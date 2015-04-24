@@ -21,6 +21,7 @@
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
+-export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -155,6 +156,48 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
                 list_next('$end_of_table', undefined, Fun, AccIn)
         end
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback add_links/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
+    no_return().
+add_links(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback delete_links/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+    no_return().
+delete_links(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback fetch_link/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+    no_return().
+fetch_link(_, _, _) ->
+    erlang:error(not_implemented).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback foreach_link/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+    fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
+    no_return().
+foreach_link(_, _Key, _, _AccIn) ->
+    erlang:error(not_implemented).
 
 
 %%--------------------------------------------------------------------

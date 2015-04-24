@@ -21,7 +21,7 @@
 namespace one {
 namespace proxy {
 
-class tls2tcp_session;
+class tls2tcp_cert_aware_session;
 class tls2tcp_http_session;
 
 /**
@@ -58,7 +58,7 @@ private:
     const std::string forward_port_;
 };
 
-extern template class tls_server<tls2tcp_session>;
+extern template class tls_server<tls2tcp_cert_aware_session>;
 extern template class tls_server<tls2tcp_http_session>;
 
 } // namespace proxy

@@ -28,7 +28,7 @@ private:
      * the base class.
      * @param verified The result of OpenSSL peer certificate verification.
      */
-    virtual void start_reading(bool verified) override;
+    virtual void post_handshake(const bool verified) override;
 };
 
 } // namespace proxy

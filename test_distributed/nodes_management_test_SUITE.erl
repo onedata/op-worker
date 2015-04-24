@@ -22,7 +22,7 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([ccm_and_worker_test/1]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [ccm_and_worker_test].
 
 %%%===================================================================

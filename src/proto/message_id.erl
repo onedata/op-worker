@@ -13,7 +13,7 @@
 -module(message_id).
 -author("Tomasz Lichon").
 
--include("proto_internal/oneclient/message_id.hrl").
+-include("proto/oneclient/message_id.hrl").
 
 %% API
 -export([generate/0, generate/1, encode/1, decode/1]).

@@ -12,11 +12,10 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/client_messages.hrl").
--include("proto/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -31,7 +30,7 @@
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [token_authentication].
 
 %%%===================================================================
@@ -99,7 +98,7 @@ connect_via_token(Node, TokenVal, SessionId) ->
         session_id = SessionId,
         token = #'Token'{value = TokenVal}
     }}},
-    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
 
     % when
     {ok, Sock} = ssl:connect(utils:get_host_as_atom(Node), Port, [binary, {packet, 4}, {active, true}]),
@@ -117,7 +116,7 @@ receive_server_message(IgnoredMsgList) ->
     receive
         {_, _, Data} ->
             % ignore listed messages
-            Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+            Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
                 true ->

@@ -12,20 +12,20 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/message_id.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
 -include("proto/oneproxy/oneproxy_messages.hrl").
--include("proto_internal/oneclient/common_messages.hrl").
--include("proto_internal/oneclient/event_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
--include("proto_internal/oneclient/message_id.hrl").
--include("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("clproto/include/messages.hrl").
+-include_lib("clproto/include/oneproxy_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
@@ -39,15 +39,15 @@
 
 % todo repair oneproxy error:
 % todo [error] <0.1099.0>@oneproxy:main_loop:234 [ oneproxy 5555 ] handle_client_read failed due to: tlsv1 alert internal error
-% todo and activate 'proto_version_test'
--perf_test({perf_cases, [multi_message_test, multi_ping_pong_test,
-    sequential_ping_pong_test, multi_connection_test, bandwidth_test, python_client_test]}).
+-performance({test_cases, [multi_message_test, multi_ping_pong_test,
+    sequential_ping_pong_test, multi_connection_test, bandwidth_test,
+    python_client_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
         client_communiate_async_test, multi_ping_pong_test,
         sequential_ping_pong_test, multi_connection_test, bandwidth_test,
-        python_client_test].
+        python_client_test, proto_version_test].
 
 -define(TOKEN, <<"TOKEN_VALUE">>).
 
@@ -72,7 +72,7 @@ cert_connection_test(Config) ->
     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
         session_id = <<"session_id">>
     }}},
-    HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
+    HandshakeReqRaw = messages:encode_msg(HandshakeReq),
     Pid = self(),
     test_utils:mock_expect(Workers, serializator, deserialize_oneproxy_certificate_info_message,
         fun(Data) ->
@@ -97,7 +97,7 @@ cert_connection_test(Config) ->
     ?assertNotEqual(undefined, CertInfo#certificate_info.client_subject_dn),
     ?assert(is_binary(CertInfo#certificate_info.client_session_id)),
     ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
-    HandshakeResponse = server_messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
+    HandshakeResponse = messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
     SessionId}}} = HandshakeResponse,
     ?assert(is_binary(SessionId)),
@@ -118,7 +118,7 @@ protobuf_msg_test(Config) ->
         {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size = 1, blocks = []}}
         }}
     },
-    RawMsg = client_messages:encode_msg(Msg),
+    RawMsg = messages:encode_msg(Msg),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
@@ -128,13 +128,23 @@ protobuf_msg_test(Config) ->
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock).
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        {ssl_through_oneproxy, [{msg_num, 100000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
+    {parameters, [
+        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {ct_config, [{msg_num, 1000}, {transport, ssl}]}
+    {config, [{name, ssl_through_oneproxy},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}]
+        ]}
+    ]},
+    {config, [{name, tcp_direct},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}],
+            [{name, transport}, {value, gen_tcp}]
+        ]}
+    ]}
 ]).
 multi_message_test(Config) ->
     % given
@@ -154,7 +164,7 @@ multi_message_test(Config) ->
                 blocks = []
             }}}}}
         end, MsgNumbers),
-    RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
+    RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
     test_utils:mock_expect(Workers, router, route_message,
         fun(#client_message{message_body = #read_event{counter = Counter}}) ->
             Self ! Counter,
@@ -175,9 +185,9 @@ multi_message_test(Config) ->
     T3 = os:timestamp(),
     ok = Transport:close(Sock),
     [
-        {sending_time, timer:now_diff(T2, T1)},
-        {receiving_time, timer:now_diff(T3, T2)},
-        {full_time, timer:now_diff(T3, T1)}
+        #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
+        #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
+        #parameter{name = full_time, value = utils:milliseconds_diff(T3, T1), unit = "ms"}
     ].
 
 client_send_test(Config) ->
@@ -270,64 +280,91 @@ client_communiate_async_test(Config) ->
     ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
     ok = ssl:close(Sock).
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        {ssl_through_oneproxy, [{msg_num, 100000}, {transport, ssl}]},
-        {tcp_direct, [{msg_num, 100000}, {transport, gen_tcp}]}
+    {parameters, [
+        [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
+        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {ct_config, [{msg_num, 100}, {transport, ssl}]}
+    {description, "Opens 'connections_num' connections and for each connection, "
+    "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
+    "messages."},
+    {config, [{name, ssl_through_oneproxy},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}]
+        ]}
+    ]},
+    {config, [{name, tcp_direct},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}],
+            [{name, transport}, {value, gen_tcp}]
+        ]}
+    ]}
 ]).
-% open connection and send 'msg_num' pings, then receive 'msg_num' pongs
 multi_ping_pong_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Transport = ?config(transport, Config),
+    ConnNumbers = ?config(connections_num, Config),
     MsgNum = ?config(msg_num, Config),
+    ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
     MsgNumbers = lists:seq(1, MsgNum),
     MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
     Pings = lists:map(
         fun(N) ->
             #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
         end, MsgNumbersBin),
-    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+    RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
+    Self = self(),
 
-    % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
-    lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawPings),
-    T2 = os:timestamp(),
-    Received = lists:map(
-        fun(_) ->
-            Pong = receive_server_message(),
-            ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
-            {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
-        end, MsgNumbersBin),
-    T3 = os:timestamp(),
-
-    % then
-    {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
-    IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
-    lists:foreach(
-        fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
-            ?assertEqual(Id, MsgId)
-        end, IdToMessage),
-    ok = Transport:close(Sock),
     [
-        {sending_time, timer:now_diff(T2, T1)},
-        {receiving_time, timer:now_diff(T3, T2)},
-        {full_time, timer:now_diff(T3, T1)}
-    ].
+        spawn_link(
+            fun() ->
+                % when
+                {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+                lists:foreach(fun(E) ->
+                    ok = Transport:send(Sock, E)
+                end, RawPings),
+                Received = lists:map(
+                    fun(_) ->
+                        Pong = receive_server_message(),
+                        ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
+                        {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
+                    end, MsgNumbersBin),
 
--perf_test([
+                % then
+                {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
+                IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
+                lists:foreach(
+                    fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
+                        ?assertEqual(Id, MsgId)
+                    end, IdToMessage),
+                ok = Transport:close(Sock),
+                Self ! success
+            end)
+        || _ <- ConnNumbersList
+    ],
+    lists:foreach(fun(_) ->
+        {ok, success} = test_utils:receive_msg(success, infinity)
+    end, ConnNumbersList),
+    T2 = os:timestamp(),
+    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
+
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        [{msg_num, 100000}]
+    {parameters, [
+        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
     ]},
-    {ct_config, [{msg_num, 1000}]}
+    {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
+    {config, [{name, sequential_ping_pong},
+        {parameters, [
+            [{name, msg_num}, {value, 100000}]
+        ]}
+    ]}
 ]).
-% open connection and: (send ping -> receive pong) * 'msg_num' times
 sequential_ping_pong_test(Config) ->
     % given
     remove_pending_messages(),
@@ -339,7 +376,7 @@ sequential_ping_pong_test(Config) ->
         fun(N) ->
             #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
         end, MsgNumbersBin),
-    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+    RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
@@ -361,16 +398,18 @@ sequential_ping_pong_test(Config) ->
     % then
     ?assertMatch({ok, _}, ssl:connection_info(Sock)),
     ok = ssl:close(Sock),
-    {full_time, timer:now_diff(T2, T1)}.
 
--perf_test([
+    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
+
+-performance([
     {repeats, 10},
-    {perf_configs, [
-        [{connections_num, 100}]
+    {parameters, [
+        [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
     ]},
-    {ct_config, [{connections_num, 100}]}
+    {description, "Opens 'connections_num' connections to the server, checks "
+    "their state, and closes them."},
+    {config, [{name, multi_connection}]}
 ]).
-% Open 'connections_num' connections to the server, check their state, and close them
 multi_connection_test(Config) ->
     % given
     remove_pending_messages(),
@@ -394,24 +433,35 @@ multi_connection_test(Config) ->
         end, Connections),
     lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        {tcp_direct, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, ssl}]},
-        {ssl_through_oneproxy, [{packet_size_kilobytes, 1024}, {packet_num, 1000}, {transport, gen_tcp}]}
+    {parameters, [
+        [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+        [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
+        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}, {transport, ssl}]}
+    {config, [{name, ssl_through_oneproxy},
+        {parameters, [
+            [{name, packet_num}, {value, 1000}]
+        ]}
+    ]},
+    {config, [{name, tcp_direct},
+        {parameters, [
+            [{name, packet_num}, {value, 1000}],
+            [{name, transport}, {value, gen_tcp}]
+        ]}
+    ]}
 ]).
 bandwidth_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    PacketSize = ?config(packet_size_kilobytes, Config),
+    PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
     Transport = ?config(transport, Config),
-    Data = crypto:rand_bytes(PacketSize*1024),
+    Data = crypto:rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
-    PacketRaw = client_messages:encode_msg(Packet),
+    PacketRaw = messages:encode_msg(Packet),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
         fun(#client_message{message_body = #data{}}) ->
@@ -422,7 +472,9 @@ bandwidth_test(Config) ->
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
     T1 = os:timestamp(),
-    lists:foreach(fun(_) -> ok = Transport:send(Sock, PacketRaw) end, lists:seq(1, PacketNum)),
+    lists:foreach(fun(_) ->
+        ok = Transport:send(Sock, PacketRaw)
+    end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
 
     % then
@@ -434,34 +486,39 @@ bandwidth_test(Config) ->
     T3 = os:timestamp(),
     Transport:close(Sock),
     [
-        {sending_time, timer:now_diff(T2, T1)},
-        {receiving_time, timer:now_diff(T3, T2)},
-        {full_time, timer:now_diff(T3, T1)}
+        #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
+        #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
+        #parameter{name = full_time, value = utils:milliseconds_diff(T3, T1), unit = "ms"}
     ].
 
--perf_test([
+-performance([
     {repeats, 3},
-    {perf_configs, [
-        [{packet_size_kilobytes, 1024}, {packet_num, 1000}]
+    {parameters, [
+        [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+        [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
     ]},
-    {ct_config, [{packet_size_kilobytes, 1024}, {packet_num, 10}]}
+    {description, "Same as bandwidth_test, but with ssl client written in python."},
+    {config, [{name, python_client},
+        {parameters, [
+            [{name, packet_num}, {value, 1000}]
+        ]}
+    ]}
 ]).
-% same as bandwidth_test, but with ssl client written in python
 python_client_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
-    PacketSize = ?config(packet_size_kilobytes, Config),
+    PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
 
     Data = crypto:rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
-    PacketRaw = client_messages:encode_msg(Packet),
+    PacketRaw = messages:encode_msg(Packet),
 
     HandshakeMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
         token = #'Token'{value = ?TOKEN}}}},
-    HandshakeMessageRaw = client_messages:encode_msg(HandshakeMessage),
+    HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
@@ -497,7 +554,7 @@ python_client_test(Config) ->
         end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
     catch port_close(PythonClient),
-    {full_time, timer:now_diff(T2, T1)}.
+    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
 proto_version_test(Config) ->
     % given
@@ -508,7 +565,7 @@ proto_version_test(Config) ->
         message_id = MsgId,
         message_body = {get_protocol_version, #'GetProtocolVersion'{}}
     },
-    GetProtoVersionRaw = client_messages:encode_msg(GetProtoVersion),
+    GetProtoVersionRaw = messages:encode_msg(GetProtoVersion),
     {ok, {Sock, _}} = connect_via_token(Worker1),
 
     % when
@@ -601,7 +658,7 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using token, with default socket_opts
-%% @equiv connect_via_token(Node, [{active, true}], ssl).
+%% @equiv connect_via_token(Node, [{active, true}], ssl)
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_via_token(Node :: node()) ->
@@ -612,19 +669,22 @@ connect_via_token(Node) ->
 connect_via_token(Node, SocketOpts) ->
     connect_via_token(Node, SocketOpts, ssl).
 
+connect_via_token(Node, SocketOpts, Transport) ->
+    connect_via_token(Node, SocketOpts, Transport, crypto:rand_bytes(10)).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using token, with custom socket opts
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), ssl | tcp) ->
+-spec connect_via_token(Node :: node(), SocketOpts :: list(), ssl | tcp, session:id()) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, Transport) ->
+connect_via_token(Node, SocketOpts, Transport, SessId) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body =
-    {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
+    {handshake_request, #'HandshakeRequest'{session_id = SessId,
         token = #'Token'{value = ?TOKEN}}}},
-    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     ActiveOpt =
         case proplists:get_value(active, SocketOpts) of
             undefined -> [];
@@ -635,8 +695,10 @@ connect_via_token(Node, SocketOpts, Transport) ->
     {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
     {Port, AdditionalOpts} =
         case Transport of
-            gen_tcp -> {rpc:call(Node, oneproxy, get_local_port, [ExternalPort]), []};
-            ssl -> {ExternalPort, [{reuse_sessions, false}]} % todo repair oneproxy and delete reuse_sessions flag
+            gen_tcp ->
+                {rpc:call(Node, oneproxy, get_local_port, [ExternalPort]), []};
+            ssl ->
+                {ExternalPort, [{reuse_sessions, false}]} % todo repair oneproxy and delete reuse_sessions flag
         end,
 
     % when
@@ -672,12 +734,16 @@ spawn_ssl_echo_client(NodeToConnect) ->
                 {ok, Data} ->
                     % decode
                     #'ServerMessage'{message_id = Id, message_body = Body} =
-                        server_messages:decode_msg(Data, 'ServerMessage'),
+                        messages:decode_msg(Data, 'ServerMessage'),
 
-                    % respond with the same data to the server
-                    ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
-                    ClientAnsRaw = client_messages:encode_msg(ClientAnsProtobuf),
-                    ?assertEqual(ok, ssl:send(Sock, ClientAnsRaw)),
+                    % respond with the same data to the server (excluding stream_reset)
+                    case Body of
+                        {message_stream_reset, _} -> ok;
+                        _ ->
+                            ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
+                            ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
+                            ?assertEqual(ok, ssl:send(Sock, ClientAnsRaw))
+                    end,
 
                     %loop back
                     Loop();
@@ -719,7 +785,7 @@ receive_server_message(IgnoredMsgList) ->
     receive
         {_, _, Data} ->
             % ignore listed messages
-            Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+            Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
                 true ->

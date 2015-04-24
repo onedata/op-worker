@@ -13,14 +13,13 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/client_messages.hrl").
--include("proto/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/common_messages.hrl").
--include("proto_internal/oneclient/stream_messages.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
--include("proto_internal/oneclient/event_messages.hrl").
--include("proto_internal/oneclient/diagnostic_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/stream_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
+-include("proto/oneclient/event_messages.hrl").
+-include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("clproto/include/messages.hrl").
 
 %% API
 -export([translate_from_protobuf/1, translate_to_protobuf/1]).
@@ -57,8 +56,10 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
     };
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{token = translate_from_protobuf(Token), session_id = SessionId};
-translate_from_protobuf(#'MessageStream'{stm_id = StmId, seq_num = SeqNum, eos = Eos}) ->
-    #message_stream{stm_id = StmId, seq_num = SeqNum, eos = Eos};
+translate_from_protobuf(#'MessageStream'{stream_id = StmId, sequence_number = SeqNum}) ->
+    #message_stream{stream_id = StmId, sequence_number = SeqNum};
+translate_from_protobuf(#'EndOfMessageStream'{}) ->
+    #end_of_message_stream{};
 translate_from_protobuf(#'Token'{value = Val}) ->
     #token{value = Val};
 translate_from_protobuf(#'Ping'{}) ->
@@ -111,17 +112,17 @@ translate_to_protobuf(#write_event_subscription{} = Sub) ->
         }}};
 translate_to_protobuf(#handshake_response{session_id = Id}) ->
     {handshake_response, #'HandshakeResponse'{session_id = Id}};
-translate_to_protobuf(#message_stream{stm_id = StmId, seq_num = SeqNum, eos = Eos}) ->
-    #'MessageStream'{stm_id = StmId, seq_num = SeqNum, eos = Eos};
+translate_to_protobuf(#message_stream{stream_id = StmId, sequence_number = SeqNum}) ->
+    #'MessageStream'{stream_id = StmId, sequence_number = SeqNum};
 translate_to_protobuf(#message_stream_reset{}) ->
     {message_stream_reset, #'MessageStreamReset'{}};
-translate_to_protobuf(#message_request{stm_id = StmId, lower_seq_num = LoSeqNum,
-    upper_seq_num = UpSeqNum}) ->
-    {message_request, #'MessageRequest'{stm_id = StmId, lower_seq_num = LoSeqNum,
-        upper_seq_num = UpSeqNum}};
-translate_to_protobuf(#message_acknowledgement{stm_id = StmId, seq_num = SeqNum}) ->
+translate_to_protobuf(#message_request{stream_id = StmId,
+    lower_sequence_number = LowerSeqNum, upper_sequence_number = UpperSeqNum}) ->
+    {message_request, #'MessageRequest'{stream_id = StmId,
+        lower_sequence_number = LowerSeqNum, upper_sequence_number = UpperSeqNum}};
+translate_to_protobuf(#message_acknowledgement{stream_id = StmId, sequence_number = SeqNum}) ->
     {message_acknowledgement,
-        #'MessageAcknowledgement'{stm_id = StmId, seq_num = SeqNum}};
+        #'MessageAcknowledgement'{stream_id = StmId, sequence_number = SeqNum}};
 translate_to_protobuf(#pong{}) ->
     {pong, #'Pong'{}};
 translate_to_protobuf(#protocol_version{major = Major, minor = Minor}) ->

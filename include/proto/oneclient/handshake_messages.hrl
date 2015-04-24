@@ -6,16 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% internal records for oneproxy messages
+%%% Internal version of protocol handshake messages.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(ONEPROXY_MESSAGES_HRL).
--define(ONEPROXY_MESSAGES_HRL, 1).
+-ifndef(HANDSHAKE_MESSAGES_HRL).
+-define(HANDSHAKE_MESSAGES_HRL, 1).
 
--record(certificate_info, {
-    client_subject_dn :: binary(),
-    client_session_id :: binary()
+-include("proto/common/credentials.hrl").
+
+-record(handshake_request, {
+    token :: #token{},
+    session_id :: session:id()
+}).
+
+-record(handshake_response, {
+    session_id :: session:id()
 }).
 
 -endif.

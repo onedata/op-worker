@@ -52,11 +52,18 @@ public:
 
 protected:
     /**
+    * Custom operation that must be done after handhake
+    * @param error Boost error code
+    * @param bytes_transferred The number of read bytes
+    */
+    virtual void post_handshake(const bool verified);
+
+    /**
      * Starts reading from sockets, deferring controll to methods from @c
      * session.
      * @param verified The result of OpenSSL peer certificate verification.
      */
-    virtual void start_reading(bool verified);
+    virtual void start_reading(const bool verified);
 
 private:
     std::string gen_session_data();
@@ -68,13 +75,6 @@ private:
      * @param error Boost error code
      */
     void handle_handshake(const boost::system::error_code &error);
-
-    /**
-    * Sends information about client's certificate to the server
-    * @param error Boost error code
-    * @param bytes_transferred The number of read bytes
-    */
-    void send_cert_info(const bool verified);
 
     const std::string forward_host_;
     const std::string forward_port_;

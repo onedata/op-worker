@@ -18,13 +18,15 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([simple_call_test/1, direct_cast_test/1, redirect_cast_test/1, mixed_cast_test/1]).
 
-all() -> [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_test].
+all() ->
+    [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_test].
 
 -define(REQUEST_TIMEOUT, timer:seconds(10)).
 -define(REPEATS, 100).
@@ -33,7 +35,10 @@ all() -> [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_tes
 %%% Test function
 %% ====================================================================
 
--perf_test({repeats, ?REPEATS}).
+-performance([
+    {repeats, ?REPEATS},
+    {config, [{name, simple_call}]}
+]).
 simple_call_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
     [Worker] = ?config(op_worker_nodes, Config),
@@ -48,15 +53,27 @@ simple_call_test(Config) ->
     ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
     T5 = os:timestamp(),
 
-    [{redirect_random, timer:now_diff(T2, T1)}, {direct_random, timer:now_diff(T3, T2)},
-        {redirect_prefer_local, timer:now_diff(T4, T3)}, {direct_prefer_local, timer:now_diff(T5, T4)}].
+    [
+        #parameter{name = redirect_random, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
+        #parameter{name = direct_random, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
+        #parameter{name = redirect_prefer_local, value = utils:milliseconds_diff(T4, T3), unit = "ms"},
+        #parameter{name = direct_prefer_local, value = utils:milliseconds_diff(T5, T4), unit = "ms"}
+    ].
 
 %%%===================================================================
 
--perf_test([
+-performance([
     {repeats, ?REPEATS},
-    {perf_config, [{proc_num, 100}, {proc_repeats, 100}]},
-    {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
+    {parameters, [
+        [{name, proc_num}, {value, 10}],
+        [{name, proc_repeats}, {value, 10}]
+    ]},
+    {config, [{name, direct_cast},
+        {parameters, [
+            [{name, proc_num}, {value, 100}],
+            [{name, proc_repeats}, {value, 100}]
+        ]}
+    ]}
 ]).
 direct_cast_test(Config) ->
     [Worker] = ?config(op_worker_nodes, Config),
@@ -73,20 +90,28 @@ direct_cast_test(Config) ->
         for(1, ProcSendNum, SendReq),
         count_answers(ProcSendNum),
         AfterProcessing = os:timestamp(),
-        timer:now_diff(AfterProcessing, BeforeProcessing)
+        utils:milliseconds_diff(AfterProcessing, BeforeProcessing)
     end,
 
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    {routing_time, Times}.
+    #parameter{name = routing_time, value = Times, unit = "ms"}.
 
 %%%===================================================================
 
--perf_test([
+-performance([
     {repeats, ?REPEATS},
-    {perf_config, [{proc_num, 100}, {proc_repeats, 100}]},
-    {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
+    {parameters, [
+        [{name, proc_num}, {value, 10}],
+        [{name, proc_repeats}, {value, 10}]
+    ]},
+    {config, [{name, redirect_cast},
+        {parameters, [
+            [{name, proc_num}, {value, 100}],
+            [{name, proc_repeats}, {value, 100}]
+        ]}
+    ]}
 ]).
 redirect_cast_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
@@ -103,24 +128,40 @@ redirect_cast_test(Config) ->
         for(1, ProcSendNum, SendReq),
         count_answers(ProcSendNum),
         AfterProcessing = os:timestamp(),
-        timer:now_diff(AfterProcessing, BeforeProcessing)
+        utils:milliseconds_diff(AfterProcessing, BeforeProcessing)
     end,
 
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    {routing_time, Times}.
+    #parameter{name = routing_time, value = Times, unit = "ms"}.
 
 %%%===================================================================
 
--perf_test([
+-performance([
     {repeats, ?REPEATS},
-    {perf_configs, [
-        {short_procs, [{proc_num, 100}, {proc_repeats, 1}]},
-        {one_proc, [{proc_num, 1}, {proc_repeats, 100}]},
-        {long_procs, [{proc_num, 100}, {proc_repeats, 100}]}
+    {parameters, [
+        [{name, proc_num}, {value, 10}],
+        [{name, proc_repeats}, {value, 10}]
     ]},
-    {ct_config, [{proc_num, 10}, {proc_repeats, 10}]}
+    {config, [{name, short_procs},
+        {parameters, [
+            [{name, proc_num}, {value, 100}],
+            [{name, proc_repeats}, {value, 1}]
+        ]}
+    ]},
+    {config, [{name, one_proc},
+        {parameters, [
+            [{name, proc_num}, {value, 1}],
+            [{name, proc_repeats}, {value, 100}]
+        ]}
+    ]},
+    {config, [{name, long_procs},
+        {parameters, [
+            [{name, proc_num}, {value, 100}],
+            [{name, proc_repeats}, {value, 100}]
+        ]}
+    ]}
 ]).
 mixed_cast_test(Config) ->
     [Ccm] = ?config(op_ccm_nodes, Config),
@@ -131,21 +172,21 @@ mixed_cast_test(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId-1, random])),
-            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2*MsgId, prefer_local]))
+            ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId - 1, random])),
+            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId, prefer_local]))
         end,
 
         BeforeProcessing = os:timestamp(),
         for(1, ProcSendNum, SendReq),
-        count_answers(2*ProcSendNum),
+        count_answers(2 * ProcSendNum),
         AfterProcessing = os:timestamp(),
-        timer:now_diff(AfterProcessing, BeforeProcessing)
+        utils:milliseconds_diff(AfterProcessing, BeforeProcessing)
     end,
 
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    {routing_time, Times}.
+    #parameter{name = routing_time, value = Times, unit = "ms"}.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -183,7 +224,7 @@ for(N, N, F) ->
     F(N);
 for(I, N, F) ->
     F(I),
-    for(I+1, N, F).
+    for(I + 1, N, F).
 
 count_answers(Exp) ->
     count_answers(0, Exp).
@@ -194,7 +235,8 @@ count_answers(Exp, Exp) ->
 count_answers(Num, Exp) ->
     NumToBeReceived = Num + 1,
     Ans = receive
-              #worker_answer{id = NumToBeReceived, response = Response} -> Response
+              #worker_answer{id = NumToBeReceived, response = Response} ->
+                  Response
           after ?REQUEST_TIMEOUT ->
               {error, timeout}
           end,

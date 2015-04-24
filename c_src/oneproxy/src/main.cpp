@@ -8,8 +8,8 @@
 
 #include "log_message.h"
 #include "tls_server.h"
-#include "tls2tcp_session.h"
 #include "tls2tcp_http_session.h"
+#include "tls2tcp_cert_aware_session.h"
 #include "tcp_server.h"
 
 #include <cstdlib>
@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
                             cert_path, listen_port, forward_host, forward_port,
                             ca_dirs);
                     } else {
-                        s = std::make_shared<tls_server<tls2tcp_session>>(
+                        s = std::make_shared<tls_server<tls2tcp_cert_aware_session>>(
                                 io_service, strand, verify_type,
                             cert_path, listen_port, forward_host, forward_port,
                             ca_dirs);

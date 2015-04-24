@@ -74,7 +74,7 @@ init(_Args) ->
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, State) ->
+handle(healthcheck, _State) ->
     HC = #{
         %?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
         %?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
@@ -126,7 +126,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    gen_server:call(?MODULE, {updatePlugInState,
+    gen_server:call(?MODULE, {update_plugin_state,
         fun(State) ->
             maps:put(Key, Value, State)
         end}).

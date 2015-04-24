@@ -14,6 +14,8 @@
 
 -behaviour(worker_plugin_behaviour).
 
+-include("proto/common/credentials.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -32,6 +34,8 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: term()} | {error, Reason :: term()}.
 init(_Args) ->
+    GrCert = oneprovider:get_globalregistry_cert(),
+    identity:save(#document{key = GrCert, value = ?GLOBALREGISTRY_IDENTITY}),
     {ok, undefined}.
 
 %%--------------------------------------------------------------------

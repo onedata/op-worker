@@ -114,7 +114,7 @@ def _wait_until_ready(workers):
     deadline = time.time() + PROVIDER_WAIT_FOR_NAGIOS_SECONDS
     while not _is_up(worker_ip):
         if time.time() > deadline:
-            print('WARNING: did not get "ok" healthcheck status for 1 minute',
+            print('WARNING: timeout waiting for "ok" healthcheck status',
                   file=sys.stderr)
             break
 

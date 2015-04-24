@@ -14,8 +14,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/stream_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -38,7 +38,7 @@
     sequencer_manager_multiple_streams_messages_ordering_test/1
 ]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [
     sequencer_stream_reset_stream_message_test,
     sequencer_stream_messages_ordering_test,
@@ -77,7 +77,7 @@ sequencer_stream_messages_ordering_test(Config) ->
     lists:foreach(fun(SeqNum) ->
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
             #client_message{message_stream = #message_stream{
-                stm_id = StmId, seq_num = SeqNum, eos = false
+                stream_id = StmId, sequence_number = SeqNum
             }}, SessId
         ]))
     end, lists:seq(MsgsCount - 1, 0, -1)),
@@ -86,7 +86,7 @@ sequencer_stream_messages_ordering_test(Config) ->
     lists:foreach(fun(SeqNum) ->
         ?assertMatch({ok, _}, test_utils:receive_msg(#client_message{
             message_stream = #message_stream{
-                stm_id = StmId, seq_num = SeqNum, eos = false
+                stream_id = StmId, sequence_number = SeqNum
             }
         }, ?TIMEOUT))
     end, lists:seq(0, MsgsCount - 1)),
@@ -106,7 +106,7 @@ sequencer_stream_request_messages_test(Config) ->
     lists:foreach(fun(SeqNum) ->
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
             #client_message{message_stream = #message_stream{
-                stm_id = StmId, seq_num = SeqNum, eos = false
+                stream_id = StmId, sequence_number = SeqNum
             }}, SessId
         ]))
     end, lists:seq(MsgsCount - 1, 0, -1)),
@@ -114,7 +114,7 @@ sequencer_stream_request_messages_test(Config) ->
     % Check whether 'MsgsCount' - 1 request messages were sent.
     lists:foreach(fun(SeqNum) ->
         ?assertMatch({ok, _}, test_utils:receive_msg(#message_request{
-            stm_id = StmId, lower_seq_num = 0, upper_seq_num = SeqNum
+            stream_id = StmId, lower_sequence_number = 0, upper_sequence_number = SeqNum
         }, ?TIMEOUT))
     end, lists:seq(MsgsCount - 2, 0, -1)),
 
@@ -133,14 +133,14 @@ sequencer_stream_messages_acknowledgement_test(Config) ->
     lists:foreach(fun(SeqNum) ->
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
             #client_message{message_stream = #message_stream{
-                stm_id = StmId, seq_num = SeqNum, eos = false
+                stream_id = StmId, sequence_number = SeqNum
             }}, SessId
         ]))
     end, lists:seq(MsgsCount - 1, 0, -1)),
 
     % Check whether messages acknowledgement was sent.
     ?assertMatch({ok, _}, test_utils:receive_msg(#message_acknowledgement{
-        stm_id = StmId, seq_num = MsgsCount - 1
+        stream_id = StmId, sequence_number = MsgsCount - 1
     }, ?TIMEOUT)),
 
     ok.
@@ -156,20 +156,20 @@ sequencer_stream_end_of_stream_test(Config) ->
     % Send last message.
     ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
         #client_message{message_stream = #message_stream{
-            stm_id = StmId, seq_num = SeqNum, eos = true
-        }}, SessId
+            stream_id = StmId, sequence_number = SeqNum
+        }, message_body = #end_of_message_stream{}}, SessId
     ])),
 
     % Check whether last message was sent.
     ?assertMatch({ok, _}, test_utils:receive_msg(
         #client_message{message_stream = #message_stream{
-            stm_id = StmId, seq_num = SeqNum, eos = true
-        }}, ?TIMEOUT
+            stream_id = StmId, sequence_number = SeqNum
+        }, message_body = #end_of_message_stream{}}, ?TIMEOUT
     )),
 
     % Check whether last message acknowledgement was sent.
     ?assertMatch({ok, _}, test_utils:receive_msg(#message_acknowledgement{
-        stm_id = StmId, seq_num = SeqNum
+        stream_id = StmId, sequence_number = SeqNum
     }, ?TIMEOUT)),
 
     % Check whether sequencer stream process has terminated normaly.
@@ -199,14 +199,14 @@ sequencer_stream_periodic_ack_test(Config) ->
     % Send messages in right order and wait for periodic acknowledgement.
     lists:foreach(fun(SeqNum) ->
         Msg = #client_message{message_stream = #message_stream{
-            stm_id = 1, seq_num = SeqNum, eos = false
+            stream_id = 1, sequence_number = SeqNum
         }},
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message,
             [Msg, SessId]
         )),
         ?assertEqual({ok, Msg}, test_utils:receive_any(?TIMEOUT)),
         ?assertEqual({ok, #message_acknowledgement{
-            stm_id = 1, seq_num = SeqNum
+            stream_id = 1, sequence_number = SeqNum
         }}, test_utils:receive_any(?TIMEOUT + SecsAckWin))
     end, lists:seq(0, MsgsCount - 1)),
 
@@ -220,7 +220,7 @@ sequencer_stream_duplication_test(Config) ->
     SessId = ?config(session_id, Config),
     MsgsCount = 20,
     Msgs = [#client_message{message_stream = #message_stream{
-        stm_id = 1, seq_num = SeqNum, eos = false
+        stream_id = 1, sequence_number = SeqNum
     }} || SeqNum <- lists:seq(0, MsgsCount - 1)],
     RandomMsgs = utils:random_shuffle(Msgs ++ Msgs ++ Msgs ++ Msgs ++ Msgs),
 
@@ -247,7 +247,7 @@ sequencer_stream_crash_test(Config) ->
     MsgsCount = 100,
     MsgsHalf = round(MsgsCount / 2),
     Msgs = [#client_message{message_stream = #message_stream{
-        stm_id = 1, seq_num = SeqNum, eos = false
+        stream_id = 1, sequence_number = SeqNum
     }} || SeqNum <- lists:seq(0, MsgsCount - 1)],
     RandomMsgs = utils:random_shuffle(Msgs),
     MsgsPart1 = lists:sublist(RandomMsgs, MsgsHalf),
@@ -294,7 +294,7 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
     SessId = ?config(session_id, Config),
     MsgsCount = 100,
     StmsCount = 10,
-    Msgs = [#message_stream{seq_num = SeqNum, eos = false} ||
+    Msgs = [#message_stream{sequence_number = SeqNum} ||
         SeqNum <- lists:seq(0, MsgsCount - 1)],
     RevSeqNums = lists:seq(MsgsCount - 1, 0, -1),
 
@@ -304,7 +304,7 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
         lists:foreach(fun(Msg) ->
             [Worker | _] = utils:random_shuffle(Workers),
             ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
-                #client_message{message_stream = Msg#message_stream{stm_id = StmId}},
+                #client_message{message_stream = Msg#message_stream{stream_id = StmId}},
                 SessId
             ]))
         end, utils:random_shuffle(Msgs))
@@ -319,8 +319,8 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
     MsgsMap = lists:foldl(fun(_, Map) ->
         Msg = test_utils:receive_any(?TIMEOUT),
         ?assertMatch({ok, #client_message{}}, Msg),
-        {ok, #client_message{message_stream = #message_stream{stm_id = StmId,
-            seq_num = SeqNum}}} = Msg,
+        {ok, #client_message{message_stream = #message_stream{stream_id = StmId,
+            sequence_number = SeqNum}}} = Msg,
         StmMsgs = maps:get(StmId, Map),
         maps:update(StmId, [SeqNum | StmMsgs], Map)
     end, InitialMsgsMap, lists:seq(0, MsgsCount * StmsCount - 1)),
@@ -470,12 +470,12 @@ communicator_echo_mock_setup(Workers, SessId) ->
 communicator_retransmission_mock_setup(Workers) ->
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
-        (#message_request{lower_seq_num = LSeqNum, upper_seq_num = USeqNum,
-            stm_id = StmId}, Id) ->
+        (#message_request{lower_sequence_number = LSeqNum, upper_sequence_number = USeqNum,
+            stream_id = StmId}, Id) ->
             lists:foreach(fun(SeqNum) ->
                 sequencer_manager:route_message(#client_message{
                     message_stream = #message_stream{
-                        stm_id = StmId, seq_num = SeqNum, eos = false
+                        stream_id = StmId, sequence_number = SeqNum
                     }
                 }, Id)
             end, lists:seq(LSeqNum, USeqNum));

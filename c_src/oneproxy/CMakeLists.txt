@@ -48,7 +48,7 @@ target_include_directories(oneproxy_gsi SYSTEM PUBLIC
 target_compile_options(oneproxy_gsi PUBLIC ${Globus_CFLAGS_OTHER})
 
 # protocols
-set(PROTO_FILES proto/oneproxy_messages.proto)
+set(PROTO_FILES ../../deps/clproto/proto/oneproxy_messages.proto)
 PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
 add_library(proto STATIC ${PROTO_SRCS} ${PROTO_HDRS})
@@ -69,6 +69,7 @@ set(SOURCE_FILES
     src/session.cpp
     src/tcp2tls_session.cpp
     src/tls2tcp_session.cpp
+    src/tls2tcp_cert_aware_session.cpp
     src/tls2tcp_http_session.cpp
     src/base64.cpp)
 

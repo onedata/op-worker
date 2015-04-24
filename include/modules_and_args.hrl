@@ -14,19 +14,19 @@
 
 -define(MODULES, [
     datastore_worker,
-    http_worker,
     dns_worker,
-    session_manager_worker
+    session_manager_worker,
+    http_worker
 ]).
 
 -define(MODULES_WITH_ARGS, [
     {datastore_worker, []},
-    {http_worker, []},
     {dns_worker, []},
     {session_manager_worker, [
         {supervisor_spec, session_manager_worker:supervisor_spec()},
         {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
-    ]}
+    ]},
+    {http_worker, []}
 ]).
 
 -endif.

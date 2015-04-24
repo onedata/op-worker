@@ -13,8 +13,8 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/datastore/datastore_models.hrl").
--include("proto_internal/oneclient/common_messages.hrl").
--include("proto_internal/oneclient/event_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/event_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -36,7 +36,7 @@
     event_manager_multiple_handlers_test/1
 ]).
 
--perf_test({perf_cases, []}).
+-performance({test_cases, []}).
 all() -> [
     event_stream_the_same_file_id_aggregation_test,
     event_stream_different_file_id_aggregation_test,
