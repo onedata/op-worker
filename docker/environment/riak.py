@@ -6,17 +6,12 @@ Brings up a riak cluster.
 """
 
 from __future__ import print_function
+
 import re
+import requests
 import sys
 
-import common
-import docker
-
-
-try:  # Python 2
-    import httplib
-except ImportError:  # Python 3
-    import http.client as httplib
+from . import common, docker, dns as dns_mod
 
 RIAK_READY_WAIT_SECONDS = 60 * 5
 
@@ -49,18 +44,18 @@ def _node_up(command, num, maps, dns, image, uid):
 
 def _ready(container):
     ip = docker.inspect(container)['NetworkSettings']['IPAddress']
+    url = 'http://{0}:8098/stats'.format(ip)
     try:
-        conn = httplib.HTTPConnection(ip, 8098, timeout=5)
-        conn.request('HEAD', '/stats')
-        return conn.getresponse().status == 200
-    except StandardError:
+        r = requests.head(url, timeout=5)
+        return r.status_code == requests.codes.ok
+    except requests.ConnectionError:
         return False
 
 
 def _ring_ready(container):
     output = docker.exec_(container, ['riak-admin', 'ring_status'], output=True,
                           stdout=sys.stderr)
-    return bool(re.search('Ring Ready:\s*true', output))
+    return bool(re.search(r'Ring Ready:\s*true', output))
 
 
 def _bucket_ready(bucket, container):
@@ -93,7 +88,7 @@ def up(image, dns, uid, maps, nodes):
     if not maps:
         maps = '{"props":{"n_val":2, "datatype":"map"}}'
 
-    dns_servers, dns_output = common.set_up_dns(dns, uid)
+    dns_servers, dns_output = dns_mod.set_up_dns(dns, uid)
     riak_output = {}
 
     command = '''

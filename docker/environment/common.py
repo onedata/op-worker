@@ -12,10 +12,9 @@ import argparse
 import inspect
 import json
 import os
+import requests
 import time
 import sys
-
-import dns
 
 
 try:
@@ -23,27 +22,17 @@ try:
 except ImportError:
     import xml.etree.ElementTree as eTree
 
-try:  # Python 2
-    from urllib2 import urlopen
-    from urllib2 import URLError
-    from httplib import BadStatusLine
-except ImportError:  # Python 3
-    from urllib.request import urlopen
-    from urllib.error import URLError
-    from http.client import BadStatusLine
-
 
 def nagios_up(ip, port=None):
     url = 'https://{0}{1}/nagios'.format(ip, (':' + port) if port else '')
     try:
-        fo = urlopen(url, timeout=5)
-        tree = eTree.parse(fo)
-        healthdata = tree.getroot()
-        status = healthdata.attrib['status']
-        return status == 'ok'
-    except URLError:
-        return False
-    except BadStatusLine:
+        r = requests.get(url, verify=False, timeout=5)
+        if r.status_code != requests.codes.ok:
+            return False
+
+        healthdata = eTree.fromstring(r.text)
+        return healthdata.attrib['status'] == 'ok'
+    except requests.ConnectionError:
         return False
 
 
@@ -107,18 +96,6 @@ def merge(d, merged):
     """
     for key, value in iter(merged.items()):
         d[key] = d[key] + value if key in d else value
-
-
-def set_up_dns(config, uid):
-    """Sets up DNS configuration values, starting the server if needed."""
-    if config == 'auto':
-        dns_config = dns.up(uid)
-        return [dns_config['dns']], dns_config
-
-    if config == 'none':
-        return [], {}
-
-    return [config], {}
 
 
 def get_file_dir(file_path):

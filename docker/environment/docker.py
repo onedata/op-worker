@@ -135,7 +135,7 @@ def logs(container, docker_host=None):
 
     cmd.extend(['logs', container])
     return subprocess.check_output(cmd, universal_newlines=True,
-                                   stderr=subprocess.STDOUT).decode('utf-8')
+                                   stderr=subprocess.STDOUT)
 
 
 def remove(containers, docker_host=None, force=False,

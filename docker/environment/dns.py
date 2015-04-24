@@ -9,8 +9,7 @@ different dockers to see each other by hostnames.
 
 from __future__ import print_function
 
-import common
-import docker
+from . import common, docker
 
 
 DNS_WAIT_FOR_SECONDS = 60
@@ -22,6 +21,18 @@ def _skydns_ready(container):
 
 def _skydock_ready(container):
     return 'skydock: starting main process' in docker.logs(container)
+
+
+def set_up_dns(config, uid):
+    """Sets up DNS configuration values, starting the server if needed."""
+    if config == 'auto':
+        dns_config = up(uid)
+        return [dns_config['dns']], dns_config
+
+    if config == 'none':
+        return [], {}
+
+    return [config], {}
 
 
 def up(uid):

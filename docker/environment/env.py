@@ -6,14 +6,23 @@ This software is released under the MIT license cited in 'LICENSE.txt'
 Brings up dockers with full onedata environment.
 """
 
-import appmock
-import client
-import common
-import globalregistry
-import provider
+import os
+
+from . import appmock, client, common, globalregistry, provider, dns as dns_mod
 
 
-def up(image, bin_am, bin_gr, bin_op, bin_oc, logdir, config_path):
+def default(key):
+    return {'image': 'onedata/worker',
+            'bin_am': '{0}/appmock'.format(os.getcwd()),
+            'bin_gr': '{0}/globalregistry'.format(os.getcwd()),
+            'bin_op': '{0}/oneprovider'.format(os.getcwd()),
+            'bin_oc': '{0}/oneclient'.format(os.getcwd()),
+            'logdir': None}[key]
+
+
+def up(config_path, image=default('image'), bin_am=default('bin_am'),
+       bin_gr=default('bin_gr'), bin_op=default('bin_op'),
+       bin_oc=default('bin_oc'), logdir=default('logdir')):
     config = common.parse_json_file(config_path)
     uid = common.generate_uid()
 
@@ -28,7 +37,7 @@ def up(image, bin_am, bin_gr, bin_op, bin_oc, logdir, config_path):
     }
 
     # Start DNS
-    [dns], dns_output = common.set_up_dns('auto', uid)
+    [dns], dns_output = dns_mod.set_up_dns('auto', uid)
     common.merge(output, dns_output)
 
     # Start appmock instances

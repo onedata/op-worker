@@ -11,8 +11,7 @@ import copy
 import json
 import os
 
-import common
-import docker
+from . import common, docker, dns as dns_mod
 
 
 def _tweak_config(config, name, uid):
@@ -104,7 +103,7 @@ def up(image, bindir, logdir, dns, uid, config_path):
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
-    dns_servers, output = common.set_up_dns(dns, uid)
+    dns_servers, output = dns_mod.set_up_dns(dns, uid)
 
     gr_containers = []
     for cfg in configs:
