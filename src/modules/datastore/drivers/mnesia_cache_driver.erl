@@ -49,7 +49,8 @@ init_bucket(_BucketName, Models) ->
                             ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
                             throw(Reason)
                     end;
-                [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
+                [MnesiaNode | _] = MnesiaNodes -> %% there is at least one mnesia node -> join cluster
+                    ?error("@@ mnesia_nodes: ~p", [MnesiaNodes]),
                     case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
                             case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
