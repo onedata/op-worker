@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-"""
+"""Author: Konrad Zemek
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
+
 Runs oneprovider integration tests, providing Erlang's ct_run with every
 environmental argument it needs for successful run. The output is put into
 'test_distributed/logs'. The (init|end)_per_suite "testcases" are removed from
