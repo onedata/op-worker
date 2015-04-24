@@ -346,6 +346,7 @@ transaction(Fun) ->
 %%--------------------------------------------------------------------
 -spec get_active_nodes(Table :: atom()) -> [Node :: atom()].
 get_active_nodes(Table) ->
+    ?error("@@ mnesia driver getting active nodes: ~p",[nodes()]),
     {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
     Replies1 = lists:flatten(Replies0),
     Replies2 = [Node || {Node, ram_copies} <- Replies1],

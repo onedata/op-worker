@@ -356,6 +356,7 @@ init_net_connection([Node | Nodes]) ->
                     {error, global_synch};
                 _ ->
                     ?debug("Connection to node ~p initialized", [Node]),
+                    ?error("@@ node manager getting active nodes: ~p",[nodes()]),
                     erlang:monitor_node(Node, true),
                     ok
             end;
