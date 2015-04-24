@@ -6,6 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc check_permissions annotation implementation.
+%%%      This annotation shall check whether annotation's caller has given
+%%%      permissions to file that is also somewhere within annotation's arguments.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(check_permissions).
@@ -17,6 +19,7 @@
 %% API
 -export([before_advice/4, after_advice/5]).
 
+%% Object pointing to annotation's argument which holds file data (see resolve_file/2)
 -type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {parent, item_definition()}.
 
 %%%===================================================================

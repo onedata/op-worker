@@ -5,10 +5,11 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Model for file's metadata. Implemets low-level metadata operations such as
+%%%      walking through file graph.
 %%% @end
 %%%-------------------------------------------------------------------
--module(mfile).
+-module(file_meta).
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 

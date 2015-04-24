@@ -26,7 +26,7 @@
 %% @doc Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(fslogic:ctx(), Path :: file:path(), Mode :: non_neg_integer()) ->
+-spec mkdir(fslogic:ctx(), Path :: file_meta:path(), Mode :: non_neg_integer()) ->
     #atom{} | no_return().
 mkdir(_, _Path, _Mode) ->
     ?NOT_IMPLEMENTED.
@@ -36,7 +36,7 @@ mkdir(_, _Path, _Mode) ->
 %% @doc Lists directory. Start with ROffset entity and limit returned list to RCount size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(fslogic:ctx(), File :: file:entry(), ROffset :: non_neg_integer(), RCount :: non_neg_integer()) ->
+-spec read_dir(fslogic:ctx(), File :: fslogic:file(), ROffset :: non_neg_integer(), RCount :: non_neg_integer()) ->
     #direntries{} | no_return().
 read_dir(_, _FIle, _ROffset, _RCount) ->
     ?NOT_IMPLEMENTED.
@@ -46,7 +46,7 @@ read_dir(_, _FIle, _ROffset, _RCount) ->
 %% @doc Creates new symbolic link.
 %% @end
 %%--------------------------------------------------------------------
--spec link(fslogic:ctx(), Path :: file:path(), LinkValue :: binary()) ->
+-spec link(fslogic:ctx(), Path :: file_meta:path(), LinkValue :: binary()) ->
     #atom{} | no_return().
 link(_, _File, LinkValue) ->
     ?NOT_IMPLEMENTED.
@@ -56,7 +56,7 @@ link(_, _File, LinkValue) ->
 %% @doc Gets value of symbolic link.
 %% @end
 %%--------------------------------------------------------------------
--spec read_link(fslogic:ctx(), File :: file:entry()) ->
+-spec read_link(fslogic:ctx(), File :: fslogic:file()) ->
     #linkinfo{} | no_return().
 read_link(_, _File) ->
     ?NOT_IMPLEMENTED.

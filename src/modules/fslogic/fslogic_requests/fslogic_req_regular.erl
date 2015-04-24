@@ -26,9 +26,9 @@
 %% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(File :: fslogic:file(), OpenMode :: fslogic:open_mode(), ForceClusterProxy :: boolean()) ->
+-spec get_file_location(File :: fslogic:file(), Flags :: fslogic:open_flags(), ForceClusterProxy :: boolean()) ->
     #filelocation{} | no_return().
-get_file_location(_File, _OpenMode, _ForceClusterProxy) ->
+get_file_location(_File, _Flags, _ForceClusterProxy) ->
     ?NOT_IMPLEMENTED.
 
 
@@ -36,7 +36,7 @@ get_file_location(_File, _OpenMode, _ForceClusterProxy) ->
 %% @doc Gets new file location (implicit mknod operation).
 %% @end
 %%--------------------------------------------------------------------
--spec get_new_file_location(File :: file:path(), Mode :: non_neg_integer(), ForceClusterProxy :: boolean()) ->
+-spec get_new_file_location(File :: file_meta:path(), Flags :: fslogic:open_flags(), ForceClusterProxy :: boolean()) ->
     #filelocation{} | no_return().
-get_new_file_location(_File, _Mode, _ForceClusterProxy) ->
+get_new_file_location(_File, _Flags, _ForceClusterProxy) ->
     ?NOT_IMPLEMENTED.

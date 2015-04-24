@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module provides and manages fslogic context information
-%%%      such as protocol version or user's DN
+%%%      such user's credentials.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_context).

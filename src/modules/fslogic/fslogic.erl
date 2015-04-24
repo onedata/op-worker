@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module implements worker_plugin_behaviour callbacks.
-%%% It is responsible for spawning processes which then process HTTP requests.
+%%%      Also it decides whether request has to be handled locally or rerouted
+%%%      to other priovider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic).
@@ -18,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--export([init/1, handle/2, cleanup/0, fslogic_runner/5, handle_fuse_message/2]).
+-export([init/1, handle/2, cleanup/0, fslogic_runner/5]).
 -export([extract_logical_path/1]).
 
 
@@ -27,10 +28,11 @@
 %%%===================================================================
 
 -type ctx() :: #fslogic_ctx{}.
--type file() :: mfile:entry().
--type open_mode() :: read | write | rwrd.
+-type file() :: file_meta:entry(). %% Type alias for better code organization
+-type open_flags() :: read | write | rwrd.
+-type posix_permissions() :: non_neg_integer().
 
--export_type([ctx/0, file/0, open_mode/0]).
+-export_type([ctx/0, file/0, open_flags/0, posix_permissions/0]).
 
 
 %%%===================================================================
@@ -70,8 +72,8 @@ handle({#fslogic_ctx{} = CTX, #fusemessage{input = RequestBody}}, _) ->
     fslogic_runner(fun maybe_handle_fuse_message/2, CTX, RequestType, RequestBody);
 
 %% Handle requests that have wrong structure.
-handle(_ProtocolVersion, _Msg) ->
-    ?warning("Wrong fslogic request: ~p", [_Msg]),
+handle(_Request, _State) ->
+    ?log_bad_request(_Request),
     erlang:error(wrong_request).
 
 
@@ -82,14 +84,10 @@ handle(_ProtocolVersion, _Msg) ->
 -spec maybe_handle_fuse_message(CTX :: ctx(), RequestBody :: tuple()) -> Result :: term().
 %%--------------------------------------------------------------------
 maybe_handle_fuse_message(CTX, RequestBody) ->
-    PathCtx = extract_logical_path(RequestBody),
-    {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx, utils:record_type(RequestBody)),
-    {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
+    %% @todo: get space data for given file
+    {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = undefined,
 
     Self = undefined, %% @todo: get proper provider id
-
-    ?debug("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p, ~p, FullName: ~p / ~p",
-        [SpaceName, Providers, Self, fslogic_context:get_gr_auth(CTX), RequestBody, PathCtx, AbsolutePathCtx]),
 
     case lists:member(Self, Providers) of
         true ->
@@ -100,8 +98,7 @@ maybe_handle_fuse_message(CTX, RequestBody) ->
                     {ok, {reroute, Self, RequestBody1}} ->  %% Request should be handled locally for some reason
                         {ok, handle_fuse_message(CTX, RequestBody1)};
                     {ok, {reroute, RerouteToProvider, RequestBody1}} ->
-                        RemoteResponse = provider_proxy:reroute_pull_message(RerouteToProvider, fslogic_context:get_gr_auth(CTX),
-                            fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody1, message_type = atom_to_list(element(1, RequestBody))}),
+                        RemoteResponse = undefined, %% @todo: implement message rerouting
                         {ok, RemoteResponse};
                     {ok, {response, Response}} -> %% Do not handle this request and return custom response
                         {ok, Response};
@@ -114,6 +111,7 @@ maybe_handle_fuse_message(CTX, RequestBody) ->
                     ?error_stacktrace("Unable to process remote fslogic request due to: ~p", [{Type, Reason}]),
                     {error, {Type, Reason}}
             end,
+            %% Remote response may need some tweaking...
             case fslogic_remote:postrouting(SpaceInfo, PrePostProcessResponse, RequestBody) of
                 undefined -> throw({unable_to_reroute_message, PrePostProcessResponse});
                 LocalResponse -> LocalResponse
@@ -192,7 +190,7 @@ handle_fuse_message(CTX, _Req = #chmod{uuid = FileUUID, mode = Mode}) ->
     fslogic_req_generic:chmod(CTX, FileUUID, Mode);
 
 handle_fuse_message(CTX, _Req = #getattr{uuid = FileUUID}) ->
-    fslogic_req_generic:get_file_attr(CTX, FileUUID).
+    fslogic_req_generic:get_attrs(CTX, FileUUID).
 
 %%--------------------------------------------------------------------
 %% @doc Convinience method that returns logical file path for the operation.

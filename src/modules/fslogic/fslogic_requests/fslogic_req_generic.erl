@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc FSLogic generic request handlers.
+%%% @doc FSLogic generic (both for regular and special files) request handlers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_req_generic).
@@ -28,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec chmod(fslogic:ctx(), File :: fslogic:file(), Perms :: non_neg_integer()) ->
+-spec chmod(fslogic:ctx(), File :: fslogic:file(), Perms :: fslogic:posix_permissions()) ->
     #atom{} | no_return().
 -check_permissions({owner, 2}).
 chmod(_, _File, _Mode) ->
@@ -60,7 +60,7 @@ delete_file(_, _File) ->
 %% @doc Renames file.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_file(fslogic:ctx(), SourcePath :: file:path(), TargetPath :: file:path()) ->
+-spec rename_file(fslogic:ctx(), SourcePath :: fslogic:file(), TargetPath :: file_meta:path()) ->
     #atom{} | no_return().
 -check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
 rename_file(_, _SourcePath, _TargetPath) ->
