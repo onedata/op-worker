@@ -32,7 +32,6 @@
 -record(cm_state, {
     nodes = [] :: [Node :: node()],
     uninitialized_nodes = [] :: [Node :: node()],
-    workers = [] :: [{Node :: node(), Module :: module(), Args :: term()}],
     state_num = 1 :: integer()
 }).
 
@@ -226,7 +225,6 @@ code_change(_OldVsn, State, _Extra) ->
     NewState :: #cm_state{}.
 heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, SenderNode) ->
     ?debug("Heartbeat from node: ~p", [SenderNode]),
-    ?error("@@ ccm getting active nodes: ~p",[nodes()]),
     case lists:member(SenderNode, Nodes) or lists:member(SenderNode, InitNodes) of
         true ->
             gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
@@ -281,7 +279,7 @@ update_node_managers(Nodes, NewStateNum) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Clears information about workers on node that is down.
+%% Delete node from active nodes list, change state num and inform everone
 %% @end
 %%--------------------------------------------------------------------
 -spec node_down(Node :: atom(), State :: #cm_state{}) -> #cm_state{}.
