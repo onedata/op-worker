@@ -50,7 +50,6 @@ init_bucket(_BucketName, Models) ->
                             throw(Reason)
                     end;
                 [MnesiaNode | _] = MnesiaNodes -> %% there is at least one mnesia node -> join cluster
-                    ?error("@@ mnesia_nodes: ~p", [MnesiaNodes]),
                     case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
                             case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
@@ -62,6 +61,7 @@ init_bucket(_BucketName, Models) ->
                             ok;
                         {error, Reason} ->
                             ?error("Cannot expand mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
+                            ?error("@@ mnesia_nodes: ~p", [MnesiaNodes]),
                             throw(Reason)
                     end
             end
@@ -347,7 +347,6 @@ transaction(Fun) ->
 %%--------------------------------------------------------------------
 -spec get_active_nodes(Table :: atom()) -> [Node :: atom()].
 get_active_nodes(Table) ->
-    ?error("@@ mnesia driver getting active nodes: ~p",[nodes()]),
     {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
     Replies1 = lists:flatten(Replies0),
     Replies2 = [Node || {Node, ram_copies} <- Replies1],
