@@ -37,7 +37,7 @@ prerouting(_SpaceInfo, RequestBody, [RerouteTo | _Providers]) ->
     Path = fslogic:extract_logical_path(RequestBody),
 
     %% Replace all paths in this request with their "full" versions (with /spaces prefix).
-    {ok, FullPath} = fslogic_path:get_full_file_name(Path),
+    {ok, FullPath} = {ok, undefined}, %% @todo: get non-ambiguous path or file UUID
     TupleList = lists:map(
         fun(Elem) ->
             case Elem of

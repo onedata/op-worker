@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--export([init/1, handle/2, cleanup/0, fslogic_runner/5]).
+-export([init/1, handle/2, cleanup/0, fslogic_runner/5, handle_fuse_message/2]).
 -export([extract_logical_path/1]).
 
 
@@ -85,9 +85,9 @@ handle(_Request, _State) ->
 %%--------------------------------------------------------------------
 maybe_handle_fuse_message(CTX, RequestBody) ->
     %% @todo: get space data for given file
-    {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = undefined,
+    {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = {ok, #space_info{providers = [crypto:rand_bytes(10)]}},
 
-    Self = undefined, %% @todo: get proper provider id
+    Self = crypto:rand_bytes(10), %% @todo: get proper provider id
 
     case lists:member(Self, Providers) of
         true ->
@@ -100,8 +100,9 @@ maybe_handle_fuse_message(CTX, RequestBody) ->
                     {ok, {reroute, RerouteToProvider, RequestBody1}} ->
                         RemoteResponse = undefined, %% @todo: implement message rerouting
                         {ok, RemoteResponse};
-                    {ok, {response, Response}} -> %% Do not handle this request and return custom response
-                        {ok, Response};
+                    %% @todo: uncomment those lines after implementing slogic_remote:prerouting/3
+%%                     {ok, {response, Response}} -> %% Do not handle this request and return custom response
+%%                         {ok, Response};
                     {error, PreRouteError} ->
                         ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [RequestBody, PreRouteError]),
                         throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})
@@ -161,22 +162,22 @@ fslogic_runner(Method, CTX, RequestType, RequestBody, ErrorHandler) when is_func
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Manually thrown error, normal interrupt case.
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, ErrorCode);
         error:{badmatch, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
             ?warning_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, ErrorCode);
         error:{case_clause, Reason} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went seriously wrong and we should know about it.
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, ErrorCode);
         error:UnkError ->
             {ErrorCode, ErrorDetails} = {?EREMOTEIO, UnkError},
             %% Bad Match assertion - something went horribly wrong. This should not happen.
             ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
+            ErrorHandler:gen_error_message(RequestType, ErrorCode)
     end.
 
 
@@ -184,18 +185,21 @@ fslogic_runner(Method, CTX, RequestType, RequestBody, ErrorHandler) when is_func
 %% @doc Processes requests from FUSE.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_message(CTX :: ctx(), Record :: tuple()) -> Result when
-  Result :: term().
+-spec handle_fuse_message(CTX :: ctx(), Record :: tuple()) -> no_return().
 handle_fuse_message(CTX, _Req = #chmod{uuid = FileUUID, mode = Mode}) ->
     fslogic_req_generic:chmod(CTX, FileUUID, Mode);
 
 handle_fuse_message(CTX, _Req = #getattr{uuid = FileUUID}) ->
-    fslogic_req_generic:get_attrs(CTX, FileUUID).
+    fslogic_req_generic:get_attrs(CTX, FileUUID);
+
+handle_fuse_message(_CTX, Req) ->
+    ?log_bad_request(Req),
+    erlang:error({invalid_request, Req}).
 
 %%--------------------------------------------------------------------
 %% @doc Convinience method that returns logical file path for the operation.
 %% @end
 %%--------------------------------------------------------------------
--spec extract_logical_path(Record :: tuple()) -> file:path() | undefined.
+-spec extract_logical_path(Record :: tuple()) -> file_meta:path() | undefined.
 extract_logical_path(_) ->
     <<"/">>.

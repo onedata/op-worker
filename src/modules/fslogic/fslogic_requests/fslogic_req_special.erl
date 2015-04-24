@@ -27,7 +27,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(fslogic:ctx(), Path :: file_meta:path(), Mode :: non_neg_integer()) ->
-    #atom{} | no_return().
+    no_return().
 mkdir(_, _Path, _Mode) ->
     ?NOT_IMPLEMENTED.
 
@@ -37,7 +37,7 @@ mkdir(_, _Path, _Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir(fslogic:ctx(), File :: fslogic:file(), ROffset :: non_neg_integer(), RCount :: non_neg_integer()) ->
-    #direntries{} | no_return().
+    no_return().
 read_dir(_, _FIle, _ROffset, _RCount) ->
     ?NOT_IMPLEMENTED.
 
@@ -47,7 +47,7 @@ read_dir(_, _FIle, _ROffset, _RCount) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec link(fslogic:ctx(), Path :: file_meta:path(), LinkValue :: binary()) ->
-    #atom{} | no_return().
+    no_return().
 link(_, _File, LinkValue) ->
     ?NOT_IMPLEMENTED.
 
@@ -57,7 +57,7 @@ link(_, _File, LinkValue) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_link(fslogic:ctx(), File :: fslogic:file()) ->
-    #linkinfo{} | no_return().
+    no_return().
 read_link(_, _File) ->
     ?NOT_IMPLEMENTED.
 

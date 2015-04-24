@@ -48,4 +48,4 @@ random_ascii_lowercase_sequence(Length) ->
 %%--------------------------------------------------------------------
 -spec get_parent(fslogic:file()) -> fslogic:file() | no_return().
 get_parent(_File) ->
-    ?NOT_IMPLEMENTED.
+    #document{value = #file_meta{}}.

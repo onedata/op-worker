@@ -18,6 +18,9 @@
 %% API
 -export([chmod/3, get_attrs/2, delete_file/2, rename_file/3]).
 
+%% @todo: uncomment 'check_permissions' annotations after implementing
+%%        methods below. Annotations have to be commented out due to dizlyzer errors.
+
 %%--------------------------------------------------------------------
 %% API functions
 %%--------------------------------------------------------------------
@@ -29,8 +32,8 @@
 %%--------------------------------------------------------------------
 
 -spec chmod(fslogic:ctx(), File :: fslogic:file(), Perms :: fslogic:posix_permissions()) ->
-    #atom{} | no_return().
--check_permissions({owner, 2}).
+    no_return().
+%%-check_permissions({owner, 2}).
 chmod(_, _File, _Mode) ->
     ?NOT_IMPLEMENTED.
 
@@ -40,7 +43,7 @@ chmod(_, _File, _Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_attrs(fslogic:ctx(), File :: fslogic:file()) ->
-    #fileattr{} | no_return().
+    no_return().
 get_attrs(_, _File) ->
     ?NOT_IMPLEMENTED.
 
@@ -50,8 +53,8 @@ get_attrs(_, _File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic:ctx(), File :: fslogic:file()) ->
-    #atom{} | no_return().
--check_permissions({write, {parent, 2}}).
+    no_return().
+%%-check_permissions({write, {parent, 2}}).
 delete_file(_, _File) ->
     ?NOT_IMPLEMENTED.
 
@@ -61,8 +64,8 @@ delete_file(_, _File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file(fslogic:ctx(), SourcePath :: fslogic:file(), TargetPath :: file_meta:path()) ->
-    #atom{} | no_return().
--check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
+    no_return().
+%%-check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
 rename_file(_, _SourcePath, _TargetPath) ->
     ?NOT_IMPLEMENTED.
 

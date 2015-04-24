@@ -32,12 +32,12 @@ gen_error_code({error, Reason}) ->
     gen_error_code(Reason);
 
 %% Generic translations below. All custom translations shall be defined ^above this line.
-gen_error_code(ErrorCode) when is_list(ErrorCode) ->
+gen_error_code(ErrorCode) when is_atom(ErrorCode) ->
     case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
         true    -> {ErrorCode, no_details};
         false   -> {?EREMOTEIO, ErrorCode}
     end;
-gen_error_code({ErrorCode, ErrorDetails}) when is_list(ErrorCode) ->
+gen_error_code({ErrorCode, ErrorDetails}) when is_atom(ErrorCode) ->
     case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
         true    -> {ErrorCode, ErrorDetails};
         false   -> {?EREMOTEIO, {ErrorCode, ErrorDetails}}
@@ -62,7 +62,7 @@ gen_error_message(RecordName, _Error) ->
 %%--------------------------------------------------------------------
 %% @doc Translates POSIX error code to internal fslogic_error().
 %%--------------------------------------------------------------------
--spec posix_to_oneerror(POSIXErrorCode :: integer()) -> ErrorCode :: non_neg_integer().
+-spec posix_to_oneerror(POSIXErrorCode :: non_neg_integer()) -> ErrorCode :: posix_error().
 posix_to_oneerror(POSIX) when POSIX < 0 -> %% All error codes are currently negative, so translate accordingly
     posix_to_oneerror(-POSIX);
 posix_to_oneerror(1) ->
