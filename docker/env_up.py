@@ -70,7 +70,8 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-output = env.up(args.image, args.bin_am, args.bin_gr, args.bin_op, args.bin_oc,
-                args.logdir, args.config_path)
+output = env.up(args.config_path, image=args.image, bin_am=args.bin_am,
+       bin_gr=args.bin_gr, bin_op=args.bin_op, bin_oc=args.bin_oc,
+       logdir=args.logdir)
 
 print(json.dumps(output))
