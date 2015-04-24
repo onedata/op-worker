@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 -behaviour(store_driver_behaviour).
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -50,7 +51,9 @@ init_bucket(_BucketName, Models) ->
                             throw(Reason)
                     end;
                 [MnesiaNode | _] = MnesiaNodes -> %% there is at least one mnesia node -> join cluster
-                    case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [Node]]) of
+                    case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                        {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end})
+                    of
                         {ok, [Node]} ->
                             case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
                                 {atomic, ok} ->
