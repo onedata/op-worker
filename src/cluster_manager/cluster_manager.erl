@@ -226,6 +226,7 @@ code_change(_OldVsn, State, _Extra) ->
     NewState :: #cm_state{}.
 heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, SenderNode) ->
     ?debug("Heartbeat from node: ~p", [SenderNode]),
+    ?error("@@ ccm getting active nodes: ~p",[nodes()]),
     case lists:member(SenderNode, Nodes) or lists:member(SenderNode, InitNodes) of
         true ->
             gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
