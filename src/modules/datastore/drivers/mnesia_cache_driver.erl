@@ -43,7 +43,9 @@ init_bucket(_BucketName, Models) ->
                 [] -> %% No mnesia nodes -> create new table
                     case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
                         {ram_copies, [Node]}, {type, set}]) of
-                        {atomic, ok} -> ok;
+                        {atomic, ok} ->
+                            mnesia:wait_for_tables([Table], 5000),
+                            ok;
                         {aborted, {already_exists, Table}} ->
                             ok;
                         {aborted, Reason} ->
@@ -51,7 +53,8 @@ init_bucket(_BucketName, Models) ->
                             throw(Reason)
                     end;
                 [MnesiaNode | _] = MnesiaNodes -> %% there is at least one mnesia node -> join cluster
-                    rpc:call(Node, mnesia, wait_for_tables, [[Table], 5000]),
+                    Tables = lists:map(fun(T) -> table_name(T) end, ?MODELS),
+                    rpc:call(Node, mnesia, wait_for_tables, [Tables, 5000]),
                     case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
                         {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end})
                     of
@@ -354,4 +357,5 @@ get_active_nodes(Table) ->
     {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
     Replies1 = lists:flatten(Replies0),
     Replies2 = [Node || {Node, ram_copies} <- Replies1],
+    mnesia:table_info()
     lists:usort(Replies2).
