@@ -38,7 +38,6 @@ all() -> [token_authentication].
 %%%===================================================================
 
 token_authentication(Config) ->
-    timer:sleep(timer:seconds(5)), % waiting for appmock. todo integrate with nagios
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
     mock_gr_certificates(Config),
