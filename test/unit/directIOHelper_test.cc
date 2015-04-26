@@ -46,7 +46,7 @@ class DirectIOHelperTest: public ::testing::Test
 protected:
     std::shared_ptr<DirectIOHelper> proxy;
 
-    struct fuse_file_info ffi;
+    struct fuse_file_info ffi = {0};
     StorageHelperCTX ctx;
     char buf[1024];
 
@@ -70,7 +70,6 @@ protected:
 
     void SetUp() override
     {
-        ffi.fh = 0;
         testFileId = "test.txt";
         testFilePath = boost::filesystem::path(DIO_TEST_ROOT) / testFileId;
 
