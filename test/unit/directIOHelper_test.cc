@@ -8,6 +8,8 @@
 #include "directIOHelper.h"
 #include "helpers/storageHelperFactory.h"
 
+#include "testUtils.h"
+
 #include <boost/algorithm/string.hpp>
 #include <gtest/gtest.h>
 
