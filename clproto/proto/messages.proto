@@ -10,7 +10,6 @@
 
 package one.clproto;
 
-import "common_messages.proto";
 import "event_messages.proto";
 import "common_messages.proto";
 import "stream_messages.proto";
