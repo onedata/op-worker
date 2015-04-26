@@ -288,37 +288,15 @@ DirectIOHelper::sh_read(const boost::filesystem::path &p, boost::asio::mutable_b
             return;
         }
 
-        boost::asio::posix::stream_descriptor fh(m_workerService, fd);
-        fh.non_blocking(true);
-
-        if(lseek(fd, offset, SEEK_SET) == -1) {
+        auto res = pread(fd, boost::asio::buffer_cast<char *>(buf), boost::asio::buffer_size(buf), offset);
+        if(res == -1) {
             setPosixError(promise, errno);
-            if(ctx.m_ffi.fh > 0)
-                fh.release(); // Do NOT auto-close this file descriptor
-            return;
+        } else {
+            promise->set_value(boost::asio::buffer(buf, res));
         }
 
-        // Helper function for setting return value and cleaning up file handle
-        auto setPromiseAndCleanup = [&ctx, buf, &fh, promise](const boost::system::error_code& ec, std::size_t bytes_transferred) {
-            if(ec) {
-                setPosixError(promise, ec.value());
-            } else {
-                promise->set_value(boost::asio::buffer(buf, bytes_transferred));
-            }
-
-            if(ctx.m_ffi.fh > 0) {
-                fh.release(); // Do NOT auto-close this file descriptor
-            }
-        };
-
-        if(fh.non_blocking()) {
-            fh.async_read_some(boost::asio::buffer(buf), [setPromiseAndCleanup](const boost::system::error_code& ec, std::size_t bytes_transferred) {
-                setPromiseAndCleanup(ec, bytes_transferred);
-            });
-        } else {
-            boost::system::error_code ec;
-            auto bytes_transferred = fh.read_some(boost::asio::buffer(buf), ec);
-            setPromiseAndCleanup(ec, bytes_transferred);
+        if(ctx.m_ffi.fh <= 0) {
+            close(fd);
         }
     });
 
@@ -340,38 +318,15 @@ DirectIOHelper::sh_write(const boost::filesystem::path &p, boost::asio::const_bu
             return;
         }
 
-        // Prepare file handle
-        boost::asio::posix::stream_descriptor fh(m_workerService, fd);
-        fh.non_blocking(true);
-
-        if(lseek(fd, offset, SEEK_SET) == -1) {
+        auto res = pwrite(fd, boost::asio::buffer_cast<const char *>(buf), boost::asio::buffer_size(buf), offset);
+        if(res == -1) {
             setPosixError(promise, errno);
-            if(ctx.m_ffi.fh > 0)
-                fh.release(); // Do NOT auto-close this file descriptor
-            return;
+        } else {
+            promise->set_value(res);
         }
 
-        // Helper function for setting return value and cleaning up file handle
-        auto setPromiseAndCleanup = [&ctx, buf, &fh, promise](const boost::system::error_code& ec, std::size_t bytes_transferred) {
-            if(ec) {
-                setPosixError(promise, ec.value());
-            } else {
-                promise->set_value(bytes_transferred);
-            }
-
-            if(ctx.m_ffi.fh > 0) {
-                fh.release(); // Do NOT auto-close this file descriptor
-            }
-        };
-
-        if(fh.non_blocking()) {
-            fh.async_write_some(boost::asio::buffer(buf), [setPromiseAndCleanup](const boost::system::error_code& ec, std::size_t bytes_transferred) {
-                setPromiseAndCleanup(ec, bytes_transferred);
-            });
-        } else {
-            boost::system::error_code ec;
-            auto bytes_transferred = fh.write_some(boost::asio::buffer(buf), ec);
-            setPromiseAndCleanup(ec, bytes_transferred);
+        if(ctx.m_ffi.fh <= 0) {
+            close(fd);
         }
     });
 
