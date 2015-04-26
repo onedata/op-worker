@@ -16,6 +16,8 @@
 #include <boost/any.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/asio/buffer.hpp>
+#define BOOST_THREAD_PROVIDES_FUTURE
+#include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
 
 #include <unordered_map>
@@ -39,7 +41,7 @@ struct StorageHelperCTX {
 
 };
 
-typedef StorageHelperCTX& ctx_type;
+using ctx_type = StorageHelperCTX&;
 
 /**
  * The IStorageHelper interface.
@@ -53,36 +55,36 @@ public:
 
     virtual ~IStorageHelper() = default;
 
-    virtual boost::shared_future<struct stat> sh_getattr(const boost::filesystem::path &p) = 0;
-    virtual boost::shared_future<int> sh_access(const boost::filesystem::path &p, int mask) = 0;
-    virtual boost::shared_future<std::string> sh_readlink(const boost::filesystem::path &p) = 0;
-    virtual boost::shared_future<std::vector<std::string>>
+    virtual boost::future<struct stat> sh_getattr(const boost::filesystem::path &p) = 0;
+    virtual boost::future<int> sh_access(const boost::filesystem::path &p, int mask) = 0;
+    virtual boost::future<std::string> sh_readlink(const boost::filesystem::path &p) = 0;
+    virtual boost::future<std::vector<std::string>>
             sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, ctx_type ctx) = 0;
-    virtual boost::shared_future<int> sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev) = 0;
-    virtual boost::shared_future<int> sh_mkdir(const boost::filesystem::path &p, mode_t mode) = 0;
-    virtual boost::shared_future<int> sh_unlink(const boost::filesystem::path &p) = 0;
-    virtual boost::shared_future<int> sh_rmdir(const boost::filesystem::path &p) = 0;
-    virtual boost::shared_future<int>
+    virtual boost::future<int> sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev) = 0;
+    virtual boost::future<int> sh_mkdir(const boost::filesystem::path &p, mode_t mode) = 0;
+    virtual boost::future<int> sh_unlink(const boost::filesystem::path &p) = 0;
+    virtual boost::future<int> sh_rmdir(const boost::filesystem::path &p) = 0;
+    virtual boost::future<int>
             sh_symlink(const boost::filesystem::path &from, const boost::filesystem::path &to) = 0;
-    virtual boost::shared_future<int>
+    virtual boost::future<int>
             sh_rename(const boost::filesystem::path &from, const boost::filesystem::path &to) = 0;
-    virtual boost::shared_future<int>
+    virtual boost::future<int>
             sh_link(const boost::filesystem::path &from, const boost::filesystem::path &to) = 0;
-    virtual boost::shared_future<int> sh_chmod(const boost::filesystem::path &p, mode_t mode) = 0;
-    virtual boost::shared_future<int> sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid) = 0;
-    virtual boost::shared_future<int> sh_truncate(const boost::filesystem::path &p, off_t size) = 0;
+    virtual boost::future<int> sh_chmod(const boost::filesystem::path &p, mode_t mode) = 0;
+    virtual boost::future<int> sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid) = 0;
+    virtual boost::future<int> sh_truncate(const boost::filesystem::path &p, off_t size) = 0;
 
 
-    virtual boost::shared_future<int> sh_open(const boost::filesystem::path &p, ctx_type ctx) = 0;
-    virtual boost::shared_future<boost::asio::mutable_buffer>
+    virtual boost::future<int> sh_open(const boost::filesystem::path &p, ctx_type ctx) = 0;
+    virtual boost::future<boost::asio::mutable_buffer>
             sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
                     ctx_type ctx) = 0;
-    virtual boost::shared_future<int>
+    virtual boost::future<int>
             sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
                      ctx_type ctx) = 0;
-    virtual boost::shared_future<int> sh_release(const boost::filesystem::path &p, ctx_type ctx) = 0;
-    virtual boost::shared_future<int> sh_flush(const boost::filesystem::path &p, ctx_type ctx) = 0;
-    virtual boost::shared_future<int>
+    virtual boost::future<int> sh_release(const boost::filesystem::path &p, ctx_type ctx) = 0;
+    virtual boost::future<int> sh_flush(const boost::filesystem::path &p, ctx_type ctx) = 0;
+    virtual boost::future<int>
             sh_fsync(const boost::filesystem::path &p, int isdatasync, ctx_type ctx) = 0;
 
 

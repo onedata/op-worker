@@ -14,6 +14,16 @@
 #include <random>
 #include <string>
 
+
+#define EXPECT_THROW_POSIX_CODE(WHAT, CODE) \
+    try { \
+        WHAT; \
+        FAIL() << "Method should've thrown"; \
+    } catch(std::system_error &e) { \
+        if(e.code().value() != CODE) { FAIL() << "Invalid error code. Was " << e.code().value() << " (" << e.what() << ") but expected " << CODE; } \
+    } catch(...) { FAIL() << "Unknown exception"; }
+
+
 namespace
 {
 

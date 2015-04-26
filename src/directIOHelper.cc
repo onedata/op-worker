@@ -45,7 +45,7 @@ inline boost::filesystem::path DirectIOHelper::root(const boost::filesystem::pat
 }
 
 
-boost::shared_future<struct stat>
+boost::future<struct stat>
 DirectIOHelper::sh_getattr(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<struct stat>>();
@@ -63,7 +63,7 @@ DirectIOHelper::sh_getattr(const boost::filesystem::path &p)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_access(const boost::filesystem::path &p, int mask)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -76,7 +76,7 @@ DirectIOHelper::sh_access(const boost::filesystem::path &p, int mask)
 }
 
 
-boost::shared_future<std::string>
+boost::future<std::string>
 DirectIOHelper::sh_readlink(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<std::string>>();
@@ -97,7 +97,7 @@ DirectIOHelper::sh_readlink(const boost::filesystem::path &p)
 }
 
 
-boost::shared_future<std::vector<std::string>>
+boost::future<std::vector<std::string>>
 DirectIOHelper::sh_readdir(const boost::filesystem::path &p, off_t offset, size_t count, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<std::vector<std::string>>>();
@@ -107,7 +107,7 @@ DirectIOHelper::sh_readdir(const boost::filesystem::path &p, off_t offset, size_
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rdev)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -138,7 +138,7 @@ DirectIOHelper::sh_mknod(const boost::filesystem::path &p, mode_t mode, dev_t rd
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_mkdir(const boost::filesystem::path &p, mode_t mode)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -151,7 +151,7 @@ DirectIOHelper::sh_mkdir(const boost::filesystem::path &p, mode_t mode)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_unlink(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -164,7 +164,7 @@ DirectIOHelper::sh_unlink(const boost::filesystem::path &p)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_rmdir(const boost::filesystem::path &p)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -177,7 +177,7 @@ DirectIOHelper::sh_rmdir(const boost::filesystem::path &p)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_symlink(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -190,7 +190,7 @@ DirectIOHelper::sh_symlink(const boost::filesystem::path &from, const boost::fil
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_rename(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -203,7 +203,7 @@ DirectIOHelper::sh_rename(const boost::filesystem::path &from, const boost::file
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_link(const boost::filesystem::path &from, const boost::filesystem::path &to)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -216,7 +216,7 @@ DirectIOHelper::sh_link(const boost::filesystem::path &from, const boost::filesy
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_chmod(const boost::filesystem::path &p, mode_t mode)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -229,7 +229,7 @@ DirectIOHelper::sh_chmod(const boost::filesystem::path &p, mode_t mode)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -242,7 +242,7 @@ DirectIOHelper::sh_chown(const boost::filesystem::path &p, uid_t uid, gid_t gid)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_truncate(const boost::filesystem::path &p, off_t size)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -255,7 +255,7 @@ DirectIOHelper::sh_truncate(const boost::filesystem::path &p, off_t size)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_open(const boost::filesystem::path &p, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -275,7 +275,7 @@ DirectIOHelper::sh_open(const boost::filesystem::path &p, ctx_type ctx)
 }
 
 
-boost::shared_future<boost::asio::mutable_buffer>
+boost::future<boost::asio::mutable_buffer>
 DirectIOHelper::sh_read(const boost::filesystem::path &p, boost::asio::mutable_buffer buf, off_t offset,
                             ctx_type ctx)
 {
@@ -305,7 +305,7 @@ DirectIOHelper::sh_read(const boost::filesystem::path &p, boost::asio::mutable_b
 
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_write(const boost::filesystem::path &p, boost::asio::const_buffer buf, off_t offset,
                              ctx_type ctx)
 {
@@ -334,7 +334,7 @@ DirectIOHelper::sh_write(const boost::filesystem::path &p, boost::asio::const_bu
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_release(const boost::filesystem::path &p, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -352,7 +352,7 @@ DirectIOHelper::sh_release(const boost::filesystem::path &p, ctx_type ctx)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_flush(const boost::filesystem::path &p, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();
@@ -363,7 +363,7 @@ DirectIOHelper::sh_flush(const boost::filesystem::path &p, ctx_type ctx)
 }
 
 
-boost::shared_future<int>
+boost::future<int>
 DirectIOHelper::sh_fsync(const boost::filesystem::path &p, int isdatasync, ctx_type ctx)
 {
     auto promise = std::make_shared<boost::promise<int>>();

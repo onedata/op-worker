@@ -31,14 +31,6 @@ bool identityEqual(const T &lhs, const T &rhs)
     return &lhs == &rhs;
 }
 
-#define EXPECT_THROW_POSIX_CODE(WHAT, CODE) \
-    try { \
-        WHAT; \
-        FAIL() << "Method should've thrown"; \
-    } catch(std::system_error &e) { \
-        if(e.code().value() != CODE) { FAIL() << "Invalid error code. Was " << e.code().value() << " (" << e.what() << ") but expected " << CODE; } \
-    } catch(...) { FAIL() << "Unknown exception"; }
-
 #define DIO_TEST_ROOT "/tmp"
 
 class DirectIOHelperTest: public ::testing::Test
