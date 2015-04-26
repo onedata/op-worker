@@ -52,7 +52,7 @@ protected:
 
     boost::asio::io_service io_service;
     boost::asio::io_service::work io_work;
-    std::future<void> th_handle;
+    std::thread th_handle;
 
     boost::filesystem::path testFilePath;
     boost::filesystem::path testFileId;
@@ -74,7 +74,7 @@ protected:
         testFileId = "test.txt";
         testFilePath = boost::filesystem::path(DIO_TEST_ROOT) / testFileId;
 
-        th_handle = std::async([&]() { io_service.run(); });
+        th_handle = std::thread([&]() { io_service.run(); });
         proxy = std::make_shared<DirectIOHelper>(IStorageHelper::ArgsMap{{srvArg(0), std::string(DIO_TEST_ROOT)}},
                                                           io_service);
 
@@ -94,7 +94,7 @@ protected:
         unlinkOnDIO(testFileId);
 
         io_service.stop();
-        th_handle.get();
+        th_handle.join();
     }
 };
 
