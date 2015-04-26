@@ -7,7 +7,6 @@
 
 #include "directIOHelper.h"
 #include "helpers/storageHelperFactory.h"
-#include "oneErrors.h"
 
 #include <boost/algorithm/string.hpp>
 #include <gtest/gtest.h>

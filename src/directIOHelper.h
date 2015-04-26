@@ -13,8 +13,6 @@
 
 #include <boost/filesystem/path.hpp>
 #include <boost/asio.hpp>
-#include <boost/asio/posix/stream_descriptor.hpp>
-#include <boost/asio/posix/basic_stream_descriptor.hpp>
 
 #include <fuse.h>
 #include <sys/types.h>
