@@ -232,7 +232,7 @@ TEST_F(DirectIOHelperTest, chmod)
 
 TEST_F(DirectIOHelperTest, chown)
 {
-    auto p = proxy->sh_chown(testFileId, -1, 0);
+    auto p = proxy->sh_chown(testFileId, -1, -1);
     EXPECT_EQ(0, p.get());
 }
 
