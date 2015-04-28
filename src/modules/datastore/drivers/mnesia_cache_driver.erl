@@ -47,6 +47,7 @@ init_bucket(_BucketName, Models) ->
                             mnesia:wait_for_tables([Table], 5000),
                             ok;
                         {aborted, {already_exists, Table}} ->
+                            mnesia:wait_for_tables([Table], 5000),
                             ok;
                         {aborted, Reason} ->
                             ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
@@ -61,6 +62,7 @@ init_bucket(_BucketName, Models) ->
                         {ok, [Node]} ->
                             case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
                                 {atomic, ok} ->
+                                    rpc:call(MnesiaNode, mnesia, wait_for_tables, [[Table], 5000]),
                                     ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
                                 {aborted, Reason} ->
                                     ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
