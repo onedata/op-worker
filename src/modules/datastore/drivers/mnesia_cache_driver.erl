@@ -356,7 +356,7 @@ transaction(Fun) ->
 %%--------------------------------------------------------------------
 -spec get_active_nodes(Table :: atom()) -> [Node :: atom()].
 get_active_nodes(Table) ->
-    {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
+    {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_read]),
     Replies1 = lists:flatten(Replies0),
     Replies2 = [Node || {Node, ram_copies} <- Replies1],
     lists:usort(Replies2).
