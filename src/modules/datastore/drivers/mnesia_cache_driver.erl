@@ -44,25 +44,23 @@ init_bucket(_BucketName, Models) ->
                     case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
                         {ram_copies, [Node]}, {type, set}]) of
                         {atomic, ok} ->
-                            mnesia:wait_for_tables([Table], 5000),
-                            ok;
+                            ok = mnesia:wait_for_tables([Table], infinity);
                         {aborted, {already_exists, Table}} ->
-                            mnesia:wait_for_tables([Table], 5000),
-                            ok;
+                            ok = mnesia:wait_for_tables([Table], infinity);
                         {aborted, Reason} ->
                             ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
                             throw(Reason)
                     end;
                 [MnesiaNode | _] = MnesiaNodes -> %% there is at least one mnesia node -> join cluster
                     Tables = lists:map(fun(T) -> table_name(T) end, ?MODELS),
-                    rpc:call(Node, mnesia, wait_for_tables, [Tables, 5000]),
+                    ok = rpc:call(Node, mnesia, wait_for_tables, [Tables, infinity]),
                     case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
                         {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end})
                     of
                         {ok, [Node]} ->
                             case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
                                 {atomic, ok} ->
-                                    rpc:call(MnesiaNode, mnesia, wait_for_tables, [[Table], 5000]),
+                                    ok = rpc:call(MnesiaNode, mnesia, wait_for_tables, [[Table], infinity]),
                                     ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
                                 {aborted, Reason} ->
                                     ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
