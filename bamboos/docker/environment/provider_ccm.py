@@ -10,20 +10,11 @@ import common
 import docker
 
 
-try:
-    import xml.etree.cElementTree as eTree
-except ImportError:
-    import xml.etree.ElementTree as eTree
+import copy
+import json
+import os
 
-try:  # Python 2
-    from urllib2 import urlopen
-    from urllib2 import URLError
-    from httplib import BadStatusLine
-except ImportError:  # Python 3
-    from urllib.request import urlopen
-    from urllib.error import URLError
-    from http.client import BadStatusLine
-
+from . import common, docker, riak, dns as dns_mod
 
 def _tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
@@ -46,6 +37,9 @@ def _node_up(image, bindir, logdir, uid, config, dns_servers):
 
     command = \
         '''set -e
+mkdir -p /root/bin/node/log/
+chown {uid}:{gid} /root/bin/node/log/
+chmod ug+s /root/bin/node/log/
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
@@ -59,6 +53,10 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     logdir = os.path.join(os.path.abspath(logdir), name)
     volumes = [(bindir, '/root/build', 'ro')]
     volumes.extend([(logdir, '/root/bin/node/log', 'rw')] if logdir else [])
+
+    if logdir:
+        logdir = os.path.join(os.path.abspath(logdir), name)
+        volumes.extend([(logdir, '/root/bin/node/log', 'rw')])
 
     container = docker.run(
         image=image,
@@ -80,12 +78,15 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         }
     )
 
+def _ready(container):
+    return True #todo implement
+
 def up(image, bindir, logdir, dns, uid, config_path):
     config = common.parse_json_file(config_path)['op_ccm']
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
-    dns_servers, output = common.set_up_dns(dns, uid)
+    dns_servers, output = dns_mod.set_up_dns(dns, uid)
     ccms = []
 
     for cfg in configs:
@@ -94,10 +95,6 @@ def up(image, bindir, logdir, dns, uid, config_path):
         ccms.extend(ccm)
         common.merge(output, node_out)
 
-    if logdir:
-        for node in ccms:
-            docker.exec_(node, ['chown', '-R',
-                                '{0}:{1}'.format(os.geteuid(), os.getegid()),
-                                '/root/bin/node/log/'])
+    common.wait_until(_ready, ccms[0:1], 0)
 
     return output

@@ -29,7 +29,7 @@ parser.add_argument(
     dest='image')
 
 parser.add_argument(
-    '-bp', '--bin-worker',
+    '-bw', '--bin-worker',
     action='store',
     default=env.default('bin_op_worker'),
     help='the path to op_worker repository (precompiled)',
@@ -78,7 +78,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 output = env.up(args.config_path, image=args.image, bin_am=args.bin_am,
-       bin_gr=args.bin_gr, bin_op=args.bin_op, bin_oc=args.bin_oc,
-       logdir=args.logdir)
+       bin_gr=args.bin_gr, bin_op_ccm=args.bin_op_ccm,
+       bin_op_worker=args.bin_op_worker, bin_oc=args.bin_oc, logdir=args.logdir)
 
 print(json.dumps(output))
