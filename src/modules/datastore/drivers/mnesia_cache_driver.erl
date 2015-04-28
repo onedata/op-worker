@@ -12,7 +12,6 @@
 -author("Rafal Slota").
 -behaviour(store_driver_behaviour).
 
--include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -43,25 +42,19 @@ init_bucket(_BucketName, Models) ->
                 [] -> %% No mnesia nodes -> create new table
                     case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
                         {ram_copies, [Node]}, {type, set}]) of
-                        {atomic, ok} ->
-                            ok = mnesia:wait_for_tables([Table], infinity);
+                        {atomic, ok} -> ok;
                         {aborted, {already_exists, Table}} ->
-                            ok = mnesia:wait_for_tables([Table], infinity);
+                            ok;
                         {aborted, Reason} ->
                             ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
                             throw(Reason)
                     end;
-                [MnesiaNode | _] = MnesiaNodes -> %% there is at least one mnesia node -> join cluster
-                    Tables = lists:map(fun(T) -> table_name(T) end, ?MODELS),
-                    ok = rpc:call(MnesiaNode, mnesia, wait_for_tables, [Tables, infinity]),
-                    case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
-                        {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end})
-                    of
+                [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
+                    timer:sleep(3000),
+                    case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
                             case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
                                 {atomic, ok} ->
-                                    ok = rpc:call(MnesiaNode, mnesia, wait_for_tables, [[Table], infinity]),
-                                    ok = mnesia:wait_for_tables([Table], infinity),
                                     ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
                                 {aborted, Reason} ->
                                     ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
@@ -69,7 +62,6 @@ init_bucket(_BucketName, Models) ->
                             ok;
                         {error, Reason} ->
                             ?error("Cannot expand mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
-                            ?error("@@ mnesia_nodes: ~p", [MnesiaNodes]),
                             throw(Reason)
                     end
             end
@@ -355,7 +347,7 @@ transaction(Fun) ->
 %%--------------------------------------------------------------------
 -spec get_active_nodes(Table :: atom()) -> [Node :: atom()].
 get_active_nodes(Table) ->
-    {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_read]),
+    {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
     Replies1 = lists:flatten(Replies0),
     Replies2 = [Node || {Node, ram_copies} <- Replies1],
     lists:usort(Replies2).
