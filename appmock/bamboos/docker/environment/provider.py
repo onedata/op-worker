@@ -2,7 +2,7 @@
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
-Brings up a set of oneprovider worker nodes. They can create separate clusters.
+Brings up a set of oneprovider nodes. They can create separate clusters.
 """
 
 import copy
@@ -34,6 +34,7 @@ def _tweak_config(config, name, uid):
 
 
 def _node_up(image, bindir, logdir, uid, config, dns_servers, db_node_mappings):
+    node_type = config['nodes']['node']['sys.config']['node_type']
     node_name = config['nodes']['node']['vm.args']['name']
     db_nodes = config['nodes']['node']['sys.config']['db_nodes']
     for i in range(len(db_nodes)):
@@ -75,10 +76,11 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         command=command)
 
     return (
-        [container],
+        [container] if node_type == 'ccm' else [],
+        [container] if node_type == 'worker' else [],
         {
             'docker_ids': [container],
-            'op_worker_nodes': [node_name]
+            'op_{0}_nodes'.format(node_type): [node_name]
         }
     )
 
@@ -112,14 +114,16 @@ def up(image, bindir, logdir, dns, uid, config_path):
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
     dns_servers, output = dns_mod.set_up_dns(dns, uid)
+    ccms = []
     workers = []
 
     db_node_mappings, riak_out = _riak_up(configs, dns_servers, uid)
     common.merge(output, riak_out)
 
     for cfg, _ in configs:
-        worker, node_out = _node_up(image, bindir, logdir, uid, cfg,
+        ccm, worker, node_out = _node_up(image, bindir, logdir, uid, cfg,
                                          dns_servers, db_node_mappings)
+        ccms.extend(ccm)
         workers.extend(worker)
         common.merge(output, node_out)
 

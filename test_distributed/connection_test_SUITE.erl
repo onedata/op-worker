@@ -12,18 +12,17 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/message_id.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
 -include("proto/oneproxy/oneproxy_messages.hrl").
--include("proto_internal/oneclient/common_messages.hrl").
--include("proto_internal/oneclient/event_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/handshake_messages.hrl").
--include("proto_internal/oneclient/message_id.hrl").
--include("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("clproto/include/messages.hrl").
+-include_lib("clproto/include/oneproxy_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -73,7 +72,7 @@ cert_connection_test(Config) ->
     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
         session_id = <<"session_id">>
     }}},
-    HandshakeReqRaw = client_messages:encode_msg(HandshakeReq),
+    HandshakeReqRaw = messages:encode_msg(HandshakeReq),
     Pid = self(),
     test_utils:mock_expect(Workers, serializator, deserialize_oneproxy_certificate_info_message,
         fun(Data) ->
@@ -98,7 +97,7 @@ cert_connection_test(Config) ->
     ?assertNotEqual(undefined, CertInfo#certificate_info.client_subject_dn),
     ?assert(is_binary(CertInfo#certificate_info.client_session_id)),
     ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
-    HandshakeResponse = server_messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
+    HandshakeResponse = messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
     SessionId}}} = HandshakeResponse,
     ?assert(is_binary(SessionId)),
@@ -119,7 +118,7 @@ protobuf_msg_test(Config) ->
         {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size = 1, blocks = []}}
         }}
     },
-    RawMsg = client_messages:encode_msg(Msg),
+    RawMsg = messages:encode_msg(Msg),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
@@ -165,7 +164,7 @@ multi_message_test(Config) ->
                 blocks = []
             }}}}}
         end, MsgNumbers),
-    RawEvents = lists:map(fun(E) -> client_messages:encode_msg(E) end, Events),
+    RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
     test_utils:mock_expect(Workers, router, route_message,
         fun(#client_message{message_body = #read_event{counter = Counter}}) ->
             Self ! Counter,
@@ -317,7 +316,7 @@ multi_ping_pong_test(Config) ->
         fun(N) ->
             #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
         end, MsgNumbersBin),
-    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+    RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
     Self = self(),
 
     T1 = os:timestamp(),
@@ -377,7 +376,7 @@ sequential_ping_pong_test(Config) ->
         fun(N) ->
             #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
         end, MsgNumbersBin),
-    RawPings = lists:map(fun(E) -> client_messages:encode_msg(E) end, Pings),
+    RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
@@ -462,7 +461,7 @@ bandwidth_test(Config) ->
     Transport = ?config(transport, Config),
     Data = crypto:rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
-    PacketRaw = client_messages:encode_msg(Packet),
+    PacketRaw = messages:encode_msg(Packet),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
         fun(#client_message{message_body = #data{}}) ->
@@ -514,12 +513,12 @@ python_client_test(Config) ->
 
     Data = crypto:rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
-    PacketRaw = client_messages:encode_msg(Packet),
+    PacketRaw = messages:encode_msg(Packet),
 
     HandshakeMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
         token = #'Token'{value = ?TOKEN}}}},
-    HandshakeMessageRaw = client_messages:encode_msg(HandshakeMessage),
+    HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
@@ -566,7 +565,7 @@ proto_version_test(Config) ->
         message_id = MsgId,
         message_body = {get_protocol_version, #'GetProtocolVersion'{}}
     },
-    GetProtoVersionRaw = client_messages:encode_msg(GetProtoVersion),
+    GetProtoVersionRaw = messages:encode_msg(GetProtoVersion),
     {ok, {Sock, _}} = connect_via_token(Worker1),
 
     % when
@@ -685,7 +684,7 @@ connect_via_token(Node, SocketOpts, Transport, SessId) ->
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = SessId,
         token = #'Token'{value = ?TOKEN}}}},
-    TokenAuthMessageRaw = client_messages:encode_msg(TokenAuthMessage),
+    TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     ActiveOpt =
         case proplists:get_value(active, SocketOpts) of
             undefined -> [];
@@ -735,14 +734,14 @@ spawn_ssl_echo_client(NodeToConnect) ->
                 {ok, Data} ->
                     % decode
                     #'ServerMessage'{message_id = Id, message_body = Body} =
-                        server_messages:decode_msg(Data, 'ServerMessage'),
+                        messages:decode_msg(Data, 'ServerMessage'),
 
                     % respond with the same data to the server (excluding stream_reset)
                     case Body of
                         {message_stream_reset, _} -> ok;
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
-                            ClientAnsRaw = client_messages:encode_msg(ClientAnsProtobuf),
+                            ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
                             ?assertEqual(ok, ssl:send(Sock, ClientAnsRaw))
                     end,
 
@@ -786,7 +785,7 @@ receive_server_message(IgnoredMsgList) ->
     receive
         {_, _, Data} ->
             % ignore listed messages
-            Msg = server_messages:decode_msg(Data, 'ServerMessage'),
+            Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
                 true ->

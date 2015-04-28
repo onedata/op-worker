@@ -34,9 +34,8 @@
 %%--------------------------------------------------------------------
 -spec start_link(Ref :: ranch:ref(), Socket :: term(), Transport :: module(), ProtoOpts :: term()) ->
     {ok, ConnectionPid :: pid()}.
-start_link(Ref, Socket, Transport, [Port, _Packet] = Opts) ->
+start_link(Ref, Socket, Transport, Opts) ->
     Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, Opts]),
-    tcp_mock_server:report_connection_state(Port, Pid, true),
     {ok, Pid}.
 
 
@@ -51,6 +50,7 @@ init(Ref, Socket, Transport, [Port, Packet]) ->
     {ok, Timeout} = application:get_env(?APP_NAME, tcp_connection_timeout),
     Transport:setopts(Socket, [{packet, Packet}]),
     {OK, _Closed, _Error} = Transport:messages(),
+    tcp_mock_server:report_connection_state(Port, self(), true),
     loop(Socket, Transport, Port, Timeout, OK).
 
 

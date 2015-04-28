@@ -12,11 +12,11 @@
 -module(router).
 -author("Tomasz Lichon").
 
--include("proto_internal/oneclient/message_id.hrl").
--include("proto_internal/oneclient/event_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/diagnostic_messages.hrl").
+-include("proto/oneclient/message_id.hrl").
+-include("proto/oneclient/event_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

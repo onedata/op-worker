@@ -19,8 +19,8 @@
 -behaviour(dns_query_handler_behaviour).
 
 -include("global_definitions.hrl").
+-include_lib("kernel/src/inet_dns.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/dns/dns.hrl").
 
 %% This record is used by dns_worker (it contains its state). The first element of
 %% a tuple is a name of a module and the second is a list of ip addresses of nodes
@@ -197,7 +197,8 @@ cleanup() ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_a(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_a(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_a(Domain) ->
     call_dns_worker({handle_a, Domain}).
 
@@ -208,7 +209,8 @@ handle_a(Domain) ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_ns(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_ns(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_ns(Domain) ->
     call_dns_worker({handle_ns, Domain}).
 
@@ -218,7 +220,8 @@ handle_ns(Domain) ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cname(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_cname(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_cname(_Domain) -> not_impl.
 
 %%--------------------------------------------------------------------
@@ -227,7 +230,8 @@ handle_cname(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_mx(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_mx(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_mx(_Domain) -> not_impl.
 
 
@@ -237,7 +241,8 @@ handle_mx(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_soa(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_soa(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_soa(_Domain) -> not_impl.
 
 
@@ -247,7 +252,8 @@ handle_soa(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_wks(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_wks(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_wks(_Domain) -> not_impl.
 
 
@@ -257,7 +263,8 @@ handle_wks(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_ptr(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_ptr(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_ptr(_Domain) -> not_impl.
 
 
@@ -267,7 +274,8 @@ handle_ptr(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_hinfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_hinfo(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_hinfo(_Domain) -> not_impl.
 
 %%--------------------------------------------------------------------
@@ -276,7 +284,8 @@ handle_hinfo(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_minfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_minfo(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 %% ====================================================================
 handle_minfo(_Domain) -> not_impl.
 
@@ -286,7 +295,8 @@ handle_minfo(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_txt(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+-spec handle_txt(Domain :: string()) -> {dns_server:reply_type(),
+    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
 handle_txt(_Domain) -> not_impl.
 
 %%%===================================================================

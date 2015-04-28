@@ -6,24 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Credentials that can be exchanged for user identity in identity model
+%%% Internal version of protocol handshake messages.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(CREDENTIALS_HRL).
--define(CREDENTIALS_HRL, 1).
+-ifndef(HANDSHAKE_MESSAGES_HRL).
+-define(HANDSHAKE_MESSAGES_HRL, 1).
 
--include("proto_internal/oneproxy/oneproxy_messages.hrl").
--include_lib("public_key/include/public_key.hrl").
+-include("proto/common/credentials.hrl").
 
--record(token, {
-    value :: binary()
+-record(handshake_request, {
+    token :: #token{},
+    session_id :: session:id()
 }).
 
--record(certificate, {
-    otp_cert :: #'OTPCertificate'{},
-    chain :: [#'OTPCertificate'{}]
+-record(handshake_response, {
+    session_id :: session:id()
 }).
-
 
 -endif.

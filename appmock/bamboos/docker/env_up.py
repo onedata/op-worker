@@ -29,18 +29,11 @@ parser.add_argument(
     dest='image')
 
 parser.add_argument(
-    '-bp', '--bin-worker',
+    '-bp', '--bin-provider',
     action='store',
-    default=env.default('bin_op_worker'),
-    help='the path to op_worker repository (precompiled)',
-    dest='bin_op_worker')
-
-parser.add_argument(
-    '-bccm', '--bin-ccm',
-    action='store',
-    default=env.default('bin_op_ccm'),
-    help='the path to op_ccm repository (precompiled)',
-    dest='bin_op_ccm')
+    default=env.default('bin_op'),
+    help='the path to oneprovider repository (precompiled)',
+    dest='bin_op')
 
 parser.add_argument(
     '-bg', '--bin-gr',

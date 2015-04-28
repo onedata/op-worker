@@ -15,7 +15,7 @@
 -author("Konrad Zemek").
 
 -include("global_definitions.hrl").
--include("proto_internal/common/credentials.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 

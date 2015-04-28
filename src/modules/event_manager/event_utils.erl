@@ -12,7 +12,7 @@
 -module(event_utils).
 -author("Krzysztof Trzepla").
 
--include("proto_internal/oneclient/common_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 
 %% API
 -export([aggregate_blocks/2]).

@@ -12,12 +12,12 @@
 -module(serializator).
 -author("Tomasz Lichon").
 
+-include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneproxy/oneproxy_messages.hrl").
--include("proto_internal/oneclient/client_messages.hrl").
--include("proto_internal/oneclient/server_messages.hrl").
--include("proto_internal/oneproxy/oneproxy_messages.hrl").
+-include_lib("clproto/include/messages.hrl").
+-include_lib("clproto/include/oneproxy_messages.hrl").
 
 %% API
 -export([deserialize_client_message/2, serialize_server_message/1,
@@ -39,7 +39,7 @@ deserialize_client_message(Message, SessionId) ->
         message_id = MsgId,
         message_stream = MsgStm,
         message_body = {_, MsgBody}
-    } = client_messages:decode_msg(Message, 'ClientMessage'),
+    } = messages:decode_msg(Message, 'ClientMessage'),
     {ok, DecodedId} = message_id:decode(MsgId),
     {ok, #client_message{
         message_id = DecodedId,
@@ -62,7 +62,7 @@ serialize_server_message(#server_message{message_id = MsgId, message_stream = Ms
         message_stream = translator:translate_to_protobuf(MsgStm),
         message_body = translator:translate_to_protobuf(MsgBody)
     },
-    {ok, server_messages:encode_msg(ServerMessage)}.
+    {ok, messages:encode_msg(ServerMessage)}.
 
 %%--------------------------------------------------------------------
 %% @doc
