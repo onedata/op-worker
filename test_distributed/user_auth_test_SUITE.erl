@@ -38,6 +38,7 @@ all() -> [token_authentication].
 %%%===================================================================
 
 token_authentication(Config) ->
+    timer:sleep(10000), %todo wait for appmock
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
     mock_gr_certificates(Config),
