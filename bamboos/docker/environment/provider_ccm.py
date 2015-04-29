@@ -50,9 +50,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         uid=os.geteuid(),
         gid=os.getegid())
 
-    logdir = os.path.join(os.path.abspath(logdir), name)
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes.extend([(logdir, '/root/bin/node/log', 'rw')] if logdir else [])
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), name)
