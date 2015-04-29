@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 -behaviour(store_driver_behaviour).
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -50,10 +51,16 @@ init_bucket(_BucketName, Models) ->
                             throw(Reason)
                     end;
                 [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
-                    timer:sleep(1000), % todo fix race condition
-                    case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [Node]]) of
+                    Tables = [table_name(ModelName) || #model_config{name = ModelName, fields = Fields} <- Models],
+                    gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                        {execute_on_node, fun() -> mnesia:wait_for_tables(Tables, 10000) end}),
+                    case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                        {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end})
+                    of
                         {ok, [Node]} ->
-                            case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
+                            case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                                {execute_on_node, fun() -> mnesia:add_table_copy(Table, Node, ram_copies) end})
+                            of
                                 {atomic, ok} ->
                                     ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
                                 {aborted, Reason} ->
@@ -347,7 +354,8 @@ transaction(Fun) ->
 %%--------------------------------------------------------------------
 -spec get_active_nodes(Table :: atom()) -> [Node :: atom()].
 get_active_nodes(Table) ->
-    {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
+    {Replies0, _} = gen_server:multi_call(nodes(), ?NODE_MANAGER_NAME,
+        {execute_on_node, fun() -> mnesia:table_info(Table, where_to_commit) end}),
     Replies1 = lists:flatten(Replies0),
     Replies2 = [Node || {Node, ram_copies} <- Replies1],
     lists:usort(Replies2).

@@ -123,6 +123,9 @@ handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
 handle_call(healthcheck, _From, State = #node_state{state_num = StateNum}) ->
     {reply, {ok, StateNum}, State};
 
+handle_call({execute_on_node, Function}, _From, State) when is_function(Function) ->
+    {reply, Function(), State};
+
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
