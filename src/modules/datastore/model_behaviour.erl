@@ -11,7 +11,7 @@
 -module(model_behaviour).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal_def.hrl").
 
 -type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links | fetch_link | foreach_link.
 -type model_type() :: atom().

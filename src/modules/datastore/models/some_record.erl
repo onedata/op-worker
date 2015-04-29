@@ -13,6 +13,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,

@@ -5,18 +5,20 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Internal common definitions for datastore
+%%% @doc @todo: Write me!
 %%% @end
 %%%-------------------------------------------------------------------
-
 -ifndef(DATASTORE_INTERNAL_HRL).
 -define(DATASTORE_INTERNAL_HRL, 1).
 
-%% Drivers definitions
--define(PERSISTENCE_DRIVER, riak_datastore_driver).
--define(LOCAL_CACHE_DRIVER, ets_cache_driver).
--define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_internal_def.hrl").
 
 -define(MODEL_NAME, ?MODULE).
+
+-compile({no_auto_import, [get/1]}).
+
+-type model_name() :: #?MODEL_NAME{}.
+-export_type([model_name/0]).
 
 -endif.

@@ -23,7 +23,7 @@
 
 %% Common names
 -define(SPACES_BASE_DIR_NAME, <<"spaces">>).
--define(DIRECTORY_SEPARATOR, <<"/">>).
+-define(DIRECTORY_SEPARATOR, "/").
 
 %% Context definition
 -record(fslogic_ctx, {

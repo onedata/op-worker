@@ -13,6 +13,7 @@
 -behaviour(store_driver_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Bukcet type that is defined in database and configured to store "map" data type

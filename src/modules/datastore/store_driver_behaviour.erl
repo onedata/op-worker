@@ -15,8 +15,6 @@
 
 -export_type([driver_action/0]).
 
--include("modules/datastore/datastore.hrl").
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Initializes given bucket locally (this method is executed per-node).

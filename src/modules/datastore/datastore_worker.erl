@@ -14,7 +14,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -define(PERSISTENCE_DRIVER, riak_datastore_driver).

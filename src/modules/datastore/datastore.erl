@@ -12,14 +12,21 @@
 -author("Rafal Slota").
 
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal.hrl").
+-include("modules/datastore/datastore_internal_def.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+
+%% Drivers definitions
+-define(PERSISTENCE_DRIVER, riak_datastore_driver).
+-define(LOCAL_CACHE_DRIVER, ets_cache_driver).
+-define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
+
 
 %% ETS name for local (node scope) state.
 -define(LOCAL_STATE, datastore_local_state).
 
 %% #document types
--type key() :: undefined | term().
+-type key() :: undefined | binary() | atom().
 -type document() :: #document{}.
 -type value() :: term().
 -type document_diff() :: #{term() => term()} | fun((OldValue :: value()) -> NewValue :: value()).

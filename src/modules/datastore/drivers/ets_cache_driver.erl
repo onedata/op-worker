@@ -13,6 +13,7 @@
 -behaviour(store_driver_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal_def.hrl").
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).

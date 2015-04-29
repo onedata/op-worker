@@ -13,6 +13,7 @@
 -behaviour(store_driver_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_internal_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Batch size for list operation

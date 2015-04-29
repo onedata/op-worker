@@ -22,6 +22,16 @@
 
 %% Models' definitions
 
+%% List of all available models
+-define(MODELS, [
+    some_record,
+    subscription,
+    session,
+    onedata_user,
+    identity
+]).
+
+
 %% sample model with example fields
 -record(some_record, {
     field1 :: term(),
@@ -59,7 +69,12 @@
 
 -record(file_meta, {
     name :: binary(),
-    mode :: non_neg_integer()
+%%     type :: file_meta:type(),
+%%     posix_permissions :: file_meta:posix_permissions(),
+    is_scope = false :: boolean(),
+    mtime :: non_neg_integer(),
+    atime :: non_neg_integer(),
+    ctime :: non_neg_integer()
 }).
 
 -endif.
