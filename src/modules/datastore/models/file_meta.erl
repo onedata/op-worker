@@ -24,7 +24,7 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, create/2]).
+-export([resolve_path/1, create/2, get_scope/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -78,16 +78,22 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
             {error, invalid_filename}
     end.
 
+create({uuid, ParentUUID}, File) ->
+    {ok, Parent} = get(ParentUUID),
+    create(Parent, File);
+create({path, Path}, File) ->
+    {ok, Parent} = resolve_path(Path),
+    create(Parent, File);
+create(#document{} = Parent, #file_meta{name = FileName} = File) ->
 
-create(Path, #file_meta{name = FileName} = File) ->
-    {ok, #document{} = Parent} = resolve_path(Path),
     FileDoc = #document{value = File},
     case create(FileDoc) of
         {ok, UUID} ->
             SavedDoc = FileDoc#document{key = UUID},
             {ok, Scope} = get_scope(Parent),
-            datastore:add_links(disk_only, Parent, {FileName, SavedDoc}),
-            datastore:add_links(disk_only, SavedDoc, [{parent, Parent}, {scope, Scope}]);
+            ok = datastore:add_links(disk_only, Parent, {FileName, SavedDoc}),
+            ok = datastore:add_links(disk_only, SavedDoc, [{parent, Parent}, {scope, Scope}]),
+            {ok, UUID};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -185,9 +191,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 
 -spec resolve_path(path()) -> {ok, datastore:document()} | datastore:generic_error().
-resolve_path(Path) ->
-    Tokens = fslogic_path:split(Path),
-    datastore:link_walk(disk_only, ?RESPONSE(get(?ROOT_DIR_UUID)), Tokens, get_leaf).
+resolve_path(<<?DIRECTORY_SEPARATOR, Path/binary>>) ->
+    case fslogic_path:split(Path) of
+        [] ->
+            get(?ROOT_DIR_UUID);
+        Tokens ->
+            datastore:link_walk(disk_only, ?RESPONSE(get(?ROOT_DIR_UUID)), Tokens, get_leaf)
+    end.
 
 
 is_valid_filename(<<"">>) ->

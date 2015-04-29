@@ -28,7 +28,8 @@
     subscription,
     session,
     onedata_user,
-    identity
+    identity,
+    file_meta
 ]).
 
 
