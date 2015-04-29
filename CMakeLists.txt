@@ -60,7 +60,16 @@ add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Wall -std=c++14)
 add_definitions(
     ${FUSE_DEFINITIONS}
     -DFUSE_USE_VERSION=29
+    -DBOOST_THREAD_VERSION=4
     -DBOOST_BIND_NO_PLACEHOLDERS)
+
+include_directories(SYSTEM
+    ${FUSE_INCLUDE_DIRS}
+    ${FUSE_INCLUDE_DIRS}/..
+    ${PROTOBUF_INCLUDE_DIR}
+    ${OPENSSL_INCLUDE_DIR}
+    ${TBB_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS})
 
 add_subdirectory(object)
 include_directories(${HELPERS_INCLUDE_DIRS})

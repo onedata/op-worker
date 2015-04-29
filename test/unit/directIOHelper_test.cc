@@ -2,7 +2,8 @@
  * @file clusterProxyHelper_test.cc
  * @author Rafal Slota
  * @copyright (C) 2013 ACK CYFRONET AGH
- * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
  */
 
 #include "directIOHelper.h"
@@ -27,16 +28,14 @@ using namespace one::helpers;
 using namespace std::placeholders;
 using one::helpers::utils::tolower;
 
-template<typename T>
-bool identityEqual(const T &lhs, const T &rhs)
+template <typename T> bool identityEqual(const T &lhs, const T &rhs)
 {
     return &lhs == &rhs;
 }
 
 #define DIO_TEST_ROOT "/tmp"
 
-class DirectIOHelperTest: public ::testing::Test
-{
+class DirectIOHelperTest : public ::testing::Test {
 protected:
     std::shared_ptr<DirectIOHelper> proxy;
 
@@ -52,8 +51,8 @@ protected:
     boost::filesystem::path testFileId;
 
     DirectIOHelperTest()
-      : ctx(ffi)
-      , io_work(io_service)
+        : ctx(ffi)
+        , io_work(io_service)
     {
     }
 
@@ -68,8 +67,9 @@ protected:
         testFilePath = boost::filesystem::path(DIO_TEST_ROOT) / testFileId;
 
         th_handle = std::thread([&]() { io_service.run(); });
-        proxy = std::make_shared<DirectIOHelper>(IStorageHelper::ArgsMap{{srvArg(0), std::string(DIO_TEST_ROOT)}},
-                                                          io_service);
+        proxy = std::make_shared<DirectIOHelper>(
+            IStorageHelper::ArgsMap{{srvArg(0), std::string(DIO_TEST_ROOT)}},
+            io_service);
 
         // remove all files that are used in tests
         unlinkOnDIO("to");
@@ -77,7 +77,7 @@ protected:
         unlinkOnDIO(testFileId);
 
         // create test file
-        std::ofstream f (testFilePath.string());
+        std::ofstream f(testFilePath.string());
         f << "test_123456789_test" << std::endl;
         f.close();
     }
@@ -91,7 +91,6 @@ protected:
     }
 };
 
-
 TEST_F(DirectIOHelperTest, writeAndRead)
 {
     std::string stmp("000");
@@ -102,7 +101,9 @@ TEST_F(DirectIOHelperTest, writeAndRead)
     auto p1 = proxy->sh_read(testFileId, readBuf, 5, ctx);
     auto rbuf1 = p1.get();
     EXPECT_EQ(5, boost::asio::buffer_size(rbuf1));
-    EXPECT_EQ("12345", std::string(boost::asio::buffer_cast<const char*>(rbuf1), boost::asio::buffer_size(rbuf1)));
+    EXPECT_EQ(
+        "12345", std::string(boost::asio::buffer_cast<const char *>(rbuf1),
+                     boost::asio::buffer_size(rbuf1)));
 
     auto p2 = proxy->sh_write(testFileId, writeBuf, 5, ctx);
     auto bytes_written = p2.get();
@@ -111,9 +112,10 @@ TEST_F(DirectIOHelperTest, writeAndRead)
     auto p3 = proxy->sh_read(testFileId, readBuf, 5, ctx);
     auto rbuf3 = p3.get();
     EXPECT_EQ(5, boost::asio::buffer_size(rbuf3));
-    EXPECT_EQ("00045", std::string(boost::asio::buffer_cast<const char*>(rbuf3), boost::asio::buffer_size(rbuf3)));
+    EXPECT_EQ(
+        "00045", std::string(boost::asio::buffer_cast<const char *>(rbuf3),
+                     boost::asio::buffer_size(rbuf3)));
 }
-
 
 TEST_F(DirectIOHelperTest, openAndRelease)
 {
@@ -122,17 +124,15 @@ TEST_F(DirectIOHelperTest, openAndRelease)
     EXPECT_GT(ctx.m_ffi.fh, 0);
 
     auto p2 = proxy->sh_release(testFileId, ctx);
-    EXPECT_EQ(0, p2.get());
-    EXPECT_EQ(0, ctx.m_ffi.fh);
+    EXPECT_NO_THROW(p2.get());
+    EXPECT_NO_THROW(ctx.m_ffi.fh);
 }
-
 
 TEST_F(DirectIOHelperTest, fsync)
 {
     auto p = proxy->sh_fsync(testFileId, 0, ctx);
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 }
-
 
 TEST_F(DirectIOHelperTest, getattr)
 {
@@ -141,13 +141,11 @@ TEST_F(DirectIOHelperTest, getattr)
     EXPECT_EQ(20, stbuf.st_size);
 }
 
-
 TEST_F(DirectIOHelperTest, access)
 {
     auto p = proxy->sh_access(testFileId, 0);
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 }
-
 
 TEST_F(DirectIOHelperTest, readdir)
 {
@@ -155,29 +153,25 @@ TEST_F(DirectIOHelperTest, readdir)
     EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
 }
 
-
 TEST_F(DirectIOHelperTest, mknod)
 {
     auto p = proxy->sh_mknod(testFileId, S_IFREG, 0);
     EXPECT_THROW_POSIX_CODE(p.get(), EEXIST);
 }
 
-
 TEST_F(DirectIOHelperTest, mkdir)
 {
     auto p = proxy->sh_mkdir("dir", 0);
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 
     std::remove("dir");
 }
 
-
 TEST_F(DirectIOHelperTest, unlink)
 {
     auto p = proxy->sh_unlink(testFileId);
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 }
-
 
 TEST_F(DirectIOHelperTest, rmdir)
 {
@@ -185,11 +179,10 @@ TEST_F(DirectIOHelperTest, rmdir)
     EXPECT_THROW_POSIX_CODE(p.get(), ENOTDIR);
 }
 
-
 TEST_F(DirectIOHelperTest, symlinkAndReadlink)
 {
     auto p1 = proxy->sh_symlink("/from", "to");
-    EXPECT_EQ(0, p1.get());
+    EXPECT_NO_THROW(p1.get());
 
     auto p2 = proxy->sh_readlink("to");
     EXPECT_EQ(std::string(DIO_TEST_ROOT) + "/from", p2.get());
@@ -197,42 +190,36 @@ TEST_F(DirectIOHelperTest, symlinkAndReadlink)
     unlinkOnDIO("to");
 }
 
-
 TEST_F(DirectIOHelperTest, rename)
 {
     auto p = proxy->sh_rename(testFileId, "to");
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 
     unlinkOnDIO("to");
 }
-
 
 TEST_F(DirectIOHelperTest, link)
 {
     auto p = proxy->sh_link(testFileId, "to");
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 
     unlinkOnDIO("to");
 }
 
-
 TEST_F(DirectIOHelperTest, chmod)
 {
     auto p = proxy->sh_chmod(testFileId, 600);
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 }
-
 
 TEST_F(DirectIOHelperTest, chown)
 {
     auto p = proxy->sh_chown(testFileId, -1, -1);
-    EXPECT_EQ(0, p.get());
+    EXPECT_NO_THROW(p.get());
 }
-
 
 TEST_F(DirectIOHelperTest, truncate)
 {
-
+    auto p = proxy->sh_truncate(testFileId, 0);
+    EXPECT_NO_THROW(p.get());
 }
-
-
