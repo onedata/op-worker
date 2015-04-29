@@ -38,7 +38,6 @@ all() -> [token_authentication].
 %%%===================================================================
 
 token_authentication(Config) ->
-    timer:sleep(10000), %todo wait for appmock
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
     mock_gr_certificates(Config),
@@ -67,7 +66,9 @@ token_authentication(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    Cfg = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    timer:sleep(10000), %todo wait for appmock
+    Cfg.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

@@ -47,7 +47,6 @@ rest_token_auth(Config) ->
     ?assertMatch({ok, "404", _, _}, AuthSuccess).
 
 rest_cert_auth(Config) ->
-    timer:sleep(10000), %todo wait for appmock
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
@@ -72,7 +71,9 @@ rest_cert_auth(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    Cfg = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    timer:sleep(10000), %todo wait for appmock
+    Cfg.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
