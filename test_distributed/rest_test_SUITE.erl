@@ -72,7 +72,7 @@ rest_cert_auth(Config) ->
 %%%===================================================================
 init_per_suite(Config) ->
     Cfg = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    timer:sleep(30000), %todo wait for appmock
+%%     timer:sleep(30000), %todo wait for appmock
     Cfg.
 
 end_per_suite(Config) ->
