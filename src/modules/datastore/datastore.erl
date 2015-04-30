@@ -36,8 +36,8 @@
 
 %% Error types
 -type generic_error() :: {error, Reason :: term()}.
--type not_found_error(Reason) :: {error, {not_found, Reason}}.
--type update_error() :: not_found_error(term()) | generic_error().
+-type not_found_error(ObjectType) :: {error, {not_found, ObjectType}}.
+-type update_error() :: not_found_error(model_behaviour:model_type()) | generic_error().
 -type create_error() :: generic_error() | {error, already_exists}.
 -type get_error() :: not_found_error(term()) | generic_error().
 -type link_error() :: generic_error() | {error, link_not_found}.

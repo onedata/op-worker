@@ -57,10 +57,10 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
 update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_function(Diff) ->
     erlang:error(not_implemented);
-update(#model_config{} = ModelConfig, Key, Diff) when is_map(Diff) ->
+update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_map(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [] ->
-            {error, {not_found, missing_or_deleted}};
+            {error, {not_found, ModelName}};
         [{_, Value}] ->
             NewValue = maps:merge(datastore_utils:shallow_to_map(Value), Diff),
             true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
@@ -87,12 +87,12 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %%--------------------------------------------------------------------
 -spec get(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:document()} | datastore:get_error().
-get(#model_config{} = ModelConfig, Key) ->
+get(#model_config{name = ModelName} = ModelConfig, Key) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [{_, Value}] ->
             {ok, #document{key = Key, value = Value}};
         [] ->
-            {error, {not_found, missing_or_deleted}}
+            {error, {not_found, ModelName}}
     end.
 
 

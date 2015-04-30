@@ -74,7 +74,7 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
     Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
 update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_function(Diff) ->
     erlang:error(not_implemented);
-update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Diff) ->
+update(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key, Diff) when is_map(Diff) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result}
             ->
@@ -92,7 +92,7 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
                 {error, Reason} -> {error, Reason}
             end;
         {error, {notfound, _}} ->
-            {error, {not_found, missing_or_deleted}};
+            {error, {not_found, ModelName}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -127,13 +127,13 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
 %%--------------------------------------------------------------------
 -spec get(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:document()} | datastore:get_error().
-get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
+get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
             {ok, #document{key = Key, rev = Result,
                 value = form_riak_obj(map, Result)}};
         {error, {notfound, _}} ->
-            {error, {not_found, missing_or_deleted}};
+            {error, {not_found, ModelName}};
         {error, Reason} ->
             {error, Reason}
     end.

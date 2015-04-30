@@ -38,22 +38,31 @@ basic_operations_test(Config) ->
     {A2, U2} = ?call(Worker2, create, [{path, <<"/spaces">>}, #file_meta{name = <<"Space 1">>, is_scope = true}]),
     {A3, U3} = ?call(Worker1, create, [{path, <<"/spaces/Space 1">>}, #file_meta{name = <<"dir1">>}]),
     {A4, U4} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/dir1">>}, #file_meta{name = <<"file1">>}]),
+    {A20, U20} = ?call(Worker1, create, [{path, <<"/spaces/Space 1">>}, #file_meta{name = <<"dir2">>}]),
+    {A21, U21} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/dir2">>}, #file_meta{name = <<"file1">>}]),
+    {A22, U22} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/dir2">>}, #file_meta{name = <<"file2">>}]),
+    {A23, U23} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/dir2">>}, #file_meta{name = <<"file3">>}]),
     ?assertMatch({ok, _}, {A1, U1}),
     ?assertMatch({ok, _}, {A2, U2}),
     ?assertMatch({ok, _}, {A3, U3}),
     ?assertMatch({ok, _}, {A4, U4}),
+    ?assertMatch({ok, _}, {A20, U20}),
+    ?assertMatch({ok, _}, {A21, U21}),
+    ?assertMatch({ok, _}, {A22, U22}),
+    ?assertMatch({ok, _}, {A23, U23}),
 
-    Bench =
+
+    Bench1 =
         fun Loop(File) when File < 100 ->
-            ?assertMatch({ok, _}, ?call(Worker1, create, [{path, <<"/spaces/Space 1/dir1">>}, #file_meta{name = integer_to_binary(File)}])),
+            ?assertMatch({ok, _}, ?call(Worker1, create, [{path, <<"/spaces/Space 1/dir1">>}, #file_meta{name = integer_to_binary(1000 + File)}])),
             Loop(File + 1);
             Loop(_) ->
                 ok
         end,
 
-    S = now(),
-    Bench(0),
-    E = now(),
+    S1 = now(),
+    Bench1(0),
+    E1 = now(),
 
     {A14, U14} = ?call(Worker1, get, [{path, <<"/">>}]),
     {A5, U5} = ?call(Worker1, get, [{path, <<"/spaces">>}]),
@@ -79,7 +88,33 @@ basic_operations_test(Config) ->
     ?assertMatch({ok, #document{key = U2}},             {A13, U13}),
 
 
-    io:format(user, "~p~n", [timer:now_diff(E, S)]),
+    ?assertMatch({ok, [U2]}, ?call(Worker1, list_uuids, [{path, <<"/spaces">>}, 0, 10])),
+
+    {A15, U15} = ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 0, 20]),
+    {A16, U16} = ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 5, 10]),
+
+    ?assertMatch({ok, _}, {A15, U15}),
+    ?assertMatch({ok, _}, {A16, U16}),
+
+    ?assertMatch(20, length(U15)),
+    ?assertMatch(U16, lists:sublist(U15, 6, 10)),
+
+    ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/spaces/Space 1/dir2/file4">>}])),
+    ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/spaces/Space 2/dir2/file1">>}])),
+    ?assertMatch(true, ?call(Worker1, exists, [{path, <<"/">>}])),
+    ?assertMatch(true, ?call(Worker1, exists, [{path, <<"/spaces/Space 1/dir2/file1">>}])),
+    ?assertMatch({ok, [_, _, _]}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
+
+    ?assertMatch(ok, ?call(Worker1, delete, [{path, <<"/spaces/Space 1/dir2/file1">>}])),
+    ?assertMatch(ok, ?call(Worker1, delete, [{uuid, U22}])),
+    ?assertMatch({error, _}, ?call(Worker1, delete, [{path, <<"/spaces/Space 1/dir2/file4">>}])),
+
+    ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/spaces/Space 1/dir2/file1">>}])),
+    ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/spaces/Space 1/dir2/file2">>}])),
+
+    ?assertMatch({ok, [U23]}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
+
+    io:format(user, "1: ~p~n", [timer:now_diff(E1, S1)]),
 
     ok.
 

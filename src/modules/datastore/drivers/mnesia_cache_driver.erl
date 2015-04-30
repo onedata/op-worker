@@ -88,11 +88,11 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
 %%--------------------------------------------------------------------
 -spec update(model_behaviour:model_config(), datastore:key(),
     Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
-update(#model_config{} = ModelConfig, Key, Diff) ->
+update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key, write) of
             [] ->
-                {error, {not_found, missing_or_deleted}};
+                {error, {not_found, ModelName}};
             [Value] when is_map(Diff) ->
                 NewValue = maps:merge(datastore_utils:shallow_to_map(strip_key(Value)), Diff),
                 ok = mnesia:write(table_name(ModelConfig),
@@ -130,10 +130,10 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %%--------------------------------------------------------------------
 -spec get(model_behaviour:model_config(), datastore:key()) ->
     {ok, datastore:document()} | datastore:get_error().
-get(#model_config{} = ModelConfig, Key) ->
+get(#model_config{name = ModelName} = ModelConfig, Key) ->
     transaction(fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
-            [] -> {error, {not_found, missing_or_deleted}};
+            [] -> {error, {not_found, ModelName}};
             [Value] -> {ok, #document{key = Key, value = strip_key(Value)}}
         end
     end).

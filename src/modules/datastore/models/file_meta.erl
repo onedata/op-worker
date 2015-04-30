@@ -24,7 +24,7 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, create/2, get_scope/1]).
+-export([resolve_path/1, create/2, get_scope/1, list_uuids/3]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -58,8 +58,10 @@ update({uuid, Key}, Diff) ->
 update(#document{value = #file_meta{}, key = Key}, Diff) ->
     update(Key, Diff);
 update({path, Path}, Diff) ->
-    {ok, #document{} = Document} = resolve_path(Path),
-    update(Document, Diff);
+    runner(fun() ->
+        {ok, #document{} = Document} = resolve_path(Path),
+        update(Document, Diff)
+    end);
 update(Key, Diff) ->
     datastore:update(globally_cached, ?MODULE, Key, Diff).
 
@@ -79,24 +81,29 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
     end.
 
 create({uuid, ParentUUID}, File) ->
-    {ok, Parent} = get(ParentUUID),
-    create(Parent, File);
+    runner(fun() ->
+        {ok, Parent} = get(ParentUUID),
+        create(Parent, File)
+    end);
 create({path, Path}, File) ->
-    {ok, Parent} = resolve_path(Path),
-    create(Parent, File);
+    runner(fun() ->
+        {ok, Parent} = resolve_path(Path),
+        create(Parent, File)
+    end);
 create(#document{} = Parent, #file_meta{name = FileName} = File) ->
-
-    FileDoc = #document{value = File},
-    case create(FileDoc) of
-        {ok, UUID} ->
-            SavedDoc = FileDoc#document{key = UUID},
-            {ok, Scope} = get_scope(Parent),
-            ok = datastore:add_links(disk_only, Parent, {FileName, SavedDoc}),
-            ok = datastore:add_links(disk_only, SavedDoc, [{parent, Parent}, {scope, Scope}]),
-            {ok, UUID};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    runner(fun() ->
+        FileDoc = #document{value = File},
+        case create(FileDoc) of
+            {ok, UUID} ->
+                SavedDoc = FileDoc#document{key = UUID},
+                {ok, Scope} = get_scope(Parent),
+                ok = datastore:add_links(disk_only, Parent, {FileName, SavedDoc}),
+                ok = datastore:add_links(disk_only, SavedDoc, [{parent, Parent}, {scope, Scope}]),
+                {ok, UUID};
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,13 +131,22 @@ get(Key) ->
 -spec delete(datastore:key() | entry()) -> ok | datastore:generic_error().
 delete({uuid, Key}) ->
     delete(Key);
-delete(#document{value = #file_meta{}, key = Key}) ->
-    delete(Key);
+delete(#document{value = #file_meta{name = FileName}, key = Key}) ->
+    runner(fun() ->
+        {ok, {ParentKey, ?MODEL_NAME}} = datastore:fetch_link(disk_only, Key, ?MODEL_NAME,parent),
+        ok = datastore:delete_links(disk_only, ParentKey, ?MODEL_NAME, FileName),
+        datastore:delete(globally_cached, ?MODULE, Key)
+    end);
 delete({path, Path}) ->
-    {ok, #document{} = Document} = resolve_path(Path),
-    delete(Document);
+    runner(fun() ->
+        {ok, #document{} = Document} = resolve_path(Path),
+        delete(Document)
+    end);
 delete(Key) ->
-    datastore:delete(globally_cached, ?MODULE, Key).
+    runner(fun() ->
+        {ok, #document{} = Document} = get(Key),
+        delete(Document)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -147,6 +163,8 @@ exists({path, Path}) ->
         {ok, #document{}} ->
             true;
         {error, {not_found, _}} ->
+            false;
+        {error, link_not_found} ->
             false
     end;
 exists(Key) ->
@@ -185,6 +203,29 @@ model_init() ->
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
+
+list_uuids(Entry, Offset, Count) ->
+    runner(fun() ->
+        {ok, #document{} = File} = get(Entry),
+        Res = datastore:foreach_link(disk_only, File, fun
+                (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
+                    Acc;
+                (LinkName, {_Key, ?MODEL_NAME}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
+                    {Skip - 1, Count1, Acc};
+                (LinkName, {Key, ?MODEL_NAME}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
+                    {0, Count1 - 1, [Key | Acc]};
+                (_LinkName, _LinkTarget, AccIn) ->
+                    AccIn
+            end, {Offset, Count, []}),
+        case Res of
+            {ok, {_, _, UUIDs}} ->
+                {ok, UUIDs};
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -215,5 +256,26 @@ get_scope(#document{value = #file_meta{is_scope = true}} = Document) ->
     {ok, Document};
 get_scope(#document{value = #file_meta{is_scope = false}} = Document) ->
     datastore:fetch_link_target(disk_only, Document, scope).
+
+
+runner(Block) ->
+    try Block() of
+        {error, link_not_found} -> %% Map links errors to document errors
+            {error, {not_found, ?MODEL_NAME}};
+        Other -> Other
+    catch
+        error:{badmatch, {error, Reason}} ->
+            {error, Reason};
+        error:{badmatch, {ok, Inv}} ->
+            {error, {inavlid_reponse, Inv}};
+        error:{badmatch, Reason} ->
+            {error, Reason};
+        error:{case_clause, {error, Reason}} ->
+            {error, Reason};
+        error:{case_clause, {ok, Inv}} ->
+            {error, {inavlid_reponse, Inv}};
+        error:{case_clause, Reason} ->
+            {error, Reason}
+    end.
 
 
