@@ -430,8 +430,7 @@ load_local_state(Models) ->
     #{bucket() => [model_behaviour:model_config()]}.
 configs_per_bucket(Configs) ->
     lists:foldl(
-        fun(ModelConfig, Acc) ->
-            #model_config{bucket = Bucket} = ModelConfig,
+        fun(#model_config{bucket = Bucket} = ModelConfig, Acc) ->
             maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
         end, #{}, Configs).
 

@@ -254,7 +254,7 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
             gen_server:cast({global, ?CCM}, {heartbeat, node()}),
 
             %% Initialize datastore
-            datastore:ensure_state_loaded(),
+            ok = datastore:ensure_state_loaded(),
 
             State#node_state{ccm_con_status = connected};
         Err ->

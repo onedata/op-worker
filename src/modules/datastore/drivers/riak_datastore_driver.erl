@@ -320,8 +320,8 @@ foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
 healthcheck(_) ->
     try call(riakc_pb_socket, ping, []) of
         pong -> ok;
-        _Other ->
-            {error, no_riak_connection}
+        Other ->
+            {error, {riak_connection_error, Other}}
     catch
         _:Reason ->
             {error, Reason}

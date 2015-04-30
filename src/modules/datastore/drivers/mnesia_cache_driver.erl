@@ -41,7 +41,7 @@ init_bucket(_BucketName, Models) ->
             Table = table_name(ModelName),
             case get_active_nodes(Table) of
                 [] -> %% No mnesia nodes -> create new table
-                    case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
+                    Ans = case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
                         {ram_copies, [Node]}, {type, set}]) of
                         {atomic, ok} -> ok;
                         {aborted, {already_exists, Table}} ->
@@ -49,13 +49,17 @@ init_bucket(_BucketName, Models) ->
                         {aborted, Reason} ->
                             ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
                             throw(Reason)
-                    end;
+                    end,
+                    ?info("Creating mnesia table: ~p, result: ~p", [table_name(ModelName), Ans]),
+                    Ans;
                 [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
-                    Tables = [table_name(ModelName) || #model_config{name = ModelName, fields = Fields} <- Models],
+                    Tables = [table_name(ModelName) || ModelName <- ?MODELS],
+                    ?info("Waiting for mnesia tables ~p to initialize on node ~p...", [Tables, MnesiaNode]),
                     gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
                         {execute_on_node, fun() -> mnesia:wait_for_tables(Tables, 10000) end}),
-                    case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
-                        {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end})
+                    ?info("Mnesia tables are ready!"),
+                    case (catch gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                        {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end}))
                     of
                         {ok, [Node]} ->
                             case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
@@ -279,8 +283,22 @@ exists(#model_config{} = ModelConfig, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
-healthcheck(_) ->
-    ok.
+healthcheck(State) ->
+    maps:fold(
+        fun
+            (_, #model_config{name = ModelName}, ok) ->
+                case mnesia:table_info(table_name(ModelName), where_to_write) of
+                    Nodes when is_list(Nodes) ->
+                        case lists:member(node(), Nodes) of
+                            true -> ok;
+                            false ->
+                                {error, {no_active_mnesia_table, table_name(ModelName)}}
+                        end;
+                    {error, Error} -> {error, Error};
+                    Error -> {error, Error}
+                end;
+            (_, _, Acc) -> Acc
+        end, ok, State).
 
 %%%===================================================================
 %%% Internal functions

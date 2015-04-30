@@ -13,6 +13,7 @@
 -behaviour(store_driver_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/2, healthcheck/1]).
@@ -32,9 +33,9 @@
 init_bucket(_Bucket, Models) ->
     lists:foreach(
         fun(#model_config{} = ModelConfig) ->
-            catch ets:new(table_name(ModelConfig), [named_table, public, set])
-        end, Models),
-    ok.
+            Ans = (catch ets:new(table_name(ModelConfig), [named_table, public, set])),
+            ?info("Creating ets table: ~p, result: ~p", [table_name(ModelConfig), Ans])
+        end, Models).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -139,9 +140,17 @@ exists(#model_config{} = ModelConfig, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
-healthcheck(_) ->
-    ok.
-
+healthcheck(State) ->
+    maps:fold(
+        fun
+            (_, #model_config{name = ModelName}, ok) ->
+                case ets:info(table_name(ModelName)) of
+                    undefined ->
+                        {error, {no_ets, table_name(ModelName)}};
+                    _ -> ok
+                end;
+            (_, _, Acc) -> Acc
+        end, ok, State).
 
 %%--------------------------------------------------------------------
 %% @doc
