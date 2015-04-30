@@ -49,7 +49,7 @@
 %% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--callback get(datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-callback get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 
 
 %%--------------------------------------------------------------------
