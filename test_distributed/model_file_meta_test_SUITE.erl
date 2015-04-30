@@ -73,10 +73,10 @@ basic_operations_test(Config) ->
     {A12, U12} = ?call(Worker1, get_scope, [U7]),
     {A13, U13} = ?call(Worker2, get_scope, [U8]),
     ?assertMatch({ok, #document{key = <<"">>}},         {A9, U9}),
-    ?assertMatch({ok, #document{key = U2}},             {A10, U10}),
-    ?assertMatch({ok, #document{key = U3}},             {A11, U11}),
-    ?assertMatch({ok, #document{key = U3}},             {A12, U12}),
-    ?assertMatch({ok, #document{key = U3}},             {A13, U13}),
+    ?assertMatch({ok, #document{key = U1}},             {A10, U10}),
+    ?assertMatch({ok, #document{key = U2}},             {A11, U11}),
+    ?assertMatch({ok, #document{key = U2}},             {A12, U12}),
+    ?assertMatch({ok, #document{key = U2}},             {A13, U13}),
 
 
     io:format(user, "~p~n", [timer:now_diff(E, S)]),
