@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% store_driver_behaviour callbacks
--export([init_bucket/2, healthcheck/1]).
+-export([init_bucket/3, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
@@ -29,8 +29,9 @@
 %% {@link store_driver_behaviour} callback init_bucket/2.
 %% @end
 %%--------------------------------------------------------------------
--spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()]) -> ok.
-init_bucket(_Bucket, Models) ->
+-spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()],
+    NodeToSync :: node()) -> ok.
+init_bucket(_Bucket, Models, _NodeToSync) ->
     lists:foreach(
         fun(#model_config{} = ModelConfig) ->
             Ans = (catch ets:new(table_name(ModelConfig), [named_table, public, set])),

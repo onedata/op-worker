@@ -20,7 +20,7 @@
 -define(LIST_BATCH_SIZE, 100).
 
 %% store_driver_behaviour callbacks
--export([init_bucket/2, healthcheck/1]).
+-export([init_bucket/3, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
@@ -33,14 +33,14 @@
 %% {@link store_driver_behaviour} callback init_bucket/2.
 %% @end
 %%--------------------------------------------------------------------
--spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()]) -> ok.
-init_bucket(_BucketName, Models) ->
+-spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()], NodeToSync :: node()) -> ok.
+init_bucket(_BucketName, Models, NodeToSync) ->
     lists:foreach( %% model
         fun(#model_config{name = ModelName, fields = Fields}) ->
             Node = node(),
             Table = table_name(ModelName),
-            case get_active_nodes(Table) of
-                [] -> %% No mnesia nodes -> create new table
+            case NodeToSync of
+                Node -> %% No mnesia nodes -> create new table
                     Ans = case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
                         {ram_copies, [Node]}, {type, set}]) of
                         {atomic, ok} -> ok;
@@ -52,21 +52,21 @@ init_bucket(_BucketName, Models) ->
                     end,
                     ?info("Creating mnesia table: ~p, result: ~p", [table_name(ModelName), Ans]),
                     Ans;
-                [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
+                _ -> %% there is at least one mnesia node -> join cluster
                     Tables = [table_name(ModelName) || ModelName <- ?MODELS],
-                    ?info("Waiting for mnesia tables ~p to initialize on node ~p...", [Tables, MnesiaNode]),
-                    gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                    ?info("Waiting for mnesia tables ~p to initialize on node ~p...", [Tables, NodeToSync]),
+                    gen_server:call({?NODE_MANAGER_NAME, NodeToSync},
                         {execute_on_node, fun() -> mnesia:wait_for_tables(Tables, 10000) end}),
                     ?info("Mnesia tables are ready!"),
-                    case (catch gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                    case (catch gen_server:call({?NODE_MANAGER_NAME, NodeToSync},
                         {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end}))
                     of
                         {ok, [Node]} ->
-                            case gen_server:call({?NODE_MANAGER_NAME, MnesiaNode},
+                            case gen_server:call({?NODE_MANAGER_NAME, NodeToSync},
                                 {execute_on_node, fun() -> mnesia:add_table_copy(Table, Node, ram_copies) end})
                             of
                                 {atomic, ok} ->
-                                    ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
+                                    ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, NodeToSync, node()]);
                                 {aborted, Reason} ->
                                     ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
                             end,
@@ -363,16 +363,3 @@ transaction(Fun) ->
         {aborted, Reason} ->
             {error, Reason}
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets all active Mnesia nodes which have given Table.
-%% @end
-%%--------------------------------------------------------------------
--spec get_active_nodes(Table :: atom()) -> [Node :: atom()].
-get_active_nodes(Table) ->
-    {Replies0, []} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
-    Replies1 = lists:flatten(Replies0),
-    Replies2 = [Node || {Node, ram_copies} <- Replies1],
-    lists:usort(Replies2).

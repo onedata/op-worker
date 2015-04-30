@@ -252,10 +252,6 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
     case (catch init_net_connection(CcmNodes)) of
         ok ->
             gen_server:cast({global, ?CCM}, {heartbeat, node()}),
-
-            %% Initialize datastore
-            ok = datastore:ensure_state_loaded(),
-
             State#node_state{ccm_con_status = connected};
         Err ->
             ?debug("No connection with CCM: ~p, retrying in ~p s", [Err, Interval]),
@@ -271,7 +267,7 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
 -spec on_ccm_state_change(NewStateNum :: integer(), State :: term()) -> #node_state{}.
 on_ccm_state_change(NewStateNum, State = #node_state{ccm_con_status = connected}) ->
     ?debug("Node ~p successfully connected to ccm, starting workers...", [node(), NewStateNum]),
-    init_workers(),
+    init_node(),
     update_dispatcher_and_dns(NewStateNum),
     State#node_state{state_num = NewStateNum, ccm_con_status = registered};
 on_ccm_state_change(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
@@ -366,6 +362,17 @@ init_net_connection([Node | Nodes]) ->
             ?error("Cannot connect to node ~p", [Node]),
             init_net_connection(Nodes)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Init node as worker of oneprovider cluster
+%% @end
+%%--------------------------------------------------------------------
+-spec init_node() -> ok.
+init_node() ->
+    {ok, NodeToSync} = gen_server:call({global, ?CCM}, get_node_to_sync),
+    datastore:ensure_state_loaded(NodeToSync),
+    init_workers().
 
 %%--------------------------------------------------------------------
 %% @doc
