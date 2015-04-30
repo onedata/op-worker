@@ -1,0 +1,77 @@
+{
+    "oneprovider_node": {
+        "config": {
+            "input_dir": "rel/oneprovider_node",
+            "target_dir": "rel/test_cluster"
+        },
+        "nodes": {
+            "ccm": {
+                "vm.args": {
+                    "name": "ccm@",
+                    "setcookie": "test_cookie"
+                },
+                "sys.config": {
+                    "node_type": "ccm",
+                    "ccm_nodes": [ "ccm@" ],
+                    "db_nodes": [ "127.0.0.1:49161" ],
+                    "workers_to_trigger_init": 2
+                }
+            },
+            "worker1": {
+                "vm.args": {
+                    "name": "worker1@",
+                    "setcookie": "test_cookie"
+                },
+                "sys.config": {
+                    "node_type": "worker",
+                    "ccm_nodes": [ "ccm@"],
+                    "db_nodes": [ "127.0.0.1:49161, 127.0.0.1:49162, 127.0.0.1:49163, 127.0.0.1:49164, 127.0.0.1:49165" ]
+                }
+            },
+            "worker2": {
+                "vm.args": {
+                    "name": "worker2@",
+                    "setcookie": "test_cookie"
+                },
+                "sys.config": {
+                    "node_type": "worker",
+                    "ccm_nodes": [ "ccm@"],
+                    "db_nodes": [ "127.0.0.1:49161, 127.0.0.1:49162, 127.0.0.1:49163, 127.0.0.1:49164, 127.0.0.1:49165" ]
+                }
+            },
+            "worker3": {
+                "vm.args": {
+                    "name": "worker3@",
+                    "setcookie": "test_cookie"
+                },
+                "sys.config": {
+                    "node_type": "worker",
+                    "ccm_nodes": [ "ccm@"],
+                    "db_nodes": [ "127.0.0.1:49161, 127.0.0.1:49162, 127.0.0.1:49163, 127.0.0.1:49164, 127.0.0.1:49165" ]
+                }
+            },
+            "worker4": {
+                "vm.args": {
+                    "name": "worker4@",
+                    "setcookie": "test_cookie"
+                },
+                "sys.config": {
+                    "node_type": "worker",
+                    "ccm_nodes": [ "ccm@"],
+                    "db_nodes": [ "127.0.0.1:49161, 127.0.0.1:49162, 127.0.0.1:49163, 127.0.0.1:49164, 127.0.0.1:49165" ]
+                }
+            },
+            "worker5": {
+                "vm.args": {
+                    "name": "worker5@",
+                    "setcookie": "test_cookie"
+                },
+                "sys.config": {
+                    "node_type": "worker",
+                    "ccm_nodes": [ "ccm@"],
+                    "db_nodes": [ "127.0.0.1:49161, 127.0.0.1:49162, 127.0.0.1:49163, 127.0.0.1:49164, 127.0.0.1:49165" ]
+                }
+            }
+        }
+    }
+}
