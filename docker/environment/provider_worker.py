@@ -12,7 +12,7 @@ import os
 from . import common, docker, riak, dns as dns_mod
 
 
-PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 5
+PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60
 
 
 def _tweak_config(config, name, uid):
