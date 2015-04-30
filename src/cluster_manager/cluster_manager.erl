@@ -120,6 +120,10 @@ handle_call(get_nodes, _From, State) ->
 handle_call(get_nodes_and_state_num, _From, State) ->
     {reply, {State#cm_state.nodes, State#cm_state.state_num}, State};
 
+handle_call(get_node_to_sync, _From, State) ->
+    Ans = get_node_to_sync(State),
+    {reply, Ans, State};
+
 handle_call(healthcheck, _From, State) ->
     Ans = healthcheck(State),
     {reply, Ans, State};
@@ -234,7 +238,7 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
             ?info("New node: ~p", [SenderNode]),
             try
                 erlang:monitor_node(SenderNode, true),
-                NewInitNodes = [SenderNode | lists:delete(SenderNode, InitNodes)],
+                NewInitNodes = add_node_to_list(SenderNode, InitNodes),
                 gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
                     {heartbeat_ok, State#cm_state.state_num}),
                 State#cm_state{uninitialized_nodes = NewInitNodes}
@@ -255,8 +259,8 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
 -spec init_ok(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
 init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes,
     state_num = StateNum}, SenderNode) ->
-    NewInitNodes = lists:delete(SenderNode, InitNodes),
-    NewNodes = [SenderNode | lists:delete(SenderNode, Nodes)],
+    NewInitNodes = InitNodes -- [SenderNode],
+    NewNodes = add_node_to_list(SenderNode, Nodes),
     NewStateNum = StateNum + 1,
     update_node_managers(NewNodes, NewStateNum),
     State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes,
@@ -294,6 +298,26 @@ node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes
         state_num = NewStateNum}.
 
 %%--------------------------------------------------------------------
+%% @doc
+%% Get node that can be used by new nodes to synchronize with
+%% (i. e. attach to mnesia cluster). This node should be one of active
+%% nodes of existing cluster, or if there isn't any, the first of nodes
+%% that are initializing.
+%%
+%% In some cases synchronization requires waiting for this node to finish
+%% initialization process. It is up to caller to wait and ensure that he can
+%% safely synchronize.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_node_to_sync(#cm_state{}) -> {ok, node()} | {error, term()}.
+get_node_to_sync(#cm_state{nodes = [], uninitialized_nodes = []}) ->
+    {error, no_nodes_connected};
+get_node_to_sync(#cm_state{nodes = [], uninitialized_nodes = [FirstInitNode | _]}) ->
+    {ok, FirstInitNode};
+get_node_to_sync(#cm_state{nodes = [FirstNode | _]}) ->
+    {ok, FirstNode}.
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Handles healthcheck request
@@ -309,4 +333,16 @@ healthcheck(#cm_state{nodes = Nodes, state_num = StateNum}) ->
         {ok, undefined} ->
             {ok, {Nodes, StateNum}};
         _ -> {error, invalid_worker_num}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add node to list if it's not there
+%% @end
+%%--------------------------------------------------------------------
+-spec add_node_to_list(node(), [node()]) -> [node()].
+add_node_to_list(Node, List) ->
+    case lists:member(Node, List) of
+        true -> List;
+        false -> [Node | List]
     end.
