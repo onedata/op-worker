@@ -55,8 +55,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
                 _ -> %% there is at least one mnesia node -> join cluster
                     Tables = [table_name(ModelName) || ModelName <- ?MODELS],
                     ?info("Waiting for mnesia tables ~p to initialize on node ~p...", [Tables, NodeToSync]),
-                    gen_server:call({?NODE_MANAGER_NAME, NodeToSync},
-                        {execute_on_node, fun() -> mnesia:wait_for_tables(Tables, 10000) end}),
+                    ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, 10000]),
                     ?info("Mnesia tables are ready!"),
                     case (catch gen_server:call({?NODE_MANAGER_NAME, NodeToSync},
                         {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end}))
