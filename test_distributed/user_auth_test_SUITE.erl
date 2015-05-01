@@ -67,7 +67,7 @@ token_authentication(Config) ->
 %%%===================================================================
 init_per_suite(Config) ->
     Cfg = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    timer:sleep(10000), %todo wait for appmock
+    timer:sleep(40000), %todo wait for appmock
     Cfg.
 
 end_per_suite(Config) ->
