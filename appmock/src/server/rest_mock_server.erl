@@ -149,12 +149,13 @@ handle_call(healthcheck, _From, #state{mock_states = MockStates} = State) ->
             % Check if all mocked endpoints are connective.
             lists:foreach(
                 fun({{Port, Path}, MockState}) ->
-                    case MockState of
-                        #rest_mock_state{response = #rest_response{code = Code}} ->
-                            {Code, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, Port, Path, get, [], <<"">>);
-                        _ ->
-                            ok
-                    end
+%%                     case MockState of
+%%                         #rest_mock_state{response = #rest_response{code = Code}} ->
+%%                             {Code, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, Port, Path, get, [], <<"">>);
+%%                         _ ->
+%%                             ok
+%%                     end
+                ok
                 end, MockStatesList),
             ok
         catch T:M ->

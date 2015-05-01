@@ -76,7 +76,8 @@ init_per_suite(Config) ->
     Cfg.
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+%%     test_node_starter:clean_environment(Config).
+    ok.
 
 init_per_testcase(_, Config) ->
     ssl:start(),
