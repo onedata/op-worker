@@ -344,5 +344,5 @@ healthcheck(#cm_state{nodes = Nodes, state_num = StateNum}) ->
 add_node_to_list(Node, List) ->
     case lists:member(Node, List) of
         true -> List;
-        false -> [Node | List]
+        false -> List ++ [Node]
     end.
