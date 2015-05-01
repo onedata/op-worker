@@ -39,8 +39,9 @@ init_bucket(_BucketName, Models, NodeToSync) ->
         fun(#model_config{name = ModelName, fields = Fields}) ->
             Node = node(),
             Table = table_name(ModelName),
-            case NodeToSync of
-                Node -> %% No mnesia nodes -> create new table
+            ?info("Initnit mnesia bucket, sync with node ~p", [NodeToSync]),
+            case NodeToSync == Node of
+                true -> %% No mnesia nodes -> create new table
                     Ans = case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
                         {ram_copies, [Node]}, {type, set}]) of
                         {atomic, ok} -> ok;
