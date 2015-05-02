@@ -312,7 +312,7 @@ node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes
 -spec get_node_to_sync(#cm_state{}) -> {ok, node()} | {error, term()}.
 get_node_to_sync(#cm_state{nodes = [], uninitialized_nodes = []}) ->
     {error, no_nodes_connected};
-get_node_to_sync(#cm_state{nodes = [FirstNode | _], uninitialized_nodes = []}) ->
+get_node_to_sync(#cm_state{nodes = [FirstNode | _]}) ->
     {ok, FirstNode};
 get_node_to_sync(#cm_state{uninitialized_nodes = [FirstInitNode | _]}) ->
     {ok, FirstInitNode}.
