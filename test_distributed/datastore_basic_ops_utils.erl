@@ -56,14 +56,13 @@ create_delete_test(Config, Level) ->
         end)
     end,
 
-    DocsSet = trunc(ThreadsNum/ConflictedThreads),
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, OkTime, ErrorNum, ErrorTime} = count_answers(OpsNum),
     ?assertEqual(OpsNum, OkNum+ErrorNum),
     % TODO change when datastore behavior will be coherent
     ct:print("Create ok num: ~p", [OkNum]),
-    ?assert((ThreadsNum * DocsPerThead >= OkNum) and (DocsPerThead * DocsSet =< OkNum)),
+    ?assert((ThreadsNum * DocsPerThead >= OkNum) and (DocsPerThead * trunc(ThreadsNum/ConflictedThreads) =< OkNum)),
 
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
@@ -77,7 +76,7 @@ create_delete_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun2),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
     {OkNum2, OkTime2, ErrorNum2, _ErrorTime2} = count_answers(OpsNum),
     ?assertEqual(OpsNum, OkNum2),
     ?assertEqual(0, ErrorNum2),
@@ -113,8 +112,7 @@ save_test(Config, Level) ->
         end)
     end,
 
-    DocsSet = trunc(ThreadsNum/ConflictedThreads),
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, OkTime, ErrorNum, _ErrorTime} = count_answers(OpsNum),
     ?assertEqual(OpsNum, OkNum),
@@ -130,8 +128,8 @@ save_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, DocsSet, DocsSet, TestFun2),
-    OpsNum2 = DocsPerThead * DocsSet,
+    spawn_at_nodes(Workers, ThreadsNum, 1, TestFun2),
+    OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, ErrorNum2, _ErrorTime2} = count_answers(OpsNum2),
     ?assertEqual(0, ErrorNum2),
     ?assertEqual(OpsNum2, OkNum2),
@@ -162,8 +160,7 @@ update_test(Config, Level) ->
         end)
     end,
 
-    DocsSet = trunc(ThreadsNum/ConflictedThreads),
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, _OkTime, ErrorNum, ErrorTime} = count_answers(OpsNum),
     ?assertEqual(0, OkNum),
@@ -172,7 +169,7 @@ update_test(Config, Level) ->
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(create, Level, [
+            Ans = ?call_store(save, Level, [
                 #document{
                     key = list_to_binary(DocsSet++integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -182,13 +179,13 @@ update_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, DocsSet, DocsSet, TestFun2),
-    OpsNum2 = DocsPerThead * DocsSet,
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
+    OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, ErrorNum2, _ErrorTime4} = count_answers(OpsNum2),
     ?assertEqual(0, ErrorNum2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     {OkNum3, OkTime3, ErrorNum3, _ErrorTime3} = count_answers(OpsNum),
     ?assertEqual(OpsNum, OkNum3),
     ?assertEqual(0, ErrorNum3),
@@ -203,7 +200,7 @@ update_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, DocsSet, DocsSet, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
     {OkNum4, _OkTime4, ErrorNum4, _ErrorTime4} = count_answers(OpsNum2),
     ?assertEqual(0, ErrorNum4),
     ?assertEqual(OpsNum2, OkNum4),
@@ -236,8 +233,7 @@ get_test(Config, Level) ->
         end)
     end,
 
-    DocsSet = trunc(ThreadsNum/ConflictedThreads),
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, _OkTime, ErrorNum, ErrorTime} = count_answers(OpsNum),
     ?assertEqual(0, OkNum),
@@ -246,7 +242,7 @@ get_test(Config, Level) ->
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(create, Level, [
+            Ans = ?call_store(save, Level, [
                 #document{
                     key = list_to_binary(DocsSet++integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -256,13 +252,13 @@ get_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, DocsSet, DocsSet, TestFun2),
-    OpsNum2 = DocsPerThead * DocsSet,
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
+    OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, ErrorNum2, _ErrorTime4} = count_answers(OpsNum2),
     ?assertEqual(0, ErrorNum2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     {OkNum3, OkTime3, ErrorNum3, _ErrorTime3} = count_answers(OpsNum),
     ?assertEqual(OpsNum, OkNum3),
     ?assertEqual(0, ErrorNum3),
@@ -277,7 +273,7 @@ get_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, DocsSet, DocsSet, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
     {OkNum4, _OkTime4, ErrorNum4, _ErrorTime4} = count_answers(OpsNum2),
     ?assertEqual(0, ErrorNum4),
     ?assertEqual(OpsNum2, OkNum4),
@@ -310,8 +306,7 @@ exists_test(Config, Level) ->
         end)
     end,
 
-    DocsSet = trunc(ThreadsNum/ConflictedThreads),
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, OkTime, ErrorNum, _ErrorTime} = count_answers(OpsNum),
     ?assertEqual(OpsNum, OkNum),
@@ -320,7 +315,7 @@ exists_test(Config, Level) ->
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(create, Level, [
+            Ans = ?call_store(save, Level, [
                 #document{
                     key = list_to_binary(DocsSet++integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -330,13 +325,13 @@ exists_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, DocsSet, DocsSet, TestFun2),
-    OpsNum2 = DocsPerThead * DocsSet,
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
+    OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, ErrorNum2, _ErrorTime4} = count_answers(OpsNum2),
     ?assertEqual(0, ErrorNum2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    spawn_at_nodes(Workers, ThreadsNum, DocsSet, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     {OkNum3, OkTime3, ErrorNum3, _ErrorTime3} = count_answers(OpsNum),
     ?assertEqual(OpsNum, OkNum3),
     ?assertEqual(0, ErrorNum3),
@@ -351,7 +346,7 @@ exists_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, DocsSet, DocsSet, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
     {OkNum4, _OkTime4, ErrorNum4, _ErrorTime4} = count_answers(OpsNum2),
     ?assertEqual(0, ErrorNum4),
     ?assertEqual(OpsNum2, OkNum4),
@@ -378,20 +373,20 @@ for(I, N, F) ->
     F(I),
     for(I + 1, N, F).
 
-spawn_at_nodes(Nodes, Threads, DocsSet, Fun) ->
-    spawn_at_nodes(Nodes, [], Threads, 0, DocsSet, Fun).
+spawn_at_nodes(Nodes, Threads, ConflictedThreads, Fun) ->
+    spawn_at_nodes(Nodes, [], Threads, 1, 0, ConflictedThreads, Fun).
 
-spawn_at_nodes(_Nodes, _Nodes2, 0, _DocsSetNum, _DocsSet, _Fun) ->
+spawn_at_nodes(_Nodes, _Nodes2, 0, _DocsSetNum, _DocNumInSet, _ConflictedThreads, _Fun) ->
     ok;
-spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet, DocsSet, Fun) ->
-    spawn_at_nodes(Nodes, Nodes2, Threads, 0, DocsSet, Fun);
-spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocsSet, Fun) ->
-    spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocsSet, Fun);
-spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocsSet, Fun) ->
+spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet, ConflictedThreads, ConflictedThreads, Fun) ->
+    spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet+1, 0, ConflictedThreads, Fun);
+spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
+    spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun);
+spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
     spawn(N, fun() ->
-        Fun(integer_to_list(DocsSetNum+1) ++ "_")
+        Fun(integer_to_list(DocsSetNum) ++ "_")
     end),
-    spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum+1, DocsSet, Fun).
+    spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet+1, ConflictedThreads, Fun).
 
 count_answers(Exp) ->
     count_answers(Exp, {0,0,0,0}). %{OkNum, OkTime, ErrorNum, ErrorTime}
