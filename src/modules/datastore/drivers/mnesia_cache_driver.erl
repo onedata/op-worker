@@ -39,7 +39,6 @@ init_bucket(_BucketName, Models, NodeToSync) ->
         fun(#model_config{name = ModelName, fields = Fields}) ->
             Node = node(),
             Table = table_name(ModelName),
-            ?info("Initnit mnesia bucket, sync with node ~p", [NodeToSync]),
             case NodeToSync == Node of
                 true -> %% No mnesia nodes -> create new table
                     Ans = case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
@@ -55,9 +54,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
                     Ans;
                 _ -> %% there is at least one mnesia node -> join cluster
                     Tables = [table_name(ModelName) || ModelName <- ?MODELS],
-                    ?info("Waiting for mnesia tables ~p to initialize on node ~p...", [Tables, NodeToSync]),
                     ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, 20000]),
-                    ?info("Mnesia tables are ready!"),
                     case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
                             case rpc:call(NodeToSync, mnesia, add_table_copy, [Table, Node, ram_copies]) of
