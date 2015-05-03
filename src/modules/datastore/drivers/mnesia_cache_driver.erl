@@ -58,13 +58,9 @@ init_bucket(_BucketName, Models, NodeToSync) ->
                     ?info("Waiting for mnesia tables ~p to initialize on node ~p...", [Tables, NodeToSync]),
                     ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, 20000]),
                     ?info("Mnesia tables are ready!"),
-                    case (catch gen_server:call({?NODE_MANAGER_NAME, NodeToSync},
-                        {execute_on_node, fun()-> mnesia:change_config(extra_db_nodes, [Node]) end}))
-                    of
+                    case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
-                            case gen_server:call({?NODE_MANAGER_NAME, NodeToSync},
-                                {execute_on_node, fun() -> mnesia:add_table_copy(Table, Node, ram_copies) end})
-                            of
+                            case rpc:call(NodeToSync, mnesia, add_table_copy, [Table, Node, ram_copies]) of
                                 {atomic, ok} ->
                                     ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, NodeToSync, node()]);
                                 {aborted, Reason} ->
