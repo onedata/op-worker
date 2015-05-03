@@ -66,9 +66,7 @@ token_authentication(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    Cfg = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    timer:sleep(40000), %todo wait for appmock
-    Cfg.
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
