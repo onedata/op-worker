@@ -1,13 +1,9 @@
-<<<<<<< HEAD
-"""Brings up a set of oneprovider ccm nodes. They can create separate clusters."""
-=======
 """Author: Tomasz Lichon
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
 Brings up a set of oneprovider ccm nodes. They can create separate clusters.
 """
->>>>>>> 5471c449bf400533a81e05e495b9bb70cfd66efd
 
 from __future__ import print_function
 
