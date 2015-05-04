@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
-"""A script to brings up a set of oneprovider ccm nodes. They can create separate
-clusters.
+"""Author: Tomasz Lichon
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
+
 Run the script with -h flag to learn about script's running options.
 """
 
