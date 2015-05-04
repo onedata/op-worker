@@ -78,8 +78,8 @@ create_delete_test(Config, Level) ->
 
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
     {OkNum2, OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(OpsNum),
-    ?assertEqual(OpsNum, OkNum2),
     ?assertEqual([], ErrorsList2),
+    ?assertEqual(OpsNum, OkNum2),
 
     [
         #parameter{name = create_ok_time, value = OkTime/OkNum, unit = "microsek"},
@@ -115,8 +115,8 @@ save_test(Config, Level) ->
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, OkTime, _ErrorNum, _ErrorTime, ErrorsList} = count_answers(OpsNum),
-    ?assertEqual(OpsNum, OkNum),
     ?assertEqual([], ErrorsList),
+    ?assertEqual(OpsNum, OkNum),
 
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
@@ -190,8 +190,8 @@ update_test(Config, Level) ->
 
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     {OkNum3, OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum),
-    ?assertEqual(OpsNum, OkNum3),
     ?assertEqual([], ErrorsList3),
+    ?assertEqual(OpsNum, OkNum3),
 
     TestFun3 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
@@ -266,8 +266,8 @@ get_test(Config, Level) ->
 
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     {OkNum3, OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum),
-    ?assertEqual(OpsNum, OkNum3),
     ?assertEqual([], ErrorsList3),
+    ?assertEqual(OpsNum, OkNum3),
 
     TestFun3 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
@@ -339,8 +339,8 @@ exists_test(Config, Level) ->
 
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     {OkNum3, OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum),
-    ?assertEqual(OpsNum, OkNum3),
     ?assertEqual([], ErrorsList3),
+    ?assertEqual(OpsNum, OkNum3),
 
     TestFun3 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
@@ -414,6 +414,8 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
                           {OkNum + 1, OkTime + Time, ErrorNum, ErrorTime, ErrorsList};
                       {ok, _} ->
                           {OkNum + 1, OkTime + Time, ErrorNum, ErrorTime, ErrorsList};
+                      {uncatched_error, E1, E2, ST} ->
+                          ?assert({E1, E2, ST});
                       E ->
                           {OkNum, OkTime, ErrorNum + 1, ErrorTime + Time, [E | ErrorsList]}
                   end

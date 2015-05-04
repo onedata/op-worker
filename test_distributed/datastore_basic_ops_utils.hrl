@@ -34,38 +34,36 @@
         {config, [{name, single_long_thread},
                     {parameters, [
                         [{name, threads_num}, {value, 1}],
-                        [{name, docs_per_thead}, {value, 1000}],
+                        [{name, docs_per_thead}, {value, 500}],
                         [{name, conflicted_threads}, {value, 1}]
                     ]}
         ]},
         {config, [{name, single_long_thread_one_op_per_doc},
             {parameters, [
                 [{name, threads_num}, {value, 1}],
-                [{name, docs_per_thead}, {value, 5000}],
+                [{name, docs_per_thead}, {value, 2500}],
                 [{name, ops_per_doc}, {value, 1}],
                 [{name, conflicted_threads}, {value, 1}]
             ]}
         ]},
         {config, [{name, multiple_threads_no_conflicts},
                     {parameters, [
-                        [{name, threads_num}, {value, 500}],
-                        [{name, docs_per_thead}, {value, 50}],
+                        [{name, threads_num}, {value, 100}],
+                        [{name, docs_per_thead}, {value, 25}],
                         [{name, ops_per_doc}, {value, 1}],
                         [{name, conflicted_threads}, {value, 1}]
                     ]}
         ]},
         {config, [{name, multiple_threads_with_repeats},
                     {parameters, [
-                        [{name, threads_num}, {value, 500}],
-                        [{name, docs_per_thead}, {value, 50}],
+                        [{name, threads_num}, {value, 100}],
                         [{name, conflicted_threads}, {value, 1}]
                     ]}
         ]},
         {config, [{name, multiple_threads_with_conflits},
                     {parameters, [
-                        [{name, threads_num}, {value, 500}],
-                        [{name, docs_per_thead}, {value, 50}],
-                        [{name, conflicted_threads}, {value, 25}]
+                        [{name, threads_num}, {value, 100}],
+                        [{name, conflicted_threads}, {value, 20}]
                     ]}
         ]}
     ])
