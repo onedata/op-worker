@@ -12,11 +12,9 @@
 -ifndef(DATASTORE_BASIC_OPS_UTILS_HRL).
 -define(DATASTORE_BASIC_OPS_UTILS_HRL, 1).
 
--define(repeats, 5).
-
 -define(basic_test_def(Desc),
     -performance([
-        {repeats, ?repeats},
+        {repeats, 1},
         {parameters, [
             [{name, threads_num}, {value, 30}, {description, "Number of threads that operates at single node."}],
             [{name, docs_per_thead}, {value, 5}, {description, "Number of documents used by single threads."}],
@@ -65,6 +63,25 @@
                         [{name, threads_num}, {value, 100}],
                         [{name, conflicted_threads}, {value, 20}]
                     ]}
+        ]}
+    ])
+).
+
+-define(long_test_def,
+    -performance([
+        {repeats, 10},
+        {parameters, [
+            [{name, threads_num}, {value, 30}, {description, "Number of threads that operates at single node."}],
+            [{name, docs_per_thead}, {value, 5}, {description, "Number of documents used by single threads."}],
+            [{name, ops_per_doc}, {value, 2}, {description, "Number of oprerations on each document."}],
+            [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
+        ]},
+        {description, "Performs multipe datastore operations using many threads."},
+        {config, [{name, multiple_threads_with_conflits},
+            {parameters, [
+                [{name, threads_num}, {value, 100}],
+                [{name, conflicted_threads}, {value, 20}]
+            ]}
         ]}
     ])
 ).

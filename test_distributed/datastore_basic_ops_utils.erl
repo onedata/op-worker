@@ -22,7 +22,7 @@
 
 -define(REQUEST_TIMEOUT, timer:seconds(10)).
 
--export([create_delete_test/2, save_test/2, update_test/2, get_test/2, exists_test/2]).
+-export([create_delete_test/2, save_test/2, update_test/2, get_test/2, exists_test/2, mixed_test/2]).
 
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
 
@@ -314,9 +314,9 @@ exists_test(Config, Level) ->
 
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
-    {OkNum, OkTime, ErrorNum, _ErrorTime, _ErrorsList} = count_answers(OpsNum),
+    {OkNum, OkTime, _ErrorNum, _ErrorTime, ErrorsList} = count_answers(OpsNum),
+    ?assertEqual([], ErrorsList),
     ?assertEqual(OpsNum, OkNum),
-    ?assertEqual(0, ErrorNum),
 
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
@@ -362,6 +362,128 @@ exists_test(Config, Level) ->
         #parameter{name = exists_false_time, value = OkTime/OkNum, unit = "microsek"}
     ].
 
+mixed_test(Config, Level) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ThreadsNum = ?config(threads_num, Config),
+    DocsPerThead = ?config(docs_per_thead, Config),
+    OpsPerDoc = ?config(ops_per_doc, Config),
+    ConflictedThreads = ?config(conflicted_threads, Config),
+
+    ok = test_node_starter:load_modules(Workers, [?MODULE]),
+    Master = self(),
+
+    TestFun = fun(DocsSet) ->
+        for(1, DocsPerThead, fun(I) ->
+            for(OpsPerDoc, fun() ->
+                BeforeProcessing = os:timestamp(),
+                Ans = ?call_store(create, Level, [
+                    #document{
+                        key = list_to_binary(DocsSet++integer_to_list(I)),
+                        value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
+                    }]),
+                AfterProcessing = os:timestamp(),
+                Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            end)
+        end)
+    end,
+
+    TestFun2 = fun(DocsSet) ->
+        for(1, DocsPerThead, fun(I) ->
+            for(OpsPerDoc, fun() ->
+                BeforeProcessing = os:timestamp(),
+                Ans = ?call_store(save, Level, [
+                    #document{
+                        key = list_to_binary(DocsSet++integer_to_list(I)),
+                        value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
+                    }]),
+                AfterProcessing = os:timestamp(),
+                Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            end)
+        end)
+    end,
+
+    TestFun3 = fun(DocsSet) ->
+        for(1, DocsPerThead, fun(I) ->
+            for(1, OpsPerDoc, fun(J) ->
+                BeforeProcessing = os:timestamp(),
+                Ans = ?call_store(update, Level, [
+                    some_record, list_to_binary(DocsSet++integer_to_list(I)),
+                    #{field1 => I+J}
+                ]),
+                AfterProcessing = os:timestamp(),
+                Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            end)
+        end)
+    end,
+
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
+    OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
+
+    {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList} = count_answers(3*OpsNum),
+    ?assertEqual(3*OpsNum, OkNum+ErrorNum),
+
+
+
+
+
+    TestFun4 = fun(DocsSet) ->
+        for(1, DocsPerThead, fun(I) ->
+            for(1, OpsPerDoc, fun(J) ->
+                BeforeProcessing = os:timestamp(),
+                Ans = ?call_store(get, Level, [
+                    some_record, list_to_binary(DocsSet++integer_to_list(I))
+                ]),
+                AfterProcessing = os:timestamp(),
+                Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            end)
+        end)
+    end,
+
+    TestFun5 = fun(DocsSet) ->
+        for(1, DocsPerThead, fun(I) ->
+            for(1, OpsPerDoc, fun(J) ->
+                BeforeProcessing = os:timestamp(),
+                Ans = ?call_store(exists, Level, [
+                    some_record, list_to_binary(DocsSet++integer_to_list(I))
+                ]),
+                AfterProcessing = os:timestamp(),
+                Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+            end)
+        end)
+    end,
+
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun4),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun5),
+    {OkNum2, OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(2*OpsNum),
+    ?assertEqual([], ErrorsList2),
+    ?assertEqual(2*OpsNum, OkNum2),
+
+
+
+
+
+    TestFun6 = fun(DocsSet) ->
+        for(1, DocsPerThead, fun(I) ->
+            BeforeProcessing = os:timestamp(),
+            Ans = ?call_store(delete, Level, [
+                some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+            AfterProcessing = os:timestamp(),
+            Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+        end)
+    end,
+
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
+    OpsNum2 = DocsPerThead * ThreadsNum,
+    {OkNum3, _OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum2),
+    ?assertEqual([], ErrorsList3),
+    ?assertEqual(OpsNum2, OkNum3),
+
+    [
+        #parameter{name = create_save_update_time, value = (OkTime+ErrorTime)/(OkNum+ErrorNum), unit = "microsek"},
+        #parameter{name = get_exist_time, value = OkTime2/OkNum2, unit = "microsek"}
+    ].
 
 %%%===================================================================
 %%% Internal functions

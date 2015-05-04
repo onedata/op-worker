@@ -26,9 +26,25 @@
     create_delete_global_cache_test/1, save_global_cache_test/1, update_global_cache_test/1,
     get_global_cache_test/1, exists_global_cache_test/1,
     create_delete_local_cache_test/1, save_local_cache_test/1, update_local_cache_test/1,
-    get_local_cache_test/1, exists_local_cache_test/1
+    get_local_cache_test/1, exists_local_cache_test/1,
+    mixed_db_test/1, mixed_global_store_test/1, mixed_local_store_test/1,
+    mixed_global_cache_test/1, mixed_local_cache_test/1
 ]).
 
+-performance({test_cases,
+    [create_delete_db_test, save_db_test, update_db_test, get_db_test, exists_db_test,
+        create_delete_global_store_test, save_global_store_test,
+        update_global_store_test, get_global_store_test, exists_global_store_test,
+        create_delete_local_store_test, save_local_store_test, update_local_store_test,
+        get_local_store_test, exists_local_store_test,
+        create_delete_global_cache_test, save_global_cache_test, update_global_cache_test,
+        get_global_cache_test, exists_global_cache_test,
+        create_delete_local_cache_test, save_local_cache_test, update_local_cache_test,
+        get_local_cache_test, exists_local_cache_test,
+        mixed_db_test, mixed_global_store_test, mixed_local_store_test,
+        mixed_global_cache_test, mixed_local_cache_test
+    ]
+}).
 all() ->
     [create_delete_db_test, save_db_test, update_db_test, get_db_test, exists_db_test,
         create_delete_global_store_test, save_global_store_test,
@@ -155,7 +171,25 @@ exists_local_cache_test(Config) ->
 
 %% ====================================================================
 
+?long_test_def.
+mixed_db_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, disk_only).
 
+?long_test_def.
+mixed_global_store_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, global_only).
+
+?long_test_def.
+mixed_local_store_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, local_only).
+
+?long_test_def.
+mixed_global_cache_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, globally_cached).
+
+?long_test_def.
+mixed_local_cache_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, locally_cached).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
