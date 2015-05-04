@@ -48,7 +48,7 @@ all() -> [
     event_manager_multiple_handlers_test
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%====================================================================
 %%% Test function

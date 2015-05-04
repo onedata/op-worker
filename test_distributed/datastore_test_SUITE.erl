@@ -21,7 +21,7 @@
 
 -define(call_store(N, M, A), ?call_store(N, datastore, M, A)).
 -define(call_store(N, Mod, M, A), rpc:call(N, Mod, M, A)).
--define(upload_test_code(CONFIG),
+-define(upload_test_code(CONFIG), %todo probably unnecessary
     begin
         {Mod, Bin, File} = code:get_object_code(?MODULE),
         {_Replies, _} = rpc:multicall(?config(op_worker_nodes, CONFIG), code, load_binary,
@@ -44,14 +44,12 @@ all() ->
 
 %% Simple usage of get/update/create/exists/delete on local cache driver (on several nodes)
 local_cache_test(Config) ->
-    [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Level = local_only,
 
     local_access_only(Worker1, Level),
     local_access_only(Worker2, Level),
-    local_access_only(CCM, Level),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
@@ -64,10 +62,6 @@ local_cache_test(Config) ->
         ?call_store(Worker2, exists, [Level,
             some_record, some_other_key])),
 
-    ?assertMatch({ok, false},
-        ?call_store(CCM, exists, [Level,
-            some_record, some_other_key])),
-
     ?assertMatch({ok, true},
         ?call_store(Worker1, exists, [Level,
             some_record, some_other_key])),
@@ -77,12 +71,10 @@ local_cache_test(Config) ->
 
 %% Simple usage of get/update/create/exists/delete on global cache driver (on several nodes)
 global_cache_test(Config) ->
-    [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Level = global_only,
 
-    local_access_only(CCM, Level),
     local_access_only(Worker1, Level),
     local_access_only(Worker2, Level),
 
@@ -93,12 +85,10 @@ global_cache_test(Config) ->
 
 %% Simple usage of get/update/create/exists/delete on persistamce driver (on several nodes)
 persistance_test(Config) ->
-    [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Level = disk_only,
 
-    local_access_only(CCM, Level),
     local_access_only(Worker1, Level),
     local_access_only(Worker2, Level),
 
@@ -109,7 +99,6 @@ persistance_test(Config) ->
 
 %% Atomic update on global cache driver (on several nodes)
 global_cache_atomic_update_test(Config) ->
-    [_CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Level = global_only,
@@ -394,7 +383,6 @@ local_access_only(Node, Level) ->
 
 -spec global_access(Config :: term(), Level :: datastore:store_level()) -> ok.
 global_access(Config, Level) ->
-    [CCM] = ?config(op_ccm_nodes, Config),
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Key = some_other_key,
@@ -408,10 +396,6 @@ global_access(Config, Level) ->
 
     ?assertMatch({ok, true},
         ?call_store(Worker2, exists, [Level,
-            some_record, Key])),
-
-    ?assertMatch({ok, true},
-        ?call_store(CCM, exists, [Level,
             some_record, Key])),
 
     ?assertMatch({ok, true},
@@ -432,10 +416,6 @@ global_access(Config, Level) ->
     ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(Worker2, get, [Level,
             some_record, some_other_key])),
-
-    ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
-        ?call_store(CCM, get, [Level,
-            some_record, Key])),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, update, [Level,

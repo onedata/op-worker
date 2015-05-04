@@ -27,7 +27,7 @@
 -define(APPLICATION_SUPERVISOR_NAME, oneprovider_node_sup).
 
 %% Global name of gen_server that provides ccm functionality.
--define(CCM, central_cluster_manager).
+-define(CCM, cluster_manager).
 
 %% Local name (name and node is used to identify it) of gen_server that
 %% coordinates node life cycle.

@@ -128,23 +128,31 @@ receive_server_message(IgnoredMsgList) ->
 
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    KeyPath = rpc:call(Worker1, gr_plugin, get_key_path, []),
-    CertPath = rpc:call(Worker1, gr_plugin, get_cert_path, []),
-    CacertPath = rpc:call(Worker1, gr_plugin, get_cacert_path, []),
+    Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
     {ok, Key} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
     {ok, Cert} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    {ok, Cacert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
-    test_utils:mock_new(Workers, [file]),
-    test_utils:mock_expect(Workers, file, read_file,
+    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
+    [{KeyType, KeyEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Key]),
+    [{_, CertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Cert]),
+    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
+    SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
+
+    test_utils:mock_new(Workers, [gr_endpoint]),
+    test_utils:mock_expect(Workers, gr_endpoint, auth_request,
         fun
-            (Path) when Path =:= KeyPath -> {ok, Key};
-            (Path) when Path =:= CertPath -> {ok, Cert};
-            (Path) when Path =:= CacertPath -> {ok, Cacert};
-            (Path) -> meck:passthrough([Path])
+            (provider, URN, Method, Headers, Body, Options) ->
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+            (client, URN, Method, Headers, Body, Options) ->
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+            ({_, undefined}, URN, Method, Headers, Body, Options) ->
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+            ({_, AccessToken}, URN, Method, Headers, Body, Options) ->
+                AuthorizationHeader = {"authorization", "Bearer " ++ binary_to_list(AccessToken)},
+                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
         end
     ).
 
 unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [file]),
-    test_utils:mock_unload(Workers, [file]).
+    test_utils:mock_validate(Workers, [gr_endpoint]),
+    test_utils:mock_unload(Workers, [gr_endpoint]).

@@ -42,11 +42,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    case application:get_env(?APP_NAME, node_type) of
-        {ok, ccm} ->
-            throw(ccm_node); % ccm node doesn't have socket interface, so GSI would be useless
-        _ -> ok
-    end,
     ?info("GSI Handler module is starting"),
     ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
     {ok, CADir} = application:get_env(?APP_NAME, ca_dir),
@@ -118,8 +113,7 @@ get_certs_from_oneproxy(OneProxyHandler, #certificate_info{client_session_id = G
 %%--------------------------------------------------------------------
 -spec get_ca_certs_from_all_cert_dirs() -> [binary()] | no_return().
 get_ca_certs_from_all_cert_dirs() ->
-    {ok, CertDir1} = application:get_env(?APP_NAME, certs_dir),
-    CertDir = atom_to_list(CertDir1),
+    {ok, CertDir} = application:get_env(?APP_NAME, certs_dir),
     get_ca_certs() ++ get_ca_certs_from_dir(CertDir).
 
 %%--------------------------------------------------------------------
