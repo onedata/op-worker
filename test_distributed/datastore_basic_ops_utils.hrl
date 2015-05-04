@@ -18,7 +18,7 @@
     -performance([
         {repeats, ?repeats},
         {parameters, [
-            [{name, threads_num}, {value, 20}, {description, "Number of threads that operates at single node."}],
+            [{name, threads_num}, {value, 30}, {description, "Number of threads that operates at single node."}],
             [{name, docs_per_thead}, {value, 5}, {description, "Number of documents used by single threads."}],
             [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
             [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
@@ -49,7 +49,7 @@
         {config, [{name, multiple_threads_no_conflicts},
                     {parameters, [
                         [{name, threads_num}, {value, 500}],
-                        [{name, docs_per_thead}, {value, 500}],
+                        [{name, docs_per_thead}, {value, 50}],
                         [{name, ops_per_doc}, {value, 1}],
                         [{name, conflicted_threads}, {value, 1}]
                     ]}
@@ -57,14 +57,14 @@
         {config, [{name, multiple_threads_with_repeats},
                     {parameters, [
                         [{name, threads_num}, {value, 500}],
-                        [{name, docs_per_thead}, {value, 500}],
+                        [{name, docs_per_thead}, {value, 50}],
                         [{name, conflicted_threads}, {value, 1}]
                     ]}
         ]},
         {config, [{name, multiple_threads_with_conflits},
                     {parameters, [
                         [{name, threads_num}, {value, 500}],
-                        [{name, docs_per_thead}, {value, 500}],
+                        [{name, docs_per_thead}, {value, 50}],
                         [{name, conflicted_threads}, {value, 25}]
                     ]}
         ]}

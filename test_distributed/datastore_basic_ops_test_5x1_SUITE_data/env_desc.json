@@ -1,7 +1,7 @@
 {
-    "oneprovider_node": {
+    "op_ccm" : {
         "config": {
-            "input_dir": "rel/oneprovider_node",
+            "input_dir": "rel/op_ccm",
             "target_dir": "rel/test_cluster"
         },
         "nodes": {
@@ -11,19 +11,24 @@
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "ccm",
                     "ccm_nodes": [ "ccm@" ],
-                    "db_nodes": [ "127.0.0.1:49161" ],
-                    "workers_to_trigger_init": 2
+                    "worker_num": 5
                 }
-            },
+            }
+        }
+    },
+    "oneprovider_node": {
+        "config": {
+            "input_dir": "rel/oneprovider_node",
+            "target_dir": "rel/test_cluster"
+        },
+        "nodes": {
             "worker1": {
                 "vm.args": {
                     "name": "worker1@",
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ]
                 }
@@ -34,7 +39,6 @@
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ]
                 }
@@ -45,7 +49,6 @@
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ]
                 }
@@ -56,7 +59,6 @@
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ]
                 }
@@ -67,7 +69,6 @@
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ]
                 }
