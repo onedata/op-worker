@@ -16,7 +16,7 @@
 %% API
 -export([reuse_or_create_session/3, remove_session/1]).
 
--define(TIMEOUT, timer:seconds(10)).
+-define(TIMEOUT, timer:seconds(20)).
 -define(SESSION_WORKER, session_manager_worker).
 
 %%%===================================================================

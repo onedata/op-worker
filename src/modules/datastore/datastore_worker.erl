@@ -74,11 +74,11 @@ init(_Args) ->
 handle(ping, _State) ->
     pong;
 
-handle(healthcheck, _State) ->
+handle(healthcheck, State) ->
     HC = #{
-        %?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
-        %?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
-        %?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+        ?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
+        ?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
+        ?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
     },
 
     maps:fold(
@@ -87,10 +87,10 @@ handle(healthcheck, _State) ->
                 AccIn;
             (K, {error, Reason}, _AccIn) when is_atom(K) ->
                 ?error("Driver ~p healthcheck error: ~p", [K, Reason]),
-                _AccIn; %% @todo: revert me! {error, K}
+                {error, K};
             (K, Reason, _AccIn) ->
                 ?error("Unknown status of driver ~p, healthcheck error: ~p", [K, Reason]),
-                _AccIn %% @todo: revert me! {error, unknown_driver_status}
+                {error, unknown_driver_status}
         end, ok, HC);
 
 %% Proxy call to given datastore driver
