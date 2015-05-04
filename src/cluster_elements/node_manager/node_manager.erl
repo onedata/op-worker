@@ -368,7 +368,7 @@ init_net_connection([Node | Nodes]) ->
 -spec init_node() -> ok.
 init_node() ->
     {ok, NodeToSync} = gen_server:call({global, ?CCM}, get_node_to_sync),
-    datastore:ensure_state_loaded(NodeToSync),
+    ok = datastore:ensure_state_loaded(NodeToSync),
     init_workers().
 
 %%--------------------------------------------------------------------

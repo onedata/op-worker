@@ -19,6 +19,8 @@
 %% Batch size for list operation
 -define(LIST_BATCH_SIZE, 100).
 
+-define(MNESIA_WAIT_TIMEOUT, timer:seconds(20)).
+
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
@@ -54,7 +56,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
                     Ans;
                 _ -> %% there is at least one mnesia node -> join cluster
                     Tables = [table_name(ModelName) || ModelName <- ?MODELS],
-                    ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, 20000]),
+                    ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, ?MNESIA_WAIT_TIMEOUT]),
                     case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
                             case rpc:call(NodeToSync, mnesia, add_table_copy, [Table, Node, ram_copies]) of
