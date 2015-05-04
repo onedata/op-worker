@@ -12,7 +12,7 @@
 -ifndef(DATASTORE_BASIC_OPS_UTILS_HRL).
 -define(DATASTORE_BASIC_OPS_UTILS_HRL, 1).
 
--define(repeats, 1).
+-define(repeats, 5).
 
 -define(basic_test_def(Desc),
     -performance([
