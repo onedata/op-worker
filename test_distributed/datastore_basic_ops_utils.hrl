@@ -13,7 +13,7 @@
 -define(DATASTORE_BASIC_OPS_UTILS_HRL, 1).
 
 -define(basic_test_def(Desc),
-    -performance([
+    [
         {repeats, 1},
         {parameters, [
             [{name, threads_num}, {value, 30}, {description, "Number of threads that operates at single node."}],
@@ -64,11 +64,11 @@
                         [{name, conflicted_threads}, {value, 20}]
                     ]}
         ]}
-    ])
+    ]
 ).
 
 -define(long_test_def,
-    -performance([
+    [
         {repeats, 10},
         {parameters, [
             [{name, threads_num}, {value, 30}, {description, "Number of threads that operates at single node."}],
@@ -83,7 +83,7 @@
                 [{name, conflicted_threads}, {value, 20}]
             ]}
         ]}
-    ])
+    ]
 ).
 
 -define(create_delete_test_def,
@@ -100,11 +100,11 @@
         "Document may be updated many times.")
 ).
 
--define(get_test,
+-define(get_test_def,
     ?basic_test_def("Performs multipe get operations using many threads.")
 ).
 
--define(exists_test,
+-define(exists_test_def,
     ?basic_test_def("Performs multipe exists operations using many threads.")
 ).
 
