@@ -24,7 +24,7 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, create/2, get_scope/1, list_uuids/3]).
+-export([resolve_path/1, create/2, get_scope/1, list_uuids/3, gen_path/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -204,6 +204,7 @@ before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
 
+
 list_uuids(Entry, Offset, Count) ->
     runner(fun() ->
         {ok, #document{} = File} = get(Entry),
@@ -226,9 +227,31 @@ list_uuids(Entry, Offset, Count) ->
     end).
 
 
+-spec gen_path(entry()) -> {ok, path()} | datastore:generic_error().
+gen_path({path, Path}) when is_binary(Path) ->
+    {ok, Path};
+gen_path(Entry) ->
+    gen_path2(Entry, []).
+
+
+
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+-spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error().
+gen_path2(Entry, Acc) ->
+    {ok, #document{} = Doc} = get(Entry),
+    case datastore:fetch_link(disk_only, Doc, parent) of
+        {ok, {?ROOT_DIR_UUID, _}} ->
+            Tokens = [Token || #document{value = #file_meta{name = Token}} <- [Doc | Acc]],
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens])};
+        {ok, {ParentUUID, _}} ->
+            gen_path2({uuid, ParentUUID}, [Doc | Acc])
+    end.
 
 
 -spec resolve_path(path()) -> {ok, datastore:document()} | datastore:generic_error().
@@ -239,6 +262,7 @@ resolve_path(<<?DIRECTORY_SEPARATOR, Path/binary>>) ->
         Tokens ->
             datastore:link_walk(disk_only, ?RESPONSE(get(?ROOT_DIR_UUID)), Tokens, get_leaf)
     end.
+
 
 
 is_valid_filename(<<"">>) ->

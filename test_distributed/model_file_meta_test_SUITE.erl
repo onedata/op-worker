@@ -75,6 +75,13 @@ basic_operations_test(Config) ->
     ?assertMatch({ok, #document{value = #file_meta{name = <<"dir1">>}}},    {A7, U7}),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"file1">>}}},   {A8, U8}),
 
+    {A30, U30} = ?call(Worker1, gen_path, [{path, <<"/spaces/Space 1/dir2/file1">>}]),
+    {A31, U31} = ?call(Worker2, gen_path, [{path, <<"/spaces/Space 1/dir2/file2">>}]),
+    {A32, U32} = ?call(Worker2, gen_path, [{path, <<"/spaces/Space 1/dir2/file3">>}]),
+    ?assertMatch({ok, <<"/spaces/Space 1/dir2/file1">>}, {A30, U30}),
+    ?assertMatch({ok, <<"/spaces/Space 1/dir2/file2">>}, {A31, U31}),
+    ?assertMatch({ok, <<"/spaces/Space 1/dir2/file3">>}, {A32, U32}),
+
 
     {A9, U9} =   ?call(Worker1, get_scope, [U14]),
     {A10, U10} = ?call(Worker1, get_scope, [U5]),
