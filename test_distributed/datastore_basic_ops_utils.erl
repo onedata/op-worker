@@ -81,9 +81,17 @@ create_delete_test(Config, Level) ->
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum, OkNum2),
 
+    CreateErrorTime = case ErrorNum of
+                          0 ->
+                              0;
+                          _ ->
+                              ErrorTime/ErrorNum
+                      end,
+
     [
         #parameter{name = create_ok_time, value = OkTime/OkNum, unit = "microsek"},
-        #parameter{name = create_error_time, value = ErrorTime/ErrorNum, unit = "microsek"},
+        #parameter{name = create_error_time, value = CreateErrorTime, unit = "microsek"},
+        #parameter{name = create_error_num, value = ErrorNum, unit = "-"},
         #parameter{name = delete_time, value = OkTime2/OkNum2, unit = "microsek"}
     ].
 
@@ -208,9 +216,17 @@ update_test(Config, Level) ->
     ?assertEqual([], ErrorsList4),
     ?assertEqual(OpsNum2, OkNum4),
 
+    UpdateErrorTime = case ErrorNum of
+                          0 ->
+                              0;
+                          _ ->
+                              ErrorTime/ErrorNum
+                      end,
+
     [
         #parameter{name = update_ok_time, value = OkTime3/OkNum3, unit = "microsek"},
-        #parameter{name = update_error_time, value = ErrorTime/ErrorNum, unit = "microsek"}
+        #parameter{name = update_error_time, value = UpdateErrorTime, unit = "microsek"},
+        #parameter{name = update_error_num, value = ErrorNum, unit = "-"}
     ].
 
 get_test(Config, Level) ->
@@ -284,9 +300,17 @@ get_test(Config, Level) ->
     ?assertEqual([], ErrorsList4),
     ?assertEqual(OpsNum2, OkNum4),
 
+    GetErrorTime = case ErrorNum of
+                          0 ->
+                              0;
+                          _ ->
+                              ErrorTime/ErrorNum
+                      end,
+
     [
         #parameter{name = get_ok_time, value = OkTime3/OkNum3, unit = "microsek"},
-        #parameter{name = get_error_time, value = ErrorTime/ErrorNum, unit = "microsek"}
+        #parameter{name = get_error_time, value = GetErrorTime, unit = "microsek"},
+        #parameter{name = update_error_num, value = ErrorNum, unit = "-"}
     ].
 
 exists_test(Config, Level) ->
