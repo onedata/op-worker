@@ -16,8 +16,8 @@
     [
         {repeats, 1},
         {parameters, [
-            [{name, threads_num}, {value, 20}, {description, "Number of threads that operates at single node."}],
-            [{name, docs_per_thead}, {value, 5}, {description, "Number of documents used by single threads."}],
+            [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
+            [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
             [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
             [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
         ]},
@@ -25,28 +25,28 @@
         {config, [{name, single_short_thread},
             {parameters, [
                 [{name, threads_num}, {value, 1}],
-                [{name, docs_per_thead}, {value, 10}],
+                [{name, docs_per_thead}, {value, 5}],
                 [{name, conflicted_threads}, {value, 1}]
             ]}
         ]},
         {config, [{name, single_long_thread},
                     {parameters, [
                         [{name, threads_num}, {value, 1}],
-                        [{name, docs_per_thead}, {value, 100}],
+                        [{name, docs_per_thead}, {value, 60}],
                         [{name, conflicted_threads}, {value, 1}]
                     ]}
         ]},
         {config, [{name, single_long_thread_one_op_per_doc},
             {parameters, [
                 [{name, threads_num}, {value, 1}],
-                [{name, docs_per_thead}, {value, 500}],
+                [{name, docs_per_thead}, {value, 300}],
                 [{name, ops_per_doc}, {value, 1}],
                 [{name, conflicted_threads}, {value, 1}]
             ]}
         ]},
         {config, [{name, multiple_threads_no_conflicts},
                     {parameters, [
-                        [{name, threads_num}, {value, 100}],
+                        [{name, threads_num}, {value, 60}],
                         [{name, ops_per_doc}, {value, 1}],
                         [{name, conflicted_threads}, {value, 1}]
                     ]}
@@ -58,7 +58,6 @@
         ]},
         {config, [{name, multiple_threads_with_conflits},
                     {parameters, [
-                        [{name, threads_num}, {value, 100}],
                         [{name, conflicted_threads}, {value, 20}]
                     ]}
         ]}
@@ -69,15 +68,15 @@
     [
         {repeats, 10},
         {parameters, [
-            [{name, threads_num}, {value, 20}, {description, "Number of threads that operates at single node."}],
-            [{name, docs_per_thead}, {value, 5}, {description, "Number of documents used by single threads."}],
-            [{name, ops_per_doc}, {value, 2}, {description, "Number of oprerations on each document."}],
+            [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
+            [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
+            [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
             [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
         ]},
         {description, "Performs multipe datastore operations using many threads."},
         {config, [{name, multiple_threads_with_conflits},
             {parameters, [
-                [{name, threads_num}, {value, 60}],
+                [{name, threads_num}, {value, 40}],
                 [{name, conflicted_threads}, {value, 20}]
             ]}
         ]}
