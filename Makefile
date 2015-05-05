@@ -27,7 +27,7 @@ deps:
 generate: deps compile
 	./rebar generate $(OVERLAY_VARS)
 
-clean:
+clean: relclean pkgclean distclean
 	./rebar clean
 
 distclean:
