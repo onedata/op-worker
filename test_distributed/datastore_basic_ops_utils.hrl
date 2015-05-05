@@ -66,7 +66,7 @@
 
 -define(long_test_def,
     [
-        {repeats, 10},
+        {repeats, 30},
         {parameters, [
             [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
             [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
