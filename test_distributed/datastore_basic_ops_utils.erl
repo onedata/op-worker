@@ -498,7 +498,7 @@ mixed_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun6),
     OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum3, _OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList3),
@@ -561,7 +561,8 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
                       {ok, _} ->
                           {OkNum + 1, OkTime + Time, ErrorNum, ErrorTime, ErrorsList};
                       {uncatched_error, E1, E2, ST} ->
-                          ?assert({E1, E2, ST});
+                          ?assertEqual({ok, ok, ok}, {E1, E2, ST}),
+                          error;
                       E ->
                           {OkNum, OkTime, ErrorNum + 1, ErrorTime + Time, [E | ErrorsList]}
                   end
