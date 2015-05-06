@@ -15,7 +15,6 @@
 #include "testUtils.h"
 
 #include <boost/thread/future.hpp>
-#include <boost/thread/executors/loop_executor.hpp>
 #include <boost/thread/executors/basic_thread_pool.hpp>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -37,8 +36,8 @@ struct LowerLayer {
 
     MOCK_METHOD2(communicateProxy, std::string(clproto::ClientMessage, int));
 
-    MOCK_METHOD2(setHandshakeProxy, void(std::function<ClientMessagePtr()>,
-                                        std::function<bool(ServerMessagePtr)>));
+    MOCK_METHOD2(setHandshake, void(std::function<ClientMessagePtr()>,
+                                   std::function<bool(ServerMessagePtr)>));
 
     MOCK_METHOD3(replyProxy,
         void(const clproto::ServerMessage, const clproto::ClientMessage, int));
@@ -47,12 +46,6 @@ struct LowerLayer {
     {
         sendProxy(*cmp, i);
         return {};
-    }
-
-    void setHandshake(std::function<ClientMessagePtr()> a,
-        std::function<bool(ServerMessagePtr)> b)
-    {
-        setHandshakeProxy(a, b);
     }
 
     auto communicate(ClientMessagePtr cmp, int i)
@@ -172,7 +165,7 @@ TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnSetHandshake)
 {
     std::function<ClientMessagePtr()> protoHandshakeF;
 
-    EXPECT_CALL(translator.mock, setHandshakeProxy(_, _))
+    EXPECT_CALL(translator.mock, setHandshake(_, _))
         .WillOnce(SaveArg<0>(&protoHandshakeF));
 
     const auto data = randomString();
@@ -189,16 +182,19 @@ TEST_F(TranslatorTest, shouldDeserializeProtocolObjectsOnHandshakeResponse)
 {
     std::function<bool(ServerMessagePtr)> protoHandshakeResponseF;
 
-    EXPECT_CALL(translator.mock, setHandshakeProxy(_, _))
+    EXPECT_CALL(translator.mock, setHandshake(_, _))
         .WillOnce(SaveArg<1>(&protoHandshakeResponseF));
 
     const auto data = randomString();
+    bool called = false;
 
     auto domainHandshakeF = [&]() { return messages::HandshakeRequest{data}; };
-    auto domainHandshakeResponseF = [&](one::messages::HandshakeResponse msg) {
-        EXPECT_EQ(data, msg.sessionId());
-        return true;
-    };
+    auto domainHandshakeResponseF =
+        [&](one::messages::HandshakeResponse msg) mutable {
+            called = true;
+            EXPECT_EQ(data, msg.sessionId());
+            return true;
+        };
 
     translator.setHandshake(domainHandshakeF, domainHandshakeResponseF);
 
@@ -207,4 +203,5 @@ TEST_F(TranslatorTest, shouldDeserializeProtocolObjectsOnHandshakeResponse)
     response->set_session_id(data);
 
     protoHandshakeResponseF(std::move(msg));
+    ASSERT_TRUE(called);
 }
