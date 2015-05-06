@@ -38,6 +38,8 @@ distclean:
 ##
 
 rel: generate
+
+test_rel: generate
 	make -C appmock/ rel
 	make -C op_ccm/ rel
 
