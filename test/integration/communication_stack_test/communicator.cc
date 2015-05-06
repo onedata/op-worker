@@ -134,7 +134,7 @@ public:
 
     std::string setHandshake(const std::string &description, bool fail)
     {
-        m_communicator.setHandshake(
+        m_communicator.binaryTranslator.setHandshake(
             [=] {
                 ExampleClientMessage msg{description};
                 return msg.serialize();

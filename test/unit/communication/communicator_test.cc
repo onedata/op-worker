@@ -24,11 +24,6 @@ class LazyConnectionPool {
 public:
     void connect() {}
 
-    void setHandshake(
-        std::function<std::string()>, std::function<bool(std::string)>)
-    {
-    }
-
     void setOnMessageCallback(std::function<void(std::string)>) {}
 
     void setCertificateData(std::shared_ptr<cert::CertificateData>) {}

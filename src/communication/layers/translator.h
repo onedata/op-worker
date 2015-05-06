@@ -19,7 +19,6 @@
 #include <boost/thread/future.hpp>
 
 #include <functional>
-#include <type_traits>
 
 namespace one {
 namespace communication {
@@ -33,7 +32,6 @@ template <class LowerLayer> class Translator : public LowerLayer {
 public:
     using LowerLayer::LowerLayer;
     using LowerLayer::send;
-    using LowerLayer::setHandshake;
     virtual ~Translator() = default;
 
     /**
@@ -84,7 +82,7 @@ public:
      * method.
      */
     template <typename = void>
-    auto reply(clproto::ServerMessage &replyTo,
+    auto reply(const clproto::ServerMessage &replyTo,
         const messages::ClientMessage &msg, const int retry)
     {
         auto protoMsg = msg.serialize();
