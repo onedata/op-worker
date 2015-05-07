@@ -30,14 +30,10 @@ all() -> [ccm_and_worker_test].
 %% ====================================================================
 
 ccm_and_worker_test(Config) ->
-    [CCM] = ?config(op_ccm_nodes, Config),
+    % given
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
-    ?assertMatch(ccm, gen_server:call({?NODE_MANAGER_NAME, CCM}, get_node_type)),
-    ?assertMatch(worker, gen_server:call({?NODE_MANAGER_NAME, Worker1}, get_node_type)),
-
-    ?assertEqual(pong, rpc:call(CCM, worker_proxy, call, [http_worker, ping])),
-    ?assertEqual(pong, rpc:call(CCM, worker_proxy, call, [dns_worker, ping])),
+    % then
     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),

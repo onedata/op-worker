@@ -30,7 +30,7 @@
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
 
 %% store_driver_behaviour callbacks
--export([init_bucket/2, healthcheck/1]).
+-export([init_bucket/3, healthcheck/1]).
 -export([save/2, create/2, update/3, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
@@ -43,8 +43,9 @@
 %% {@link store_driver_behaviour} callback init_bucket/2.
 %% @end
 %%--------------------------------------------------------------------
--spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()]) -> ok.
-init_bucket(_Bucket, _Models) ->
+-spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()],
+    NodeToSync :: node()) -> ok.
+init_bucket(_Bucket, _Models, _NodeToSync) ->
     ?debug("Riak init with nodes: ~p", [datastore_worker:state_get(riak_nodes)]),
     ok.
 
@@ -320,8 +321,8 @@ foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
 healthcheck(_) ->
     try call(riakc_pb_socket, ping, []) of
         pong -> ok;
-        _Other ->
-            {error, no_riak_connection}
+        Other ->
+            {error, {riak_connection_error, Other}}
     catch
         _:Reason ->
             {error, Reason}

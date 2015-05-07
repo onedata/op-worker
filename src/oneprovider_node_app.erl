@@ -32,8 +32,7 @@
     {ok, Pid :: pid()} | {ok, Pid :: pid(), State :: term()} |
     {error, Reason ::term()}.
 start(_StartType, _StartArgs) ->
-    {ok, NodeType} = application:get_env(?APP_NAME, node_type),
-    oneprovider_node_sup:start_link(NodeType).
+    oneprovider_node_sup:start_link().
 
 %%--------------------------------------------------------------------
 %% @doc

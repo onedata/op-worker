@@ -60,7 +60,7 @@
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
--export([configs_per_bucket/1, ensure_state_loaded/0]).
+-export([configs_per_bucket/1, ensure_state_loaded/1]).
 
 %%%===================================================================
 %%% API
@@ -131,9 +131,9 @@ list(Level, ModelName, Fun, AccIn) ->
 delete(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
-            spawn(fun() -> delete_links(disk_only, Key, ModelName, all) end),
-            spawn(fun() -> delete_links(global_only, Key, ModelName, all) end),
-            spawn(fun() -> delete_links(local_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(disk_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(global_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(local_only, Key, ModelName, all) end),
             ok;
         {error, Reason} ->
             {error, Reason}
@@ -430,8 +430,7 @@ load_local_state(Models) ->
     #{bucket() => [model_behaviour:model_config()]}.
 configs_per_bucket(Configs) ->
     lists:foldl(
-        fun(ModelConfig, Acc) ->
-            #model_config{bucket = Bucket} = ModelConfig,
+        fun(#model_config{bucket = Bucket} = ModelConfig, Acc) ->
             maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
         end, #{}, Configs).
 
@@ -441,29 +440,30 @@ configs_per_bucket(Configs) ->
 %% Runs init_bucket/1 for each datastore driver using given models'.
 %% @end
 %%--------------------------------------------------------------------
--spec init_drivers(Configs :: [model_behaviour:model_config()]) ->
+-spec init_drivers(Configs :: [model_behaviour:model_config()], NodeToSync :: node()) ->
     ok | no_return().
-init_drivers(Configs) ->
+init_drivers(Configs, NodeToSync) ->
     lists:foreach(
         fun({Bucket, Models}) ->
-            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket, Models),
-            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket, Models),
-            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models)
+            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
+            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
+            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync)
         end, maps:to_list(configs_per_bucket(Configs))).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Loads local state and initializes datastore drivers if needed.
+%% Loads local state, initializes datastore drivers and fetches active config
+%% from NodeToSync if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_state_loaded() -> ok | {error, Reason :: term()}.
-ensure_state_loaded() ->
+-spec ensure_state_loaded(NodeToSync :: node()) -> ok | {error, Reason :: term()}.
+ensure_state_loaded(NodeToSync) ->
     try
         case ets:info(?LOCAL_STATE) of
             undefined ->
                 Configs = load_local_state(?MODELS),
-                init_drivers(Configs);
+                init_drivers(Configs, NodeToSync);
             _ -> ok
         end
     catch

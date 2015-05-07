@@ -186,10 +186,9 @@ exec(OneProxyPid, CMD, Args) when is_pid(OneProxyPid) ->
 %%--------------------------------------------------------------------
 -spec start(Mode :: string(), ListenerPort :: non_neg_integer(), Args :: list()) -> no_return().
 start(Mode, ListenerPort, Args) ->
-    {ok, CWD} = file:get_cwd(),
-    ExecPath = os:find_executable("oneproxy", filename:join(CWD, "c_lib")),
-
     {ok, CADir} = application:get_env(?APP_NAME, ca_dir),
+    {ok, NifPrefix} = application:get_env(?APP_NAME, nif_prefix),
+    ExecPath = os:find_executable("oneproxy", NifPrefix),
 
     %% Try to load certs before starting proxy
     catch ca_crl_to_der(get_der_certs_dir()),

@@ -86,12 +86,9 @@ get_worker_nodes(WorkerName) ->
 %% Updates ets when new workers list appears.
 %% @end
 %%--------------------------------------------------------------------
--spec update_workers(WorkersList :: [{Node :: node(), WorkerName :: worker_name()}]) -> ok.
-update_workers(WorkersList) ->
-    WorkersListInverted = lists:map(fun({Node, WorkerName}) ->
-        {WorkerName, Node} end, WorkersList),
-    ModuleToNodes = utils:aggregate_over_first_element(WorkersListInverted),
-    lists:foreach(fun update_worker/1, ModuleToNodes).
+-spec update_workers(WorkersList :: [{Worker :: module(), Nodes :: [node()]}]) -> ok.
+update_workers(WorkerToNodes) ->
+    lists:foreach(fun update_worker/1, WorkerToNodes).
 
 %%%===================================================================
 %%% Internal functions

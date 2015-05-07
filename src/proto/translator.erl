@@ -34,8 +34,6 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec translate_from_protobuf(tuple() | undefined) -> tuple() | undefined.
-translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
-    #file_block{offset = Off, size = S};
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
 translate_from_protobuf(#'Event'{event = {_, Record}}) ->
@@ -45,15 +43,18 @@ translate_from_protobuf(#'ReadEvent'{} = Record) ->
         counter = Record#'ReadEvent'.counter,
         file_id = Record#'ReadEvent'.file_id,
         size = Record#'ReadEvent'.size,
-        blocks = [translate_to_protobuf(B) || B <- Record#'ReadEvent'.blocks]
+        blocks = [translate_from_protobuf(B) || B <- Record#'ReadEvent'.blocks]
     };
 translate_from_protobuf(#'WriteEvent'{} = Record) ->
     #write_event{
         counter = Record#'WriteEvent'.counter,
         file_id = Record#'WriteEvent'.file_id,
         size = Record#'WriteEvent'.size,
-        blocks = [translate_to_protobuf(B) || B <- Record#'WriteEvent'.blocks]
+        file_size = Record#'WriteEvent'.file_size,
+        blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]
     };
+translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
+    #file_block{offset = Off, size = S};
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{token = translate_from_protobuf(Token), session_id = SessionId};
 translate_from_protobuf(#'MessageStream'{stream_id = StmId, sequence_number = SeqNum}) ->
@@ -77,8 +78,6 @@ translate_from_protobuf(undefined) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec translate_to_protobuf(tuple() | undefined) -> tuple() | undefined.
-translate_to_protobuf(#file_block{offset = Off, size = S}) ->
-    #'FileBlock'{offset = Off, size = S};
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
 translate_to_protobuf(#event_subscription_cancellation{id = Id}) ->
