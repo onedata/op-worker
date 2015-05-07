@@ -263,5 +263,19 @@ boost::asio::mutable_buffers_1 Connection::headerToBuffer(std::uint32_t &header)
     return {static_cast<void *>(&header), sizeof(header)};
 }
 
+std::shared_ptr<Connection> createConnection(boost::asio::io_service &ioService,
+    boost::asio::ssl::context &context, const bool verifyServerCertificate,
+    std::function<std::string()> &getHandshake,
+    std::function<bool(std::string)> &onHandshakeResponse,
+    std::function<void(std::string)> onMessageReceived,
+    std::function<void(std::shared_ptr<Connection>)> onReady,
+    std::function<void(std::shared_ptr<Connection>, boost::exception_ptr)>
+        onClosed)
+{
+    return std::make_shared<Connection>(ioService, context,
+        verifyServerCertificate, getHandshake, onHandshakeResponse,
+        std::move(onMessageReceived), std::move(onReady), std::move(onClosed));
+}
+
 } // namespace communication
 } // namespace one

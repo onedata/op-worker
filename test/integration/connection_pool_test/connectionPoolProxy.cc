@@ -7,6 +7,7 @@
  */
 
 #include "communication/connectionPool.h"
+#include "communication/connection.h"
 
 #include <boost/make_shared.hpp>
 #include <boost/python.hpp>
@@ -21,7 +22,8 @@ using namespace one::communication;
 class ConnectionPoolProxy {
 public:
     ConnectionPoolProxy(unsigned int conn, std::string host, int port)
-        : m_pool{conn, std::move(host), std::to_string(port), false}
+        : m_pool{conn, std::move(host), std::to_string(port), false,
+              createConnection}
     {
         m_pool.setOnMessageCallback([this](std::string msg) {
             m_messages.emplace(std::move(msg));
