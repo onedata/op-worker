@@ -87,6 +87,7 @@ void Connection::send(std::string message, boost::promise<void> promise)
         }
         else {
             t->m_outPromise.set_value();
+            t->m_onReady(t);
         }
     });
 }

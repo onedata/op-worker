@@ -1,5 +1,5 @@
 /**
- * @file innbox_test.cc
+ * @file inbox_test.cc
  * @author Konrad Zemek
  * @copyright (C) 2015 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in
