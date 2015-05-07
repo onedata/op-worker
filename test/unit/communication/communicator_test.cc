@@ -10,8 +10,8 @@
 #include "messages/ping.h"
 #include "messages/pong.h"
 
-#include <boost/thread/executors/basic_thread_pool.hpp>
 #include <boost/thread/future.hpp>
+#include <boost/thread/executors/basic_thread_pool.hpp>
 #include <gtest/gtest.h>
 
 #include <chrono>

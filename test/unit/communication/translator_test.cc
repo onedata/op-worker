@@ -30,7 +30,7 @@ using namespace ::testing;
 using namespace std::literals;
 
 struct LowerLayer {
-    LowerLayer &mock = *static_cast<LowerLayer *>(this);
+    LowerLayer &mock = static_cast<LowerLayer &>(*this);
 
     MOCK_METHOD2(sendProxy, void(clproto::ClientMessage, int));
 

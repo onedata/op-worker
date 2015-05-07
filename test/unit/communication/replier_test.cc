@@ -20,7 +20,7 @@ using namespace one::communication;
 using namespace ::testing;
 
 struct LowerLayer {
-    LowerLayer &mock = *static_cast<LowerLayer *>(this);
+    LowerLayer &mock = static_cast<LowerLayer &>(*this);
 
     MOCK_METHOD2(sendProxy, void(clproto::ClientMessage, int));
 
