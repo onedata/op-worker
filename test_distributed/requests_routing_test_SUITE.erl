@@ -37,7 +37,8 @@ all() ->
 
 -performance([
     {repeats, ?REPEATS},
-    {config, [{name, simple_call}]}
+    {description, "Performs one worker_proxy call per use case"},
+    {config, [{name, simple_call}, {description, "Basic config for test"}]}
 ]).
 simple_call_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
@@ -71,11 +72,13 @@ simple_call_test(Config) ->
         [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
         [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
+    {description, "Performs many one worker_proxy calls with 'prefer_local' argument set, using many threads"},
     {config, [{name, direct_cast},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "Basic config for test"}
     ]}
 ]).
 direct_cast_test(Config) ->
@@ -110,11 +113,13 @@ direct_cast_test(Config) ->
         [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
         [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
+    {description, "Performs many one worker_proxy calls with default arguments but delegated to other node, using many threads"},
     {config, [{name, redirect_cast},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "Basic config for test"}
     ]}
 ]).
 redirect_cast_test(Config) ->
@@ -139,7 +144,7 @@ redirect_cast_test(Config) ->
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
     #parameter{name = routing_time, value = Times, unit = "ms",
-        description = "Aggregated time of all calls with default arguments delegated to other node"}.
+        description = "Aggregated time of all calls with default arguments but delegated to other node"}.
 
 %%%===================================================================
 
@@ -149,23 +154,27 @@ redirect_cast_test(Config) ->
         [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
         [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
+    {description, "Performs many one worker_proxy calls with various arguments"},
     {config, [{name, short_procs},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 1}]
-        ]}
+        ]},
+        {description, "Multiple threads, each thread does only one operation of each type"}
     ]},
     {config, [{name, one_proc},
         {parameters, [
             [{name, proc_num}, {value, 1}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "One thread does many operations"}
     ]},
     {config, [{name, long_procs},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "Many threads do many operations"}
     ]}
 ]).
 mixed_cast_test(Config) ->
