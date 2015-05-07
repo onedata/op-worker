@@ -101,7 +101,7 @@ TEST_F(DirectIOHelperTest, shouldWriteBytes)
     auto bytes_written = p2.get();
     EXPECT_EQ(3, bytes_written);
 
-    ifstream f(testFilePath);
+    std::ifstream f(testFilePath);
     f >> tmp;
     f.close();
 
