@@ -9,15 +9,17 @@
 #ifndef HELPERS_COMMUNICATION_CONNECTION_POOL_H
 #define HELPERS_COMMUNICATION_CONNECTION_POOL_H
 
+#include "ioServiceExecutor.h"
+
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <boost/thread/future.hpp>
 #include <tbb/concurrent_queue.h>
 
 #include <functional>
-#include <future>
 #include <memory>
 #include <string>
 #include <queue>
@@ -41,9 +43,11 @@ class Connection;
  * do not interact with connections directly.
  */
 class ConnectionPool {
-    using SendTask = std::tuple<std::string, std::promise<void>>;
+    using SendTask = std::tuple<std::string, boost::promise<void>>;
 
 public:
+    enum class ErrorPolicy { ignore, propagate };
+
     /**
      * A reference to @c *this typed as a @c ConnectionPool.
      */
@@ -61,7 +65,8 @@ public:
      * @param certificateData Certificate data to use for SSL authentication.
      */
     ConnectionPool(const unsigned int connectionsNumber, std::string host,
-        std::string service, const bool verifyServerCertificate);
+        std::string service, const bool verifyServerCertificate,
+        ErrorPolicy errorPolicy = ErrorPolicy::ignore);
 
     /**
      * Creates connections and threads that will work for them.
@@ -103,7 +108,7 @@ public:
      * @return A future fulfilled when the message is sent or (with an
      * exception) when an error occured.
      */
-    std::future<void> send(std::string message, const int = int{});
+    boost::future<void> send(std::string message, const int = int{});
 
     /**
      * Destructor.
@@ -116,12 +121,14 @@ private:
     void createConnection();
     void onMessageReceived(std::string message);
     void onConnectionReady(std::shared_ptr<Connection> conn);
-    void onConnectionClosed(std::shared_ptr<Connection> conn);
+    void onConnectionClosed(
+        std::shared_ptr<Connection> conn, boost::exception_ptr exception);
 
     const unsigned int m_connectionsNumber;
     std::string m_host;
     std::string m_service;
     const bool m_verifyServerCertificate;
+    ErrorPolicy m_errorPolicy;
     std::shared_ptr<const cert::CertificateData> m_certificateData;
 
     std::function<std::string()> m_getHandshake;
@@ -139,6 +146,13 @@ private:
     tbb::concurrent_bounded_queue<std::shared_ptr<SendTask>> m_outbox;
     tbb::concurrent_queue<std::shared_ptr<SendTask>> m_rejects;
     std::unordered_set<std::shared_ptr<Connection>> m_connections;
+
+protected:
+    /**
+     * A thread executor working on top of this pool's @c io_service.
+     * @note Defined after other variables as it depends on private ioService.
+     */
+    IoServiceExecutor m_ioServiceExecutor;
 };
 
 } // namespace communication

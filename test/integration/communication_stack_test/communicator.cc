@@ -1,5 +1,6 @@
 #include "communication/communicator.h"
 #include "communication/declarations.h"
+#include "communication/future.h"
 #include "messages/clientMessage.h"
 #include "messages/serverMessage.h"
 
@@ -9,13 +10,13 @@
 #include <boost/make_shared.hpp>
 #include <boost/python.hpp>
 #include <boost/smart_ptr.hpp>
+#include <boost/thread/future.hpp>
 
 #include <chrono>
 #include <memory>
-#include <future>
 #include <string>
 
-using namespace std::literals::chrono_literals;
+using namespace std::literals;
 using namespace one::communication;
 using namespace one;
 using namespace boost::python;
@@ -43,7 +44,7 @@ public:
                 try {
                     m_handshakeResponsePromise.set_value(response);
                 }
-                catch (std::future_error) {
+                catch (boost::future_error) {
                 }
                 return onHandshakeResponse(std::move(response));
             });
@@ -57,7 +58,7 @@ public:
     }
 
 private:
-    std::promise<std::string> m_handshakeResponsePromise;
+    boost::promise<std::string> m_handshakeResponsePromise;
     std::string m_handshake;
     std::string m_lastMessageSent;
 };
@@ -102,9 +103,11 @@ private:
 class CommunicatorProxy {
 public:
     CommunicatorProxy(const unsigned int connectionsNumber, std::string host,
-        const unsigned short port)
-        : m_communicator{
-              connectionsNumber, std::move(host), std::to_string(port), false}
+        const unsigned short port, bool propagateExceptions)
+        : m_communicator{connectionsNumber, std::move(host),
+              std::to_string(port), false,
+              propagateExceptions ? ConnectionPool::ErrorPolicy::propagate
+                                  : ConnectionPool::ErrorPolicy::ignore}
     {
     }
 
@@ -126,10 +129,7 @@ public:
 
     std::string communicateReceive()
     {
-        /// @todo No way to timeout on deferred future; a possible solution
-        /// would be to implement timeout inside deferred function definition
-        /// (in Retrier and Translator).
-        return m_future.get().protocolMsg().SerializeAsString();
+        return m_future.get(10s).protocolMsg().SerializeAsString();
     }
 
     std::string setHandshake(const std::string &description, bool fail)
@@ -151,15 +151,15 @@ public:
 
 private:
     CustomCommunicator m_communicator;
-    std::future<ExampleServerMessage> m_future;
+    Future<ExampleServerMessage> m_future;
 };
 
 boost::shared_ptr<CommunicatorProxy> create(
     const unsigned int connectionsNumber, std::string host,
-    const unsigned short port)
+    const unsigned short port, bool propagateExceptions)
 {
     return boost::make_shared<CommunicatorProxy>(
-        connectionsNumber, std::move(host), port);
+        connectionsNumber, std::move(host), port, propagateExceptions);
 }
 
 std::string prepareReply(
@@ -177,9 +177,17 @@ std::string prepareReply(
     return serverMsg.SerializeAsString();
 }
 
+void translate(const ConnectionError &e)
+{
+    PyErr_SetString(
+        PyExc_RuntimeError, ("ConnectionError "s + e.what()).c_str());
+}
+
 extern void server();
 BOOST_PYTHON_MODULE(communication_stack)
 {
+    register_exception_translator<ConnectionError>(&translate);
+
     class_<CommunicatorProxy, boost::noncopyable>("Communicator", no_init)
         .def("__init__", make_constructor(create))
         .def("connect", &CommunicatorProxy::connect)

@@ -34,15 +34,18 @@ namespace one {
 namespace communication {
 
 ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
-    std::string host, std::string service, const bool verifyServerCertificate)
+    std::string host, std::string service, const bool verifyServerCertificate,
+    ErrorPolicy errorPolicy)
     : m_connectionsNumber{connectionsNumber}
     , m_host{std::move(host)}
     , m_service{std::move(service)}
     , m_verifyServerCertificate{verifyServerCertificate}
+    , m_errorPolicy{errorPolicy}
     , m_idleWork{m_ioService}
     , m_blockingStrand{m_ioService}
     , m_connectionsStrand{m_ioService}
     , m_context{boost::asio::ssl::context::tlsv12_client}
+    , m_ioServiceExecutor{m_ioService}
 {
     m_outbox.set_capacity(OUTBOX_SIZE);
 }
@@ -74,8 +77,9 @@ void ConnectionPool::connect()
                 : boost::asio::ssl::verify_none);
 
         SSL_CTX *ssl_ctx = m_context.native_handle();
-        auto mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
-        mode |= SSL_SESS_CACHE_CLIENT;
+        auto mode =
+            SSL_CTX_get_session_cache_mode(ssl_ctx) | SSL_SESS_CACHE_CLIENT;
+
         SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
 
         if (m_certificateData)
@@ -108,11 +112,11 @@ void ConnectionPool::setCertificateData(
     m_certificateData = std::move(certificateData);
 }
 
-std::future<void> ConnectionPool::send(std::string message, const int)
+boost::future<void> ConnectionPool::send(std::string message, const int)
 {
-    std::promise<void> promise;
+    boost::promise<void> promise;
     auto future = promise.get_future();
-    auto data = std::make_shared<std::tuple<std::string, std::promise<void>>>(
+    auto data = std::make_shared<std::tuple<std::string, boost::promise<void>>>(
         std::forward_as_tuple(std::move(message), std::move(promise)));
 
     m_outbox.emplace(std::move(data));
@@ -143,10 +147,17 @@ void ConnectionPool::onConnectionReady(std::shared_ptr<Connection> conn)
     });
 }
 
-/// TODO: Take an exception pointer (and then what?)
-void ConnectionPool::onConnectionClosed(std::shared_ptr<Connection> conn)
+void ConnectionPool::onConnectionClosed(
+    std::shared_ptr<Connection> conn, boost::exception_ptr exception)
 {
     m_connectionsStrand.post([this, conn] { m_connections.erase(conn); });
+
+    if (exception && m_errorPolicy == ErrorPolicy::propagate) {
+        std::shared_ptr<SendTask> task;
+        if (m_rejects.try_pop(task) || m_outbox.try_pop(task))
+            std::get<1>(*task).set_exception(exception);
+    }
+
     auto timer = std::make_shared<steady_timer>(m_ioService, RECREATE_DELAY);
     timer->async_wait([this, timer](const boost::system::error_code &ec) {
         if (!ec)
@@ -160,7 +171,7 @@ void ConnectionPool::createConnection()
         m_verifyServerCertificate, m_getHandshake, m_onHandshakeResponse,
         std::bind(&ConnectionPool::onMessageReceived, this, _1),
         std::bind(&ConnectionPool::onConnectionReady, this, _1),
-        std::bind(&ConnectionPool::onConnectionClosed, this, _1));
+        std::bind(&ConnectionPool::onConnectionClosed, this, _1, _2));
 
     m_connectionsStrand.post([this, conn] { m_connections.emplace(conn); });
     conn->connect(m_host, m_service);

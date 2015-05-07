@@ -22,7 +22,6 @@ find_package(Threads REQUIRED)
 # Setup fuse
 message(STATUS "Checking for FUSE...")
 find_package(FUSE REQUIRED)
-include_directories(SYSTEM ${FUSE_INCLUDE_DIRS}/.. ${FUSE_INCLUDE_DIRS})
 
 # Setup Intel TBB
 message(STATUS "Checking for Intel TBB...")
@@ -32,7 +31,7 @@ find_package(TBB REQUIRED)
 set(Boost_USE_STATIC_LIBS       OFF)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
-find_package(Boost COMPONENTS thread filesystem system random REQUIRED)
+find_package(Boost COMPONENTS coroutine filesystem system thread REQUIRED)
 
 # Utility libs
 find_library(LTDL_LIBRARY ltdl)
@@ -56,12 +55,14 @@ else(NOT APPLE)
     set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/lib" "\$ORIGIN")
 endif(APPLE)
 
-add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Wall -std=c++14)
+add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Werror -Wall -std=c++14)
 add_definitions(
     ${FUSE_DEFINITIONS}
     -DFUSE_USE_VERSION=29
+    -DBOOST_BIND_NO_PLACEHOLDERS
     -DBOOST_THREAD_VERSION=4
-    -DBOOST_BIND_NO_PLACEHOLDERS)
+    -DBOOST_THREAD_PROVIDES_EXECUTORS
+    -DBOOST_CHRONO_HEADER_ONLY
 
 include_directories(SYSTEM
     ${FUSE_INCLUDE_DIRS}

@@ -12,10 +12,12 @@
 #include "communication/declarations.h"
 #include "communication/subscriptionData.h"
 
+#include <boost/thread/future.hpp>
 #include <tbb/concurrent_hash_map.h>
 #include <tbb/concurrent_queue.h>
 #include <tbb/concurrent_vector.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -46,7 +48,7 @@ public:
      * @param retries Number of retries in case of sending error.
      * @return A future which should be fulfiled with server's reply.
      */
-    std::future<ServerMessagePtr> communicate(
+    boost::future<ServerMessagePtr> communicate(
         ClientMessagePtr message, const int retries = DEFAULT_RETRY_NUMBER);
 
     /**
@@ -73,7 +75,7 @@ public:
 
 private:
     tbb::concurrent_hash_map<std::string,
-        std::shared_ptr<std::promise<ServerMessagePtr>>> m_promises;
+        std::shared_ptr<boost::promise<ServerMessagePtr>>> m_promises;
 
     /// The counter will loop after sending ~65000 messages, providing us with
     /// a natural size bound for m_promises.
@@ -85,21 +87,30 @@ private:
 };
 
 template <class LowerLayer>
-std::future<ServerMessagePtr> Inbox<LowerLayer>::communicate(
+boost::future<ServerMessagePtr> Inbox<LowerLayer>::communicate(
     ClientMessagePtr message, const int retries)
 {
-    message->set_message_id(std::to_string(m_nextMsgId++));
+    const auto messageId = std::to_string(m_nextMsgId++);
+    message->set_message_id(messageId);
 
-    auto promise = std::make_shared<std::promise<ServerMessagePtr>>();
-    auto future = promise->get_future();
-
+    auto promise = std::make_shared<boost::promise<ServerMessagePtr>>();
     typename decltype(m_promises)::accessor acc;
-    m_promises.insert(acc, message->message_id());
-    acc->second = std::move(promise);
+    m_promises.insert(acc, messageId);
+    acc->second = promise;
     acc.release();
 
-    LowerLayer::send(std::move(message), retries);
-    return future;
+    auto sendFuture = LowerLayer::send(std::move(message), retries);
+    auto future = sendFuture.then(LowerLayer::m_ioServiceExecutor,
+        [this, promise, messageId](auto f) mutable {
+            if (f.has_exception()) {
+                this->m_promises.erase(messageId);
+                f.get();
+            }
+
+            return promise->get_future();
+        });
+
+    return future.unwrap();
 }
 
 template <class LowerLayer>
