@@ -53,10 +53,14 @@ simple_call_test(Config) ->
     T5 = os:timestamp(),
 
     [
-        #parameter{name = redirect_random, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
-        #parameter{name = direct_random, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
-        #parameter{name = redirect_prefer_local, value = utils:milliseconds_diff(T4, T3), unit = "ms"},
-        #parameter{name = direct_prefer_local, value = utils:milliseconds_diff(T5, T4), unit = "ms"}
+        #parameter{name = redirect_random, value = utils:milliseconds_diff(T2, T1), unit = "ms",
+            description = "Time of call with 'random' argument set"},
+        #parameter{name = direct_random, value = utils:milliseconds_diff(T3, T2), unit = "ms",
+            description = "Time of call with default arguments processed locally"},
+        #parameter{name = redirect_prefer_local, value = utils:milliseconds_diff(T4, T3), unit = "ms",
+            description = "Time of call with default arguments delegated to other node"},
+        #parameter{name = direct_prefer_local, value = utils:milliseconds_diff(T5, T4), unit = "ms",
+            description = "Time of call with 'prefer_local' argument set"}
     ].
 
 %%%===================================================================
@@ -64,8 +68,8 @@ simple_call_test(Config) ->
 -performance([
     {repeats, ?REPEATS},
     {parameters, [
-        [{name, proc_num}, {value, 10}],
-        [{name, proc_repeats}, {value, 10}]
+        [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
+        [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
     {config, [{name, direct_cast},
         {parameters, [
@@ -95,15 +99,16 @@ direct_cast_test(Config) ->
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    #parameter{name = routing_time, value = Times, unit = "ms"}.
+    #parameter{name = routing_time, value = Times, unit = "ms",
+        description = "Aggregated time of all calls with 'prefer_local' argument set"}.
 
 %%%===================================================================
 
 -performance([
     {repeats, ?REPEATS},
     {parameters, [
-        [{name, proc_num}, {value, 10}],
-        [{name, proc_repeats}, {value, 10}]
+        [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
+        [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
     {config, [{name, redirect_cast},
         {parameters, [
@@ -133,15 +138,16 @@ redirect_cast_test(Config) ->
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    #parameter{name = routing_time, value = Times, unit = "ms"}.
+    #parameter{name = routing_time, value = Times, unit = "ms",
+        description = "Aggregated time of all calls with default arguments delegated to other node"}.
 
 %%%===================================================================
 
 -performance([
     {repeats, ?REPEATS},
     {parameters, [
-        [{name, proc_num}, {value, 10}],
-        [{name, proc_repeats}, {value, 10}]
+        [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
+        [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
     {config, [{name, short_procs},
         {parameters, [
@@ -184,7 +190,8 @@ mixed_cast_test(Config) ->
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    #parameter{name = routing_time, value = Times, unit = "ms"}.
+    #parameter{name = routing_time, value = Times, unit = "ms",
+        description = "Aggregated time of all calls"}.
 
 %%%===================================================================
 %%% SetUp and TearDown functions

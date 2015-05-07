@@ -20,7 +20,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
--define(REQUEST_TIMEOUT, timer:seconds(10)).
+-define(REQUEST_TIMEOUT, timer:seconds(30)).
 
 -export([create_delete_test/2, save_test/2, update_test/2, get_test/2, exists_test/2, mixed_test/2]).
 
@@ -62,6 +62,10 @@ create_delete_test(Config, Level) ->
     ?assertEqual(OpsNum, OkNum+ErrorNum),
     % TODO change when datastore behavior will be coherent
     ct:print("Create ok num: ~p, error num ~p:, level ~p", [OkNum, ErrorNum, Level]),
+    case ((ThreadsNum * DocsPerThead < OkNum) or (DocsPerThead * trunc(ThreadsNum/ConflictedThreads) > OkNum)) of
+        true -> ct:print("Create errors list: ~p", [ErrorsList]);
+        _ -> ok
+    end,
     ?assert((ThreadsNum * DocsPerThead >= OkNum) and (DocsPerThead * trunc(ThreadsNum/ConflictedThreads) =< OkNum)),
 
     TestFun2 = fun(DocsSet) ->
@@ -89,10 +93,14 @@ create_delete_test(Config, Level) ->
                       end,
 
     [
-        #parameter{name = create_ok_time, value = OkTime/OkNum, unit = "microsek"},
-        #parameter{name = create_error_time, value = CreateErrorTime, unit = "microsek"},
-        #parameter{name = create_error_num, value = ErrorNum, unit = "-"},
-        #parameter{name = delete_time, value = OkTime2/OkNum2, unit = "microsek"}
+        #parameter{name = create_ok_time, value = OkTime/OkNum, unit = "microsek",
+            description = "Average time of create operation that ended successfully"},
+        #parameter{name = create_error_time, value = CreateErrorTime, unit = "microsek",
+            description = "Average time of create operation that filed (e.g. file exists)"},
+        #parameter{name = create_error_num, value = ErrorNum, unit = "-",
+            description = "Average numer of create operation that filed (e.g. file exists)"},
+        #parameter{name = delete_time, value = OkTime2/OkNum2, unit = "microsek",
+            description = "Average time of delete operation"}
     ].
 
 save_test(Config, Level) ->
@@ -142,7 +150,8 @@ save_test(Config, Level) ->
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    #parameter{name = save_time, value = OkTime/OkNum, unit = "microsek"}.
+    #parameter{name = save_time, value = OkTime/OkNum, unit = "microsek",
+        description = "Average time of save operation"}.
 
 update_test(Config, Level) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -224,9 +233,12 @@ update_test(Config, Level) ->
                       end,
 
     [
-        #parameter{name = update_ok_time, value = OkTime3/OkNum3, unit = "microsek"},
-        #parameter{name = update_error_time, value = UpdateErrorTime, unit = "microsek"},
-        #parameter{name = update_error_num, value = ErrorNum, unit = "-"}
+        #parameter{name = update_ok_time, value = OkTime3/OkNum3, unit = "microsek",
+            description = "Average time of update operation that ended successfully"},
+        #parameter{name = update_error_time, value = UpdateErrorTime, unit = "microsek",
+            description = "Average time of update operation that failed (e.g. file does not exist)"},
+        #parameter{name = update_error_num, value = ErrorNum, unit = "-",
+            description = "Average number of update operation that failed (e.g. file does not exist)"}
     ].
 
 get_test(Config, Level) ->
@@ -308,9 +320,12 @@ get_test(Config, Level) ->
                       end,
 
     [
-        #parameter{name = get_ok_time, value = OkTime3/OkNum3, unit = "microsek"},
-        #parameter{name = get_error_time, value = GetErrorTime, unit = "microsek"},
-        #parameter{name = update_error_num, value = ErrorNum, unit = "-"}
+        #parameter{name = get_ok_time, value = OkTime3/OkNum3, unit = "microsek",
+            description = "Average time of get operation that ended successfully"},
+        #parameter{name = get_error_time, value = GetErrorTime, unit = "microsek",
+            description = "Average time of get operation that failed (e.g. file does not exist)"},
+        #parameter{name = update_error_num, value = ErrorNum, unit = "-",
+            description = "Average number of update operation that failed (e.g. file does not exist)"}
     ].
 
 exists_test(Config, Level) ->
@@ -382,8 +397,10 @@ exists_test(Config, Level) ->
     ?assertEqual(OpsNum2, OkNum4),
 
     [
-        #parameter{name = exists_true_time, value = OkTime3/OkNum3, unit = "microsek"},
-        #parameter{name = exists_false_time, value = OkTime/OkNum, unit = "microsek"}
+        #parameter{name = exists_true_time, value = OkTime3/OkNum3, unit = "microsek",
+            description = "Average time of exists operation that returned true"},
+        #parameter{name = exists_false_time, value = OkTime/OkNum, unit = "microsek",
+            description = "Average time of exists operation that returned false"}
     ].
 
 mixed_test(Config, Level) ->
@@ -505,8 +522,10 @@ mixed_test(Config, Level) ->
     ?assertEqual(OpsNum2, OkNum3),
 
     [
-        #parameter{name = create_save_update_time, value = (OkTime+ErrorTime)/(OkNum+ErrorNum), unit = "microsek"},
-        #parameter{name = get_exist_time, value = OkTime2/OkNum2, unit = "microsek"}
+        #parameter{name = create_save_update_time, value = (OkTime+ErrorTime)/(OkNum+ErrorNum), unit = "microsek",
+            description = "Average time of create/save/update"},
+        #parameter{name = get_exist_time, value = OkTime2/OkNum2, unit = "microsek",
+            description = "Average time of get/exist"}
     ].
 
 %%%===================================================================
