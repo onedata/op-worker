@@ -91,6 +91,23 @@ protected:
     }
 };
 
+TEST_F(DirectIOHelperTest, shouldWriteBytes)
+{
+    std::string stmp("000");
+    std::string tmp;
+    auto writeBuf = boost::asio::buffer(stmp);
+
+    auto p2 = proxy->sh_write(testFileId, writeBuf, 5, ctx);
+    auto bytes_written = p2.get();
+    EXPECT_EQ(3, bytes_written);
+
+    ifstream f(testFilePath);
+    f >> tmp;
+    f.close();
+
+    EXPECT_EQ("test_000456789_test", tmp);
+}
+
 TEST_F(DirectIOHelperTest, writeAndRead)
 {
     std::string stmp("000");
