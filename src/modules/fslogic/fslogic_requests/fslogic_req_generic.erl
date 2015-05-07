@@ -28,6 +28,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc Changes file permissions.
+%% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
 
@@ -40,6 +41,7 @@ chmod(_, _File, _Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc Gets file's attributes.
+%% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
 -spec get_attrs(fslogic:ctx(), File :: fslogic:file()) ->
@@ -50,6 +52,7 @@ get_attrs(_, _File) ->
 
 %%--------------------------------------------------------------------
 %% @doc Deletes file.
+%% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic:ctx(), File :: fslogic:file()) ->
@@ -61,6 +64,7 @@ delete_file(_, _File) ->
 
 %%--------------------------------------------------------------------
 %% @doc Renames file.
+%% For best performance use following arg types: path -> uuid -> document
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file(fslogic:ctx(), SourcePath :: fslogic:file(), TargetPath :: file_meta:path()) ->
