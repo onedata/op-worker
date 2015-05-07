@@ -49,7 +49,7 @@ struct CommunicatorTest : public ::testing::Test {
     CommunicatorTest() { comm.connect(); }
 };
 
-TEST_F(CommunicatorTest, shouldTimeoutOnCommunicateGet)
+TEST_F(CommunicatorTest, communicateShouldReturnTimeoutableFuture)
 {
     auto future = comm.communicate<messages::Pong>(messages::Ping{}, 0);
     ASSERT_THROW(future.get(10ms), TimeoutExceeded);

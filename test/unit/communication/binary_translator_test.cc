@@ -61,7 +61,7 @@ TEST_F(BinaryTranslatorTest, sendShouldPassUninterestingArgumentsDown)
     binaryTranslator.send(messages::Ping{randomString()}.serialize(), retries);
 }
 
-TEST_F(BinaryTranslatorTest, onSetOnMessageCallbackShouldDeserializeBytes)
+TEST_F(BinaryTranslatorTest, setOnMessageCallbackShouldDeserializeBytes)
 {
     std::function<void(std::string)> byteOnMessageCallback;
     EXPECT_CALL(binaryTranslator.mock, setOnMessageCallback(_))
@@ -84,7 +84,7 @@ TEST_F(BinaryTranslatorTest, onSetOnMessageCallbackShouldDeserializeBytes)
     ASSERT_TRUE(called);
 }
 
-TEST_F(BinaryTranslatorTest, onSetHandshakeShouldSerializeDomainObjects)
+TEST_F(BinaryTranslatorTest, setHandshakeShouldSerializeDomainObjects)
 {
     std::function<std::string()> byteGetHandshake;
     EXPECT_CALL(binaryTranslator.mock, setHandshake(_, _))
@@ -100,7 +100,7 @@ TEST_F(BinaryTranslatorTest, onSetHandshakeShouldSerializeDomainObjects)
     ASSERT_EQ(msg, byteGetHandshake());
 }
 
-TEST_F(BinaryTranslatorTest, onSetHandshakeShouldDeserializeBytes)
+TEST_F(BinaryTranslatorTest, setHandshakeShouldDeserializeBytes)
 {
     std::function<bool(std::string)> byteOnHandshakeResponse;
     EXPECT_CALL(binaryTranslator.mock, setHandshake(_, _))

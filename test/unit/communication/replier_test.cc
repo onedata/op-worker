@@ -35,7 +35,7 @@ struct ReplierTest : public ::testing::Test {
     layers::Replier<LowerLayer> replier;
 };
 
-TEST_F(ReplierTest, shouldSetMessageIdForReply)
+TEST_F(ReplierTest, replyShouldSetMessageId)
 {
     const auto messageId = randomString();
 
@@ -50,7 +50,7 @@ TEST_F(ReplierTest, shouldSetMessageIdForReply)
     ASSERT_EQ(messageId, sentMsg.message_id());
 }
 
-TEST_F(ReplierTest, shouldPassUninterestingValuesDownOnReply)
+TEST_F(ReplierTest, replyShouldPassUninterestingValuesDown)
 {
     const auto retries = randomInt();
     EXPECT_CALL(replier.mock, sendProxy(_, retries)).Times(1);

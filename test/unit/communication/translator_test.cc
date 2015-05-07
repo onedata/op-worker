@@ -72,7 +72,7 @@ struct TranslatorTest : public ::testing::Test {
     layers::Translator<LowerLayer> translator;
 };
 
-TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnSend)
+TEST_F(TranslatorTest, sendShouldSerializeDomainObjects)
 {
     clproto::ClientMessage sentMsg;
     EXPECT_CALL(translator.mock, sendProxy(_, 1))
@@ -86,14 +86,14 @@ TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnSend)
     ASSERT_EQ(data, sentMsg.ping().data());
 }
 
-TEST_F(TranslatorTest, shouldPassUninterestingArgumentsDownOnSend)
+TEST_F(TranslatorTest, sendShouldPassUninterestingArgumentsDown)
 {
     const auto retries = randomInt();
     EXPECT_CALL(translator.mock, sendProxy(_, retries)).Times(1);
     translator.send(messages::Ping{}, retries);
 }
 
-TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnCommunicate)
+TEST_F(TranslatorTest, communicateShouldSerializeDomainObjects)
 {
     clproto::ClientMessage sentMsg;
     EXPECT_CALL(translator.mock, communicateProxy(_, 1))
@@ -107,7 +107,7 @@ TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnCommunicate)
     ASSERT_EQ(data, sentMsg.ping().data());
 }
 
-TEST_F(TranslatorTest, shouldDeserializeProtocolObjectsOnCommunicate)
+TEST_F(TranslatorTest, communicateShouldDeserializeProtocolObjects)
 {
     const auto data = randomString();
 
@@ -119,14 +119,14 @@ TEST_F(TranslatorTest, shouldDeserializeProtocolObjectsOnCommunicate)
     ASSERT_EQ(data, pong.data());
 }
 
-TEST_F(TranslatorTest, shouldPassUninterestingArgumentsDownOnCommunicate)
+TEST_F(TranslatorTest, communicateShouldPassUninterestingArgumentsDown)
 {
     const auto retries = randomInt();
     EXPECT_CALL(translator.mock, communicateProxy(_, retries)).Times(1);
     translator.communicate<messages::Pong>(messages::Ping{}, retries);
 }
 
-TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnReply)
+TEST_F(TranslatorTest, replyShouldSerializeDomainObjects)
 {
     clproto::ClientMessage sentMsg;
     EXPECT_CALL(translator.mock, replyProxy(_, _, 1))
@@ -142,7 +142,7 @@ TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnReply)
     ASSERT_EQ(data, sentMsg.ping().data());
 }
 
-TEST_F(TranslatorTest, shouldPassUninterestingArgumentsDownOnReply)
+TEST_F(TranslatorTest, replyShouldPassUninterestingArgumentsDown)
 {
     const auto retries = randomInt();
     const auto data = randomString();
@@ -161,7 +161,7 @@ TEST_F(TranslatorTest, shouldPassUninterestingArgumentsDownOnReply)
     ASSERT_EQ(data, passedArg.pong().data());
 }
 
-TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnSetHandshake)
+TEST_F(TranslatorTest, setHandshakeShouldSerializeDomainObjects)
 {
     std::function<ClientMessagePtr()> protoHandshakeF;
 
@@ -178,7 +178,7 @@ TEST_F(TranslatorTest, shouldSerializeDomainObjectsOnSetHandshake)
     ASSERT_EQ(data, protoHandshake->handshake_request().session_id());
 }
 
-TEST_F(TranslatorTest, shouldDeserializeProtocolObjectsOnHandshakeResponse)
+TEST_F(TranslatorTest, onHandshakeResponseShouldDeserializeProtocolObjects)
 {
     std::function<bool(ServerMessagePtr)> protoHandshakeResponseF;
 

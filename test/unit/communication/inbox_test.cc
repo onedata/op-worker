@@ -53,7 +53,7 @@ ACTION_P(SaveMessageId, result)
     *result = arg0.message_id();
 }
 
-TEST_F(InboxTest, shouldPassArgumentsToSendOnCommunicate)
+TEST_F(InboxTest, communicateShouldPassArgumentsToSend)
 {
     const auto data = randomString();
     const auto retries = randomInt();
@@ -71,7 +71,7 @@ TEST_F(InboxTest, shouldPassArgumentsToSendOnCommunicate)
     ASSERT_EQ(data, sentMsg.ping().data());
 }
 
-TEST_F(InboxTest, shouldSetMessageIdOnCommunicate)
+TEST_F(InboxTest, communicateShouldSetMessageId)
 {
     std::string sentMsgId1;
     std::string sentMsgId2;
@@ -91,7 +91,7 @@ TEST_F(InboxTest, shouldSetMessageIdOnCommunicate)
     EXPECT_NE(sentMsgId1, sentMsgId2);
 }
 
-TEST_F(InboxTest, shouldReturnExceptionIfSendFailsInCommunicate)
+TEST_F(InboxTest, communicateShouldReturnExceptionIfSendFails)
 {
     inbox.mock.exception = true;
 
@@ -101,7 +101,7 @@ TEST_F(InboxTest, shouldReturnExceptionIfSendFailsInCommunicate)
     ASSERT_THROW(future.get(), ConnectionError);
 }
 
-TEST_F(InboxTest, shouldFulfillPromiseOnceReplyIsReceived)
+TEST_F(InboxTest, InboxShouldFulfillCommunicatePromiseOnceReplyIsReceived)
 {
     std::string sentMsgId;
     EXPECT_CALL(inbox.mock, sendProxy(_, _))
@@ -130,7 +130,7 @@ TEST_F(InboxTest, shouldFulfillPromiseOnceReplyIsReceived)
     ASSERT_EQ(data, future.get()->pong().data());
 }
 
-TEST_F(InboxTest, shouldSetOnMessageCallbackOnConnect)
+TEST_F(InboxTest, connectShouldSetOnMessageCallback)
 {
     EXPECT_CALL(inbox.mock, connect());
     EXPECT_CALL(inbox.mock, setOnMessageCallback(_));
@@ -138,7 +138,7 @@ TEST_F(InboxTest, shouldSetOnMessageCallbackOnConnect)
     inbox.connect();
 }
 
-TEST_F(InboxTest, shouldPassMessagesToSubscribers)
+TEST_F(InboxTest, InboxShouldPassIncomingMessagesToSubscribers)
 {
     std::function<void(ServerMessagePtr)> onMessageCallback;
     EXPECT_CALL(inbox.mock, connect());
@@ -170,7 +170,7 @@ TEST_F(InboxTest, shouldPassMessagesToSubscribers)
     ASSERT_TRUE(callbackCalled);
 }
 
-TEST_F(InboxTest, shouldMarkExpectedMessagesAsHandledForSubscribers)
+TEST_F(InboxTest, InboxShouldMarkExpectedMessagesAsHandledForSubscribers)
 {
     std::function<void(ServerMessagePtr)> onMessageCallback;
     EXPECT_CALL(inbox.mock, connect());
@@ -216,7 +216,7 @@ TEST_F(InboxTest, shouldMarkExpectedMessagesAsHandledForSubscribers)
     ASSERT_EQ(sentMsgId, f.get()->message_id());
 }
 
-TEST_F(InboxTest, shouldNotCallSubscriptionCallbackWhenPredicateIsFalse)
+TEST_F(InboxTest, InboxShouldNotCallSubscriptionCallbackWhenPredicateIsFalse)
 {
     std::function<void(ServerMessagePtr)> onMessageCallback;
     EXPECT_CALL(inbox.mock, connect());
