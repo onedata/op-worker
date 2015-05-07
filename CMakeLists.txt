@@ -55,7 +55,7 @@ else(NOT APPLE)
     set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/lib" "\$ORIGIN")
 endif(APPLE)
 
-add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Werror -Wall -std=c++14)
+add_compile_options(${SECTION_FRAGMENTATION_FLAGS} -Wall -std=c++14)
 add_definitions(
     ${FUSE_DEFINITIONS}
     -DFUSE_USE_VERSION=29

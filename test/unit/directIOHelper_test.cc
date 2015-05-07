@@ -128,26 +128,26 @@ TEST_F(DirectIOHelperTest, openAndRelease)
     EXPECT_NO_THROW(ctx.m_ffi.fh);
 }
 
-TEST_F(DirectIOHelperTest, fsync)
+TEST_F(DirectIOHelperTest, shouldRunSync)
 {
     auto p = proxy->sh_fsync(testFileId, 0, ctx);
     EXPECT_NO_THROW(p.get());
 }
 
-TEST_F(DirectIOHelperTest, getattr)
+TEST_F(DirectIOHelperTest, shouldGetAttributes)
 {
     auto p = proxy->sh_getattr(testFileId);
     struct stat stbuf = p.get();
     EXPECT_EQ(20, stbuf.st_size);
 }
 
-TEST_F(DirectIOHelperTest, access)
+TEST_F(DirectIOHelperTest, shouldCheckAccess)
 {
     auto p = proxy->sh_access(testFileId, 0);
     EXPECT_NO_THROW(p.get());
 }
 
-TEST_F(DirectIOHelperTest, readdir)
+TEST_F(DirectIOHelperTest, shouldNotReadDirectory)
 {
     auto p = proxy->sh_readdir(testFileId, 0, 10, ctx);
     EXPECT_THROW_POSIX_CODE(p.get(), ENOTSUP);
@@ -159,7 +159,7 @@ TEST_F(DirectIOHelperTest, mknod)
     EXPECT_THROW_POSIX_CODE(p.get(), EEXIST);
 }
 
-TEST_F(DirectIOHelperTest, mkdir)
+TEST_F(DirectIOHelperTest, shouldMakeDirectory)
 {
     auto p = proxy->sh_mkdir("dir", 0);
     EXPECT_NO_THROW(p.get());
@@ -167,13 +167,13 @@ TEST_F(DirectIOHelperTest, mkdir)
     std::remove("dir");
 }
 
-TEST_F(DirectIOHelperTest, unlink)
+TEST_F(DirectIOHelperTest, shouldDeleteFile)
 {
     auto p = proxy->sh_unlink(testFileId);
     EXPECT_NO_THROW(p.get());
 }
 
-TEST_F(DirectIOHelperTest, rmdir)
+TEST_F(DirectIOHelperTest, shouldDeleteDir)
 {
     auto p = proxy->sh_rmdir(testFileId);
     EXPECT_THROW_POSIX_CODE(p.get(), ENOTDIR);
@@ -190,7 +190,7 @@ TEST_F(DirectIOHelperTest, symlinkAndReadlink)
     unlinkOnDIO("to");
 }
 
-TEST_F(DirectIOHelperTest, rename)
+TEST_F(DirectIOHelperTest, shouldRename)
 {
     auto p = proxy->sh_rename(testFileId, "to");
     EXPECT_NO_THROW(p.get());
@@ -198,7 +198,7 @@ TEST_F(DirectIOHelperTest, rename)
     unlinkOnDIO("to");
 }
 
-TEST_F(DirectIOHelperTest, link)
+TEST_F(DirectIOHelperTest, shouldCreateLink)
 {
     auto p = proxy->sh_link(testFileId, "to");
     EXPECT_NO_THROW(p.get());
@@ -206,19 +206,19 @@ TEST_F(DirectIOHelperTest, link)
     unlinkOnDIO("to");
 }
 
-TEST_F(DirectIOHelperTest, chmod)
+TEST_F(DirectIOHelperTest, shouldChangeMode)
 {
     auto p = proxy->sh_chmod(testFileId, 600);
     EXPECT_NO_THROW(p.get());
 }
 
-TEST_F(DirectIOHelperTest, chown)
+TEST_F(DirectIOHelperTest, shouldChangeOwner)
 {
     auto p = proxy->sh_chown(testFileId, -1, -1);
     EXPECT_NO_THROW(p.get());
 }
 
-TEST_F(DirectIOHelperTest, truncate)
+TEST_F(DirectIOHelperTest, shouldTruncate)
 {
     auto p = proxy->sh_truncate(testFileId, 0);
     EXPECT_NO_THROW(p.get());
