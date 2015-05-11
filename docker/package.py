@@ -5,13 +5,14 @@
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
+Build packages in dockerized environment, as user 'package'
+
 Run the script with -h flag to learn about script's running options.
 """
 
 from os.path import expanduser
 import argparse
 import os
-import platform
 import sys
 
 from environment import docker
@@ -32,7 +33,7 @@ parser.add_argument(
     '-s', '--src',
     action='store',
     default=os.getcwd(),
-    help='source directory to run make from',
+    help='source directory to run command from',
     dest='src')
 
 parser.add_argument(
