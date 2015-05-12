@@ -18,6 +18,7 @@
 -include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 -export([init/3, handle/2, terminate/3]).
 -export([get_cluster_status/1]).
