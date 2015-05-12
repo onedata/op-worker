@@ -32,6 +32,7 @@ struct ConnectionMock : public Connection {
         std::string message, boost::promise<void> promise) override
     {
         sendProxy(message);
+        promise.set_value();
     }
 
     ConnectionMock(boost::asio::io_service &ioService,
@@ -144,7 +145,10 @@ TEST_F(ConnectionPoolTest, sendShouldCallSendOnConnection)
 
     EXPECT_CALL(*connection, sendProxy(data));
     connection->onReady(connection);
-    connectionPool.send(data);
+    auto future = connectionPool.send(data);
+
+    auto futureStatus = future.wait_for(boost::chrono::seconds(5));
+    ASSERT_EQ(boost::future_status::ready, futureStatus);
 }
 
 TEST_F(ConnectionPoolTest, sendShouldNotCallSendOnConnectionBeforeOnReady)
