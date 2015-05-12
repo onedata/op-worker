@@ -12,12 +12,14 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
+-include("global_definitions.hrl").
 -include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).

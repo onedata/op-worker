@@ -19,26 +19,17 @@
 -behaviour(dns_query_handler_behaviour).
 
 -include("global_definitions.hrl").
--include_lib("kernel/src/inet_dns.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("kernel/src/inet_dns.hrl").
 
-%% This record is used by dns_worker (it contains its state). The first element of
-%% a tuple is a name of a module and the second is a list of ip addresses of nodes
-%% sorted ascending by load.
-%%
-%% Example:
-%%     Assuming that dns_worker plugin works on node1@127.0.0.1 and node2@192.168.0.1,
-%%     (load on node1 < load on node2) and control_panel works on node3@127.0.0.1,
-%%     dns_worker state will look like this:
-%%     {dns_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}, {control_panel, [{127,0,0,1}]}]}
--record(dns_worker_state, {
-    workers_list = [] :: [{atom(),  [{inet:ip4_address(), integer(), integer()}]}],
-    nodes_list = [] :: [{inet:ip4_address(),  number()}],
-    avg_load = 0 :: number()
+%% This record is used by dns_worker (it contains its state).
+-record(state, {
+    %% This record is usually used in read-only mode to get a list of
+    %% nodes to return as DNS response. It is updated periodically by node manager.
+    lb_advice = undefined :: load_balancing:dns_lb_advice(),
+    % Time of last ld advice update received from dispatcher
+    last_update = {0, 0, 0} :: {integer(), integer(), integer()}
 }).
-
--define(EXTERNALLY_VISIBLE_MODULES, [http_worker, dns_worker]).
--define(HEALTHCHECK_TIMEOUT, timer:seconds(5)).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).
@@ -57,15 +48,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, #dns_worker_state{}} | {error, Reason :: term()}.
+    Result :: {ok, #state{}} | {error, Reason :: term()}.
 init([]) ->
-    {ok, #dns_worker_state{}};
+    {ok, #state{}};
 
-init(InitialState) when is_record(InitialState, dns_worker_state) ->
+init(InitialState) when is_record(InitialState, state) ->
     {ok, InitialState};
 
 init(test) ->
-    {ok, #dns_worker_state{}};
+    {ok, #state{}};
 
 init(_) ->
     throw(unknown_initial_state).
@@ -76,99 +67,77 @@ init(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
-    Request :: ping | healthcheck |
-    {update_state, list(), list()} |
-    {get_worker, atom()} |
-    get_nodes,
+    Request :: ping | healthcheck,
     Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: [inet:ip4_address()],
     Reason :: term().
+
 handle(ping, _) ->
     pong;
 
-handle(healthcheck, _) ->
-    healthcheck();
+handle(healthcheck, State) ->
+    _Reply = healthcheck(State);
 
-handle({update_state, ModulesToNodes, NLoads, AvgLoad}, _) ->
-    ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
-    try
-        ModulesToNodes2 = lists:map(fun({Module, Nodes}) ->
-            GetLoads = fun({Node, V}) ->
-                {Node, V, V}
-            end,
-            {Module, lists:map(GetLoads, Nodes)}
-        end, ModulesToNodes),
-        New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
-        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
-            ok ->
-                ok;
-            UpdateError ->
-                ?error("DNS update error: ~p", [UpdateError]),
-                udpate_error
-        end
-    catch
-        E1:E2 ->
-            ?error("DNS update error: ~p:~p", [E1, E2]),
-            udpate_error
-    end;
+handle({update_lb_advice, LBAdvice}, State) ->
+    ?debug("DNS update of load_balancing advice: ~p", [LBAdvice]),
+    NewState = State#state{last_update = now(), lb_advice = LBAdvice},
+    gen_server:call(?MODULE, {update_plugin_state, NewState});
 
-handle({handle_a, Domain}, _) ->
-    IPList = case parse_domain(Domain) of
-                 unknown_domain ->
-                     refused;
-                 {Prefix, _Suffix} ->
-                     % Accept all prefixes that consist of one part
-                     case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                         true ->
-                             case Prefix of
-                                 "cluster" ->
-                                     % Return all nodes when asked about cluster
-                                     get_nodes();
-                                 _ ->
-                                     % Check if query concers any specific module, if not assume it's a http request
-                                     Module = try list_to_existing_atom(Prefix) catch _:_ -> undefined end,
-                                     case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
-                                         false ->
-                                             get_workers(http_worker);
-                                         true ->
-                                             get_workers(Module)
-                                     end
-                             end;
-                         false ->
-                             nx_domain
-                     end
-             end,
-    case IPList of
-        nx_domain ->
-            nx_domain;
-        serv_fail ->
+handle({handle_a, Domain}, #state{lb_advice = LBAdvice}) ->
+    ?debug("DNS A request: ~s, current advice: ~p", [Domain, LBAdvice]),
+    case LBAdvice of
+        undefined ->
+            % The DNS server is still out of sync, return serv fail
             serv_fail;
-        refused ->
-            refused;
         _ ->
-            {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
-            {ok,
-                    [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- IPList] ++
-                    [dns_server:authoritative_answer_flag(true)]
-            }
+            case parse_domain(Domain) of
+                unknown_domain ->
+                    % Unrecognizable domain
+                    refused;
+                {Prefix, _Suffix} ->
+                    % Accept all prefixes that consist of one part
+                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
+                        true ->
+                            % Prefix OK, return nodes to connect to
+                            Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
+                            {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
+                            {ok,
+                                    [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- Nodes] ++
+                                    [dns_server:authoritative_answer_flag(true)]
+                            };
+                        false ->
+                            % Return NX domain for other prefixes
+                            nx_domain
+                    end
+            end
     end;
 
-handle({handle_ns, Domain}, _) ->
-    case parse_domain(Domain) of
-        unknown_domain ->
-            refused;
-        {Prefix, _Suffix} ->
-            % Accept all prefixes that consist of one part
-            case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                true ->
-                    {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
-                    {ok,
-                            [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- get_nodes()] ++
-                            [dns_server:authoritative_answer_flag(true)]
-                    };
-                false ->
-                    nx_domain
+handle({handle_ns, Domain}, #state{lb_advice = LBAdvice}) ->
+    ?debug("DNS NS request: ~s, current advice: ~p", [Domain, LBAdvice]),
+    case LBAdvice of
+        undefined ->
+            % The DNS server is still out of sync, return serv fail
+            serv_fail;
+        _ ->
+            case parse_domain(Domain) of
+                unknown_domain ->
+                    % Unrecognizable domain
+                    refused;
+                {Prefix, _Suffix} ->
+                    % Accept all prefixes that consist of one part
+                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
+                        true ->
+                            % Prefix OK, return NS nodes of the cluster
+                            Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
+                            {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
+                            {ok,
+                                    [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- Nodes] ++
+                                    [dns_server:authoritative_answer_flag(true)]
+                            };
+                        false ->
+                            nx_domain
+                    end
             end
     end;
 
@@ -197,10 +166,9 @@ cleanup() ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_a(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
+-spec handle_a(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 handle_a(Domain) ->
-    call_dns_worker({handle_a, Domain}).
+    worker_proxy:call(dns_worker, {handle_a, Domain}).
 
 
 %%--------------------------------------------------------------------
@@ -209,10 +177,10 @@ handle_a(Domain) ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_ns(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
+-spec handle_ns(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 handle_ns(Domain) ->
-    call_dns_worker({handle_ns, Domain}).
+    worker_proxy:call(dns_worker, {handle_ns, Domain}).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -220,9 +188,10 @@ handle_ns(Domain) ->
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cname(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
-handle_cname(_Domain) -> not_impl.
+-spec handle_cname(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+handle_cname(_Domain) ->
+    not_impl.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -230,9 +199,9 @@ handle_cname(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_mx(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
-handle_mx(_Domain) -> not_impl.
+-spec handle_mx(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+handle_mx(_Domain) ->
+    not_impl.
 
 
 %%--------------------------------------------------------------------
@@ -241,9 +210,9 @@ handle_mx(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_soa(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
-handle_soa(_Domain) -> not_impl.
+-spec handle_soa(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+handle_soa(_Domain) ->
+    not_impl.
 
 
 %%--------------------------------------------------------------------
@@ -252,9 +221,9 @@ handle_soa(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_wks(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
-handle_wks(_Domain) -> not_impl.
+-spec handle_wks(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+handle_wks(_Domain) ->
+    not_impl.
 
 
 %%--------------------------------------------------------------------
@@ -263,9 +232,9 @@ handle_wks(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_ptr(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
-handle_ptr(_Domain) -> not_impl.
+-spec handle_ptr(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+handle_ptr(_Domain) ->
+    not_impl.
 
 
 %%--------------------------------------------------------------------
@@ -274,9 +243,9 @@ handle_ptr(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_hinfo(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
-handle_hinfo(_Domain) -> not_impl.
+-spec handle_hinfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+handle_hinfo(_Domain) ->
+    not_impl.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -284,10 +253,10 @@ handle_hinfo(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_minfo(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
+-spec handle_minfo(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
 %% ====================================================================
-handle_minfo(_Domain) -> not_impl.
+handle_minfo(_Domain) ->
+    not_impl.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -295,9 +264,9 @@ handle_minfo(_Domain) -> not_impl.
 %% See {@link dns_query_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_txt(Domain :: string()) -> {dns_server:reply_type(),
-    dns_server:dns_query_handler_reponse()} | dns_server:reply_type().
-handle_txt(_Domain) -> not_impl.
+-spec handle_txt(Domain :: string()) -> {reply_type(), dns_query_handler_reponse()} | reply_type().
+handle_txt(_Domain) ->
+    not_impl.
 
 %%%===================================================================
 %%% Internal functions
@@ -315,7 +284,7 @@ handle_txt(_Domain) -> not_impl.
 parse_domain(DomainArg) ->
     % If requested domain starts with 'www.', ignore it
     Domain = case DomainArg of
-                 [$w, $w, $w, $. | Rest] -> Rest;
+                 "www." ++ Rest -> Rest;
                  Other -> Other
              end,
     {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_NAME, global_registry_hostname),
@@ -337,186 +306,43 @@ parse_domain(DomainArg) ->
 
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Selects couple of nodes hosting given worker and returns their IPs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_workers(Module :: atom()) -> list() | serv_fail.
-get_workers(Module) ->
-    try
-        DNSState = gen_server:call(?MODULE, get_plugin_state),
-        WorkerList = DNSState#dns_worker_state.workers_list,
-        NodesList = DNSState#dns_worker_state.nodes_list,
-        Result = proplists:get_value(Module, WorkerList, []),
-
-        PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
-            TmpAns2 = case C of
-                          V -> [Node | TmpAns];
-                          _ -> TmpAns
-                      end,
-            C2 = case C of
-                     1 -> V;
-                     _ -> C - 1
-                 end,
-            {TmpAns2, [{Node, V, C2} | TmpWorkers]}
-        end,
-        {Result2, ModuleWorkerList} = lists:foldl(PrepareResult, {[], []}, Result),
-
-        PrepareState = fun({M, Workers}, TmpWorkersList) ->
-            case M =:= Module of
-                true -> [{M, ModuleWorkerList} | TmpWorkersList];
-                false -> [{M, Workers} | TmpWorkersList]
-            end
-        end,
-        NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
-
-        New_DNS_State = DNSState#dns_worker_state{workers_list = NewWorkersList},
-
-        case gen_server:call(?MODULE, {update_plugin_state, New_DNS_State}) of
-            ok ->
-                random:seed(now()),
-                Result3 = make_ans_random(Result2),
-                case Module of
-                    http_worker ->
-                        Result3;
-                    _ ->
-                        create_ans(Result3, NodesList)
-                end;
-            UpdateError ->
-                ?error("DNS get_worker error: ~p", [UpdateError]),
-                serv_fail
-        end
-    catch
-        E1:E2 ->
-            ?error("DNS get_worker error: ~p:~p", [E1, E2]),
-            serv_fail
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Selects couple of nodes from the cluster and returns their IPs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_nodes() -> list() | serv_fail.
-get_nodes() ->
-    try
-        DNSState = gen_server:call(?MODULE, get_plugin_state),
-        NodesList = DNSState#dns_worker_state.nodes_list,
-        AvgLoad = DNSState#dns_worker_state.avg_load,
-
-        case AvgLoad of
-            0 ->
-                Res = make_ans_random(lists:map(
-                    fun({Node, _}) ->
-                        Node
-                    end, NodesList)),
-                Res;
-            _ ->
-                random:seed(now()),
-                ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
-                    case is_number(NodeLoad) and (NodeLoad > 0) of
-                        true ->
-                            Ratio = AvgLoad / NodeLoad,
-                            case Ratio >= random:uniform() of
-                                true ->
-                                    [Node | TmpAns];
-                                false ->
-                                    TmpAns
-                            end;
-                        false ->
-                            [Node | TmpAns]
-                    end
-                end,
-                Result = lists:foldl(ChooseNodes, [], NodesList),
-                Result2 = make_ans_random(Result),
-                create_ans(Result2, NodesList)
-        end
-    catch
-        E1:E2 ->
-            ?error("DNS get_nodes error: ~p:~p", [E1, E2]),
-            serv_fail
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates answer from results list (adds additional node if needed).
-%% @end
-%%--------------------------------------------------------------------
--spec create_ans(Result :: list(), NodesList :: list()) -> IPs :: [term()].
-create_ans(Result, NodesList) ->
-    case (length(Result) > 1) or (length(NodesList) =< 1) of
-        true -> Result;
-        false ->
-            NodeNum = random:uniform(length(NodesList)),
-            {NewNode, _} = lists:nth(NodeNum, NodesList),
-            case Result =:= [NewNode] of
-                true ->
-                    {NewNode2, _} = lists:nth((NodeNum rem length(NodesList) + 1), NodesList),
-                    Result ++ [NewNode2];
-                false ->
-                    Result ++ [NewNode]
-            end
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%  Makes order of nodes in answer random.
-%% @end
-%%--------------------------------------------------------------------
--spec make_ans_random(Result :: list()) -> IPs :: [term()].
-make_ans_random(Result) ->
-    Len = length(Result),
-    case Len of
-        0 -> [];
-        1 -> Result;
-        _ ->
-            NodeNum = random:uniform(Len),
-            NewRes = lists:sublist(Result, 1, NodeNum - 1) ++ lists:sublist(Result, NodeNum + 1, Len),
-            [lists:nth(NodeNum, Result) | make_ans_random(NewRes)]
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calls dns_worker module gen_server with given request. Used to delegate
-%% DNS query processing to dns_worker.
-%% @end
-%%--------------------------------------------------------------------
--spec call_dns_worker(Request :: term()) -> term().
-call_dns_worker(Request) ->
-    worker_proxy:call(dns_worker, Request).
-
-%%--------------------------------------------------------------------
 %% @doc
 %% healthcheck dns endpoint
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck() -> ok | {error, Reason :: atom()}.
-healthcheck() ->
-    {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
-    Query = inet_dns:encode(
-        #dns_rec{
-            header = #dns_header{
-                id = crypto:rand_uniform(1, 16#FFFF),
-                opcode = 'query',
-                rd = true
-            },
-            qdlist = [#dns_query{
-                domain = "localhost",
-                type = soa,
-                class = in
-            }],
-            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
-        }),
-    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-    gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
-    case gen_udp:recv(Socket, 65535, ?HEALTHCHECK_TIMEOUT) of
-        {ok, _} -> ok;
-        _ -> {error, no_dns}
+-spec healthcheck(State :: #state{}) -> ok | {error, Reason :: atom()}.
+healthcheck(#state{last_update = LastUpdate}) ->
+    {ok, Threshold} = application:get_env(?APP_NAME, dns_disp_out_of_sync_threshold),
+    {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    % Threshold is in millisecs, now_diff is in microsecs
+    case timer:now_diff(now(), LastUpdate) > Threshold * 1000 of
+        true ->
+            % DNS is out of sync
+            out_of_sync;
+        false ->
+            {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
+            Query = inet_dns:encode(
+                #dns_rec{
+                    header = #dns_header{
+                        id = crypto:rand_uniform(1, 16#FFFF),
+                        opcode = 'query',
+                        rd = true
+                    },
+                    qdlist = [#dns_query{
+                        domain = "localhost",
+                        type = soa,
+                        class = in
+                    }],
+                    arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
+                }),
+            {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+            gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
+            case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
+                {ok, _} ->
+                    % DNS is working
+                    ok;
+                _ ->
+                    % DNS is not working
+                    {error, server_not_responding}
+            end
     end.

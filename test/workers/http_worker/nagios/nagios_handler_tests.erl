@@ -13,6 +13,7 @@
 
 -ifdef(TEST).
 -include("global_definitions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(NODE_1, 'worker1@host.com').

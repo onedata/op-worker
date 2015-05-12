@@ -1,6 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
 %%% @author Tomasz Lichon
+%%% @author Lukasz Opiola
 %%% @copyright (C) 2013 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -15,6 +16,7 @@
 -module(node_manager).
 -author("Michal Wrzeszcz").
 -author("Tomasz Lichon").
+-author("Lukasz Opiola").
 
 -behaviour(gen_server).
 
@@ -22,15 +24,16 @@
 -include("modules_and_args.hrl").
 -include("cluster_elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 %% This record is used by node_manager (it contains its state).
-%% It describes node type (ccm or worker) and status of connection
-%% with ccm (connected or not_connected).
--record(node_state, {
+%% It hold the status of connection to ccm.
+-record(state, {
+    node_ip = {127, 0, 0, 1} :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()},
     ccm_con_status = not_connected :: not_connected | connected | registered,
-    state_num = 0 :: integer(),
-    dispatcher_state = 0 :: integer()
+    monitoring_state = undefined :: monitoring:node_monitoring_state()
 }).
+
 
 %% API
 -export([start_link/0, stop/0]).
@@ -65,6 +68,15 @@ start_link() ->
 stop() ->
     gen_server:cast(?NODE_MANAGER_NAME, stop).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Tries to contact GR and refresh node's IP Address.
+%% @end
+%%--------------------------------------------------------------------
+refresh_ip_address() ->
+    gen_server:cast(?NODE_MANAGER_NAME, refresh_ip_address).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -90,8 +102,12 @@ init([]) ->
         listener_starter:start_rest_listener(),
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
-        gen_server:cast(self(), do_heartbeat),
-        {ok, #node_state{ccm_con_status = not_connected}}
+        gen_server:cast(self(), connect_to_ccm),
+        NodeIP = check_node_ip_address(),
+        MonitoringState = monitoring:start(NodeIP),
+        {ok, #state{node_ip = NodeIP,
+            ccm_con_status = not_connected,
+            monitoring_state = MonitoringState}}
     catch
         _:Error ->
             ?error_stacktrace("Cannot initialize listeners: ~p", [Error]),
@@ -117,11 +133,13 @@ init([]) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call(get_state_num, _From, State = #node_state{state_num = StateNum}) ->
-    {reply, StateNum, State};
 
-handle_call(healthcheck, _From, State = #node_state{state_num = StateNum}) ->
-    {reply, {ok, StateNum}, State};
+handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) ->
+    Reply = case ConnStatus of
+                registered -> ok;
+                _ -> {error, out_of_sync}
+            end,
+    {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -140,22 +158,26 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
+handle_cast(connect_to_ccm, State) ->
+    NewState = connect_to_ccm(State),
+    {noreply, NewState};
+
+handle_cast(ccm_con_ack, State) ->
+    NewState = ccm_conn_ack(State),
+    {noreply, NewState};
+
 handle_cast(do_heartbeat, State) ->
     NewState = do_heartbeat(State),
     {noreply, NewState};
 
-handle_cast({heartbeat_ok, StateNum}, State) ->
-    NewState = on_ccm_state_change(StateNum, State),
+handle_cast({update_lb_advices, Advices}, State) ->
+    NewState = update_lb_advices(State, Advices),
     {noreply, NewState};
 
-handle_cast({update_state, NewStateNum}, State) ->
-    ?info("Node manager state updated, state num: ~p", [NewStateNum]),
-    NewState = on_ccm_state_change(NewStateNum, State),
-    {noreply, NewState};
-
-handle_cast({dispatcher_up_to_date, DispState}, State) ->
-    NewState = State#node_state{dispatcher_state = DispState},
-    {noreply, NewState};
+handle_cast(refresh_ip_address, #state{monitoring_state = MonState} = State) ->
+    NodeIP = check_node_ip_address(),
+    NewMonState = monitoring:refresh_ip_address(NodeIP, MonState),
+    {noreply, State#state{node_ip = NodeIP, monitoring_state = NewMonState}};
 
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -177,13 +199,16 @@ handle_cast(_Request, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
+
 handle_info({timer, Msg}, State) ->
     gen_server:cast(?NODE_MANAGER_NAME, Msg),
     {noreply, State};
 
 handle_info({nodedown, _Node}, State) ->
-    ?warning("Connection to CCM lost, node~p", [node()]),
-    {noreply, State#node_state{ccm_con_status = not_connected}};
+    ?warning("Connection to CCM lost, restarting node"),
+    % Cause node_manager to restart
+    throw(connection_to_ccm_lost),
+    {noreply, State#state{ccm_con_status = not_connected}};
 
 handle_info(_Request, State) ->
     ?log_bad_request(_Request),
@@ -231,28 +256,29 @@ code_change(_OldVsn, State, _Extra) ->
 %% First it establishes network connection, next sends message to ccm.
 %% @end
 %%--------------------------------------------------------------------
--spec do_heartbeat(State :: #node_state{}) -> #node_state{}.
-do_heartbeat(State = #node_state{ccm_con_status = registered}) ->
-    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_success_interval_seconds),
-    gen_server:cast({global, ?CCM}, {heartbeat, node()}),
-    erlang:send_after(timer:seconds(Interval), self(), {timer, do_heartbeat}),
+-spec connect_to_ccm(State :: #state{}) -> #state{}.
+connect_to_ccm(State = #state{ccm_con_status = registered}) ->
+    % Already registered, do nothing
     State;
-do_heartbeat(State = #node_state{ccm_con_status = connected}) ->
-    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval_seconds),
-    gen_server:cast({global, ?CCM}, {heartbeat, node()}),
-    erlang:send_after(timer:seconds(Interval), self(), {timer, do_heartbeat}),
+connect_to_ccm(State = #state{ccm_con_status = connected}) ->
+    % Connected, but not registered (workers did not start), check again in some time
+    {ok, Interval} = application:get_env(?APP_NAME, ccm_connection_retry_period),
+    gen_server:cast({global, ?CCM}, {ccm_conn_req, node()}),
+    erlang:send_after(Interval, self(), {timer, connect_to_ccm}),
     State;
-do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
+connect_to_ccm(State = #state{ccm_con_status = not_connected}) ->
+    % Not connected to CCM, try and automatically schedule the next try
     {ok, CcmNodes} = application:get_env(?APP_NAME, ccm_nodes),
-    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_fail_interval_seconds),
-    erlang:send_after(timer:seconds(Interval), self(), {timer, do_heartbeat}),
+    {ok, Interval} = application:get_env(?APP_NAME, ccm_connection_retry_period),
+    erlang:send_after(Interval, self(), {timer, connect_to_ccm}),
     case (catch init_net_connection(CcmNodes)) of
         ok ->
+            ?info("Initializing connection to CCM"),
             gen_server:cast({global, ?CCM}, {heartbeat, node()}),
-            State#node_state{ccm_con_status = connected};
+            State#state{ccm_con_status = connected};
         Err ->
-            ?debug("No connection with CCM: ~p, retrying in ~p s", [Err, Interval]),
-            State#node_state{ccm_con_status = not_connected}
+            ?debug("No connection with CCM: ~p, retrying in ~p ms", [Err, Interval]),
+            State#state{ccm_con_status = not_connected}
     end.
 
 %%--------------------------------------------------------------------
@@ -261,75 +287,57 @@ do_heartbeat(State = #node_state{ccm_con_status = not_connected}) ->
 %% Saves information about ccm connection when ccm answers to its request
 %% @end
 %%--------------------------------------------------------------------
--spec on_ccm_state_change(NewStateNum :: integer(), State :: term()) -> #node_state{}.
-on_ccm_state_change(NewStateNum, State = #node_state{ccm_con_status = connected}) ->
-    ?debug("Node ~p successfully connected to ccm, starting workers...", [node(), NewStateNum]),
+-spec ccm_conn_ack(State :: term()) -> #state{}.
+ccm_conn_ack(State = #state{ccm_con_status = connected}) ->
+    ?info("Successfully connected to CCM"),
     init_node(),
-    update_dispatcher_and_dns(NewStateNum),
-    State#node_state{state_num = NewStateNum, ccm_con_status = registered};
-on_ccm_state_change(NewStateNum, State = #node_state{state_num = NewStateNum, dispatcher_state = NewStateNum}) ->
-    ?debug("heartbeat on node: ~p: answered, new state_num: ~p", [node(), NewStateNum]),
-    State#node_state{ccm_con_status = registered};
-on_ccm_state_change(NewStateNum, State) ->
-    ?debug("heartbeat on node: ~p: answered, new state_num: ~p", [node(), NewStateNum]),
-    update_dispatcher_and_dns(NewStateNum),
-    State#node_state{state_num = NewStateNum, ccm_con_status = registered}.
+    ?info("Node initialized"),
+    gen_server:cast({global, ?CCM}, {init_ok, node()}),
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval_ms),
+    erlang:send_after(Interval, self(), {timer, do_heartbeat}),
+    State#state{ccm_con_status = registered};
+ccm_conn_ack(State) ->
+    % Already registered or not connected, do nothing
+    State.
+
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Notifies dispatcher and dns, about new state of cluster
+%% Performs calls to CCM with heartbeat. The heartbeat message consists of
+%% current monitoring data. The data is updated directly before sending.
+%% The CCM will perform an 'update_lb_advices' cast perodically, using
+%% newest node states from node managers for calculations.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatcher_and_dns(NewStateNum :: integer()) -> ok | {error, term()}.
-update_dispatcher_and_dns(NewStateNum) ->
-    update_dispatcher(NewStateNum),
-    update_dns().
+-spec do_heartbeat(State :: #state{}) -> #state{}.
+do_heartbeat(#state{ccm_con_status = registered, monitoring_state = MonState} = State) ->
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval_ms),
+    erlang:send_after(Interval, self(), {timer, do_heartbeat}),
+    NewMonState = monitoring:update(MonState),
+    NodeState = monitoring:get_node_state(NewMonState),
+    ?debug("Sending heartbeat to CCM"),
+    gen_server:cast({global, ?CCM}, {heartbeat, NodeState}),
+    State#state{monitoring_state = NewMonState};
+
+% Stop heartbeat if node_manager is not registered in CCM
+do_heartbeat(State) ->
+    State.
+
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Tells dispatcher that cluster state has changed.
+%% Receives lb advices update from CCM and follows it to DNS worker and dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec update_dispatcher(NewStateNum :: integer()) -> ok.
-update_dispatcher(NewStateNum) ->
-    ?debug("Message sent to update dispatcher, state num: ~p", [NewStateNum]),
-    gen_server:cast(?DISPATCHER_NAME, {check_state, NewStateNum}).
+-spec update_lb_advices(LBAdvices, State :: #state{}) -> #state{} when
+    LBAdvices :: {load_balancing:dns_lb_advice(), load_balancing:dispatcher_lb_advice()}.
+update_lb_advices(State, {DNSAdvice, DispatcherAdvice}) ->
+    gen_server:cast(?DISPATCHER_NAME, {update_lb_advice, DispatcherAdvice}),
+    worker_proxy:call({dns_worker, node()}, {update_lb_advice, DNSAdvice}),
+    State.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates dnses' states.
-%% @end
-%%--------------------------------------------------------------------
--spec update_dns() -> ok | {error, ip_resolving}.
-update_dns() ->
-    %prepare worker IPs with loads info
-    Nodes = gen_server:call({global, ?CCM}, get_nodes),
-    NodesIpToLoad = [{node_to_ip(Node), node_monitoring:node_load(Node)} || Node <- Nodes],
-    FilteredNodesIpToLoad = [{IP, Load} || {IP, Load} <- NodesIpToLoad, IP =/= unknownaddress],
-
-    %prepare modules with their nodes and loads info
-    ModuleToNodeList = [{Module, NodesIpToLoad} || Module <- ?MODULES],
-
-    case FilteredNodesIpToLoad of
-        [] -> ok;
-        _ ->
-            % prepare average load
-            LoadAverage = utils:average([Load || {_, Load} <- FilteredNodesIpToLoad]),
-
-            UpdateInfo = {update_state, ModuleToNodeList, FilteredNodesIpToLoad, LoadAverage},
-            ?debug("updating dns, update message: ~p", [UpdateInfo]),
-            gen_server:cast(dns_worker, #worker_request{req = UpdateInfo})
-    end,
-
-    case length(FilteredNodesIpToLoad) == length(Nodes) of
-        true ->
-            ok;
-        false ->
-            {error, ip_resolving}
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -369,6 +377,7 @@ init_net_connection([Node | Nodes]) ->
 init_node() ->
     {ok, NodeToSync} = gen_server:call({global, ?CCM}, get_node_to_sync),
     ok = datastore:ensure_state_loaded(NodeToSync),
+    ?info("Datastore synchronized"),
     init_workers().
 
 %%--------------------------------------------------------------------
@@ -380,7 +389,8 @@ init_node() ->
 -spec init_workers() -> ok.
 init_workers() ->
     lists:foreach(fun({Module, Args}) -> ok = start_worker(Module, Args) end, ?MODULES_WITH_ARGS),
-    gen_server:cast({global, ?CCM}, {init_ok, node()}).
+    ?info("All workers started"),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -409,20 +419,23 @@ start_worker(Module, Args) ->
             {error, Error}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Resolve ipv4 address of node.
+%% Checks IP address of this node by asking GR. If the check cannot be performed,
+%% it assumes a 127.0.0.1 address and logs an alert.
 %% @end
 %%--------------------------------------------------------------------
--spec node_to_ip(Node :: atom()) -> inet:ip4_address() | unknownaddress.
-node_to_ip(Node) ->
-    StrNode = atom_to_list(Node),
-    AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
-    Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
-    case inet:getaddr(Address, inet) of
-        {ok, Ip} -> Ip;
-        {error, Error} ->
-            ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
-            unknownaddress
+-spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
+check_node_ip_address() ->
+    try
+        IPCheckPath = "/provider/test/check_my_ip",
+        {ok, "200", _ResponseHeaders, JSON} = gr_endpoint:noauth_request(provider, IPCheckPath, get),
+        IPBin = mochijson2:decode(JSON),
+        {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
+        IP
+    catch T:M ->
+        ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
+        {127, 0, 0, 1}
     end.
