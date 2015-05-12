@@ -27,7 +27,7 @@ deps:
 generate: deps compile
 	./rebar generate $(OVERLAY_VARS)
 
-clean:
+clean: relclean pkgclean
 	./rebar clean
 
 distclean:
@@ -38,6 +38,8 @@ distclean:
 ##
 
 rel: generate
+
+test_rel: generate
 	make -C appmock/ rel
 	make -C op_ccm/ rel
 
