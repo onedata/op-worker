@@ -12,14 +12,13 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
--include("global_definitions.hrl").
 -include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -69,7 +68,7 @@ nagios_test(Config) ->
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
             ?assertEqual(true, lists:member(WName, WorkersOnNode))
-        end, [{Node, Worker} || Node <- Nodes, Worker <- ?MODULES ]),
+        end, [{Node, Worker} || Node <- Nodes, Worker <- ?MODULES]),
 
     % Check if every node's status contains dispatcher and node manager status
     lists:foreach(
