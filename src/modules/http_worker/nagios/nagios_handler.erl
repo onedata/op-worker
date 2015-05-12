@@ -18,7 +18,6 @@
 -include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_definitions.hrl").
 
 -export([init/3, handle/2, terminate/3]).
 -export([get_cluster_status/1]).
@@ -26,7 +25,7 @@
 -export_type([healthcheck_reponse/0]).
 
 % ErrorDesc will appear in xml as node status.
--type healthcheck_reponse() :: ok | {ok, term()} | {error, ErrorDesc :: atom()}.
+-type healthcheck_reponse() :: ok | out_of_sync | {error, ErrorDesc :: atom()}.
 
 -ifdef(TEST).
 -compile(export_all).
@@ -53,10 +52,9 @@ init(_Type, Req, _Opts) ->
 %%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
-    {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout_seconds),
-
+    {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
     NewReq =
-        case get_cluster_status(timer:seconds(Timeout)) of
+        case get_cluster_status(Timeout) of
             error ->
                 {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply, [500, Req]),
                 Req2;
@@ -70,6 +68,7 @@ handle(Req, State) ->
                         {?APP_NAME, [{name, atom_to_list(Node)}, {status, atom_to_list(NodeStatus)}], NodeDetails}
                     end, NodeStatuses),
 
+                ?dump(MappedClusterState),
                 {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
                 DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
 
@@ -127,19 +126,68 @@ get_cluster_status(Timeout) ->
     case check_ccm(Timeout) of
         error ->
             error;
-        {Nodes, StateNum} ->
+        Nodes ->
             try
-                Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
+%%                 Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
                 NodeManagerStatuses = check_node_managers(Nodes, Timeout),
-                DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
-                WorkerStatuses = check_workers(Nodes, Workers, Timeout),
-                {ok, _} = calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
+%%                 DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
+%%                 WorkerStatuses = check_workers(Nodes, Workers, Timeout),
+                ?dump(NodeManagerStatuses),
+                {ok, _} = temp_calculate_cluster_status(Nodes, NodeManagerStatuses)
+%%                 {ok, _} = calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
             catch
                 Type:Error ->
                     ?error_stacktrace("Unexpected error during healthcheck: ~p:~p", [Type, Error]),
                     error
             end
     end.
+
+
+temp_calculate_cluster_status(Nodes, NodeManagerStatuses) ->
+    NodeStatuses =
+        lists:map(
+            fun(Node) ->
+                % Calculate node manager and dispatcher statuses
+                % ok - if the state num is the same as in the CCM
+                % out_of_sync - if the state num is other than in the CCM
+                % Error::atom() - if an error of type Error occured
+                NodeManagerStatus =
+                    case proplists:get_value(Node, NodeManagerStatuses) of
+                        ok -> ok;
+                        {error, out_of_sync} -> out_of_sync
+                    end,
+                % The list for each node contains:
+                % node_manager status
+                % request_dispatcher status
+                % workers' statuses, alphabetically
+                ComponentStatuses = [
+                    {?NODE_MANAGER_NAME, NodeManagerStatus}
+                ],
+                % Calculate status of the whole node - it's the same as the worst status of any child
+                % ok > out_of_sync > Other (any other atom means an error)
+                % If any node component has an error, node's status will be 'error'.
+                NodeStatus = lists:foldl(
+                    fun({_, CurrentStatus}, Acc) ->
+                        case {Acc, CurrentStatus} of
+                            {ok, Any} -> Any;
+                            {out_of_sync, ok} -> out_of_sync;
+                            {out_of_sync, Any} -> Any;
+                            {_Error, _} -> error
+                        end
+                    end, ok, ComponentStatuses),
+                {Node, NodeStatus, ComponentStatuses}
+            end, Nodes),
+    AppStatus = lists:foldl(
+        fun({_, CurrentStatus, _}, Acc) ->
+            case {Acc, CurrentStatus} of
+                {ok, Any} -> Any;
+                {out_of_sync, ok} -> out_of_sync;
+                {out_of_sync, Any} -> Any;
+                {_Error, _} -> error
+            end
+        end, ok, NodeStatuses),
+    {ok, {?APP_NAME, AppStatus, lists:usort(NodeStatuses)}}.
+
 
 
 %%--------------------------------------------------------------------
@@ -231,8 +279,8 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
     {Nodes :: [node()], StateNum :: integer()} | error.
 check_ccm(Timeout) ->
     try
-        {ok, {Nodes, StateNum}} = gen_server:call({global, ?CCM}, healthcheck, Timeout),
-        {Nodes, StateNum}
+        {ok, Nodes} = gen_server:call({global, ?CCM}, healthcheck, Timeout),
+        Nodes
     catch
         Type:Error ->
             ?error("CCM error during healthcheck: ~p:~p", [Type, Error]),
