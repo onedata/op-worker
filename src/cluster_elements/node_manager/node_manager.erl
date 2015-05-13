@@ -137,7 +137,7 @@ init([]) ->
 handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) ->
     Reply = case ConnStatus of
                 registered -> ok;
-                _ -> {error, out_of_sync}
+                _ -> out_of_sync
             end,
     {reply, Reply, State};
 
