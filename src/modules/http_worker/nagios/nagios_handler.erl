@@ -54,8 +54,33 @@ init(_Type, Req, _Opts) ->
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
     {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    {ok, CachingTime} = application:get_env(?APP_NAME, nagios_caching_time),
+    CachedResponse = case application:get_env(?APP_NAME, nagios_cache) of
+                         {ok, {LastCheck, LastValue}} ->
+                             case utils:milliseconds_diff(now(), LastCheck) < CachingTime of
+                                 true ->
+                                     ?debug("Serving nagios response from cache"),
+                                     {true, LastValue};
+                                 false ->
+                                     false
+                             end;
+                         _ ->
+                             false
+                     end,
+    ClusterStatus = case CachedResponse of
+                        {true, Value} ->
+                            Value;
+                        false ->
+                            Status = get_cluster_status(Timeout),
+                            % Save cluster state in cache, but only if there was no error
+                            case Status of
+                                error -> skip;
+                                _ -> application:set_env(?APP_NAME, nagios_cache, {now(), Status})
+                            end,
+                            Status
+                    end,
     NewReq =
-        case get_cluster_status(Timeout) of
+        case ClusterStatus of
             error ->
                 {ok, Req2} = opn_cowboy_bridge:apply(cowboy_req, reply, [500, Req]),
                 Req2;
@@ -129,13 +154,12 @@ get_cluster_status(Timeout) ->
             error;
         Nodes ->
             try
-%%                 Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
+                Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
                 NodeManagerStatuses = check_node_managers(Nodes, Timeout),
-%%                 DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
-%%                 WorkerStatuses = check_workers(Nodes, Workers, Timeout),
+                DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
+                WorkerStatuses = check_workers(Nodes, Workers, Timeout),
                 ?dump(NodeManagerStatuses),
-                {ok, _} = temp_calculate_cluster_status(Nodes, NodeManagerStatuses)
-%%                 {ok, _} = calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
+                {ok, _} = calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
             catch
                 Type:Error ->
                     ?error_stacktrace("Unexpected error during healthcheck: ~p:~p", [Type, Error]),
@@ -144,116 +168,41 @@ get_cluster_status(Timeout) ->
     end.
 
 
-temp_calculate_cluster_status(Nodes, NodeManagerStatuses) ->
-    NodeStatuses =
-        lists:map(
-            fun(Node) ->
-                % Calculate node manager and dispatcher statuses
-                % ok - if the state num is the same as in the CCM
-                % out_of_sync - if the state num is other than in the CCM
-                % Error::atom() - if an error of type Error occured
-                NodeManagerStatus =
-                    case proplists:get_value(Node, NodeManagerStatuses) of
-                        ok -> ok;
-                        {error, out_of_sync} -> out_of_sync
-                    end,
-                % The list for each node contains:
-                % node_manager status
-                % request_dispatcher status
-                % workers' statuses, alphabetically
-                ComponentStatuses = [
-                    {?NODE_MANAGER_NAME, NodeManagerStatus}
-                ],
-                % Calculate status of the whole node - it's the same as the worst status of any child
-                % ok > out_of_sync > Other (any other atom means an error)
-                % If any node component has an error, node's status will be 'error'.
-                NodeStatus = lists:foldl(
-                    fun({_, CurrentStatus}, Acc) ->
-                        case {Acc, CurrentStatus} of
-                            {ok, Any} -> Any;
-                            {out_of_sync, ok} -> out_of_sync;
-                            {out_of_sync, Any} -> Any;
-                            {_Error, _} -> error
-                        end
-                    end, ok, ComponentStatuses),
-                {Node, NodeStatus, ComponentStatuses}
-            end, Nodes),
-    AppStatus = lists:foldl(
-        fun({_, CurrentStatus, _}, Acc) ->
-            case {Acc, CurrentStatus} of
-                {ok, Any} -> Any;
-                {out_of_sync, ok} -> out_of_sync;
-                {out_of_sync, Any} -> Any;
-                {_Error, _} -> error
-            end
-        end, ok, NodeStatuses),
-    {ok, {?APP_NAME, AppStatus, lists:usort(NodeStatuses)}}.
-
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a proper term expressing cluster health,
 %% constructing it from statuses of all components.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_cluster_status(Nodes :: [Node], StateNum :: integer(), NodeManagerStatuses :: [{Node, Status}],
+-spec calculate_cluster_status(Nodes :: [Node], NodeManagerStatuses :: [{Node, Status}],
     DistpatcherStatuses :: [{Node, Status}], WorkerStatuses :: [{Node, [{Worker :: atom(), Status}]}]) -> term()
     when Node :: atom(), Status :: ok | out_of_sync | error | atom().
-calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) ->
+calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) ->
     NodeStatuses =
         lists:map(
             fun(Node) ->
-                % Calculate node manager and dispatcher statuses
-                % ok - if the state num is the same as in the CCM
-                % out_of_sync - if the state num is other than in the CCM
-                % Error::atom() - if an error of type Error occured
-                NodeManagerStatus =
-                    case proplists:get_value(Node, NodeManagerStatuses) of
-                        {ok, StateNum} -> ok;
-                        {ok, _} -> out_of_sync;
-                        {error, ErrorDesc1} -> ErrorDesc1
-                    end,
-                RequestDistpatcherStatus =
-                    case proplists:get_value(Node, DistpatcherStatuses) of
-                        {ok, StateNum} -> ok;
-                        {ok, _} -> out_of_sync;
-                        {error, ErrorDesc2} -> ErrorDesc2
-                    end,
-                % Calculate workers' statuses
-                % ok - if the worker returned 'ok'
-                % Error::atom() - if an error of type Error occured
-                MappedWorkerStatuses = lists:map(
-                    fun({WName, WStatus}) ->
-                        MappedStatus = case WStatus of
-                                           ok -> ok;
-                                           {error, ErrorDesc3} -> ErrorDesc3
-                                       end,
-                        {WName, MappedStatus}
-                    end, lists:usort(proplists:get_value(Node, WorkerStatuses))),
-
-                % The list for each node contains:
-                % node_manager status
-                % request_dispatcher status
-                % workers' statuses, alphabetically
-                ComponentStatuses = [
-                    {?NODE_MANAGER_NAME, NodeManagerStatus},
-                    {?DISPATCHER_NAME, RequestDistpatcherStatus} |
-                    MappedWorkerStatuses
+                % Get all statuses for this node
+                % They are all in form:
+                % {ModuleName, ok | out_of_sync | {error, atom()}}
+                AllStatuses = [
+                    {?NODE_MANAGER_NAME, proplists:get_value(Node, NodeManagerStatuses)},
+                    {?DISPATCHER_NAME, proplists:get_value(Node, DistpatcherStatuses)}
+                    | lists:usort(proplists:get_value(Node, WorkerStatuses))
                 ],
                 % Calculate status of the whole node - it's the same as the worst status of any child
-                % ok > out_of_sync > Other (any other atom means an error)
-                % If any node component has an error, node's status will be 'error'.
+                % ok < out_of_sync < error
+                % i. e. if any node component has an error, node's status will be 'error'.
                 NodeStatus = lists:foldl(
                     fun({_, CurrentStatus}, Acc) ->
                         case {Acc, CurrentStatus} of
-                            {ok, Any} -> Any;
-                            {out_of_sync, ok} -> out_of_sync;
-                            {out_of_sync, Any} -> Any;
-                            {_Error, _} -> error
+                            {ok, {error, _}} -> error;
+                            {ok, OkOrOOS} -> OkOrOOS;
+                            {out_of_sync, {error, _}} -> error;
+                            {out_of_sync, _} -> out_of_sync;
+                            _ -> error
                         end
-                    end, ok, ComponentStatuses),
-                {Node, NodeStatus, ComponentStatuses}
+                    end, ok, AllStatuses),
+                {Node, NodeStatus, AllStatuses}
             end, Nodes),
     % Calculate status of the whole application - it's the same as the worst status of any node
     % ok > out_of_sync > Other (any other atom means an error)
@@ -264,7 +213,7 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
                 {ok, Any} -> Any;
                 {out_of_sync, ok} -> out_of_sync;
                 {out_of_sync, Any} -> Any;
-                {_Error, _} -> error
+                _ -> error
             end
         end, ok, NodeStatuses),
     % Sort node statuses by node name
