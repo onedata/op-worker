@@ -122,6 +122,10 @@ init(_) ->
 handle_call(get_nodes, _From, State) ->
     {reply, State#state.nodes, State};
 
+handle_call(get_node_to_sync, _From, State) ->
+    Ans = get_node_to_sync(State),
+    {reply, Ans, State};
+
 handle_call(healthcheck, _From, State) ->
     Ans = healthcheck(State),
     {reply, Ans, State};
@@ -290,7 +294,6 @@ heartbeat(#state{node_states = NodeStates, last_heartbeat = LastHeartbeat} = Sta
     NewNodeStates = [{Node, NodeState} | proplists:delete(Node, NodeStates)],
     NewLastHeartbeat = [{Node, now()} | proplists:delete(Node, LastHeartbeat)],
     State#state{node_states = NewNodeStates, last_heartbeat = NewLastHeartbeat}.
-
 
 %%--------------------------------------------------------------------
 %% @private
