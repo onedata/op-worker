@@ -130,10 +130,6 @@ handle_call(healthcheck, _From, State) ->
     Ans = healthcheck(State),
     {reply, Ans, State};
 
-handle_call(get_node_to_sync, _From, State) ->
-    Ans = get_node_to_sync(State),
-    {reply, Ans, State};
-
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -162,6 +158,7 @@ handle_cast({init_ok, Node}, State) ->
     {noreply, NewState};
 
 handle_cast({heartbeat, NodeState}, State) ->
+    ?dump({heartbeat, NodeState}),
     NewState = heartbeat(State, NodeState),
     {noreply, NewState};
 

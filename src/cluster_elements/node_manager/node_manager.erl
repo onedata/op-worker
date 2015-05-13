@@ -162,7 +162,7 @@ handle_cast(connect_to_ccm, State) ->
     NewState = connect_to_ccm(State),
     {noreply, NewState};
 
-handle_cast(ccm_con_ack, State) ->
+handle_cast(ccm_conn_ack, State) ->
     NewState = ccm_conn_ack(State),
     {noreply, NewState};
 
@@ -274,7 +274,7 @@ connect_to_ccm(State = #state{ccm_con_status = not_connected}) ->
     case (catch init_net_connection(CcmNodes)) of
         ok ->
             ?info("Initializing connection to CCM"),
-            gen_server:cast({global, ?CCM}, {heartbeat, node()}),
+            gen_server:cast({global, ?CCM}, {ccm_conn_req, node()}),
             State#state{ccm_con_status = connected};
         Err ->
             ?debug("No connection with CCM: ~p, retrying in ~p ms", [Err, Interval]),
