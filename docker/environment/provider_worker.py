@@ -99,6 +99,9 @@ def _riak_up(configs, dns_servers, uid):
         db_node_mappings[node] = riak.config_entry(i, uid)
         i += 1
 
+    if i == 0:
+        return db_node_mappings, {}
+
     [dns] = dns_servers
     riak_output = riak.up('onedata/riak', dns, uid, None,
                           len(db_node_mappings))
