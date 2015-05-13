@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements {@link worker_plugin_behaviour} and
 %%% manages a DNS server module.
-%%% In addition, it implements {@link dns_query_handler_behaviour} -
+%%% In addition, it implements {@link dns_handler_behaviour} -
 %%% DNS query handling logic.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -16,7 +16,7 @@
 -author("Lukasz Opiola").
 
 -behaviour(worker_plugin_behaviour).
--behaviour(dns_query_handler_behaviour).
+-behaviour(dns_handler_behaviour).
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -26,7 +26,7 @@
 -record(state, {
     %% This record is usually used in read-only mode to get a list of
     %% nodes to return as DNS response. It is updated periodically by node manager.
-    lb_advice = undefined :: load_balancing:dns_lb_advice(),
+    lb_advice = undefined :: load_balancing:dns_lb_advice() | undefined,
     % Time of last ld advice update received from dispatcher
     last_update = {0, 0, 0} :: {integer(), integer(), integer()}
 }).
@@ -34,7 +34,7 @@
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).
 
-%% dns_query_handler_behaviour callbacks
+%% dns_handler_behaviour callbacks
 -export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
     handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
 
@@ -157,18 +157,16 @@ cleanup() ->
 
 
 %%%===================================================================
-%%% dns_query_handler_behaviour callbacks
+%%% dns_handler_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type A.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_a(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_a(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_a(Domain) ->
     worker_proxy:call(dns_worker, {handle_a, Domain}).
 
@@ -176,12 +174,10 @@ handle_a(Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type NS.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_ns(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_ns(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_ns(Domain) ->
     worker_proxy:call(dns_worker, {handle_ns, Domain}).
 
@@ -189,12 +185,10 @@ handle_ns(Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type CNAME.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cname(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_cname(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_cname(_Domain) ->
     not_impl.
 
@@ -202,12 +196,10 @@ handle_cname(_Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type MX.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_mx(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_mx(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_mx(_Domain) ->
     not_impl.
 
@@ -215,12 +207,10 @@ handle_mx(_Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type SOA.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_soa(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_soa(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_soa(_Domain) ->
     not_impl.
 
@@ -228,12 +218,10 @@ handle_soa(_Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type WKS.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_wks(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_wks(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_wks(_Domain) ->
     not_impl.
 
@@ -241,12 +229,10 @@ handle_wks(_Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type PTR.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_ptr(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_ptr(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_ptr(_Domain) ->
     not_impl.
 
@@ -254,24 +240,20 @@ handle_ptr(_Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type HINFO.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_hinfo(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_hinfo(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_hinfo(_Domain) ->
     not_impl.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type MINFO.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_minfo(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_minfo(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 %% ====================================================================
 handle_minfo(_Domain) ->
     not_impl.
@@ -279,12 +261,10 @@ handle_minfo(_Domain) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles DNS queries of type TXT.
-%% See {@link dns_query_handler_behaviour} for reference.
+%% See {@link dns_handler_behaviour} for reference.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_txt(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
-    dns_query_handler_behaviour:reply_code().
+-spec handle_txt(Domain :: string()) -> dns_handler_behaviour:handler_reply().
 handle_txt(_Domain) ->
     not_impl.
 

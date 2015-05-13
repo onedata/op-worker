@@ -150,16 +150,22 @@ terminate(_Reason, _Req, _State) ->
 %% If CCM cannot be contacted, the function returns 'error' atom.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cluster_status(Timeout :: integer()) -> term().
+-spec get_cluster_status(Timeout :: integer()) -> error | {ok, ClusterStatus} when
+    Status :: healthcheck_response(),
+    ClusterStatus :: {?APP_NAME, Status, NodeStatuses :: [
+        {node(), Status, [
+            {ModuleName :: module(), Status}
+        ]}
+    ]}.
 get_cluster_status(Timeout) ->
     case check_ccm(Timeout) of
         error ->
             error;
         Nodes ->
             try
-                Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
                 NodeManagerStatuses = check_node_managers(Nodes, Timeout),
                 DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
+                Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
                 WorkerStatuses = check_workers(Nodes, Workers, Timeout),
                 {ok, _} = calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
             catch
@@ -176,9 +182,18 @@ get_cluster_status(Timeout) ->
 %% constructing it from statuses of all components.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_cluster_status(Nodes :: [Node], NodeManagerStatuses :: [{Node, Status}],
-    DistpatcherStatuses :: [{Node, Status}], WorkerStatuses :: [{Node, [{Worker :: atom(), Status}]}]) -> term()
-    when Node :: atom(), Status :: ok | out_of_sync | error | atom().
+-spec calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) -> {ok, ClusterStatus} when
+    Nodes :: [Node],
+    NodeManagerStatuses :: [{Node, Status}],
+    DistpatcherStatuses :: [{Node, Status}],
+    WorkerStatuses :: [{Node, [{Worker :: atom(), Status}]}],
+    Node :: node(),
+    Status :: healthcheck_response(),
+    ClusterStatus :: {?APP_NAME, Status, NodeStatuses :: [
+        {node(), Status, [
+            {ModuleName :: module(), Status}
+        ]}
+    ]}.
 calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses) ->
     NodeStatuses =
         lists:map(
@@ -227,8 +242,7 @@ calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, Worker
 %% Contacts CCM for healthcheck and gathers information about cluster state.
 %% @end
 %%--------------------------------------------------------------------
--spec check_ccm(Timeout :: integer()) ->
-    {Nodes :: [node()], StateNum :: integer()} | error.
+-spec check_ccm(Timeout :: integer()) -> Nodes :: [node()] | error.
 check_ccm(Timeout) ->
     try
         {ok, Nodes} = gen_server:call({global, ?CCM}, healthcheck, Timeout),

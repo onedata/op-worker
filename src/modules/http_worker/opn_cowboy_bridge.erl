@@ -701,7 +701,7 @@ get_handler_module() ->
 %% Convenience function that stores the reference to handler pid in process dict.
 %% @end
 %%--------------------------------------------------------------------
--spec set_handler_pid(Pid :: pid()) -> term().
+-spec set_handler_pid(Pid :: pid() | undefined) -> term().
 set_handler_pid(Pid) ->
     erlang:put(handler_pid, Pid).
 
@@ -710,7 +710,7 @@ set_handler_pid(Pid) ->
 %% Convenience function that retrieves the reference to handler pid from process dict.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handler_pid() -> pid().
+-spec get_handler_pid() -> pid() | undefined.
 get_handler_pid() ->
     erlang:get(handler_pid).
 

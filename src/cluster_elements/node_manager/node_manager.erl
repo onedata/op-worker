@@ -331,7 +331,7 @@ do_heartbeat(State) ->
 %% Receives lb advices update from CCM and follows it to DNS worker and dispatcher.
 %% @end
 %%--------------------------------------------------------------------
--spec update_lb_advices(LBAdvices, State :: #state{}) -> #state{} when
+-spec update_lb_advices(State :: #state{}, LBAdvices) -> #state{} when
     LBAdvices :: {load_balancing:dns_lb_advice(), load_balancing:dispatcher_lb_advice()}.
 update_lb_advices(State, {DNSAdvice, DispatcherAdvice}) ->
     gen_server:cast(?DISPATCHER_NAME, {update_lb_advice, DispatcherAdvice}),
