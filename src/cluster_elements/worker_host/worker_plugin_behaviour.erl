@@ -27,7 +27,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback handle(Request :: term(), State :: term()) ->
-    nagios_handler:healthcheck_reponse() | ok | pong | {ok, Answer :: term()} |
+    nagios_handler:healthcheck_response() | ok | pong | {ok, Answer :: term()} |
     {error, Reason :: term()}.
 
 %%--------------------------------------------------------------------

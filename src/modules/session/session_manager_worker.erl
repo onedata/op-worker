@@ -50,7 +50,7 @@ init(_Args) ->
     {get_or_create_session, SessId :: session:id(), Iden :: session:identity(),
         Con :: pid()} |
     {remove_session, SessId :: session:id()},
-    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
     Reason :: term().

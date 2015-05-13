@@ -129,7 +129,7 @@ init([]) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: nagios_handler:healthcheck_reponse() | term(),
+    Reply :: nagios_handler:healthcheck_response() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().

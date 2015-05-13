@@ -23,10 +23,10 @@
 -export([init/3, handle/2, terminate/3]).
 -export([get_cluster_status/1]).
 
--export_type([healthcheck_reponse/0]).
+-export_type([healthcheck_response/0]).
 
 % ErrorDesc will appear in xml as node status.
--type healthcheck_reponse() :: ok | out_of_sync | {error, ErrorDesc :: atom()}.
+-type healthcheck_response() :: ok | out_of_sync | {error, ErrorDesc :: atom()}.
 
 -ifdef(TEST).
 -compile(export_all).
@@ -89,7 +89,11 @@ handle(Req, State) ->
                     fun({Node, NodeStatus, NodeComponents}) ->
                         NodeDetails = lists:map(
                             fun({Component, Status}) ->
-                                {Component, [{status, atom_to_list(Status)}], []}
+                                StatusList = case Status of
+                                                 {error, Desc} -> "error: " ++ atom_to_list(Desc);
+                                                 _ -> atom_to_list(Status)
+                                             end,
+                                {Component, [{status, StatusList}], []}
                             end, NodeComponents),
                         {?APP_NAME, [{name, atom_to_list(Node)}, {status, atom_to_list(NodeStatus)}], NodeDetails}
                     end, NodeStatuses),
@@ -243,7 +247,7 @@ check_ccm(Timeout) ->
 %% Contacts node managers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
 %% @end
 %%--------------------------------------------------------------------
--spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_reponse()].
+-spec check_node_managers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_response()].
 check_node_managers(Nodes, Timeout) ->
     utils:pmap(
         fun(Node) ->
@@ -263,7 +267,7 @@ check_node_managers(Nodes, Timeout) ->
 %% Contacts request dispatchers on given nodes for healthcheck. The check is performed in parallel (one proces per node).
 %% @end
 %%--------------------------------------------------------------------
--spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_reponse()].
+-spec check_dispatchers(Nodes :: [atom()], Timeout :: integer()) -> [healthcheck_response()].
 check_dispatchers(Nodes, Timeout) ->
     utils:pmap(
         fun(Node) ->
@@ -285,7 +289,7 @@ check_dispatchers(Nodes, Timeout) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_workers(Nodes :: [atom()], Workers :: [{Node :: atom(), WorkerName :: atom()}], Timeout :: integer()) ->
-    [{Node :: atom(), [{Worker :: atom(), Status :: healthcheck_reponse()}]}].
+    [{Node :: atom(), [{Worker :: atom(), Status :: healthcheck_response()}]}].
 check_workers(Nodes, Workers, Timeout) ->
     WorkerStatuses = utils:pmap(
         fun({WNode, WName}) ->
