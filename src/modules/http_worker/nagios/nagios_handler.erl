@@ -98,7 +98,6 @@ handle(Req, State) ->
                         {?APP_NAME, [{name, atom_to_list(Node)}, {status, atom_to_list(NodeStatus)}], NodeDetails}
                     end, NodeStatuses),
 
-                ?dump(MappedClusterState),
                 {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
                 DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
 
@@ -162,7 +161,6 @@ get_cluster_status(Timeout) ->
                 NodeManagerStatuses = check_node_managers(Nodes, Timeout),
                 DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
                 WorkerStatuses = check_workers(Nodes, Workers, Timeout),
-                ?dump(NodeManagerStatuses),
                 {ok, _} = calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
             catch
                 Type:Error ->

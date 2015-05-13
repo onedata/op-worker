@@ -167,8 +167,8 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_a(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_a(Domain) ->
     worker_proxy:call(dns_worker, {handle_a, Domain}).
 
@@ -180,8 +180,8 @@ handle_a(Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_ns(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_ns(Domain) ->
     worker_proxy:call(dns_worker, {handle_ns, Domain}).
 
@@ -193,8 +193,8 @@ handle_ns(Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cname(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_cname(_Domain) ->
     not_impl.
 
@@ -206,8 +206,8 @@ handle_cname(_Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_mx(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_mx(_Domain) ->
     not_impl.
 
@@ -219,8 +219,8 @@ handle_mx(_Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_soa(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_soa(_Domain) ->
     not_impl.
 
@@ -232,8 +232,8 @@ handle_soa(_Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_wks(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_wks(_Domain) ->
     not_impl.
 
@@ -245,8 +245,8 @@ handle_wks(_Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_ptr(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_ptr(_Domain) ->
     not_impl.
 
@@ -258,8 +258,8 @@ handle_ptr(_Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_hinfo(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_hinfo(_Domain) ->
     not_impl.
 
@@ -270,8 +270,8 @@ handle_hinfo(_Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_minfo(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 %% ====================================================================
 handle_minfo(_Domain) ->
     not_impl.
@@ -283,8 +283,8 @@ handle_minfo(_Domain) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_txt(Domain :: string()) ->
-    {dns_query_handler_behaviour:reply_type(), dns_query_handler_behaviour:dns_query_handler_response()} |
-    dns_query_handler_behaviour:reply_type().
+    {dns_query_handler_behaviour:reply_code(), dns_query_handler_behaviour:reply_record_list()} |
+    dns_query_handler_behaviour:reply_code().
 handle_txt(_Domain) ->
     not_impl.
 
