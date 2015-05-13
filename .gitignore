@@ -10,6 +10,8 @@
 rel/op_ccm
 rel/test_cluster
 
+test/eunit_results
+
 deps
 doc
 logs

@@ -23,7 +23,8 @@
 -export([start_link/0, stop/0]).
 
 %% gen_event callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+    code_change/3]).
 
 %% This record is used by ccm (it contains its state). It describes
 %% nodes, dispatchers and workers in cluster. It also contains reference
@@ -31,7 +32,6 @@
 -record(cm_state, {
     nodes = [] :: [Node :: node()],
     uninitialized_nodes = [] :: [Node :: node()],
-    workers = [] :: [{Node :: node(), Module :: module(), Args :: term()}],
     state_num = 1 :: integer()
 }).
 
@@ -97,7 +97,8 @@ init(_) ->
 %% Handling call messages
 %% @end
 %%--------------------------------------------------------------------
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result when
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+    State :: term()) -> Result when
     Result :: {reply, Reply, NewState}
     | {reply, Reply, NewState, Timeout}
     | {reply, Reply, NewState, hibernate}
@@ -118,6 +119,10 @@ handle_call(get_nodes, _From, State) ->
 
 handle_call(get_nodes_and_state_num, _From, State) ->
     {reply, {State#cm_state.nodes, State#cm_state.state_num}, State};
+
+handle_call(get_node_to_sync, _From, State) ->
+    Ans = get_node_to_sync(State),
+    {reply, Ans, State};
 
 handle_call(healthcheck, _From, State) ->
     Ans = healthcheck(State),
@@ -226,19 +231,21 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
     ?debug("Heartbeat from node: ~p", [SenderNode]),
     case lists:member(SenderNode, Nodes) or lists:member(SenderNode, InitNodes) of
         true ->
-            gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
+            gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
+                {heartbeat_ok, State#cm_state.state_num}),
             State;
         false ->
             ?info("New node: ~p", [SenderNode]),
             try
-                pong = net_adm:ping(SenderNode),
                 erlang:monitor_node(SenderNode, true),
-                NewInitNodes = [SenderNode | lists:delete(SenderNode, InitNodes)],
-                gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, {heartbeat_ok, State#cm_state.state_num}),
+                NewInitNodes = add_node_to_list(SenderNode, InitNodes),
+                gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
+                    {heartbeat_ok, State#cm_state.state_num}),
                 State#cm_state{uninitialized_nodes = NewInitNodes}
             catch
                 _:Error ->
-                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p", [SenderNode, Error]),
+                    ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p",
+                        [SenderNode, Error]),
                     State
             end
     end.
@@ -250,12 +257,14 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
 %% @end
 %%--------------------------------------------------------------------
 -spec init_ok(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
-init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_num = StateNum}, SenderNode) ->
-    NewInitNodes = lists:delete(SenderNode, InitNodes),
-    NewNodes = [SenderNode | lists:delete(SenderNode, Nodes)],
+init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes,
+    state_num = StateNum}, SenderNode) ->
+    NewInitNodes = InitNodes -- [SenderNode],
+    NewNodes = add_node_to_list(SenderNode, Nodes),
     NewStateNum = StateNum + 1,
     update_node_managers(NewNodes, NewStateNum),
-    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes, state_num = NewStateNum}.
+    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes,
+        state_num = NewStateNum}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -264,7 +273,7 @@ init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_
 %% they are supposed to synchronize
 %% @end
 %%--------------------------------------------------------------------
--spec update_node_managers(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
+-spec update_node_managers(Nodes :: [node()], StateNum:: non_neg_integer()) -> ok.
 update_node_managers(Nodes, NewStateNum) ->
     UpdateNode = fun(Node) ->
         gen_server:cast({?NODE_MANAGER_NAME, Node}, {update_state, NewStateNum})
@@ -274,17 +283,39 @@ update_node_managers(Nodes, NewStateNum) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Clears information about workers on node that is down.
+%% Delete node from active nodes list, change state num and inform everone
 %% @end
 %%--------------------------------------------------------------------
 -spec node_down(Node :: atom(), State :: #cm_state{}) -> #cm_state{}.
-node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_num = StateNum}) ->
+node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes,
+    state_num = StateNum}) ->
     ?error("Node down: ~p", [Node]),
     NewNodes = Nodes -- [Node],
     NewInitNodes = InitNodes -- [Node],
     NewStateNum = StateNum + 1,
     update_node_managers(NewNodes, NewStateNum),
-    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes, state_num = NewStateNum}.
+    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes,
+        state_num = NewStateNum}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get node that can be used by new nodes to synchronize with
+%% (i. e. attach to mnesia cluster). This node should be one of active
+%% nodes of existing cluster, or if there isn't any, the first of nodes
+%% that are initializing.
+%%
+%% In some cases synchronization requires waiting for this node to finish
+%% initialization process. It is up to caller to wait and ensure that he can
+%% safely synchronize.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_node_to_sync(#cm_state{}) -> {ok, node()} | {error, term()}.
+get_node_to_sync(#cm_state{nodes = [], uninitialized_nodes = []}) ->
+    {error, no_nodes_connected};
+get_node_to_sync(#cm_state{nodes = [FirstNode | _]}) ->
+    {ok, FirstNode};
+get_node_to_sync(#cm_state{uninitialized_nodes = [FirstInitNode | _]}) ->
+    {ok, FirstInitNode}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -302,4 +333,16 @@ healthcheck(#cm_state{nodes = Nodes, state_num = StateNum}) ->
         {ok, undefined} ->
             {ok, {Nodes, StateNum}};
         _ -> {error, invalid_worker_num}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add node to list if it's not there
+%% @end
+%%--------------------------------------------------------------------
+-spec add_node_to_list(node(), [node()]) -> [node()].
+add_node_to_list(Node, List) ->
+    case lists:member(Node, List) of
+        true -> List;
+        false -> List ++ [Node]
     end.
