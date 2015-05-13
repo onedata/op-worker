@@ -181,8 +181,8 @@ mixed_cast_test(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId - 1])),
-            ?assertEqual(ok, rpc:call(Worker2, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker1}, ping, {proc, Self}, 2 * MsgId - 1])),
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker2}, ping, {proc, Self}, 2 * MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),
