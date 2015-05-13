@@ -45,7 +45,9 @@ nagios_test(Config) ->
     {Xml, _} = xmerl_scan:string(XMLString),
 
     [MainStatus] = [X#xmlAttribute.value || X <- Xml#xmlElement.attributes, X#xmlAttribute.name == status],
-    ?assertEqual(MainStatus, "ok"),
+    % Whole app status might become out_of_sync in some marginal cases when dns or dispatcher does
+    % not receive update for a long time.
+    ?assert(MainStatus =:= "ok" orelse MainStatus =:= "out_of_sync"),
 
     NodeStatuses = [X || X <- Xml#xmlElement.content, X#xmlElement.name == oneprovider_node],
 
