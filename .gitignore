@@ -16,3 +16,6 @@ deps
 doc
 logs
 ebin
+
+package/
+
