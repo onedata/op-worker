@@ -15,6 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 -define(call(N, M, A), ?call(N, file_meta, M, A)).
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
@@ -26,14 +27,20 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, exec_and_check_time/3]).
 -export([basic_operations_test/1]).
 
--performance({test_cases, []}).
 all() ->
     [basic_operations_test].
+
+-define(REPEATS, 1).
 
 %%%===================================================================
 %%% Tests
 %%%===================================================================
 
+-performance([
+    {repeats, ?REPEATS},
+    {description, "Performs operations on file meta model"},
+    {config, [{name, basic_config}, {description, "Basic config for test"}]}
+]).
 basic_operations_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
@@ -152,7 +159,68 @@ basic_operations_test(Config) ->
 
     ?assertMatch({ok, [U23]}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
 
-    ok.
+    [
+        #parameter{name = create_level_0, value = CreateLevel0, unit = "us",
+            description = "Time of create opertion at root level"},
+        #parameter{name = create_level_1, value = CreateLevel1, unit = "us",
+            description = "Time of create opertion at level 1 (1 dir above file)"},
+        #parameter{name = create_level_2, value = CreateLevel2, unit = "us",
+            description = "Time of create opertion at level 2 (2 dirs above file)"},
+        #parameter{name = create_level_20, value = CreateLevel20, unit = "us",
+            description = "Time of create opertion at level 20 (20 dirs above file)"},
+        #parameter{name = get_level_0, value = GetLevel0, unit = "us",
+            description = "Time of get opertion at root level"},
+        #parameter{name = get_level_1, value = GetLevel1, unit = "us",
+            description = "Time of get opertion at level 1 (1 dir above file)"},
+        #parameter{name = get_level_2, value = GetLevel2, unit = "us",
+            description = "Time of get opertion at level 2 (2 dirs above file)"},
+        #parameter{name = get_level_20, value = GetLevel20, unit = "us",
+            description = "Time of get opertion at level 20 (20 dirs above file)"},
+        #parameter{name = get_path_level_1, value = GetPathLevel1, unit = "us",
+            description = "Time of get path opertion at level 1 (1 dir above file)"},
+        #parameter{name = get_path_level_2, value = GetPathLevel2, unit = "us",
+            description = "Time of get path opertion at level 2 (2 dirs above file)"},
+        #parameter{name = get_path_level_3, value = GetPathLevel3, unit = "us",
+            description = "Time of get path opertion at level 3 (3 dirs above file)"},
+        #parameter{name = getv_pathv_level_20, value = GetPathLevel20, unit = "us",
+            description = "Time of get path opertion at level 20 (20 dirs above file)"},
+        #parameter{name = get_scope_level_0, value = GetScopeLevel0, unit = "us",
+            description = "Time of get scope opertion at root level"},
+        #parameter{name = get_scope_level_1, value = GetScopeLevel1, unit = "us",
+            description = "Time of get scope opertion at level 1 (1 dir above file)"},
+        #parameter{name = get_scope_level_2, value = GetScopeLevel2, unit = "us",
+            description = "Time of get scope opertion at level 2 (2 dirs above file)"},
+        #parameter{name = get_scope_level_20, value = GetScopeLevel20, unit = "us",
+            description = "Time of get scope opertion at level 20 (20 dirs above file)"},
+        #parameter{name = list_uuids_20_100, value = ListUuids20_100, unit = "us",
+            description = "Time of listing 20 uuids in 100file dir at level 4 (4 dirs above file)"},
+        #parameter{name = list_uuids_100_100, value = ListUuids100_100, unit = "us",
+            description = "Time of listing 100 uuids in 100file dir at level 4 (4 dirs above file)"},
+        #parameter{name = list_uuids_1000_100, value = ListUuids1000_100, unit = "us",
+            description = "Time of listing 1000 uuids in 100file dir at level 4 (4 dirs above file)"},
+        #parameter{name = list_uuids_1_100, value = ListUuids1_100, unit = "us",
+            description = "Time of listing 1 uuid in 100file dir at level 4 (4 dirs above file)"},
+        #parameter{name = list_uuids_50_60_100, value = ListUuids50_60_100, unit = "us",
+            description = "Time of listing uuids from 50 to 60 (100 uuids) in 100file dir at level 4 (4 dirs above file)"},
+        #parameter{name = list_uuids_level20, value = ListUuidsLevel20, unit = "us",
+            description = "Time of listing 1 uuid in dir with no children at level 20 (20 dirs above file)"},
+        #parameter{name = exists_false_level4, value = ExistsFalseLevel4, unit = "us",
+            description = "Time of exists opertion at level 4 (4 dirs above file) when file does not exist"},
+        #parameter{name = exists_true_level1, value = ExistsTrueLevel1, unit = "us",
+            description = "Time of exists opertion at root level when file exists"},
+        #parameter{name = exists_true_level4, value = ExistsTrueLevel4, unit = "us",
+            description = "Time of exists opertion at level 4 (4 dirs above file) when file exists"},
+        #parameter{name = exists_true_level20, value = ExistsTrueLevel20, unit = "us",
+            description = "Time of exists opertion at level 4 (4 dirs above file) when file exists"},
+        #parameter{name = delete_ok_path_level4, value = DeleteOkPathLevel4, unit = "us",
+            description = "Time of delete by path opertion at level 4 (4 dirs above file) when file exists"},
+        #parameter{name = delete_ok_uuid_level4, value = DeleteOkUuidLevel4, unit = "us",
+            description = "Time of delete by uuid opertion at level 4 (4 dirs above file) when file exists"},
+        #parameter{name = delete_error_path_level4, value = DeleteErrorPathLevel4, unit = "us",
+            description = "Time of delete by path opertion at level 4 (4 dirs above file) when file does not exist"},
+        #parameter{name = delete_ok_path_level20, value = DeleteOkPathLevel20, unit = "us",
+            description = "Time of delete by path opertion at level 20 (20 dirs above file) when file exists"}
+    ].
 
 
 
