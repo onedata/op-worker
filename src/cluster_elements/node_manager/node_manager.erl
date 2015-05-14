@@ -210,8 +210,11 @@ handle_info({nodedown, Node}, State) ->
         false ->
             ?warning("Node manager received unexpected nodedown msg: ~p", [{nodedown, Node}]);
         true ->
-            ?error("Connection to CCM lost, restarting node"),
-            throw(connection_to_ccm_lost)
+            ok
+            % TODO maybe node_manager should be restarted along with all workers to
+            % avoid desynchronization of modules between nodes.
+%%             ?error("Connection to CCM lost, restarting node"),
+%%             throw(connection_to_ccm_lost)
     end,
     {noreply, State};
 
