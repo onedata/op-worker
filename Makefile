@@ -12,7 +12,7 @@ OVERLAY_VARS    ?=
 
 .PHONY: deps test package
 
-all: rel
+all: test_rel
 
 ##
 ## Rebar targets

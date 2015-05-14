@@ -207,7 +207,7 @@ handle_info({timer, Msg}, State) ->
 handle_info({nodedown, _Node}, State) ->
     ?warning("Connection to CCM lost, restarting node"),
     % Cause node_manager to restart
-    throw(connection_to_ccm_lost),
+%%     throw(connection_to_ccm_lost),
     {noreply, State#state{ccm_con_status = not_connected}};
 
 handle_info(_Request, State) ->
