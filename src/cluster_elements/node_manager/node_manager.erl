@@ -204,11 +204,16 @@ handle_info({timer, Msg}, State) ->
     gen_server:cast(?NODE_MANAGER_NAME, Msg),
     {noreply, State};
 
-handle_info({nodedown, _Node}, State) ->
-    ?warning("Connection to CCM lost, restarting node"),
-    % Cause node_manager to restart
-%%     throw(connection_to_ccm_lost),
-    {noreply, State#state{ccm_con_status = not_connected}};
+handle_info({nodedown, Node}, State) ->
+    {ok, CCMNodes} = application:get_env(?APP_NAME, ccm_nodes),
+    case lists:member(Node, CCMNodes) of
+        false ->
+            ?warning("Node manager received unexpected nodedown msg: ~p", [{nodedown, Node}]);
+        true ->
+            ?error("Connection to CCM lost, restarting node"),
+            throw(connection_to_ccm_lost)
+    end,
+    {noreply, State};
 
 handle_info(_Request, State) ->
     ?log_bad_request(_Request),
