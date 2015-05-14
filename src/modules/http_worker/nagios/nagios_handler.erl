@@ -83,7 +83,6 @@ handle(Req, State) ->
                             end,
                             Status
                     end,
-    ?emergency("cluster_status: ~p", [ClusterStatus]),
     NewReq =
         case ClusterStatus of
             error ->
