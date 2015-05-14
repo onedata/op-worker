@@ -229,12 +229,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% NOTE: currently, all nodes host all workers, so worker type can be omitted.
 %% @end
 %%--------------------------------------------------------------------
--spec get_worker_node(WorkerName :: worker_name()) -> {ok, node()} | {error, term()}.
+-spec get_worker_node(WorkerName :: worker_name()) -> {ok, node()} | {error, worker_not_found}.
 get_worker_node(WorkerName) ->
     case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
         [{?LB_ADVICE_KEY, undefined}] ->
-            ?alert("get_worker_node: ~p", [{error, not_found}]),
-            {error, not_found};
+            ?alert("get_worker_node: ~p", [{error, worker_not_found}]),
+            {error, worker_not_found};
         [{?LB_ADVICE_KEY, LBAdvice}] ->
             Node = load_balancing:choose_node_for_dispatcher(LBAdvice, WorkerName),
             {ok, Node}
@@ -249,12 +249,12 @@ get_worker_node(WorkerName) ->
 %% NOTE: currently, all nodes host all workers, so worker type can be omitted.
 %% @end
 %%--------------------------------------------------------------------
--spec get_worker_nodes(WorkerName :: worker_name()) -> {ok, [node()]} | {error, term()}.
+-spec get_worker_nodes(WorkerName :: worker_name()) -> {ok, [node()]} | {error, worker_not_found}.
 get_worker_nodes(_WorkerName) ->
     case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
         [{?LB_ADVICE_KEY, undefined}] ->
-            ?alert("get_worker_node: ~p", [{error, not_found}]),
-            {error, not_found};
+            ?alert("get_worker_node: ~p", [{error, worker_not_found}]),
+            {error, worker_not_found};
         [{?LB_ADVICE_KEY, LBAdvice}] ->
             Nodes = load_balancing:all_nodes_for_dispatcher(LBAdvice),
             {ok, Nodes}

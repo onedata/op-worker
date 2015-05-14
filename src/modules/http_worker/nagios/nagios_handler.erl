@@ -74,8 +74,12 @@ handle(Req, State) ->
                             Status = get_cluster_status(Timeout),
                             % Save cluster state in cache, but only if there was no error
                             case Status of
-                                error -> skip;
-                                {ok, {?APP_NAME, ok, _}} -> application:set_env(?APP_NAME, nagios_cache, {now(), Status})
+                                error ->
+                                    skip;
+                                {ok, {?APP_NAME, ok, _}} ->
+                                    application:set_env(?APP_NAME, nagios_cache, {now(), Status});
+                                _ ->
+                                    skip
                             end,
                             Status
                     end,
