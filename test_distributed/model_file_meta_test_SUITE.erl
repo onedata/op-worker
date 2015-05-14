@@ -124,8 +124,7 @@ basic_operations_test(Config) ->
     ?assertMatch(100, length(U15_2)),
     ?assertMatch(100, length(U15_3)),
     ?assertMatch(1, length(U15_4)),
-    ct:print("~p~n~p", [U16, lists:sublist(U15_2, 51, 10)]),
-    ?assertMatch(U16, lists:sublist(U15_2, 51, 10)),
+    ?assertMatch(U16, lists:sublist(U15_2, 41, 10)), % list_uuids starts from the end
     ?assertMatch(0, length(UL20_4)),
 
     {AE1, ExistsFalseLevel4} = ?call_with_time(Worker1, exists, [{path, <<"/spaces/Space 1/dir2/file4">>}]),
