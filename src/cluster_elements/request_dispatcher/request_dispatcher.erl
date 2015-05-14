@@ -120,11 +120,17 @@ init(_) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 handle_call(healthcheck, _From, #state{last_update = LastUpdate} = State) ->
-    {ok, Threshold} = application:get_env(?APP_NAME, dns_disp_out_of_sync_threshold),
-    % Threshold is in millisecs, now_diff is in microsecs
-    Reply = case timer:now_diff(now(), LastUpdate) > Threshold * 1000 of
-                true -> out_of_sync;
-                false -> ok
+    % Report error as long as no LB advice has been received.
+    Reply = case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
+                [{?LB_ADVICE_KEY, undefined}] ->
+                    {error, no_lb_advice_received};
+                _ ->
+                    {ok, Threshold} = application:get_env(?APP_NAME, dns_disp_out_of_sync_threshold),
+                    % Threshold is in millisecs, now_diff is in microsecs
+                    case utils:milliseconds_diff(now(), LastUpdate) > Threshold of
+                        true -> out_of_sync;
+                        false -> ok
+                    end
             end,
     {reply, Reply, State};
 

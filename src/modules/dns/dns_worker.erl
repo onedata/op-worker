@@ -311,38 +311,54 @@ parse_domain(DomainArg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck(State :: #state{}) -> ok | {error, Reason :: atom()}.
-healthcheck(#state{last_update = LastUpdate}) ->
-    {ok, Threshold} = application:get_env(?APP_NAME, dns_disp_out_of_sync_threshold),
-    {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
-    % Threshold is in millisecs, now_diff is in microsecs
-    case timer:now_diff(now(), LastUpdate) > Threshold * 1000 of
-        true ->
-            % DNS is out of sync
-            out_of_sync;
-        false ->
-            {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
-            Query = inet_dns:encode(
-                #dns_rec{
-                    header = #dns_header{
-                        id = crypto:rand_uniform(1, 16#FFFF),
-                        opcode = 'query',
-                        rd = true
-                    },
-                    qdlist = [#dns_query{
-                        domain = "localhost",
-                        type = soa,
-                        class = in
-                    }],
-                    arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
-                }),
-            {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-            gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
-            case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
-                {ok, _} ->
-                    % DNS is working
-                    ok;
-                _ ->
-                    % DNS is not working
-                    {error, server_not_responding}
+healthcheck(#state{last_update = LastUpdate, lb_advice = LBAdvice}) ->
+    case LBAdvice of
+        undefined ->
+            {error, no_lb_advice_received};
+        _ ->
+            {ok, Threshold} = application:get_env(?APP_NAME, dns_disp_out_of_sync_threshold),
+            % Threshold is in millisecs, now_diff is in microsecs
+            case timer:now_diff(now(), LastUpdate) > Threshold * 1000 of
+                true ->
+                    % DNS is out of sync
+                    out_of_sync;
+                false ->
+                    % DNS is synced, check if it responds to requests.
+                    check_dns_connectivity()
             end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if DNS server responds to requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_dns_connectivity() -> ok | {error, server_not_responding}.
+check_dns_connectivity() ->
+    {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
+    Query = inet_dns:encode(
+        #dns_rec{
+            header = #dns_header{
+                id = crypto:rand_uniform(1, 16#FFFF),
+                opcode = 'query',
+                rd = true
+            },
+            qdlist = [#dns_query{
+                domain = "localhost",
+                type = soa,
+                class = in
+            }],
+            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
+        }),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
+    case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
+        {ok, _} ->
+            % DNS is working
+            ok;
+        _ ->
+            % DNS is not working
+            {error, server_not_responding}
     end.
