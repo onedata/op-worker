@@ -132,6 +132,7 @@ handle_call(healthcheck, _From, #state{last_update = LastUpdate} = State) ->
                         false -> ok
                     end
             end,
+    ?alert("RD healthcheck: ~p", [Reply]),
     {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
@@ -232,6 +233,7 @@ code_change(_OldVsn, State, _Extra) ->
 get_worker_node(WorkerName) ->
     case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
         [{?LB_ADVICE_KEY, undefined}] ->
+            ?alert("get_worker_node: ~p", [{error, not_found}]),
             {error, not_found};
         [{?LB_ADVICE_KEY, LBAdvice}] ->
             Node = load_balancing:choose_node_for_dispatcher(LBAdvice, WorkerName),
@@ -251,6 +253,7 @@ get_worker_node(WorkerName) ->
 get_worker_nodes(_WorkerName) ->
     case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
         [{?LB_ADVICE_KEY, undefined}] ->
+            ?alert("get_worker_node: ~p", [{error, not_found}]),
             {error, not_found};
         [{?LB_ADVICE_KEY, LBAdvice}] ->
             Nodes = load_balancing:all_nodes_for_dispatcher(LBAdvice),

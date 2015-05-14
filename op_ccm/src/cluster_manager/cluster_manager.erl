@@ -387,7 +387,7 @@ get_node_to_sync(#state{uninitialized_nodes = [FirstInitNode | _]}) ->
     {error, invalid_worker_num}.
 healthcheck(#state{nodes = Nodes}) ->
     case application:get_env(?APP_NAME, worker_num) of
-        {ok, N} when N >= length(Nodes) ->
+        {ok, N} when N =< length(Nodes) ->
             {ok, Nodes};
         {ok, undefined} ->
             {ok, Nodes};

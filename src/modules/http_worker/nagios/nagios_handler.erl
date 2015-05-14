@@ -75,10 +75,11 @@ handle(Req, State) ->
                             % Save cluster state in cache, but only if there was no error
                             case Status of
                                 error -> skip;
-                                _ -> application:set_env(?APP_NAME, nagios_cache, {now(), Status})
+                                {ok, {?APP_NAME, ok, _}} -> application:set_env(?APP_NAME, nagios_cache, {now(), Status})
                             end,
                             Status
                     end,
+    ?emergency("cluster_status: ~p", [ClusterStatus]),
     NewReq =
         case ClusterStatus of
             error ->
