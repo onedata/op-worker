@@ -16,6 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 -define(call(N, M, A), ?call(N, file_meta, M, A)).
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
@@ -30,7 +31,7 @@
 all() ->
     [basic_operations_test].
 
--define(REPEATS, 1).
+-define(REPEATS, 100).
 
 %%%===================================================================
 %%% Tests
