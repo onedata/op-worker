@@ -12,6 +12,7 @@
 #include "testUtils.h"
 
 #include <boost/algorithm/string.hpp>
+#include <boost/filesystem.hpp>
 #include <gtest/gtest.h>
 
 #include <errno.h>
@@ -101,48 +102,41 @@ TEST_F(DirectIOHelperTest, shouldWriteBytes)
     auto bytes_written = p2.get();
     EXPECT_EQ(3, bytes_written);
 
-    std::ifstream f(testFilePath);
+    std::ifstream f(testFilePath.string());
     f >> tmp;
     f.close();
 
     EXPECT_EQ("test_000456789_test", tmp);
 }
 
-TEST_F(DirectIOHelperTest, writeAndRead)
+TEST_F(DirectIOHelperTest, shouldReadBytes)
 {
-    std::string stmp("000");
-    char ctmp[5];
-    auto writeBuf = boost::asio::buffer(stmp);
-    auto readBuf = boost::asio::buffer(ctmp);
+    char stmp[10];
+    auto buf1 = boost::asio::mutable_buffer(stmp, 10);
 
-    auto p1 = proxy->sh_read(testFileId, readBuf, 5, ctx);
-    auto rbuf1 = p1.get();
-    EXPECT_EQ(5, boost::asio::buffer_size(rbuf1));
-    EXPECT_EQ(
-        "12345", std::string(boost::asio::buffer_cast<const char *>(rbuf1),
-                     boost::asio::buffer_size(rbuf1)));
+    auto p2 = proxy->sh_read(testFileId, buf1, 5, ctx);
+    auto buf2 = p2.get();
 
-    auto p2 = proxy->sh_write(testFileId, writeBuf, 5, ctx);
-    auto bytes_written = p2.get();
-    EXPECT_EQ(3, bytes_written);
-
-    auto p3 = proxy->sh_read(testFileId, readBuf, 5, ctx);
-    auto rbuf3 = p3.get();
-    EXPECT_EQ(5, boost::asio::buffer_size(rbuf3));
-    EXPECT_EQ(
-        "00045", std::string(boost::asio::buffer_cast<const char *>(rbuf3),
-                     boost::asio::buffer_size(rbuf3)));
+    EXPECT_EQ(10, boost::asio::buffer_size(buf2));
+    EXPECT_EQ("123456789_", std::string(boost::asio::buffer_cast<const char*>(buf2), boost::asio::buffer_size(buf2)));
 }
 
-TEST_F(DirectIOHelperTest, openAndRelease)
+
+TEST_F(DirectIOHelperTest, shouldOpen)
 {
     auto f1 = proxy->sh_open(testFileId, ctx);
     EXPECT_GT(f1.get(), 0);
     EXPECT_GT(ctx.m_ffi.fh, 0);
+}
+
+TEST_F(DirectIOHelperTest, shouldRelease)
+{
+    auto fd = ::open(testFilePath.c_str(), ctx.m_ffi.flags);
+    ctx.m_ffi.fh = fd;
 
     auto p2 = proxy->sh_release(testFileId, ctx);
     EXPECT_NO_THROW(p2.get());
-    EXPECT_NO_THROW(ctx.m_ffi.fh);
+    EXPECT_EQ(0, ctx.m_ffi.fh);
 }
 
 TEST_F(DirectIOHelperTest, shouldRunSync)
@@ -196,13 +190,22 @@ TEST_F(DirectIOHelperTest, shouldDeleteDir)
     EXPECT_THROW_POSIX_CODE(p.get(), ENOTDIR);
 }
 
-TEST_F(DirectIOHelperTest, symlinkAndReadlink)
+TEST_F(DirectIOHelperTest, shouldMakeSymlink)
 {
     auto p1 = proxy->sh_symlink("/from", "to");
     EXPECT_NO_THROW(p1.get());
 
+    EXPECT_TRUE(boost::filesystem::is_symlink(boost::filesystem::symlink_status((boost::filesystem::path(DIO_TEST_ROOT) / "to"))));
+
+    unlinkOnDIO("to");
+}
+
+TEST_F(DirectIOHelperTest, shouldReadSymlink)
+{
+    ::symlink((boost::filesystem::path(DIO_TEST_ROOT) / "from").c_str(), (boost::filesystem::path(DIO_TEST_ROOT) / "to").c_str());
+
     auto p2 = proxy->sh_readlink("to");
-    EXPECT_EQ(std::string(DIO_TEST_ROOT) + "/from", p2.get());
+    EXPECT_EQ((boost::filesystem::path(DIO_TEST_ROOT) / "from").string(), p2.get());
 
     unlinkOnDIO("to");
 }
