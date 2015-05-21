@@ -305,30 +305,34 @@ link_walk(Level, #document{key = StartKey} = StartDoc, LinkNames, Mode) when is_
 %% @doc
 %% "Walks" from link to link and fetches either all encountered documents (for Mode == get_all - not yet implemted),
 %% or just last document (for Mode == get_leaf). Starts on the document given by key.
+%% In case of Mode == get_leaf, list of all link's uuids is also returned.
 %% @end
 %%--------------------------------------------------------------------
 -spec link_walk(Level :: store_level(), Key :: key(), ModelName :: model_behaviour:model_type(), [link_name()], get_leaf | get_all) ->
-    {ok, document() | [document()]} | link_error() | get_error().
-link_walk(_Level, _Key, _ModelName, _Links, get_all) ->
-    erlang:error(not_inplemented);
-link_walk(Level, Key, ModelName, [LastLink], get_leaf) ->
-    case fetch_link_target(Level, Key, ModelName, LastLink) of
-        {ok, #document{} = Leaf} ->
-            {ok, Leaf};
-        {error, Reason} ->
-            {error, Reason}
-    end;
-link_walk(Level, Key, ModelName, [NextLink | R], get_leaf) ->
-    case fetch_link(Level, Key, ModelName, NextLink) of
-        {ok, {TargetKey, TargetMod}} ->
-            link_walk(Level, TargetKey, TargetMod, R, get_leaf);
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    {ok, {document(), [key()]} | [document()]} | link_error() | get_error().
+link_walk(Level, Key, ModelName, R, Mode) ->
+    link_walk7(Level, Key, ModelName, R, [], Mode).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+link_walk7(_Level, _Key, _ModelName, _Links, _Acc, get_all) ->
+    erlang:error(not_inplemented);
+link_walk7(Level, Key, ModelName, [LastLink], Acc, get_leaf) ->
+    case fetch_link_target(Level, Key, ModelName, LastLink) of
+        {ok, #document{key = LastKey} = Leaf} ->
+            {ok, {Leaf, lists:reverse([LastKey | Acc])}};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+link_walk7(Level, Key, ModelName, [NextLink | R], Acc, get_leaf) ->
+    case fetch_link(Level, Key, ModelName, NextLink) of
+        {ok, {TargetKey, TargetMod}} ->
+            link_walk7(Level, TargetKey, TargetMod, R, [TargetKey | Acc], get_leaf);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 normalize_link_target([]) ->
     [];
@@ -527,6 +531,8 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
     case exec_driver(ModelName, Driver, Method, Args) of
         {error, Reason} ->
             {error, Reason};
+        Result when Method =:= get ->
+            Result;
         _ ->
             exec_driver(ModelName, Rest, Method, Args)
     end;

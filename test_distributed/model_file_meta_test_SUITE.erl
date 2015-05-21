@@ -21,11 +21,11 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([basic_operations_test/1]).
+-export([basic_operations_test/1, rename_test/1]).
 
 -performance({test_cases, []}).
 all() ->
-    [basic_operations_test].
+    [basic_operations_test, rename_test].
 
 %%%===================================================================
 %%% Tests
@@ -121,10 +121,48 @@ basic_operations_test(Config) ->
 
     ?assertMatch({ok, [U23]}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
 
-    io:format(user, "1: ~p~n", [timer:now_diff(E1, S1)]),
+
+    [?call(Worker1, delete, [{uuid, D}]) || D <- [U1, U2, U3, U4, U20, U21, U22, U23]],
 
     ok.
 
+
+rename_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+
+    {A1, U1} = ?call(Worker1, create, [{path, <<"/">>}, #file_meta{name = <<"spaces">>, is_scope = true}]),
+    {A2, U2} = ?call(Worker2, create, [{path, <<"/spaces">>}, #file_meta{name = <<"Space 1">>, is_scope = true}]),
+    {A3, U3} = ?call(Worker2, create, [{path, <<"/spaces">>}, #file_meta{name = <<"Space 2">>, is_scope = true}]),
+    {A4, U4} = ?call(Worker1, create, [{path, <<"/spaces/Space 1">>}, #file_meta{name = <<"d1">>}]),
+    {A5, U5} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1">>}, #file_meta{name = <<"f1">>}]),
+    ?assertMatch({ok, _}, {A1, U1}),
+    ?assertMatch({ok, _}, {A2, U2}),
+    ?assertMatch({ok, _}, {A3, U3}),
+    ?assertMatch({ok, _}, {A4, U4}),
+    ?assertMatch({ok, _}, {A5, U5}),
+
+    {A8, U8} = ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}]),
+    ?assertMatch({ok, _}, {A8, U8}),
+
+    ?assertMatch({ok, _}, ?call(Worker2, rename, [U8, {name, <<"d2">>}])),
+    ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"d2">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
+
+    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {name, <<"d3">>}])),
+    ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"d3">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3">>}])),
+
+    ?assertMatch({ok, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3/f1">>}])),
+
+    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d3">>}, {path, <<"/spaces/Space 1/d2">>}])),
+    ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3">>}])),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"d2">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
+
+    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {path, <<"/spaces/Space 1/d1">>}])),
+    ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"d1">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
+
+    ok.
 
 
 %%%===================================================================
@@ -135,7 +173,8 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+%%     test_node_starter:clean_environment(Config).
+    ok.
 
 %%%===================================================================
 %%% Internal functions

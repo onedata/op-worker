@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_internal.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(ROOT_DIR_UUID, <<"">>).
 -define(ROOT_DIR_NAME, <<"">>).
@@ -24,7 +25,7 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
--export([resolve_path/1, create/2, get_scope/1, list_uuids/3, gen_path/1]).
+-export([resolve_path/1, create/2, get_scope/1, list_uuids/3, gen_path/1, rename/2]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -59,7 +60,7 @@ update(#document{value = #file_meta{}, key = Key}, Diff) ->
     update(Key, Diff);
 update({path, Path}, Diff) ->
     runner(fun() ->
-        {ok, #document{} = Document} = resolve_path(Path),
+        {ok, {#document{} = Document, _}} = resolve_path(Path),
         update(Document, Diff)
     end);
 update(Key, Diff) ->
@@ -87,7 +88,7 @@ create({uuid, ParentUUID}, File) ->
     end);
 create({path, Path}, File) ->
     runner(fun() ->
-        {ok, Parent} = resolve_path(Path),
+        {ok, {Parent, _}} = resolve_path(Path),
         create(Parent, File)
     end);
 create(#document{} = Parent, #file_meta{name = FileName} = File) ->
@@ -116,7 +117,10 @@ get({uuid, Key}) ->
 get(#document{value = #file_meta{}} = Document) ->
     {ok, Document};
 get({path, Path}) ->
-    resolve_path(Path);
+    runner(fun() ->
+        {ok, {Doc, _}} = resolve_path(Path),
+        {ok, Doc}
+    end);
 get(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
                   #file_meta{name = ?ROOT_DIR_NAME, is_scope = true}}};
@@ -139,7 +143,7 @@ delete(#document{value = #file_meta{name = FileName}, key = Key}) ->
     end);
 delete({path, Path}) ->
     runner(fun() ->
-        {ok, #document{} = Document} = resolve_path(Path),
+        {ok, {#document{} = Document, _}} = resolve_path(Path),
         delete(Document)
     end);
 delete(Key) ->
@@ -160,9 +164,11 @@ exists(#document{value = #file_meta{}, key = Key}) ->
     exists(Key);
 exists({path, Path}) ->
     case resolve_path(Path) of
-        {ok, #document{}} ->
+        {ok, {#document{}, _}} ->
             true;
         {error, {not_found, _}} ->
+            false;
+        {error, ghost_file} ->
             false;
         {error, link_not_found} ->
             false
@@ -231,16 +237,87 @@ list_uuids(Entry, Offset, Count) ->
 gen_path({path, Path}) when is_binary(Path) ->
     {ok, Path};
 gen_path(Entry) ->
-    gen_path2(Entry, []).
+    runner(fun() ->
+        gen_path2(Entry, [])
+    end).
 
 
+-spec resolve_path(path()) -> {ok, {datastore:document(), [datastore:key()]}} | datastore:generic_error().
+resolve_path(<<?DIRECTORY_SEPARATOR, Path/binary>>) ->
+    runner(fun() ->
+        case fslogic_path:split(Path) of
+            [] ->
+                {ok, #document{key = RootUUID} = Root} = get(?ROOT_DIR_UUID),
+                {ok, {Root, [RootUUID]}};
+            Tokens ->
+                case datastore:link_walk(disk_only, ?RESPONSE(get(?ROOT_DIR_UUID)), Tokens, get_leaf) of
+                    {ok, {Leaf, KeyPath}} ->
+                        [_ | [RealParentUUID | _]] = lists:reverse([?ROOT_DIR_UUID | KeyPath]),
+                        {ok, {ParentUUID, _}} = datastore:fetch_link(disk_only, Leaf, parent),
+                        case ParentUUID of
+                            RealParentUUID ->
+                                {ok, {Leaf, [?ROOT_DIR_UUID | KeyPath]}};
+                            _ ->
+                                {error, ghost_file}
+                        end;
+                    {error, Reason} ->
+                        {error, Reason}
+                end
+        end
+    end).
 
-
+-spec rename(entry(), {name, binary()} | {path, path()}) -> ok | datastore:generic_error().
+rename({path, Path}, Op) ->
+    runner(fun() ->
+        {ok, {Subj, KeyPath}} = resolve_path(Path),
+        [_ | [ParentUUID | _]] = lists:reverse(KeyPath),
+        rename3(Subj, ParentUUID, Op)
+    end);
+rename(Entry, Op) ->
+    runner(fun() ->
+        {ok, Subj} = get(Entry),
+        {ok, {ParentUUID, _}} = datastore:fetch_link(disk_only, Subj, parent),
+        rename3(Subj, ParentUUID, Op)
+    end).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {name, NewName}) ->
+    {ok, FileUUID} = update(Subject, #{name => NewName}),
+    ok = datastore:add_links(disk_only, ParentUUID, ?MODEL_NAME, {NewName, {FileUUID, ?MODEL_NAME}}),
+    ok = datastore:delete_links(disk_only, ParentUUID, ?MODEL_NAME, OldName),
+    {ok, FileUUID};
+rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, {path, NewPath}) ->
+    NewTokens = fslogic_path:split(NewPath),
+    [NewName | NewParentTokens] = lists:reverse(NewTokens),
+    NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
+    io:format(user, "1: ~p~n", [NewParentPath]),
+    {ok, NewParent} = get(NewParentPath),
+
+    {ok, NewScope} = get_scope(NewParent),
+
+    ok = datastore:add_links(disk_only, NewParent, {NewName, Subject}),
+    {ok, FileUUID} = update(Subject, #{name => NewName}),
+    ok = datastore:delete_links(disk_only, OldParentUUID, ?MODEL_NAME, OldName),
+    ok = datastore:add_links(disk_only, FileUUID, ?MODEL_NAME, {parent, NewParent}),
+
+    ok = update_scopes(Subject, NewScope),
+
+    {ok, FileUUID}.
+
+
+update_scopes(Entry, #document{key = NewScopeUUID} = NewScope) ->
+    {ok, #document{key = OldScopeUUID}} = get_scope(Entry),
+    case OldScopeUUID of
+        NewScopeUUID -> ok;
+        _ ->
+            set_scopes(Entry, NewScope)
+    end.
+
+set_scopes(Entry, #document{key = NewScopeUUID}) ->
+    ok.
 
 -spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error().
 gen_path2(Entry, Acc) ->
@@ -251,16 +328,6 @@ gen_path2(Entry, Acc) ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens])};
         {ok, {ParentUUID, _}} ->
             gen_path2({uuid, ParentUUID}, [Doc | Acc])
-    end.
-
-
--spec resolve_path(path()) -> {ok, datastore:document()} | datastore:generic_error().
-resolve_path(<<?DIRECTORY_SEPARATOR, Path/binary>>) ->
-    case fslogic_path:split(Path) of
-        [] ->
-            get(?ROOT_DIR_UUID);
-        Tokens ->
-            datastore:link_walk(disk_only, ?RESPONSE(get(?ROOT_DIR_UUID)), Tokens, get_leaf)
     end.
 
 
@@ -289,16 +356,20 @@ runner(Block) ->
         Other -> Other
     catch
         error:{badmatch, {error, Reason}} ->
+            ?error_stacktrace("file_meta error: ~p", [Reason]),
             {error, Reason};
         error:{badmatch, {ok, Inv}} ->
             {error, {inavlid_reponse, Inv}};
         error:{badmatch, Reason} ->
+            ?error_stacktrace("file_meta error: ~p", [Reason]),
             {error, Reason};
         error:{case_clause, {error, Reason}} ->
+            ?error_stacktrace("file_meta error: ~p", [Reason]),
             {error, Reason};
         error:{case_clause, {ok, Inv}} ->
             {error, {inavlid_reponse, Inv}};
         error:{case_clause, Reason} ->
+            ?error_stacktrace("file_meta error: ~p", [Reason]),
             {error, Reason}
     end.
 
