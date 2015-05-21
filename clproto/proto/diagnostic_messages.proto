@@ -5,12 +5,15 @@
  * @copyright This software is released under the MIT license cited in
  * 'LICENSE.txt'
  */
+
 package one.clproto;
 
 message Ping {
+  optional bytes data = 1;
 }
 
 message Pong {
+  optional bytes data = 1;
 }
 
 message GetProtocolVersion {
