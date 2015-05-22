@@ -138,12 +138,10 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 -spec get(model_behaviour:model_config(), datastore:key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{name = ModelName} = ModelConfig, Key) ->
-    transaction(fun() ->
-        case mnesia:read(table_name(ModelConfig), Key) of
-            [] -> {error, {not_found, ModelName}};
-            [Value] -> {ok, #document{key = Key, value = strip_key(Value)}}
-        end
-    end).
+    case mnesia:dirty_read(table_name(ModelConfig), Key) of
+        [] -> {error, {not_found, ModelName}};
+        [Value] -> {ok, #document{key = Key, value = strip_key(Value)}}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -265,12 +263,10 @@ delete(#model_config{} = ModelConfig, Key, Pred) ->
 -spec exists(model_behaviour:model_config(), datastore:key()) ->
     {ok, boolean()} | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
-    transaction(fun() ->
-        case mnesia:read(table_name(ModelConfig), Key) of
-            [] -> {ok, false};
-            [_Record] -> {ok, true}
-        end
-    end).
+    case mnesia:dirty_read(table_name(ModelConfig), Key) of
+        [] -> {ok, false};
+        [_Record] -> {ok, true}
+    end.
 
 
 %%--------------------------------------------------------------------
