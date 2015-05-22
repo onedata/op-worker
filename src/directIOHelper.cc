@@ -262,24 +262,10 @@ future_t<boost::asio::mutable_buffer> DirectIOHelper::ash_read(
         std::make_shared<promise_t<boost::asio::mutable_buffer>>();
 
     m_workerService.post([=, &ctx]() {
-        int fd =
-            ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_RDONLY);
-        if (fd == -1) {
-            setPosixError(promise, errno);
-            return;
-        }
-
-        auto res = pread(fd, boost::asio::buffer_cast<char *>(buf),
-            boost::asio::buffer_size(buf), offset);
-        if (res == -1) {
-            setPosixError(promise, errno);
-        }
-        else {
-            promise->set_value(boost::asio::buffer(buf, res));
-        }
-
-        if (ctx.m_ffi.fh <= 0) {
-            close(fd);
+        try {
+            promise->set_value(sh_read(p, buf, offset, ctx));
+        } catch(std::system_error &e) {
+            setPosixError(promise, e.code().value());
         }
     });
 
@@ -292,24 +278,10 @@ future_t<int> DirectIOHelper::ash_write(const boost::filesystem::path &p,
     auto promise = std::make_shared<promise_t<int>>();
 
     m_workerService.post([=, &ctx]() {
-        int fd =
-            ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_WRONLY);
-        if (fd == -1) {
-            setPosixError(promise, errno);
-            //return;
-        }
-
-        auto res = pwrite(fd, boost::asio::buffer_cast<const char *>(buf),
-            boost::asio::buffer_size(buf), offset);
-        if (res == -1) {
-            setPosixError(promise, errno);
-        }
-        else {
-            promise->set_value(res);
-        }
-
-        if (ctx.m_ffi.fh <= 0) {
-            close(fd);
+        try {
+            promise->set_value(sh_write(p, buf, offset, ctx));
+        } catch(std::system_error &e) {
+            setPosixError(promise, e.code().value());
         }
     });
 
