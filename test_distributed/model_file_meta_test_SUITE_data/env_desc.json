@@ -17,7 +17,6 @@
             }
         }
     },
-
     "oneprovider_node": {
         "config": {
             "input_dir": "rel/oneprovider_node",

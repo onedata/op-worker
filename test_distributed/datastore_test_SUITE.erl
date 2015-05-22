@@ -223,8 +223,8 @@ link_walk_test(Config) ->
     Res0 = ?call_store(Worker1, link_walk, [Level, Doc1, [some, link], get_leaf]),
     Res1 = ?call_store(Worker2, link_walk, [Level, Doc1, [some, parent], get_leaf]),
 
-    ?assertMatch({ok, {{#document{key = k3, value = #some_record{field1 = 3}}}, [k2, k3]}}, Res0),
-    ?assertMatch({ok, {{#document{key = k1, value = #some_record{field1 = 1}}}, [k2, k1]}}, Res1),
+    ?assertMatch({ok, {#document{key = k3, value = #some_record{field1 = 3}}, [k2, k3]}}, Res0),
+    ?assertMatch({ok, {#document{key = k1, value = #some_record{field1 = 1}}, [k2, k1]}}, Res1),
 
     ok.
 
