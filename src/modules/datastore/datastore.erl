@@ -533,6 +533,8 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
             {error, Reason};
         Result when Method =:= get ->
             Result;
+        {ok, true} = Result when Method =:= exists ->
+            Result;
         _ ->
             exec_driver(ModelName, Rest, Method, Args)
     end;
