@@ -100,7 +100,7 @@ maybe_handle_fuse_message(CTX, RequestBody) ->
                     {ok, {reroute, RerouteToProvider, RequestBody1}} ->
                         RemoteResponse = undefined, %% @todo: implement message rerouting
                         {ok, RemoteResponse};
-                    %% @todo: uncomment those lines after implementing slogic_remote:prerouting/3
+                    %% @todo: uncomment those lines after implementing fslogic_remote:prerouting/3
 %%                     {ok, {response, Response}} -> %% Do not handle this request and return custom response
 %%                         {ok, Response};
                     {error, PreRouteError} ->

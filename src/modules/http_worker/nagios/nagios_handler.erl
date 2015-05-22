@@ -15,6 +15,7 @@
 -behaviour(cowboy_http_handler).
 
 -include("global_definitions.hrl").
+-include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -125,8 +126,9 @@ get_cluster_status(Timeout) ->
     case check_ccm(Timeout) of
         error ->
             error;
-        {Nodes, Workers, StateNum} ->
+        {Nodes, StateNum} ->
             try
+                Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
                 NodeManagerStatuses = check_node_managers(Nodes, Timeout),
                 DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
                 WorkerStatuses = check_workers(Nodes, Workers, Timeout),
@@ -224,15 +226,15 @@ calculate_cluster_status(Nodes, StateNum, NodeManagerStatuses, DistpatcherStatus
 %% Contacts CCM for healthcheck and gathers information about cluster state.
 %% @end
 %%--------------------------------------------------------------------
--spec check_ccm(Timeout :: integer()) -> {Nodes :: [Node], Workers :: [{Node, WorkerName :: atom()}], StateNum :: integer()} | error
-    when Node :: atom().
+-spec check_ccm(Timeout :: integer()) ->
+    {Nodes :: [node()], StateNum :: integer()} | error.
 check_ccm(Timeout) ->
     try
-        {ok, {Nodes, Workers, StateNum}} = gen_server:call({global, ?CCM}, healthcheck, Timeout),
-        {Nodes, Workers, StateNum}
+        {ok, {Nodes, StateNum}} = gen_server:call({global, ?CCM}, healthcheck, Timeout),
+        {Nodes, StateNum}
     catch
         Type:Error ->
-            ?error("CCM connection error during healthcheck: ~p:~p", [Type, Error]),
+            ?error("CCM error during healthcheck: ~p:~p", [Type, Error]),
             error
     end.
 

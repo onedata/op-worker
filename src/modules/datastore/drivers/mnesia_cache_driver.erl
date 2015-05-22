@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 -behaviour(store_driver_behaviour).
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_internal_def.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -19,8 +20,10 @@
 %% Batch size for list operation
 -define(LIST_BATCH_SIZE, 100).
 
+-define(MNESIA_WAIT_TIMEOUT, timer:seconds(20)).
+
 %% store_driver_behaviour callbacks
--export([init_bucket/2, healthcheck/1]).
+-export([init_bucket/3, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
@@ -33,15 +36,15 @@
 %% {@link store_driver_behaviour} callback init_bucket/2.
 %% @end
 %%--------------------------------------------------------------------
--spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()]) -> ok.
-init_bucket(_BucketName, Models) ->
+-spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()], NodeToSync :: node()) -> ok.
+init_bucket(_BucketName, Models, NodeToSync) ->
     lists:foreach( %% model
         fun(#model_config{name = ModelName, fields = Fields}) ->
             Node = node(),
             Table = table_name(ModelName),
-            case get_active_nodes(Table) of
-                [] -> %% No mnesia nodes -> create new table
-                    case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
+            case NodeToSync == Node of
+                true -> %% No mnesia nodes -> create new table
+                    Ans = case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
                         {ram_copies, [Node]}, {type, set}]) of
                         {atomic, ok} -> ok;
                         {aborted, {already_exists, Table}} ->
@@ -49,13 +52,17 @@ init_bucket(_BucketName, Models) ->
                         {aborted, Reason} ->
                             ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
                             throw(Reason)
-                    end;
-                [MnesiaNode | _] -> %% there is at least one mnesia node -> join cluster
-                    case rpc:call(MnesiaNode, mnesia, change_config, [extra_db_nodes, [Node]]) of
+                    end,
+                    ?info("Creating mnesia table: ~p, result: ~p", [table_name(ModelName), Ans]),
+                    Ans;
+                _ -> %% there is at least one mnesia node -> join cluster
+                    Tables = [table_name(ModelName) || ModelName <- ?MODELS],
+                    ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, ?MNESIA_WAIT_TIMEOUT]),
+                    case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
-                            case rpc:call(MnesiaNode, mnesia, add_table_copy, [Table, Node, ram_copies]) of
+                            case rpc:call(NodeToSync, mnesia, add_table_copy, [Table, Node, ram_copies]) of
                                 {atomic, ok} ->
-                                    ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, MnesiaNode, node()]);
+                                    ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, NodeToSync, node()]);
                                 {aborted, Reason} ->
                                     ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
                             end,
@@ -272,8 +279,22 @@ exists(#model_config{} = ModelConfig, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
-healthcheck(_) ->
-    ok.
+healthcheck(State) ->
+    maps:fold(
+        fun
+            (_, #model_config{name = ModelName}, ok) ->
+                case mnesia:table_info(table_name(ModelName), where_to_write) of
+                    Nodes when is_list(Nodes) ->
+                        case lists:member(node(), Nodes) of
+                            true -> ok;
+                            false ->
+                                {error, {no_active_mnesia_table, table_name(ModelName)}}
+                        end;
+                    {error, Error} -> {error, Error};
+                    Error -> {error, Error}
+                end;
+            (_, _, Acc) -> Acc
+        end, ok, State).
 
 %%%===================================================================
 %%% Internal functions
@@ -338,16 +359,3 @@ transaction(Fun) ->
         {aborted, Reason} ->
             {error, Reason}
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets all active Mnesia nodes which have given Table.
-%% @end
-%%--------------------------------------------------------------------
--spec get_active_nodes(Table :: atom()) -> [Node :: atom()].
-get_active_nodes(Table) ->
-    {Replies0, _} = rpc:multicall(nodes(), mnesia, table_info, [Table, where_to_commit]),
-    Replies1 = lists:flatten(Replies0),
-    Replies2 = [Node || {Node, ram_copies} <- Replies1],
-    lists:usort(Replies2).
