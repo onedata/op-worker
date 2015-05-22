@@ -29,7 +29,6 @@
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ]
                 }
@@ -40,7 +39,6 @@
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "node_type": "worker",
                     "ccm_nodes": [ "ccm@"],
                     "db_nodes": [ "127.0.0.1:49161" ]
                 }
