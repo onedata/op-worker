@@ -33,44 +33,51 @@ public:
      */
     DirectIOHelper(const ArgsMap &, boost::asio::io_service &service);
 
-    boost::future<struct stat> sh_getattr(const boost::filesystem::path &p);
-    boost::future<void> sh_access(const boost::filesystem::path &p, int mask);
-    boost::future<std::string> sh_readlink(const boost::filesystem::path &p);
-    boost::future<std::vector<std::string>> sh_readdir(
+    future_t<struct stat> ash_getattr(const boost::filesystem::path &p);
+    future_t<void> ash_access(const boost::filesystem::path &p, int mask);
+    future_t<std::string> ash_readlink(const boost::filesystem::path &p);
+    future_t<std::vector<std::string>> ash_readdir(
         const boost::filesystem::path &p, off_t offset, size_t count,
         CTXRef ctx);
-    boost::future<void> sh_mknod(
+    future_t<void> ash_mknod(
         const boost::filesystem::path &p, mode_t mode, dev_t rdev);
-    boost::future<void> sh_mkdir(const boost::filesystem::path &p, mode_t mode);
-    boost::future<void> sh_unlink(const boost::filesystem::path &p);
-    boost::future<void> sh_rmdir(const boost::filesystem::path &p);
-    boost::future<void> sh_symlink(
+    future_t<void> ash_mkdir(const boost::filesystem::path &p, mode_t mode);
+    future_t<void> ash_unlink(const boost::filesystem::path &p);
+    future_t<void> ash_rmdir(const boost::filesystem::path &p);
+    future_t<void> ash_symlink(
         const boost::filesystem::path &from, const boost::filesystem::path &to);
-    boost::future<void> sh_rename(
+    future_t<void> ash_rename(
         const boost::filesystem::path &from, const boost::filesystem::path &to);
-    boost::future<void> sh_link(
+    future_t<void> ash_link(
         const boost::filesystem::path &from, const boost::filesystem::path &to);
-    boost::future<void> sh_chmod(const boost::filesystem::path &p, mode_t mode);
-    boost::future<void> sh_chown(
+    future_t<void> ash_chmod(const boost::filesystem::path &p, mode_t mode);
+    future_t<void> ash_chown(
         const boost::filesystem::path &p, uid_t uid, gid_t gid);
-    boost::future<void> sh_truncate(
+    future_t<void> ash_truncate(
         const boost::filesystem::path &p, off_t size);
 
-    boost::future<int> sh_open(const boost::filesystem::path &p, CTXRef ctx);
-    boost::future<boost::asio::mutable_buffer> sh_read(
+    future_t<int> ash_open(const boost::filesystem::path &p, CTXRef ctx);
+    future_t<boost::asio::mutable_buffer> ash_read(
         const boost::filesystem::path &p, boost::asio::mutable_buffer buf,
         off_t offset, CTXRef ctx);
-    boost::future<int> sh_write(const boost::filesystem::path &p,
+    future_t<int> ash_write(const boost::filesystem::path &p,
         boost::asio::const_buffer buf, off_t offset, CTXRef ctx);
-    boost::future<void> sh_release(
+    future_t<void> ash_release(
         const boost::filesystem::path &p, CTXRef ctx);
-    boost::future<void> sh_flush(const boost::filesystem::path &p, CTXRef ctx);
-    boost::future<void> sh_fsync(
+    future_t<void> ash_flush(const boost::filesystem::path &p, CTXRef ctx);
+    future_t<void> ash_fsync(
         const boost::filesystem::path &p, int isdatasync, CTXRef ctx);
+
+
+    boost::asio::mutable_buffer sh_read(
+        const boost::filesystem::path &p, boost::asio::mutable_buffer buf,
+        off_t offset, CTXRef ctx);
+    int sh_write(const boost::filesystem::path &p,
+        boost::asio::const_buffer buf, off_t offset, CTXRef ctx);
 
 protected:
     template <class Result, typename... Args1, typename... Args2>
-    static void setResult(std::shared_ptr<boost::promise<void>> p,
+    static void setResult(std::shared_ptr<promise_t<void>> p,
         Result (*fun)(Args2...), Args1 &&... args)
     {
         auto posixStatus = fun(std::forward<Args1>(args)...);

@@ -24,6 +24,7 @@
 #include <vector>
 #include <memory>
 #include <system_error>
+#include <future>
 
 namespace one {
 namespace helpers {
@@ -40,6 +41,9 @@ struct StorageHelperCTX {
 
 using CTXRef = StorageHelperCTX &;
 
+template<class T> using future_t = boost::future<T>;
+template<class T> using promise_t = boost::promise<T>;
+
 /**
  * The IStorageHelper interface.
  * Base class of all storage helpers. Unifies their interface.
@@ -52,47 +56,54 @@ public:
 
     virtual ~IStorageHelper() = default;
 
-    virtual boost::future<struct stat> sh_getattr(
+    virtual future_t<struct stat> ash_getattr(
         const boost::filesystem::path &p) = 0;
-    virtual boost::future<void> sh_access(
+    virtual future_t<void> ash_access(
         const boost::filesystem::path &p, int mask) = 0;
-    virtual boost::future<std::string> sh_readlink(
+    virtual future_t<std::string> ash_readlink(
         const boost::filesystem::path &p) = 0;
-    virtual boost::future<std::vector<std::string>> sh_readdir(
+    virtual future_t<std::vector<std::string>> ash_readdir(
         const boost::filesystem::path &p, off_t offset, size_t count,
         CTXRef ctx) = 0;
-    virtual boost::future<void> sh_mknod(
+    virtual future_t<void> ash_mknod(
         const boost::filesystem::path &p, mode_t mode, dev_t rdev) = 0;
-    virtual boost::future<void> sh_mkdir(
+    virtual future_t<void> ash_mkdir(
         const boost::filesystem::path &p, mode_t mode) = 0;
-    virtual boost::future<void> sh_unlink(const boost::filesystem::path &p) = 0;
-    virtual boost::future<void> sh_rmdir(const boost::filesystem::path &p) = 0;
-    virtual boost::future<void> sh_symlink(const boost::filesystem::path &from,
+    virtual future_t<void> ash_unlink(const boost::filesystem::path &p) = 0;
+    virtual future_t<void> ash_rmdir(const boost::filesystem::path &p) = 0;
+    virtual future_t<void> ash_symlink(const boost::filesystem::path &from,
         const boost::filesystem::path &to) = 0;
-    virtual boost::future<void> sh_rename(const boost::filesystem::path &from,
+    virtual future_t<void> ash_rename(const boost::filesystem::path &from,
         const boost::filesystem::path &to) = 0;
-    virtual boost::future<void> sh_link(const boost::filesystem::path &from,
+    virtual future_t<void> ash_link(const boost::filesystem::path &from,
         const boost::filesystem::path &to) = 0;
-    virtual boost::future<void> sh_chmod(
+    virtual future_t<void> ash_chmod(
         const boost::filesystem::path &p, mode_t mode) = 0;
-    virtual boost::future<void> sh_chown(
+    virtual future_t<void> ash_chown(
         const boost::filesystem::path &p, uid_t uid, gid_t gid) = 0;
-    virtual boost::future<void> sh_truncate(
+    virtual future_t<void> ash_truncate(
         const boost::filesystem::path &p, off_t size) = 0;
 
-    virtual boost::future<int> sh_open(
+    virtual future_t<int> ash_open(
         const boost::filesystem::path &p, CTXRef ctx) = 0;
-    virtual boost::future<boost::asio::mutable_buffer> sh_read(
+    virtual future_t<boost::asio::mutable_buffer> ash_read(
         const boost::filesystem::path &p, boost::asio::mutable_buffer buf,
         off_t offset, CTXRef ctx) = 0;
-    virtual boost::future<int> sh_write(const boost::filesystem::path &p,
+    virtual future_t<int> ash_write(const boost::filesystem::path &p,
         boost::asio::const_buffer buf, off_t offset, CTXRef ctx) = 0;
-    virtual boost::future<void> sh_release(
+    virtual future_t<void> ash_release(
         const boost::filesystem::path &p, CTXRef ctx) = 0;
-    virtual boost::future<void> sh_flush(
+    virtual future_t<void> ash_flush(
         const boost::filesystem::path &p, CTXRef ctx) = 0;
-    virtual boost::future<void> sh_fsync(
+    virtual future_t<void> ash_fsync(
         const boost::filesystem::path &p, int isdatasync, CTXRef ctx) = 0;
+
+
+    virtual boost::asio::mutable_buffer sh_read(
+        const boost::filesystem::path &p, boost::asio::mutable_buffer buf,
+        off_t offset, CTXRef ctx) = 0;
+    virtual int sh_write(const boost::filesystem::path &p,
+        boost::asio::const_buffer buf, off_t offset, CTXRef ctx) = 0;
 
 protected:
     template <class T>
@@ -100,6 +111,13 @@ protected:
         std::shared_ptr<boost::promise<T>> p, int posixCode)
     {
         p->set_exception(makePosixError(posixCode));
+    }
+
+    template <class T>
+    static void setPosixError(
+        std::shared_ptr<std::promise<T>> p, int posixCode)
+    {
+        p->set_exception(std::make_exception_ptr(makePosixError(posixCode)));
     }
 
     static std::system_error makePosixError(int posixCode)
