@@ -168,6 +168,6 @@ fetch(Token = #token{}) ->
 get_or_fetch(Cred) ->
     case identity:get(Cred) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, missing_or_deleted}} -> fetch(Cred);
+        {error, {not_found, _}} -> fetch(Cred);
         Error -> Error
     end.
