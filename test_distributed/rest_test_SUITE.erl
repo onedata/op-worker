@@ -24,8 +24,9 @@
 
 -export([rest_token_auth/1, rest_cert_auth/1]).
 
+%todo reenable rest_cert_auth after appmock repair
 -performance({test_cases, []}).
-all() -> [rest_token_auth, rest_cert_auth].
+all() -> [rest_token_auth].
 
 -define(TOKEN, "TOKEN").
 
@@ -71,8 +72,7 @@ rest_cert_auth(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
-    Config2 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    Config2.
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

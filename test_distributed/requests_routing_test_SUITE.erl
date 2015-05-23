@@ -37,27 +37,31 @@ all() ->
 
 -performance([
     {repeats, ?REPEATS},
-    {config, [{name, simple_call}]}
+    {description, "Performs one worker_proxy call per use case"},
+    {config, [{name, simple_call}, {description, "Basic config for test"}]}
 ]).
 simple_call_test(Config) ->
-    [Ccm] = ?config(op_ccm_nodes, Config),
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     T1 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
     T2 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker1}, ping, ?REQUEST_TIMEOUT])),
     T3 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Ccm, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker2}, ping, ?REQUEST_TIMEOUT])),
     T4 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
     T5 = os:timestamp(),
 
     [
-        #parameter{name = redirect_random, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
-        #parameter{name = direct_random, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
-        #parameter{name = redirect_prefer_local, value = utils:milliseconds_diff(T4, T3), unit = "ms"},
-        #parameter{name = direct_prefer_local, value = utils:milliseconds_diff(T5, T4), unit = "ms"}
+        #parameter{name = redirect_random, value = utils:milliseconds_diff(T2, T1), unit = "ms",
+            description = "Time of call with 'random' argument set"},
+        #parameter{name = direct_random, value = utils:milliseconds_diff(T3, T2), unit = "ms",
+            description = "Time of call with default arguments processed locally"},
+        #parameter{name = redirect_prefer_local, value = utils:milliseconds_diff(T4, T3), unit = "ms",
+            description = "Time of call with default arguments delegated to other node"},
+        #parameter{name = direct_prefer_local, value = utils:milliseconds_diff(T5, T4), unit = "ms",
+            description = "Time of call with 'prefer_local' argument set"}
     ].
 
 %%%===================================================================
@@ -65,18 +69,20 @@ simple_call_test(Config) ->
 -performance([
     {repeats, ?REPEATS},
     {parameters, [
-        [{name, proc_num}, {value, 10}],
-        [{name, proc_repeats}, {value, 10}]
+        [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
+        [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
+    {description, "Performs many one worker_proxy calls with 'prefer_local' argument set, using many threads"},
     {config, [{name, direct_cast},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "Basic config for test"}
     ]}
 ]).
 direct_cast_test(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ProcSendNum = ?config(proc_repeats, Config),
     ProcNum = ?config(proc_num, Config),
 
@@ -96,32 +102,35 @@ direct_cast_test(Config) ->
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    #parameter{name = routing_time, value = Times, unit = "ms"}.
+    #parameter{name = routing_time, value = Times, unit = "ms",
+        description = "Aggregated time of all calls with 'prefer_local' argument set"}.
 
 %%%===================================================================
 
 -performance([
     {repeats, ?REPEATS},
     {parameters, [
-        [{name, proc_num}, {value, 10}],
-        [{name, proc_repeats}, {value, 10}]
+        [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
+        [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
+    {description, "Performs many one worker_proxy calls with default arguments but delegated to other node, using many threads"},
     {config, [{name, redirect_cast},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "Basic config for test"}
     ]}
 ]).
 redirect_cast_test(Config) ->
-    [Ccm] = ?config(op_ccm_nodes, Config),
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     ProcSendNum = ?config(proc_repeats, Config),
     ProcNum = ?config(proc_num, Config),
 
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, random]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker2}, ping, {proc, Self}, MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),
@@ -134,46 +143,50 @@ redirect_cast_test(Config) ->
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    #parameter{name = routing_time, value = Times, unit = "ms"}.
+    #parameter{name = routing_time, value = Times, unit = "ms",
+        description = "Aggregated time of all calls with default arguments but delegated to other node"}.
 
 %%%===================================================================
 
 -performance([
     {repeats, ?REPEATS},
     {parameters, [
-        [{name, proc_num}, {value, 10}],
-        [{name, proc_repeats}, {value, 10}]
+        [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
+        [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
+    {description, "Performs many one worker_proxy calls with various arguments"},
     {config, [{name, short_procs},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 1}]
-        ]}
+        ]},
+        {description, "Multiple threads, each thread does only one operation of each type"}
     ]},
     {config, [{name, one_proc},
         {parameters, [
             [{name, proc_num}, {value, 1}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "One thread does many operations"}
     ]},
     {config, [{name, long_procs},
         {parameters, [
             [{name, proc_num}, {value, 100}],
             [{name, proc_repeats}, {value, 100}]
-        ]}
+        ]},
+        {description, "Many threads do many operations"}
     ]}
 ]).
 mixed_cast_test(Config) ->
-    [Ccm] = ?config(op_ccm_nodes, Config),
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     ProcSendNum = ?config(proc_repeats, Config),
     ProcNum = ?config(proc_num, Config),
 
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Ccm, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId - 1, random])),
-            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId, prefer_local]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId - 1, random])),
+            ?assertEqual(ok, rpc:call(Worker2, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId, prefer_local]))
         end,
 
         BeforeProcessing = os:timestamp(),
@@ -186,7 +199,8 @@ mixed_cast_test(Config) ->
     Ans = spawn_and_check(TestProc, ProcNum),
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
-    #parameter{name = routing_time, value = Times, unit = "ms"}.
+    #parameter{name = routing_time, value = Times, unit = "ms",
+        description = "Aggregated time of all calls"}.
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -16,7 +16,6 @@
 
 -include("modules_and_args.hrl").
 -include("global_definitions.hrl").
--include("cluster_elements/request_dispatcher/request_dispatcher_state.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
@@ -25,6 +24,9 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+
+%% This record is used by requests_dispatcher (it contains its state).
+-record(dispatcher_state, {state_num = 0 :: integer()}).
 
 %%%===================================================================
 %%% API
@@ -199,9 +201,9 @@ check_state(State = #dispatcher_state{state_num = StateNum}, NewStateNum) when S
     State;
 check_state(State, _) ->
     ?info("Dispatcher had old state number, starting update"),
-    try gen_server:call({global, ?CCM}, get_workers) of
-        {WorkersList, StateNum} ->
-            worker_map:update_workers(WorkersList),
+    try gen_server:call({global, ?CCM}, get_nodes_and_state_num) of
+        {Nodes, StateNum} ->
+            worker_map:update_workers([{Worker, Nodes} || Worker <- ?MODULES]),
             gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, StateNum}),
             ?info("Dispatcher state updated, state num: ~p", [StateNum]),
             State#dispatcher_state{state_num = StateNum}

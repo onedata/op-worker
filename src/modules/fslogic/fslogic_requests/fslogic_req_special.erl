@@ -34,6 +34,7 @@ mkdir(_, _Path, _Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc Lists directory. Start with ROffset entity and limit returned list to RCount size.
+%% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir(fslogic:ctx(), File :: fslogic:file(), ROffset :: non_neg_integer(), RCount :: non_neg_integer()) ->
@@ -54,6 +55,7 @@ link(_, _File, LinkValue) ->
 
 %%--------------------------------------------------------------------
 %% @doc Gets value of symbolic link.
+%% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
 -spec read_link(fslogic:ctx(), File :: fslogic:file()) ->

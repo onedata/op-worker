@@ -67,7 +67,7 @@
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
--export([configs_per_bucket/1, ensure_state_loaded/0]).
+-export([configs_per_bucket/1, ensure_state_loaded/1]).
 
 %%%===================================================================
 %%% API
@@ -138,9 +138,9 @@ list(Level, ModelName, Fun, AccIn) ->
 delete(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
-            spawn(fun() -> delete_links(disk_only, Key, ModelName, all) end),
-            spawn(fun() -> delete_links(global_only, Key, ModelName, all) end),
-            spawn(fun() -> delete_links(local_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(disk_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(global_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(local_only, Key, ModelName, all) end),
             ok;
         {error, Reason} ->
             {error, Reason}
@@ -305,30 +305,34 @@ link_walk(Level, #document{key = StartKey} = StartDoc, LinkNames, Mode) when is_
 %% @doc
 %% "Walks" from link to link and fetches either all encountered documents (for Mode == get_all - not yet implemted),
 %% or just last document (for Mode == get_leaf). Starts on the document given by key.
+%% In case of Mode == get_leaf, list of all link's uuids is also returned.
 %% @end
 %%--------------------------------------------------------------------
 -spec link_walk(Level :: store_level(), Key :: key(), ModelName :: model_behaviour:model_type(), [link_name()], get_leaf | get_all) ->
-    {ok, document() | [document()]} | link_error() | get_error().
-link_walk(_Level, _Key, _ModelName, _Links, get_all) ->
-    erlang:error(not_inplemented);
-link_walk(Level, Key, ModelName, [LastLink], get_leaf) ->
-    case fetch_link_target(Level, Key, ModelName, LastLink) of
-        {ok, #document{} = Leaf} ->
-            {ok, Leaf};
-        {error, Reason} ->
-            {error, Reason}
-    end;
-link_walk(Level, Key, ModelName, [NextLink | R], get_leaf) ->
-    case fetch_link(Level, Key, ModelName, NextLink) of
-        {ok, {TargetKey, TargetMod}} ->
-            link_walk(Level, TargetKey, TargetMod, R, get_leaf);
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    {ok, {document(), [key()]} | [document()]} | link_error() | get_error().
+link_walk(Level, Key, ModelName, R, Mode) ->
+    link_walk7(Level, Key, ModelName, R, [], Mode).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+link_walk7(_Level, _Key, _ModelName, _Links, _Acc, get_all) ->
+    erlang:error(not_inplemented);
+link_walk7(Level, Key, ModelName, [LastLink], Acc, get_leaf) ->
+    case fetch_link_target(Level, Key, ModelName, LastLink) of
+        {ok, #document{key = LastKey} = Leaf} ->
+            {ok, {Leaf, lists:reverse([LastKey | Acc])}};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+link_walk7(Level, Key, ModelName, [NextLink | R], Acc, get_leaf) ->
+    case fetch_link(Level, Key, ModelName, NextLink) of
+        {ok, {TargetKey, TargetMod}} ->
+            link_walk7(Level, TargetKey, TargetMod, R, [TargetKey | Acc], get_leaf);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 normalize_link_target([]) ->
     [];
@@ -437,8 +441,7 @@ load_local_state(Models) ->
     #{bucket() => [model_behaviour:model_config()]}.
 configs_per_bucket(Configs) ->
     lists:foldl(
-        fun(ModelConfig, Acc) ->
-            #model_config{bucket = Bucket} = ModelConfig,
+        fun(#model_config{bucket = Bucket} = ModelConfig, Acc) ->
             maps:put(Bucket, [ModelConfig | maps:get(Bucket, Acc, [])], Acc)
         end, #{}, Configs).
 
@@ -448,29 +451,30 @@ configs_per_bucket(Configs) ->
 %% Runs init_bucket/1 for each datastore driver using given models'.
 %% @end
 %%--------------------------------------------------------------------
--spec init_drivers(Configs :: [model_behaviour:model_config()]) ->
+-spec init_drivers(Configs :: [model_behaviour:model_config()], NodeToSync :: node()) ->
     ok | no_return().
-init_drivers(Configs) ->
+init_drivers(Configs, NodeToSync) ->
     lists:foreach(
         fun({Bucket, Models}) ->
-            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket, Models),
-            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket, Models),
-            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models)
+            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
+            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
+            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync)
         end, maps:to_list(configs_per_bucket(Configs))).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Loads local state and initializes datastore drivers if needed.
+%% Loads local state, initializes datastore drivers and fetches active config
+%% from NodeToSync if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_state_loaded() -> ok | {error, Reason :: term()}.
-ensure_state_loaded() ->
+-spec ensure_state_loaded(NodeToSync :: node()) -> ok | {error, Reason :: term()}.
+ensure_state_loaded(NodeToSync) ->
     try
         case ets:info(?LOCAL_STATE) of
             undefined ->
                 Configs = load_local_state(?MODELS),
-                init_drivers(Configs);
+                init_drivers(Configs, NodeToSync);
             _ -> ok
         end
     catch
@@ -527,6 +531,10 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
     case exec_driver(ModelName, Driver, Method, Args) of
         {error, Reason} ->
             {error, Reason};
+        Result when Method =:= get ->
+            Result;
+        {ok, true} = Result when Method =:= exists ->
+            Result;
         _ ->
             exec_driver(ModelName, Rest, Method, Args)
     end;

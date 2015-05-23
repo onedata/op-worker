@@ -102,7 +102,7 @@ is_authorized(Req, State) ->
     case rest_auth:authenticate(Req) of
         {{ok, Iden}, NewReq} ->
             {true, NewReq, State#state{identity = Iden}};
-        {{error, {not_found, missing_or_deleted}}, NewReq} ->
+        {{error, {not_found, _}}, NewReq} ->
             GrUrl = gr_plugin:get_gr_url(),
             ProviderId = oneprovider:get_provider_id(),
             {_, NewReq2} = cowboy_req:host(NewReq),

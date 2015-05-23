@@ -150,6 +150,6 @@ fetch(#token{value = Token}) ->
 get_or_fetch(Key, Token) ->
     case onedata_user:get(Key) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, missing_or_deleted}} -> fetch(Token);
+        {error, {not_found, _}} -> fetch(Token);
         Error -> Error
     end.

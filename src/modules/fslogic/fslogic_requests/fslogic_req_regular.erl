@@ -24,6 +24,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.
+%% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location(File :: fslogic:file(), Flags :: fslogic:open_flags(), ForceClusterProxy :: boolean()) ->
