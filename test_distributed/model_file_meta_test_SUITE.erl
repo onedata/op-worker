@@ -26,11 +26,9 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, exec_and_check_time/3]).
--export([basic_operations_test/1]).
--export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([basic_operations_test/1, rename_test/1]).
 
--performance({test_cases, []}).
+-performance({test_cases, [basic_operations_test]}).
 all() ->
     [basic_operations_test, rename_test].
 
@@ -163,6 +161,18 @@ basic_operations_test(Config) ->
 
     ?assertMatch({ok, [U23]}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
 
+    BigDirDel =
+        fun Loop(File) when File < 99 ->
+            ?call(Worker1, delete, [{path, list_to_binary("/spaces/Space 1/dir1/" ++ integer_to_list(1000 + File))}]),
+            Loop(File + 1);
+            Loop(_) ->
+                ok
+        end,
+    BigDirDel(0),
+
+    delete_deep_tree(Worker2),
+    [?call(Worker1, delete, [{uuid, D}]) || D <- [U1, U2, U3, U4, U20, U21, U22, U23]],
+
     [
         #parameter{name = create_level_0, value = CreateLevel0, unit = "us",
             description = "Time of create opertion at root level"},
@@ -225,10 +235,6 @@ basic_operations_test(Config) ->
         #parameter{name = delete_ok_path_level20, value = DeleteOkPathLevel20, unit = "us",
             description = "Time of delete by path opertion at level 20 (20 dirs above file) when file exists"}
     ].
-
-    [?call(Worker1, delete, [{uuid, D}]) || D <- [U1, U2, U3, U4, U20, U21, U22, U23]],
-
-    ok.
 
 
 rename_test(Config) ->
@@ -302,3 +308,14 @@ create_deep_tree(Worker, Prefix, Num) ->
     {A, U} = ?call(Worker, create, [{path, list_to_binary(Prefix)}, #file_meta{name = list_to_binary(StringNum)}]),
     ?assertMatch({ok, _}, {A, U}),
     create_deep_tree(Worker, Prefix++"/"++StringNum, Num-1).
+
+delete_deep_tree(Worker) ->
+    delete_deep_tree(Worker, "/spaces/Space 1", 18).
+
+delete_deep_tree(Worker, Prefix, 1) ->
+    ?call(Worker, delete, [{path, list_to_binary(Prefix)}]);
+
+delete_deep_tree(Worker, Prefix, Num) ->
+    StringNum = integer_to_list(Num),
+    delete_deep_tree(Worker, Prefix++"/"++StringNum, Num-1),
+    ?call(Worker, delete, [{path, list_to_binary(Prefix)}]).
