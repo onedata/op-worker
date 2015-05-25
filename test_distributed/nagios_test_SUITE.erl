@@ -47,7 +47,7 @@ nagios_test(Config) ->
     [MainStatus] = [X#xmlAttribute.value || X <- Xml#xmlElement.attributes, X#xmlAttribute.name == status],
     % Whole app status might become out_of_sync in some marginal cases when dns or dispatcher does
     % not receive update for a long time.
-    ?assert(MainStatus =:= "ok" orelse MainStatus =:= "out_of_sync"),
+    ?assertEqual(MainStatus, "ok"),
 
     NodeStatuses = [X || X <- Xml#xmlElement.content, X#xmlElement.name == oneprovider_node],
 

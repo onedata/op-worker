@@ -306,6 +306,7 @@ ccm_conn_ack(State = #state{ccm_con_status = connected}) ->
     State#state{ccm_con_status = registered};
 ccm_conn_ack(State) ->
     % Already registered or not connected, do nothing
+    ?warning("node_manager received redundant ccm_conn_ack"),
     State.
 
 
