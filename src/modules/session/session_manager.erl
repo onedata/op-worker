@@ -34,8 +34,7 @@ reuse_or_create_session(SessId, Iden, Con) ->
     worker_proxy:call(
         ?SESSION_WORKER,
         {reuse_or_create_session, SessId, Iden, Con},
-        ?TIMEOUT,
-        prefer_local
+        ?TIMEOUT
     ).
 
 %%--------------------------------------------------------------------
@@ -48,8 +47,7 @@ remove_session(SessId) ->
     worker_proxy:call(
         ?SESSION_WORKER,
         {remove_session, SessId},
-        ?TIMEOUT,
-        prefer_local
+        ?TIMEOUT
     ).
 
 %%%===================================================================

@@ -1,4 +1,9 @@
-"""Brings up a set of oneprovider ccm nodes. They can create separate clusters."""
+"""Author: Tomasz Lichon
+Copyright (C) 2015 ACK CYFRONET AGH
+This software is released under the MIT license cited in 'LICENSE.txt'
+
+Brings up a set of oneprovider ccm nodes. They can create separate clusters.
+"""
 
 from __future__ import print_function
 
@@ -10,31 +15,22 @@ import common
 import docker
 
 
-try:
-    import xml.etree.cElementTree as eTree
-except ImportError:
-    import xml.etree.ElementTree as eTree
+import copy
+import json
+import os
 
-try:  # Python 2
-    from urllib2 import urlopen
-    from urllib2 import URLError
-    from httplib import BadStatusLine
-except ImportError:  # Python 3
-    from urllib.request import urlopen
-    from urllib.error import URLError
-    from http.client import BadStatusLine
-
+from . import common, docker, riak, dns as dns_mod
 
 def _tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
     cfg['nodes'] = {'node': cfg['nodes'][name]}
 
     sys_config = cfg['nodes']['node']['sys.config']
-    sys_config['ccm_nodes'] = [common.format_hostname(n, uid) for n in
+    sys_config['ccm_nodes'] = [common.format_nodename(n, uid) for n in
                                sys_config['ccm_nodes']]
 
     vm_args = cfg['nodes']['node']['vm.args']
-    vm_args['name'] = common.format_hostname(vm_args['name'], uid)
+    vm_args['name'] = common.format_nodename(vm_args['name'], uid)
 
     return cfg
 
@@ -46,6 +42,9 @@ def _node_up(image, bindir, logdir, uid, config, dns_servers):
 
     command = \
         '''set -e
+mkdir -p /root/bin/node/log/
+chown {uid}:{gid} /root/bin/node/log/
+chmod ug+s /root/bin/node/log/
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
@@ -56,9 +55,11 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         uid=os.geteuid(),
         gid=os.getegid())
 
-    logdir = os.path.join(os.path.abspath(logdir), name)
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes.extend([(logdir, '/root/bin/node/log', 'rw')] if logdir else [])
+
+    if logdir:
+        logdir = os.path.join(os.path.abspath(logdir), name)
+        volumes.extend([(logdir, '/root/bin/node/log', 'rw')])
 
     container = docker.run(
         image=image,
@@ -80,12 +81,15 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         }
     )
 
+def _ready(container):
+    return True #todo implement
+
 def up(image, bindir, logdir, dns, uid, config_path):
     config = common.parse_json_file(config_path)['op_ccm']
     config['config']['target_dir'] = '/root/bin'
     configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
-    dns_servers, output = common.set_up_dns(dns, uid)
+    dns_servers, output = dns_mod.set_up_dns(dns, uid)
     ccms = []
 
     for cfg in configs:
@@ -94,10 +98,6 @@ def up(image, bindir, logdir, dns, uid, config_path):
         ccms.extend(ccm)
         common.merge(output, node_out)
 
-    if logdir:
-        for node in ccms:
-            docker.exec_(node, ['chown', '-R',
-                                '{0}:{1}'.format(os.geteuid(), os.getegid()),
-                                '/root/bin/node/log/'])
+    common.wait_until(_ready, ccms[0:1], 0)
 
     return output

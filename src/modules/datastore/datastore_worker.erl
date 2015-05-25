@@ -67,7 +67,7 @@ init(_Args) ->
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck |
     {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
-    Result :: nagios_handler:healthcheck_reponse() | ok | pong | {ok, Response} |
+    Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
     Reason :: term().
