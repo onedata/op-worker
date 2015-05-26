@@ -122,7 +122,13 @@ init(_) ->
 handle_call(get_nodes, _From, State) ->
     {reply, State#state.nodes, State};
 
-handle_call(get_node_to_sync, _From, State) ->
+handle_call(get_node_to_sync, _From, #state{node_states = NodeStates} = State) ->
+    MemSum = lists:foldl(fun({_Node, NodeState}, Sum) ->
+        Sum + NodeState#node_state.mem_usage
+    end, 0, NodeStates),
+    {reply, MemSum/length(NodeStates), State};
+
+handle_call(get_avg_mem_usage, _From, State) ->
     Ans = get_node_to_sync(State),
     {reply, Ans, State};
 
