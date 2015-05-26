@@ -103,6 +103,8 @@ init([]) ->
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
+        {ok, Interval} = application:get_env(?APP_NAME, check_mem_interval_minutes),
+        erlang:send_after(timer:minutes(Interval), self(), {timer, check_mem}),
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
@@ -165,6 +167,18 @@ handle_cast(connect_to_ccm, State) ->
 handle_cast(ccm_conn_ack, State) ->
     NewState = ccm_conn_ack(State),
     {noreply, NewState};
+
+handle_cast(check_mem, #state{monitoring_state = MonState} = State) ->
+    MemUsage = monitoring:mem_usage(MonState),
+    case caches_controller:should_clear_cache(MemUsage) of
+        true ->
+            spawn(fun() -> free_memory(MemUsage) end);
+        _ ->
+            ok
+    end,
+    {ok, Interval} = application:get_env(?APP_NAME, check_mem_interval_minutes),
+    erlang:send_after(timer:minutes(Interval), self(), {timer, check_mem}),
+    {noreply, State};
 
 handle_cast(do_heartbeat, State) ->
     NewState = do_heartbeat(State),
@@ -447,4 +461,31 @@ check_node_ip_address() ->
     catch T:M ->
         ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
         {127, 0, 0, 1}
+    end.
+
+free_memory(NodeMem) ->
+    try
+        AvgMem = gen_server:call({global, ?CCM}, get_avg_mem_usage),
+        ClearingOrder = case NodeMem >= AvgMem of
+            true ->
+                [{false, locally_cached}, {false, globally_cached}, {true, locally_cached}, {true, globally_cached}];
+            _ ->
+                [{false, globally_cached}, {false, locally_cached}, {true, globally_cached}, {true, locally_cached}]
+        end,
+        lists:foldl(fun
+            ({_Aggressive, _StoreType}, ok) ->
+                ok;
+            ({Aggressive, StoreType}, _) ->
+                Ans = caches_controller:clear_global_cache(Aggressive, StoreType),
+                case Ans of
+                    mem_usage_too_high ->
+                        ?warning("Not able to free enough memory clearing cache ~p with param ~p", [StoreType, Aggressive]);
+                    _ ->
+                        ok
+                end,
+                Ans
+        end, start, ClearingOrder)
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2])
     end.
