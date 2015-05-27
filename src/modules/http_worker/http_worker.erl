@@ -45,7 +45,7 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
-    Result :: nagios_handler:healthcheck_reponse() | ok | {ok, Response} |
+    Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
     {error, Reason} | pong,
     Response :: term(),
     Reason :: term().

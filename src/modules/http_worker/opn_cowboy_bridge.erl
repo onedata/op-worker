@@ -182,7 +182,8 @@ init(Type, Req, Opts) ->
                 ok ->
                     DoDelegate();
                 _ ->
-                    {shutdown, Req, no_state}
+                    {ok, Req2} = cowboy_req:reply(500, [], Req),
+                    {shutdown, Req2, no_state}
             end;
         false ->
             DoDelegate()
@@ -590,12 +591,13 @@ get_file(Req, State) ->
 %%--------------------------------------------------------------------
 -spec spawn_handling_process() -> ok | {error, term()}.
 spawn_handling_process() ->
-    case worker_proxy:call(http_worker, {spawn_handler, self()}, ?HANDLING_PROCESS_SPAWN_TIMEOUT, prefer_local) of
+    case worker_proxy:call(http_worker, {spawn_handler, self()}, ?HANDLING_PROCESS_SPAWN_TIMEOUT) of
         {ok, Pid} ->
             set_handler_pid(Pid),
             ok;
         {error, Error} ->
             ?error("Cannot spawn handling process, error: ~p", [Error]),
+            set_handler_pid(undefined),
             {error, Error}
     end.
 
@@ -606,7 +608,12 @@ spawn_handling_process() ->
 %%--------------------------------------------------------------------
 -spec terminate_handling_process() -> terminate.
 terminate_handling_process() ->
-    get_handler_pid() ! terminate.
+    case get_handler_pid() of
+        undefined ->
+            ok;
+        Pid when is_pid(Pid) ->
+            Pid ! terminate
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -638,9 +645,13 @@ delegate(Fun, Args, Arity, FailWithNoCall) ->
         false ->
             case get_delegation() of
                 true ->
-                    HandlerPid = get_handler_pid(),
-                    HandlerPid ! {apply, HandlerModule, Fun, Args},
-                    delegation_loop(HandlerPid);
+                    case get_handler_pid() of
+                        undefined ->
+                            no_call;
+                        Pid when is_pid(Pid) ->
+                            Pid ! {apply, HandlerModule, Fun, Args},
+                            delegation_loop(Pid)
+                    end;
                 false ->
                     erlang:apply(HandlerModule, Fun, Args)
             end
@@ -690,7 +701,7 @@ get_handler_module() ->
 %% Convenience function that stores the reference to handler pid in process dict.
 %% @end
 %%--------------------------------------------------------------------
--spec set_handler_pid(Pid :: pid()) -> term().
+-spec set_handler_pid(Pid :: pid() | undefined) -> term().
 set_handler_pid(Pid) ->
     erlang:put(handler_pid, Pid).
 
@@ -699,7 +710,7 @@ set_handler_pid(Pid) ->
 %% Convenience function that retrieves the reference to handler pid from process dict.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handler_pid() -> pid().
+-spec get_handler_pid() -> pid() | undefined.
 get_handler_pid() ->
     erlang:get(handler_pid).
 

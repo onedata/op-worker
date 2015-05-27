@@ -13,6 +13,7 @@
 
 -ifdef(TEST).
 -include("global_definitions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(NODE_1, 'worker1@host.com').
@@ -43,18 +44,17 @@
 calculate_cluster_status_test() ->
     meck:new(nagios_handler, [passthrough]),
     Nodes = [?NODE_1, ?NODE_2, ?NODE_3, ?NODE_4],
-    StatusNum = 5,
     NodeManagerStatuses = [
-        {?NODE_1, {ok, 4}},
+        {?NODE_1, ok},
         {?NODE_2, {error, some_error}},
-        {?NODE_3, {ok, 5}},
-        {?NODE_4, {ok, 5}}
+        {?NODE_3, ok},
+        {?NODE_4, ok}
     ],
     DistpatcherStatuses = [
-        {?NODE_1, {ok, 4}},
-        {?NODE_2, {ok, 5}},
-        {?NODE_3, {ok, 4}},
-        {?NODE_4, {ok, 5}}
+        {?NODE_1, ok},
+        {?NODE_2, ok},
+        {?NODE_3, out_of_sync},
+        {?NODE_4, ok}
     ],
     WorkerStatuses = [
         {?NODE_1, [{?WORKER_1, {error, other_error}}, {?WORKER_2, ok}]},
@@ -63,22 +63,22 @@ calculate_cluster_status_test() ->
         {?NODE_4, [{?WORKER_1, ok}, {?WORKER_3, ok}]}
     ],
 
-    {ok, ClusterStatus} = nagios_handler:calculate_cluster_status(Nodes, StatusNum, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses),
+    {ok, ClusterStatus} = nagios_handler:calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses),
     ?assertMatch({?APP_NAME, error, _}, ClusterStatus),
     {?APP_NAME, error, NodeStatuses} = ClusterStatus,
 
     % Check 1st node's statuses
     ?assertMatch({?NODE_1, _, _}, lists:keyfind(?NODE_1, 1, NodeStatuses)),
     {?NODE_1, error, Node1Status} = lists:keyfind(?NODE_1, 1, NodeStatuses),
-    ?assertEqual(out_of_sync, proplists:get_value(?NODE_MANAGER_NAME, Node1Status)),
-    ?assertEqual(out_of_sync, proplists:get_value(?DISPATCHER_NAME, Node1Status)),
-    ?assertEqual(other_error, proplists:get_value(?WORKER_1, Node1Status)),
+    ?assertEqual(ok, proplists:get_value(?NODE_MANAGER_NAME, Node1Status)),
+    ?assertEqual(ok, proplists:get_value(?DISPATCHER_NAME, Node1Status)),
+    ?assertEqual({error, other_error}, proplists:get_value(?WORKER_1, Node1Status)),
     ?assertEqual(ok, proplists:get_value(?WORKER_2, Node1Status)),
 
     % Check 2nd node's statuses
     ?assertMatch({?NODE_2, _, _}, lists:keyfind(?NODE_2, 1, NodeStatuses)),
     {?NODE_2, error, Node2Status} = lists:keyfind(?NODE_2, 1, NodeStatuses),
-    ?assertEqual(some_error, proplists:get_value(?NODE_MANAGER_NAME, Node2Status)),
+    ?assertEqual({error, some_error}, proplists:get_value(?NODE_MANAGER_NAME, Node2Status)),
     ?assertEqual(ok, proplists:get_value(?DISPATCHER_NAME, Node2Status)),
     ?assertEqual(ok, proplists:get_value(?WORKER_3, Node2Status)),
     ?assertEqual(ok, proplists:get_value(?WORKER_4, Node2Status)),

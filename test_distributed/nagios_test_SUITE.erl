@@ -17,6 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
@@ -44,6 +45,8 @@ nagios_test(Config) ->
     {Xml, _} = xmerl_scan:string(XMLString),
 
     [MainStatus] = [X#xmlAttribute.value || X <- Xml#xmlElement.attributes, X#xmlAttribute.name == status],
+    % Whole app status might become out_of_sync in some marginal cases when dns or dispatcher does
+    % not receive update for a long time.
     ?assertEqual(MainStatus, "ok"),
 
     NodeStatuses = [X || X <- Xml#xmlElement.content, X#xmlElement.name == oneprovider_node],
@@ -67,7 +70,7 @@ nagios_test(Config) ->
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
             ?assertEqual(true, lists:member(WName, WorkersOnNode))
-        end, [{Node, Worker} || Node <- Nodes, Worker <- ?MODULES ]),
+        end, [{Node, Worker} || Node <- Nodes, Worker <- ?MODULES]),
 
     % Check if every node's status contains dispatcher and node manager status
     lists:foreach(

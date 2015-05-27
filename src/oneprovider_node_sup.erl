@@ -60,7 +60,7 @@ start_link() ->
     }} |
     ignore.
 init([]) ->
-    RestartStrategy = one_for_one,
+    RestartStrategy = one_for_all,
     MaxRestarts = 5,
     RestartTimeWindowSecs = 10,
     {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
