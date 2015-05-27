@@ -29,9 +29,18 @@
     session,
     onedata_user,
     identity,
+    file_meta,
+    global_cache_controller
+]).
+
+-define(GLOBAL_CACHES, [
+    some_record,
     file_meta
 ]).
 
+-record(global_cache_controller, {
+    timestamp :: tuple()
+}).
 
 %% sample model with example fields
 -record(some_record, {

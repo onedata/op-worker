@@ -103,8 +103,7 @@ init([]) ->
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
-        {ok, Interval} = application:get_env(?APP_NAME, check_mem_interval_minutes),
-        erlang:send_after(timer:minutes(Interval), self(), {timer, check_mem}),
+        naxt_mem_check(),
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
@@ -176,8 +175,7 @@ handle_cast(check_mem, #state{monitoring_state = MonState} = State) ->
         _ ->
             ok
     end,
-    {ok, Interval} = application:get_env(?APP_NAME, check_mem_interval_minutes),
-    erlang:send_after(timer:minutes(Interval), self(), {timer, check_mem}),
+    naxt_mem_check(),
     {noreply, State};
 
 handle_cast(do_heartbeat, State) ->
@@ -489,3 +487,9 @@ free_memory(NodeMem) ->
         E1:E2 ->
             ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2])
     end.
+
+naxt_mem_check() ->
+    {ok, IntervalMin} = application:get_env(?APP_NAME, check_mem_interval_minutes),
+    Interval = timer:minutes(IntervalMin),
+    % random to reduce probability that two nodes clear memory simultanosly
+    erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).

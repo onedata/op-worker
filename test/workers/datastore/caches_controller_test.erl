@@ -84,6 +84,16 @@ mem_clearing_test() ->
     ?assert(meck:validate(caches_controller)),
     ok = meck:unload(caches_controller).
 
+get_hooks_config_test() ->
+    Methods = [save, get, exists, delete, update, create],
+    XConfig = lists:map(fun(Method) ->
+        {x, Method}
+    end, Methods),
+    YConfig = lists:map(fun(Method) ->
+        {y, Method}
+    end, Methods),
+    ?assertEqual(YConfig ++ XConfig, caches_controller:get_hooks_config([x, y])).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================

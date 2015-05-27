@@ -11,7 +11,7 @@
 -module(store_driver_behaviour).
 -author("Rafal Slota").
 
--type driver_action() :: model_behaviour:model_action() | add_links | delete_links | fetch_link | foreach_link.
+-type driver_action() :: model_behaviour:model_action().
 
 -export_type([driver_action/0]).
 

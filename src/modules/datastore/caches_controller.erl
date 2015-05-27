@@ -18,7 +18,7 @@
 
 %% API
 -export([clear_local_cache/1, clear_global_cache/1, clear_local_cache/2, clear_global_cache/2]).
--export([clear_cache/2, clear_cache/3, should_clear_cache/1]).
+-export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1]).
 
 -ifdef(TEST).
 -export([delete_old_keys/2]).
@@ -77,11 +77,21 @@ clear_cache(_MemUsage, TargetMemUse, StoreType, [TimeWindow | Windows]) ->
       cannot_check_mem_usage
   end.
 
+get_hooks_config(Models) ->
+  Methods = [save, get, exists, delete, update, create],
+  lists:foldl(fun(Model, Ans) ->
+    ModelConfig = lists:map(fun(Method) ->
+      {Model, Method}
+    end, Methods),
+    ModelConfig ++ Ans
+  end, [], Models).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 delete_old_keys(globally_cached, _TimeWindow) ->
+  % Przy zero czyścić wszystko jak leci z modeli (może nie być tego w modelu kontrolera bo się zgubiło)
   ok;
 
 delete_old_keys(locally_cached, _TimeWindow) ->
