@@ -18,6 +18,8 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/monitoring/monitoring.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 %% API
 -export([start_link/0, stop/0]).
@@ -29,10 +31,12 @@
 %% This record is used by ccm (it contains its state). It describes
 %% nodes, dispatchers and workers in cluster. It also contains reference
 %% to process used to monitor if nodes are alive.
--record(cm_state, {
+-record(state, {
     nodes = [] :: [Node :: node()],
     uninitialized_nodes = [] :: [Node :: node()],
-    state_num = 1 :: integer()
+    node_states = [] :: [{Node :: node(), NodeState :: #node_state{}}],
+    last_heartbeat = [] :: [{Node :: node(), Timestamp :: {integer(), integer(), integer()}}],
+    lb_state = undefined :: load_balancing:load_balancing_state() | undefined
 }).
 
 %%%===================================================================
@@ -58,6 +62,7 @@ start_link() ->
         Error ->
             Error
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -89,7 +94,9 @@ stop() ->
 %% ====================================================================
 init(_) ->
     process_flag(trap_exit, true),
-    {ok, #cm_state{}}.
+    gen_server:cast(self(), update_advices),
+    {ok, #state{}}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -111,14 +118,9 @@ init(_) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call(get_state_num, _From, State) ->
-    {reply, State#cm_state.state_num, State};
 
 handle_call(get_nodes, _From, State) ->
-    {reply, State#cm_state.nodes, State};
-
-handle_call(get_nodes_and_state_num, _From, State) ->
-    {reply, {State#cm_state.nodes, State#cm_state.state_num}, State};
+    {reply, State#state.nodes, State};
 
 handle_call(get_node_to_sync, _From, State) ->
     Ans = get_node_to_sync(State),
@@ -131,6 +133,7 @@ handle_call(healthcheck, _From, State) ->
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -145,12 +148,21 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast({heartbeat, Node}, State) ->
-    NewState = heartbeat(State, Node),
+
+handle_cast({ccm_conn_req, Node}, State) ->
+    NewState = ccm_conn_req(State, Node),
     {noreply, NewState};
 
 handle_cast({init_ok, Node}, State) ->
     NewState = init_ok(State, Node),
+    {noreply, NewState};
+
+handle_cast({heartbeat, NodeState}, State) ->
+    NewState = heartbeat(State, NodeState),
+    {noreply, NewState};
+
+handle_cast(update_advices, State) ->
+    NewState = update_advices(State),
     {noreply, NewState};
 
 handle_cast(stop, State) ->
@@ -159,6 +171,7 @@ handle_cast(stop, State) ->
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -185,6 +198,7 @@ handle_info(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -201,6 +215,7 @@ handle_info(_Request, State) ->
     | term().
 terminate(_Reason, _State) ->
     ok.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -225,23 +240,20 @@ code_change(_OldVsn, State, _Extra) ->
 %% Receive heartbeat from node_manager
 %% @end
 %%--------------------------------------------------------------------
--spec heartbeat(State :: #cm_state{}, SenderNode :: node()) ->
-    NewState :: #cm_state{}.
-heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, SenderNode) ->
-    ?debug("Heartbeat from node: ~p", [SenderNode]),
+-spec ccm_conn_req(State :: #state{}, SenderNode :: node()) -> NewState :: #state{}.
+ccm_conn_req(State = #state{nodes = Nodes, uninitialized_nodes = InitNodes}, SenderNode) ->
+    ?info("Connection request from node: ~p", [SenderNode]),
     case lists:member(SenderNode, Nodes) or lists:member(SenderNode, InitNodes) of
         true ->
-            gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
-                {heartbeat_ok, State#cm_state.state_num}),
+            gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, ccm_conn_ack),
             State;
         false ->
             ?info("New node: ~p", [SenderNode]),
             try
                 erlang:monitor_node(SenderNode, true),
                 NewInitNodes = add_node_to_list(SenderNode, InitNodes),
-                gen_server:cast({?NODE_MANAGER_NAME, SenderNode},
-                    {heartbeat_ok, State#cm_state.state_num}),
-                State#cm_state{uninitialized_nodes = NewInitNodes}
+                gen_server:cast({?NODE_MANAGER_NAME, SenderNode}, ccm_conn_ack),
+                State#state{uninitialized_nodes = NewInitNodes}
             catch
                 _:Error ->
                     ?warning_stacktrace("Checking node ~p, in ccm failed with error: ~p",
@@ -250,35 +262,76 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
             end
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Receive acknowledgement of successfull worker initialization on node
 %% @end
 %%--------------------------------------------------------------------
--spec init_ok(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
-init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes,
-    state_num = StateNum}, SenderNode) ->
-    NewInitNodes = InitNodes -- [SenderNode],
+-spec init_ok(State :: #state{}, SenderNode :: node()) -> #state{}.
+init_ok(State = #state{nodes = Nodes, uninitialized_nodes = InitNodes}, SenderNode) ->
+    ?info("Node ~p initialized successfully.", [SenderNode]),
+    NewInitNodes = lists:delete(SenderNode, InitNodes),
     NewNodes = add_node_to_list(SenderNode, Nodes),
-    NewStateNum = StateNum + 1,
-    update_node_managers(NewNodes, NewStateNum),
-    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes,
-        state_num = NewStateNum}.
+    State#state{nodes = NewNodes, uninitialized_nodes = NewInitNodes}.
+
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends information to all nodes, that the state of cluster has changed and
-%% they are supposed to synchronize
+%% Receive heartbeat from a node manager and store its state.
 %% @end
 %%--------------------------------------------------------------------
--spec update_node_managers(Nodes :: [node()], StateNum:: non_neg_integer()) -> ok.
-update_node_managers(Nodes, NewStateNum) ->
-    UpdateNode = fun(Node) ->
-        gen_server:cast({?NODE_MANAGER_NAME, Node}, {update_state, NewStateNum})
-    end,
-    lists:foreach(UpdateNode, Nodes).
+-spec heartbeat(State :: #state{}, NodeState :: #node_state{}) -> #state{}.
+heartbeat(#state{node_states = NodeStates, last_heartbeat = LastHeartbeat} = State, NodeState) ->
+    #node_state{node = Node} = NodeState,
+    ?debug("Heartbeat from node ~p", [Node]),
+    NewNodeStates = [{Node, NodeState} | proplists:delete(Node, NodeStates)],
+    NewLastHeartbeat = [{Node, now()} | proplists:delete(Node, LastHeartbeat)],
+    State#state{node_states = NewNodeStates, last_heartbeat = NewLastHeartbeat}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Calculate current load balancing advices, broadcast them and schedule next update.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_advices(State :: #state{}) -> #state{}.
+update_advices(#state{node_states = NodeStatesMap, last_heartbeat = LastHeartbeats, lb_state = LBState} = State) ->
+    ?debug("Updating load balancing advices"),
+    {ok, Interval} = application:get_env(?APP_NAME, lb_advices_update_interval),
+    erlang:send_after(Interval, self(), {timer, update_advices}),
+    case NodeStatesMap of
+        [] ->
+            State;
+        _ ->
+            {_, NodeStates} = lists:unzip(NodeStatesMap),
+            Now = now(),
+            % Check which node managers are late with heartbeat ( > 2 * monitoring interval).
+            % Assume full CPU usage on them.
+            PrecheckedNodeStates = lists:map(
+                fun(#node_state{node = Node} = NodeState) ->
+                    LastHeartbeat = timer:now_diff(Now, proplists:get_value(Node, LastHeartbeats, now())) / 1000,
+                    case LastHeartbeat > 2 * Interval of
+                        true -> NodeState#node_state{cpu_usage = 100.0};
+                        false -> NodeState
+                    end
+                end, NodeStates),
+            {AdvicesForDNSes, LBState2} = load_balancing:advices_for_dnses(PrecheckedNodeStates, LBState),
+            {AdvicesForDispatchers, NewState} = load_balancing:advices_for_dispatchers(PrecheckedNodeStates, LBState2),
+            LBAdvices = lists:zipwith(
+                fun({Node, DNSAdvice}, {Node, DispAdvice}) ->
+                    {Node, {DNSAdvice, DispAdvice}}
+                end, AdvicesForDNSes, AdvicesForDispatchers),
+            % Send LB advices
+            lists:foreach(
+                fun({Node, Advices}) ->
+                    gen_server:cast({?NODE_MANAGER_NAME, Node}, {update_lb_advices, Advices})
+                end, LBAdvices),
+            State#state{lb_state = NewState}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -286,16 +339,21 @@ update_node_managers(Nodes, NewStateNum) ->
 %% Delete node from active nodes list, change state num and inform everone
 %% @end
 %%--------------------------------------------------------------------
--spec node_down(Node :: atom(), State :: #cm_state{}) -> #cm_state{}.
-node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes,
-    state_num = StateNum}) ->
+-spec node_down(Node :: atom(), State :: #state{}) -> #state{}.
+node_down(Node, State) ->
+    #state{nodes = Nodes,
+        uninitialized_nodes = InitNodes,
+        node_states = NodeStates
+    } = State,
     ?error("Node down: ~p", [Node]),
     NewNodes = Nodes -- [Node],
     NewInitNodes = InitNodes -- [Node],
-    NewStateNum = StateNum + 1,
-    update_node_managers(NewNodes, NewStateNum),
-    State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes,
-        state_num = NewStateNum}.
+    NewNodeStates = proplists:delete(Node, NodeStates),
+    State#state{nodes = NewNodes,
+        uninitialized_nodes = NewInitNodes,
+        node_states = NewNodeStates
+    }.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -309,13 +367,14 @@ node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes
 %% safely synchronize.
 %% @end
 %%--------------------------------------------------------------------
--spec get_node_to_sync(#cm_state{}) -> {ok, node()} | {error, term()}.
-get_node_to_sync(#cm_state{nodes = [], uninitialized_nodes = []}) ->
+-spec get_node_to_sync(#state{}) -> {ok, node()} | {error, term()}.
+get_node_to_sync(#state{nodes = [], uninitialized_nodes = []}) ->
     {error, no_nodes_connected};
-get_node_to_sync(#cm_state{nodes = [FirstNode | _]}) ->
+get_node_to_sync(#state{nodes = [FirstNode | _]}) ->
     {ok, FirstNode};
-get_node_to_sync(#cm_state{uninitialized_nodes = [FirstInitNode | _]}) ->
+get_node_to_sync(#state{uninitialized_nodes = [FirstInitNode | _]}) ->
     {ok, FirstInitNode}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -323,17 +382,19 @@ get_node_to_sync(#cm_state{uninitialized_nodes = [FirstInitNode | _]}) ->
 %% Handles healthcheck request
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(State :: #cm_state{}) ->
+-spec healthcheck(State :: #state{}) ->
     {ok, {Nodes :: [node()], StateNum :: non_neg_integer()}} |
     {error, invalid_worker_num}.
-healthcheck(#cm_state{nodes = Nodes, state_num = StateNum}) ->
+healthcheck(#state{nodes = Nodes}) ->
     case application:get_env(?APP_NAME, worker_num) of
-        {ok, N} when N =:= length(Nodes)->
-            {ok, {Nodes, StateNum}};
+        {ok, N} when N =< length(Nodes) ->
+            {ok, Nodes};
         {ok, undefined} ->
-            {ok, {Nodes, StateNum}};
-        _ -> {error, invalid_worker_num}
+            {ok, Nodes};
+        _ ->
+            {error, invalid_worker_num}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

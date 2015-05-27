@@ -44,24 +44,20 @@ simple_call_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     T1 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, random])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT])),
     T2 = os:timestamp(),
     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker1}, ping, ?REQUEST_TIMEOUT])),
     T3 = os:timestamp(),
     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker2}, ping, ?REQUEST_TIMEOUT])),
     T4 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT, prefer_local])),
-    T5 = os:timestamp(),
 
     [
-        #parameter{name = redirect_random, value = utils:milliseconds_diff(T2, T1), unit = "ms",
-            description = "Time of call with 'random' argument set"},
-        #parameter{name = direct_random, value = utils:milliseconds_diff(T3, T2), unit = "ms",
+        #parameter{name = dispatcher, value = utils:milliseconds_diff(T2, T1), unit = "ms",
+            description = "Time of call without specified target node (decision made by dispatcher)"},
+        #parameter{name = local_processing, value = utils:milliseconds_diff(T3, T2), unit = "ms",
             description = "Time of call with default arguments processed locally"},
-        #parameter{name = redirect_prefer_local, value = utils:milliseconds_diff(T4, T3), unit = "ms",
-            description = "Time of call with default arguments delegated to other node"},
-        #parameter{name = direct_prefer_local, value = utils:milliseconds_diff(T5, T4), unit = "ms",
-            description = "Time of call with 'prefer_local' argument set"}
+        #parameter{name = remote_processing, value = utils:milliseconds_diff(T4, T3), unit = "ms",
+            description = "Time of call with default arguments delegated to other node"}
     ].
 
 %%%===================================================================
@@ -72,7 +68,7 @@ simple_call_test(Config) ->
         [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
         [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
-    {description, "Performs many one worker_proxy calls with 'prefer_local' argument set, using many threads"},
+    {description, "Performs many one worker_proxy calls (dispatcher decide where they will be processed), using many threads"},
     {config, [{name, direct_cast},
         {parameters, [
             [{name, proc_num}, {value, 100}],
@@ -89,7 +85,7 @@ direct_cast_test(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId, prefer_local]))
+            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),
@@ -103,7 +99,7 @@ direct_cast_test(Config) ->
     ?assertMatch({ok, _}, Ans),
     {_, Times} = Ans,
     #parameter{name = routing_time, value = Times, unit = "ms",
-        description = "Aggregated time of all calls with 'prefer_local' argument set"}.
+        description = "Aggregated time of all calls performed via dispatcher"}.
 
 %%%===================================================================
 
@@ -185,8 +181,8 @@ mixed_cast_test(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId - 1, random])),
-            ?assertEqual(ok, rpc:call(Worker2, worker_proxy, cast, [http_worker, ping, {proc, Self}, 2 * MsgId, prefer_local]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker1}, ping, {proc, Self}, 2 * MsgId - 1])),
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker2}, ping, {proc, Self}, 2 * MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),

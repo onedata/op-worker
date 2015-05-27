@@ -1,5 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
+%%% @author Tomasz Lichon
+%%% @author Lukasz Opiola
 %%% @copyright (C) 2013 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -11,13 +13,29 @@
 %%%-------------------------------------------------------------------
 -module(request_dispatcher).
 -author("Michal Wrzeszcz").
+-author("Tomasz Lichon").
+-author("Lukasz Opiola").
 
 -behaviour(gen_server).
 
 -include("modules_and_args.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("annotations/include/annotations.hrl").
+
+% ETS used to hold workers mapping.
+-define(LB_ADVICE_KEY, lb_advice).
+-define(WORKER_MAP_ETS, workers_ets).
+
+% Types used in request routing.
+-type worker_name() :: atom().
+-type worker_ref() :: worker_name() | {WorkerName :: worker_name(), Node :: node()}.
+-export_type([worker_name/0, worker_ref/0]).
+
+%% This record is used by requests_dispatcher (it contains its state).
+-record(state, {
+    % Time of last ld advice update received from dispatcher
+    last_update = {0, 0, 0} :: {integer(), integer(), integer()}
+}).
 
 %% API
 -export([start_link/0, stop/0]).
@@ -25,8 +43,8 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% This record is used by requests_dispatcher (it contains its state).
--record(dispatcher_state, {state_num = 0 :: integer()}).
+%% Request routing API
+-export([get_worker_node/1, get_worker_nodes/1]).
 
 %%%===================================================================
 %%% API
@@ -76,8 +94,11 @@ stop() ->
 init(_) ->
     process_flag(trap_exit, true),
     catch gsi_handler:init(),   %% Failed initialization of GSI should not disturb dispacher's startup
-    worker_map:init(),
-    {ok, #dispatcher_state{}}.
+    ets:new(?WORKER_MAP_ETS, [set, protected, named_table, {read_concurrency, true}]),
+    % Insert undefined as LB advice - it means that the node is not yet initialized
+    % and it should not accept requests to workers.
+    ets:insert(?WORKER_MAP_ETS, {?LB_ADVICE_KEY, undefined}),
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -94,15 +115,24 @@ init(_) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: nagios_handler:healthcheck_reponse() | term(),
+    Reply :: nagios_handler:healthcheck_response() | term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call(get_state_num, _From, #dispatcher_state{state_num = StateNum} = State) ->
-    {reply, StateNum, State};
-
-handle_call(healthcheck, _From, #dispatcher_state{state_num = StateNum} = State) ->
-    {reply, {ok, StateNum}, State};
+handle_call(healthcheck, _From, #state{last_update = LastUpdate} = State) ->
+    % Report error as long as no LB advice has been received.
+    Reply = case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
+                [{?LB_ADVICE_KEY, undefined}] ->
+                    {error, no_lb_advice_received};
+                _ ->
+                    {ok, Threshold} = application:get_env(?APP_NAME, dns_disp_out_of_sync_threshold),
+                    % Threshold is in millisecs, now_diff is in microsecs
+                    case utils:milliseconds_diff(now(), LastUpdate) > Threshold of
+                        true -> out_of_sync;
+                        false -> ok
+                    end
+            end,
+    {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -121,10 +151,12 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
--notify_state_change(dispatcher).
-handle_cast({check_state, NewStateNum}, State) ->
-    NewState = check_state(State, NewStateNum),
-    {noreply, NewState};
+
+handle_cast({update_lb_advice, LBAdvice}, State) ->
+    ?debug("Dispatcher update of load_balancing advice: ~p", [LBAdvice]),
+    % Update LB advice
+    ets:insert(?WORKER_MAP_ETS, {?LB_ADVICE_KEY, LBAdvice}),
+    {noreply, State#state{last_update = now()}};
 
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -168,7 +200,7 @@ handle_info(_Request, State) ->
     | {shutdown, term()}
     | term().
 terminate(_Reason, _State) ->
-    worker_map:terminate(),
+    ets:delete(?WORKER_MAP_ETS),
     ok.
 
 %%--------------------------------------------------------------------
@@ -185,30 +217,42 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%%===================================================================
-%%% Internal functions
+%%% Request routing API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether dispatcher state is up to date, if not - fetches
-%% worker list from ccm and updates it.
+%% Chooses to which worker (on which node) the request should be sent.
+%%
+%% NOTE: currently, all nodes host all workers, so worker type can be omitted.
 %% @end
 %%--------------------------------------------------------------------
--spec check_state(State :: #dispatcher_state{}, NewStateNum :: integer()) -> #dispatcher_state{}.
-check_state(State = #dispatcher_state{state_num = StateNum}, NewStateNum) when StateNum >= NewStateNum ->
-    gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, NewStateNum}),
-    State;
-check_state(State, _) ->
-    ?info("Dispatcher had old state number, starting update"),
-    try gen_server:call({global, ?CCM}, get_nodes_and_state_num) of
-        {Nodes, StateNum} ->
-            worker_map:update_workers([{Worker, Nodes} || Worker <- ?MODULES]),
-            gen_server:cast(?NODE_MANAGER_NAME, {dispatcher_up_to_date, StateNum}),
-            ?info("Dispatcher state updated, state num: ~p", [StateNum]),
-            State#dispatcher_state{state_num = StateNum}
-    catch
-        _:Error ->
-        ?error("Dispatcher had old state number but could not update data, error: ~p",[Error]),
-        State
+-spec get_worker_node(WorkerName :: worker_name()) -> {ok, node()} | {error, dispatcher_out_of_sync}.
+get_worker_node(WorkerName) ->
+    case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
+        [{?LB_ADVICE_KEY, undefined}] ->
+            {error, dispatcher_out_of_sync};
+        [{?LB_ADVICE_KEY, LBAdvice}] ->
+            Node = load_balancing:choose_node_for_dispatcher(LBAdvice, WorkerName),
+            {ok, Node}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns all workers that host given worker.
+%%
+%% NOTE: currently, all nodes host all workers, so worker type can be omitted.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_worker_nodes(WorkerName :: worker_name()) -> {ok, [node()]} | {error, dispatcher_out_of_sync}.
+get_worker_nodes(_WorkerName) ->
+    case ets:lookup(?WORKER_MAP_ETS, ?LB_ADVICE_KEY) of
+        [{?LB_ADVICE_KEY, undefined}] ->
+            {error, dispatcher_out_of_sync};
+        [{?LB_ADVICE_KEY, LBAdvice}] ->
+            Nodes = load_balancing:all_nodes_for_dispatcher(LBAdvice),
+            {ok, Nodes}
     end.
