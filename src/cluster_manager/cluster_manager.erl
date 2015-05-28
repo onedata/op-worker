@@ -36,7 +36,7 @@
     uninitialized_nodes = [] :: [Node :: node()],
     node_states = [] :: [{Node :: node(), NodeState :: #node_state{}}],
     last_heartbeat = [] :: [{Node :: node(), Timestamp :: {integer(), integer(), integer()}}],
-    lb_state = undefined :: load_balancing:load_balancing_state()
+    lb_state = undefined :: load_balancing:load_balancing_state() | undefined
 }).
 
 %%%===================================================================
