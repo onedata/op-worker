@@ -31,16 +31,40 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
-            global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1]).
+            global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1,
+            cache_monitoring_test/1, cache_clearing_test/1]).
 
 -performance({test_cases, []}).
+%% all() ->
+%%     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
+%%      global_cache_list_test, persistance_test, links_test, link_walk_test,
+%%      cache_monitoring_test, cache_clearing_test].
+
 all() ->
-    [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-     global_cache_list_test, persistance_test, links_test, link_walk_test].
+    [cache_monitoring_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
+
+cache_monitoring_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+
+    Key = <<"key">>,
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
+        #document{
+            key = Key,
+            value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+        }])),
+
+    Uuid = global_cache_controller:get_cache_uuid(Key, some_record),
+    ?assertMatch({ok, true}, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
+
+    ok.
+
+cache_clearing_test(Config) ->
+    ok.
 
 %% Simple usage of get/update/create/exists/delete on local cache driver (on several nodes)
 local_cache_test(Config) ->
