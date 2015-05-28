@@ -313,7 +313,7 @@ ccm_conn_ack(State = #state{ccm_con_status = connected}) ->
     init_node(),
     ?info("Node initialized"),
     gen_server:cast({global, ?CCM}, {init_ok, node()}),
-    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval_ms),
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval),
     erlang:send_after(Interval, self(), {timer, do_heartbeat}),
     State#state{ccm_con_status = registered};
 ccm_conn_ack(State) ->
@@ -333,7 +333,7 @@ ccm_conn_ack(State) ->
 %%--------------------------------------------------------------------
 -spec do_heartbeat(State :: #state{}) -> #state{}.
 do_heartbeat(#state{ccm_con_status = registered, monitoring_state = MonState} = State) ->
-    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval_ms),
+    {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval),
     erlang:send_after(Interval, self(), {timer, do_heartbeat}),
     NewMonState = monitoring:update(MonState),
     NodeState = monitoring:get_node_state(NewMonState),
