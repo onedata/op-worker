@@ -20,11 +20,11 @@
 %%%===================================================================
 
 %% Name of the application.
--define(APP_NAME, oneprovider_node).
+-define(APP_NAME, op_worker).
 
 %% Local name (name and node is used to identify it) of supervisor that
 %% coordinates application at each node (one supervisor per node).
--define(APPLICATION_SUPERVISOR_NAME, oneprovider_node_sup).
+-define(APPLICATION_SUPERVISOR_NAME, op_worker_sup).
 
 %% Local name (name and node is used to identify it) of supervisor that
 %% coordinates workers at each node

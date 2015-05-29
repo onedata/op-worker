@@ -9,7 +9,7 @@
 %%% supervisor which then initializes appropriate components of node.
 %%% @end
 %%%--------------------------------------------------------------------
--module(oneprovider_node_app).
+-module(op_worker_app).
 -author("Michal Wrzeszcz").
 
 -behaviour(application).
@@ -32,7 +32,7 @@
     {ok, Pid :: pid()} | {ok, Pid :: pid(), State :: term()} |
     {error, Reason ::term()}.
 start(_StartType, _StartArgs) ->
-    oneprovider_node_sup:start_link().
+    op_worker_sup:start_link().
 
 %%--------------------------------------------------------------------
 %% @doc

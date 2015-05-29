@@ -1,8 +1,8 @@
-REPO            ?= oneprovider
+REPO            ?= op-worker
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
-PKG_ID           = oneprovider-$(PKG_VERSION)
+PKG_ID           = op-worker-$(PKG_VERSION)
 PKG_BUILD        = 1
 BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
@@ -45,7 +45,7 @@ test_rel: generate
 
 relclean:
 	rm -rf rel/test_cluster
-	rm -rf rel/oneprovider_node
+	rm -rf rel/op_worker
 	rm -rf appmock/rel/appmock
 	rm -rf op_ccm/rel/op_ccm
 

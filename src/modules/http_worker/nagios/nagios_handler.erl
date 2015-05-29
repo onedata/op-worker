@@ -135,7 +135,7 @@ terminate(_Reason, _Req, _State) ->
 %% @doc
 %% Contacts all components of the cluster and produces a healthcheck report
 %% in following form:
-%% {oneprovider_node, AppStatus, [
+%% {op_worker, AppStatus, [
 %%     {Node1, Node1Status, [
 %%         {node_manager, NodeManStatus},
 %%         {request_dispatcher, DispStatus},
