@@ -87,7 +87,7 @@ old_keys_cleaning_test(Config) ->
             key = CorruptedKey,
             value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
         }])),
-    CorruptedUuid = caches_controller:get_cache_uuid(K, some_record),
+    CorruptedUuid = caches_controller:get_cache_uuid(CorruptedKey, some_record),
     ?assertMatch(ok, ?call_store(Worker2, global_cache_controller, delete, [CorruptedUuid])),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 1])),
