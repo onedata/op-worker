@@ -38,6 +38,9 @@
     file_meta
 ]).
 
+-define(LOCAL_CACHES, [
+]).
+
 -record(global_cache_controller, {
     timestamp :: tuple()
 }).

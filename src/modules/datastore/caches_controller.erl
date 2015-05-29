@@ -14,15 +14,13 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([clear_local_cache/1, clear_global_cache/1, clear_local_cache/2, clear_global_cache/2]).
--export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1]).
-
--ifdef(TEST).
--export([delete_old_keys/2]).
--endif.
+-export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1, get_docs_filter/1]).
+-export([delete_old_keys/2, get_cache_uuid/2, decode_uuid/1]).
 
 %%%===================================================================
 %%% API
@@ -86,13 +84,53 @@ get_hooks_config(Models) ->
     ModelConfig ++ Ans
   end, [], Models).
 
+get_docs_filter(DocAge) ->
+  Now = os:timestamp(),
+  fun
+    ('$end_of_table', Acc) ->
+      {abort, Acc};
+    (#document{key = Uuid, value = V}, Acc) ->
+      T = V#global_cache_controller.timestamp,
+      case timer:now_diff(Now, T) >= 1000*DocAge of
+        true ->
+          {next, [Uuid | Acc]};
+        false ->
+          {next, Acc}
+      end
+  end.
+
+get_cache_uuid(Key, ModelName) ->
+  base64:encode(term_to_binary({ModelName, Key})).
+
+decode_uuid(Uuid) ->
+  binary_to_term(base64:decode(Uuid)).
+
+delete_old_keys(globally_cached, TimeWindow) ->
+  delete_old_keys(global_cache_controller, global_only, ?GLOBAL_CACHES, TimeWindow);
+
+delete_old_keys(locally_cached, TimeWindow) ->
+  delete_old_keys(local_cache_controller, local_only, ?LOCAL_CACHES, TimeWindow).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-delete_old_keys(globally_cached, _TimeWindow) ->
-  % Przy zero czyścić wszystko jak leci z modeli (może nie być tego w modelu kontrolera bo się zgubiło)
-  ok;
-
-delete_old_keys(locally_cached, _TimeWindow) ->
+delete_old_keys(Model, Level, Caches, TimeWindow) ->
+  {ok, Uuids} = apply(Model, list, [TimeWindow]),
+  lists:foreach(fun(Uuid) ->
+    {ModelName, Key} = decode_uuid(Uuid),
+    apply(datastore, delete, [Level, ModelName, Key]),
+    apply(Model, delete, [Uuid])
+  end, Uuids),
+  case TimeWindow of
+    0 ->
+      lists:foreach(fun(Cache) ->
+        {ok, Uuids2} = apply(datastore, list, [Level, Cache, ?GET_ALL, []]),
+        lists:foreach(fun(Uuid) ->
+          apply(datastore, delete, [Level, Cache, Uuid])
+        end, Uuids2)
+      end, Caches);
+    _ ->
+      ok
+  end,
   ok.

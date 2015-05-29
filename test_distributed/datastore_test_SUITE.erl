@@ -16,7 +16,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
--include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore.hrl").
 
 -define(call_store(N, M, A), ?call_store(N, datastore, M, A)).
@@ -32,16 +31,16 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
             global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1,
-            cache_monitoring_test/1, cache_clearing_test/1]).
+            cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
 
 -performance({test_cases, []}).
 %% all() ->
 %%     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
 %%      global_cache_list_test, persistance_test, links_test, link_walk_test,
-%%      cache_monitoring_test, cache_clearing_test].
+%%      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 all() ->
-    [cache_monitoring_test, cache_clearing_test].
+    [cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test function
@@ -57,11 +56,80 @@ cache_monitoring_test(Config) ->
             value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
         }])),
 
-    Uuid = global_cache_controller:get_cache_uuid(Key, some_record),
-    ?assertMatch({ok, true}, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
-    ?assertMatch({ok, true}, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
+    Uuid = caches_controller:get_cache_uuid(Key, some_record),
+    ?assertMatch(true, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
+    ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
 
     ok.
+
+old_keys_cleaning_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+
+    Times = [timer:hours(7*24), timer:hours(24), timer:hours(1), timer:minutes(10), 0],
+    {_, KeysWithTimes} = lists:foldl(fun(T, {Num, Ans}) ->
+        K = list_to_binary("old_keys_cleaning_test"++integer_to_list(Num)),
+        {Num + 1, [{K, T} | Ans]}
+    end, {1, []}, Times),
+
+    lists:foreach(fun({K, _T}) ->
+        ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
+            #document{
+                key = K,
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+            }]))
+    end, KeysWithTimes),
+
+    check_clearing(lists:reverse(KeysWithTimes), Worker1, Worker2),
+
+    CorruptedKey = list_to_binary("old_keys_cleaning_test_c"),
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
+        #document{
+            key = CorruptedKey,
+            value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+        }])),
+    CorruptedUuid = caches_controller:get_cache_uuid(K, some_record),
+    ?assertMatch(ok, ?call_store(Worker2, global_cache_controller, delete, [CorruptedUuid])),
+
+    ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 1])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
+
+    ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 0])),
+    ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
+    ok.
+
+check_clearing([], _Worker1, _Worker2) ->
+    ok;
+check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
+    lists:foreach(fun({K, T}) ->
+        Uuid = caches_controller:get_cache_uuid(K, some_record),
+        {Status, CacheDoc} = ?call_store(Worker1, global_cache_controller, get, [Uuid]),
+        ?assertMatch(ok, Status),
+        #document{value = V} = CacheDoc,
+        V2 = V#global_cache_controller{timestamp = to_timestamp(from_timestamp(os:timestamp()) - T - timer:minutes(5))},
+        ?assertMatch({ok, _}, ?call_store(Worker1, some_record, save, [CacheDoc#document{value = V2}]))
+    end, KeysWithTimes),
+
+    ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, TimeWindow])),
+
+    Uuid = caches_controller:get_cache_uuid(K, some_record),
+    ?assertMatch(false, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
+    ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, K])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K])),
+
+    lists:foreach(fun({K2, _}) ->
+        Uuid2 = caches_controller:get_cache_uuid(K2, some_record),
+        ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid2])),
+        ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, K2])),
+        ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K2]))
+    end, R),
+
+    check_clearing(R, Worker1, Worker2).
+
+from_timestamp({Mega,Sec,Micro}) ->
+    (Mega*1000000 + Sec)*1000 + Micro/1000.
+
+to_timestamp(T) ->
+    {trunc(T/1000000000), trunc(T/1000) rem 1000000, trunc(T*1000) rem 1000000}.
 
 cache_clearing_test(Config) ->
     ok.

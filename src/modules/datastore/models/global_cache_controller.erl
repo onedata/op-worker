@@ -15,9 +15,9 @@
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_internal.hrl").
 
-%% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4, get_cache_uuid/2]).
+%% model_behaviour callbacks and API
+-export([save/1, get/1, list/0, list/1, exists/1, delete/1, update/2, create/1, model_init/0,
+    'after'/5, before/4]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -70,6 +70,10 @@ get(Key) ->
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
     datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
+
+list(DocAge) ->
+    Filter = caches_controller:get_docs_filter(DocAge),
+    datastore:list(global_only, ?MODEL_NAME, Filter, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -138,14 +142,11 @@ get_hooks_config() ->
     caches_controller:get_hooks_config(?GLOBAL_CACHES).
 
 update_usage_info(Key, ModelName) ->
-    Uuid = get_cache_uuid(Key, ModelName),
+    Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     V = #global_cache_controller{timestamp = os:timestamp()},
     Doc = #document{key = Uuid, value = V},
     save(Doc).
 
 del_usage_info(Key, ModelName) ->
-    Uuid = get_cache_uuid(Key, ModelName),
+    Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     delete(Uuid).
-
-get_cache_uuid(Key, ModelName) ->
-    base64:encode(term_to_binary({ModelName, Key})).
