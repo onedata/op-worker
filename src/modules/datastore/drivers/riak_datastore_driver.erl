@@ -126,7 +126,7 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:document()) ->
+-spec get(model_behaviour:model_config(), datastore:key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of

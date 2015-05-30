@@ -45,7 +45,7 @@
 
 -export([resolve_path/1, create/2, get_scope/1, list_uuids/3, gen_path/1, rename/2]).
 
--type uuid() :: datastore:key().
+-type uuid() :: uuid().
 -type path() :: binary().
 -type name() :: binary().
 -type entry() :: {path, path()} | {uuid, uuid()} | datastore:document().
@@ -63,7 +63,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    {ok, uuid()} | datastore:generic_error().
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
@@ -72,8 +72,8 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key() | entry(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec update(uuid() | entry(), Diff :: datastore:document_diff()) ->
+    {ok, uuid()} | datastore:update_error().
 update({uuid, Key}, Diff) ->
     update(Key, Diff);
 update(#document{value = #file_meta{}, key = Key}, Diff) ->
@@ -92,7 +92,7 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
+    {ok, uuid()} | datastore:create_error().
 create(#document{value = #file_meta{name = FileName}} = Document) ->
     case is_valid_filename(FileName) of
         true ->
@@ -106,7 +106,7 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 %% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec create(entry(), file_meta()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(entry(), file_meta()) -> {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUUID}, File) ->
     ?run(begin
         {ok, Parent} = get(ParentUUID),
@@ -137,7 +137,7 @@ create(#document{} = Parent, #file_meta{name = FileName} = File) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key() | entry()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(uuid() | entry()) -> {ok, datastore:document()} | datastore:get_error().
 get({uuid, Key}) ->
     get(Key);
 get(#document{value = #file_meta{}} = Document) ->
@@ -158,7 +158,7 @@ get(Key) ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key() | entry()) -> ok | datastore:generic_error().
+-spec delete(uuid() | entry()) -> ok | datastore:generic_error().
 delete({uuid, Key}) ->
     delete(Key);
 delete(#document{value = #file_meta{name = FileName}, key = Key}) ->
@@ -187,7 +187,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key() | entry()) -> datastore:exists_return().
+-spec exists(uuid() | entry()) -> datastore:exists_return().
 exists({uuid, Key}) ->
     exists(Key);
 exists(#document{value = #file_meta{}, key = Key}) ->
@@ -429,7 +429,7 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
     end).
 
 
--spec set_scopes6(Entry :: entry(), NewScopeUUID :: uuid(), [pid()], [pid()],
+-spec set_scopes6(Entry :: entry() | [entry()], NewScopeUUID :: uuid(), [pid()], [pid()],
     Offset :: non_neg_integer(), BatchSize :: non_neg_integer()) -> ok | no_return().
 set_scopes6(Entry, NewScopeUUID, [], SettersBak, Offset, BatchSize) ->
     set_scopes6(Entry, NewScopeUUID, SettersBak, [], Offset, BatchSize);

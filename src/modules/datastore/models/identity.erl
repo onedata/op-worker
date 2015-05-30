@@ -136,9 +136,9 @@ before(_ModelName, _Method, _Level, _Context) ->
 fetch(CertInfo = #certificate_info{}) ->
     case gsi_handler:get_certs_from_oneproxy(?ONEPROXY_REST, CertInfo) of
         {ok, #certificate{otp_cert = OtpCert}} ->
-            case identity:get(OtpCert) of
+            case identity:get(encode(OtpCert)) of
                 {ok, Doc = #document{value = Iden}} ->
-                    identity:save(#document{key = CertInfo, value = Iden}),
+                    identity:save(#document{key = encode(CertInfo), value = Iden}),
                     {ok, Doc};
                 Error_ -> Error_
             end;
@@ -148,7 +148,7 @@ fetch(CertInfo = #certificate_info{}) ->
 fetch(Token = #token{}) ->
     case onedata_user:fetch(Token) of
         {ok, #document{key = Id}} ->
-            NewDoc = #document{key = Token, value = #identity{user_id = Id}},
+            NewDoc = #document{key = encode(Token), value = #identity{user_id = Id}},
             case identity:save(NewDoc) of
                 {ok, _} -> {ok, NewDoc};
                 Error_ -> Error_
@@ -166,8 +166,12 @@ fetch(Token = #token{}) ->
 -spec get_or_fetch(identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Cred) ->
-    case identity:get(Cred) of
+    case identity:get(encode(Cred)) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Cred);
         Error -> Error
     end.
+
+-spec encode(term()) -> binary().
+encode(Term) ->
+    base64:encode(term_to_binary(Term)).
