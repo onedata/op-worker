@@ -125,13 +125,15 @@ cache_clearing_test(Config) ->
     MemTarget = 80,
     MemUsage = MemTarget + 5,
 
+    [{_, Mem0}] = monitoring:get_memory_stats(),
+    ?assert(Mem0 < MemTarget),
+
     ?assertMatch(ok, rpc:call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget])),
     [{_, Mem1}] = monitoring:get_memory_stats(),
     ?assert(Mem1 > MemTarget),
 
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker1}, check_mem_synch, 10000)),
     [{_, Mem2}] = monitoring:get_memory_stats(),
-    ct:print("aa ~p ~p", [Mem1, Mem2]),
     ?assert(Mem2 < MemTarget),
 
     ok.
