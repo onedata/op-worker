@@ -13,9 +13,8 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_model.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}
@@ -30,6 +29,12 @@
             ?error_stacktrace("file_meta error: ~p", [__Reason0]),
             {error, __Reason0}
     end).
+
+%% How many processes shall be process single set_scope operation.
+-define(SET_SCOPER_WORKERS, 25).
+
+%% How many entries shall be processed in one batch for set_scope operation.
+-define(SET_SCOPE_BATCH_SIZE, 100).
 
 -define(ROOT_DIR_UUID, <<"">>).
 -define(ROOT_DIR_NAME, <<"">>).
@@ -396,7 +401,6 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
     ?run(begin
         SetterFun =
             fun(CurrentEntry, ScopeUUID) ->
-                io:format(user, "2: ~p~n", [CurrentEntry]),
                 {ok, CurrentUUID} = to_uuid(CurrentEntry),
                 ok = datastore:add_links(?LINK_STORE_LEVEL, CurrentUUID, ?MODEL_NAME, {scope, {ScopeUUID, ?MODEL_NAME}})
             end,
@@ -410,10 +414,10 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                     exit -> ok
                 end
             end,
-        Setters = [spawn_link(ReceiverFun) || _ <- lists:seq(1, 25)],
+        Setters = [spawn_link(ReceiverFun) || _ <- lists:seq(1, ?SET_SCOPER_WORKERS)],
 
         Res =
-            try set_scopes6(Entry, NewScopeUUID, Setters, [], 0, 100) of
+            try set_scopes6(Entry, NewScopeUUID, Setters, [], 0, ?SET_SCOPE_BATCH_SIZE) of
                 Result -> Result
             catch
                 _:Reason ->
@@ -435,10 +439,8 @@ set_scopes6([Entry | R], NewScopeUUID, [Setter | Setters], SettersBak, Offset, B
     ok = set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize),
     ok = set_scopes6(R, NewScopeUUID, Setters, [Setter | SettersBak], Offset, BatchSize);
 set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize) ->
-    io:format(user, "0: ~p~n", [Entry]),
     Setter ! {Entry, NewScopeUUID},
     {ok, UUIDs} = list_uuids(Entry, Offset, BatchSize),
-    io:format(user, "1: ~p~n", [UUIDs]),
     case length(UUIDs) < BatchSize of
         true -> ok;
         false ->

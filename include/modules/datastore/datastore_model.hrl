@@ -13,6 +13,7 @@
 -ifndef(DATASTORE_MODEL_HRL).
 -define(DATASTORE_MODEL_HRL, 1).
 
+-include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_models_def.hrl").
 -include("modules/datastore/datastore_common_internal.hrl").
 
@@ -27,10 +28,16 @@
 -export_type([model_record/0, model_name/0]).
 
 
+%% Get default store_level() for given model
 -define(STORE_LEVEL(M), (M:model_init())#model_config.store_level).
+
+%% Get default link's store_level() for given model
 -define(LINK_STORE_LEVEL(M), (M:model_init())#model_config.link_store_level).
 
+%% Get default store_level() for current model
 -define(STORE_LEVEL, ?STORE_LEVEL(?MODEL_NAME)).
+
+%% Get default link's store_level() for current model
 -define(LINK_STORE_LEVEL, ?LINK_STORE_LEVEL(?MODEL_NAME)).
 
 -endif.

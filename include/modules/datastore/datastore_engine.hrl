@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_common_internal.hrl").
 
+%% Drivers' names
 -define(PERSISTENCE_DRIVER, riak_datastore_driver).
 -define(LOCAL_CACHE_DRIVER, ets_cache_driver).
 -define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).

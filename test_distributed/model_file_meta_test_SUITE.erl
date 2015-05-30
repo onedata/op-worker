@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Tests for file_meta model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(model_file_meta_test_SUITE).
@@ -223,8 +223,7 @@ init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
-%%     test_node_starter:clean_environment(Config).
-    ok.
+    test_node_starter:clean_environment(Config).
 
 %%%===================================================================
 %%% Internal functions

@@ -92,7 +92,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
-    transaction(fun() ->
+    mnesia_run(sync_dirty, fun() ->
         ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
         {ok, Key}
     end).
@@ -105,7 +105,7 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
 -spec update(model_behaviour:model_config(), datastore:key(),
     Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         case mnesia:read(table_name(ModelConfig), Key, write) of
             [] ->
                 {error, {not_found, ModelName}};
@@ -129,7 +129,7 @@ update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
             [] ->
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
@@ -163,7 +163,7 @@ get(#model_config{name = ModelName} = ModelConfig, Key) ->
     {ok, Handle :: term()} | datastore:generic_error() | no_return().
 list(#model_config{} = ModelConfig, Fun, AccIn) ->
     SelectAll = [{'_', [], ['$_']}],
-    transaction(fun() ->
+    mnesia_run(transaction, fun() ->
         case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, read) of
             {Obj, Handle} ->
                 list_next(Obj, Handle, Fun, AccIn);
@@ -181,7 +181,7 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
 -spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
     ok | datastore:generic_error().
 add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         Links = #links{} =
             case mnesia:read(links_table_name(ModelConfig), Key, write) of
                 [] ->
@@ -201,11 +201,11 @@ add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
 -spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error().
 delete_links(#model_config{} = ModelConfig, Key, all) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         ok = mnesia:delete(links_table_name(ModelConfig), Key, write)
     end);
 delete_links(#model_config{} = ModelConfig, Key, LinkNames) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         Links = #links{} =
             case mnesia:read(links_table_name(ModelConfig), Key, write) of
                 [] ->
@@ -302,7 +302,7 @@ list_next([], Handle, Fun, AccIn) ->
 -spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
 delete(#model_config{} = ModelConfig, Key, Pred) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         case Pred() of
             true ->
                 ok = mnesia:delete(table_name(ModelConfig), Key, write);
@@ -414,12 +414,21 @@ get_key(Tuple) when is_tuple(Tuple) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Convinience function for executing transaction within Mnesia
+%% Convinience function for executing given Mnesia's transaction-like function and normalizing Result.
+%% Available methods: sync_dirty, async_dirty, sync_transaction, transaction.
 %% @end
 %%--------------------------------------------------------------------
--spec transaction(Fun :: fun(() -> term())) -> term().
-transaction(Fun) ->
-    case mnesia:transaction(Fun) of
+-spec mnesia_run(Method :: atom(), Fun :: fun(() -> term())) -> term().
+mnesia_run(Method, Fun) when Method =:= sync_dirty; Method =:= async_dirty ->
+    try mnesia:Method(Fun) of
+        Result ->
+            Result
+    catch
+        _:Reason ->
+            {error, Reason}
+    end;
+mnesia_run(Method, Fun) when Method =:= sync_transaction; Method =:= transaction ->
+    case mnesia:Method(Fun) of
         {atomic, Result} ->
             Result;
         {aborted, Reason} ->
