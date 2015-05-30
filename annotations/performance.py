@@ -8,7 +8,7 @@ import traceback
 from subprocess import Popen, PIPE
 
 PERFORMANCE_ENV_VARIABLE = 'performance'
-PERFORMANCE_RESULT_FILE = os.path.join(os.environ.get('test_dir', '.'),
+PERFORMANCE_RESULT_FILE = os.path.join(os.environ.get('base_test_dir', '.'),
                                        'performance.json')
 
 
@@ -20,8 +20,9 @@ class Parameter(object):
         self.unit = unit
 
     def __repr__(self):
-        return 'name: {0}, description: {1}, value: {2}, unit: {3}'.format(
-            self.name, self.description, self.value, self.unit)
+        return "Parameter(name: '{0}', description: '{1}', value: {2}," \
+               " unit: '{3}')".format(self.name, self.description, self.value,
+                                      self.unit)
 
     def aggregate_value(self, value):
         self.value += value
@@ -55,7 +56,7 @@ def performance(config={}, skip=False):
             def test_case_decorator(*args, **kwargs):
                 if os.environ.get(PERFORMANCE_ENV_VARIABLE) == 'True':
                     test_suite = sys.modules[test_case.__module__]
-                    configs = config.get('configs', [])
+                    configs = config.get('configs', {})
                     exec_perf_configs(test_suite, test_case, args, kwargs,
                                       default_reps, default_params, configs)
                 else:
@@ -73,23 +74,22 @@ def exec_ct_config(test_case, params, args, kwargs):
 
 def exec_perf_configs(test_suite, test_case, case_args, case_kwargs,
                       default_reps, default_params, configs):
-    results = map(
-        lambda config: exec_perf_config(test_suite, test_case, case_args,
-                                        case_kwargs, config, default_reps,
-                                        default_params),
-        configs)
+    results = map(lambda (config_name, config):
+                  exec_perf_config(test_suite, test_case, case_args,
+                                   case_kwargs, config_name, config,
+                                   default_reps, default_params),
+                  configs.items())
     assert all(results)
 
 
 # noinspection PyShadowingNames
-def exec_perf_config(test_suite, test_case, case_args, case_kwargs, config,
-                     default_reps, default_params):
+def exec_perf_config(test_suite, test_case, case_args, case_kwargs, config_name,
+                     config, default_reps, default_params):
     suite_name = test_suite.__name__
     case_name = test_case.func_name
-    config_name = config.get('name', '')
     config_reps = config.get('repeats', default_reps)
     config_descr = config.get('description', '')
-    config_params = merge_parameters(config.get('parameters', {}),
+    config_params = merge_parameters(config.get('parameters', []),
                                      default_params)
 
     case_kwargs['parameters'] = parameters_to_dict(config_params)
@@ -205,7 +205,7 @@ def save_performance_results(content):
 
 
 def parameters_to_dict(params):
-    return dict(map(lambda param: (param.name, param.value), params))
+    return dict(map(lambda param: (param.name, param), params))
 
 
 def format_parameters(params):

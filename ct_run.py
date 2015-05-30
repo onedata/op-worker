@@ -37,9 +37,20 @@ parser.add_argument(
     help='run performance tests',
     dest='performance')
 
+parser.add_argument(
+    '--suite', '-s',
+    action='append',
+    default=[],
+    help='name of the test suite',
+    dest='suites')
+
 [args, pass_args] = parser.parse_known_args()
 script_dir = os.path.dirname(os.path.realpath(__file__))
-test_dir = os.path.join(os.path.realpath(args.release), 'test', 'integration')
+base_test_dir = os.path.join(os.path.realpath(args.release), 'test',
+                             'integration')
+test_dirs = map(lambda suite: os.path.join(base_test_dir, suite), args.suites)
+if not test_dirs:
+    test_dirs = [base_test_dir]
 
 command = '''
 import os, subprocess, sys, stat
@@ -52,7 +63,7 @@ if {shed_privileges}:
     os.setregid({gid}, {gid})
     os.setreuid({uid}, {uid})
 
-command = ['py.test'] + {args} + ['{test_dir}']
+command = ['py.test'] + {args} + ['{test_dirs}']
 ret = subprocess.call(command)
 sys.exit(ret)
 '''
@@ -60,7 +71,7 @@ command = command.format(
     args=pass_args,
     uid=os.geteuid(),
     gid=os.getegid(),
-    test_dir=test_dir,
+    test_dirs="', '".join(test_dirs),
     shed_privileges=(platform.system() == 'Linux'))
 
 ret = docker.run(tty=True,
@@ -70,6 +81,7 @@ ret = docker.run(tty=True,
                  reflect=[(script_dir, 'rw'),
                           ('/var/run/docker.sock', 'rw')],
                  image=args.image,
-                 envs={'performance': args.performance, 'test_dir': test_dir},
+                 envs={'performance': args.performance,
+                       'base_test_dir': base_test_dir},
                  command=['python', '-c', command])
 sys.exit(ret)

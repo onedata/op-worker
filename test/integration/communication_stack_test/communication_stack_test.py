@@ -1,4 +1,4 @@
-"""Documentation for communication_stack module."""
+"""This module tests communication stack."""
 
 __author__ = "Konrad Zemek"
 __copyright__ = """(C) 2015 ACK CYFRONET AGH,
@@ -7,6 +7,8 @@ This software is released under the MIT license cited in 'LICENSE.txt'."""
 import os
 import sys
 import time
+import string
+import random
 
 import pytest
 
@@ -38,36 +40,86 @@ class TestCommunicator:
     def teardown_class(cls):
         docker.remove(cls.result['docker_ids'], force=True, volumes=True)
 
-    @performance({'repeats': 3,
-                  'configs': [
-                      {'name': 'test_config'}
-                  ]})
+    @performance({
+        'parameters': [
+            Parameter('msg_num', 'Number of messages sent.', 1),
+            Parameter('msg_size', 'Size of each sent message.', 1, 'kB')
+        ],
+        'configs': {
+            'multiple_small_messages': {
+                'description': 'Sends multiple small messages using '
+                               'communicator.',
+                'parameters': [
+                    Parameter('msg_num', 'Number of messages sent.', 10000)
+                ]
+            },
+            'multiple_large_messages': {
+                'description': 'Sends multiple large messages using '
+                               'communicator.',
+                'parameters': [
+                    Parameter('msg_num', 'Number of messages sent.', 10),
+                    Parameter('msg_size', 'Size of each sent message.', 1, 'MB')
+                ]
+            }
+        }
+    })
     def test_send(self, parameters):
-        """Documentation for test_send test."""
         com = communication_stack.Communicator(3, self.ip, 5555, False)
         com.connect()
 
-        sent_bytes = com.send("this is a message")
+        msg_num = parameters['msg_num'].value
+        msg_size = parameters['msg_size'].value * translate_unit(
+            parameters['msg_size'].unit)
+        msg = random_str(msg_size)
+        for _ in xrange(msg_num):
+            sent_bytes = com.send(msg)
         time.sleep(0.5)
 
-        assert 0 < appmock_client.tcp_server_message_count(self.ip, 5555,
-                                                           sent_bytes)
+        assert msg_num == appmock_client.tcp_server_message_count(self.ip, 5555,
+                                                                  sent_bytes)
 
-    @performance(skip=True)
+    @performance({
+        'parameters': [
+            Parameter('msg_num', 'Number of messages sent.', 1),
+            Parameter('msg_size', 'Size of each sent message.', 1, 'kB')
+        ],
+        'configs': {
+            'multiple_small_messages': {
+                'description': 'Receives multiple small messages using '
+                               'communicator.',
+                'parameters': [
+                    Parameter('msg_num', 'Number of messages sent.', 10000)
+                ]
+            },
+            'multiple_large_messages': {
+                'description': 'Receives multiple large messages using '
+                               'communicator.',
+                'parameters': [
+                    Parameter('msg_num', 'Number of messages sent.', 10),
+                    Parameter('msg_size', 'Size of each sent message.', 1, 'MB')
+                ]
+            }
+        }
+    })
     def test_communicate(self, parameters):
         com = communication_stack.Communicator(1, self.ip, 5555, False)
         com.connect()
 
-        request = com.communicate("this is a request")
+        msg_num = parameters['msg_num'].value
+        msg_size = parameters['msg_size'].value * translate_unit(
+            parameters['msg_size'].unit)
+        msg = random_str(msg_size)
 
-        reply = communication_stack.prepareReply(request, "this is a reply")
-        time.sleep(0.5)
+        for _ in xrange(msg_num):
+            request = com.communicate(msg)
+            reply = communication_stack.prepareReply(request, msg)
+
+            appmock_client.tcp_server_send(self.ip, 5555, reply)
+
+            assert com.communicateReceive() == reply
 
         assert 1 == appmock_client.tcp_server_message_count(self.ip, 5555,
                                                             request)
-        appmock_client.tcp_server_send(self.ip, 5555, reply)
-
-        assert com.communicateReceive() == reply
 
     @performance(skip=True)
     def test_successful_handshake(self, parameters):

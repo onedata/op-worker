@@ -19,6 +19,15 @@ def random_int():
     return random.randint(1, 100)
 
 
-def random_str():
+def random_str(size=random_int()):
     return ''.join(random.choice(string.ascii_uppercase + string.digits) for
-                   _ in range(random_int()))
+                   _ in xrange(size))
+
+
+def translate_unit(unit):
+    if unit == 'kB':
+        return 1024
+    elif unit == 'MB':
+        return 1048576
+    else:
+        return 1
