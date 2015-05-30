@@ -5,10 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model that is used to controle memory utilization by global cache.
+%%% @doc Model that is used to controle memory utilization by local cache.
 %%% @end
 %%%-------------------------------------------------------------------
--module(global_cache_controller).
+-module(local_cache_controller).
 -author("Michal Wrzeszcz").
 -behaviour(model_behaviour).
 
@@ -31,7 +31,7 @@
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(global_only, Document).
+    datastore:save(local_only, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -41,7 +41,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(global_only, ?MODULE, Key, Diff).
+    datastore:update(local_only, ?MODULE, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,7 +51,7 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(global_only, Document).
+    datastore:create(local_only, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,7 +60,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(global_only, ?MODULE, Key).
+    datastore:get(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -69,23 +69,25 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
+    datastore:list(local_only, ?MODEL_NAME, ?GET_ALL, []).
 
 list(DocAge) ->
-    Now = os:timestamp(),
-    Filter = fun
-        ('$end_of_table', Acc) ->
-            {abort, Acc};
-        (#document{key = Uuid, value = V}, Acc) ->
-            T = V#global_cache_controller.timestamp,
-            case timer:now_diff(Now, T) >= 1000*DocAge of
-                true ->
-                    {next, [Uuid | Acc]};
-                false ->
-                    {next, Acc}
-            end
-    end,
-    datastore:list(global_only, ?MODEL_NAME, Filter, []).
+%%     Now = os:timestamp(),
+%%     Filter = fun
+%%         ('$end_of_table', Acc) ->
+%%             {abort, Acc};
+%%         (#document{key = Uuid, value = V}, Acc) ->
+%%             T = V#local_cache_controller.timestamp,
+%%             case timer:now_diff(Now, T) >= 1000*DocAge of
+%%                 true ->
+%%                     {next, [Uuid | Acc]};
+%%                 false ->
+%%                     {next, Acc}
+%%             end
+%%     end,
+%%     datastore:list(local_only, ?MODEL_NAME, Filter, []).
+    %TODO change when list on ets is added.
+    {ok, []}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -94,7 +96,7 @@ list(DocAge) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(global_only, ?MODULE, Key).
+    datastore:delete(local_only, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,7 +105,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(global_only, ?MODULE, Key)).
+    ?RESPONSE(datastore:exists(local_only, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -155,7 +157,7 @@ get_hooks_config() ->
 
 update_usage_info(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-    V = #global_cache_controller{timestamp = os:timestamp()},
+    V = #local_cache_controller{timestamp = os:timestamp()},
     Doc = #document{key = Uuid, value = V},
     save(Doc).
 

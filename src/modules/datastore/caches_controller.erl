@@ -19,7 +19,7 @@
 
 %% API
 -export([clear_local_cache/1, clear_global_cache/1, clear_local_cache/2, clear_global_cache/2]).
--export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1, get_docs_filter/1]).
+-export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1]).
 -export([delete_old_keys/2, get_cache_uuid/2, decode_uuid/1]).
 
 %%%===================================================================
@@ -84,21 +84,6 @@ get_hooks_config(Models) ->
     ModelConfig ++ Ans
   end, [], Models).
 
-get_docs_filter(DocAge) ->
-  Now = os:timestamp(),
-  fun
-    ('$end_of_table', Acc) ->
-      {abort, Acc};
-    (#document{key = Uuid, value = V}, Acc) ->
-      T = V#global_cache_controller.timestamp,
-      case timer:now_diff(Now, T) >= 1000*DocAge of
-        true ->
-          {next, [Uuid | Acc]};
-        false ->
-          {next, Acc}
-      end
-  end.
-
 get_cache_uuid(Key, ModelName) ->
   base64:encode(term_to_binary({ModelName, Key})).
 
@@ -125,10 +110,10 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
   case TimeWindow of
     0 ->
       lists:foreach(fun(Cache) ->
-        {ok, Uuids2} = apply(datastore, list, [Level, Cache, ?GET_ALL, []]),
-        lists:foreach(fun(Uuid) ->
-          apply(datastore, delete, [Level, Cache, Uuid])
-        end, Uuids2)
+        {ok, Docs} = apply(datastore, list, [Level, Cache, ?GET_ALL, []]),
+        lists:foreach(fun(Doc) ->
+          apply(datastore, delete, [Level, Cache, Doc#document.key])
+        end, Docs)
       end, Caches);
     _ ->
       ok

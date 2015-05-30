@@ -142,6 +142,21 @@ handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) ->
             end,
     {reply, Reply, State};
 
+% only for tests
+handle_call(check_mem_synch, _From, #state{monitoring_state = MonState} = State) ->
+    Ans = case monitoring:get_memory_stats() of
+        [{<<"mem">>, MemUsage}] ->
+            case caches_controller:should_clear_cache(MemUsage) of
+                true ->
+                    free_memory(MemUsage);
+                _ ->
+                    ok
+            end;
+        _ ->
+            cannot_check_mem_usage
+    end,
+    {reply, Ans, State};
+
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -474,7 +489,7 @@ free_memory(NodeMem) ->
             ({_Aggressive, _StoreType}, ok) ->
                 ok;
             ({Aggressive, StoreType}, _) ->
-                Ans = caches_controller:clear_global_cache(Aggressive, StoreType),
+                Ans = caches_controller:clear_cache(NodeMem, Aggressive, StoreType),
                 case Ans of
                     mem_usage_too_high ->
                         ?warning("Not able to free enough memory clearing cache ~p with param ~p", [StoreType, Aggressive]);
@@ -485,7 +500,8 @@ free_memory(NodeMem) ->
         end, start, ClearingOrder)
     catch
         E1:E2 ->
-            ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2])
+            ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2]),
+            {error, {E1, E2}}
     end.
 
 naxt_mem_check() ->

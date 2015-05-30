@@ -15,32 +15,25 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include("modules/datastore/datastore.hrl").
 
 -define(call_store(N, M, A), ?call_store(N, datastore, M, A)).
 -define(call_store(N, Mod, M, A), rpc:call(N, Mod, M, A)).
--define(upload_test_code(CONFIG), %todo probably unnecessary
-    begin
-        {Mod, Bin, File} = code:get_object_code(?MODULE),
-        {_Replies, _} = rpc:multicall(?config(op_worker_nodes, CONFIG), code, load_binary,
-            [Mod, File, Bin])
-    end).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
             global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1,
             cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
+-export([utilize_memory/2]).
 
 -performance({test_cases, []}).
-%% all() ->
-%%     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-%%      global_cache_list_test, persistance_test, links_test, link_walk_test,
-%%      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
-
 all() ->
-    [cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
+    [local_cache_test, global_cache_test, global_cache_atomic_update_test,
+     global_cache_list_test, persistance_test, links_test, link_walk_test,
+     cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test function
@@ -92,16 +85,18 @@ old_keys_cleaning_test(Config) ->
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 1])),
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, CorruptedKey])),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 0])),
     ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, CorruptedKey])),
     ok.
 
 check_clearing([], _Worker1, _Worker2) ->
     ok;
 check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
-    lists:foreach(fun({K, T}) ->
-        Uuid = caches_controller:get_cache_uuid(K, some_record),
+    lists:foreach(fun({K2, T}) ->
+        Uuid = caches_controller:get_cache_uuid(K2, some_record),
         {Status, CacheDoc} = ?call_store(Worker1, global_cache_controller, get, [Uuid]),
         ?assertMatch(ok, Status),
         #document{value = V} = CacheDoc,
@@ -125,13 +120,40 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
 
     check_clearing(R, Worker1, Worker2).
 
-from_timestamp({Mega,Sec,Micro}) ->
-    (Mega*1000000 + Sec)*1000 + Micro/1000.
-
-to_timestamp(T) ->
-    {trunc(T/1000000000), trunc(T/1000) rem 1000000, trunc(T*1000) rem 1000000}.
-
 cache_clearing_test(Config) ->
+    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
+    MemTarget = 80,
+    MemUsage = MemTarget + 5,
+
+    ?assertMatch(ok, rpc:call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget])),
+    [{_, Mem1}] = monitoring:get_memory_stats(),
+    ?assert(Mem1 > MemTarget),
+
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker1}, check_mem_synch, 10000)),
+    [{_, Mem2}] = monitoring:get_memory_stats(),
+    ct:print("aa ~p ~p", [Mem1, Mem2]),
+    ?assert(Mem2 < MemTarget),
+
+    ok.
+
+utilize_memory(MemUsage, MemTarget) ->
+    application:set_env(?APP_NAME, mem_to_clear_cache, MemTarget),
+
+    OneMB = list_to_binary(prepare_list(1024*1024)),
+
+    Add100MB = fun(_KeyBeg) ->
+        for(1, 100, fun(_I) ->
+            some_record:create(
+                #document{
+                    value = #some_record{field1 = 1, field2 = binary:copy(OneMB), field3 = {test, tuple}}
+                })
+        end)
+    end,
+    Guard = fun() ->
+        [{_, Current}] = monitoring:get_memory_stats(),
+        Current >= MemUsage
+    end,
+    while(Add100MB, Guard),
     ok.
 
 %% Simple usage of get/update/create/exists/delete on local cache driver (on several nodes)
@@ -196,9 +218,6 @@ global_cache_atomic_update_test(Config) ->
     Level = global_only,
     Key = some_key_atomic,
 
-    %% Load this module into oneprovider nodes so that update fun() will be available
-    ?upload_test_code(Config),
-
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
             #document{
@@ -243,8 +262,6 @@ global_cache_list_test(Config) ->
 
     Level = global_only,
 
-    ?upload_test_code(Config),
-
     Ret0 = ?call_store(Worker1, list, [Level, some_record, ?GET_ALL, []]),
     ?assertMatch({ok, _}, Ret0),
     {ok, Objects0} = Ret0,
@@ -280,7 +297,6 @@ global_cache_list_test(Config) ->
 %% Simple usege of link_walk
 link_walk_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
-    ?upload_test_code(Config),
 
     Level = disk_only,
 
@@ -323,7 +339,6 @@ link_walk_test(Config) ->
 %% Simple usege of (add/fetch/delete/foreach)_link
 links_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
-    ?upload_test_code(Config),
 
     Level = disk_only,
 
@@ -414,6 +429,9 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.
 local_access_only(Node, Level) ->
@@ -518,3 +536,33 @@ global_access(Config, Level) ->
             some_record, Key])),
 
     ok.
+
+prepare_list(1) ->
+    "x";
+
+prepare_list(Size) ->
+    "x" ++ prepare_list(Size - 1).
+
+for(N, N, F) ->
+    F(N);
+for(I, N, F) ->
+    F(I),
+    for(I + 1, N, F).
+
+while(F, Guard) ->
+    while(0, F, Guard).
+
+while(Counter, F, Guard) ->
+    case Guard() of
+        true ->
+            ok;
+        _ ->
+            F(Counter),
+            while(Counter+1, F, Guard)
+    end.
+
+from_timestamp({Mega,Sec,Micro}) ->
+    (Mega*1000000 + Sec)*1000 + Micro/1000.
+
+to_timestamp(T) ->
+    {trunc(T/1000000000), trunc(T/1000) rem 1000000, trunc(T*1000) rem 1000000}.

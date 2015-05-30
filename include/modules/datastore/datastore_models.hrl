@@ -30,7 +30,8 @@
     onedata_user,
     identity,
     file_meta,
-    global_cache_controller
+    global_cache_controller,
+    local_cache_controller
 ]).
 
 -define(GLOBAL_CACHES, [
@@ -42,6 +43,10 @@
 ]).
 
 -record(global_cache_controller, {
+    timestamp :: tuple()
+}).
+
+-record(local_cache_controller, {
     timestamp :: tuple()
 }).
 
