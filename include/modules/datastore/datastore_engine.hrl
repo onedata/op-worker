@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Defines common macros and records used by datastore engine.
+%%%      This header shall not be used outside of core datastore engine (drivers, API and worker).
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(DATASTORE_ENGINE_HRL).

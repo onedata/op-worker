@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Models definitions.
+%%% @doc Models definitions. Shall not be included directly in any erl file.
 %%% @end
 %%%-------------------------------------------------------------------
 

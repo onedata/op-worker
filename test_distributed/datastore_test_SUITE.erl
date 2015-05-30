@@ -367,18 +367,22 @@ generic_links_test(Config, Level) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     ?upload_test_code(Config),
 
+    Key1 = rand_key(),
+    Key2 = rand_key(),
+    Key3 = rand_key(),
+
     Doc1 = #document{
-        key = doc1,
+        key = Key1,
         value = #some_record{field1 = 1}
     },
 
     Doc2 = #document{
-        key = doc2,
+        key = Key2,
         value = #some_record{field1 = 2}
     },
 
     Doc3 = #document{
-        key = doc3,
+        key = Key3,
         value = #some_record{field1 = 3}
     },
 
@@ -401,10 +405,10 @@ generic_links_test(Config, Level) ->
     Ret2 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
     Ret3 = ?call_store(Worker1, fetch_link, [Level, Doc1, link3]),
 
-    ?assertMatch({ok, {doc2, some_record}}, Ret2),
-    ?assertMatch({ok, {doc3, some_record}}, Ret3),
-    ?assertMatch({ok, #document{key = doc2, value = #some_record{field1 = 2}}}, Ret0),
-    ?assertMatch({ok, #document{key = doc3, value = #some_record{field1 = 3}}}, Ret1),
+    ?assertMatch({ok, {Key2, some_record}}, Ret2),
+    ?assertMatch({ok, {Key3, some_record}}, Ret3),
+    ?assertMatch({ok, #document{key = Key2, value = #some_record{field1 = 2}}}, Ret0),
+    ?assertMatch({ok, #document{key = Key3, value = #some_record{field1 = 3}}}, Ret1),
 
     ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, [link2, link3]])),
 
@@ -420,7 +424,7 @@ generic_links_test(Config, Level) ->
 
     ?assertMatch(ok, ?call_store(Worker2, add_links, [Level, Doc1, [{link2, Doc2}, {link3, Doc3}]])),
     ?assertMatch(ok,
-        ?call_store(Worker1, some_record, delete, [doc2])),
+        ?call_store(Worker1, some_record, delete, [Key2])),
     ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, link3])),
 
     Ret8 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link2]),
@@ -428,21 +432,24 @@ generic_links_test(Config, Level) ->
     Ret10 = ?call_store(Worker1, fetch_link, [Level, Doc1, link2]),
     Ret11 = ?call_store(Worker2, fetch_link, [Level, Doc1, link3]),
 
-    ?assertMatch({ok, {doc2, some_record}}, Ret10),
+    ?assertMatch({ok, {Key2, some_record}}, Ret10),
     ?assertMatch({error, link_not_found}, Ret11),
     ?assertMatch({error, link_not_found}, Ret9),
     ?assertMatch({error, {not_found, _}}, Ret8),
 
     %% Delete on document shall delete all its links
     ?assertMatch(ok,
-        ?call_store(Worker1, some_record, delete, [doc1])),
+        ?call_store(Worker1, some_record, delete, [Key1])),
     timer:sleep(timer:seconds(1)),
 
     Ret12 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
     ?assertMatch({error, link_not_found}, Ret12),
 
-    ?call_store(Worker2, delete, [Level, some_record, doc1]),
-    ?call_store(Worker2, delete, [Level, some_record, doc2]),
-    ?call_store(Worker2, delete, [Level, some_record, doc3]),
+    ok = ?call_store(Worker2, delete, [Level, some_record, Key1]),
+    ok = ?call_store(Worker2, delete, [Level, some_record, Key2]),
+    ok = ?call_store(Worker2, delete, [Level, some_record, Key3]),
 
     ok.
+
+rand_key() ->
+    base64:encode(crypto:rand_bytes(8)).

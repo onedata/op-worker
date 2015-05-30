@@ -374,7 +374,7 @@ table_name(TabName) when is_atom(TabName) ->
 %%--------------------------------------------------------------------
 -spec links_table_name(model_behaviour:model_config() | atom()) -> atom().
 links_table_name(#model_config{name = ModelName}) ->
-    table_name(ModelName);
+    links_table_name(ModelName);
 links_table_name(TabName) when is_atom(TabName) ->
     binary_to_atom(<<"dc_links_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
 

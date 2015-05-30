@@ -6,6 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Common definions and configurations for datastore.
+%%%      This header may be used anywhere to get access to datastore API helpers
+%%%      and model definitions.
 %%% @end
 %%%-------------------------------------------------------------------
 
