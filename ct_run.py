@@ -12,7 +12,6 @@ docker_dir = os.path.join(script_dir, 'bamboos', 'docker')
 sys.path.insert(0, docker_dir)
 from environment import docker
 
-
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     description='Run Common Tests.')
@@ -30,6 +29,13 @@ parser.add_argument(
     default='release',
     help='release directory to run tests from',
     dest='release')
+
+parser.add_argument(
+    '--performance', '-p',
+    action='store_true',
+    default=False,
+    help='run performance tests',
+    dest='performance')
 
 [args, pass_args] = parser.parse_known_args()
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -64,5 +70,6 @@ ret = docker.run(tty=True,
                  reflect=[(script_dir, 'rw'),
                           ('/var/run/docker.sock', 'rw')],
                  image=args.image,
+                 envs={'performance': args.performance, 'test_dir': test_dir},
                  command=['python', '-c', command])
 sys.exit(ret)

@@ -5,6 +5,7 @@ import time
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(script_dir))
 from test_common import *
+from performance import *
 
 # noinspection PyUnresolvedReferences
 from environment import appmock, common, docker
@@ -30,7 +31,8 @@ class TestConnectionPool:
     def teardown_class(cls):
         docker.remove(cls.result['docker_ids'], force=True, volumes=True)
 
-    def test_cp_should_send_messages(self):
+    @performance(skip=True)
+    def test_cp_should_send_messages(self, parameters):
         cp = connection_pool.ConnectionPoolProxy(3, self.ip, 5555)
 
         messages = [random_str() for _ in range(10)]
@@ -44,7 +46,8 @@ class TestConnectionPool:
             assert 1 == appmock_client.tcp_server_message_count(self.ip, 5555,
                                                                 msg)
 
-    def test_cp_should_receive_messages(self):
+    @performance(skip=True)
+    def test_cp_should_receive_messages(self, parameters):
         cp = connection_pool.ConnectionPoolProxy(3, self.ip, 5555)
 
         messages = [random_str() for _ in range(10)]
@@ -79,7 +82,8 @@ class TestConnection:
     def teardown_class(cls):
         docker.remove(cls.result['docker_ids'], force=True, volumes=True)
 
-    def test_connect_should_trigger_handshake(self):
+    @performance(skip=True)
+    def test_connect_should_trigger_handshake(self, parameters):
         handshake = random_str()
 
         conn = connection_pool.ConnectionProxy(handshake, True)
@@ -90,7 +94,8 @@ class TestConnection:
         assert 1 == appmock_client.tcp_server_message_count(self.ip, 5555,
                                                             handshake)
 
-    def test_connection_should_receive_handshake_response(self):
+    @performance(skip=True)
+    def test_connection_should_receive_handshake_response(self, parameters):
         conn = connection_pool.ConnectionProxy(random_str(), True)
         conn.connect(self.ip, 5555)
 
@@ -99,7 +104,9 @@ class TestConnection:
 
         assert response == conn.getHandshakeResponse()
 
-    def test_connection_should_close_after_rejected_handshake_response(self):
+    @performance(skip=True)
+    def test_connection_should_close_after_rejected_handshake_response(self,
+                                                                       parameters):
         conn = connection_pool.ConnectionProxy(random_str(), False)
         conn.connect(self.ip, 5555)
 
@@ -109,7 +116,8 @@ class TestConnection:
 
         assert conn.waitForClosed()
 
-    def test_connection_is_ready_after_handshake_response(self):
+    @performance(skip=True)
+    def test_connection_is_ready_after_handshake_response(self, parameters):
         conn = connection_pool.ConnectionProxy(random_str(), True)
         conn.connect(self.ip, 5555)
 
@@ -119,7 +127,9 @@ class TestConnection:
 
         assert conn.waitForReady()
 
-    def test_connection_should_become_ready_after_message_sent(self):
+    @performance(skip=True)
+    def test_connection_should_become_ready_after_message_sent(self,
+                                                               parameters):
         conn = connection_pool.ConnectionProxy(random_str(), True)
         conn.connect(self.ip, 5555)
 
@@ -130,7 +140,8 @@ class TestConnection:
 
         assert conn.waitForReady()
 
-    def test_send_should_send_messages(self):
+    @performance(skip=True)
+    def test_send_should_send_messages(self, parameters):
         conn = connection_pool.ConnectionProxy(random_str(), True)
         conn.connect(self.ip, 5555)
 
@@ -150,7 +161,8 @@ class TestConnection:
         assert 1 == appmock_client.tcp_server_message_count(self.ip, 5555, msg)
         assert 1 == appmock_client.tcp_server_message_count(self.ip, 5555, msg2)
 
-    def test_connection_should_receive(self):
+    @performance(skip=True)
+    def test_connection_should_receive(self, parameters):
         conn = connection_pool.ConnectionProxy(random_str(), True)
         conn.connect(self.ip, 5555)
 
