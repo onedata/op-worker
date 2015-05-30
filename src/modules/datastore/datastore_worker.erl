@@ -14,12 +14,8 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
-
--define(PERSISTENCE_DRIVER, riak_datastore_driver).
--define(LOCAL_CACHE_DRIVER, ets_cache_driver).
--define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanup/0]).

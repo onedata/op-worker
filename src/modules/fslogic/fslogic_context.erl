@@ -12,7 +12,7 @@
 -module(fslogic_context).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 

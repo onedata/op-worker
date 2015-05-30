@@ -12,7 +12,7 @@
 -author("Rafal Slota").
 
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_common_internal.hrl").
+-include("modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 

@@ -16,7 +16,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
--include("modules/datastore/datastore_models_def.hrl").
 -include("modules/datastore/datastore.hrl").
 
 -define(call_store(N, M, A), ?call_store(N, datastore, M, A)).

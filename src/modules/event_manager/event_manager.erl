@@ -15,7 +15,7 @@
 
 -behaviour(gen_server).
 
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include("modules/event_manager/events.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").

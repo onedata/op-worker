@@ -13,7 +13,7 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 

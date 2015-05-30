@@ -12,7 +12,7 @@
 -module(auth_manager).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").

@@ -47,8 +47,8 @@ init_bucket(_BucketName, Models, NodeToSync) ->
             LinkTable = links_table_name(ModelName),
             case NodeToSync == Node of
                 true -> %% No mnesia nodes -> create new table
-                    MakeTable = fun(TabName, RecordName, Fields) ->
-                        Ans = case mnesia:create_table(TabName, [{record_name, RecordName}, {attributes, Fields},
+                    MakeTable = fun(TabName, RecordName, RecordFields) ->
+                        Ans = case mnesia:create_table(TabName, [{record_name, RecordName}, {attributes, RecordFields},
                             {ram_copies, [Node]}, {type, set}]) of
                             {atomic, ok} -> ok;
                             {aborted, {already_exists, TabName}} ->
@@ -372,7 +372,7 @@ table_name(TabName) when is_atom(TabName) ->
 %% Gets Mnesia links table name for given model.
 %% @end
 %%--------------------------------------------------------------------
--spec table_name(model_behaviour:model_config() | atom()) -> atom().
+-spec links_table_name(model_behaviour:model_config() | atom()) -> atom().
 links_table_name(#model_config{name = ModelName}) ->
     table_name(ModelName);
 links_table_name(TabName) when is_atom(TabName) ->

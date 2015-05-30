@@ -14,7 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/http_worker/http_common.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % the state of request, it is created in rest_init function, and passed to every cowboy callback functions

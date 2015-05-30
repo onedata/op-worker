@@ -19,7 +19,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("clproto/include/oneproxy_messages.hrl").
