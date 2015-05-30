@@ -229,7 +229,7 @@ delete_links(#model_config{} = ModelConfig, Key, LinkNames) ->
 -spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
     {ok, datastore:link_target()} | datastore:link_error().
 fetch_link(#model_config{} = ModelConfig, Key, LinkName) ->
-    case mnesia:dirty_read(table_name(ModelConfig), Key) of
+    case mnesia:dirty_read(links_table_name(ModelConfig), Key) of
         [] -> {error, link_not_found};
         [Value] ->
             Map = Value#links.link_map,
@@ -250,7 +250,7 @@ fetch_link(#model_config{} = ModelConfig, Key, LinkName) ->
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     {ok, Acc :: term()} | datastore:link_error().
 foreach_link(#model_config{} = ModelConfig, Key, Fun, AccIn) ->
-    case mnesia:dirty_read(table_name(ModelConfig), Key) of
+    case mnesia:dirty_read(links_table_name(ModelConfig), Key) of
         [] -> {ok, AccIn};
         [Value] ->
             Map = Value#links.link_map,
