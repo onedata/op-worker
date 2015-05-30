@@ -441,4 +441,8 @@ generic_links_test(Config, Level) ->
     Ret12 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
     ?assertMatch({error, link_not_found}, Ret12),
 
+    ?call_store(Worker2, delete, [Level, some_record, doc1]),
+    ?call_store(Worker2, delete, [Level, some_record, doc2]),
+    ?call_store(Worker2, delete, [Level, some_record, doc3]),
+
     ok.
