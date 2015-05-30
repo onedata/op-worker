@@ -525,7 +525,7 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
     case exec_driver(ModelName, Driver, Method, Args) of
         {error, Reason} ->
             {error, Reason};
-        Result when Method =:= get ->
+        Result when Method =:= get; Method =:= fetch_link ->
             Result;
         {ok, true} = Result when Method =:= exists ->
             Result;
