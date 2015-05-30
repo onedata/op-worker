@@ -43,7 +43,7 @@ class TestCommunicator:
     @performance({
         'parameters': [
             Parameter('msg_num', 'Number of messages sent.', 1),
-            Parameter('msg_size', 'Size of each sent message.', 1, 'kB')
+            Parameter('msg_size', 'Size of each sent message.', 100, 'B')
         ],
         'configs': {
             'multiple_small_messages': {
@@ -81,7 +81,7 @@ class TestCommunicator:
     @performance({
         'parameters': [
             Parameter('msg_num', 'Number of messages sent.', 1),
-            Parameter('msg_size', 'Size of each sent message.', 1, 'kB')
+            Parameter('msg_size', 'Size of each sent message.', 100, 'B')
         ],
         'configs': {
             'multiple_small_messages': {

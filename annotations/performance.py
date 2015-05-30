@@ -140,14 +140,14 @@ def exec_perf_config(test_suite, test_case, case_args, case_kwargs, config_name,
     }})
     cases.update({case_name: {
         'name': case_name,
-        'description': test_case.__doc__,
+        'description': test_case.__doc__ or '',
         'configs': configs
     }})
     suites.update({suite_name: {
         'name': suite_name,
-        'copyright': test_suite.__copyright__,
-        'authors': re.split(r'\s*,\s*', test_suite.__author__),
-        'description': test_suite.__doc__,
+        'copyright': get_copyright(test_suite),
+        'authors': get_authors(test_suite),
+        'description': test_suite.__doc__ or '',
         'cases': cases
     }})
     performance.update({'suites': suites})
@@ -267,6 +267,26 @@ def get_timestamp():
     """Returns number of milliseconds since the Epoch."""
 
     return int(time.time() * 1000)
+
+
+# noinspection PyBroadException
+def get_copyright(test_suite):
+    """Returns copyright for test suite."""
+
+    try:
+        return test_suite.__copyright__
+    except:
+        return ''
+
+
+# noinspection PyBroadException
+def get_authors(test_suite):
+    """Returns authors of test suite."""
+
+    try:
+        return re.split(r'\s*,\s*', test_suite.__author__)
+    except:
+        return []
 
 
 def cmd(command):

@@ -47,15 +47,13 @@ class TestConnectionPool:
                 'description': 'Sends multiple small messages using connection '
                                'pool.',
                 'parameters': [
-                    Parameter('msg_num', 'Number of messages sent.', 10000),
-                    Parameter('msg_size', 'Size of each sent message.', 1, 'kB')
+                    Parameter('msg_num', 'Number of messages sent.', 10000)
                 ]
             },
             'multiple_large_messages': {
                 'description': 'Sends multiple large messages using connection '
                                'pool.',
                 'parameters': [
-                    Parameter('msg_num', 'Number of messages sent.', 10),
                     Parameter('msg_size', 'Size of each sent message.', 1, 'MB')
                 ]
             }
@@ -88,15 +86,13 @@ class TestConnectionPool:
                 'description': 'Receives multiple small messages using '
                                'connection pool.',
                 'parameters': [
-                    Parameter('msg_num', 'Number of messages sent.', 10000),
-                    Parameter('msg_size', 'Size of each sent message.', 1, 'kB')
+                    Parameter('msg_num', 'Number of messages sent.', 10000)
                 ]
             },
             'multiple_large_messages': {
                 'description': 'Receives multiple large messages using '
                                'connection pool.',
                 'parameters': [
-                    Parameter('msg_num', 'Number of messages sent.', 10),
                     Parameter('msg_size', 'Size of each sent message.', 1, 'MB')
                 ]
             }
