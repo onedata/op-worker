@@ -13,7 +13,7 @@
 -behaviour(store_driver_behaviour).
 
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% store_driver_behaviour callbacks
@@ -169,7 +169,7 @@ add_links(_, _, _) ->
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+-spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:link_name()] | all) ->
     no_return().
 delete_links(_, _, _) ->
     erlang:error(not_implemented).

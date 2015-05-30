@@ -103,7 +103,7 @@
 %% Removes links from the document with given key. There is special link name 'all' which removes all links.
 %% @end
 %%--------------------------------------------------------------------
--callback delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+-callback delete_links(model_behaviour:model_config(), datastore:key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error() | no_return().
 
 

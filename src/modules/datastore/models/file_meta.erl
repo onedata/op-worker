@@ -15,7 +15,7 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_internal.hrl").
+-include("modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}

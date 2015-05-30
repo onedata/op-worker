@@ -13,7 +13,7 @@
 -behaviour(store_driver_behaviour).
 
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Bukcet type that is defined in database and configured to store "map" data type
@@ -226,7 +226,7 @@ add_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [Link | R], Ctx) 
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+-spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error().
 delete_links(#model_config{bucket = Bucket} = _ModelConfig, Key, all) ->
     case call(riakc_pb_socket, delete, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of

@@ -12,7 +12,7 @@
 -ifndef(DATASTORE_HRL).
 -define(DATASTORE_HRL, 1).
 
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_models_def.hrl").
 
 %% Common predicates
 -define(PRED_ALWAYS, fun() -> true end).

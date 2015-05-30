@@ -14,7 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Batch size for list operation
@@ -26,6 +26,8 @@
 -export([init_bucket/3, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
+
+-record(links, {key, link_map = #{}}).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -42,21 +44,28 @@ init_bucket(_BucketName, Models, NodeToSync) ->
         fun(#model_config{name = ModelName, fields = Fields}) ->
             Node = node(),
             Table = table_name(ModelName),
+            LinkTable = links_table_name(ModelName),
             case NodeToSync == Node of
                 true -> %% No mnesia nodes -> create new table
-                    Ans = case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
-                        {ram_copies, [Node]}, {type, set}]) of
-                        {atomic, ok} -> ok;
-                        {aborted, {already_exists, Table}} ->
-                            ok;
-                        {aborted, Reason} ->
-                            ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
-                            throw(Reason)
+                    MakeTable = fun(TabName, RecordName, Fields) ->
+                        Ans = case mnesia:create_table(TabName, [{record_name, RecordName}, {attributes, Fields},
+                            {ram_copies, [Node]}, {type, set}]) of
+                            {atomic, ok} -> ok;
+                            {aborted, {already_exists, TabName}} ->
+                                ok;
+                            {aborted, Reason} ->
+                                ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [TabName, node(), Reason]),
+                                throw(Reason)
+                        end,
+                        ?info("Creating mnesia table: ~p, result: ~p", [TabName, Ans])
                     end,
-                    ?info("Creating mnesia table: ~p, result: ~p", [table_name(ModelName), Ans]),
-                    Ans;
+                    {
+                        MakeTable(Table, ModelName, [key | Fields]),
+                        MakeTable(LinkTable, links, record_info(fields, links))
+                    };
                 _ -> %% there is at least one mnesia node -> join cluster
-                    Tables = [table_name(MName) || MName <- ?MODELS],
+                    Tables = [table_name(MName) || MName <- ?MODELS] ++
+                             [links_table_name(MName) || MName <- ?MODELS],
                     ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, ?MNESIA_WAIT_TIMEOUT]),
                     case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
                         {ok, [Node]} ->
@@ -170,19 +179,47 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
-    no_return().
-add_links(_, _, _) ->
-    erlang:error(not_implemented).
+    ok | datastore:generic_error().
+add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
+    transaction(fun() ->
+        Links = #links{} =
+            case mnesia:read(links_table_name(ModelConfig), Key, write) of
+                [] ->
+                    #links{key = Key};
+                [Value] ->
+                    Value
+            end,
+        Links1 = Links#links{link_map = maps:merge(Links#links.link_map, maps:from_list(LinkSpec))},
+        ok = mnesia:write(links_table_name(ModelConfig), Links1, write)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
-    no_return().
-delete_links(_, _, _) ->
-    erlang:error(not_implemented).
+-spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:link_name()] | all) ->
+    ok | datastore:generic_error().
+delete_links(#model_config{} = ModelConfig, Key, all) ->
+    transaction(fun() ->
+        ok = mnesia:delete(links_table_name(ModelConfig), Key, write)
+    end);
+delete_links(#model_config{} = ModelConfig, Key, LinkNames) ->
+    transaction(fun() ->
+        Links = #links{} =
+            case mnesia:read(links_table_name(ModelConfig), Key, write) of
+                [] ->
+                    #links{key = Key};
+                [Value] ->
+                    Value
+            end,
+        LinksMap =
+            lists:foldl(fun(LinkName, Map) ->
+                maps:remove(LinkName, Map)
+            end, Links#links.link_map, LinkNames),
+        Links1 = Links#links{link_map = LinksMap},
+        ok = mnesia:write(links_table_name(ModelConfig), Links1, write)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -190,9 +227,19 @@ delete_links(_, _, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
-    no_return().
-fetch_link(_, _, _) ->
-    erlang:error(not_implemented).
+    {ok, datastore:link_target()} | datastore:link_error().
+fetch_link(#model_config{} = ModelConfig, Key, LinkName) ->
+    case mnesia:dirty_read(table_name(ModelConfig), Key) of
+        [] -> {error, link_not_found};
+        [Value] ->
+            Map = Value#links.link_map,
+            case maps:get(LinkName, Map, undefined) of
+                undefined ->
+                    {error, link_not_found};
+                {_TargetKey, _TargetModel} = Target ->
+                    {ok, Target}
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -201,9 +248,19 @@ fetch_link(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
-    no_return().
-foreach_link(_, _Key, _, _AccIn) ->
-    erlang:error(not_implemented).
+    {ok, Acc :: term()} | datastore:link_error().
+foreach_link(#model_config{} = ModelConfig, Key, Fun, AccIn) ->
+    case mnesia:dirty_read(table_name(ModelConfig), Key) of
+        [] -> {ok, AccIn};
+        [Value] ->
+            Map = Value#links.link_map,
+            try maps:fold(Fun, AccIn, Map) of
+                AccOut -> {ok, AccOut}
+            catch
+                _:Reason ->
+                    {error, Reason}
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -307,6 +364,19 @@ table_name(#model_config{name = ModelName}) ->
     table_name(ModelName);
 table_name(TabName) when is_atom(TabName) ->
     binary_to_atom(<<"dc_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets Mnesia links table name for given model.
+%% @end
+%%--------------------------------------------------------------------
+-spec table_name(model_behaviour:model_config() | atom()) -> atom().
+links_table_name(#model_config{name = ModelName}) ->
+    table_name(ModelName);
+links_table_name(TabName) when is_atom(TabName) ->
+    binary_to_atom(<<"dc_links_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
 
 %%--------------------------------------------------------------------
 %% @private

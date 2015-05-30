@@ -11,8 +11,8 @@
 -ifndef(DATASTORE_INTERNAL_HRL).
 -define(DATASTORE_INTERNAL_HRL, 1).
 
--include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_models_def.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 
 -define(MODEL_NAME, ?MODULE).
 
