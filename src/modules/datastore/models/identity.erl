@@ -42,7 +42,7 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(local_only, Document).
 
@@ -51,8 +51,8 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(local_only, ?MODULE, Key, Diff).
 
@@ -61,7 +61,7 @@ update(Key, Diff) ->
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
 create(Document) ->
     datastore:create(local_only, Document).
 
@@ -70,7 +70,7 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(local_only, ?MODULE, Key).
 
@@ -79,7 +79,7 @@ get(Key) ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
+-spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(local_only, ?MODULE, Key).
 
@@ -88,7 +88,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
+-spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(datastore:exists(local_only, ?MODULE, Key)).
 
@@ -136,9 +136,9 @@ before(_ModelName, _Method, _Level, _Context) ->
 fetch(CertInfo = #certificate_info{}) ->
     case gsi_handler:get_certs_from_oneproxy(?ONEPROXY_REST, CertInfo) of
         {ok, #certificate{otp_cert = OtpCert}} ->
-            case identity:get(encode(OtpCert)) of
+            case identity:get(OtpCert) of
                 {ok, Doc = #document{value = Iden}} ->
-                    identity:save(#document{key = encode(CertInfo), value = Iden}),
+                    identity:save(#document{key = CertInfo, value = Iden}),
                     {ok, Doc};
                 Error_ -> Error_
             end;
@@ -148,7 +148,7 @@ fetch(CertInfo = #certificate_info{}) ->
 fetch(Token = #token{}) ->
     case onedata_user:fetch(Token) of
         {ok, #document{key = Id}} ->
-            NewDoc = #document{key = encode(Token), value = #identity{user_id = Id}},
+            NewDoc = #document{key = Token, value = #identity{user_id = Id}},
             case identity:save(NewDoc) of
                 {ok, _} -> {ok, NewDoc};
                 Error_ -> Error_
@@ -166,12 +166,8 @@ fetch(Token = #token{}) ->
 -spec get_or_fetch(identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Cred) ->
-    case identity:get(encode(Cred)) of
+    case identity:get(Cred) of
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Cred);
         Error -> Error
     end.
-
--spec encode(term()) -> binary().
-encode(Term) ->
-    base64:encode(term_to_binary(Term)).

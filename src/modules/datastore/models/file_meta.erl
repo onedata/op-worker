@@ -20,8 +20,6 @@
 %% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}
 -define(run(B),
     try B of
-        {error, link_not_found} -> %% Map links errors to document errors
-            {error, {not_found, ?MODEL_NAME}};
         __Other -> __Other
     catch
         error:__Reason ->
@@ -45,7 +43,7 @@
 
 -export([resolve_path/1, create/2, get_scope/1, list_uuids/3, gen_path/1, rename/2]).
 
--type uuid() :: uuid().
+-type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
 -type entry() :: {path, path()} | {uuid, uuid()} | datastore:document().
@@ -307,6 +305,8 @@ resolve_path(<<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                             _ ->
                                 {error, ghost_file}
                         end;
+                    {error, link_not_found} -> %% Map links errors to document errors
+                        {error, {not_found, ?MODEL_NAME}};
                     {error, Reason} ->
                         {error, Reason}
                 end

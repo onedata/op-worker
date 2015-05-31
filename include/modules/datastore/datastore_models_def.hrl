@@ -14,7 +14,7 @@
 
 %% Wrapper for all models' records
 -record(document, {
-    key :: datastore:key(),
+    key :: datastore:ext_key(),
     rev :: term(),
     value :: datastore:value(),
     links :: term()

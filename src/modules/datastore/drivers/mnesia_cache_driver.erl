@@ -90,7 +90,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
     mnesia_run(sync_dirty, fun() ->
         ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
@@ -102,8 +102,8 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
 %% {@link store_driver_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(model_behaviour:model_config(), datastore:key(),
-    Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-spec update(model_behaviour:model_config(), datastore:ext_key(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
     mnesia_run(sync_transaction, fun() ->
         case mnesia:read(table_name(ModelConfig), Key, write) of
@@ -127,7 +127,7 @@ update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
+    {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     mnesia_run(sync_transaction, fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
@@ -144,7 +144,7 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:key()) ->
+-spec get(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{name = ModelName} = ModelConfig, Key) ->
     case mnesia:dirty_read(table_name(ModelConfig), Key) of
@@ -178,7 +178,7 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
 %% {@link store_driver_behaviour} callback add_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
+-spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) ->
     ok | datastore:generic_error().
 add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
     mnesia_run(sync_transaction, fun() ->
@@ -198,7 +198,7 @@ add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:link_name()] | all) ->
+-spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error().
 delete_links(#model_config{} = ModelConfig, Key, all) ->
     mnesia_run(sync_transaction, fun() ->
@@ -226,7 +226,7 @@ delete_links(#model_config{} = ModelConfig, Key, LinkNames) ->
 %% {@link store_driver_behaviour} callback fetch_link/3.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+-spec fetch_link(model_behaviour:model_config(), datastore:ext_key(), datastore:link_name()) ->
     {ok, datastore:link_target()} | datastore:link_error().
 fetch_link(#model_config{} = ModelConfig, Key, LinkName) ->
     case mnesia:dirty_read(links_table_name(ModelConfig), Key) of
@@ -246,7 +246,7 @@ fetch_link(#model_config{} = ModelConfig, Key, LinkName) ->
 %% {@link store_driver_behaviour} callback foreach_link/4.
 %% @end
 %%--------------------------------------------------------------------
--spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:ext_key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     {ok, Acc :: term()} | datastore:link_error().
 foreach_link(#model_config{} = ModelConfig, Key, Fun, AccIn) ->
@@ -299,7 +299,7 @@ list_next([], Handle, Fun, AccIn) ->
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
+-spec delete(model_behaviour:model_config(), datastore:ext_key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
 delete(#model_config{} = ModelConfig, Key, Pred) ->
     mnesia_run(sync_transaction, fun() ->
@@ -317,7 +317,7 @@ delete(#model_config{} = ModelConfig, Key, Pred) ->
 %% {@link store_driver_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(model_behaviour:model_config(), datastore:key()) ->
+-spec exists(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, boolean()} | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
     case mnesia:dirty_read(table_name(ModelConfig), Key) of
@@ -384,7 +384,7 @@ links_table_name(TabName) when is_atom(TabName) ->
 %% Inserts given key as second element of given tuple.
 %% @end
 %%--------------------------------------------------------------------
--spec inject_key(Key :: datastore:key(), Tuple :: tuple()) -> NewTuple :: tuple().
+-spec inject_key(Key :: datastore:ext_key(), Tuple :: tuple()) -> NewTuple :: tuple().
 inject_key(Key, Tuple) when is_tuple(Tuple) ->
     [RecordName | Fields] = tuple_to_list(Tuple),
     list_to_tuple([RecordName | [Key | Fields]]).

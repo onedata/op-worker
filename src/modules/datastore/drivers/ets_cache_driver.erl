@@ -45,7 +45,7 @@ init_bucket(_Bucket, Models, _NodeToSync) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     true = ets:insert(table_name(ModelConfig), {Key, Value}),
     {ok, Key}.
@@ -55,8 +55,8 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %% {@link store_driver_behaviour} callback update/3.
 %% @end
 %%--------------------------------------------------------------------
--spec update(model_behaviour:model_config(), datastore:key(),
-    Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-spec update(model_behaviour:model_config(), datastore:ext_key(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
 update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_function(Diff) ->
     erlang:error(not_implemented);
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_map(Diff) ->
@@ -75,7 +75,7 @@ update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_map(Dif
 %% @end
 %%--------------------------------------------------------------------
 -spec create(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
+    {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     case ets:insert_new(table_name(ModelConfig), {Key, Value}) of
         false -> {error, already_exists};
@@ -87,7 +87,7 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:key()) ->
+-spec get(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{name = ModelName} = ModelConfig, Key) ->
     case ets:lookup(table_name(ModelConfig), Key) of
@@ -115,7 +115,7 @@ list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
+-spec delete(model_behaviour:model_config(), datastore:ext_key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
 delete(#model_config{} = ModelConfig, Key, Pred) ->
     case Pred() of
@@ -131,7 +131,7 @@ delete(#model_config{} = ModelConfig, Key, Pred) ->
 %% {@link store_driver_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(model_behaviour:model_config(), datastore:key()) ->
+-spec exists(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, boolean()} | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
     {ok, ets:member(table_name(ModelConfig), Key)}.
@@ -159,7 +159,7 @@ healthcheck(State) ->
 %% {@link store_driver_behaviour} callback add_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
+-spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) ->
     no_return().
 add_links(_, _, _) ->
     erlang:error(not_implemented).
@@ -169,7 +169,7 @@ add_links(_, _, _) ->
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:link_name()] | all) ->
+-spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) ->
     no_return().
 delete_links(_, _, _) ->
     erlang:error(not_implemented).
@@ -179,7 +179,7 @@ delete_links(_, _, _) ->
 %% {@link store_driver_behaviour} callback fetch_link/3.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+-spec fetch_link(model_behaviour:model_config(), datastore:ext_key(), datastore:link_name()) ->
     no_return().
 fetch_link(_, _, _) ->
     erlang:error(not_implemented).
@@ -189,7 +189,7 @@ fetch_link(_, _, _) ->
 %% {@link store_driver_behaviour} callback foreach_link/4.
 %% @end
 %%--------------------------------------------------------------------
--spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:ext_key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     no_return().
 foreach_link(_, _Key, _, _AccIn) ->
