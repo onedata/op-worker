@@ -22,8 +22,12 @@
 %%%===================================================================
 
 mem_clearing_test() ->
-    MemTarget = 80,
-    MemUsage = MemTarget + 5,
+    [{_, Mem0}] = monitoring:get_memory_stats(),
+    FreeMem = 100 - Mem0,
+    ToAdd = min(5, FreeMem/2),
+    MemTarget = Mem0 + ToAdd/2,
+    MemUsage = Mem0 + ToAdd,
+
     application:set_env(?APP_NAME, mem_to_clear_cache, MemTarget),
 
     OneMB = list_to_binary(prepare_list(1024*1024)),

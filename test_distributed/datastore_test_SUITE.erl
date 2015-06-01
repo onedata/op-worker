@@ -122,11 +122,12 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
 
 cache_clearing_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
-    MemTarget = 80,
-    MemUsage = MemTarget + 5,
 
     [{_, Mem0}] = monitoring:get_memory_stats(),
-    ?assert(Mem0 < MemTarget),
+    FreeMem = 100 - Mem0,
+    ToAdd = min(5, FreeMem/2),
+    MemTarget = Mem0 + ToAdd/2,
+    MemUsage = Mem0 + ToAdd,
 
     ?assertMatch(ok, rpc:call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget])),
     [{_, Mem1}] = monitoring:get_memory_stats(),
