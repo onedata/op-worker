@@ -21,6 +21,7 @@
 -include("modules_and_args.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 % ETS used to hold workers mapping.
 -define(LB_ADVICE_KEY, lb_advice).
