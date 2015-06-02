@@ -201,7 +201,7 @@ def exec_test_repeat(test_case, case_args, case_kwargs):
         result = test_case(*case_args, **case_kwargs)
         end_time = time.time()
         result = [result] if not isinstance(result, list) else result
-        test_time = int((end_time - start_time) * 1000000)
+        test_time = int((end_time - start_time) * 1000)
         params = filter(lambda param: isinstance(param, Parameter), result)
         params.insert(0, Parameter(
             name='test_time',
