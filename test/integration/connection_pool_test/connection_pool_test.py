@@ -70,7 +70,7 @@ class TestConnectionPool:
         for msg in msgs:
             cp.send(msg)
 
-        time.sleep(1)
+#        time.sleep(1)
 
         for msg in msgs:
             assert 1 == appmock_client.tcp_server_message_count(self.ip, 5555,
