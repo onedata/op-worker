@@ -38,7 +38,6 @@ class TestConnectionPool:
         docker.remove(cls.result['docker_ids'], force=True, volumes=True)
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num(10), msg_size(100, 'B')],
         'configs': {
             'multiple_small_messages': {
@@ -67,13 +66,12 @@ class TestConnectionPool:
             duration(send_time, cp.send, msg)
 
         appmock_client.tcp_server_wait_for_messages(self.ip, 5555, msg, msg_num,
-                                                    30)
+                                                    5)
 
         return Parameter('send_time', 'Summary send time.', send_time.ms(),
                          'ms')
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num(10), msg_size(100, 'B')],
         'configs': {
             'multiple_small_messages': {
@@ -185,7 +183,6 @@ class TestConnection:
         assert conn.waitForReady()
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num(1)],
         'configs': {
             'multiple_messages': {
@@ -214,15 +211,14 @@ class TestConnection:
             duration(send_time, conn.send, msg2)
 
         appmock_client.tcp_server_wait_for_messages(self.ip, 5555, msg, msg_num,
-                                                    30)
+                                                    5)
         appmock_client.tcp_server_wait_for_messages(self.ip, 5555, msg2,
-                                                    msg_num, 30)
+                                                    msg_num, 5)
 
         return Parameter('send_time', 'Summary send time.', send_time.ms(),
                          'ms')
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num(1)],
         'configs': {
             'multiple_messages': {

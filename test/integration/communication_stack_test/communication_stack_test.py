@@ -41,7 +41,6 @@ class TestCommunicator:
         docker.remove(cls.result['docker_ids'], force=True, volumes=True)
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num(1), msg_size(100, 'B')],
         'configs': {
             'multiple_small_messages': {
@@ -77,7 +76,6 @@ class TestCommunicator:
                          'ms')
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num(1), msg_size(100, 'B')],
         'configs': {
             'multiple_small_messages': {
@@ -93,8 +91,7 @@ class TestCommunicator:
         }
     })
     def test_communicate(self, parameters):
-        appmock_client.reset_tcp_server_history(self.ip)
-        com = communication_stack.Communicator(3, self.ip, 5555, False)
+        com = communication_stack.Communicator(1, self.ip, 5555, False)
         com.connect()
 
         msg_num = parameters['msg_num'].value
