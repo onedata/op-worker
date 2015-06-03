@@ -12,7 +12,7 @@
 -module(session_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

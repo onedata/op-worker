@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Tests for file_meta model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(model_file_meta_test_SUITE).
@@ -87,16 +87,27 @@ basic_operations_test(Config) ->
 
     {{AL20, UL20}, GetLevel20} = ?call_with_time(Worker1, get, [{path, Level20Path}]),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"1">>}}},   {AL20, UL20}),
+    #document{key = Level20Key} = UL20,
 
-%%     @RS - jaki sens ma pobieranie sciezki po sciezce? Zmien na inny klucz
-    {{A30, U30}, GetPathLevel1} = ?call_with_time(Worker1, gen_path, [{path, <<"/spaces">>}]),
-    {{A31, U31}, GetPathLevel2} = ?call_with_time(Worker2, gen_path, [{path, <<"/spaces/Space 1">>}]),
-    {{A32, U32}, GetPathLevel3} = ?call_with_time(Worker2, gen_path, [{path, <<"/spaces/Space 1/dir2">>}]),
-    ?assertMatch({ok, <<"/spaces">>}, {A30, U30}),
-    ?assertMatch({ok, <<"/spaces/Space 1">>}, {A31, U31}),
-    ?assertMatch({ok, <<"/spaces/Space 1/dir2">>}, {A32, U32}),
 
-    {{AL20_2, UL20_2}, GetPathLevel20} = ?call_with_time(Worker2, gen_path, [{path, Level20Path}]),
+    {{A30, U30}, GenPathLevel1} = ?call_with_time(Worker1, gen_path, [{uuid, U21}]),
+    {{A31, U31}, GenPathLevel2} = ?call_with_time(Worker2, gen_path, [{uuid, U22}]),
+    {{A32, U32}, GenPathLevel3} = ?call_with_time(Worker2, gen_path, [{uuid, U23}]),
+    ?assertMatch({ok, <<"/spaces/Space 1/dir2/file1">>}, {A30, U30}),
+    ?assertMatch({ok, <<"/spaces/Space 1/dir2/file2">>}, {A31, U31}),
+    ?assertMatch({ok, <<"/spaces/Space 1/dir2/file3">>}, {A32, U32}),
+
+    {{A40, U40}, ResolveLevel1} = ?call_with_time(Worker1, resolve_path, [<<"/spaces">>]),
+    {{A41, U41}, ResolveLevel2} = ?call_with_time(Worker1, resolve_path, [<<"/spaces/Space 1/">>]),
+    {{A42, U42}, ResolveLevel3} = ?call_with_time(Worker1, resolve_path, [<<"/spaces/Space 1/dir2">>]),
+    {{A43, U43}, ResolveLevel20} = ?call_with_time(Worker1, resolve_path, [Level20Path]),
+    ?assertMatch({ok, {#document{key = U1}, _}}, {A40, U40}),
+    ?assertMatch({ok, {#document{key = U2}, _}}, {A41, U41}),
+    ?assertMatch({ok, {#document{key = U20}, _}}, {A42, U42}),
+    ?assertMatch({ok, {#document{key = Level20Key}, _}}, {A43, U43}),
+
+
+    {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, gen_path, [UL20]),
     ?assertMatch({ok, Level20Path}, {AL20_2, UL20_2}),
 
     {{A9, U9}, GetScopeLevel0} =   ?call_with_time(Worker1, get_scope, [U14]),
@@ -114,6 +125,7 @@ basic_operations_test(Config) ->
     ?assertMatch({ok, #document{key = U2}},             {AL20_3, UL20_3}),
 
     ?assertMatch({ok, [U2]}, ?call(Worker1, list_uuids, [{path, <<"/spaces">>}, 0, 10])),
+    ?assertMatch({ok, []}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2/file3">>}, 0, 10])),
 
     {{A15, U15}, ListUuids20_100} = ?call_with_time(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 0, 20]),
     {{A15_2, U15_2}, ListUuids100_100} = ?call_with_time(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 0, 100]),
@@ -190,14 +202,22 @@ basic_operations_test(Config) ->
             description = "Time of get opertion at level 2 (2 dirs above file)"},
         #parameter{name = get_level_20, value = GetLevel20, unit = "us",
             description = "Time of get opertion at level 20 (20 dirs above file)"},
-        #parameter{name = get_path_level_1, value = GetPathLevel1, unit = "us",
-            description = "Time of get path opertion at level 1 (1 dir above file)"},
-        #parameter{name = get_path_level_2, value = GetPathLevel2, unit = "us",
-            description = "Time of get path opertion at level 2 (2 dirs above file)"},
-        #parameter{name = get_path_level_3, value = GetPathLevel3, unit = "us",
-            description = "Time of get path opertion at level 3 (3 dirs above file)"},
-        #parameter{name = getv_pathv_level_20, value = GetPathLevel20, unit = "us",
-            description = "Time of get path opertion at level 20 (20 dirs above file)"},
+        #parameter{name = gen_path_level_1, value = GenPathLevel1, unit = "us",
+            description = "Time of gen path opertion at level 1 (1 dir above file)"},
+        #parameter{name = gen_path_level_2, value = GenPathLevel2, unit = "us",
+            description = "Time of gen path opertion at level 2 (2 dirs above file)"},
+        #parameter{name = gen_path_level_3, value = GenPathLevel3, unit = "us",
+            description = "Time of gen path opertion at level 3 (3 dirs above file)"},
+        #parameter{name = genv_pathv_level_20, value = GenPathLevel20, unit = "us",
+            description = "Time of gen path opertion at level 20 (20 dirs above file)"},
+        #parameter{name = resolve_path_level_1, value = ResolveLevel1, unit = "us",
+            description = "Time of resolve path opertion at level 1 (1 dir above file)"},
+        #parameter{name = resolve_path_level_2, value = ResolveLevel2, unit = "us",
+            description = "Time of resolve path opertion at level 2 (2 dirs above file)"},
+        #parameter{name = resolve_path_level_3, value = ResolveLevel3, unit = "us",
+            description = "Time of resolve path opertion at level 3 (3 dirs above file)"},
+        #parameter{name = resolve_path_level_20, value = ResolveLevel20, unit = "us",
+            description = "Time of resolve path opertion at level 20 (20 dirs above file)"},
         #parameter{name = get_scope_level_0, value = GetScopeLevel0, unit = "us",
             description = "Time of get scope opertion at root level"},
         #parameter{name = get_scope_level_1, value = GetScopeLevel1, unit = "us",
@@ -245,11 +265,41 @@ rename_test(Config) ->
     {A3, U3} = ?call(Worker2, create, [{path, <<"/spaces">>}, #file_meta{name = <<"Space 2">>, is_scope = true}]),
     {A4, U4} = ?call(Worker1, create, [{path, <<"/spaces/Space 1">>}, #file_meta{name = <<"d1">>}]),
     {A5, U5} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1">>}, #file_meta{name = <<"f1">>}]),
+    {A20, U20} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1">>}, #file_meta{name = <<"f2">>}]),
+    {A21, U21} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1">>}, #file_meta{name = <<"f3">>}]),
+    {A22, U22} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1">>}, #file_meta{name = <<"f4">>}]),
+    {A23, U23} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1">>}, #file_meta{name = <<"dd1">>}]),
+    {A24, U24} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1">>}, #file_meta{name = <<"dd2">>}]),
+    {A25, U25} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1/dd1">>}, #file_meta{name = <<"f1">>}]),
+    {A26, U26} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1/dd1">>}, #file_meta{name = <<"f2">>}]),
+    {A27, U27} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1/dd2">>}, #file_meta{name = <<"f1">>}]),
+    {A28, U28} = ?call(Worker1, create, [{path, <<"/spaces/Space 1/d1/dd2">>}, #file_meta{name = <<"f2">>}]),
     ?assertMatch({ok, _}, {A1, U1}),
     ?assertMatch({ok, _}, {A2, U2}),
     ?assertMatch({ok, _}, {A3, U3}),
     ?assertMatch({ok, _}, {A4, U4}),
     ?assertMatch({ok, _}, {A5, U5}),
+
+    ?assertMatch({ok, _}, {A20, U20}),
+    ?assertMatch({ok, _}, {A21, U21}),
+    ?assertMatch({ok, _}, {A22, U22}),
+    ?assertMatch({ok, _}, {A23, U23}),
+    ?assertMatch({ok, _}, {A24, U24}),
+    ?assertMatch({ok, _}, {A25, U25}),
+    ?assertMatch({ok, _}, {A26, U26}),
+    ?assertMatch({ok, _}, {A27, U27}),
+    ?assertMatch({ok, _}, {A28, U28}),
+
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/f1">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/f2">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/f3">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/f4">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/dd1/f1">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/dd1/f2">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/dd2/f1">>}])),
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d1/dd2/f2">>}])),
+
 
     {A8, U8} = ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}]),
     ?assertMatch({ok, _}, {A8, U8}),
@@ -271,6 +321,25 @@ rename_test(Config) ->
     ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {path, <<"/spaces/Space 1/d1">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d1">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
+
+    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d1">>}, {name, <<"d4">>}])),
+    ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"d4">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d4">>}])),
+
+    %% Inter-space rename
+    ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d4">>}])),
+    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d4">>}, {path, <<"/spaces/Space 2/d1">>}])),
+    ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d4">>}])),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"d1">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 2/d1">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/f1">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/f2">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/f3">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/f4">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/dd1/f1">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/dd1/f2">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/dd2/f1">>}])),
+    ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1/dd2/f2">>}])),
 
     ok.
 

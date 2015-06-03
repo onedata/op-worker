@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Models definitions.
+%%% @doc Models definitions. Shall not be included directly in any erl file.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -14,7 +14,7 @@
 
 %% Wrapper for all models' records
 -record(document, {
-    key :: datastore:key(),
+    key :: datastore:ext_key(),
     rev :: term(),
     value :: datastore:value(),
     links :: term()

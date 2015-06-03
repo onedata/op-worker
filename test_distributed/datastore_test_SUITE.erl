@@ -28,12 +28,19 @@
             global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1,
             cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
 -export([utilize_memory/2]).
+-export([
+    local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
+    global_cache_list_test/1, persistance_test/1,
+    disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1
+]).
 
 -performance({test_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
      global_cache_list_test, persistance_test, links_test, link_walk_test,
      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
+     global_cache_list_test, persistance_test,
+     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test].
 
 %%%===================================================================
 %%% Test function
@@ -344,87 +351,20 @@ link_walk_test(Config) ->
 
     ok.
 
+
 %% Simple usege of (add/fetch/delete/foreach)_link
-links_test(Config) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
-
-    Level = disk_only,
-
-    Doc1 = #document{
-        key = doc1,
-        value = #some_record{field1 = 1}
-    },
-
-    Doc2 = #document{
-        key = doc2,
-        value = #some_record{field1 = 2}
-    },
-
-    Doc3 = #document{
-        key = doc3,
-        value = #some_record{field1 = 3}
-    },
+disk_only_links_test(Config) ->
+    generic_links_test(Config, disk_only).
 
 
-    %% Create some documents and links
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, some_record, create, [Doc1])),
+%% Simple usege of (add/fetch/delete/foreach)_link
+global_only_links_test(Config) ->
+    generic_links_test(Config, global_only).
 
-    ?assertMatch({ok, _},
-        ?call_store(Worker2, some_record, create, [Doc2])),
 
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, some_record, create, [Doc3])),
-
-    ?assertMatch(ok, ?call_store(Worker2, add_links, [Level, Doc1, [{link2, Doc2}, {link3, Doc3}]])),
-
-    %% Fetch all links and theirs targets
-    Ret0 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link2]),
-    Ret1 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link3]),
-    Ret2 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
-    Ret3 = ?call_store(Worker1, fetch_link, [Level, Doc1, link3]),
-
-    ?assertMatch({ok, {doc2, some_record}}, Ret2),
-    ?assertMatch({ok, {doc3, some_record}}, Ret3),
-    ?assertMatch({ok, #document{key = doc2, value = #some_record{field1 = 2}}}, Ret0),
-    ?assertMatch({ok, #document{key = doc3, value = #some_record{field1 = 3}}}, Ret1),
-
-    ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, [link2, link3]])),
-
-    Ret4 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link2]),
-    Ret5 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link3]),
-    Ret6 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
-    Ret7 = ?call_store(Worker1, fetch_link, [Level, Doc1, link3]),
-
-    ?assertMatch({error, link_not_found}, Ret6),
-    ?assertMatch({error, link_not_found}, Ret7),
-    ?assertMatch({error, link_not_found}, Ret4),
-    ?assertMatch({error, link_not_found}, Ret5),
-
-    ?assertMatch(ok, ?call_store(Worker2, add_links, [Level, Doc1, [{link2, Doc2}, {link3, Doc3}]])),
-    ?assertMatch(ok,
-        ?call_store(Worker1, some_record, delete, [doc2])),
-    ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, link3])),
-
-    Ret8 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link2]),
-    Ret9 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link3]),
-    Ret10 = ?call_store(Worker1, fetch_link, [Level, Doc1, link2]),
-    Ret11 = ?call_store(Worker2, fetch_link, [Level, Doc1, link3]),
-
-    ?assertMatch({ok, {doc2, some_record}}, Ret10),
-    ?assertMatch({error, link_not_found}, Ret11),
-    ?assertMatch({error, link_not_found}, Ret9),
-    ?assertMatch({error, {not_found, _}}, Ret8),
-
-    %% Delete on document shall delete all its links
-    ?assertMatch(ok,
-        ?call_store(Worker1, some_record, delete, [doc1])),
-    timer:sleep(timer:seconds(1)),
-
-    Ret12 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
-    ?assertMatch({error, link_not_found}, Ret12),
-
-    ok.
+%% Simple usege of (add/fetch/delete/foreach)_link
+globally_cached_links_test(Config) ->
+    generic_links_test(Config, globally_cached).
 
 
 %%%===================================================================
@@ -545,6 +485,97 @@ global_access(Config, Level) ->
 
     ok.
 
+
+generic_links_test(Config, Level) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    ?upload_test_code(Config),
+
+    Key1 = rand_key(),
+    Key2 = rand_key(),
+    Key3 = rand_key(),
+
+    Doc1 = #document{
+        key = Key1,
+        value = #some_record{field1 = 1}
+    },
+
+    Doc2 = #document{
+        key = Key2,
+        value = #some_record{field1 = 2}
+    },
+
+    Doc3 = #document{
+        key = Key3,
+        value = #some_record{field1 = 3}
+    },
+
+
+    %% Create some documents and links
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, some_record, create, [Doc1])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker2, some_record, create, [Doc2])),
+
+    ?assertMatch({ok, _},
+        ?call_store(Worker1, some_record, create, [Doc3])),
+
+    ?assertMatch(ok, ?call_store(Worker2, add_links, [Level, Doc1, [{link2, Doc2}, {link3, Doc3}]])),
+
+    %% Fetch all links and theirs targets
+    Ret0 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link2]),
+    Ret1 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link3]),
+    Ret2 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
+    Ret3 = ?call_store(Worker1, fetch_link, [Level, Doc1, link3]),
+
+    ?assertMatch({ok, {Key2, some_record}}, Ret2),
+    ?assertMatch({ok, {Key3, some_record}}, Ret3),
+    ?assertMatch({ok, #document{key = Key2, value = #some_record{field1 = 2}}}, Ret0),
+    ?assertMatch({ok, #document{key = Key3, value = #some_record{field1 = 3}}}, Ret1),
+
+    ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, [link2, link3]])),
+
+    Ret4 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link2]),
+    Ret5 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link3]),
+    Ret6 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
+    Ret7 = ?call_store(Worker1, fetch_link, [Level, Doc1, link3]),
+
+    ?assertMatch({error, link_not_found}, Ret6),
+    ?assertMatch({error, link_not_found}, Ret7),
+    ?assertMatch({error, link_not_found}, Ret4),
+    ?assertMatch({error, link_not_found}, Ret5),
+
+    ?assertMatch(ok, ?call_store(Worker2, add_links, [Level, Doc1, [{link2, Doc2}, {link3, Doc3}]])),
+    ?assertMatch(ok,
+        ?call_store(Worker1, some_record, delete, [Key2])),
+    ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, link3])),
+
+    Ret8 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link2]),
+    Ret9 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link3]),
+    Ret10 = ?call_store(Worker1, fetch_link, [Level, Doc1, link2]),
+    Ret11 = ?call_store(Worker2, fetch_link, [Level, Doc1, link3]),
+
+    ?assertMatch({ok, {Key2, some_record}}, Ret10),
+    ?assertMatch({error, link_not_found}, Ret11),
+    ?assertMatch({error, link_not_found}, Ret9),
+    ?assertMatch({error, {not_found, _}}, Ret8),
+
+    %% Delete on document shall delete all its links
+    ?assertMatch(ok,
+        ?call_store(Worker1, some_record, delete, [Key1])),
+    timer:sleep(timer:seconds(1)),
+
+    Ret12 = ?call_store(Worker2, fetch_link, [Level, Doc1, link2]),
+    ?assertMatch({error, link_not_found}, Ret12),
+
+    ok = ?call_store(Worker2, delete, [Level, some_record, Key1]),
+    ok = ?call_store(Worker2, delete, [Level, some_record, Key2]),
+    ok = ?call_store(Worker2, delete, [Level, some_record, Key3]),
+
+    ok.
+
+rand_key() ->
+    base64:encode(crypto:rand_bytes(8)).
 prepare_list(1) ->
     "x";
 

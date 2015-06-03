@@ -11,12 +11,12 @@
 -module(datastore_utils).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 
 -define(KEY_LEN, 32).
 
 %% API
--export([shallow_to_map/1, shallow_to_record/1, gen_uuid/0]).
+-export([shallow_to_map/1, shallow_to_record/1, gen_uuid/0, gen_uuid/1]).
 
 %%%===================================================================
 %%% API
@@ -82,6 +82,16 @@ shallow_to_record(#{'$record' := ModelName} = Map) ->
 -spec gen_uuid() -> binary().
 gen_uuid() ->
     base64:encode(crypto:rand_bytes(?KEY_LEN)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates UUID based on given term.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_uuid(term()) -> binary().
+gen_uuid(Term) ->
+    base64:encode(term_to_binary(Term)).
 
 
 %%%===================================================================

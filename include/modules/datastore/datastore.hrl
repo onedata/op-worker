@@ -6,13 +6,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Common definions and configurations for datastore.
+%%%      This header may be used anywhere to get access to datastore API helpers
+%%%      and model definitions.
 %%% @end
 %%%-------------------------------------------------------------------
 
 -ifndef(DATASTORE_HRL).
 -define(DATASTORE_HRL, 1).
 
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_models_def.hrl").
 
 %% Common predicates
 -define(PRED_ALWAYS, fun() -> true end).

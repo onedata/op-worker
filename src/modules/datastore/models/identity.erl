@@ -13,8 +13,8 @@
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal.hrl").
+-include("modules/datastore/datastore_model.hrl").
+
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneproxy/oneproxy_messages.hrl").
 -include("cluster_elements/oneproxy/oneproxy.hrl").
@@ -42,7 +42,7 @@
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-spec save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(local_only, Document).
 
@@ -51,8 +51,8 @@ save(Document) ->
 %% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+-spec update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(local_only, ?MODULE, Key, Diff).
 
@@ -61,7 +61,7 @@ update(Key, Diff) ->
 %% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-spec create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
 create(Document) ->
     datastore:create(local_only, Document).
 
@@ -70,7 +70,7 @@ create(Document) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
--spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
     datastore:get(local_only, ?MODULE, Key).
 
@@ -79,7 +79,7 @@ get(Key) ->
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:key()) -> ok | datastore:generic_error().
+-spec delete(datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(local_only, ?MODULE, Key).
 
@@ -88,7 +88,7 @@ delete(Key) ->
 %% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(datastore:key()) -> datastore:exists_return().
+-spec exists(datastore:ext_key()) -> datastore:exists_return().
 exists(Key) ->
     ?RESPONSE(datastore:exists(local_only, ?MODULE, Key)).
 

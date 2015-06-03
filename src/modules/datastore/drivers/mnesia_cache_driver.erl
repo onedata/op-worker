@@ -14,7 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Batch size for list operation
@@ -26,6 +26,8 @@
 -export([init_bucket/3, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
+
+-record(links, {key, link_map = #{}}).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
@@ -42,35 +44,48 @@ init_bucket(_BucketName, Models, NodeToSync) ->
         fun(#model_config{name = ModelName, fields = Fields}) ->
             Node = node(),
             Table = table_name(ModelName),
+            LinkTable = links_table_name(ModelName),
             case NodeToSync == Node of
                 true -> %% No mnesia nodes -> create new table
-                    Ans = case mnesia:create_table(Table, [{record_name, ModelName}, {attributes, [key | Fields]},
-                        {ram_copies, [Node]}, {type, set}]) of
-                        {atomic, ok} -> ok;
-                        {aborted, {already_exists, Table}} ->
-                            ok;
-                        {aborted, Reason} ->
-                            ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
-                            throw(Reason)
+                    MakeTable = fun(TabName, RecordName, RecordFields) ->
+                        Ans = case mnesia:create_table(TabName, [{record_name, RecordName}, {attributes, RecordFields},
+                            {ram_copies, [Node]}, {type, set}]) of
+                            {atomic, ok} -> ok;
+                            {aborted, {already_exists, TabName}} ->
+                                ok;
+                            {aborted, Reason} ->
+                                ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [TabName, node(), Reason]),
+                                throw(Reason)
+                        end,
+                        ?info("Creating mnesia table: ~p, result: ~p", [TabName, Ans])
                     end,
-                    ?info("Creating mnesia table: ~p, result: ~p", [table_name(ModelName), Ans]),
-                    Ans;
+                    {
+                        MakeTable(Table, ModelName, [key | Fields]),
+                        MakeTable(LinkTable, links, record_info(fields, links))
+                    };
                 _ -> %% there is at least one mnesia node -> join cluster
-                    Tables = [table_name(MName) || MName <- ?MODELS],
+                    Tables = [table_name(MName) || MName <- ?MODELS] ++
+                             [links_table_name(MName) || MName <- ?MODELS],
                     ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, ?MNESIA_WAIT_TIMEOUT]),
-                    case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
-                        {ok, [Node]} ->
-                            case rpc:call(NodeToSync, mnesia, add_table_copy, [Table, Node, ram_copies]) of
-                                {atomic, ok} ->
-                                    ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [Table, NodeToSync, node()]);
-                                {aborted, Reason} ->
-                                    ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [Table, node(), Reason])
-                            end,
-                            ok;
-                        {error, Reason} ->
-                            ?error("Cannot expand mnesia cluster (table ~p) on node ~p due to ~p", [Table, node(), Reason]),
-                            throw(Reason)
-                    end
+                    ExpandTable = fun(TabName) ->
+                        case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
+                            {ok, [Node]} ->
+                                case rpc:call(NodeToSync, mnesia, add_table_copy, [TabName, Node, ram_copies]) of
+                                    {atomic, ok} ->
+                                        ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [TabName, NodeToSync, node()]);
+                                    {aborted, Reason} ->
+                                        ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [TabName, node(), Reason])
+                                end,
+                                ok;
+                            {error, Reason} ->
+                                ?error("Cannot expand mnesia cluster (table ~p) on node ~p due to ~p", [TabName, node(), Reason]),
+                                throw(Reason)
+                        end
+                    end,
+                    {
+                        ExpandTable(Table),
+                        ExpandTable(LinkTable)
+                    }
             end
         end, Models),
     ok.
@@ -81,9 +96,9 @@ init_bucket(_BucketName, Models, NodeToSync) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
-    transaction(fun() ->
+    mnesia_run(sync_dirty, fun() ->
         ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
         {ok, Key}
     end).
@@ -93,10 +108,10 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
 %% {@link store_driver_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
--spec update(model_behaviour:model_config(), datastore:key(),
-    Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-spec update(model_behaviour:model_config(), datastore:ext_key(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         case mnesia:read(table_name(ModelConfig), Key, write) of
             [] ->
                 {error, {not_found, ModelName}};
@@ -118,9 +133,9 @@ update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
+    {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
             [] ->
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
@@ -135,7 +150,7 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:key()) ->
+-spec get(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{name = ModelName} = ModelConfig, Key) ->
     case mnesia:dirty_read(table_name(ModelConfig), Key) of
@@ -154,7 +169,7 @@ get(#model_config{name = ModelName} = ModelConfig, Key) ->
     {ok, Handle :: term()} | datastore:generic_error() | no_return().
 list(#model_config{} = ModelConfig, Fun, AccIn) ->
     SelectAll = [{'_', [], ['$_']}],
-    transaction(fun() ->
+    mnesia_run(transaction, fun() ->
         case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, read) of
             {Obj, Handle} ->
                 list_next(Obj, Handle, Fun, AccIn);
@@ -169,41 +184,89 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
 %% {@link store_driver_behaviour} callback add_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
-    no_return().
-add_links(_, _, _) ->
-    erlang:error(not_implemented).
+-spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) ->
+    ok | datastore:generic_error().
+add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
+    mnesia_run(sync_transaction, fun() ->
+        Links = #links{} =
+            case mnesia:read(links_table_name(ModelConfig), Key, write) of
+                [] ->
+                    #links{key = Key};
+                [Value] ->
+                    Value
+            end,
+        Links1 = Links#links{link_map = maps:merge(Links#links.link_map, maps:from_list(LinkSpec))},
+        ok = mnesia:write(links_table_name(ModelConfig), Links1, write)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
-    no_return().
-delete_links(_, _, _) ->
-    erlang:error(not_implemented).
+-spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) ->
+    ok | datastore:generic_error().
+delete_links(#model_config{} = ModelConfig, Key, all) ->
+    mnesia_run(sync_transaction, fun() ->
+        ok = mnesia:delete(links_table_name(ModelConfig), Key, write)
+    end);
+delete_links(#model_config{} = ModelConfig, Key, LinkNames) ->
+    mnesia_run(sync_transaction, fun() ->
+        Links = #links{} =
+            case mnesia:read(links_table_name(ModelConfig), Key, write) of
+                [] ->
+                    #links{key = Key};
+                [Value] ->
+                    Value
+            end,
+        LinksMap =
+            lists:foldl(fun(LinkName, Map) ->
+                maps:remove(LinkName, Map)
+            end, Links#links.link_map, LinkNames),
+        Links1 = Links#links{link_map = LinksMap},
+        ok = mnesia:write(links_table_name(ModelConfig), Links1, write)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback fetch_link/3.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
-    no_return().
-fetch_link(_, _, _) ->
-    erlang:error(not_implemented).
+-spec fetch_link(model_behaviour:model_config(), datastore:ext_key(), datastore:link_name()) ->
+    {ok, datastore:link_target()} | datastore:link_error().
+fetch_link(#model_config{} = ModelConfig, Key, LinkName) ->
+    case mnesia:dirty_read(links_table_name(ModelConfig), Key) of
+        [] -> {error, link_not_found};
+        [Value] ->
+            Map = Value#links.link_map,
+            case maps:get(LinkName, Map, undefined) of
+                undefined ->
+                    {error, link_not_found};
+                {_TargetKey, _TargetModel} = Target ->
+                    {ok, Target}
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback foreach_link/4.
 %% @end
 %%--------------------------------------------------------------------
--spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:ext_key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
-    no_return().
-foreach_link(_, _Key, _, _AccIn) ->
-    erlang:error(not_implemented).
+    {ok, Acc :: term()} | datastore:link_error().
+foreach_link(#model_config{} = ModelConfig, Key, Fun, AccIn) ->
+    case mnesia:dirty_read(links_table_name(ModelConfig), Key) of
+        [] -> {ok, AccIn};
+        [Value] ->
+            Map = Value#links.link_map,
+            try maps:fold(Fun, AccIn, Map) of
+                AccOut -> {ok, AccOut}
+            catch
+                _:Reason ->
+                    {error, Reason}
+            end
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -242,10 +305,10 @@ list_next([], Handle, Fun, AccIn) ->
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
+-spec delete(model_behaviour:model_config(), datastore:ext_key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
 delete(#model_config{} = ModelConfig, Key, Pred) ->
-    transaction(fun() ->
+    mnesia_run(sync_transaction, fun() ->
         case Pred() of
             true ->
                 ok = mnesia:delete(table_name(ModelConfig), Key, write);
@@ -260,7 +323,7 @@ delete(#model_config{} = ModelConfig, Key, Pred) ->
 %% {@link store_driver_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(model_behaviour:model_config(), datastore:key()) ->
+-spec exists(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, boolean()} | datastore:generic_error().
 exists(#model_config{} = ModelConfig, Key) ->
     case mnesia:dirty_read(table_name(ModelConfig), Key) of
@@ -308,13 +371,26 @@ table_name(#model_config{name = ModelName}) ->
 table_name(TabName) when is_atom(TabName) ->
     binary_to_atom(<<"dc_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
 
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets Mnesia links table name for given model.
+%% @end
+%%--------------------------------------------------------------------
+-spec links_table_name(model_behaviour:model_config() | atom()) -> atom().
+links_table_name(#model_config{name = ModelName}) ->
+    links_table_name(ModelName);
+links_table_name(TabName) when is_atom(TabName) ->
+    binary_to_atom(<<"dc_links_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Inserts given key as second element of given tuple.
 %% @end
 %%--------------------------------------------------------------------
--spec inject_key(Key :: datastore:key(), Tuple :: tuple()) -> NewTuple :: tuple().
+-spec inject_key(Key :: datastore:ext_key(), Tuple :: tuple()) -> NewTuple :: tuple().
 inject_key(Key, Tuple) when is_tuple(Tuple) ->
     [RecordName | Fields] = tuple_to_list(Tuple),
     list_to_tuple([RecordName | [Key | Fields]]).
@@ -344,12 +420,21 @@ get_key(Tuple) when is_tuple(Tuple) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Convinience function for executing transaction within Mnesia
+%% Convinience function for executing given Mnesia's transaction-like function and normalizing Result.
+%% Available methods: sync_dirty, async_dirty, sync_transaction, transaction.
 %% @end
 %%--------------------------------------------------------------------
--spec transaction(Fun :: fun(() -> term())) -> term().
-transaction(Fun) ->
-    case mnesia:transaction(Fun) of
+-spec mnesia_run(Method :: atom(), Fun :: fun(() -> term())) -> term().
+mnesia_run(Method, Fun) when Method =:= sync_dirty; Method =:= async_dirty ->
+    try mnesia:Method(Fun) of
+        Result ->
+            Result
+    catch
+        _:Reason ->
+            {error, Reason}
+    end;
+mnesia_run(Method, Fun) when Method =:= sync_transaction; Method =:= transaction ->
+    case mnesia:Method(Fun) of
         {atomic, Result} ->
             Result;
         {aborted, Reason} ->

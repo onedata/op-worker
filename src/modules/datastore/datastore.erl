@@ -12,20 +12,22 @@
 -author("Rafal Slota").
 
 -include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal_def.hrl").
+-include("modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
+
 
 %% ETS name for local (node scope) state.
 -define(LOCAL_STATE, datastore_local_state).
 
 %% #document types
--type key() :: undefined | binary() | atom().
+-type key() :: undefined | binary() | atom() | integer().
+-type ext_key() :: key() | term().
 -type document() :: #document{}.
 -type value() :: term().
 -type document_diff() :: #{term() => term()} | fun((OldValue :: value()) -> NewValue :: value()).
 -type bucket() :: atom() | binary().
 
--export_type([key/0, value/0, document/0, document_diff/0, bucket/0]).
+-export_type([key/0, ext_key/0, value/0, document/0, document_diff/0, bucket/0]).
 
 %% Error types
 -type generic_error() :: {error, Reason :: term()}.
@@ -46,7 +48,7 @@
 -export_type([store_level/0, delete_predicate/0, list_fun/0, exists_return/0]).
 
 %% Links' types
--type normalized_link_target() :: {key(), model_behaviour:model_type()}.
+-type normalized_link_target() :: {ext_key(), model_behaviour:model_type()}.
 -type link_target() :: #document{} | normalized_link_target().
 -type link_name() :: atom() | binary().
 -type link_spec() :: {link_name(), link_target()}.
@@ -72,7 +74,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec save(Level :: store_level(), Document :: datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
@@ -83,8 +85,8 @@ save(Level, #document{} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(Level :: store_level(), ModelName :: model_behaviour:model_type(),
-    Key :: datastore:key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:key()} | datastore:update_error().
+    Key :: datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
 update(Level, ModelName, Key, Diff) ->
     exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff]).
 
@@ -94,7 +96,7 @@ update(Level, ModelName, Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(Level :: store_level(), Document :: datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
+    {ok, datastore:ext_key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
@@ -105,7 +107,7 @@ create(Level, #document{} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(Level :: store_level(), ModelName :: model_behaviour:model_type(),
-    Key :: datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+    Key :: datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), get, [Key]).
 
@@ -127,7 +129,7 @@ list(Level, ModelName, Fun, AccIn) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
-    Key :: datastore:key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
+    Key :: datastore:ext_key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
@@ -146,7 +148,7 @@ delete(Level, ModelName, Key, Pred) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
-    Key :: datastore:key()) -> ok | datastore:generic_error().
+    Key :: datastore:ext_key()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key) ->
     delete(Level, ModelName, Key, ?PRED_ALWAYS).
 
@@ -159,7 +161,7 @@ delete(Level, ModelName, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(Level :: store_level(), ModelName :: model_behaviour:model_type(),
-    Key :: datastore:key()) -> {ok, boolean()} | datastore:generic_error().
+    Key :: datastore:ext_key()) -> {ok, boolean()} | datastore:generic_error().
 exists(Level, ModelName, Key) ->
     exec_driver(ModelName, level_to_driver(Level), exists, [Key]).
 
@@ -179,7 +181,7 @@ add_links(Level, #document{key = Key} = Doc, Links) ->
 %% Adds given links to the document with given key.
 %% @end
 %%--------------------------------------------------------------------
--spec add_links(Level :: store_level(), key(), model_behaviour:model_type(), link_spec() | [link_spec()]) ->
+-spec add_links(Level :: store_level(), ext_key(), model_behaviour:model_type(), link_spec() | [link_spec()]) ->
     ok | generic_error().
 add_links(Level, Key, ModelName, {_LinkName, _LinkTarget} = LinkSpec) ->
     add_links(Level, Key, ModelName, [LinkSpec]);
@@ -203,7 +205,7 @@ delete_links(Level, #document{key = Key} = Doc, LinkNames) ->
 %% Removes links from the document with given key. There is special link name 'all' which removes all links.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(Level :: store_level(), key(), model_behaviour:model_type(), link_name() | [link_name()] | all) -> ok | generic_error().
+-spec delete_links(Level :: store_level(), ext_key(), model_behaviour:model_type(), link_name() | [link_name()] | all) -> ok | generic_error().
 delete_links(Level, Key, ModelName, LinkNames) when is_list(LinkNames); LinkNames =:= all ->
     _ModelConfig = ModelName:model_init(),
     exec_driver(ModelName, level_to_driver(Level), delete_links, [Key, LinkNames]);
@@ -226,7 +228,7 @@ fetch_link(Level, #document{key = Key} = Doc, LinkName) ->
 %% Gets specified link from the document given by key.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_link(Level :: store_level(), key(), model_behaviour:model_type(), link_name()) ->
+-spec fetch_link(Level :: store_level(), ext_key(), model_behaviour:model_type(), link_name()) ->
     {ok, normalized_link_target()} | generic_error().
 fetch_link(Level, Key, ModelName, LinkName) ->
     _ModelConfig = ModelName:model_init(),
@@ -248,7 +250,7 @@ fetch_link_target(Level, #document{key = Key} = Doc, LinkName) ->
 %% Gets document pointed by given link of document given by key.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_link_target(Level :: store_level(), key(), model_behaviour:model_type(), link_name()) ->
+-spec fetch_link_target(Level :: store_level(), ext_key(), model_behaviour:model_type(), link_name()) ->
     {ok, document()} | generic_error().
 fetch_link_target(Level, Key, ModelName, LinkName) ->
     case fetch_link(Level, Key, ModelName, LinkName) of
@@ -275,7 +277,7 @@ foreach_link(Level, #document{key = Key} = Doc, Fun, AccIn) ->
 %% Executes given function for each link of the document given by key - similar to 'foldl'.
 %% @end
 %%--------------------------------------------------------------------
--spec foreach_link(Level :: store_level(), Key :: key(), ModelName :: model_behaviour:model_type(),
+-spec foreach_link(Level :: store_level(), Key :: ext_key(), ModelName :: model_behaviour:model_type(),
     fun((link_name(), link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     {ok, Acc :: term()} | link_error().
 foreach_link(Level, Key, ModelName, Fun, AccIn) ->
@@ -301,8 +303,8 @@ link_walk(Level, #document{key = StartKey} = StartDoc, LinkNames, Mode) when is_
 %% In case of Mode == get_leaf, list of all link's uuids is also returned.
 %% @end
 %%--------------------------------------------------------------------
--spec link_walk(Level :: store_level(), Key :: key(), ModelName :: model_behaviour:model_type(), [link_name()], get_leaf | get_all) ->
-    {ok, {document(), [key()]} | [document()]} | link_error() | get_error().
+-spec link_walk(Level :: store_level(), Key :: ext_key(), ModelName :: model_behaviour:model_type(), [link_name()], get_leaf | get_all) ->
+    {ok, {document(), [ext_key()]} | [document()]} | link_error() | get_error().
 link_walk(Level, Key, ModelName, R, Mode) ->
     link_walk7(Level, Key, ModelName, R, [], Mode).
 
@@ -524,7 +526,7 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
     case exec_driver(ModelName, Driver, Method, Args) of
         {error, Reason} ->
             {error, Reason};
-        Result when Method =:= get -> % a list, po co leci 2 razy, sam dysk?
+        Result when Method =:= get; Method =:= fetch_link ->
             Result;
         {ok, true} = Result when Method =:= exists ->
             Result;
