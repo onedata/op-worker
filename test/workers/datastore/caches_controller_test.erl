@@ -72,7 +72,7 @@ mem_clearing_test_() ->
             ?assert(TmpMem2 > MemTarget),
 
             Ans = caches_controller:clear_local_cache(MemUsage, true),
-            timer:sleep(5000),
+            timer:sleep(1000),
             [{_, FinalMem}] = monitoring:get_memory_stats(),
             ?assertEqual(ok, {Mem0, TmpMem, FinalMem, Ans, ToAdd}),
 
