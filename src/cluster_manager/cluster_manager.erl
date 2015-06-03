@@ -130,7 +130,7 @@ handle_call(get_avg_mem_usage, _From, #state{node_states = NodeStates} = State) 
     MemSum = lists:foldl(fun({_Node, NodeState}, Sum) ->
         Sum + NodeState#node_state.mem_usage
     end, 0, NodeStates),
-    {reply, MemSum/length(NodeStates), State};
+    {reply, MemSum/max(1, length(NodeStates)), State};
 
 handle_call(healthcheck, _From, State) ->
     Ans = healthcheck(State),
