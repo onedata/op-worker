@@ -9,7 +9,7 @@
 %%% which initializes node.
 %%% @end
 %%%--------------------------------------------------------------------
--module(oneprovider_node_sup).
+-module(op_worker_sup).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").

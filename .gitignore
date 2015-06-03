@@ -14,7 +14,7 @@ src/gui_static/n2o
 *.beam
 *.pyc
 
-rel/oneprovider_node
+rel/op_worker
 rel/test_cluster
 rel/*.rpm
 
