@@ -140,7 +140,7 @@ cache_clearing_test(Config) ->
     [{_, Mem1}] = monitoring:get_memory_stats(),
     ?assert(Mem1 > MemTarget),
 
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker1}, check_mem_synch, 10000)),
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker1}, check_mem_synch, 60000)),
     [{_, Mem2}] = monitoring:get_memory_stats(),
     ?assert(Mem2 < MemTarget),
 
