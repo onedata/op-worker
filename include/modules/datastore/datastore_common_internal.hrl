@@ -9,8 +9,8 @@
 %%%      This header shall not be included directly by any erl file.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(DATASTORE_COMMON_INTERNAL_DEF_HRL).
--define(DATASTORE_COMMON_INTERNAL_DEF_HRL, 1).
+-ifndef(DATASTORE_COMMON_INTERNAL_HRL).
+-define(DATASTORE_COMMON_INTERNAL_HRL, 1).
 
 %% Levels
 -define(DISK_ONLY_LEVEL, disk_only).

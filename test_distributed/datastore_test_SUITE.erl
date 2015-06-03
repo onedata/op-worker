@@ -484,7 +484,6 @@ global_access(Config, Level) ->
 
 generic_links_test(Config, Level) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
-    ?upload_test_code(Config),
 
     Key1 = rand_key(),
     Key2 = rand_key(),
