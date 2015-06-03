@@ -121,6 +121,7 @@ clear_cache(_MemUsage, _TargetMemUse, _StoreType, []) ->
 
 clear_cache(_MemUsage, TargetMemUse, StoreType, [TimeWindow | Windows]) ->
   caches_controller:delete_old_keys(StoreType, TimeWindow),
+  timer:sleep(1000), % time for system for mem info update
   case monitoring:get_memory_stats() of
     [{<<"mem">>, NewMemUsage}] ->
       clear_cache(NewMemUsage, TargetMemUse, StoreType, Windows);
