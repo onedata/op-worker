@@ -95,13 +95,27 @@
 ).
 
 -define(save_test_def,
-    ?basic_test_def("Performs multipe saves operations using many threads. "
+    ?basic_test_def("Performs multipe save operations using many threads. "
         "Document may be saved many times.")
 ).
 
 -define(update_test_def,
     ?basic_test_def("Performs multipe update operations using many threads. "
         "Document may be updated many times.")
+).
+
+-define(create_async_delete_test_def,
+    ?basic_test_def("Performs multipe create_async/delete operations using many threads.")
+).
+
+-define(save_async_test_def,
+    ?basic_test_def("Performs multipe save_async operations using many threads. "
+    "Document may be saved many times.")
+).
+
+-define(update_async_test_def,
+    ?basic_test_def("Performs multipe update_async operations using many threads. "
+    "Document may be updated many times.")
 ).
 
 -define(get_test_def,

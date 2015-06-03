@@ -58,7 +58,8 @@
 -export_type([link_target/0, link_name/0, link_spec/0, normalized_link_spec/0, normalized_link_target/0]).
 
 %% API
--export([save/2, update/4, create/2, get/3, list/4, delete/4, delete/3, exists/3]).
+-export([save/2, save_async/2, update/4, update_async/4, create/2, create_async/2,
+         get/3, list/4, delete/4, delete/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
@@ -81,6 +82,17 @@ save(Level, #document{} = Document) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Saves given #document to memory with async save to disk.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_async(Level :: store_level(), Document :: datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:generic_error().
+save_async(Level, #document{} = Document) ->
+    ModelName = model_name(Document),
+    exec_cache_async(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Updates given by key document by replacing given fields with new values.
 %% @end
 %%--------------------------------------------------------------------
@@ -92,6 +104,18 @@ update(Level, ModelName, Key, Diff) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates given by key document by replacing given fields with new values.
+%% Sync operation on memory with async operation on disk.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_async(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update_async(Level, ModelName, Key, Diff) ->
+    exec_cache_async(ModelName, level_to_driver(Level), update, [Key, Diff]).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates new #document.
 %% @end
 %%--------------------------------------------------------------------
@@ -100,6 +124,17 @@ update(Level, ModelName, Key, Diff) ->
 create(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new #document. Sync operation on memory with async operation on disk.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_async(Level :: store_level(), Document :: datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create_async(Level, #document{} = Document) ->
+    ModelName = model_name(Document),
+    exec_cache_async(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -550,3 +585,20 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
         end,
     run_posthooks(ModelConfig, Method, driver_to_level(Driver), Args, Return).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes given model action with async execution on second driver.
+%% @end
+%%--------------------------------------------------------------------
+-spec exec_cache_async(model_behaviour:model_type(), [atom()],
+    Method :: store_driver_behaviour:driver_action(), [term()]) ->
+    ok | {ok, term()} | {error, term()}.
+exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
+    case exec_driver(ModelName, Driver1, Method, Args) of
+        {error, Reason} ->
+            {error, Reason};
+        Result ->
+            spawn(fun() -> exec_driver(ModelName, Driver2, Method, Args) end),
+            Result
+    end.

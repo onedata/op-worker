@@ -22,7 +22,8 @@
 
 -define(REQUEST_TIMEOUT, timer:seconds(30)).
 
--export([create_delete_test/2, save_test/2, update_test/2, get_test/2, exists_test/2, mixed_test/2]).
+-export([create_delete_test/2, create_async_delete_test/2, save_test/2, save_async_test/2,
+    update_test/2, update_async_test/2, get_test/2, exists_test/2, mixed_test/2]).
 
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
 
@@ -30,8 +31,13 @@
 %%% Test function
 %% ====================================================================
 
-
 create_delete_test(Config, Level) ->
+    create_delete_test_base(Config, Level, create).
+
+create_async_delete_test(Config, Level) ->
+    create_delete_test_base(Config, Level, create_async).
+
+create_delete_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
@@ -45,7 +51,7 @@ create_delete_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(create, Level, [
+                Ans = ?call_store(Fun, Level, [
                     #document{
                         key = list_to_binary(DocsSet++integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -104,6 +110,12 @@ create_delete_test(Config, Level) ->
     ].
 
 save_test(Config, Level) ->
+    save_test_base(Config, Level, save).
+
+save_async_test(Config, Level) ->
+    save_test_base(Config, Level, save_async).
+
+save_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
@@ -117,7 +129,7 @@ save_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(save, Level, [
+                Ans = ?call_store(Fun, Level, [
                     #document{
                         key = list_to_binary(DocsSet++integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -154,6 +166,12 @@ save_test(Config, Level) ->
         description = "Average time of save operation"}.
 
 update_test(Config, Level) ->
+    update_test_base(Config, Level, update).
+
+update_async_test(Config, Level) ->
+    update_test_base(Config, Level, update_async).
+
+update_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
@@ -167,7 +185,7 @@ update_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(J) ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(update, Level, [
+                Ans = ?call_store(Fun, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I)),
                     #{field1 => I+J}
                 ]),

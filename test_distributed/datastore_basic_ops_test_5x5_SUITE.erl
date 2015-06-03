@@ -24,8 +24,10 @@
     create_delete_local_store_test/1, save_local_store_test/1, update_local_store_test/1,
     get_local_store_test/1, exists_local_store_test/1,
     create_delete_global_cache_test/1, save_global_cache_test/1, update_global_cache_test/1,
+    create_async_delete_global_cache_test/1, save_async_global_cache_test/1, update_async_global_cache_test/1,
     get_global_cache_test/1, exists_global_cache_test/1,
     create_delete_local_cache_test/1, save_local_cache_test/1, update_local_cache_test/1,
+    create_async_delete_local_cache_test/1, save_async_local_cache_test/1, update_async_local_cache_test/1,
     get_local_cache_test/1, exists_local_cache_test/1,
     mixed_db_test/1, mixed_global_store_test/1, mixed_local_store_test/1,
     mixed_global_cache_test/1, mixed_local_cache_test/1
@@ -38,8 +40,10 @@
         create_delete_local_store_test, save_local_store_test, update_local_store_test,
         get_local_store_test, exists_local_store_test,
         create_delete_global_cache_test, save_global_cache_test, update_global_cache_test,
+        create_async_delete_global_cache_test, save_async_global_cache_test, update_async_global_cache_test,
         get_global_cache_test, exists_global_cache_test,
         create_delete_local_cache_test, save_local_cache_test, update_local_cache_test,
+        create_async_delete_local_cache_test, save_async_local_cache_test, update_async_local_cache_test,
         get_local_cache_test, exists_local_cache_test,
         mixed_db_test, mixed_global_store_test, mixed_local_store_test,
         mixed_global_cache_test, mixed_local_cache_test
@@ -52,8 +56,10 @@ all() ->
         create_delete_local_store_test, save_local_store_test, update_local_store_test,
         get_local_store_test, exists_local_store_test,
         create_delete_global_cache_test, save_global_cache_test, update_global_cache_test,
+        create_async_delete_global_cache_test, save_async_global_cache_test, update_async_global_cache_test,
         get_global_cache_test, exists_global_cache_test,
         create_delete_local_cache_test, save_local_cache_test, update_local_cache_test,
+        create_async_delete_local_cache_test, save_async_local_cache_test, update_async_local_cache_test,
         get_local_cache_test, exists_local_cache_test
     ].
 
@@ -139,6 +145,18 @@ save_global_cache_test(Config) ->
 update_global_cache_test(Config) ->
     datastore_basic_ops_utils:update_test(Config, globally_cached).
 
+-performance(?create_async_delete_test_def).
+create_async_delete_global_cache_test(Config) ->
+    datastore_basic_ops_utils:create_async_delete_test(Config, globally_cached).
+
+-performance(?save_async_test_def).
+save_async_global_cache_test(Config) ->
+    datastore_basic_ops_utils:save_async_test(Config, globally_cached).
+
+-performance(?update_async_test_def).
+update_async_global_cache_test(Config) ->
+    datastore_basic_ops_utils:update_async_test(Config, globally_cached).
+
 -performance(?get_test_def).
 get_global_cache_test(Config) ->
     datastore_basic_ops_utils:get_test(Config, globally_cached).
@@ -160,6 +178,18 @@ save_local_cache_test(Config) ->
 -performance(?update_test_def).
 update_local_cache_test(Config) ->
     datastore_basic_ops_utils:update_test(Config, locally_cached).
+
+-performance(?create_async_delete_test_def).
+create_async_delete_local_cache_test(Config) ->
+    datastore_basic_ops_utils:create_async_delete_test(Config, locally_cached).
+
+-performance(?save_async_test_def).
+save_async_local_cache_test(Config) ->
+    datastore_basic_ops_utils:save_async_test(Config, locally_cached).
+
+-performance(?update_async_test_def).
+update_async_local_cache_test(Config) ->
+    datastore_basic_ops_utils:update_async_test(Config, locally_cached).
 
 -performance(?get_test_def).
 get_local_cache_test(Config) ->
