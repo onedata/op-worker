@@ -519,7 +519,7 @@ free_memory(NodeMem) ->
 %% Plans next memory checking.
 %% @end
 %%--------------------------------------------------------------------
--spec next_mem_check() -> ok.
+-spec next_mem_check() -> TimerRef :: reference().
 next_mem_check() ->
     {ok, IntervalMin} = application:get_env(?APP_NAME, check_mem_interval_minutes),
     Interval = timer:minutes(IntervalMin),

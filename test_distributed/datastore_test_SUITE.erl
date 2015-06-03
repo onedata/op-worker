@@ -24,23 +24,19 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
-            global_cache_list_test/1, persistance_test/1, links_test/1, link_walk_test/1,
-            cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
--export([utilize_memory/2]).
 -export([
     local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
     global_cache_list_test/1, persistance_test/1,
-    disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1
-]).
+    disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1,
+    cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
+-export([utilize_memory/2]).
 
 -performance({test_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-     global_cache_list_test, persistance_test, links_test, link_walk_test,
-     cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
      global_cache_list_test, persistance_test,
-     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test].
+     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
+     cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test function
@@ -576,6 +572,7 @@ generic_links_test(Config, Level) ->
 
 rand_key() ->
     base64:encode(crypto:rand_bytes(8)).
+
 prepare_list(1) ->
     "x";
 
