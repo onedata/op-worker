@@ -103,7 +103,7 @@ init([]) ->
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
-        naxt_mem_check(),
+        next_mem_check(),
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
@@ -143,7 +143,7 @@ handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) ->
     {reply, Reply, State};
 
 % only for tests
-handle_call(check_mem_synch, _From, #state{monitoring_state = MonState} = State) ->
+handle_call(check_mem_synch, _From, State) ->
     Ans = case monitoring:get_memory_stats() of
         [{<<"mem">>, MemUsage}] ->
             case caches_controller:should_clear_cache(MemUsage) of
@@ -184,13 +184,15 @@ handle_cast(ccm_conn_ack, State) ->
 
 handle_cast(check_mem, #state{monitoring_state = MonState} = State) ->
     MemUsage = monitoring:mem_usage(MonState),
+    % Check if memory cleaning of oldest date should be started
+    % even when memory utilization is low (e.g. once a day)
     case caches_controller:should_clear_cache(MemUsage) of
         true ->
             spawn(fun() -> free_memory(MemUsage) end);
         _ ->
             ok
     end,
-    naxt_mem_check(),
+    next_mem_check(),
     {noreply, State};
 
 handle_cast(do_heartbeat, State) ->
@@ -476,6 +478,13 @@ check_node_ip_address() ->
         {127, 0, 0, 1}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Clears memory caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec free_memory(NodeMem :: number()) -> ok | mem_usage_too_high | cannot_check_mem_usage | {error, term()}.
 free_memory(NodeMem) ->
     try
         AvgMem = gen_server:call({global, ?CCM}, get_avg_mem_usage),
@@ -501,10 +510,17 @@ free_memory(NodeMem) ->
     catch
         E1:E2 ->
             ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2]),
-            {error, {E1, E2}}
+            {error, E2}
     end.
 
-naxt_mem_check() ->
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Plans next memory checking.
+%% @end
+%%--------------------------------------------------------------------
+-spec next_mem_check() -> ok.
+next_mem_check() ->
     {ok, IntervalMin} = application:get_env(?APP_NAME, check_mem_interval_minutes),
     Interval = timer:minutes(IntervalMin),
     % random to reduce probability that two nodes clear memory simultanosly

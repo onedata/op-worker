@@ -39,6 +39,7 @@ all() ->
 %%% Test function
 %% ====================================================================
 
+% checks if cache is monitored
 cache_monitoring_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
@@ -55,6 +56,7 @@ cache_monitoring_test(Config) ->
 
     ok.
 
+% checks if caches controller clears caches
 old_keys_cleaning_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
@@ -92,6 +94,7 @@ old_keys_cleaning_test(Config) ->
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, CorruptedKey])),
     ok.
 
+% helper fun used by old_keys_cleaning_test
 check_clearing([], _Worker1, _Worker2) ->
     ok;
 check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
@@ -120,12 +123,13 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
 
     check_clearing(R, Worker1, Worker2).
 
+% checks if node_managaer clears memory correctly
 cache_clearing_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
 
     [{_, Mem0}] = monitoring:get_memory_stats(),
     FreeMem = 100 - Mem0,
-    ToAdd = min(5, FreeMem/2),
+    ToAdd = min(20, FreeMem/2),
     MemTarget = Mem0 + ToAdd/2,
     MemUsage = Mem0 + ToAdd,
 
@@ -139,6 +143,7 @@ cache_clearing_test(Config) ->
 
     ok.
 
+% helper fun used by cache_clearing_test
 utilize_memory(MemUsage, MemTarget) ->
     application:set_env(?APP_NAME, mem_to_clear_cache, MemTarget),
 

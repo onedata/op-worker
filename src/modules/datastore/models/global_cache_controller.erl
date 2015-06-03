@@ -71,6 +71,12 @@ get(Key) ->
 list() ->
     datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list records older then DocAge..
+%% @end
+%%--------------------------------------------------------------------
+-spec list(DocAge :: integer()) -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list(DocAge) ->
     Now = os:timestamp(),
     Filter = fun
@@ -150,15 +156,42 @@ model_init() ->
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Provides hooks configuration.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_hooks_config() -> list().
 get_hooks_config() ->
     caches_controller:get_hooks_config(?GLOBAL_CACHES).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates information about usage of a document.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 update_usage_info(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     V = #global_cache_controller{timestamp = os:timestamp()},
     Doc = #document{key = Uuid, value = V},
     save(Doc).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes information about usage of a document.
+%% @end
+%%--------------------------------------------------------------------
+-spec del_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) ->
+    ok | datastore:generic_error().
 del_usage_info(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     delete(Uuid).

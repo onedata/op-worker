@@ -22,9 +22,10 @@
 %%%===================================================================
 
 mem_clearing_test() ->
+    % utilize memory
     [{_, Mem0}] = monitoring:get_memory_stats(),
     FreeMem = 100 - Mem0,
-    ToAdd = min(5, FreeMem/2),
+    ToAdd = min(20, FreeMem/2),
     MemTarget = Mem0 + ToAdd/2,
     MemUsage = Mem0 + ToAdd,
 
@@ -44,6 +45,9 @@ mem_clearing_test() ->
     end,
     while(Add100MB, Guard),
 
+
+
+    % clear memory
     meck:new(caches_controller, [passthrough]),
     meck:expect(caches_controller, delete_old_keys,
         fun
@@ -73,6 +77,9 @@ mem_clearing_test() ->
 
     catch ets:delete(test),
 
+
+
+    % check
     ?assertEqual(1, meck:num_calls(caches_controller, delete_old_keys, [locally_cached, timer:hours(7*24)])),
     ?assertEqual(1, meck:num_calls(caches_controller, delete_old_keys, [locally_cached, timer:hours(24)])),
     ?assertEqual(1, meck:num_calls(caches_controller, delete_old_keys, [locally_cached, timer:hours(1)])),

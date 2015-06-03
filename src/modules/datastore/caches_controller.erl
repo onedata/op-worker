@@ -26,22 +26,61 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if memory should be cleared.
+%% @end
+%%--------------------------------------------------------------------
+-spec should_clear_cache(MemUsage :: number()) -> boolean().
 should_clear_cache(MemUsage) ->
   {ok, TargetMemUse} = application:get_env(?APP_NAME, mem_to_clear_cache),
   MemUsage >= TargetMemUse.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears local cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_local_cache(Aggressive :: boolean()) -> ok | mem_usage_too_high | cannot_check_mem_usage.
 clear_local_cache(Aggressive) ->
   clear_cache(Aggressive, locally_cached).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears local cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_local_cache(MemUsage :: number(), Aggressive :: boolean()) ->
+  ok | mem_usage_too_high | cannot_check_mem_usage.
 clear_local_cache(MemUsage, Aggressive) ->
   clear_cache(MemUsage, Aggressive, locally_cached).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears global cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_global_cache(Aggressive :: boolean()) -> ok | mem_usage_too_high | cannot_check_mem_usage.
 clear_global_cache(Aggressive) ->
   clear_cache(Aggressive, globally_cached).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears global cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_global_cache(MemUsage :: number(), Aggressive :: boolean()) ->
+  ok | mem_usage_too_high | cannot_check_mem_usage.
 clear_global_cache(MemUsage, Aggressive) ->
   clear_cache(MemUsage, Aggressive, globally_cached).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_cache(Aggressive :: boolean(), StoreType :: globally_cached | locally_cached) ->
+  ok | mem_usage_too_high | cannot_check_mem_usage.
 clear_cache(Aggressive, StoreType) ->
   case monitoring:get_memory_stats() of
     [{<<"mem">>, MemUsage}] ->
@@ -51,6 +90,13 @@ clear_cache(Aggressive, StoreType) ->
       cannot_check_mem_usage
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_cache(MemUsage :: number(), Aggressive :: boolean(), StoreType :: globally_cached | locally_cached) ->
+  ok | mem_usage_too_high | cannot_check_mem_usage.
 clear_cache(MemUsage, true, StoreType) ->
   {ok, TargetMemUse} = application:get_env(?APP_NAME, mem_to_clear_cache),
   clear_cache(MemUsage, TargetMemUse, StoreType, [timer:minutes(10), 0]);
@@ -59,6 +105,14 @@ clear_cache(MemUsage, _, StoreType) ->
   {ok, TargetMemUse} = application:get_env(?APP_NAME, mem_to_clear_cache),
   clear_cache(MemUsage, TargetMemUse, StoreType, [timer:hours(7*24), timer:hours(24), timer:hours(1)]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_cache(MemUsage :: number(), TargetMemUse :: number(),
+    StoreType :: globally_cached | locally_cached, TimeWindows :: list()) ->
+  ok | mem_usage_too_high | cannot_check_mem_usage.
 clear_cache(MemUsage, TargetMemUse, _StoreType, _TimeWindows) when MemUsage < TargetMemUse->
   ok;
 
@@ -75,6 +129,12 @@ clear_cache(_MemUsage, TargetMemUse, StoreType, [TimeWindow | Windows]) ->
       cannot_check_mem_usage
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides hooks configuration on the basis of models list.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_hooks_config(Models :: list()) -> list().
 get_hooks_config(Models) ->
   Methods = [save, get, exists, delete, update, create],
   lists:foldl(fun(Model, Ans) ->
@@ -84,12 +144,30 @@ get_hooks_config(Models) ->
     ModelConfig ++ Ans
   end, [], Models).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates uuid on the basis of key and model name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cache_uuid(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) -> binary().
 get_cache_uuid(Key, ModelName) ->
   base64:encode(term_to_binary({ModelName, Key})).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Decodes uuid to key and model name.
+%% @end
+%%--------------------------------------------------------------------
+-spec decode_uuid(binary()) -> {Key :: datastore:key(), ModelName :: model_behaviour:model_type()}.
 decode_uuid(Uuid) ->
   binary_to_term(base64:decode(Uuid)).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears old documents from memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_old_keys(StoreType :: globally_cached | locally_cached, TimeWindow :: integer()) -> ok.
 delete_old_keys(globally_cached, TimeWindow) ->
   delete_old_keys(global_cache_controller, global_only, ?GLOBAL_CACHES, TimeWindow);
 
@@ -100,6 +178,14 @@ delete_old_keys(locally_cached, TimeWindow) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Clears old documents from memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_old_keys(Model :: global_cache_controller | local_cache_controller,
+    Level :: global_only | local_only, Caches :: list(), TimeWindow :: integer()) -> ok.
 delete_old_keys(Model, Level, Caches, TimeWindow) ->
   {ok, Uuids} = apply(Model, list, [TimeWindow]),
   lists:foreach(fun(Uuid) ->
