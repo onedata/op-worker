@@ -100,5 +100,5 @@ dist: package/$(PKG_ID).tar.gz
 package: package/$(PKG_ID).tar.gz
 	${MAKE} -C package -f $(PKG_ID)/deps/node_package/Makefile
 
-pkgclean: distclean
+pkgclean:
 	rm -rf package
