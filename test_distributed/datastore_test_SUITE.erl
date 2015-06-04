@@ -151,8 +151,8 @@ global_cache_list_test(Config) ->
 local_cache_list_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
-    generic_list_test(Worker1, ?LOCAL_ONLY_LEVEL),
-    generic_list_test(Worker2, ?LOCAL_ONLY_LEVEL),
+    generic_list_test([Worker1], ?LOCAL_ONLY_LEVEL),
+    generic_list_test([Worker2], ?LOCAL_ONLY_LEVEL),
     ok.
 
 %% Simple usege of link_walk
@@ -458,5 +458,7 @@ generic_list_test(Nodes, Level) ->
 rand_key() ->
     base64:encode(crypto:rand_bytes(8)).
 
-rand_node(Nodes) ->
-    lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes).
+rand_node(Nodes) when is_list(Nodes) ->
+    lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes);
+rand_node(Node) when is_atom(Node) ->
+    Node.
