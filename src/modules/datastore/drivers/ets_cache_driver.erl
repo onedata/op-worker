@@ -21,6 +21,9 @@
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
+%% Batch size for list operation
+-define(LIST_BATCH_SIZE, 100).
+
 %%%===================================================================
 %%% store_driver_behaviour callbacks
 %%%===================================================================
@@ -104,9 +107,16 @@ get(#model_config{name = ModelName} = ModelConfig, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list(model_behaviour:model_config(),
-    Fun :: datastore:list_fun(), AccIn :: term()) -> no_return().
-list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
-    error(not_supported).
+    Fun :: datastore:list_fun(), AccIn :: term()) ->
+    {ok, Handle :: term()} | datastore:generic_error() | no_return().
+list(#model_config{} = ModelConfig, Fun, AccIn) ->
+    SelectAll = [{'_', [], ['$_']}],
+    case ets:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE) of
+        {Obj, Handle} ->
+            list_next(Obj, Handle, Fun, AccIn);
+        '$end_of_table' ->
+            list_next('$end_of_table', undefined, Fun, AccIn)
+    end.
 
 
 
@@ -198,6 +208,38 @@ foreach_link(_, _Key, _, _AccIn) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Internat helper - accumulator for list/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_next([term()] | '$end_of_table', term(), datastore:list_fun(), term()) ->
+    {ok, Acc :: term()} | datastore:generic_error().
+list_next([{Key, Obj} | R], Handle, Fun, AccIn) ->
+    Doc =  #document{key = Key, value = Obj},
+    case Fun(Doc, AccIn) of
+        {next, NewAcc} ->
+            list_next(R, Handle, Fun, NewAcc);
+        {abort, NewAcc} ->
+            {ok, NewAcc}
+    end;
+list_next('$end_of_table' = EoT, Handle, Fun, AccIn) ->
+    case Fun(EoT, AccIn) of
+        {next, NewAcc} ->
+            list_next(EoT, Handle, Fun, NewAcc);
+        {abort, NewAcc} ->
+            {ok, NewAcc}
+    end;
+list_next([], Handle, Fun, AccIn) ->
+    case ets:select(Handle) of
+        {Objects, NewHandle} ->
+            list_next(Objects, NewHandle, Fun, AccIn);
+        '$end_of_table' ->
+            list_next('$end_of_table', undefined, Fun, AccIn)
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @private

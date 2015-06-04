@@ -40,7 +40,7 @@
 -export_type([generic_error/0, not_found_error/1, update_error/0, create_error/0, get_error/0, link_error/0]).
 
 %% API utility types
--type store_level() :: disk_only | local_only | global_only | locally_cached | globally_cached.
+-type store_level() :: ?DISK_ONLY_LEVEL | ?LOCAL_ONLY_LEVEL | ?GLOBAL_ONLY_LEVEL | ?LOCALLY_CACHED_LEVEL | ?GLOBALLY_CACHED_LEVEL.
 -type delete_predicate() :: fun(() -> boolean()).
 -type list_fun() :: fun((Obj :: term(), AccIn :: term()) -> {next, Acc :: term()} | {abort, Acc :: term()}).
 -type exists_return() :: boolean() | no_return().
@@ -168,9 +168,10 @@ list(Level, ModelName, Fun, AccIn) ->
 delete(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
-            spawn(fun() -> catch delete_links(disk_only, Key, ModelName, all) end),
-            spawn(fun() -> catch delete_links(global_only, Key, ModelName, all) end),
-            spawn(fun() -> catch delete_links(local_only, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
+            %% @todo: uncomment following line when local cache will support links
+            % spawn(fun() -> catch delete_links(?LOCAL_ONLY_LEVEL, Key, ModelName, all) end),
             ok;
         {error, Reason} ->
             {error, Reason}
@@ -521,15 +522,15 @@ ensure_state_loaded(NodeToSync) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec level_to_driver(Level :: store_level()) -> [Driver :: atom()].
-level_to_driver(disk_only) ->
+level_to_driver(?DISK_ONLY_LEVEL) ->
     ?PERSISTENCE_DRIVER;
-level_to_driver(local_only) ->
+level_to_driver(?LOCAL_ONLY_LEVEL) ->
     ?LOCAL_CACHE_DRIVER;
-level_to_driver(global_only) ->
+level_to_driver(?GLOBAL_ONLY_LEVEL) ->
     ?DISTRIBUTED_CACHE_DRIVER;
-level_to_driver(locally_cached) ->
+level_to_driver(?LOCALLY_CACHED_LEVEL) ->
     [?LOCAL_CACHE_DRIVER, ?PERSISTENCE_DRIVER];
-level_to_driver(globally_cached) ->
+level_to_driver(?GLOBALLY_CACHED_LEVEL) ->
     [?DISTRIBUTED_CACHE_DRIVER, ?PERSISTENCE_DRIVER].
 
 %%--------------------------------------------------------------------
@@ -540,11 +541,11 @@ level_to_driver(globally_cached) ->
 %%--------------------------------------------------------------------
 -spec driver_to_level(atom()) -> store_level().
 driver_to_level(?PERSISTENCE_DRIVER) ->
-    disk_only;
+    ?DISK_ONLY_LEVEL;
 driver_to_level(?LOCAL_CACHE_DRIVER) ->
-    local_only;
+    ?LOCAL_ONLY_LEVEL;
 driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
-    global_only.
+    ?GLOBAL_ONLY_LEVEL.
 
 %%--------------------------------------------------------------------
 %% @private

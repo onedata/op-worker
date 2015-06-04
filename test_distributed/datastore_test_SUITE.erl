@@ -18,6 +18,7 @@
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 
 -define(call_store(N, M, A), ?call_store(N, datastore, M, A)).
 -define(call_store(N, Mod, M, A), rpc:call(N, Mod, M, A)).
@@ -26,6 +27,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([
     local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
+    global_cache_list_test/1, persistance_test/1, local_cache_list_test/1,
+    disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1
+]).
     global_cache_list_test/1, persistance_test/1,
     disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1,
     cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
@@ -34,6 +38,8 @@
 -performance({test_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
+     global_cache_list_test, persistance_test, local_cache_list_test,
+     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test].
      global_cache_list_test, persistance_test,
      disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
@@ -198,7 +204,7 @@ local_cache_test(Config) ->
 global_cache_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
-    Level = global_only,
+    Level = ?GLOBAL_ONLY_LEVEL,
 
     local_access_only(Worker1, Level),
     local_access_only(Worker2, Level),
@@ -212,7 +218,7 @@ global_cache_test(Config) ->
 persistance_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
-    Level = disk_only,
+    Level = ?DISK_ONLY_LEVEL,
 
     local_access_only(Worker1, Level),
     local_access_only(Worker2, Level),
@@ -226,8 +232,8 @@ persistance_test(Config) ->
 global_cache_atomic_update_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
-    Level = global_only,
-    Key = some_key_atomic,
+    Level = ?GLOBAL_ONLY_LEVEL,
+    Key = rand_key(),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
@@ -269,60 +275,38 @@ global_cache_atomic_update_test(Config) ->
 
 %% list operation on global cache driver (on several nodes)
 global_cache_list_test(Config) ->
+    generic_list_test(?config(op_worker_nodes, Config), ?GLOBAL_ONLY_LEVEL).
+
+
+%% list operation on local cache driver (on several nodes)
+local_cache_list_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
-    Level = global_only,
-
-    Ret0 = ?call_store(Worker1, list, [Level, some_record, ?GET_ALL, []]),
-    ?assertMatch({ok, _}, Ret0),
-    {ok, Objects0} = Ret0,
-
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, create, [Level,
-            #document{
-                key = obj1,
-                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
-
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, create, [Level,
-            #document{
-                key = obj2,
-                value = #some_record{field1 = 2, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
-
-    ?assertMatch({ok, _},
-        ?call_store(Worker2, create, [Level,
-            #document{
-                key = obj3,
-                value = #some_record{field1 = 3, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
-
-    Ret1 = ?call_store(Worker2, list, [Level, some_record, ?GET_ALL, []]),
-    ?assertMatch({ok, _}, Ret1),
-    {ok, Objects1} = Ret1,
-    ?assertMatch(3, erlang:length(Objects1) - erlang:length(Objects0)),
-
+    generic_list_test([Worker1], ?LOCAL_ONLY_LEVEL),
+    generic_list_test([Worker2], ?LOCAL_ONLY_LEVEL),
     ok.
 
 %% Simple usege of link_walk
 link_walk_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
-
-    Level = disk_only,
+    
+    Level = ?DISK_ONLY_LEVEL,
+    Key1 = rand_key(),
+    Key2 = rand_key(),
+    Key3 = rand_key(),
 
     Doc1 = #document{
-        key = k1,
+        key = Key1,
         value = #some_record{field1 = 1}
     },
 
     Doc2 = #document{
-        key = k2,
+        key = Key2,
         value = #some_record{field1 = 2}
     },
 
     Doc3 = #document{
-        key = k3,
+        key = Key3,
         value = #some_record{field1 = 3}
     },
 
@@ -342,25 +326,25 @@ link_walk_test(Config) ->
     Res0 = ?call_store(Worker1, link_walk, [Level, Doc1, [some, link], get_leaf]),
     Res1 = ?call_store(Worker2, link_walk, [Level, Doc1, [some, parent], get_leaf]),
 
-    ?assertMatch({ok, {#document{key = k3, value = #some_record{field1 = 3}}, [k2, k3]}}, Res0),
-    ?assertMatch({ok, {#document{key = k1, value = #some_record{field1 = 1}}, [k2, k1]}}, Res1),
+    ?assertMatch({ok, {#document{key = Key3, value = #some_record{field1 = 3}}, [Key2, Key3]}}, Res0),
+    ?assertMatch({ok, {#document{key = Key1, value = #some_record{field1 = 1}}, [Key2, Key1]}}, Res1),
 
     ok.
 
 
 %% Simple usege of (add/fetch/delete/foreach)_link
 disk_only_links_test(Config) ->
-    generic_links_test(Config, disk_only).
+    generic_links_test(Config, ?DISK_ONLY_LEVEL).
 
 
 %% Simple usege of (add/fetch/delete/foreach)_link
 global_only_links_test(Config) ->
-    generic_links_test(Config, global_only).
+    generic_links_test(Config, ?GLOBAL_ONLY_LEVEL).
 
 
 %% Simple usege of (add/fetch/delete/foreach)_link
 globally_cached_links_test(Config) ->
-    generic_links_test(Config, globally_cached).
+    generic_links_test(Config, ?GLOBALLY_CACHED_LEVEL).
 
 
 %%%===================================================================
@@ -379,7 +363,7 @@ end_per_suite(Config) ->
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.
 local_access_only(Node, Level) ->
-    Key = some_key,
+    Key = rand_key(),
 
     ?assertMatch({ok, Key},
         ?call_store(Node, create, [Level,
@@ -439,7 +423,7 @@ local_access_only(Node, Level) ->
 global_access(Config, Level) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
-    Key = some_other_key,
+    Key = rand_key(),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
@@ -469,7 +453,7 @@ global_access(Config, Level) ->
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
         ?call_store(Worker2, get, [Level,
-            some_record, some_other_key])),
+            some_record, Key])),
 
     ?assertMatch({ok, _},
         ?call_store(Worker1, update, [Level,
@@ -569,8 +553,49 @@ generic_links_test(Config, Level) ->
 
     ok.
 
+
+%% generic list operation (on several nodes)
+generic_list_test(Nodes, Level) ->
+    
+    Ret0 = ?call_store(rand_node(Nodes), list, [Level, some_record, ?GET_ALL, []]),
+    ?assertMatch({ok, _}, Ret0),
+    {ok, Objects0} = Ret0,
+
+    ?assertMatch({ok, _},
+        ?call_store(rand_node(Nodes), create, [Level,
+            #document{
+                key = rand_key(),
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+
+    ?assertMatch({ok, _},
+        ?call_store(rand_node(Nodes), create, [Level,
+            #document{
+                key = rand_key(),
+                value = #some_record{field1 = 2, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+
+    ?assertMatch({ok, _},
+        ?call_store(rand_node(Nodes), create, [Level,
+            #document{
+                key = rand_key(),
+                value = #some_record{field1 = 3, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+
+    Ret1 = ?call_store(rand_node(Nodes), list, [Level, some_record, ?GET_ALL, []]),
+    ?assertMatch({ok, _}, Ret1),
+    {ok, Objects1} = Ret1,
+    ?assertMatch(3, erlang:length(Objects1) - erlang:length(Objects0)),
+
+    ok.
+
 rand_key() ->
     base64:encode(crypto:rand_bytes(8)).
+
+rand_node(Nodes) when is_list(Nodes) ->
+    lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes);
+rand_node(Node) when is_atom(Node) ->
+    Node.    base64:encode(crypto:rand_bytes(8)).
 
 prepare_list(1) ->
     "x";
