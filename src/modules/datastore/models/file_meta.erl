@@ -355,6 +355,12 @@ get_scope(Entry) ->
 %%% Internal functions
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Internel helper function for rename/2.
+%% @end
+%%--------------------------------------------------------------------
 -spec rename3(Subject :: datastore:document(), ParentUUID :: uuid(), {name, NewName :: name()} | {path, NewPath :: path()}) ->
     ok | datastore:generic_error().
 rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {name, NewName}) ->
@@ -384,6 +390,12 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, 
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Force set "scope" document for given file_meta:entry() and all its children recursively but only if
+%% given file_meta:entry() has differen "scope" document.
+%% @end
+%%--------------------------------------------------------------------
 -spec update_scopes(Entry :: entry(), NewScope :: datastore:document()) -> ok | datastore:generic_error().
 update_scopes(Entry, #document{key = NewScopeUUID} = NewScope) ->
     ?run(begin
@@ -396,6 +408,11 @@ update_scopes(Entry, #document{key = NewScopeUUID} = NewScope) ->
      end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Force set "scope" document for given file_meta:entry() and all its children recursively.
+%% @end
+%%--------------------------------------------------------------------
 -spec set_scopes(entry(), datastore:document()) -> ok | datastore:generic_error().
 set_scopes(Entry, #document{key = NewScopeUUID}) ->
     ?run(begin
@@ -429,18 +446,23 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Internal helper fo set_scopes/2. Dispatch all set_scope jobs across all worker proceses.
+%% @end
+%%--------------------------------------------------------------------
 -spec set_scopes6(Entry :: entry() | [entry()], NewScopeUUID :: uuid(), [pid()], [pid()],
     Offset :: non_neg_integer(), BatchSize :: non_neg_integer()) -> ok | no_return().
-set_scopes6(Entry, NewScopeUUID, [], SettersBak, Offset, BatchSize) ->
+set_scopes6(Entry, NewScopeUUID, [], SettersBak, Offset, BatchSize) -> %% Empty workers list -> restore from busy workers list
     set_scopes6(Entry, NewScopeUUID, SettersBak, [], Offset, BatchSize);
 set_scopes6([], _NewScopeUUID, _Setters, _SettersBak, _Offset, _BatchSize) ->
-    ok;
-set_scopes6([Entry | R], NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize) ->
-    ok = set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize),
-    ok = set_scopes6(R, NewScopeUUID, Setters, [Setter | SettersBak], Offset, BatchSize);
-set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize) ->
-    Setter ! {Entry, NewScopeUUID},
-    {ok, UUIDs} = list_uuids(Entry, Offset, BatchSize),
+    ok; %% Nothing to do
+set_scopes6([Entry | R], NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize) ->  %% set_scopes for all given entries
+    ok = set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize), %% set_scopes for current entry
+    ok = set_scopes6(R, NewScopeUUID, Setters, [Setter | SettersBak], Offset, BatchSize);     %% set_scopes for other entries
+set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSize) -> %% set_scopes for current entry
+    Setter ! {Entry, NewScopeUUID}, %% Send job to first available process
+    {ok, UUIDs} = list_uuids(Entry, Offset, BatchSize), %% Apply this fuction for all children
     case length(UUIDs) < BatchSize of
         true -> ok;
         false ->
@@ -449,6 +471,11 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
     ok = set_scopes6([{uuid, UUID} || UUID <- UUIDs], NewScopeUUID, Setters, [Setter | SettersBak], 0, BatchSize).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Internal helper for gen_path/1. Accumulates all intermediate documents and concatenates them into path().
+%% @end
+%%--------------------------------------------------------------------
 -spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error() | no_return().
 gen_path2(Entry, Acc) ->
     {ok, #document{} = Doc} = get(Entry),
@@ -461,6 +488,11 @@ gen_path2(Entry, Acc) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
+%% @end
+%%--------------------------------------------------------------------
 -spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
 to_uuid({uuid, UUID}) ->
     {ok, UUID};
@@ -473,7 +505,12 @@ to_uuid({path, Path}) ->
     end).
 
 
--spec is_valid_filename(path()) -> boolean().
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given term is valid path()
+%% @end
+%%--------------------------------------------------------------------
+-spec is_valid_filename(term()) -> boolean().
 is_valid_filename(<<"">>) ->
     false;
 is_valid_filename(FileName) when not is_binary(FileName) ->
@@ -484,6 +521,12 @@ is_valid_filename(FileName) when is_binary(FileName) ->
         _  -> false
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns just error reason for given error tuple
+%% @end
+%%--------------------------------------------------------------------
 -spec normalize_error(term()) -> term().
 normalize_error({badmatch, Reason}) ->
     normalize_error(Reason);
