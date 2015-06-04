@@ -78,22 +78,20 @@ list() ->
 %%--------------------------------------------------------------------
 -spec list(DocAge :: integer()) -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list(DocAge) ->
-%%     Now = os:timestamp(),
-%%     Filter = fun
-%%         ('$end_of_table', Acc) ->
-%%             {abort, Acc};
-%%         (#document{key = Uuid, value = V}, Acc) ->
-%%             T = V#local_cache_controller.timestamp,
-%%             case timer:now_diff(Now, T) >= 1000*DocAge of
-%%                 true ->
-%%                     {next, [Uuid | Acc]};
-%%                 false ->
-%%                     {next, Acc}
-%%             end
-%%     end,
-%%     datastore:list(local_only, ?MODEL_NAME, Filter, []).
-    %TODO change when list on ets is added.
-    {ok, []}.
+    Now = os:timestamp(),
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (#document{key = Uuid, value = V}, Acc) ->
+            T = V#local_cache_controller.timestamp,
+            case timer:now_diff(Now, T) >= 1000*DocAge of
+                true ->
+                    {next, [Uuid | Acc]};
+                false ->
+                    {next, Acc}
+            end
+    end,
+    datastore:list(local_only, ?MODEL_NAME, Filter, []).
 
 %%--------------------------------------------------------------------
 %% @doc

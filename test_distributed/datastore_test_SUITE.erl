@@ -28,9 +28,6 @@
 -export([
     local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
     global_cache_list_test/1, persistance_test/1, local_cache_list_test/1,
-    disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1
-]).
-    global_cache_list_test/1, persistance_test/1,
     disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1,
     cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
 -export([utilize_memory/2]).
@@ -39,8 +36,6 @@
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
      global_cache_list_test, persistance_test, local_cache_list_test,
-     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test].
-     global_cache_list_test, persistance_test,
      disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
@@ -595,7 +590,7 @@ rand_key() ->
 rand_node(Nodes) when is_list(Nodes) ->
     lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes);
 rand_node(Node) when is_atom(Node) ->
-    Node.    base64:encode(crypto:rand_bytes(8)).
+    Node.
 
 prepare_list(1) ->
     "x";
