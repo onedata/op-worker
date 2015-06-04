@@ -17,17 +17,17 @@
 -include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% Batch size for list operation
--define(LIST_BATCH_SIZE, 100).
-
--define(MNESIA_WAIT_TIMEOUT, timer:seconds(20)).
-
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
 -record(links, {key, link_map = #{}}).
+
+%% Batch size for list operation
+-define(LIST_BATCH_SIZE, 100).
+
+-define(MNESIA_WAIT_TIMEOUT, timer:seconds(20)).
 
 %%%===================================================================
 %%% store_driver_behaviour callbacks
