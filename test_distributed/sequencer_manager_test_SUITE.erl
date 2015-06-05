@@ -147,6 +147,7 @@ sequencer_stream_messages_ordering_test(Config) ->
 
     session_teardown(Worker, [{session_id, SessId}]),
     mocks_teardown(Worker, [communicator]),
+    remove_pending_messages(),
 
     [?SEND_TIME(SendTime), ?RECV_TIME(RecvTime)].
 

@@ -151,6 +151,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
+    remove_pending_messages(),
 
     [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
 
@@ -273,6 +274,7 @@ event_stream_counter_emission_rule_test(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
+    remove_pending_messages(),
 
     [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
 
@@ -328,6 +330,7 @@ event_stream_size_emission_rule_test(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
+    remove_pending_messages(),
 
     [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
 
@@ -518,6 +521,7 @@ event_manager_multiple_subscription_test(Config) ->
     lists:foreach(fun(SubId) ->
         unsubscribe(Worker, SubId)
     end, SubIds),
+    remove_pending_messages(),
 
     ok.
 
@@ -563,7 +567,7 @@ event_manager_multiple_handlers_test(Config) ->
 
 -performance([
     {repeats, 10},
-    {parameters, [?CLI_NUM(3), ?CTR_THR(5), ?EVT_NUM(20)]},
+    {parameters, [?CLI_NUM(3), ?CTR_THR(5), ?EVT_NUM(1000)]},
     {description, "Check whether event stream executes handlers for multiple clients."},
     {config, [{name, small_client_number},
         {description, "Small number of clients connected to the server."},
@@ -623,6 +627,7 @@ event_manager_multiple_clients_test(Config) ->
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, SessIds),
+    remove_pending_messages(),
 
     [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
 
