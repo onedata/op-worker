@@ -170,7 +170,7 @@ get(#model_config{name = ModelName} = ModelConfig, Key) ->
 list(#model_config{} = ModelConfig, Fun, AccIn) ->
     SelectAll = [{'_', [], ['$_']}],
     mnesia_run(async_dirty, fun() ->
-        case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, read) of
+        case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, none) of
             {Obj, Handle} ->
                 list_next(Obj, Handle, Fun, AccIn);
             '$end_of_table' ->
