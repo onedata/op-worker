@@ -427,31 +427,26 @@ generic_list_test(Nodes, Level) ->
     ?assertMatch({ok, _}, Ret0),
     {ok, Objects0} = Ret0,
 
-    ?assertMatch({ok, _},
+    ObjCount = 3424,
+    Keys = [rand_key() || _ <- lists:seq(1, ObjCount)],
+
+    CreateDocFun = fun(Key) ->
         ?call_store(rand_node(Nodes), create, [Level,
             #document{
-                key = rand_key(),
+                key = Key,
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
+            }])
+        end,
 
-    ?assertMatch({ok, _},
-        ?call_store(rand_node(Nodes), create, [Level,
-            #document{
-                key = rand_key(),
-                value = #some_record{field1 = 2, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
-
-    ?assertMatch({ok, _},
-        ?call_store(rand_node(Nodes), create, [Level,
-            #document{
-                key = rand_key(),
-                value = #some_record{field1 = 3, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
+    [?assertMatch({ok, _}, CreateDocFun(Key)) || Key <- Keys],
 
     Ret1 = ?call_store(rand_node(Nodes), list, [Level, some_record, ?GET_ALL, []]),
     ?assertMatch({ok, _}, Ret1),
     {ok, Objects1} = Ret1,
-    ?assertMatch(3, erlang:length(Objects1) - erlang:length(Objects0)),
+    ReceivedKeys = lists:map(fun(#document{key = Key}) -> Key end, Objects1 -- Objects0),
+
+    ?assertMatch(ObjCount, erlang:length(Objects1) - erlang:length(Objects0)),
+    ?assertMatch([], ReceivedKeys -- Keys),
 
     ok.
 

@@ -169,7 +169,7 @@ get(#model_config{name = ModelName} = ModelConfig, Key) ->
     {ok, Handle :: term()} | datastore:generic_error() | no_return().
 list(#model_config{} = ModelConfig, Fun, AccIn) ->
     SelectAll = [{'_', [], ['$_']}],
-    mnesia_run(transaction, fun() ->
+    mnesia_run(async_dirty, fun() ->
         case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, read) of
             {Obj, Handle} ->
                 list_next(Obj, Handle, Fun, AccIn);
