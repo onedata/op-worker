@@ -20,6 +20,7 @@
 -include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore.hrl").
+-include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("clproto/include/oneproxy_messages.hrl").
@@ -460,11 +461,11 @@ bandwidth_test(Config) ->
     PacketNum = ?config(packet_num, Config),
     Transport = ?config(transport, Config),
     Data = crypto:rand_bytes(PacketSize * 1024),
-    Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
+    Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #data{}}) ->
+        fun(#client_message{message_body = #ping{}}) ->
             Self ! router_message_called,
             ok
         end),
@@ -512,7 +513,7 @@ python_client_test(Config) ->
     PacketNum = ?config(packet_num, Config),
 
     Data = crypto:rand_bytes(PacketSize * 1024),
-    Packet = #'ClientMessage'{message_body = {data, #'Data'{data = Data}}},
+    Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
     HandshakeMessage = #'ClientMessage'{message_body =
@@ -522,7 +523,7 @@ python_client_test(Config) ->
 
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #data{}}) ->
+        fun(#client_message{message_body = #ping{}}) ->
             Self ! router_message_called,
             ok
         end),

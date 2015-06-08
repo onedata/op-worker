@@ -13,9 +13,13 @@
 -ifndef(DIAGNOSTIC_MESSAGES_HRL).
 -define(DIAGNOSTIC_MESSAGES_HRL, 1).
 
--record(ping,{}).
+-record(ping,{
+    data :: binary()
+}).
 
--record(pong,{}).
+-record(pong,{
+    data :: binary()
+}).
 
 -record(get_protocol_version, {}).
 
