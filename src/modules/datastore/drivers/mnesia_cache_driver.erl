@@ -98,7 +98,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
-    mnesia_run(sync_dirty, fun() ->
+    mnesia_run(sync_transaction, fun() ->
         ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
         {ok, Key}
     end).
