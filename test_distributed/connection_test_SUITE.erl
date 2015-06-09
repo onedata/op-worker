@@ -341,6 +341,13 @@ multi_ping_pong_test(Config) ->
                 IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
                 lists:foreach(
                     fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
+                        case Id =/= MsgId of
+                            true ->
+                                ct:print("~p",[IdToMessage]);
+                            false ->
+                                ok
+                        end,
+
                         ?assertEqual(Id, MsgId)
                     end, IdToMessage),
                 ok = Transport:close(Sock),
@@ -793,7 +800,7 @@ receive_server_message(IgnoredMsgList) ->
                     receive_server_message(IgnoredMsgList);
                 false -> Msg
             end
-    after timer:seconds(5) ->
+    after timer:seconds(10) ->
         {error, timeout}
     end.
 
