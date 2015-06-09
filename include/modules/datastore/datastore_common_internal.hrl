@@ -40,7 +40,7 @@
 %% StoreLevel       :: see #model_config.store_level (optional)
 %% LinkStoreLevel   :: see #model_config.link_store_level (optional)
 -define(MODEL_CONFIG(Bucket, Hooks), ?MODEL_CONFIG(Bucket, Hooks, ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL)).
--define(MODEL_CONFIG(Bucket, Hooks, StoreLevel), ?MODEL_CONFIG(Bucket, Hooks, StoreLevel, ?DEFAULT_STORE_LEVEL)).
+-define(MODEL_CONFIG(Bucket, Hooks, StoreLevel), ?MODEL_CONFIG(Bucket, Hooks, StoreLevel, StoreLevel)).
 -define(MODEL_CONFIG(Bucket, Hooks, StoreLevel, LinkStoreLevel), #model_config{name = ?MODULE,
     size = record_info(size, ?MODULE),
     fields = record_info(fields, ?MODULE),

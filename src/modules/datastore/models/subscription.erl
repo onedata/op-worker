@@ -32,7 +32,7 @@
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(global_only, Document).
+    datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -42,7 +42,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(global_only, ?MODEL_NAME, Key, Diff).
+    datastore:update(?STORE_LEVEL, ?MODEL_NAME, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,7 +52,7 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(global_only, Document).
+    datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,7 +61,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(global_only, ?MODEL_NAME, Key).
+    datastore:get(?STORE_LEVEL, ?MODEL_NAME, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,7 +70,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 
 %%--------------------------------------------------------------------
@@ -80,7 +80,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(global_only, ?MODEL_NAME, Key).
+    datastore:delete(?STORE_LEVEL, ?MODEL_NAME, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -89,7 +89,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(global_only, ?MODEL_NAME, Key)).
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODEL_NAME, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,7 +98,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(event_manager_bucket, []).
+    ?MODEL_CONFIG(event_manager_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -98,7 +98,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
-    mnesia_run(sync_dirty, fun() ->
+    mnesia_run(sync_transaction, fun() ->
         ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
         {ok, Key}
     end).
@@ -169,8 +169,8 @@ get(#model_config{name = ModelName} = ModelConfig, Key) ->
     {ok, Handle :: term()} | datastore:generic_error() | no_return().
 list(#model_config{} = ModelConfig, Fun, AccIn) ->
     SelectAll = [{'_', [], ['$_']}],
-    mnesia_run(transaction, fun() ->
-        case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, read) of
+    mnesia_run(async_dirty, fun() ->
+        case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, none) of
             {Obj, Handle} ->
                 list_next(Obj, Handle, Fun, AccIn);
             '$end_of_table' ->
