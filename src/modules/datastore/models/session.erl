@@ -68,7 +68,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    timer:sleep(100),
+    timer:sleep(50),
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
