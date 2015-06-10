@@ -91,6 +91,9 @@ all() -> [
 -define(AGGR_TIME(Value), #parameter{name = aggr_time,
     description = "Summary events aggregation time.", value = Value, unit = "ms"
 }).
+-define(EVT_PER_SEC(EvtNum, Time), #parameter{name = evt_per_sec, unit = "event/s",
+    description = "Number of events per second.", value = 1000 * EvtNum div Time
+}).
 
 %%%====================================================================
 %%% Test function
@@ -153,7 +156,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
+    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(EvtNum, EmitTime + AggrTime)].
 
 -performance([
     {repeats, 10},
@@ -223,7 +226,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
+    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(FileNum * EvtNum, EmitTime + AggrTime)].
 
 -performance([
     {repeats, 10},
@@ -261,7 +264,9 @@ event_stream_counter_emission_rule_test(Config) ->
     % Emit events.
     {_, EmitTime} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            emit(Worker, #write_event{file_id = FileId}, SessId)
+            emit(Worker, #write_event{
+                file_id = FileId, counter = 1, size = 0, file_size = 0
+            }, SessId)
         end, lists:seq(1, EvtNum))
     end),
 
@@ -276,7 +281,7 @@ event_stream_counter_emission_rule_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
+    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(EvtNum, EmitTime + AggrTime)].
 
 -performance([
     {repeats, 10},
@@ -317,7 +322,9 @@ event_stream_size_emission_rule_test(Config) ->
     % Emit events.
     {_, EmitTime} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            emit(Worker, #write_event{file_id = FileId, size = EvtSize}, SessId)
+            emit(Worker, #write_event{
+                counter = 1, file_id = FileId, size = EvtSize, file_size = 0
+            }, SessId)
         end, lists:seq(1, EvtNum))
     end),
 
@@ -332,7 +339,7 @@ event_stream_size_emission_rule_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
+    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(EvtNum, EmitTime + AggrTime)].
 
 %% Check whether event stream executes handlers when emission time expires.
 event_stream_time_emission_rule_test(Config) ->
@@ -608,7 +615,9 @@ event_manager_multiple_clients_test(Config) ->
     {_, EmitTime} = utils:duration(fun() ->
         utils:pforeach(fun(SessId) ->
             lists:foreach(fun(_) ->
-                emit(Worker, #write_event{file_id = FileId}, SessId)
+                emit(Worker, #write_event{
+                    file_id = FileId, counter = 1, size = 0, file_size = 0
+                }, SessId)
             end, lists:seq(1, EvtNum))
         end, SessIds)
     end),
@@ -629,7 +638,7 @@ event_manager_multiple_clients_test(Config) ->
     end, SessIds),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime)].
+    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(CliNum * EvtNum, EmitTime + AggrTime)].
 
 %%%===================================================================
 %%% SetUp and TearDown functions

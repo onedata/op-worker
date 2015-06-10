@@ -15,9 +15,9 @@
 -include("event_stream.hrl").
 
 -record(read_event, {
-    counter = 1 :: non_neg_integer(),
-    file_id = <<>> :: binary(),
-    size = 0 :: non_neg_integer(),
+    counter :: non_neg_integer(),
+    file_id :: binary(),
+    size :: non_neg_integer(),
     blocks = [] :: [event_utils:file_block()]
 }).
 
