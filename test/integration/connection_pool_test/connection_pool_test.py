@@ -192,7 +192,6 @@ class TestConnection:
         assert conn.waitForReady()
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num_param(1)],
         'configs': {
             'multiple_messages': {
@@ -235,7 +234,6 @@ class TestConnection:
         ]
 
     @performance({
-        'repeats': 10,
         'parameters': [msg_num_param(1)],
         'configs': {
             'multiple_messages': {
