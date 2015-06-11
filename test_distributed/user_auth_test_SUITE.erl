@@ -13,7 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

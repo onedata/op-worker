@@ -12,7 +12,7 @@
 -module(event_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include_lib("ctool/include/logging.hrl").

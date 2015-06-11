@@ -13,6 +13,7 @@
 -behaviour(store_driver_behaviour).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Bukcet type that is defined in database and configured to store "map" data type
@@ -55,7 +56,7 @@ init_bucket(_Bucket, _Models, _NodeToSync) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
     RiakObj = to_riak_obj(Value, Rev),
     RiakOP = riakc_map:to_op(RiakObj),
@@ -70,11 +71,11 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
 %% {@link store_driver_behaviour} callback update/3.
 %% @end
 %%--------------------------------------------------------------------
--spec update(model_behaviour:model_config(), datastore:key(),
-    Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-spec update(model_behaviour:model_config(), datastore:ext_key(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
 update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_function(Diff) ->
     erlang:error(not_implemented);
-update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Diff) ->
+update(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key, Diff) when is_map(Diff) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result}
             ->
@@ -92,7 +93,7 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
                 {error, Reason} -> {error, Reason}
             end;
         {error, {notfound, _}} ->
-            {error, {not_found, missing_or_deleted}};
+            {error, {not_found, ModelName}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -103,7 +104,7 @@ update(#model_config{bucket = Bucket} = _ModelConfig, Key, Diff) when is_map(Dif
 %% @end
 %%--------------------------------------------------------------------
 -spec create(model_behaviour:model_config(), datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
+    {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
     %% @todo: fix me! somehow riak's context allows to override existing record
     case exists(_ModelConfig, Key) of
@@ -125,15 +126,15 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
 %% {@link store_driver_behaviour} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(model_behaviour:model_config(), datastore:document()) ->
+-spec get(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, datastore:document()} | datastore:get_error().
-get(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
+get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
         {ok, Result} ->
             {ok, #document{key = Key, rev = Result,
                 value = form_riak_obj(map, Result)}};
         {error, {notfound, _}} ->
-            {error, {not_found, missing_or_deleted}};
+            {error, {not_found, ModelName}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -154,7 +155,7 @@ list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
 %% {@link store_driver_behaviour} callback delete/2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(model_behaviour:model_config(), datastore:key(), datastore:delete_predicate()) ->
+-spec delete(model_behaviour:model_config(), datastore:ext_key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
 delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
     case Pred() of
@@ -174,7 +175,7 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
 %% {@link store_driver_behaviour} callback exists/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(model_behaviour:model_config(), datastore:key()) ->
+-spec exists(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, boolean()} | datastore:generic_error().
 exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(Key)]) of
@@ -192,7 +193,7 @@ exists(#model_config{bucket = Bucket} = _ModelConfig, Key) ->
 %% {@link store_driver_behaviour} callback add_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec add_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()]) ->
+-spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) ->
     ok | datastore:generic_error().
 add_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
@@ -204,7 +205,7 @@ add_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) when is_list
             {error, Reason}
     end.
 
--spec add_links4(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()], InternalCtx :: term()) ->
+-spec add_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()], InternalCtx :: term()) ->
     ok | datastore:generic_error().
 add_links4(#model_config{bucket = Bucket} = _ModelConfig, Key, [], Ctx) ->
     case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key)), riakc_map:to_op(Ctx)]) of
@@ -225,7 +226,7 @@ add_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [Link | R], Ctx) 
 %% {@link store_driver_behaviour} callback delete_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_links(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all) ->
+-spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error().
 delete_links(#model_config{bucket = Bucket} = _ModelConfig, Key, all) ->
     case call(riakc_pb_socket, delete, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
@@ -244,7 +245,7 @@ delete_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) ->
             {error, Reason}
     end.
 
--spec delete_links4(model_behaviour:model_config(), datastore:key(), [datastore:normalized_link_spec()] | all, InternalCtx :: term()) ->
+-spec delete_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()] | all, InternalCtx :: term()) ->
     ok | datastore:generic_error().
 delete_links4(#model_config{bucket = Bucket} = _ModelConfig, Key, [], Ctx) ->
     case call(riakc_pb_socket, update_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key)), riakc_map:to_op(Ctx)]) of
@@ -263,7 +264,7 @@ delete_links4(#model_config{} = ModelConfig, Key, [Link | R], Ctx) ->
 %% {@link store_driver_behaviour} callback fetch_links/3.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_link(model_behaviour:model_config(), datastore:key(), datastore:link_name()) ->
+-spec fetch_link(model_behaviour:model_config(), datastore:ext_key(), datastore:link_name()) ->
     {ok, datastore:link_target()} | datastore:link_error().
 fetch_link(#model_config{bucket = Bucket} = _ModelConfig, Key, LinkName) ->
     case call(riakc_pb_socket, fetch_type, [{?RIAK_BUCKET_TYPE, bucket_encode(Bucket)}, to_binary(links_doc_key(Key))]) of
@@ -288,7 +289,7 @@ fetch_link(#model_config{bucket = Bucket} = _ModelConfig, Key, LinkName) ->
 %% {@link store_driver_behaviour} callback foreach_link/4.
 %% @end
 %%--------------------------------------------------------------------
--spec foreach_link(model_behaviour:model_config(), Key :: datastore:key(),
+-spec foreach_link(model_behaviour:model_config(), Key :: datastore:ext_key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     {ok, Acc :: term()} | datastore:link_error().
 foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
@@ -306,7 +307,7 @@ foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
                     {error, Reason1}
             end;
         {error, {notfound, _}} ->
-            {error, link_not_found};
+            {ok, []};
         {error, Reason} ->
             {error, Reason}
     end.

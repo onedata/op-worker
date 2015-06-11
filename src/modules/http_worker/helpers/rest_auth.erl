@@ -14,7 +14,7 @@
 
 -include("cluster_elements/oneproxy/oneproxy.hrl").
 -include("modules/http_worker/http_common.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneproxy/oneproxy_messages.hrl").
 

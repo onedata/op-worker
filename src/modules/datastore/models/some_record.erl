@@ -12,7 +12,7 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -30,7 +30,7 @@
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(globally_cached, Document).
+    datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -40,7 +40,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(globally_cached, ?MODULE, Key, Diff).
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,7 +50,7 @@ update(Key, Diff) ->
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(globally_cached, Document).
+    datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,7 +59,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(globally_cached, ?MODULE, Key).
+    datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,7 +68,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(globally_cached, ?MODULE, Key).
+    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,7 +77,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(globally_cached, ?MODULE, Key)).
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,7 +86,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(test_bucket, [{some_record, update}]).
+    ?MODEL_CONFIG(test_bucket, [{some_record, update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
