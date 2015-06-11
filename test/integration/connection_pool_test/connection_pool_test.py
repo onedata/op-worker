@@ -72,7 +72,7 @@ class TestConnectionPool:
 
         return [
             send_time_param(send_time.ms()),
-            msg_per_sek_param(msg_num, send_time.us())
+            mbps_param(msg_num, send_time.us())
         ]
 
     @performance({
@@ -114,7 +114,7 @@ class TestConnectionPool:
 
         return [
             recv_time_param(recv_time.ms()),
-            msg_per_sek_param(msg_num, recv_time.us())
+            mbps_param(msg_num, recv_time.us())
         ]
 
 
@@ -230,7 +230,7 @@ class TestConnection:
 
         return [
             send_time_param(send_time.ms()),
-            msg_per_sek_param(msg_num, send_time.us())
+            mbps_param(msg_num, send_time.us())
         ]
 
     @performance({
@@ -271,5 +271,5 @@ class TestConnection:
 
         return [
             recv_time_param(recv_time.ms()),
-            msg_per_sek_param(msg_num, recv_time.us())
+            mbps_param(msg_num, recv_time.us())
         ]

@@ -50,9 +50,9 @@ def communicate_time_param(value, unit='ms'):
                      value, unit)
 
 
-def msg_per_sek_param(msg_num, us):
-    return Parameter('msg_per_sek', 'Number of sent messages per second.',
-                     1000000 * msg_num / us, 'msg/s')
+def mbps_param(msg_num, msg_size, us):
+    return Parameter('mbps', 'Transfer speed.',
+                     (1000000 * msg_num * msg_size) / (1048576 * us), 'MB/s')
 
 
 def translate_unit(unit):
