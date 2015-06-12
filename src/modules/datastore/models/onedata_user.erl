@@ -13,8 +13,8 @@
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_internal.hrl").
+-include("modules/datastore/datastore_model.hrl").
+
 -include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 
@@ -40,7 +40,7 @@
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    datastore:save(global_only, Document).
+    datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -50,7 +50,7 @@ save(Document) ->
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(global_only, ?MODULE, Key, Diff).
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,7 +59,7 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
-    datastore:create(global_only, Document).
+    datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,7 +68,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(global_only, ?MODULE, Key).
+    datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -77,7 +77,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(global_only, ?MODULE, Key).
+    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,7 +86,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(global_only, ?MODULE, Key)).
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,7 +95,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, []).
+    ?MODEL_CONFIG(onedata_user_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -150,6 +150,6 @@ fetch(#token{value = Token}) ->
 get_or_fetch(Key, Token) ->
     case onedata_user:get(Key) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, missing_or_deleted}} -> fetch(Token);
+        {error, {not_found, _}} -> fetch(Token);
         Error -> Error
     end.

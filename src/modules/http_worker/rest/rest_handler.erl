@@ -14,7 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/http_worker/http_common.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % the state of request, it is created in rest_init function, and passed to every cowboy callback functions
@@ -102,7 +102,7 @@ is_authorized(Req, State) ->
     case rest_auth:authenticate(Req) of
         {{ok, Iden}, NewReq} ->
             {true, NewReq, State#state{identity = Iden}};
-        {{error, {not_found, missing_or_deleted}}, NewReq} ->
+        {{error, {not_found, _}}, NewReq} ->
             GrUrl = gr_plugin:get_gr_url(),
             ProviderId = oneprovider:get_provider_id(),
             {_, NewReq2} = cowboy_req:host(NewReq),

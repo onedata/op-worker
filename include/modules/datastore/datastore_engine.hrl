@@ -5,18 +5,19 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Internal common definitions for datastore
+%%% @doc Defines common macros and records used by datastore engine.
+%%%      This header shall not be used outside of core datastore engine (drivers, API and worker).
 %%% @end
 %%%-------------------------------------------------------------------
+-ifndef(DATASTORE_ENGINE_HRL).
+-define(DATASTORE_ENGINE_HRL, 1).
 
--ifndef(DATASTORE_INTERNAL_HRL).
--define(DATASTORE_INTERNAL_HRL, 1).
+-include("modules/datastore/datastore_common_internal.hrl").
 
-%% Drivers definitions
+%% Drivers' names
 -define(PERSISTENCE_DRIVER, riak_datastore_driver).
 -define(LOCAL_CACHE_DRIVER, ets_cache_driver).
 -define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
 
--define(MODEL_NAME, ?MODULE).
 
 -endif.

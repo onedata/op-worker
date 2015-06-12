@@ -16,23 +16,64 @@
 
 %% API
 -export([verify_file_name/1]).
--export([basename/1, split/1, is_space_dir/1]).
+-export([basename/1, split/1, join/1, is_space_dir/1]).
 -export([ensure_path_begins_with_slash/1]).
-
-%% @todo: absolute_join/1
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Same as {@link filename:split/1} but returned tokens build always relative path.
+%% @doc Same as {@link filename:split/1} but platform independent.
 %% @end
 -spec split(Path :: file_meta:path()) -> [binary()].
 %%--------------------------------------------------------------------
 split(Path) ->
-    Bins = binary:split(Path, ?DIRECTORY_SEPARATOR, [global]),
-    [Bin || Bin <- Bins, Bin =/= <<"">>].
+    Bins = binary:split(Path, <<?DIRECTORY_SEPARATOR>>, [global]),
+    Bins1 = [Bin || Bin <- Bins, Bin =/= <<"">>],
+    case Path of
+        <<?DIRECTORY_SEPARATOR, _/binary>> ->
+            [<<?DIRECTORY_SEPARATOR>> | Bins1];
+        _ -> Bins1
+    end.
+
+-spec join(list(binary())) -> binary().
+join([]) ->
+    <<>>;
+join([<<?DIRECTORY_SEPARATOR>> = Sep | Tokens]) ->
+    <<Sep/binary, (join(Tokens))/binary>>;
+join(Tokens) ->
+    Tokens1 = lists:map(fun
+        StripFun(Token) ->
+            Size1 = byte_size(Token) - 1,
+            Size2 = byte_size(Token) - 2,
+            case Token of
+                <<?DIRECTORY_SEPARATOR, Tok:(Size2)/binary, ?DIRECTORY_SEPARATOR>> ->
+                    StripFun(Tok);
+                <<?DIRECTORY_SEPARATOR, Tok/binary>> ->
+                    StripFun(Tok);
+                <<Tok:Size1/binary, ?DIRECTORY_SEPARATOR>> ->
+                    StripFun(Tok);
+                Tok ->
+                    Tok
+            end
+    end, Tokens),
+    Tokens2 = [Bin || Bin <- Tokens1, Bin =/= <<"">>],
+    binary_join(Tokens2, <<?DIRECTORY_SEPARATOR>>).
+
+
+-spec binary_join([binary()], binary()) -> binary().
+binary_join([], _Sep) ->
+    <<>>;
+binary_join([Part], _Sep) ->
+    Part;
+binary_join(List, Sep) ->
+    lists:foldr(fun (A, B) ->
+        if
+            bit_size(B) > 0 -> <<A/binary, Sep/binary, B/binary>>;
+            true -> A
+        end
+    end, <<>>, List).
 
 
 %%--------------------------------------------------------------------
@@ -67,7 +108,7 @@ verify_file_name(FileName) ->
 basename(Path) ->
     case lists:reverse(split(Path)) of
         [Leaf | _] -> Leaf;
-        _ -> [?DIRECTORY_SEPARATOR]
+        _ -> [<<?DIRECTORY_SEPARATOR>>]
     end.
 
 
@@ -89,5 +130,5 @@ is_space_dir(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_path_begins_with_slash(Path :: file_meta:path()) -> file_meta:path().
-ensure_path_begins_with_slash(<<"/", _R/binary>> = Path) -> Path;
-ensure_path_begins_with_slash(Path) -> <<"/", Path/binary>>.
+ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) -> Path;
+ensure_path_begins_with_slash(Path) -> <<?DIRECTORY_SEPARATOR, Path/binary>>.

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Models definitions.
+%%% @doc Models definitions. Shall not be included directly in any erl file.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -14,13 +14,24 @@
 
 %% Wrapper for all models' records
 -record(document, {
-    key :: datastore:key(),
+    key :: datastore:ext_key(),
     rev :: term(),
     value :: datastore:value(),
     links :: term()
 }).
 
 %% Models' definitions
+
+%% List of all available models
+-define(MODELS, [
+    some_record,
+    subscription,
+    session,
+    onedata_user,
+    identity,
+    file_meta
+]).
+
 
 %% sample model with example fields
 -record(some_record, {
@@ -59,7 +70,12 @@
 
 -record(file_meta, {
     name :: binary(),
-    mode :: non_neg_integer()
+%%     type :: file_meta:type(),
+%%     posix_permissions :: file_meta:posix_permissions(),
+    is_scope = false :: boolean(),
+    mtime :: non_neg_integer(),
+    atime :: non_neg_integer(),
+    ctime :: non_neg_integer()
 }).
 
 -endif.

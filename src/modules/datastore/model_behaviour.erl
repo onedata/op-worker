@@ -11,7 +11,7 @@
 -module(model_behaviour).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 
 -type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links | fetch_link | foreach_link.
 -type model_type() :: atom().
@@ -25,7 +25,7 @@
 %% Saves given #document.
 %% @end
 %%--------------------------------------------------------------------
--callback save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
+-callback save(datastore:document()) -> {ok, datastore:ext_key()} | datastore:generic_error().
 
 
 %%--------------------------------------------------------------------
@@ -33,7 +33,7 @@
 %% Updates given by key document by replacing given fields with new values.
 %% @end
 %%--------------------------------------------------------------------
--callback update(datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:key()} | datastore:update_error().
+-callback update(datastore:key(), Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
 
 
 %%--------------------------------------------------------------------
@@ -41,7 +41,7 @@
 %% Creates new #document.
 %% @end
 %%--------------------------------------------------------------------
--callback create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
+-callback create(datastore:document()) -> {ok, datastore:ext_key()} | datastore:create_error().
 
 
 %%--------------------------------------------------------------------
@@ -49,7 +49,7 @@
 %% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--callback get(datastore:document()) -> {ok, datastore:document()} | datastore:get_error().
+-callback get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 
 
 %%--------------------------------------------------------------------
