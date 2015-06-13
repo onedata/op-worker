@@ -188,7 +188,7 @@ handle_cast(check_mem, #state{monitoring_state = MonState} = State) ->
     % even when memory utilization is low (e.g. once a day)
     case caches_controller:should_clear_cache(MemUsage) of
         true ->
-            spawn(fun() -> free_memory(MemUsage) end);
+            ok;%spawn(fun() -> free_memory(MemUsage) end);
         _ ->
             ok
     end,
