@@ -72,6 +72,7 @@ handle(ping, _State) ->
 
 handle(healthcheck, State) ->
     HC = #{
+        datastore_state_init => datastore:healthcheck(),
         ?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
         ?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
         ?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)

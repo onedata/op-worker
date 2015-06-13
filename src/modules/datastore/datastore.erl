@@ -63,7 +63,7 @@
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
--export([configs_per_bucket/1, ensure_state_loaded/1]).
+-export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0]).
 
 %%%===================================================================
 %%% API
@@ -343,6 +343,19 @@ link_walk(Level, #document{key = StartKey} = StartDoc, LinkNames, Mode) when is_
     {ok, {document(), [ext_key()]} | [document()]} | link_error() | get_error().
 link_walk(Level, Key, ModelName, R, Mode) ->
     link_walk7(Level, Key, ModelName, R, [], Mode).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback healthcheck/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | {error, Reason :: term()}.
+healthcheck() ->
+    case ets:info(?LOCAL_STATE) of
+        undefined ->
+            {error, {no_ets, ?LOCAL_STATE}};
+        _ -> ok
+    end.
 
 %%%===================================================================
 %%% Internal functions
