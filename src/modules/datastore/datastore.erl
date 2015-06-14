@@ -573,6 +573,10 @@ exec_driver(ModelName, [Driver], Method, Args) when is_atom(Driver) ->
     exec_driver(ModelName, Driver, Method, Args);
 exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
     case exec_driver(ModelName, Driver, Method, Args) of
+        {error, {not_found, _}} when Method =:= get ->
+            exec_driver(ModelName, Rest, Method, Args);
+        {error, link_not_found} when Method =:= fetch_link ->
+            exec_driver(ModelName, Rest, Method, Args);
         {error, Reason} ->
             {error, Reason};
         Result when Method =:= get; Method =:= fetch_link ->
