@@ -55,6 +55,7 @@ cache_monitoring_test(Config) ->
             value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
         }])),
 
+    timer:sleep(1000), % Posthook is async
     Uuid = caches_controller:get_cache_uuid(Key, some_record),
     ?assertMatch(true, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
     ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
@@ -79,7 +80,7 @@ old_keys_cleaning_test(Config) ->
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }]))
     end, KeysWithTimes),
-
+    timer:sleep(1000), % Posthook is async
     check_clearing(lists:reverse(KeysWithTimes), Worker1, Worker2),
 
     CorruptedKey = list_to_binary("old_keys_cleaning_test_c"),
@@ -88,6 +89,7 @@ old_keys_cleaning_test(Config) ->
             key = CorruptedKey,
             value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
         }])),
+    timer:sleep(1000), % Posthook is async
     CorruptedUuid = caches_controller:get_cache_uuid(CorruptedKey, some_record),
     ?assertMatch(ok, ?call_store(Worker2, global_cache_controller, delete, [CorruptedUuid])),
 
@@ -110,7 +112,7 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
         ?assertMatch(ok, Status),
         #document{value = V} = CacheDoc,
         V2 = V#global_cache_controller{timestamp = to_timestamp(from_timestamp(os:timestamp()) - T - timer:minutes(5))},
-        ?assertMatch({ok, _}, ?call_store(Worker1, some_record, save, [CacheDoc#document{value = V2}]))
+        ?assertMatch({ok, _}, ?call_store(Worker1, global_cache_controller, save, [CacheDoc#document{value = V2}]))
     end, KeysWithTimes),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, TimeWindow])),
@@ -120,7 +122,7 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
     ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, K])),
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K])),
     ?assertMatch({ok, _}, ?call_store(Worker1, some_record, get, [K])),
-    ?assertMatch(true, ?call_store(Worker2, some_record, exist, [K])),
+    ?assertMatch(true, ?call_store(Worker2, some_record, exists, [K])),
 
     lists:foreach(fun({K2, _}) ->
         Uuid2 = caches_controller:get_cache_uuid(K2, some_record),
@@ -146,7 +148,8 @@ cache_clearing_test(Config) ->
     [{_, Mem1}] = monitoring:get_memory_stats(),
     ?assert(Mem1 > MemTarget),
 
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker1}, check_mem_synch, 60000)),
+    timer:sleep(1000), % Posthook is async
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker2}, check_mem_synch, 60000)),
     [{_, Mem2}] = monitoring:get_memory_stats(),
     ?assert(Mem2 < MemTarget),
 
