@@ -113,7 +113,7 @@ clear_cache(MemUsage, _, StoreType) ->
 -spec clear_cache(MemUsage :: number(), TargetMemUse :: number(),
     StoreType :: globally_cached | locally_cached, TimeWindows :: list()) ->
   ok | mem_usage_too_high | cannot_check_mem_usage.
-clear_cache(MemUsage, TargetMemUse, _StoreType, _TimeWindows) when MemUsage < TargetMemUse->
+clear_cache(MemUsage, TargetMemUse, _StoreType, _TimeWindows) when MemUsage < TargetMemUse ->
   ok;
 
 clear_cache(_MemUsage, _TargetMemUse, _StoreType, []) ->
@@ -191,15 +191,15 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
   {ok, Uuids} = apply(Model, list, [TimeWindow]),
   lists:foreach(fun(Uuid) ->
     {ModelName, Key} = decode_uuid(Uuid),
-    apply(datastore, delete, [Level, ModelName, Key]),
+    datastore:delete(Level, ModelName, Key),
     apply(Model, delete, [Uuid])
   end, Uuids),
   case TimeWindow of
     0 ->
       lists:foreach(fun(Cache) ->
-        {ok, Docs} = apply(datastore, list, [Level, Cache, ?GET_ALL, []]),
+        {ok, Docs} = datastore:list(Level, Cache, ?GET_ALL, []),
         lists:foreach(fun(Doc) ->
-          apply(datastore, delete, [Level, Cache, Doc#document.key])
+          datastore:delete(Level, Cache, Doc#document.key)
         end, Docs)
       end, Caches);
     _ ->

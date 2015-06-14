@@ -74,7 +74,7 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list records older then DocAge..
+%% Returns list records older then DocAge (in ms).
 %% @end
 %%--------------------------------------------------------------------
 -spec list(DocAge :: integer()) -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
