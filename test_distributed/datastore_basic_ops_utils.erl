@@ -19,6 +19,7 @@
 -include_lib("annotations/include/annotations.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 -define(REQUEST_TIMEOUT, timer:seconds(30)).
 
@@ -43,6 +44,8 @@ create_delete_test_base(Config, Level, Fun) ->
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
+
+    disable_cache_clearing(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -122,6 +125,8 @@ save_test_base(Config, Level, Fun) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
+    disable_cache_clearing(Workers),
+
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
@@ -177,6 +182,8 @@ update_test_base(Config, Level, Fun) ->
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
+
+    disable_cache_clearing(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -266,12 +273,14 @@ get_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
+    disable_cache_clearing(Workers),
+
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     TestFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(get, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -353,12 +362,14 @@ exists_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
+    disable_cache_clearing(Workers),
+
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     TestFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(exists, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -428,6 +439,8 @@ mixed_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
+    disable_cache_clearing(Workers),
+
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
@@ -480,7 +493,7 @@ mixed_test(Config, Level) ->
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
 
-    {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList} = count_answers(3*OpsNum),
+    {OkNum, OkTime, ErrorNum, ErrorTime, _ErrorsList} = count_answers(3*OpsNum),
     ?assertEqual(3*OpsNum, OkNum+ErrorNum),
 
 
@@ -489,7 +502,7 @@ mixed_test(Config, Level) ->
 
     TestFun4 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(get, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -502,7 +515,7 @@ mixed_test(Config, Level) ->
 
     TestFun5 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(exists, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -612,3 +625,8 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
         _ ->
             count_answers(Num - 1, NewAns)
     end.
+
+disable_cache_clearing(Workers) ->
+    lists:foreach(fun(W) ->
+        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
+    end, Workers).

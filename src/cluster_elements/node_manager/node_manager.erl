@@ -31,7 +31,8 @@
 -record(state, {
     node_ip = {127, 0, 0, 1} :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()},
     ccm_con_status = not_connected :: not_connected | connected | registered,
-    monitoring_state = undefined :: monitoring:node_monitoring_state()
+    monitoring_state = undefined :: monitoring:node_monitoring_state(),
+    cache_clearing = true
 }).
 
 
@@ -157,6 +158,12 @@ handle_call(check_mem_synch, _From, State) ->
     end,
     {reply, Ans, State};
 
+handle_call(disable_cache_clearing, _From, State) ->
+    {reply, ok, State#state{cache_clearing = false}};
+
+handle_call(enable_cache_clearing, _From, State) ->
+    {reply, ok, State#state{cache_clearing = true}};
+
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -182,14 +189,19 @@ handle_cast(ccm_conn_ack, State) ->
     NewState = ccm_conn_ack(State),
     {noreply, NewState};
 
-handle_cast(check_mem, #state{monitoring_state = MonState} = State) ->
-    MemUsage = monitoring:mem_usage(MonState),
-    % Check if memory cleaning of oldest date should be started
-    % even when memory utilization is low (e.g. once a day)
-    case caches_controller:should_clear_cache(MemUsage) of
+handle_cast(check_mem, #state{monitoring_state = MonState, cache_clearing = CacheClearing} = State) ->
+    case CacheClearing of
         true ->
-            spawn(fun() -> free_memory(MemUsage) end);
-        _ ->
+            MemUsage = monitoring:mem_usage(MonState),
+            % Check if memory cleaning of oldest docs should be started
+            % even when memory utilization is low (e.g. once a day)
+            case caches_controller:should_clear_cache(MemUsage) of
+                true ->
+                    spawn(fun() -> free_memory(MemUsage) end);
+                _ ->
+                    ok
+            end;
+        false ->
             ok
     end,
     next_mem_check(),

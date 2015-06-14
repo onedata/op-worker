@@ -45,7 +45,8 @@ all() ->
 
 % checks if cache is monitored
 cache_monitoring_test(Config) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    disable_cache_clearing(Workers), % Automatic cleaning may influence results
 
     Key = <<"key">>,
     ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
@@ -62,7 +63,8 @@ cache_monitoring_test(Config) ->
 
 % checks if caches controller clears caches
 old_keys_cleaning_test(Config) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    disable_cache_clearing(Workers), % Automatic cleaning may influence results
 
     Times = [timer:hours(7*24), timer:hours(24), timer:hours(1), timer:minutes(10), 0],
     {_, KeysWithTimes} = lists:foldl(fun(T, {Num, Ans}) ->
@@ -117,6 +119,8 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
     ?assertMatch(false, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
     ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, K])),
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K])),
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, get, [K])),
+    ?assertMatch(true, ?call_store(Worker2, some_record, exist, [K])),
 
     lists:foreach(fun({K2, _}) ->
         Uuid2 = caches_controller:get_cache_uuid(K2, some_record),
@@ -129,7 +133,8 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
 
 % checks if node_managaer clears memory correctly
 cache_clearing_test(Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    disable_cache_clearing(Workers), % Automatic cleaning may influence results
 
     [{_, Mem0}] = monitoring:get_memory_stats(),
     FreeMem = 100 - Mem0,
@@ -616,3 +621,8 @@ from_timestamp({Mega,Sec,Micro}) ->
 
 to_timestamp(T) ->
     {trunc(T/1000000000), trunc(T/1000) rem 1000000, trunc(T*1000) rem 1000000}.
+
+disable_cache_clearing(Workers) ->
+    lists:foreach(fun(W) ->
+        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
+    end, Workers).
