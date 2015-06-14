@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_model.hrl").
+-include("modules/datastore/datastore_engine.hrl").
 
 %% model_behaviour callbacks and API
 -export([save/1, get/1, list/0, list/1, exists/1, delete/1, update/2, create/1, model_init/0,
