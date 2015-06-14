@@ -129,15 +129,15 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(ModelName, save, _Level, [Doc], _ReturnValue) ->
+'after'(ModelName, save, ?PERSISTENCE_DRIVER, [Doc], _ReturnValue) ->
     update_usage_info(Doc#document.key, ModelName);
-'after'(ModelName, update, _Level, [Key, _Diff], _ReturnValue) ->
+'after'(ModelName, update, ?PERSISTENCE_DRIVER, [Key, _Diff], _ReturnValue) ->
     update_usage_info(Key, ModelName);
-'after'(ModelName, create, _Level, [Doc], _ReturnValue) ->
+'after'(ModelName, create, ?PERSISTENCE_DRIVER, [Doc], _ReturnValue) ->
     update_usage_info(Doc#document.key, ModelName);
 'after'(ModelName, get, _Level, [Key], _ReturnValue) ->
     update_usage_info(Key, ModelName);
-'after'(ModelName, delete, _Level, [Key, _Pred], ok) ->
+'after'(ModelName, delete, ?DISTRIBUTED_CACHE_DRIVER, [Key, _Pred], ok) ->
     del_usage_info(Key, ModelName);
 'after'(ModelName, exists, _Level, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName);
