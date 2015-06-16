@@ -629,4 +629,6 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
 disable_cache_clearing(Workers) ->
     lists:foreach(fun(W) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
-    end, Workers).
+    end, Workers),
+    [W | _] = Workers,
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).

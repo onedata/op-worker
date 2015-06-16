@@ -158,6 +158,12 @@ handle_call(check_mem_synch, _From, State) ->
     end,
     {reply, Ans, State};
 
+% only for tests
+handle_call(clear_mem_synch, _From, State) ->
+    caches_controller:delete_old_keys(locally_cached, 0),
+    caches_controller:delete_old_keys(globally_cached, 0),
+    {reply, ok, State};
+
 handle_call(disable_cache_clearing, _From, State) ->
     {reply, ok, State#state{cache_clearing = false}};
 
