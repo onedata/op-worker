@@ -630,4 +630,5 @@ disable_cache_clearing(Workers) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
     end, Workers),
     [W | _] = Workers,
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)),
+    timer:sleep(500). % TODO check why datastore is still busy for a while after cleaning
