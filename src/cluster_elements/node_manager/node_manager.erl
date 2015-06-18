@@ -31,7 +31,8 @@
 -record(state, {
     node_ip = {127, 0, 0, 1} :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()},
     ccm_con_status = not_connected :: not_connected | connected | registered,
-    monitoring_state = undefined :: monitoring:node_monitoring_state()
+    monitoring_state = undefined :: monitoring:node_monitoring_state(),
+    cache_clearing = true
 }).
 
 
@@ -103,6 +104,7 @@ init([]) ->
         listener_starter:start_redirector_listener(),
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
+        next_mem_check(),
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
@@ -141,6 +143,33 @@ handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) ->
             end,
     {reply, Reply, State};
 
+% only for tests
+handle_call(check_mem_synch, _From, State) ->
+    Ans = case monitoring:get_memory_stats() of
+        [{<<"mem">>, MemUsage}] ->
+            case caches_controller:should_clear_cache(MemUsage) of
+                true ->
+                    free_memory(MemUsage);
+                _ ->
+                    ok
+            end;
+        _ ->
+            cannot_check_mem_usage
+    end,
+    {reply, Ans, State};
+
+% only for tests
+handle_call(clear_mem_synch, _From, State) ->
+    caches_controller:delete_old_keys(locally_cached, 0),
+    caches_controller:delete_old_keys(globally_cached, 0),
+    {reply, ok, State};
+
+handle_call(disable_cache_clearing, _From, State) ->
+    {reply, ok, State#state{cache_clearing = false}};
+
+handle_call(enable_cache_clearing, _From, State) ->
+    {reply, ok, State#state{cache_clearing = true}};
+
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
     {reply, wrong_request, State}.
@@ -165,6 +194,24 @@ handle_cast(connect_to_ccm, State) ->
 handle_cast(ccm_conn_ack, State) ->
     NewState = ccm_conn_ack(State),
     {noreply, NewState};
+
+handle_cast(check_mem, #state{monitoring_state = MonState, cache_clearing = CacheClearing} = State) ->
+    case CacheClearing of
+        true ->
+            MemUsage = monitoring:mem_usage(MonState),
+            % Check if memory cleaning of oldest docs should be started
+            % even when memory utilization is low (e.g. once a day)
+            case caches_controller:should_clear_cache(MemUsage) of
+                true ->
+                    spawn(fun() -> free_memory(MemUsage) end);
+                _ ->
+                    ok
+            end;
+        false ->
+            ok
+    end,
+    next_mem_check(),
+    {noreply, State};
 
 handle_cast(do_heartbeat, State) ->
     NewState = do_heartbeat(State),
@@ -448,3 +495,51 @@ check_node_ip_address() ->
         ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
         {127, 0, 0, 1}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Clears memory caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec free_memory(NodeMem :: number()) -> ok | mem_usage_too_high | cannot_check_mem_usage | {error, term()}.
+free_memory(NodeMem) ->
+    try
+        AvgMem = gen_server:call({global, ?CCM}, get_avg_mem_usage),
+        ClearingOrder = case NodeMem >= AvgMem of
+            true ->
+                [{false, locally_cached}, {false, globally_cached}, {true, locally_cached}, {true, globally_cached}];
+            _ ->
+                [{false, globally_cached}, {false, locally_cached}, {true, globally_cached}, {true, locally_cached}]
+        end,
+        lists:foldl(fun
+            ({_Aggressive, _StoreType}, ok) ->
+                ok;
+            ({Aggressive, StoreType}, _) ->
+                Ans = caches_controller:clear_cache(NodeMem, Aggressive, StoreType),
+                case Ans of
+                    mem_usage_too_high ->
+                        ?warning("Not able to free enough memory clearing cache ~p with param ~p", [StoreType, Aggressive]);
+                    _ ->
+                        ok
+                end,
+                Ans
+        end, start, ClearingOrder)
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2]),
+            {error, E2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Plans next memory checking.
+%% @end
+%%--------------------------------------------------------------------
+-spec next_mem_check() -> TimerRef :: reference().
+next_mem_check() ->
+    {ok, IntervalMin} = application:get_env(?APP_NAME, check_mem_interval_minutes),
+    Interval = timer:minutes(IntervalMin),
+    % random to reduce probability that two nodes clear memory simultanosly
+    erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).

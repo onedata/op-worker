@@ -19,6 +19,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
+%% TODO Add non_transactional updates (each update creates tmp ets!)
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
