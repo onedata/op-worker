@@ -19,7 +19,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
--export([all/0, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/2, end_per_suite/2]).
 -export([ccm_and_worker_test/1]).
 
 -performance({test_cases, []}).
@@ -43,8 +43,8 @@ ccm_and_worker_test(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_testcase(ccm_and_worker_test, Config) ->
+init_per_suite(ccm_and_worker_test, Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
-end_per_testcase(ccm_and_worker_test, Config) ->
+end_per_suite(ccm_and_worker_test, Config) ->
     test_node_starter:clean_environment(Config).
