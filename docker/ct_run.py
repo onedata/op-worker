@@ -19,6 +19,7 @@ import os
 import platform
 import sys
 import time
+import shutil
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
@@ -57,11 +58,22 @@ args = parser.parse_args()
 script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
 
+excluded_modules = glob.glob(os.path.join(script_dir, 'test_distributed', '*.erl'))
+for i, item in enumerate(excluded_modules):
+    excluded_modules[i] = os.path.basename(item)[:-4]
+
+new_cover = os.path.join(script_dir, 'test_distributed', 'cover_tmp.spec')
+shutil.copyfile(os.path.join(script_dir, 'test_distributed', 'cover.spec'),
+                new_cover)
+
+with open(new_cover, 'a') as cover:
+    cover.write('\n{excl_mods, [' + ', '.join(excluded_modules) + ']}.')
+
 ct_command = ['ct_run',
               '-no_auto_compile',
               '-dir', '.',
               '-logdir', './logs/',
-              '-cover', 'cover.spec',
+              '-cover', 'cover_tmp.spec',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
               '-noshell',
               '-name', 'testmaster@testmaster.{0}.dev.docker'.format(uid),
@@ -124,4 +136,6 @@ ret = docker.run(tty=True,
                  hostname='testmaster.{0}.dev.docker'.format(uid),
                  image=args.image,
                  command=['python', '-c', command])
+
+os.remove(new_cover)
 sys.exit(ret)
