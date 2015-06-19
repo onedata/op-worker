@@ -67,7 +67,7 @@ shutil.copyfile(os.path.join(script_dir, 'test_distributed', 'cover.spec'),
                 new_cover)
 
 with open(new_cover, 'a') as cover:
-    cover.write('\n{excl_mods, [' + ', '.join(excluded_modules) + ']}.')
+    cover.write('\n{excl_mods, [performance,  ' + ', '.join(excluded_modules) + ']}.')
 
 ct_command = ['ct_run',
               '-no_auto_compile',
