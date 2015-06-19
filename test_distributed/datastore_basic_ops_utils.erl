@@ -19,10 +19,12 @@
 -include_lib("annotations/include/annotations.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 -define(REQUEST_TIMEOUT, timer:seconds(30)).
 
--export([create_delete_test/2, save_test/2, update_test/2, get_test/2, exists_test/2, mixed_test/2]).
+-export([create_delete_test/2, create_async_delete_test/2, save_test/2, save_async_test/2,
+    update_test/2, update_async_test/2, get_test/2, exists_test/2, mixed_test/2]).
 
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
 
@@ -30,13 +32,20 @@
 %%% Test function
 %% ====================================================================
 
-
 create_delete_test(Config, Level) ->
+    create_delete_test_base(Config, Level, create).
+
+create_async_delete_test(Config, Level) ->
+    create_delete_test_base(Config, Level, create_async).
+
+create_delete_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
+
+    disable_cache_clearing(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -45,7 +54,7 @@ create_delete_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(create, Level, [
+                Ans = ?call_store(Fun, Level, [
                     #document{
                         key = list_to_binary(DocsSet++integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -104,11 +113,19 @@ create_delete_test(Config, Level) ->
     ].
 
 save_test(Config, Level) ->
+    save_test_base(Config, Level, save).
+
+save_async_test(Config, Level) ->
+    save_test_base(Config, Level, save_async).
+
+save_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
+
+    disable_cache_clearing(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -117,7 +134,7 @@ save_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(save, Level, [
+                Ans = ?call_store(Fun, Level, [
                     #document{
                         key = list_to_binary(DocsSet++integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -154,11 +171,19 @@ save_test(Config, Level) ->
         description = "Average time of save operation"}.
 
 update_test(Config, Level) ->
+    update_test_base(Config, Level, update).
+
+update_async_test(Config, Level) ->
+    update_test_base(Config, Level, update_async).
+
+update_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
+
+    disable_cache_clearing(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -167,7 +192,7 @@ update_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(J) ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(update, Level, [
+                Ans = ?call_store(Fun, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I)),
                     #{field1 => I+J}
                 ]),
@@ -248,12 +273,14 @@ get_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
+    disable_cache_clearing(Workers),
+
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     TestFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(get, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -335,12 +362,14 @@ exists_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
+    disable_cache_clearing(Workers),
+
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     TestFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(exists, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -410,6 +439,8 @@ mixed_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
+    disable_cache_clearing(Workers),
+
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
@@ -462,7 +493,7 @@ mixed_test(Config, Level) ->
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
 
-    {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList} = count_answers(3*OpsNum),
+    {OkNum, OkTime, ErrorNum, ErrorTime, _ErrorsList} = count_answers(3*OpsNum),
     ?assertEqual(3*OpsNum, OkNum+ErrorNum),
 
 
@@ -471,7 +502,7 @@ mixed_test(Config, Level) ->
 
     TestFun4 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(get, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -484,7 +515,7 @@ mixed_test(Config, Level) ->
 
     TestFun5 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
-            for(1, OpsPerDoc, fun(J) ->
+            for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(exists, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))
@@ -594,3 +625,11 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
         _ ->
             count_answers(Num - 1, NewAns)
     end.
+
+disable_cache_clearing(Workers) ->
+    lists:foreach(fun(W) ->
+        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
+    end, Workers),
+    [W | _] = Workers,
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)),
+    timer:sleep(5000). % TODO check why datastore is still busy for a while after cleaning
