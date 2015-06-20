@@ -73,11 +73,14 @@ all() -> [
         {parameters, [?MSG_NUM(Num), ?MSG_ORD(Ord)]}
     ]
 }).
--define(SEND_TIME(Value), #parameter{name = send_time,
-    description = "Summary messages send time.", value = Value, unit = "ms"
+-define(SEND_TIME(Value, Unit), #parameter{name = send_time,
+    description = "Summary messages send time.", value = Value, unit = Unit
 }).
--define(RECV_TIME(Value), #parameter{name = aggr_time,
-    description = "Summary messages receive time.", value = Value, unit = "ms"
+-define(RECV_TIME(Value, Unit), #parameter{name = aggr_time,
+    description = "Summary messages receive time.", value = Value, unit = Unit
+}).
+-define(MSG_PER_SEC(MsgNum, Time), #parameter{name = msgps, unit = "msg/s",
+    description = "Number of messages per second.", value = 1000000 * MsgNum / Time
 }).
 
 %%%====================================================================
@@ -124,7 +127,7 @@ sequencer_stream_messages_ordering_test(Config) ->
               end,
 
     % Send 'MsgNum' messages in 'MsgOrd' order.
-    {_, SendTime} = utils:duration(fun() ->
+    {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
         lists:foreach(fun(SeqNum) ->
             ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message, [
                 #client_message{message_stream = #message_stream{
@@ -135,7 +138,7 @@ sequencer_stream_messages_ordering_test(Config) ->
     end),
 
     % Check whether messages were forwarded in right order.
-    {_, RecvTime} = utils:duration(fun() ->
+    {_, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
         lists:foreach(fun(SeqNum) ->
             ?assertMatch({ok, _}, test_utils:receive_msg(#client_message{
                 message_stream = #message_stream{
@@ -149,7 +152,8 @@ sequencer_stream_messages_ordering_test(Config) ->
     mocks_teardown(Worker, [communicator]),
     remove_pending_messages(),
 
-    [?SEND_TIME(SendTime), ?RECV_TIME(RecvTime)].
+    [?SEND_TIME(SendTime, SendUnit), ?RECV_TIME(RecvTime, RecvUnit),
+        ?MSG_PER_SEC(MsgNum, SendUs + RecvUs)].
 
 %% Check whether sequencer stream sends requests for messages when they arrive
 %% in wrong order.
@@ -378,7 +382,7 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
 
     % Production of 'MsgNum' messages in random order belonging to 'StmsCount'
     % streams. Requests are routed through random workers.
-    {_, SendTime} = utils:duration(fun() ->
+    {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
         utils:pforeach(fun(StmId) ->
             lists:foreach(fun(Msg) ->
                 [Wrk | _] = utils:random_shuffle(Workers),
@@ -396,7 +400,7 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
 
     % Check whether 'MsgsCount' messages have been forwarded in a right order
     % from each stream.
-    {MsgsMap, RecvTime} = utils:duration(fun() ->
+    {MsgsMap, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
         lists:foldl(fun(_, Map) ->
             Msg = test_utils:receive_any(?TIMEOUT),
             ?assertMatch({ok, #client_message{}}, Msg),
@@ -415,7 +419,8 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
 
     session_teardown(Worker, [{session_id, SessId}]),
 
-    [?SEND_TIME(SendTime), ?RECV_TIME(RecvTime)].
+    [?SEND_TIME(SendTime, SendUnit), ?RECV_TIME(RecvTime, RecvUnit),
+        ?MSG_PER_SEC(MsgNum * StmNum, SendUs + RecvUs)].
 
 %%%===================================================================
 %%% SetUp and TearDown functions

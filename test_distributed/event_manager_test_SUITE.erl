@@ -85,14 +85,14 @@ all() -> [
     {name, evt_size}, {value, Value}, {description, "Size of each event."},
     {unit, "B"}
 ]).
--define(EMIT_TIME(Value), #parameter{name = emit_time,
-    description = "Summary events emission time.", value = Value, unit = "ms"
+-define(EMIT_TIME(Value, Unit), #parameter{name = emit_time,
+    description = "Summary events emission time.", value = Value, unit = Unit
 }).
--define(AGGR_TIME(Value), #parameter{name = aggr_time,
-    description = "Summary events aggregation time.", value = Value, unit = "ms"
+-define(AGGR_TIME(Value, Unit), #parameter{name = aggr_time,
+    description = "Summary events aggregation time.", value = Value, unit = Unit
 }).
--define(EVT_PER_SEC(EvtNum, Time), #parameter{name = evt_per_sec, unit = "event/s",
-    description = "Number of events per second.", value = 1000 * EvtNum div Time
+-define(EVT_PER_SEC(EvtNum, Time), #parameter{name = evtps, unit = "event/s",
+    description = "Number of events per second.", value = 1000000 * EvtNum / Time
 }).
 
 %%%====================================================================
@@ -133,7 +133,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     ),
 
     % Emit events.
-    {_, EmitTime} = utils:duration(fun() ->
+    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
             emit(Worker, #write_event{file_id = FileId, size = EvtSize,
                 counter = 1, file_size = N * EvtSize, blocks = [#file_block{
@@ -143,7 +143,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     end),
 
     % Check whether events have been aggregated and handler has been executed.
-    {_, AggrTime} = utils:duration(fun() ->
+    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
             ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
                 file_id = FileId, counter = CtrThr, size = CtrThr * EvtSize,
@@ -156,7 +156,8 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(EvtNum, EmitTime + AggrTime)].
+    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
+        ?EVT_PER_SEC(EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
@@ -206,7 +207,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
     end, Evts)),
 
     % Emit events for different files.
-    {_, EmitTime} = utils:duration(fun() ->
+    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             lists:foreach(fun(Evt) ->
                 emit(Worker, Evt, SessId)
@@ -216,7 +217,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
 
     % Check whether events have been aggregated in terms of the same file ID
     % and handler has been executed.
-    {_, AggrTime} = utils:duration(fun() ->
+    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             {ok, {handler, AggrEvts}} = test_utils:receive_any(?TIMEOUT),
             ?assertEqual(EvtsToRecv, lists:sort(AggrEvts))
@@ -226,7 +227,8 @@ event_stream_different_file_id_aggregation_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(FileNum * EvtNum, EmitTime + AggrTime)].
+    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
+        ?EVT_PER_SEC(FileNum * EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
@@ -262,7 +264,7 @@ event_stream_counter_emission_rule_test(Config) ->
     ),
 
     % Emit events.
-    {_, EmitTime} = utils:duration(fun() ->
+    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             emit(Worker, #write_event{
                 file_id = FileId, counter = 1, size = 0, file_size = 0
@@ -272,7 +274,7 @@ event_stream_counter_emission_rule_test(Config) ->
 
     % Check whether events have been aggregated and handler has been executed
     % when emission rule has been satisfied.
-    {_, AggrTime} = utils:duration(fun() ->
+    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
         end, lists:seq(1, EvtNum div CtrThr))
@@ -281,7 +283,8 @@ event_stream_counter_emission_rule_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(EvtNum, EmitTime + AggrTime)].
+    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
+        ?EVT_PER_SEC(EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
@@ -320,7 +323,7 @@ event_stream_size_emission_rule_test(Config) ->
     ),
 
     % Emit events.
-    {_, EmitTime} = utils:duration(fun() ->
+    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             emit(Worker, #write_event{
                 counter = 1, file_id = FileId, size = EvtSize, file_size = 0
@@ -330,7 +333,7 @@ event_stream_size_emission_rule_test(Config) ->
 
     % Check whether events have been aggregated and handler has been executed
     % when emission rule has been satisfied.
-    {_, AggrTime} = utils:duration(fun() ->
+    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
         end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
@@ -339,7 +342,8 @@ event_stream_size_emission_rule_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(EvtNum, EmitTime + AggrTime)].
+    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
+        ?EVT_PER_SEC(EvtNum, EmitUs + AggrUs)].
 
 %% Check whether event stream executes handlers when emission time expires.
 event_stream_time_emission_rule_test(Config) ->
@@ -612,7 +616,7 @@ event_manager_multiple_clients_test(Config) ->
     ),
 
     % Emit events.
-    {_, EmitTime} = utils:duration(fun() ->
+    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         utils:pforeach(fun(SessId) ->
             lists:foreach(fun(_) ->
                 emit(Worker, #write_event{
@@ -624,7 +628,7 @@ event_manager_multiple_clients_test(Config) ->
 
     % Check whether events have been aggregated and handler has been executed
     % when emission rule has been satisfied.
-    {_, AggrTime} = utils:duration(fun() ->
+    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             lists:foreach(fun(_) ->
                 ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
@@ -638,7 +642,8 @@ event_manager_multiple_clients_test(Config) ->
     end, SessIds),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime), ?AGGR_TIME(AggrTime), ?EVT_PER_SEC(CliNum * EvtNum, EmitTime + AggrTime)].
+    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
+        ?EVT_PER_SEC(CliNum * EvtNum, EmitUs + AggrUs)].
 
 %%%===================================================================
 %%% SetUp and TearDown functions
