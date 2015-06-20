@@ -85,15 +85,6 @@ all() -> [
     {name, evt_size}, {value, Value}, {description, "Size of each event."},
     {unit, "B"}
 ]).
--define(EMIT_TIME(Value, Unit), #parameter{name = emit_time,
-    description = "Summary events emission time.", value = Value, unit = Unit
-}).
--define(AGGR_TIME(Value, Unit), #parameter{name = aggr_time,
-    description = "Summary events aggregation time.", value = Value, unit = Unit
-}).
--define(EVT_PER_SEC(EvtNum, Time), #parameter{name = evtps, unit = "event/s",
-    description = "Number of events per second.", value = 1000000 * EvtNum / Time
-}).
 
 %%%====================================================================
 %%% Test function
@@ -156,8 +147,8 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
-        ?EVT_PER_SEC(EvtNum, EmitUs + AggrUs)].
+    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+        evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
@@ -227,8 +218,8 @@ event_stream_different_file_id_aggregation_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
-        ?EVT_PER_SEC(FileNum * EvtNum, EmitUs + AggrUs)].
+    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+        evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
@@ -283,8 +274,8 @@ event_stream_counter_emission_rule_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
-        ?EVT_PER_SEC(EvtNum, EmitUs + AggrUs)].
+    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+        evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
@@ -342,8 +333,8 @@ event_stream_size_emission_rule_test(Config) ->
     unsubscribe(Worker, SubId),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
-        ?EVT_PER_SEC(EvtNum, EmitUs + AggrUs)].
+    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+        evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 %% Check whether event stream executes handlers when emission time expires.
 event_stream_time_emission_rule_test(Config) ->
@@ -642,8 +633,8 @@ event_manager_multiple_clients_test(Config) ->
     end, SessIds),
     remove_pending_messages(),
 
-    [?EMIT_TIME(EmitTime, EmitUnit), ?AGGR_TIME(AggrTime, AggrUnit),
-        ?EVT_PER_SEC(CliNum * EvtNum, EmitUs + AggrUs)].
+    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+        evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)].
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -872,3 +863,36 @@ remove_pending_messages() ->
         {error, timeout} -> ok;
         _ -> remove_pending_messages()
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns summary events emission time parameter.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_time(Value :: integer() | float(), Unit :: string()) -> #parameter{}.
+emit_time(Value, Unit) ->
+    #parameter{name = emit_time, description = "Summary events emission time.",
+        value = Value, unit = Unit}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns summary events aggregation time parameter.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggr_time(Value :: integer() | float(), Unit :: string()) -> #parameter{}.
+aggr_time(Value, Unit) ->
+    #parameter{name = aggr_time, description = "Summary events aggregation time.",
+        value = Value, unit = Unit}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns number of events per second parameter.
+%% @end
+%%--------------------------------------------------------------------
+-spec evt_per_sec(EvtNum :: integer(), Time :: integer()) -> #parameter{}.
+evt_per_sec(EvtNum, Time) ->
+    #parameter{name = evtps, unit = "event/s", description = "Number of events per second.",
+        value = 1000000 * EvtNum / Time}.

@@ -73,15 +73,6 @@ all() -> [
         {parameters, [?MSG_NUM(Num), ?MSG_ORD(Ord)]}
     ]
 }).
--define(SEND_TIME(Value, Unit), #parameter{name = send_time,
-    description = "Summary messages send time.", value = Value, unit = Unit
-}).
--define(RECV_TIME(Value, Unit), #parameter{name = aggr_time,
-    description = "Summary messages receive time.", value = Value, unit = Unit
-}).
--define(MSG_PER_SEC(MsgNum, Time), #parameter{name = msgps, unit = "msg/s",
-    description = "Number of messages per second.", value = 1000000 * MsgNum / Time
-}).
 
 %%%====================================================================
 %%% Test function
@@ -152,8 +143,8 @@ sequencer_stream_messages_ordering_test(Config) ->
     mocks_teardown(Worker, [communicator]),
     remove_pending_messages(),
 
-    [?SEND_TIME(SendTime, SendUnit), ?RECV_TIME(RecvTime, RecvUnit),
-        ?MSG_PER_SEC(MsgNum, SendUs + RecvUs)].
+    [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
+        msg_per_sec(MsgNum, SendUs + RecvUs)].
 
 %% Check whether sequencer stream sends requests for messages when they arrive
 %% in wrong order.
@@ -419,8 +410,8 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
 
     session_teardown(Worker, [{session_id, SessId}]),
 
-    [?SEND_TIME(SendTime, SendUnit), ?RECV_TIME(RecvTime, RecvUnit),
-        ?MSG_PER_SEC(MsgNum * StmNum, SendUs + RecvUs)].
+    [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
+        msg_per_sec(MsgNum * StmNum, SendUs + RecvUs)].
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -643,3 +634,36 @@ remove_pending_messages() ->
         {error, timeout} -> ok;
         _ -> remove_pending_messages()
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns summary messages send time parameter.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_time(Value :: integer() | float(), Unit :: string()) -> #parameter{}.
+send_time(Value, Unit) ->
+    #parameter{name = send_time, description = "Summary messages send time.",
+        value = Value, unit = Unit}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns summary messages receive time parameter.
+%% @end
+%%--------------------------------------------------------------------
+-spec recv_time(Value :: integer() | float(), Unit :: string()) -> #parameter{}.
+recv_time(Value, Unit) ->
+    #parameter{name = aggr_time, description = "Summary messages receive time.",
+        value = Value, unit = Unit}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns number of messages per second parameter.
+%% @end
+%%--------------------------------------------------------------------
+-spec msg_per_sec(MsgNum :: integer(), Time :: integer()) -> #parameter{}.
+msg_per_sec(MsgNum, Time) ->
+    #parameter{name = msgps, unit = "msg/s", description = "Number of messages "
+    "per second.", value = 1000000 * MsgNum / Time}.
