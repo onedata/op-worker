@@ -62,12 +62,24 @@ excluded_modules = glob.glob(os.path.join(script_dir, 'test_distributed', '*.erl
 for i, item in enumerate(excluded_modules):
     excluded_modules[i] = os.path.basename(item)[:-4]
 
+cover_template = os.path.join(script_dir, 'test_distributed', 'cover.spec')
 new_cover = os.path.join(script_dir, 'test_distributed', 'cover_tmp.spec')
-shutil.copyfile(os.path.join(script_dir, 'test_distributed', 'cover.spec'),
-                new_cover)
 
-with open(new_cover, 'a') as cover:
+dirs = []
+with open(cover_template) as f, open(new_cover, 'a') as cover:
+    lines = f.readlines()
+    for line in lines:
+        if line.find('incl_dirs_r') != -1:
+            start = line.find('[')
+            stop = line.find(']')
+            dirs_string = line[start+1:stop]
+            dirs = dirs_string.split(', ')
+        else:
+            cover.write(line)
     cover.write('\n{excl_mods, [performance,  ' + ', '.join(excluded_modules) + ']}.')
+    for i, item in enumerate(dirs):
+        dirs[i] = os.path.join(script_dir, dirs[i][1:])
+    cover.write('\n{incl_dirs_r, ["' + ', "'.join(dirs) + ']}.')
 
 ct_command = ['ct_run',
               '-no_auto_compile',
@@ -79,7 +91,13 @@ ct_command = ['ct_run',
               '-name', 'testmaster@testmaster.{0}.dev.docker'.format(uid),
               '-include', '../include', '../deps']
 
-code_paths = ['-pa', os.path.join(script_dir, 'ebin')]
+code_paths = ['-pa']
+if dirs == []:
+    code_paths.extend([os.path.join(script_dir, 'ebin')])
+else:
+    for i, item in enumerate(dirs):
+        dirs[i] = os.path.join(script_dir, dirs[i][0:-1])
+    code_paths.extend(dirs)
 code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
 ct_command.extend(code_paths)
 

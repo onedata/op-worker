@@ -1,2 +1,2 @@
-{incl_dirs_r, ["../../../ebin"]}. % TODO add: "../../../op_ccm/ebin" (find way to recompile chosen dependency with cover)
+{incl_dirs_r, ["ebin", "op_ccm/ebin"]}.
 {level, details}.
