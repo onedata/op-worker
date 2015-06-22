@@ -76,7 +76,7 @@ with open(cover_template) as f, open(new_cover, 'a') as cover:
             dirs = dirs_string.split(', ')
         else:
             cover.write(line)
-    cover.write('\n{excl_mods, [performance,  ' + ', '.join(excluded_modules) + ']}.')
+    cover.write('\n{excl_mods, [performance, bare_view, ' + ', '.join(excluded_modules) + ']}.')
     for i, item in enumerate(dirs):
         dirs[i] = os.path.join(script_dir, dirs[i][1:])
     cover.write('\n{incl_dirs_r, ["' + ', "'.join(dirs) + ']}.')
