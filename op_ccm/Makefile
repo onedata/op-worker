@@ -1,5 +1,9 @@
 REPO            ?= op-ccm
 
+# distro for package building
+DISTRIBUTION    ?= none
+export DISTRIBUTION
+
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
 PKG_ID           = oneprovider-ccm-$(PKG_VERSION)
