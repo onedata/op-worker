@@ -13,12 +13,14 @@ All paths used are relative to script's path, not to the running user's CWD.
 Run the script with -h flag to learn about script's running options.
 """
 
+from __future__ import print_function
 import argparse
 import glob
 import os
 import platform
 import sys
 import time
+import re
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
@@ -57,16 +59,42 @@ args = parser.parse_args()
 script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
 
+excluded_modules = glob.glob(
+    os.path.join(script_dir, 'test_distributed', '*.erl'))
+excluded_modules = [os.path.basename(item)[:-4] for item in excluded_modules]
+
+cover_template = os.path.join(script_dir, 'test_distributed', 'cover.spec')
+new_cover = os.path.join(script_dir, 'test_distributed', 'cover_tmp.spec')
+
+dirs = []
+with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
+    for line in template:
+        if 'incl_dirs_r' in line:
+            dirs_string = re.search(r'\[(.*?)\]', line).group(1)
+            dirs = [os.path.join(script_dir, d[1:]) for d in
+                    dirs_string.split(', ')]
+        else:
+            print(line, file=cover)
+
+    print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(dirs)), file=cover)
+    print('{{excl_mods, [performance, bare_view, {0}]}}.'.format(
+        ', '.join(excluded_modules)), file=cover)
+
 ct_command = ['ct_run',
               '-no_auto_compile',
               '-dir', '.',
               '-logdir', './logs/',
+              '-cover', 'cover_tmp.spec',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
               '-noshell',
               '-name', 'testmaster@testmaster.{0}.dev.docker'.format(uid),
               '-include', '../include', '../deps']
 
-code_paths = ['-pa', os.path.join(script_dir, 'ebin')]
+code_paths = ['-pa']
+if dirs:
+    code_paths.extend([os.path.join(script_dir, item[:-1]) for item in dirs])
+else:
+    code_paths.extend([os.path.join(script_dir, 'ebin')])
 code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
 ct_command.extend(code_paths)
 
@@ -123,4 +151,6 @@ ret = docker.run(tty=True,
                  hostname='testmaster.{0}.dev.docker'.format(uid),
                  image=args.image,
                  command=['python', '-c', command])
+
+os.remove(new_cover)
 sys.exit(ret)
