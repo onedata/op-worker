@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("cluster_elements/oneproxy/oneproxy.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
@@ -31,7 +30,6 @@
 
 % Paths in gui static directory
 -define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
--define(ONEPROXY_PROTOCOL_LISTENER, oneproxy_protocol_listener).
 
 % Cowboy listener references
 -define(HTTPS_LISTENER, https).
@@ -55,23 +53,20 @@
 -spec start_protocol_listener() -> {ok, pid()} | no_return().
 start_protocol_listener() ->
     {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
-    {ok, DispatcherPoolSize} = application:get_env(?APP_NAME, protocol_handler_pool_size),
-    {ok, CertFile} = application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
+    {ok, DispatcherPoolSize} =
+        application:get_env(?APP_NAME, protocol_handler_pool_size),
+    {ok, CertFile} =
+        application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
     Ip = case application:get_env(?APP_NAME, protocol_handler_bind_addr) of
              {ok, loopback} -> {127, 0, 0, 1};
              {ok, all} -> {0, 0, 0, 0}
          end,
 
-    LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() ->
-        oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer, no_http)
-    end),
-    register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
-
     {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
-        ranch_tcp, [
+        ranch_ssl2, [
             {ip, Ip},
-            {port, LocalPort}
+            {port, Port},
+            {certfile, CertFile}
         ],
         connection, []
     ).
@@ -85,17 +80,16 @@ start_protocol_listener() ->
 -spec start_gui_listener() -> {ok, pid()} | no_return().
 start_gui_listener() ->
     % Get params from env for gui
-    {ok, DocRoot} = application:get_env(?APP_NAME, http_worker_static_files_root),
+    {ok, DocRoot} =
+        application:get_env(?APP_NAME, http_worker_static_files_root),
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
     {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
-    {ok, GuiNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
-    {ok, MaxKeepAlive} = application:get_env(?APP_NAME, http_worker_max_keepalive),
-    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
-
-    LocalPort = oneproxy:get_local_port(GuiPort),
-    spawn_link(fun() ->
-        oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none)
-    end),
+    {ok, GuiNbAcceptors} =
+        application:get_env(?APP_NAME, http_worker_number_of_acceptors),
+    {ok, MaxKeepAlive} =
+        application:get_env(?APP_NAME, http_worker_max_keepalive),
+    {ok, Timeout} =
+        application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -128,15 +122,16 @@ start_gui_listener() ->
     ],
 
     % Create ets tables and set envs needed by n2o
-    gui_utils:init_n2o_ets_and_envs(GuiPort, ?GUI_ROUTING_MODULE, ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
+    gui_utils:init_n2o_ets_and_envs(GuiPort, ?GUI_ROUTING_MODULE,
+        ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
 
     % Start the listener for web gui and nagios handler
-    {ok, _} = cowboy:start_http(?HTTPS_LISTENER, GuiNbAcceptors,
-        [
+    {ok, _} = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
+        ranch_ssl2, [
             {ip, {127, 0, 0, 1}},
-            {port, LocalPort}
-        ],
-        [
+            {port, GuiPort},
+            {certfile, Cert}
+        ], cowboy_protocol, [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, timer:seconds(Timeout)},
@@ -152,9 +147,12 @@ start_gui_listener() ->
 %%--------------------------------------------------------------------
 -spec start_redirector_listener() -> {ok, pid()} | no_return().
 start_redirector_listener() ->
-    {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
-    {ok, RedirectNbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
-    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+    {ok, RedirectPort} =
+        application:get_env(?APP_NAME, http_worker_redirect_port),
+    {ok, RedirectNbAcceptors} =
+        application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
+    {ok, Timeout} =
+        application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
     RedirectDispatch = [
         {'_', [
             {'_', opn_cowboy_bridge,
@@ -182,15 +180,12 @@ start_redirector_listener() ->
 %%--------------------------------------------------------------------
 -spec start_rest_listener() -> {ok, pid()} | no_return().
 start_rest_listener() ->
-    {ok, NbAcceptors} = application:get_env(?APP_NAME, http_worker_number_of_acceptors),
-    {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+    {ok, NbAcceptors} =
+        application:get_env(?APP_NAME, http_worker_number_of_acceptors),
+    {ok, Timeout} =
+        application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
-    LocalPort = oneproxy:get_local_port(RestPort),
-    Pid = spawn_link(fun() ->
-        oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer)
-    end),
-    register(?ONEPROXY_REST, Pid),
 
     RestDispatch = [
         {'_', [
@@ -210,12 +205,12 @@ start_rest_listener() ->
     ],
 
     % Start the listener for REST handler
-    {ok, _} = cowboy:start_http(?REST_LISTENER, NbAcceptors,
-        [
+    {ok, _} = ranch:start_listener(?REST_LISTENER, NbAcceptors,
+        ranch_ssl2, [
             {ip, {127, 0, 0, 1}},
-            {port, LocalPort}
-        ],
-        [
+            {port, RestPort},
+            {certfile, Cert}
+        ], cowboy_protocol, [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
             {max_keepalive, 1},
             {timeout, timer:seconds(Timeout)}
@@ -230,12 +225,14 @@ start_rest_listener() ->
 start_dns_listeners() ->
     {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
     {ok, EdnsMaxUdpSize} = application:get_env(?APP_NAME, edns_max_udp_size),
-    {ok, TCPNumAcceptors} = application:get_env(?APP_NAME, dns_tcp_acceptor_pool_size),
+    {ok, TCPNumAcceptors} =
+        application:get_env(?APP_NAME, dns_tcp_acceptor_pool_size),
     {ok, TCPTImeout} = application:get_env(?APP_NAME, dns_tcp_timeout_seconds),
     OnFailureFun = fun() ->
         ?error("Could not start DNS server on node ~p.", [node()])
     end,
-    ok = dns_server:start(?APPLICATION_SUPERVISOR_NAME, DNSPort, dns_worker, EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+    ok = dns_server:start(?APPLICATION_SUPERVISOR_NAME, DNSPort, dns_worker,
+        EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -244,7 +241,8 @@ start_dns_listeners() ->
 %%--------------------------------------------------------------------
 -spec stop_listeners() -> ok.
 stop_listeners() ->
-    Listeners = [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
+    Listeners =
+        [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
     Results = lists:map(
         fun(?SESSION_LOGIC_MODULE) ->
             catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);

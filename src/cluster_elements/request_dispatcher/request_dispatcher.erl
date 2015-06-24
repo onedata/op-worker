@@ -93,7 +93,6 @@ stop() ->
     Timeout :: non_neg_integer() | infinity.
 init(_) ->
     process_flag(trap_exit, true),
-    catch gsi_handler:init(),   %% Failed initialization of GSI should not disturb dispacher's startup
     ets:new(?WORKER_MAP_ETS, [set, protected, named_table, {read_concurrency, true}]),
     % Insert undefined as LB advice - it means that the node is not yet initialized
     % and it should not accept requests to workers.
