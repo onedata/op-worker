@@ -17,8 +17,9 @@ enum FileType {
 }
 
 message FileEntry {
-    required bytes    name = 1;
-    required FileType type = 2;
+    required bytes    uuid = 1;
+    required bytes    name = 2;
+    required FileType type = 3;
 }
 
 // Generic FUSE client request
@@ -73,14 +74,15 @@ message FuseResponse {
 }
 
 message FileAttr {
-    required int32    mode   = 1;
-    required int32    uid    = 2;
-    required int32    gid    = 3;
-    required int64    atime  = 4;
-    required int64    mtime  = 5;
-    required int64    ctime  = 6;
-    required FileType type   = 7;
-    optional int64    size   = 8 [default = 0];
+    required bytes    uuid   = 1;
+    required int32    mode   = 2;
+    required int32    uid    = 3;
+    required int32    gid    = 4;
+    required int64    atime  = 5;
+    required int64    mtime  = 6;
+    required int64    ctime  = 7;
+    required FileType type   = 8;
+    optional int64    size   = 9 [default = 0];
 }
 
 message FileChildren {
