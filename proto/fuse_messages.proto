@@ -46,8 +46,9 @@ message GetFileChildren {
 }
 
 message CreateDir {
-    required bytes  path = 1;
-    required uint32 mode = 2;
+    required bytes  parent_uuid = 1;
+    required bytes  name        = 2;
+    required uint32 mode        = 3;
 }
 
 message DeleteFile {
