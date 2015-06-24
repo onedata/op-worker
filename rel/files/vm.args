@@ -1,20 +1,19 @@
 ## Name of the node
--name nonode@nohost
+-name appmock@127.0.0.1
 
 ## Cookie for distributed erlang
--setcookie oneprovider_node
+-setcookie appmock
 
-## Treat lager warnings as warnings
-+W w
+## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
+## (Disabled by default..use with caution!)
+##-heart
+
+## Enable kernel poll and a few async threads
+##+K true
+##+A 5
 
 ## Increase number of concurrent ports/sockets
--env ERL_MAX_PORTS 4096
+##-env ERL_MAX_PORTS 4096
 
-## Increase number of processes
-+P 1000000
-
-## Set the location of crash dumps
--env ERL_CRASH_DUMP {{crash_dump}}
-
-## Upgrade ets limit (tmp ets are used for transactions)
--env ERL_MAX_ETS_TABLES 100000
+## Tweak GC to run more often
+##-env ERL_FULLSWEEP_AFTER 10
