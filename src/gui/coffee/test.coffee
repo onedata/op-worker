@@ -1,0 +1,1 @@
+@al = () -> alert "OMG LOOLOLOLOL"

@@ -20,7 +20,7 @@
 -export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
-main() -> <<"ok">>.
+main() -> #dtl{file = "page_404", app = ?APP_NAME}.
 
 
 event(init) -> ok;
