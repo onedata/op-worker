@@ -16,12 +16,6 @@ enum FileType {
     LNK = 3; // symbolic link
 }
 
-message FileEntry {
-    required bytes    uuid = 1;
-    required bytes    name = 2;
-    required FileType type = 3;
-}
-
 // Generic FUSE client request
 message FuseRequest {
     oneof fuse_request { // list of all FUSE client requests
@@ -86,5 +80,5 @@ message FileAttr {
 }
 
 message FileChildren {
-    repeated FileEntry file_entries  = 1;
+    repeated bytes uuids = 1;
 }
