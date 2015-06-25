@@ -69,12 +69,12 @@ def run(image, docker_host=None, detach=False, dns_list=[], envs={},
     if user:
         cmd.extend(['-u', user])
 
-    cmd.extend(run_params)
-    cmd.append(image)
-
     if len(expose) > 0:
         for port in expose:
             cmd.extend(['-p', '{0}:{0}'.format(port)])
+
+    cmd.extend(run_params)
+    cmd.append(image)
 
     if isinstance(command, str):
         cmd.extend(['sh', '-c', command])
