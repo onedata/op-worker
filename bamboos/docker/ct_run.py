@@ -84,7 +84,6 @@ ct_command = ['ct_run',
               '-no_auto_compile',
               '-dir', '.',
               '-logdir', './logs/',
-              '-cover', 'cover_tmp.spec',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
               '-noshell',
               '-name', 'testmaster@testmaster.{0}.dev.docker'.format(uid),
@@ -108,6 +107,8 @@ if args.cases:
 
 if args.performance:
     ct_command.extend(['-env', 'performance', 'true'])
+else:
+    ct_command.extend(['-cover', 'cover_tmp.spec'])
 
 command = '''
 import os, subprocess, sys, stat
