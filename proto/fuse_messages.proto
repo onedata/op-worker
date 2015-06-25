@@ -69,14 +69,15 @@ message FuseResponse {
 
 message FileAttr {
     required bytes    uuid   = 1;
-    required int32    mode   = 2;
-    required int32    uid    = 3;
-    required int32    gid    = 4;
-    required int64    atime  = 5;
-    required int64    mtime  = 6;
-    required int64    ctime  = 7;
-    required FileType type   = 8;
-    optional int64    size   = 9 [default = 0];
+    required bytes    name   = 2;
+    required int32    mode   = 3;
+    required int32    uid    = 4;
+    required int32    gid    = 5;
+    required int64    atime  = 6;
+    required int64    mtime  = 7;
+    required int64    ctime  = 8;
+    required FileType type   = 9;
+    optional int64    size   = 10 [default = 0];
 }
 
 message FileChildren {
