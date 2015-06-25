@@ -18,6 +18,7 @@
 
 %% API
 -export([gen_global_session_id/2, read_global_session_id/1, is_global_session_id/1]).
+-export([get_user_id/1]).
 
 %%%===================================================================
 %%% API functions
@@ -58,3 +59,11 @@ read_global_session_id(GlobalSessionId) ->
 is_global_session_id(GlobalSessionId) ->
     GlobalSessionId1 = utils:ensure_binary(GlobalSessionId),
     length(binary:split(GlobalSessionId1, <<"::">>)) =:= 2.
+
+%%--------------------------------------------------------------------
+%% @doc Retrieves user ID from fslogic context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_id(Ctx :: fslogic:ctx()) -> UserId :: onedata_user:id().
+get_user_id(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}}) ->
+    UserId.

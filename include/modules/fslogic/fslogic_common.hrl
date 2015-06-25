@@ -13,8 +13,6 @@
 -ifndef(FSLOGIC_COMMON_HRL).
 -define(FSLOGIC_COMMON_HRL, 1).
 
-%% Remove after protocol impl.
--include("modules/fslogic/fslogic_stubs.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
@@ -29,5 +27,11 @@
 -record(fslogic_ctx, {
     session :: #session{}
 }).
+
+-record(space_info, {}).
+
+-define(REGULAR_FILE_TYPE, 'REG').
+-define(DIRECTORY_TYPE, 'DIR').
+-define(LINK_TYPE, 'LNK').
 
 -endif.

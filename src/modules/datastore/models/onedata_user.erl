@@ -127,17 +127,20 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetch user from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Token :: #token{}) -> {ok, datastore:document()} | datastore:get_error().
+-spec fetch(Token :: #token{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#token{value = Token}) ->
-    case gr_users:get_details({user, Token}) of
-        {ok, #user_details{id = Id, name = Name}} ->
-            NewDoc = #document{key = Id, value = #onedata_user{name = Name}},
-            case onedata_user:save(NewDoc) of
-                {ok, _} -> {ok, NewDoc};
-                Error -> Error
-            end;
-        Error ->
-            Error
+    try
+        {ok, #user_details{id = Id, name = Name}} =
+            gr_users:get_details({user, Token}),
+        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
+            gr_users:get_spaces({user, Token}),
+        OnedataUser = #onedata_user{
+            name = Name, space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
+        },
+        {ok, _} = onedata_user:save(#document{key = Id, value = OnedataUser})
+    catch
+        _:Reason ->
+            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
