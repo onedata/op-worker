@@ -18,6 +18,6 @@
 
 finish(State, Ctx) -> {ok, State, Ctx}.
 init(State, Ctx) ->
-    Path = wf:path(Ctx#context.req),
-    {ok, State, Ctx#context{path = Path, module = route(Path)}}.
+    Path = wf:path(Ctx#cx.req),
+    {ok, State, Ctx#cx{path = Path, module = route(Path)}}.
 route(_) -> page_404.
