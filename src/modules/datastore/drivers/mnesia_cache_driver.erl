@@ -450,9 +450,9 @@ mnesia_run(Method, Fun) when Method =:= sync_transaction; Method =:= transaction
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_transaction(model_behaviour:model_config(), atom()) -> atom().
+maybe_transaction(#model_config{transactional_global_cache = false}, TransactionType) ->
+    case TransactionType of
+        sync_transaction -> sync_dirty
+    end;
 maybe_transaction(#model_config{transactional_global_cache = true}, TransactionType) ->
-    TransactionType;
-maybe_transaction(#model_config{transactional_global_cache = false}, sync_transaction) ->
-    sync_dirty;
-maybe_transaction(#model_config{transactional_global_cache = false}, transaction) ->
-    async_dirty.
+    TransactionType.
