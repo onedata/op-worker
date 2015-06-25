@@ -449,11 +449,10 @@ mnesia_run(Method, Fun) when Method =:= sync_transaction; Method =:= transaction
 %% If transactions are disabled in #model_config{} returns corresponding dirty mode.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_transaction(model_behaviour:model_config(), sync_transaction | transaction) ->
-    sync_dirty | async_dirty | sync_transaction | transaction.
-maybe_transaction(#model_config{transactionial_global_cache = true}, TransactionType) ->
+-spec maybe_transaction(model_behaviour:model_config(), atom()) -> atom().
+maybe_transaction(#model_config{transactional_global_cache = true}, TransactionType) ->
     TransactionType;
-maybe_transaction(#model_config{transactionial_global_cache = false}, sync_transaction) ->
+maybe_transaction(#model_config{transactional_global_cache = false}, sync_transaction) ->
     sync_dirty;
-maybe_transaction(#model_config{transactionial_global_cache = false}, transaction) ->
+maybe_transaction(#model_config{transactional_global_cache = false}, transaction) ->
     async_dirty.

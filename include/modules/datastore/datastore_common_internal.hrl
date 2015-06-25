@@ -32,7 +32,7 @@
     bucket :: datastore:bucket(),
     store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level(),
     link_store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level(),
-    transactionial_global_cache = true :: boolean()
+    transactional_global_cache = true :: boolean()
 }).
 
 %% Helper macro for instantiating #model_config record.
