@@ -29,8 +29,30 @@
     session,
     onedata_user,
     identity,
+    file_meta,
+    global_cache_controller,
+    local_cache_controller
+]).
+
+%% List of all global caches
+-define(GLOBAL_CACHES, [
+    some_record,
     file_meta
 ]).
+
+%% List of all local caches
+-define(LOCAL_CACHES, [
+]).
+
+%% Model that controls utilization of global cache
+-record(global_cache_controller, {
+    timestamp :: tuple()
+}).
+
+%% Model that controls utilization of local cache
+-record(local_cache_controller, {
+    timestamp :: tuple()
+}).
 
 %% sample model with example fields
 -record(some_record, {

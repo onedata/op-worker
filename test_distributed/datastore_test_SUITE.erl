@@ -15,6 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_common_internal.hrl").
@@ -27,18 +28,153 @@
 -export([
     local_cache_test/1, global_cache_test/1, global_cache_atomic_update_test/1,
     global_cache_list_test/1, persistance_test/1, local_cache_list_test/1,
-    disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1
-]).
+    disk_only_links_test/1, global_only_links_test/1, globally_cached_links_test/1, link_walk_test/1,
+    cache_monitoring_test/1, old_keys_cleaning_test/1, cache_clearing_test/1]).
+-export([utilize_memory/2]).
 
 -performance({test_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
      global_cache_list_test, persistance_test, local_cache_list_test,
-     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test].
+     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
+     cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test function
 %% ====================================================================
+
+% checks if cache is monitored
+cache_monitoring_test(Config) ->
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    disable_cache_clearing(Workers), % Automatic cleaning may influence results
+
+    Key = <<"key">>,
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
+        #document{
+            key = Key,
+            value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+        }])),
+
+    timer:sleep(1000), % Posthook is async
+    Uuid = caches_controller:get_cache_uuid(Key, some_record),
+    ?assertMatch(true, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
+    ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
+
+    ok.
+
+% checks if caches controller clears caches
+old_keys_cleaning_test(Config) ->
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    disable_cache_clearing(Workers), % Automatic cleaning may influence results
+
+    Times = [timer:hours(7*24), timer:hours(24), timer:hours(1), timer:minutes(10), 0],
+    {_, KeysWithTimes} = lists:foldl(fun(T, {Num, Ans}) ->
+        K = list_to_binary("old_keys_cleaning_test"++integer_to_list(Num)),
+        {Num + 1, [{K, T} | Ans]}
+    end, {1, []}, Times),
+
+    lists:foreach(fun({K, _T}) ->
+        ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
+            #document{
+                key = K,
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+            }]))
+    end, KeysWithTimes),
+    timer:sleep(1000), % Posthook is async
+    check_clearing(lists:reverse(KeysWithTimes), Worker1, Worker2),
+
+    CorruptedKey = list_to_binary("old_keys_cleaning_test_c"),
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
+        #document{
+            key = CorruptedKey,
+            value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+        }])),
+    timer:sleep(1000), % Posthook is async
+    CorruptedUuid = caches_controller:get_cache_uuid(CorruptedKey, some_record),
+    ?assertMatch(ok, ?call_store(Worker2, global_cache_controller, delete, [CorruptedUuid])),
+
+    ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 1])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, CorruptedKey])),
+
+    ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 0])),
+    ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, CorruptedKey])),
+    ok.
+
+% helper fun used by old_keys_cleaning_test
+check_clearing([], _Worker1, _Worker2) ->
+    ok;
+check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
+    lists:foreach(fun({K2, T}) ->
+        Uuid = caches_controller:get_cache_uuid(K2, some_record),
+        {Status, CacheDoc} = ?call_store(Worker1, global_cache_controller, get, [Uuid]),
+        ?assertMatch(ok, Status),
+        #document{value = V} = CacheDoc,
+        V2 = V#global_cache_controller{timestamp = to_timestamp(from_timestamp(os:timestamp()) - T - timer:minutes(5))},
+        ?assertMatch({ok, _}, ?call_store(Worker1, global_cache_controller, save, [CacheDoc#document{value = V2}]))
+    end, KeysWithTimes),
+
+    ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, TimeWindow])),
+
+    Uuid = caches_controller:get_cache_uuid(K, some_record),
+    ?assertMatch(false, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
+    ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, K])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K])),
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, get, [K])),
+    ?assertMatch(true, ?call_store(Worker2, some_record, exists, [K])),
+
+    lists:foreach(fun({K2, _}) ->
+        Uuid2 = caches_controller:get_cache_uuid(K2, some_record),
+        ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid2])),
+        ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, K2])),
+        ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K2]))
+    end, R),
+
+    check_clearing(R, Worker1, Worker2).
+
+% checks if node_managaer clears memory correctly
+cache_clearing_test(Config) ->
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    disable_cache_clearing(Workers), % Automatic cleaning may influence results
+
+    [{_, Mem0}] = monitoring:get_memory_stats(),
+    FreeMem = 100 - Mem0,
+    ToAdd = min(20, FreeMem/2),
+    MemTarget = Mem0 + ToAdd/2,
+    MemUsage = Mem0 + ToAdd,
+
+    ?assertMatch(ok, rpc:call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget])),
+    [{_, Mem1}] = monitoring:get_memory_stats(),
+    ?assert(Mem1 > MemTarget),
+
+    timer:sleep(1000), % Posthook is async
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker2}, check_mem_synch, 60000)),
+    [{_, Mem2}] = monitoring:get_memory_stats(),
+    ?assert(Mem2 < MemTarget),
+
+    ok.
+
+% helper fun used by cache_clearing_test
+utilize_memory(MemUsage, MemTarget) ->
+    application:set_env(?APP_NAME, mem_to_clear_cache, MemTarget),
+
+    OneMB = list_to_binary(prepare_list(1024*1024)),
+
+    Add100MB = fun(_KeyBeg) ->
+        for(1, 100, fun(_I) ->
+            some_record:create(
+                #document{
+                    value = #some_record{field1 = 1, field2 = binary:copy(OneMB), field3 = {test, tuple}}
+                })
+        end)
+    end,
+    Guard = fun() ->
+        [{_, Current}] = monitoring:get_memory_stats(),
+        Current >= MemUsage
+    end,
+    while(Add100MB, Guard),
+    ok.
 
 %% Simple usage of get/update/create/exists/delete on local cache driver (on several nodes)
 local_cache_test(Config) ->
@@ -102,8 +238,6 @@ global_cache_atomic_update_test(Config) ->
     Level = ?GLOBAL_ONLY_LEVEL,
     Key = rand_key(),
 
-    %% Load this module into oneprovider nodes so that update fun() will be available
-    
     ?assertMatch({ok, _},
         ?call_store(Worker1, create, [Level,
             #document{
@@ -226,6 +360,9 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 -spec local_access_only(Node :: atom(), Level :: datastore:store_level()) -> ok.
 local_access_only(Node, Level) ->
@@ -457,3 +594,41 @@ rand_node(Nodes) when is_list(Nodes) ->
     lists:nth(crypto:rand_uniform(1, length(Nodes) + 1), Nodes);
 rand_node(Node) when is_atom(Node) ->
     Node.
+
+prepare_list(1) ->
+    "x";
+
+prepare_list(Size) ->
+    "x" ++ prepare_list(Size - 1).
+
+for(N, N, F) ->
+    F(N);
+for(I, N, F) ->
+    F(I),
+    for(I + 1, N, F).
+
+while(F, Guard) ->
+    while(0, F, Guard).
+
+while(Counter, F, Guard) ->
+    case Guard() of
+        true ->
+            ok;
+        _ ->
+            F(Counter),
+            while(Counter+1, F, Guard)
+    end.
+
+from_timestamp({Mega,Sec,Micro}) ->
+    (Mega*1000000 + Sec)*1000 + Micro/1000.
+
+to_timestamp(T) ->
+    {trunc(T/1000000000), trunc(T/1000) rem 1000000, trunc(T*1000) rem 1000000}.
+
+disable_cache_clearing(Workers) ->
+    lists:foreach(fun(W) ->
+        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
+    end, Workers),
+    [W | _] = Workers,
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)),
+    timer:sleep(5000). % TODO check why datastore is still busy for a while after cleaning
