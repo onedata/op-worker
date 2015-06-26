@@ -43,7 +43,7 @@ chmod(_, _File, _Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr(Ctx :: fslogic:ctx(), File :: fslogic:file()) ->
-    FuseResponse :: fuse_response().
+    FuseResponse :: #fuse_response{}.
 get_file_attr(Ctx, {path, Path}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
@@ -57,7 +57,7 @@ get_file_attr(_Ctx, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic:ctx(), File :: fslogic:file()) ->
-    FuseResponse :: fuse_response().
+    FuseResponse :: #fuse_response{}.
 %%-check_permissions({write, {parent, 2}}).
 delete_file(_, File) ->
     {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
@@ -98,7 +98,7 @@ rename_file(_, _SourcePath, _TargetPath) ->
 %% Utility function returning file attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr(File :: fslogic:file()) -> FuseResponse :: fuse_response().
+-spec get_file_attr(File :: fslogic:file()) -> FuseResponse :: #fuse_response{}.
 get_file_attr(File) ->
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{

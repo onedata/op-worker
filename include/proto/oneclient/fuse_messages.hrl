@@ -64,18 +64,14 @@
     child_links :: [#child_link{}]
 }).
 
--type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
-                        #delete_file{} | #update_times{}.
-
--type fuse_response() :: #file_attr{} | #file_children{}.
-
 -record(fuse_request, {
-    fuse_request :: fuse_request()
+    fuse_request :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
+                    #delete_file{} | #update_times{}
 }).
 
 -record(fuse_response, {
     status :: #status{},
-    fuse_response :: fuse_response()
+    fuse_response :: #file_attr{} | #file_children{}
 }).
 
 -endif.

@@ -55,7 +55,7 @@ init(_Args) ->
 %%--------------------------------------------------------------------
 -spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {fuse_request, SessId :: session:id(),
-        FuseRequest :: fuse_request()},
+        FuseRequest :: #fuse_request{}},
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
     {error, Reason} | pong,
     Response :: term(),
@@ -92,8 +92,8 @@ cleanup() ->
 %% fslogic_errors:translate_error/1 function.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_handle_fuse_request(SessId :: session:id(), FuseRequest :: fuse_request()) ->
-    FuseResponse :: fuse_response().
+-spec maybe_handle_fuse_request(SessId :: session:id(), FuseRequest :: #fuse_request{}) ->
+    FuseResponse :: #fuse_response{}.
 maybe_handle_fuse_request(SessId, FuseRequest) ->
     try
         ?debug("Processing request: ~p", [FuseRequest]),
@@ -121,8 +121,8 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
 %% Logs an error with given log level.
 %% @end
 %%--------------------------------------------------------------------
--spec report_error(FuseRequest :: fuse_request(), Error :: term(),
-    LogLevel :: debug | warning | error) -> FuseResponse :: fuse_response().
+-spec report_error(FuseRequest :: #fuse_request{}, Error :: term(),
+    LogLevel :: debug | warning | error) -> FuseResponse :: #fuse_response{}.
 report_error(FuseRequest, Error, LogLevel) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
@@ -140,8 +140,8 @@ report_error(FuseRequest, Error, LogLevel) ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(Ctx :: fslogic:ctx(), FuseRequest :: fuse_request()) ->
-    FuseResponse :: fuse_response().
+-spec handle_fuse_request(Ctx :: fslogic:ctx(), FuseRequest :: #fuse_request{}) ->
+    FuseResponse :: #fuse_response{}.
 handle_fuse_request(Ctx, #get_file_attr{entry = Entry}) ->
     fslogic_req_generic:get_file_attr(Ctx, Entry);
 handle_fuse_request(Ctx, #delete_file{uuid = UUID}) ->

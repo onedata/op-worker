@@ -137,7 +137,9 @@ fetch(#token{value = Token}) ->
         OnedataUser = #onedata_user{
             name = Name, space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
         },
-        {ok, _} = onedata_user:save(#document{key = Id, value = OnedataUser})
+        OnedataUserDoc = #document{key = Id, value = OnedataUser},
+        {ok, _} = onedata_user:save(OnedataUserDoc),
+        {ok, OnedataUserDoc}
     catch
         _:Reason ->
             {error, Reason}

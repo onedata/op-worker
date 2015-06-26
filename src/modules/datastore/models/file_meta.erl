@@ -55,7 +55,6 @@
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
--type file_meta() :: model_name().
 -type posix_permissions() :: non_neg_integer().
 
 -export_type([uuid/0, path/0, name/0, entry/0, type/0, offset/0, size/0, mode/0,
