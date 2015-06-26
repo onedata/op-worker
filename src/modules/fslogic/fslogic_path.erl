@@ -83,8 +83,8 @@ binary_join(List, Sep) ->
 %% asking about non-group dir).
 %% @end
 %%--------------------------------------------------------------------
--spec get_canonical_file_entry(fslogic:ctx(), Path :: file_meta:path()) ->
-    file_meta:entry().
+-spec get_canonical_file_entry(Ctx :: fslogic:ctx(), Tokens :: [file_meta:path()]) ->
+    FileEntry :: file_meta:entry().
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {uuid, UserId};

@@ -92,8 +92,8 @@ cleanup() ->
 %% fslogic_errors:translate_error/1 function.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_handle_fuse_request(SessId :: session:id(), FuseRequest :: #fuse_request{}) ->
-    FuseResponse :: #fuse_response{}.
+-spec maybe_handle_fuse_request(SessId :: session:id(), FuseRequest :: fuse_request()) ->
+    FuseResponse :: fuse_response().
 maybe_handle_fuse_request(SessId, FuseRequest) ->
     try
         ?debug("Processing request: ~p", [FuseRequest]),

@@ -35,7 +35,7 @@ mkdir(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = C
     mkdir(Ctx, DefaultSpaceUUID, Name, Mode);
 mkdir(Ctx, ParentUUID, Name, Mode) ->
     CTime = utils:time(),
-    File = #file_meta{
+    File = #document{value = #file_meta{
         name = Name,
         type = ?DIRECTORY_TYPE,
         mode = Mode,
@@ -43,7 +43,7 @@ mkdir(Ctx, ParentUUID, Name, Mode) ->
         atime = CTime,
         ctime = CTime,
         uid = fslogic_context:get_user_id(Ctx)
-    },
+    }},
     case file_meta:create({uuid, ParentUUID}, File) of
         {ok, _} ->
             {ok, _} = file_meta:update({uuid, ParentUUID}, #{mtime => CTime}),

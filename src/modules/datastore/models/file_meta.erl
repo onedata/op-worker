@@ -114,7 +114,7 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 %% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
+-spec create(entry(), datastore:document()) -> {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUUID}, File) ->
     ?run(begin
              {ok, Parent} = get(ParentUUID),
@@ -125,8 +125,6 @@ create({path, Path}, File) ->
              {ok, {Parent, _}} = resolve_path(Path),
              create(Parent, File)
          end);
-create(#document{} = Parent, #file_meta{} = File) ->
-    create(Parent, #document{value = File});
 create(#document{} = Parent, #document{value = #file_meta{name = FileName}} = FileDoc) ->
     ?run(begin
              case create(FileDoc) of
@@ -393,14 +391,14 @@ setup_onedata_user(UUID) ->
                 mtime = CTime, atime = CTime, ctime = CTime, uid = UUID
             }
         }),
-        {ok, SpacesUUID} = create({uuid, RootUUID}, #file_meta{
+        {ok, SpacesUUID} = create({uuid, RootUUID}, #document{value = #file_meta{
             name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#644,
             mtime = CTime, atime = CTime, ctime = CTime, uid = UUID
-        }),
-        {ok, _} = create({uuid, SpacesUUID}, #file_meta{
+        }}),
+        {ok, _} = create({uuid, SpacesUUID}, #document{value = #file_meta{
             name = DefaultSpaceName, type = ?DIRECTORY_TYPE, mode = 8#644,
             mtime = CTime, atime = CTime, ctime = CTime, uid = UUID
-        }),
+        }}),
 
         ok
     catch
