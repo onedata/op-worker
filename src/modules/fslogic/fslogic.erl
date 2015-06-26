@@ -140,7 +140,7 @@ report_error(FuseRequest, Error, LogLevel) ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(Ctx :: fslogic:ctx(), FuseRequest :: #fuse_request{}) ->
+-spec handle_fuse_request(Ctx :: fslogic:ctx(), FuseRequest :: fuse_request()) ->
     FuseResponse :: #fuse_response{}.
 handle_fuse_request(Ctx, #get_file_attr{entry = Entry}) ->
     fslogic_req_generic:get_file_attr(Ctx, Entry);

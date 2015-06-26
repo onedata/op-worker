@@ -55,6 +55,7 @@
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
+-type file_meta() :: model_record().
 -type posix_permissions() :: non_neg_integer().
 
 -export_type([uuid/0, path/0, name/0, entry/0, type/0, offset/0, size/0, mode/0,
@@ -113,7 +114,7 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 %% Creates new #file_meta and links it as a new child of given as first argument existing #file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec create(entry(), datastore:document()) -> {ok, uuid()} | datastore:create_error().
+-spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUUID}, File) ->
     ?run(begin
              {ok, Parent} = get(ParentUUID),
@@ -124,6 +125,8 @@ create({path, Path}, File) ->
              {ok, {Parent, _}} = resolve_path(Path),
              create(Parent, File)
          end);
+create(#document{} = Parent, #file_meta{} = File) ->
+    create(Parent, #document{value = File});
 create(#document{} = Parent, #document{value = #file_meta{name = FileName}} = FileDoc) ->
     ?run(begin
              case create(FileDoc) of
