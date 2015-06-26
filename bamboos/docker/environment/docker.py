@@ -16,7 +16,7 @@ import subprocess
 def run(image, docker_host=None, detach=False, dns_list=[], envs={},
         hostname=None, interactive=False, link={}, tty=False, rm=False,
         reflect=[], volumes=[], name=None, workdir=None, user=None,
-        run_params=[], command=None, stdin=None, stdout=None, stderr=None, expose=[]):
+        run_params=[], command=None, stdin=None, stdout=None, stderr=None):
     cmd = ['docker']
 
     if docker_host:
@@ -68,10 +68,6 @@ def run(image, docker_host=None, detach=False, dns_list=[], envs={},
 
     if user:
         cmd.extend(['-u', user])
-
-    if len(expose) > 0:
-        for port in expose:
-            cmd.extend(['-p', '{0}:{0}'.format(port)])
 
     cmd.extend(run_params)
     cmd.append(image)

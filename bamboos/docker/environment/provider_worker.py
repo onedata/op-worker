@@ -72,8 +72,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         name=common.format_dockername(name, uid),
         volumes=volumes,
         dns_list=dns_servers,
-        command=command,
-        expose=[443])
+        command=command)
 
     return (
         [container],

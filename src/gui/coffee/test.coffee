@@ -1,1 +1,1 @@
-@al = () -> alert "OMG LOOLOLOLOL 35"
+@show_alert = () -> alert "Dzien dobry"

@@ -118,6 +118,12 @@ start_gui_listener() ->
                     {handler_module, nagios_handler},
                     {handler_opts, []}
                 ]},
+            {"/ws/[...]", opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, opn_bullet_handler},
+                    {handler_opts, [{handler, n2o_bullet}]}
+                ]},
             {'_', opn_cowboy_bridge,
                 [
                     {delegation, true},

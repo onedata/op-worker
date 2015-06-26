@@ -23,34 +23,26 @@
     <!-- link rel="shortcut icon" href="" -->
 </head>
 <body>
-    <p>TO JEST TEST</p>
+    <p>{{message}}</p>
 
     <!-- transition process -->
     <script>{{script}}</script>
-
-    <!-- bootstrap / flat-ui scripts -->
-    <script src='flatui/jquery-1.8.3.min.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/jquery-ui-1.10.3.custom.min.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/jquery.ui.touch-punch.min.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/bootstrap.min.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/bootstrap-select.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/bootstrap-switch.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/bootbox.min.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/flatui-checkbox.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/flatui-radio.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/jquery.tagsinput.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/jquery.placeholder.js' type='text/javascript' charset='utf-8'></script>
-    <script src='flatui/jquery.stacktable.js' type='text/javascript' charset='utf-8'></script>
-
-    <!-- n2o scripts -->
-    <script src='n2o/bullet.js' type='text/javascript' charset='utf-8'></script>
-    <script src='n2o/n2o.js' type='text/javascript' charset='utf-8'></script>
-    <script src='n2o/bert.js' type='text/javascript' charset='utf-8'></script>
+    <script src='/n2o/protocols/bert.js'></script>
+    <script src='/n2o/protocols/binary.js'></script>
+    <script src='/n2o/protocols/client.js'></script>
+    <script src='/n2o/protocols/nitrogen.js'></script>
+    <script src='/n2o/bullet.js'></script>
+    <script src='/n2o/utf8.js'></script>
+    <script src='/n2o/template.js'></script>
+    <script src='/n2o/n2o.js'></script>
+    <script src='/n2o/validation.js'></script>
+    <!--script src='https://synrc.com/hi.js'></script-->
+    <script>N2O_start();</script>
 
     <!-- application specific scripts -->
-    <script src='common/application.js' type='text/javascript' charset='utf-8'></script>
     <script src='js/test.js' type='text/javascript' charset='utf-8'></script>
 
-    <div>sdf</div>
+    <div><button id="btn1" onclick="show_alert()"> Nacisnij mnie</button></div>
+    <div><button id="btn2" onclick="document.api_fun('')"> Jestem drugim guzikiem</button></div>
 </body>
 </html>
