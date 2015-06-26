@@ -151,6 +151,7 @@ cache_clearing_test(Config) ->
     timer:sleep(1000), % Posthook is async
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker2}, check_mem_synch, 60000)),
     [{_, Mem2}] = monitoring:get_memory_stats(),
+    ct:print("Mem0,1,2: ~p", [{Mem0, Mem1, Mem2}]),
     ?assert(Mem2 < MemTarget),
 
     ok.
