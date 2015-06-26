@@ -19,11 +19,19 @@ enum FileType {
 // Generic FUSE client request
 message FuseRequest {
     oneof fuse_request { // list of all FUSE client requests
-        GetFileAttr get_file_attr = 1; GetFileChildren get_file_children = 2; CreateDir create_dir = 3; DeleteFile delete_file = 4; UpdateTimes update_times = 5; }
+        GetFileAttr get_file_attr = 1;
+        GetFileChildren get_file_children = 2;
+        CreateDir create_dir = 3;
+        DeleteFile delete_file = 4;
+        UpdateTimes update_times = 5;
+    }
 }
 
 message GetFileAttr {
-    oneof entry { bytes path = 1; bytes uuid = 2; }
+    oneof entry {
+        bytes path = 1;
+        bytes uuid = 2;
+    }
 }
 
 message GetFileChildren {
@@ -54,7 +62,9 @@ message FuseResponse {
     required Status status = 1;
 
     oneof fuse_response { // list of all FUSE client responses
-        FileAttr file_attr = 2; FileChildren file_children = 3; }
+        FileAttr file_attr = 2;
+        FileChildren file_children = 3;
+    }
 }
 
 message FileAttr {
