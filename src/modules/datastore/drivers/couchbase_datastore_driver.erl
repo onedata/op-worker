@@ -381,8 +381,8 @@ links_doc_key(Key) ->
 
 
 call(Method, Args) ->
-    call(Method, Args, 5).
-call(Method, Args, Retry) when Retry > 0 ->
+    call(Method, Args, 5, undefined).
+call(Method, Args, Retry, LastError) when Retry > 0 ->
     catch connect(),
     try apply(cberl, Method, Args) of
         {error, Reason} ->
@@ -394,16 +394,19 @@ call(Method, Args, Retry) when Retry > 0 ->
             {ok, Res};
         {Key, CAS, Value} when is_binary(Key), is_binary(Value) ->
             {ok, {CAS, Value}};
-        {'EXIT', _, _} ->
-            call(Method, Args, Retry - 1);
-        {shutdown, _} ->
-            call(Method, Args, Retry - 1);
-        {normal, _} ->
-            call(Method, Args, Retry - 1);
+        {'EXIT', _, _} = E ->
+            call(Method, Args, Retry - 1, E);
+        {shutdown, _} = E ->
+            call(Method, Args, Retry - 1, E);
+        {normal, _} = E ->
+            call(Method, Args, Retry - 1, E);
         Other ->
             {error, Other}
     catch
         Class:Reason0 ->
             ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
-            {error, Reason0}
-    end.
+            call(Method, Args, Retry - 1, Reason0)
+    end;
+call(Method, Args, _, LastError) ->
+    ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
+    {error, communication_failure}.
