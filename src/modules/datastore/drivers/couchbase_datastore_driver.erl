@@ -436,11 +436,11 @@ select_connection() ->
 -spec get_connections() -> [riak_connection()].
 get_connections() ->
     case datastore_worker:state_get(couchbase_connections) of
-        [_ | _] = Connections ->
-            Connections;
+%%         [_ | _] = Connections ->
+%%             Connections;
         _ ->
             L = datastore_worker:state_get(db_nodes),
-            Connections = connect(L ++ L ++ L ++ L ++ L ++ L ++ L ++ L),
+            Connections = connect(L),
             datastore_worker:state_put(couchbase_connections, Connections),
             Connections
     end.
