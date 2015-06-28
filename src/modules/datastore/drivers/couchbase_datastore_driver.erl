@@ -396,6 +396,10 @@ call(Method, Args, Retry) when Retry > 0 ->
             {ok, {CAS, Value}};
         {'EXIT', _, _} ->
             call(Method, Args, Retry - 1);
+        {shutdown, _} ->
+            call(Method, Args, Retry - 1);
+        {normal, _} ->
+            call(Method, Args, Retry - 1);
         Other ->
             {error, Other}
     end.
