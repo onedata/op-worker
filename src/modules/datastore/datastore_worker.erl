@@ -53,7 +53,7 @@ init(_Args) ->
             maps:put(RecordName, ModelConfig, StateAcc)
         end, #{}, ?MODELS),
 
-    {ok, State#{riak_nodes => RiakNodes}}.
+    {ok, State#{db_nodes => RiakNodes}}.
 
 %%--------------------------------------------------------------------
 %% @doc
