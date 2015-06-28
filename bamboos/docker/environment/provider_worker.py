@@ -9,7 +9,7 @@ import copy
 import json
 import os
 
-from . import common, docker, riak, dns as dns_mod
+from . import common, docker, riak, couchbase, dns as dns_mod
 
 
 PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60
@@ -108,6 +108,25 @@ def _riak_up(configs, dns_servers, uid):
 
     return db_node_mappings, riak_output
 
+def _couchbase_up(configs, dns_servers, uid):
+    db_node_mappings = {}
+    for _, db_nodes in configs:
+        for node in db_nodes:
+            db_node_mappings[node] = ''
+
+    i = 0
+    for node in iter(db_node_mappings.keys()):
+        db_node_mappings[node] = couchbase.config_entry(i, uid)
+        i += 1
+
+    if i == 0:
+        return db_node_mappings, {}
+
+    [dns] = dns_servers
+    couchbase_output = couchbase.up('couchbase/server', dns, uid, len(db_node_mappings))
+
+    return db_node_mappings, couchbase_output
+
 
 def up(image, bindir, logdir, dns, uid, config_path):
     config = common.parse_json_file(config_path)['op_worker']
@@ -118,7 +137,9 @@ def up(image, bindir, logdir, dns, uid, config_path):
     workers = []
 
     db_node_mappings, riak_out = _riak_up(configs, dns_servers, uid)
+    db_node_mappings, couchbase_out = _couchbase_up(configs, dns_servers, uid)
     common.merge(output, riak_out)
+    common.merge(output, couchbase_out)
 
     for cfg, _ in configs:
         worker, node_out = _node_up(image, bindir, logdir, uid, cfg,
