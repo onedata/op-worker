@@ -14,7 +14,7 @@ import time
 
 from . import common, docker, dns as dns_mod
 
-COUCHBASE_READY_WAIT_SECONDS = 30
+COUCHBASE_READY_WAIT_SECONDS = 60
 
 
 def _couchbase(num):
@@ -77,10 +77,11 @@ def _wait_until(condition, containers):
 
 def _cluster_nodes(containers, master_hostname, uid):
     for num, container in enumerate(containers[1:]):
-        hostname = common.format_hostname(_couchbase(num), uid)
+        hostname = common.format_hostname(_couchbase(num + 1), uid)
         docker.exec_(container,
-                 command=["/opt/couchbase/bin/couchbase-cli", "server-add", "-c", "{0}:8091".format(master_hostname),
-                          "-u", "admin", "-p", "password", "--server-add={0}:8091".format(hostname)],
+                 command=["/opt/couchbase/bin/couchbase-cli", "rebalance", "-c", "{0}:8091".format(master_hostname),
+                          "-u", "admin", "-p", "password", "--server-add={0}:8091".format(hostname),
+                          "--server-add-username=admin" "--server-add-password=password"],
                  stdout=sys.stderr)
 
 

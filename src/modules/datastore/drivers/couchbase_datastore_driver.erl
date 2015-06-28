@@ -420,7 +420,7 @@ call(Method, Args, Retry, LastError) when Retry > 0 ->
     end;
 call(Method, Args, _, LastError) ->
     ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
-    {error, communication_failure}.
+    {error, {communication_failure, LastError}}.
 
 
 %%--------------------------------------------------------------------
