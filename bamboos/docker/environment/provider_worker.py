@@ -115,7 +115,6 @@ def _couchbase_up(configs, dns_servers, uid):
             db_node_mappings[node] = ''
 
     i = 0
-    print
     for node in iter(db_node_mappings.keys()):
         db_node_mappings[node] = couchbase.config_entry(i, uid)
         i += 1
@@ -124,7 +123,7 @@ def _couchbase_up(configs, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    couchbase_output = couchbase.up('couchbase/server', dns, uid, len(db_node_mappings))
+    couchbase_output = couchbase.up('couchbase/server:enterprise-4.0.0-beta', dns, uid, len(db_node_mappings))
 
     return db_node_mappings, couchbase_output
 
