@@ -309,7 +309,7 @@ connect() ->
                     binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port)
                 end, datastore_worker:state_get(db_nodes)),
             Hosts = string:join(URLs, ";"),
-            cberl:start_link(?POOL_ID, length(URLs) * 5, Hosts, "", "", "default"),
+            cberl:start_link(?POOL_ID, length(URLs) * 50, Hosts, "", "", "default"),
             ?debug("CouchBase init with nodes: ~p", [Hosts])
     end,
     ok.
