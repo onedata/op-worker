@@ -27,7 +27,9 @@
 
 -define(LINKS_KEY_SUFFIX, "$$").
 
--define(POOL_ID, cberl_default).
+-define(POOLS, lists:map(fun(E) -> erlang:list_to_atom("cberl_" ++ erlang:integer_to_list(E)) end, lists:seq(1, 1200))).
+
+-define(POOL_ID, lists:nth(crypto:rand_uniform(1, length(?POOLS) + 1), ?POOLS)).
 
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
@@ -59,8 +61,8 @@ init_bucket(_Bucket, _Models, _NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
-    connect(),
-    case call(set, [?POOL_ID, to_binary(Key), 0, to_binary(Value)]) of
+    ?info("WTF ~p ~p", [Value, to_binary(Value)]),
+    case call(set, [to_binary(Key), 0, to_binary(Value)]) of
         ok ->
             {ok, Key};
         {error, Reason} ->
@@ -93,8 +95,8 @@ update(#model_config{bucket = Bucket, name = ModelName} = ModelConfig, Key, Diff
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
-    connect(),
-    case call(add, [?POOL_ID, to_binary(Key), 0, to_binary(Value)]) of
+    ?info("WTF ~p ~p", [Value, to_binary(Value)]),
+    case call(add, [to_binary(Key), 0, to_binary(Value)]) of
         ok ->
             {ok, Key};
         {error, key_eexists} ->
@@ -111,8 +113,7 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
 -spec get(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
-    connect(),
-    case call(get, [?POOL_ID, to_binary(Key)]) of
+    case call(get, [to_binary(Key)]) of
         {error, key_enoent} ->
             {error, {not_found, ModelName}};
         {error, Reason} ->
@@ -141,10 +142,9 @@ list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
 -spec delete(model_behaviour:model_config(), datastore:ext_key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
 delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
-    connect(),
     case Pred() of
         true ->
-            case call(remove, [?POOL_ID, to_binary(Key)]) of
+            case call(remove, [to_binary(Key)]) of
                 ok ->
                     ok;
                 {error, key_enoent} ->
@@ -164,7 +164,6 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
 -spec exists(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, boolean()} | datastore:generic_error().
 exists(#model_config{bucket = Bucket} = ModelConfig, Key) ->
-    connect(),
     case get(ModelConfig, Key) of
         {error, {not_found, _}} ->
             {ok, false};
@@ -309,7 +308,9 @@ connect() ->
                     binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port)
                 end, datastore_worker:state_get(db_nodes)),
             Hosts = string:join(URLs, ";"),
-            cberl:start_link(?POOL_ID, length(URLs) * 50, Hosts, "", "", "default"),
+            lists:foreach(fun(Pool) ->
+                cberl:start_link(Pool, length(URLs) * 5, Hosts, "", "", "default")
+            end, ?POOLS),
             ?debug("CouchBase init with nodes: ~p", [Hosts])
     end,
     ok.
@@ -383,8 +384,8 @@ links_doc_key(Key) ->
 call(Method, Args) ->
     call(Method, Args, 5, undefined).
 call(Method, Args, Retry, LastError) when Retry > 0 ->
-    catch connect(),
-    try apply(cberl, Method, Args) of
+    {Node, Pid} = select_connection(),
+    try apply(cberl_internal, Method, [Pid] ++ Args) of
         {error, Reason} ->
             {error, Reason};
         {_, {error, Reason}} ->
@@ -404,9 +405,61 @@ call(Method, Args, Retry, LastError) when Retry > 0 ->
             {error, Other}
     catch
         Class:Reason0 ->
+            NewConn = [Conn || {N, _} = Conn <- datastore_worker:state_get(couchbase_connections), N =/= Node],
+            datastore_worker:state_put(couchbase_connections, NewConn),
             ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
             call(Method, Args, Retry - 1, Reason0)
     end;
 call(Method, Args, _, LastError) ->
     ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
     {error, communication_failure}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Selects riak connection from connection pool retuned by get_connections/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec select_connection() -> riak_connection().
+select_connection() ->
+    Connections = get_connections(),
+    lists:nth(crypto:rand_uniform(1, length(Connections) + 1), Connections).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets riak active connections. When no connection is available, tries to
+%% estabilish new connections.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connections() -> [riak_connection()].
+get_connections() ->
+    case datastore_worker:state_get(couchbase_connections) of
+        [_ | _] = Connections ->
+            Connections;
+        _ ->
+            L = datastore_worker:state_get(db_nodes),
+            Connections = connect(L ++ L ++ L ++ L ++ L ++ L),
+            datastore_worker:state_put(couchbase_connections, Connections),
+            Connections
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Connects to given Riak database nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec connect([riak_node()]) -> [riak_connection()].
+connect([{Hostname, Port} = Node | R]) ->
+    case cberl_worker:start_link([{host, binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port)}, {username, ""},
+                                    {password, ""}, {bucketname, "default"}, {transcoder, cberl_transcoder}]) of
+        {ok, Pid} ->
+            [{Node, Pid} | connect(R)];
+        {error, Reason} ->
+            ?error("Cannot connect to couchbase node ~p due to ~p", [Node, Reason]),
+            connect(R)
+    end;
+connect([]) ->
+    [].
