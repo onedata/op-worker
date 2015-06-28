@@ -384,7 +384,7 @@ call(Method, Args) ->
     call(Method, Args, 5).
 call(Method, Args, Retry) when Retry > 0 ->
     catch connect(),
-    case apply(cberl, Method, Args) of
+    try apply(cberl, Method, Args) of
         {error, Reason} ->
             {error, Reason};
         {_, {error, Reason}} ->
@@ -402,4 +402,8 @@ call(Method, Args, Retry) when Retry > 0 ->
             call(Method, Args, Retry - 1);
         Other ->
             {error, Other}
+    catch
+        Class:Reason0 ->
+            ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
+            {error, Reason0}
     end.
