@@ -440,7 +440,7 @@ get_connections() ->
             Connections;
         _ ->
             L = datastore_worker:state_get(db_nodes),
-            Connections = connect(L ++ L ++ L ++ L ++ L ++ L),
+            Connections = connect(L ++ L ++ L ++ L ++ L ++ L ++ L ++ L),
             datastore_worker:state_put(couchbase_connections, Connections),
             Connections
     end.
