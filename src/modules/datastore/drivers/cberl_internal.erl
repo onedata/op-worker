@@ -357,7 +357,9 @@ remove_design_doc(PoolPid, DocName) ->
 
 execute(PoolPid, Cmd) ->
     %%?info("EXEC ~p ~p ~p", [PoolPid, process_info(PoolPid), Cmd]),
-    gen_server:call(PoolPid, Cmd).
+%%     gen_server:call(PoolPid, Cmd).
+    {_, Res, _} = cberl_async:handle_call2(Cmd, self(), PoolPid),
+    Res.
 
 http_type(view) -> 0;
 http_type(management) -> 1;

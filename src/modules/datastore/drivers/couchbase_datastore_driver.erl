@@ -34,6 +34,37 @@
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
 
+
+-define('CBE_ADD',      1).
+-define('CBE_REPLACE',  2).
+-define('CBE_SET',      3).
+-define('CBE_APPEND',   4).
+-define('CBE_PREPEND',  5).
+
+-define('CMD_CONNECT',    0).
+-define('CMD_STORE',      1).
+-define('CMD_MGET',       2).
+-define('CMD_UNLOCK',     3).
+-define('CMD_MTOUCH',     4).
+-define('CMD_ARITHMETIC', 5).
+-define('CMD_REMOVE',     6).
+-define('CMD_HTTP',       7).
+
+-type handle() :: binary().
+
+-record(instance, {handle :: handle(),
+    bucketname :: string(),
+    transcoder :: module(),
+    connected :: true | false,
+    opts :: list()}).
+
+-type key() :: string().
+-type value() :: string() | list() | integer() | binary().
+-type operation_type() :: add | replace | set | append | prepend.
+-type instance() :: #instance{}.
+-type http_type() :: view | management | raw.
+-type http_method() :: get | post | put | delete.
+
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
 -export([save/2, create/2, update/3, exists/2, get/2, list/3, delete/3]).
@@ -392,7 +423,8 @@ links_doc_key(Key) ->
 call(Method, Args) ->
     call(Method, Args, 5, undefined).
 call(Method, Args, Retry, LastError) when Retry > 0 ->
-    {Node, Pid} = select_connection(),
+%%     {Node, Pid} = select_connection(),
+    {Node, Pid} = select_connection_nif(),
     try apply(cberl_internal, Method, [Pid] ++ Args) of
         {error, Reason} ->
             {error, Reason};
@@ -415,7 +447,7 @@ call(Method, Args, Retry, LastError) when Retry > 0 ->
         Class:Reason0 ->
             NewConn = [Conn || {N, _} = Conn <- datastore_worker:state_get(couchbase_connections), N =/= Node],
             datastore_worker:state_put(couchbase_connections, NewConn),
-            ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
+            ?error_stacktrace("CouchBase connection error (type ~p): ~p ~p", [Class, Reason0, NewConn]),
             call(Method, Args, Retry - 1, Reason0)
     end;
 call(Method, Args, _, LastError) ->
@@ -434,6 +466,10 @@ select_connection() ->
     Connections = get_connections(),
     lists:nth(crypto:rand_uniform(1, length(Connections) + 1), Connections).
 
+select_connection_nif() ->
+    Connections = get_connections_nif(),
+    lists:nth(crypto:rand_uniform(1, length(Connections) + 1), Connections).
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -444,11 +480,22 @@ select_connection() ->
 -spec get_connections() -> [riak_connection()].
 get_connections() ->
     case datastore_worker:state_get(couchbase_connections) of
-%%         [_ | _] = Connections ->
-%%             Connections;
+        [_ | _] = Connections ->
+            Connections;
         _ ->
             L = datastore_worker:state_get(db_nodes),
             Connections = connect(L),
+            datastore_worker:state_put(couchbase_connections, Connections),
+            Connections
+    end.
+
+get_connections_nif() ->
+    case datastore_worker:state_get(couchbase_connections) of
+        [_ | _] = Connections ->
+            Connections;
+        _ ->
+            L = datastore_worker:state_get(db_nodes),
+            Connections = connect_nif(L),
             datastore_worker:state_put(couchbase_connections, Connections),
             Connections
     end.
@@ -470,4 +517,20 @@ connect([{Hostname, Port} = Node | R]) ->
             connect(R)
     end;
 connect([]) ->
+    [].
+
+connect_nif([{Hostname, Port} = Node | R]) ->
+    {ok, Handle} = cberl_nif:new(),
+    State = #instance{handle = Handle,
+        transcoder = cberl_transcoder,
+        bucketname ="default",
+        opts = [binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port), "", "", "default"],
+        connected = false},
+    State2 = case cberl_worker:connect(State) of
+                 ok -> State#instance{connected = true};
+                 {error, _} -> State#instance{connected = false}
+             end,
+    ?info("CONN NIF ~p", [State2]),
+    [{Node, State2} | connect(R)];
+connect_nif([]) ->
     [].
