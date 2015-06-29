@@ -63,7 +63,8 @@ start_protocol_listener() ->
          end,
 
     LocalPort = oneproxy:get_local_port(Port),
-    Pid = spawn_link(fun() ->
+    % TODO oneproxy sometimes kills node_manager when it's linked to node_manager
+    Pid = spawn(fun() ->
         oneproxy:start_rproxy(Port, LocalPort, CertFile, verify_peer, no_http)
     end),
     register(?ONEPROXY_PROTOCOL_LISTENER, Pid),
@@ -93,7 +94,8 @@ start_gui_listener() ->
     {ok, Timeout} = application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
 
     LocalPort = oneproxy:get_local_port(GuiPort),
-    spawn_link(fun() ->
+    % TODO oneproxy sometimes kills node_manager when it's linked to node_manager
+    spawn(fun() ->
         oneproxy:start_rproxy(GuiPort, LocalPort, Cert, verify_none)
     end),
 
@@ -187,7 +189,8 @@ start_rest_listener() ->
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
     LocalPort = oneproxy:get_local_port(RestPort),
-    Pid = spawn_link(fun() ->
+    % TODO oneproxy sometimes kills node_manager when it's linked to node_manager
+    Pid = spawn(fun() ->
         oneproxy:start_rproxy(RestPort, LocalPort, Cert, verify_peer)
     end),
     register(?ONEPROXY_REST, Pid),
