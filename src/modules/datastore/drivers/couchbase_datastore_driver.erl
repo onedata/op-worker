@@ -526,7 +526,7 @@ connect_nif([{Hostname, Port} = Node | R]) ->
         bucketname ="default",
         opts = [binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port), "", "", "default"],
         connected = false},
-    State2 = case cberl_worker:connect(State) of
+    State2 = case cberl_async:connect(State) of
                  ok -> State#instance{connected = true};
                  {error, _} -> State#instance{connected = false}
              end,
