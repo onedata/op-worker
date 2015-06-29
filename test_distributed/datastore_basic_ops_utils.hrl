@@ -22,56 +22,56 @@
             [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
         ]},
         {description, Desc},
-        {config, [{name, single_short_thread},
-            {description, "Test config that uses single thread that does only few operations on few docs"},
-            {parameters, [
-                [{name, threads_num}, {value, 1}],
-                [{name, docs_per_thead}, {value, 5}],
-                [{name, conflicted_threads}, {value, 1}]
-            ]}
-        ]},
-        {config, [{name, single_long_thread},
-            {description, "Test config that uses single thread that does many operations on multiple docs"},
-            {parameters, [
-                [{name, threads_num}, {value, 1}],
-                [{name, docs_per_thead}, {value, 60}],
-                [{name, conflicted_threads}, {value, 1}]
-            ]}
-        ]},
-        {config, [{name, single_long_thread_one_op_per_doc},
-            {description, "Test config that uses single thread that does only one operation on each doc (multiple docs used)"},
-            {parameters, [
-                [{name, threads_num}, {value, 1}],
-                [{name, docs_per_thead}, {value, 300}],
-                [{name, ops_per_doc}, {value, 1}],
-                [{name, conflicted_threads}, {value, 1}]
-            ]}
-        ]},
-        {config, [{name, multiple_threads_no_conflicts},
-            {description, "Test config that uses many threads that do only one operation on each doc (multiple docs used)"},
-            {parameters, [
-                [{name, threads_num}, {value, 60}],
-                [{name, ops_per_doc}, {value, 1}],
-                [{name, conflicted_threads}, {value, 1}]
-            ]}
-        ]},
-        {config, [{name, multiple_threads_with_repeats},
-            {description, "Test config that uses many threads that do many operations on multiple docs (no conflicts between threads)"},
-            {parameters, [
-                [{name, conflicted_threads}, {value, 1}]
-            ]}
-        ]},
-        {config, [{name, multiple_threads_with_conflits},
-            {description, "Test config that uses many threads that do many operations on multiple docs (with conflicts between threads)"},
-            {parameters, [
-                [{name, conflicted_threads}, {value, 20}]
-            ]}
-        ]},
+%%         {config, [{name, single_short_thread},
+%%             {description, "Test config that uses single thread that does only few operations on few docs"},
+%%             {parameters, [
+%%                 [{name, threads_num}, {value, 1}],
+%%                 [{name, docs_per_thead}, {value, 5}],
+%%                 [{name, conflicted_threads}, {value, 1}]
+%%             ]}
+%%         ]},
+%%         {config, [{name, single_long_thread},
+%%             {description, "Test config that uses single thread that does many operations on multiple docs"},
+%%             {parameters, [
+%%                 [{name, threads_num}, {value, 1}],
+%%                 [{name, docs_per_thead}, {value, 60}],
+%%                 [{name, conflicted_threads}, {value, 1}]
+%%             ]}
+%%         ]},
+%%         {config, [{name, single_long_thread_one_op_per_doc},
+%%             {description, "Test config that uses single thread that does only one operation on each doc (multiple docs used)"},
+%%             {parameters, [
+%%                 [{name, threads_num}, {value, 1}],
+%%                 [{name, docs_per_thead}, {value, 300}],
+%%                 [{name, ops_per_doc}, {value, 1}],
+%%                 [{name, conflicted_threads}, {value, 1}]
+%%             ]}
+%%         ]},
+%%         {config, [{name, multiple_threads_no_conflicts},
+%%             {description, "Test config that uses many threads that do only one operation on each doc (multiple docs used)"},
+%%             {parameters, [
+%%                 [{name, threads_num}, {value, 60}],
+%%                 [{name, ops_per_doc}, {value, 1}],
+%%                 [{name, conflicted_threads}, {value, 1}]
+%%             ]}
+%%         ]},
+%%         {config, [{name, multiple_threads_with_repeats},
+%%             {description, "Test config that uses many threads that do many operations on multiple docs (no conflicts between threads)"},
+%%             {parameters, [
+%%                 [{name, conflicted_threads}, {value, 1}]
+%%             ]}
+%%         ]},
+%%         {config, [{name, multiple_threads_with_conflits},
+%%             {description, "Test config that uses many threads that do many operations on multiple docs (with conflicts between threads)"},
+%%             {parameters, [
+%%                 [{name, conflicted_threads}, {value, 20}]
+%%             ]}
+%%         ]}
         {config, [{name, '1GB load'},
             {description, "OMG"},
             {parameters, [
                 [{name, threads_num}, {value, 1024}],
-                [{name, docs_per_thead}, {value, 1024}],
+                [{name, docs_per_thead}, {value, 32}],
                 [{name, conflicted_threads}, {value, 1}]
             ]}
         ]}

@@ -30,20 +30,23 @@
 ]).
 
 -performance({test_cases,
-    [create_delete_db_test, save_db_test, update_db_test, get_db_test, exists_db_test,
-        create_delete_global_store_test, save_global_store_test,
-        update_global_store_test,
+    [
+%%         create_delete_db_test, save_db_test, update_db_test,
+        get_db_test
+%%         exists_db_test,
+%%         create_delete_global_store_test, save_global_store_test,
+%%         update_global_store_test,
 %%         get_global_store_test,
-        exists_global_store_test,
-        create_delete_local_store_test, save_local_store_test, update_local_store_test,
+%%         exists_global_store_test,
+%%         create_delete_local_store_test, save_local_store_test, update_local_store_test,
 %%         get_local_store_test,
-        exists_local_store_test,
-        create_delete_global_cache_test, save_global_cache_test, update_global_cache_test,
+%%         exists_local_store_test,
+%%         create_delete_global_cache_test, save_global_cache_test, update_global_cache_test,
 %%         get_global_cache_test,
-        exists_global_cache_test,
-        create_delete_local_cache_test, save_local_cache_test, update_local_cache_test,
+%%         exists_global_cache_test,
+%%         create_delete_local_cache_test, save_local_cache_test, update_local_cache_test,
 %%         get_local_cache_test,
-        exists_local_cache_test
+%%         exists_local_cache_test
     ]
 }).
 all() -> [].

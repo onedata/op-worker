@@ -92,7 +92,7 @@ init_bucket(_Bucket, _Models, _NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
-    case byte_size(term_to_binary(Value)) > 32 * 1024 of
+    case byte_size(term_to_binary(Value)) > 5 * 1024 * 1024 of
         true -> error(term_to_big);
         false -> ok
     end,
@@ -130,7 +130,7 @@ update(#model_config{bucket = Bucket, name = ModelName} = ModelConfig, Key, Diff
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
-    case byte_size(term_to_binary(Value)) > 32 * 1024 of
+    case byte_size(term_to_binary(Value)) > 5 * 1024 * 1024 of
         true -> error(term_to_big);
         false -> ok
     end,
