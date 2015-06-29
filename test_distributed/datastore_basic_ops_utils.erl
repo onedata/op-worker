@@ -300,16 +300,13 @@ get_test(Config, Level) ->
 %%     ?assertEqual(OpsNum, ErrorNum),
     ?assertEqual(OpsNum, OkNum+ErrorNum),
 
-    GB1 = 1024 * 1024 * 1024,
-    SizePerDoc = (2 * GB1) / (DocsPerThead * ThreadsNum),
-
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(save, Level, [
                 #document{
                     key = list_to_binary(DocsSet++integer_to_list(I)),
-                    value = #some_record{field1 = I, field2 = crypto:rand_bytes(round(SizePerDoc)), field3 = {test, tuple}}
+                    value = #some_record{field1 = I, field2 = crypto:rand_bytes(1024), field3 = {test, tuple}}
                 }]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}

@@ -66,6 +66,14 @@
             {parameters, [
                 [{name, conflicted_threads}, {value, 20}]
             ]}
+        ]},
+        {config, [{name, '1GB load'},
+            {description, "OMG"},
+            {parameters, [
+                [{name, threads_num}, {value, 1024}],
+                [{name, docs_per_thead}, {value, 1024}],
+                [{name, conflicted_threads}, {value, 1}]
+            ]}
         ]}
     ]
 ).
