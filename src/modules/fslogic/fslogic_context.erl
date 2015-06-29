@@ -64,6 +64,6 @@ is_global_session_id(GlobalSessionId) ->
 %% @doc Retrieves user ID from fslogic context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(Ctx :: fslogic:ctx()) -> UserId :: onedata_user:id().
+-spec get_user_id(Ctx :: fslogic_worker:ctx()) -> UserId :: onedata_user:id().
 get_user_id(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}}) ->
     UserId.

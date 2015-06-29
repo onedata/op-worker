@@ -26,7 +26,7 @@
 %% @doc Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(Ctx :: fslogic:ctx(), ParentUUID :: file_meta:uuid(),
+-spec mkdir(Ctx :: fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{}.
 mkdir(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = Ctx,
@@ -57,7 +57,7 @@ mkdir(Ctx, ParentUUID, Name, Mode) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(Ctx :: fslogic:ctx(), File :: fslogic:file(),
+-spec read_dir(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file(),
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{}.
 read_dir(Ctx, File, Offset, Size) ->
@@ -86,7 +86,7 @@ read_dir(Ctx, File, Offset, Size) ->
 %% @doc Creates new symbolic link.
 %% @end
 %%--------------------------------------------------------------------
--spec link(fslogic:ctx(), Path :: file_meta:path(), LinkValue :: binary()) ->
+-spec link(fslogic_worker:ctx(), Path :: file_meta:path(), LinkValue :: binary()) ->
     no_return().
 link(_, _File, _LinkValue) ->
     ?NOT_IMPLEMENTED.
@@ -96,7 +96,7 @@ link(_, _File, _LinkValue) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec read_link(fslogic:ctx(), File :: fslogic:file()) ->
+-spec read_link(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     no_return().
 read_link(_, _File) ->
     ?NOT_IMPLEMENTED.

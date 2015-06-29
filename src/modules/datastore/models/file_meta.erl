@@ -381,28 +381,46 @@ get_scope(Entry) ->
 -spec setup_onedata_user(UUID :: uuid()) -> ok.
 setup_onedata_user(UUID) ->
     try
-        {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
+        {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
             onedata_user:get(UUID),
-        {ok, #space_details{name = DefaultSpaceName}} =
-            gr_spaces:get_details(provider, DefaultSpaceId),
 
         CTime = utils:time(),
+
+        {ok, SpacesRootUUID} =
+            case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
+                #document{key = Key} -> {ok, Key};
+                {error, {not_found, _}} ->
+                    create({uuid, ?ROOT_DIR_UUID}, #file_meta{
+                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#711,
+                        mtime = CTime, atime = CTime, ctime = CTime, uid = 0
+                    })
+            end,
+
+        lists:foreach(fun(SpaceId) ->
+            case exists({uuid, SpaceId}) of
+                true -> ok;
+                false ->
+                    {ok, #space_details{name = SpaceName}} =
+                        gr_spaces:get_details(provider, SpaceId),
+                    {ok, _} = create({uuid, SpacesRootUUID}, #file_meta{
+                        name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#770,
+                        mtime = CTime, atime = CTime, ctime = CTime, uid = 0
+                    })
+            end
+        end, Spaces),
+
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID}, #document{key = UUID,
             value = #file_meta{
-                name = UUID, type = ?DIRECTORY_TYPE, mode = 8#644,
+                name = UUID, type = ?DIRECTORY_TYPE, mode = 8#770,
                 mtime = CTime, atime = CTime, ctime = CTime, uid = UUID
             }
         }),
-        {ok, SpacesUUID} = create({uuid, RootUUID}, #document{value = #file_meta{
-            name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#644,
-            mtime = CTime, atime = CTime, ctime = CTime, uid = UUID
-        }}),
-        {ok, _} = create({uuid, SpacesUUID}, #document{value = #file_meta{
-            name = DefaultSpaceName, type = ?DIRECTORY_TYPE, mode = 8#644,
-            mtime = CTime, atime = CTime, ctime = CTime, uid = UUID
-        }}),
-
-        ok
+        {ok, SpacesUUID} = create({uuid, RootUUID}, #document{key = fslogic_path:spaces_uuid(UUID),
+            value = #file_meta{
+                name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#755,
+                mtime = CTime, atime = CTime, ctime = CTime, uid = 0
+            }
+        })
     catch
         Error:Reason ->
             ?error_stacktrace("Cannot initialize onedata user files metadata "

@@ -10,7 +10,7 @@
 %%%      to other priovider.
 %%% @end
 %%%--------------------------------------------------------------------
--module(fslogic).
+-module(fslogic_worker).
 -behaviour(worker_plugin_behaviour).
 
 -include("errors.hrl").
@@ -129,8 +129,8 @@ report_error(FuseRequest, Error, LogLevel) ->
     MsgFormat = "Cannot process request ~p due to unknown error: ~p (code: ~p)",
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-        warning -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-        error -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code])
+        warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
+        error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,
     #fuse_response{status = Status}.
 
@@ -140,8 +140,12 @@ report_error(FuseRequest, Error, LogLevel) ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(Ctx :: fslogic:ctx(), FuseRequest :: fuse_request()) ->
+-spec handle_fuse_request(Ctx :: fslogic_worker:ctx(), FuseRequest :: fuse_request()) ->
     FuseResponse :: #fuse_response{}.
+handle_fuse_request(Ctx, #get_file_attr{entry = {path, Path}}) ->
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
+    fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
 handle_fuse_request(Ctx, #get_file_attr{entry = Entry}) ->
     fslogic_req_generic:get_file_attr(Ctx, Entry);
 handle_fuse_request(Ctx, #delete_file{uuid = UUID}) ->

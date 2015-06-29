@@ -34,11 +34,13 @@
 -performance({test_cases, []}).
 all() -> [
     fslogic_get_file_attr_test,
-    fslogic_mkdir_and_rmdir_test,
-    fslogic_read_dir_test
+%%     fslogic_mkdir_and_rmdir_test,
+%%     fslogic_read_dir_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
+
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}])).
 
 %%%====================================================================
 %%% Test function
@@ -46,22 +48,27 @@ all() -> [
 
 fslogic_get_file_attr_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    Ctx = ?config(fslogic_ctx, Config),
-    lists:foreach(fun({Name, Path}) ->
+
+    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+
+    lists:foreach(fun({SessId, Name, Mode, UID, Path}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
-                name = Name, type = ?DIRECTORY_TYPE, mode = 8#644
+                name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
+                uid = UID
             }
-        }, rpc:call(
-            Worker, fslogic_req_generic, get_file_attr, [Ctx, {path, Path}]
-        ))
+        }, ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}))
     end, [
-        {<<"user_id">>, <<"/">>}, {<<"spaces">>, <<"/spaces">>},
-        {<<"default_space_name">>, <<"/spaces/default_space_name">>}
+        {SessId1, UserId1, 8#770, UserId1, <<"/">>},
+        {SessId2, UserId2, 8#770, UserId2, <<"/">>},
+        {SessId1, <<"spaces">>, 8#755, 0, <<"/spaces">>},
+        {SessId2, <<"spaces">>, 8#755, 0, <<"/spaces">>},
+        {SessId1, <<"space_name1">>, 8#770, 0, <<"/spaces/space_name1">>},
+        {SessId2, <<"space_name2">>, 8#770, 0, <<"/spaces/space_name2">>}
     ]),
-    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, rpc:call(
-        Worker, fslogic_req_generic, get_file_attr, [Ctx,
-            {path, <<"/spaces/default_space_name/dir">>}]
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
+        SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir">>}}
     )).
 
 fslogic_mkdir_and_rmdir_test(Config) ->
@@ -158,11 +165,19 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
+
     file_meta_mock_setup(Workers),
-    gr_spaces_mock_setup(Workers, <<"default_space_id">>, <<"default_space_name">>),
-    session_setup(Worker, SessId, Iden, Config).
+    Space1 = {<<"space_id1">>, <<"space_name1">>},
+    Space2 = {<<"space_id2">>, <<"space_name2">>},
+    Space3 = {<<"space_id3">>, <<"space_name3">>},
+    Space4 = {<<"space_id4">>, <<"space_name4">>},
+    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
+
+    User1 = {1, [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
+    User2 = {2, [<<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
+    User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
+
+    session_setup(Worker, [User1, User2, User3], Config).
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -179,21 +194,31 @@ end_per_testcase(_, Config) ->
 %% Creates new test session.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Config :: term()) -> NewConfig :: term().
-session_setup(Worker, SessId, Iden, Config) ->
+-spec session_setup(Worker :: node(), [{UserNum :: non_neg_integer(), [SpaceIds :: binary()]}], Config :: term()) -> NewConfig :: term().
+session_setup(_Worker, [], Config) ->
+    Config;
+session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
     Self = self(),
+
+    Name = fun(Text, Num) -> name(Text, Num) end,
+
+    SessId = Name("session_id", UserNum),
+    UserId = Name("user_id", UserNum),
+    Iden = #identity{user_id = UserId},
+    UserName = Name("username", UserNum),
+
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
-        #document{key = <<"user_id">>, value = #onedata_user{
-            name = <<"test_user">>, space_ids = [<<"default_space_id">>]
+        #document{key = UserId, value = #onedata_user{
+            name = UserName, space_ids = SpaceIds
         }}
     ]),
     ?assertEqual({ok, onedata_user_setup}, test_utils:receive_msg(
         onedata_user_setup, ?TIMEOUT)),
-    [{session_id, SessId}, {fslogic_ctx, #fslogic_ctx{session = Session}} | Config].
+    [{{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId}, {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
+        | session_setup(Worker, R, Config)].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -203,10 +228,18 @@ session_setup(Worker, SessId, Iden, Config) ->
 %%--------------------------------------------------------------------
 -spec session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
 session_teardown(Worker, Config) ->
-    SessId = ?config(session_id, Config),
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
-    ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [<<"user_id">>])),
-    proplists:delete(session_id, proplists:delete(fslogic_ctx, Config)).
+    lists:foldl(fun
+        ({{session_id, _}, SessId}, Acc) ->
+            ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
+            Acc;
+        ({{user_id, _}, UserId}, Acc) ->
+            ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
+            Acc;
+        ({{fslogic_ctx, _}, _}, Acc) ->
+            Acc;
+        (Elem, Acc) ->
+            [Elem | Acc]
+    end, [], Config).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -216,12 +249,13 @@ session_teardown(Worker, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gr_spaces_mock_setup(Workers :: node() | [node()],
-    DefaultSpaceId :: binary(), DefaultSpaceName :: binary()) -> ok.
-gr_spaces_mock_setup(Workers, DefaultSpaceId, DefaultSpaceName) ->
+    [{binary(), binary()}]) -> ok.
+gr_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_new(Workers, gr_spaces),
     test_utils:mock_expect(Workers, gr_spaces, get_details,
-        fun(provider, SpaceId) when SpaceId =:= DefaultSpaceId ->
-            {ok, #space_details{name = DefaultSpaceName}}
+        fun(provider, SpaceId) ->
+            {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
+            {ok, #space_details{name = SpaceName}}
         end
     ).
 
@@ -253,3 +287,6 @@ file_meta_mock_setup(Workers) ->
 mocks_teardown(Workers, Modules) ->
     test_utils:mock_validate(Workers, Modules),
     test_utils:mock_unload(Workers, Modules).
+
+name(Text, Num) ->
+    list_to_binary(Text ++ "_" ++ integer_to_list(Num)).

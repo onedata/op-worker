@@ -64,7 +64,7 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %%--------------------------------------------------------------------
 %% @doc Extracts file() from argument list (Inputs) based on Item description.
 %%--------------------------------------------------------------------
--spec resolve_file(item_definition(), [term()]) -> fslogic:file().
+-spec resolve_file(item_definition(), [term()]) -> fslogic_worker:file().
 resolve_file(Item, Inputs) when Item > 0 ->
     lists:nth(Item - 1, Inputs);
 resolve_file({path, Item}, Inputs) when Item > 0 ->

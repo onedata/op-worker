@@ -46,6 +46,6 @@ random_ascii_lowercase_sequence(Length) ->
 %%--------------------------------------------------------------------
 %% @doc Returns parent of given file.
 %%--------------------------------------------------------------------
--spec get_parent(fslogic:file()) -> fslogic:file() | no_return().
+-spec get_parent(fslogic_worker:file()) -> fslogic_worker:file() | no_return().
 get_parent(_File) ->
     #document{value = #file_meta{}}.

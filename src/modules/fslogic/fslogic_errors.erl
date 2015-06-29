@@ -29,6 +29,8 @@
 -spec gen_status_message(Error :: term()) -> #status{}.
 gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
+gen_status_message({not_found, file_meta}) ->
+    #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(Error) when is_atom(Error) ->
     case lists:member(Error, ?ERROR_CODES) of
         true -> #status{code = Error};

@@ -28,7 +28,7 @@
 %% Returns default space document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_default_space(Ctx :: fslogic:ctx()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get_default_space(Ctx :: fslogic_worker:ctx()) -> {ok, datastore:document()} | datastore:get_error().
 get_default_space(Ctx) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =

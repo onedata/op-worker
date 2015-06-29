@@ -31,7 +31,7 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec chmod(fslogic:ctx(), File :: fslogic:file(), Perms :: fslogic:posix_permissions()) ->
+-spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
     no_return().
 %%-check_permissions({owner, 2}).
 chmod(_, _File, _Mode) ->
@@ -42,21 +42,28 @@ chmod(_, _File, _Mode) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr(Ctx :: fslogic:ctx(), File :: fslogic:file()) ->
+-spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{}.
-get_file_attr(Ctx, {path, Path}) ->
-    {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
-    get_file_attr(CanonicalFileEntry);
-get_file_attr(_Ctx, File) ->
-    get_file_attr(File).
+get_file_attr(Ctx, File) ->
+    case file_meta:get(File) of
+        {ok, #document{key = UUID, value = #file_meta{
+            type = Type, mode = Mode, atime = ATime, mtime = MTime,
+            ctime = CTime, uid = UID, size = Size, name = Name}}} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response =
+                            #file_attr{
+                                uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
+                                ctime = CTime, uid = UID, size = Size, name = Name
+                            }};
+        {error, {not_found, _}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Deletes file.
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec delete_file(fslogic:ctx(), File :: fslogic:file()) ->
+-spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{}.
 %%-check_permissions({write, {parent, 2}}).
 delete_file(_, File) ->
@@ -82,7 +89,7 @@ delete_file(_, File) ->
 %% For best performance use following arg types: path -> uuid -> document
 %% @end
 %%--------------------------------------------------------------------
--spec rename_file(fslogic:ctx(), SourcePath :: fslogic:file(), TargetPath :: file_meta:path()) ->
+-spec rename_file(fslogic_worker:ctx(), SourcePath :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
     no_return().
 %%-check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
 rename_file(_, _SourcePath, _TargetPath) ->
@@ -91,24 +98,3 @@ rename_file(_, _SourcePath, _TargetPath) ->
 %%--------------------------------------------------------------------
 %% Internal functions
 %%--------------------------------------------------------------------
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Utility function returning file attributes.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_attr(File :: fslogic:file()) -> FuseResponse :: #fuse_response{}.
-get_file_attr(File) ->
-    case file_meta:get(File) of
-        {ok, #document{key = UUID, value = #file_meta{
-            type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = UID, size = Size, name = Name
-        }}} -> #fuse_response{status = #status{code = ?OK}, fuse_response =
-        #file_attr{
-            uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = UID, size = Size, name = Name
-        }};
-        {error, {not_found, _}} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
-    end.
