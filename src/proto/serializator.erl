@@ -12,16 +12,12 @@
 -module(serializator).
 -author("Tomasz Lichon").
 
--include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include("proto/oneproxy/oneproxy_messages.hrl").
 -include_lib("clproto/include/messages.hrl").
--include_lib("clproto/include/oneproxy_messages.hrl").
 
 %% API
--export([deserialize_client_message/2, serialize_server_message/1,
-    deserialize_oneproxy_certificate_info_message/1]).
+-export([deserialize_client_message/2, serialize_server_message/1]).
 
 %%%===================================================================
 %%% API
@@ -63,19 +59,6 @@ serialize_server_message(#server_message{message_id = MsgId, message_stream = Ms
         message_body = translator:translate_to_protobuf(MsgBody)
     },
     {ok, messages:encode_msg(ServerMessage)}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% deserialize oneproxy protobuf binary data
-%% @end
-%%--------------------------------------------------------------------
--spec deserialize_oneproxy_certificate_info_message(Message :: binary()) ->
-    {ok, #certificate_info{}} | no_return().
-deserialize_oneproxy_certificate_info_message(Message) ->
-    #'CertificateInfo'{client_session_id = Id, client_subject_dn = Dn} =
-        oneproxy_messages:decode_msg(Message, 'CertificateInfo'),
-    {ok, #certificate_info{client_session_id = Id, client_subject_dn = Dn}}.
-
 
 %%%===================================================================
 %%% Internal functions

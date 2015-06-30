@@ -16,8 +16,6 @@
 -include("modules/datastore/datastore_model.hrl").
 
 -include("proto/oneclient/handshake_messages.hrl").
--include("proto/oneproxy/oneproxy_messages.hrl").
--include("cluster_elements/oneproxy/oneproxy.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -31,7 +29,7 @@
 %% todo split this model to:
 %% todo globally cached - #certificate{} -> #identity{},
 %% todo and locally cached - #token{} | #certificate_info{} -> #identity{}
--type credentials() :: #token{} | #certificate_info{}.
+-type credentials() :: #token{} | #'OTPCertificate'{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -133,17 +131,12 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec fetch(identity:credentials()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(CertInfo = #certificate_info{}) ->
-    case gsi_handler:get_certs_from_oneproxy(?ONEPROXY_REST, CertInfo) of
-        {ok, #certificate{otp_cert = OtpCert}} ->
-            case identity:get(OtpCert) of
-                {ok, Doc = #document{value = Iden}} ->
-                    identity:save(#document{key = CertInfo, value = Iden}),
-                    {ok, Doc};
-                Error_ -> Error_
-            end;
-        Error ->
-            Error
+fetch(OtpCert = #'OTPCertificate'{}) ->
+    case identity:get(OtpCert) of
+        {ok, Doc = #document{value = Iden}} ->
+            identity:save(#document{key = OtpCert, value = Iden}),
+            {ok, Doc};
+        Error_ -> Error_
     end;
 fetch(Token = #token{}) ->
     case onedata_user:fetch(Token) of

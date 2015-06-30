@@ -16,7 +16,7 @@ def default(key):
     return {'image': 'onedata/worker',
             'bin_am': '{0}/appmock'.format(os.getcwd()),
             'bin_gr': '{0}/globalregistry'.format(os.getcwd()),
-            'bin_op_worker': '{0}/oneprovider'.format(os.getcwd()),
+            'bin_op_worker': '{0}/op_worker'.format(os.getcwd()),
             'bin_op_ccm': '{0}/op_ccm'.format(os.getcwd()),
             'bin_oc': '{0}/oneclient'.format(os.getcwd()),
             'logdir': None}[key]
