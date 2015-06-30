@@ -16,6 +16,11 @@ enum FileType {
     LNK = 3; // symbolic link
 }
 
+enum EntryType {
+    PATH = 1; // Path to the file
+    UUID = 2; // UUID of the file
+}
+
 // Generic FUSE client request
 message FuseRequest {
     oneof fuse_request { // list of all FUSE client requests
@@ -28,10 +33,8 @@ message FuseRequest {
 }
 
 message GetFileAttr {
-    oneof entry {
-        bytes path = 1;
-        bytes uuid = 2;
-    }
+    required EntryType entry_type = 1;
+    required bytes entry = 2;
 }
 
 message GetFileChildren {
