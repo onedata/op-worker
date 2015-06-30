@@ -136,8 +136,8 @@ def up(image, bindir, logdir, dns, uid, config_path):
     dns_servers, output = dns_mod.set_up_dns(dns, uid)
     workers = []
 
-    db_node_mappings, riak_out = _riak_up(configs, dns_servers, uid)
     db_node_mappings, couchbase_out = _couchbase_up(configs, dns_servers, uid)
+    db_node_mappings, riak_out = _riak_up(configs, dns_servers, uid)
     common.merge(output, riak_out)
     common.merge(output, couchbase_out)
 
