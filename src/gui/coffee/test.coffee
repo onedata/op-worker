@@ -1,1 +1,1 @@
-@show_alert = () -> alert "Dzien dobry"
+@show_alert = (param) -> alert "WIADOMOSC" + param

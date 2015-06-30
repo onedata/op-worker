@@ -22,12 +22,17 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    gui_jq:wire(#api{name = "api_fun", tag = "api_fun"}, false),
+    gui_jq:wire(#api{name = "api_fun", tag = "api_fun"}),
     #dtl{file = "page_404", app = ?APP_NAME, bindings = [{message, <<"Dzien dobry">>}]}.
 
 
 api_event("api_fun", _, _) ->
-    ?dump(hohoho).
+    random:seed(now()),
+    N = random:uniform(234234),
+    NewStr = <<"Oto randomowa liczba: ", (integer_to_binary(N))/binary>>,
+%%     ?dump(NewStr),
+    gui_jq:wire(<<"show_alert(' brakuje spacji');">>),
+    gui_jq:update(<<"message">>, NewStr).
 
 event(init) ->
     ok;
