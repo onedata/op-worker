@@ -34,7 +34,7 @@
 -performance({test_cases, []}).
 all() -> [
     fslogic_get_file_attr_test,
-%%     fslogic_mkdir_and_rmdir_test,
+    fslogic_mkdir_and_rmdir_test
 %%     fslogic_read_dir_test
 ].
 
@@ -52,7 +52,8 @@ fslogic_get_file_attr_test(Config) ->
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    lists:foreach(fun({SessId, Name, Mode, UID, Path}) ->
+    lists:foreach(fun({SessId, Name, Mode, UID, Path} = Conf) ->
+        io:format(user, "Testing: ~p~n", [Conf]),
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
                 name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
@@ -65,7 +66,9 @@ fslogic_get_file_attr_test(Config) ->
         {SessId1, <<"spaces">>, 8#755, 0, <<"/spaces">>},
         {SessId2, <<"spaces">>, 8#755, 0, <<"/spaces">>},
         {SessId1, <<"space_name1">>, 8#770, 0, <<"/spaces/space_name1">>},
-        {SessId2, <<"space_name2">>, 8#770, 0, <<"/spaces/space_name2">>}
+        {SessId2, <<"space_name2">>, 8#770, 0, <<"/spaces/space_name2">>},
+        {SessId1, <<"space_name3">>, 8#770, 0, <<"/spaces/space_name3">>},
+        {SessId2, <<"space_name4">>, 8#770, 0, <<"/spaces/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir">>}}
@@ -73,7 +76,9 @@ fslogic_get_file_attr_test(Config) ->
 
 fslogic_mkdir_and_rmdir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    Ctx = ?config(fslogic_ctx, Config),
+
+    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
     RootFileAttr = rpc:call(Worker, fslogic_req_generic, get_file_attr, [Ctx, {path, <<"/">>}]),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),

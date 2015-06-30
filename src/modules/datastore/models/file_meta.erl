@@ -388,7 +388,7 @@ setup_onedata_user(UUID) ->
 
         {ok, SpacesRootUUID} =
             case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
-                #document{key = Key} -> {ok, Key};
+                {ok, #document{key = Key}} -> {ok, Key};
                 {error, {not_found, _}} ->
                     create({uuid, ?ROOT_DIR_UUID}, #file_meta{
                         name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#711,
