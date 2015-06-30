@@ -34,6 +34,8 @@
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
 
+-define(DRIVER, mcd).
+
 
 -define('CBE_ADD',      1).
 -define('CBE_REPLACE',  2).
@@ -92,13 +94,15 @@ init_bucket(_Bucket, _Models, _NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
-    case byte_size(term_to_binary(Value)) > 5 * 1024 * 1024 of
+    case byte_size(term_to_binary(Value)) > 100 * 1024 of
         true -> error(term_to_big);
         false -> ok
     end,
-    ?info("WTF ~p ~p", [Value, to_binary(Value)]),
-    case call(set, [to_binary(Key), 0, to_binary(Value)]) of
+%%     ?info("WTF ~p ~p", [Value, to_binary(Value)]),
+    case exec(?DRIVER, set, to_binary(Key), to_binary(Value), 0) of
         ok ->
+            {ok, Key};
+        {ok, _} ->
             {ok, Key};
         {error, Reason} ->
             {error, Reason}
@@ -130,15 +134,19 @@ update(#model_config{bucket = Bucket, name = ModelName} = ModelConfig, Key, Diff
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
-    case byte_size(term_to_binary(Value)) > 5 * 1024 * 1024 of
+    case byte_size(term_to_binary(Value)) > 100 * 1024 of
         true -> error(term_to_big);
         false -> ok
     end,
-    ?info("WTF ~p ~p", [Value, to_binary(Value)]),
-    case call(add, [to_binary(Key), 0, to_binary(Value)]) of
+%%     ?info("WTF ~p ~p", [Value, to_binary(Value)]),
+    case exec(?DRIVER, add, to_binary(Key), to_binary(Value), 0) of
         ok ->
             {ok, Key};
+        {ok, _} ->
+            {ok, Key};
         {error, key_eexists} ->
+            {error, already_exists};
+        {error, notstored} ->
             {error, already_exists};
         {error, Reason} ->
             {error, Reason}
@@ -152,11 +160,13 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
 -spec get(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
-    case call(get, [to_binary(Key)]) of
+    case exec(?DRIVER, get, to_binary(Key)) of
         {error, key_enoent} ->
             {error, {not_found, ModelName}};
         {error, Reason} ->
             {error, Reason};
+        {ok, Value} ->
+            {ok, #document{key = Key, value = from_binary(Value)}};
         {ok, {CAS, Value}} ->
             {ok, #document{key = Key, rev = CAS,
                 value = from_binary(Value)}}
@@ -183,8 +193,10 @@ list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
 delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
     case Pred() of
         true ->
-            case call(remove, [to_binary(Key)]) of
+            case exec(?DRIVER, remove, to_binary(Key)) of
                 ok ->
+                    ok;
+                {ok, deleted} ->
                     ok;
                 {error, key_enoent} ->
                     ok;
@@ -323,7 +335,12 @@ foreach_link(#model_config{bucket = Bucket} = ModelConfig, Key, Fun, AccIn) ->
 %%--------------------------------------------------------------------
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
-    ok.
+    try
+        ensure_mc_connected(),
+        ensure_mc_text_connected()
+    catch
+        _:R -> {error, R}
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -420,6 +437,35 @@ links_doc_key(Key) ->
     <<BinKey/binary, ?LINKS_KEY_SUFFIX>>.
 
 
+exec(cberl_internal, add, Key, Value, Expiration) ->
+    call(add, [Key, Expiration, Value]);
+exec(cberl_internal, set, Key, Value, Expiration) ->
+    call(set, [Key, Expiration, Value]);
+exec(erlmc, add, Key, Value, Expiration) ->
+    callmc(add, [Key, Value, Expiration]);
+exec(erlmc, set, Key, Value, Expiration) ->
+    callmc(set, [Key, Value, Expiration]);
+exec(mcd, add, Key, Value, Expiration) ->
+    callmc_text(do, [{add, 0, Expiration}, Key, Value]);
+exec(mcd, set, Key, Value, Expiration) ->
+    callmc_text(set, [Key, Value, Expiration]).
+
+
+exec(cberl_internal, get, Key) ->
+    call(get, [Key]);
+exec(cberl_internal, remove, Key) ->
+    call(remove, [Key]);
+exec(erlmc, get, Key) ->
+    callmc(get, [Key]);
+exec(erlmc, remove, Key) ->
+    callmc(delete, [Key]);
+exec(mcd, get, Key) ->
+    callmc_text(get, [Key]);
+exec(mcd, remove, Key) ->
+    callmc_text(delete, [Key]).
+
+
+
 call(Method, Args) ->
     call(Method, Args, 5, undefined).
 call(Method, Args, Retry, LastError) when Retry > 0 ->
@@ -453,6 +499,108 @@ call(Method, Args, Retry, LastError) when Retry > 0 ->
 call(Method, Args, _, LastError) ->
     ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
     {error, {communication_failure, LastError}}.
+
+callmc(Method, Args) ->
+    callmc(Method, Args, 5, undefined).
+callmc(Method, Args, Retry, LastError) when Retry > 0 ->
+    ensure_mc_connected(),
+    try apply(erlmc, Method, Args) of
+        {error, Reason} ->
+            {error, Reason};
+        {_, {error, Reason}} ->
+            {error, Reason};
+        ok -> ok;
+        {ok, Res} ->
+            {ok, Res};
+        {Key, CAS, Value} when is_binary(Key), is_binary(Value) ->
+            {ok, {CAS, Value}};
+        {'EXIT', _, _} = E ->
+            callmc(Method, Args, Retry - 1, E);
+        {shutdown, _} = E ->
+            callmc(Method, Args, Retry - 1, E);
+        {normal, _} = E ->
+            callmc(Method, Args, Retry - 1, E);
+        Other ->
+            {error, Other}
+    catch
+        Class:Reason0 ->
+            datastore_worker:state_put(mc_connected, error),
+            ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
+            callmc(Method, Args, Retry - 1, Reason0)
+    end;
+callmc(Method, Args, _, LastError) ->
+    ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
+    {error, {communication_failure, LastError}}.
+
+
+callmc_text(Method, Args) ->
+    callmc_text(Method, Args, 5, undefined).
+callmc_text(Method, Args, Retry, LastError) when Retry > 0 ->
+    ensure_mc_text_connected(),
+    try apply(mcd, Method, ['MCDCluster'] ++ Args) of
+        {error, notfound} ->
+            {error, key_enoent};
+        {error, Reason} ->
+            {error, Reason};
+        {_, {error, Reason}} ->
+            {error, Reason};
+        ok -> ok;
+        {ok, Res} ->
+            {ok, Res};
+        {Key, CAS, Value} when is_binary(Key), is_binary(Value) ->
+            {ok, {CAS, Value}};
+        {'EXIT', _, _} = E ->
+            callmc_text(Method, Args, Retry - 1, E);
+        {shutdown, _} = E ->
+            callmc_text(Method, Args, Retry - 1, E);
+        {normal, _} = E ->
+            callmc_text(Method, Args, Retry - 1, E);
+        Other ->
+            {error, Other}
+    catch
+        Class:Reason0 ->
+            datastore_worker:state_put(mc_text_connected, error),
+            ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
+            callmc_text(Method, Args, Retry - 1, Reason0)
+    end;
+callmc_text(Method, Args, _, LastError) ->
+    ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
+    {error, {communication_failure, LastError}}.
+
+
+ensure_mc_connected() ->
+    case datastore_worker:state_get(mc_connected) of
+        {ok, _} -> ok;
+        ok -> ok;
+        _ ->
+            L = datastore_worker:state_get(db_nodes),
+            Servers = lists:map(fun({Hostname, Port}) ->
+                {binary_to_list(Hostname), 11211, 100}
+            end, L),
+            Res = erlmc:start(Servers),
+            ?info("ERLMC started ~p", [Res]),
+            datastore_worker:state_put(mc_connected, Res),
+            Res
+    end.
+
+
+ensure_mc_text_connected() ->
+    case datastore_worker:state_get(mc_text_connected) of
+        {ok, _} -> ok;
+        ok -> ok;
+        _ ->
+            L = datastore_worker:state_get(db_nodes),
+            Servers = lists:map(fun({Hostname, Port}) ->
+                {binary_to_atom(Hostname, utf8), [binary_to_list(Hostname), 11211], 100}
+            end, L),
+            Res = mcd_cluster:start_link('MCDCluster', Servers),
+            ?info("ECD started ~p", [Res]),
+            datastore_worker:state_put(mc_text_connected, Res),
+            case Res of
+                {ok, _} -> ok;
+                E -> E
+            end
+    end.
 
 
 %%--------------------------------------------------------------------

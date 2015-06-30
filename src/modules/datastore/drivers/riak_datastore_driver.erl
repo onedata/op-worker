@@ -47,7 +47,7 @@
 -spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()],
     NodeToSync :: node()) -> ok.
 init_bucket(_Bucket, _Models, _NodeToSync) ->
-    ?debug("Riak init with nodes: ~p", [datastore_worker:state_get(riak_nodes)]),
+    ?debug("Riak init with nodes: ~p", [datastore_worker:state_get(db_nodes)]),
     ok.
 
 %%--------------------------------------------------------------------
@@ -450,7 +450,7 @@ get_connections() ->
         [_ | _] = Connections ->
             Connections;
         _ ->
-            Connections = connect(datastore_worker:state_get(riak_nodes)),
+            Connections = connect(datastore_worker:state_get(db_nodes)),
             datastore_worker:state_put(riak_connections, Connections),
             Connections
     end.

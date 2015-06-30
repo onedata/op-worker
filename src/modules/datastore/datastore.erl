@@ -122,6 +122,7 @@ update_async(Level, ModelName, Key, Diff) ->
 -spec create(Level :: store_level(), Document :: datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
+    ?info("DT CREATE: ~p", [Document]),
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
 

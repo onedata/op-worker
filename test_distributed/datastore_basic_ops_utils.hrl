@@ -70,8 +70,8 @@
         {config, [{name, '1GB load'},
             {description, "OMG"},
             {parameters, [
-                [{name, threads_num}, {value, 1024}],
-                [{name, docs_per_thead}, {value, 32}],
+                [{name, threads_num}, {value, 32}],
+                [{name, docs_per_thead}, {value, 512}],
                 [{name, conflicted_threads}, {value, 1}]
             ]}
         ]}
