@@ -123,7 +123,7 @@ def _couchbase_up(configs, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    couchbase_output = couchbase.up('couchbase/server:enterprise-4.0.0-beta', dns, uid, len(db_node_mappings))
+    couchbase_output = couchbase.up('couchbase/server', dns, uid, len(db_node_mappings))
 
     return db_node_mappings, couchbase_output
 
