@@ -32,7 +32,7 @@
 -performance({test_cases,
     [
 %%         create_delete_db_test,
-        save_db_test,
+%%         save_db_test,
 %%         update_db_test,
         get_db_test
 %%         exists_db_test,
