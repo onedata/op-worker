@@ -55,6 +55,27 @@ parser.add_argument(
     help='run performance tests',
     dest='performance')
 
+parser.add_argument(
+    '--stress', '-str',
+    action='store_true',
+    default=False,
+    help='run stress tests',
+    dest='stress')
+
+parser.add_argument(
+    '--stress_no_clearing', '-str_nc',
+    action='store_true',
+    default=False,
+    help='run stress tests without clearing data between test cases',
+    dest='stress_no_clearing')
+
+parser.add_argument(
+    '--stress_time', '-st',
+    action='append',
+    help='time of stress test in sek',
+    dest='stress_time')
+
+
 args = parser.parse_args()
 script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
@@ -105,8 +126,16 @@ if args.cases:
     ct_command.append('-case')
     ct_command.extend(args.cases)
 
+if args.stress_time:
+    ct_command.extend(['-env', 'stress_time'])
+    ct_command.extend(args.stress_time)
+
 if args.performance:
     ct_command.extend(['-env', 'performance', 'true'])
+elif args.stress:
+    ct_command.extend(['-env', 'stress', 'true'])
+elif args.stress_no_clearing:
+    ct_command.extend(['-env', 'stress_no_clearing', 'true'])
 else:
     ct_command.extend(['-cover', 'cover_tmp.spec'])
 

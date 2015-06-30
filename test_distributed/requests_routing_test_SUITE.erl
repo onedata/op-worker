@@ -25,6 +25,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([simple_call_test/1, direct_cast_test/1, redirect_cast_test/1, mixed_cast_test/1]).
 
+-performance({test_cases, [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_test]}).
 all() ->
     [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_test].
 
