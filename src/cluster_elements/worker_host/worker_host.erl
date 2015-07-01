@@ -96,7 +96,7 @@ stop(Plugin) ->
     Timeout :: non_neg_integer() | infinity.
 init([Plugin, PluginArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
-    ets:new(Plugin, [named_table, public, set, read_concurrency]),
+    ets:new(Plugin, [named_table, public, set, {read_concurrency, true}]),
     {ok, InitAns} = Plugin:init(PluginArgs),
     [ets:insert(Plugin, Entry) || Entry <- maps:to_list(InitAns)],
     ?debug("Plugin ~p initialized with args ~p and result ~p", [Plugin, PluginArgs, InitAns]),
@@ -216,6 +216,63 @@ terminate(_Reason, #host_state{plugin = Plugin}) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns Value for given Key form plugin's KV state or 'undefined' if the is no such entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_get(Plugin :: atom(), Key :: term()) -> Value :: term() | undefined.
+state_get(Plugin, Key) ->
+    case ets:lookup(Plugin, Key) of
+        [{_, Value}] -> Value;
+        []           -> undefined
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates Value for given Key in plugin's KV state using given function. The function gets as argument old Value and
+%% shall return new Value. The function runs in worker_host's process.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_update(Plugin :: atom(), Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
+    ok | no_return().
+state_update(Plugin, Key, UpdateFun) when is_function(UpdateFun) ->
+    ok = gen_server:call(Plugin, {update_plugin_state, Key, UpdateFun}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Puts Value for given Key into plugin's KV state.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_put(Plugin :: atom(), Key :: term(), Value :: term()) -> ok | no_return().
+state_put(Plugin, Key, Value) ->
+    true = ets:insert(Plugin, {Key, Value}),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes entry for given Key in plugin's KV state.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_delete(Plugin :: atom(), Key :: term()) -> ok | no_return().
+state_delete(Plugin, Key) ->
+    true = ets:delete(Plugin, Key),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns whole plugin's KV state as Erlang's map.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_to_map(Plugin :: atom()) -> plugin_state().
+state_to_map(Plugin) ->
+    maps:from_list(ets:tab2list(Plugin)).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -284,32 +341,3 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
         S ->
             {[Report | New], Old, S, Max}
     end.
-
--spec state_get(Plugin :: atom(), Key :: term()) -> Value :: term() | undefined.
-state_get(Plugin, Key) ->
-    case ets:lookup(Plugin, Key) of
-        [{_, Value}] -> Value;
-        []           -> undefined
-    end.
-
-
--spec state_update(Plugin :: atom(), Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
-    ok | no_return().
-state_update(Plugin, Key, UpdateFun) when is_function(UpdateFun) ->
-    ok = gen_server:call(Plugin, {update_plugin_state, Key, UpdateFun}).
-
-
--spec state_put(Plugin :: atom(), Key :: term(), Value :: term()) -> ok | no_return().
-state_put(Plugin, Key, Value) ->
-    true = ets:insert(Plugin, {Key, Value}),
-    ok.
-
-
--spec state_delete(Plugin :: atom(), Key :: term()) -> ok | no_return().
-state_delete(Plugin, Key) ->
-    true = ets:insert(Plugin, {Key, undefined}),
-    ok.
-
--spec state_to_map(Plugin :: atom()) -> plugin_state().
-state_to_map(Plugin) ->
-    maps:from_list(ets:tab2list(Plugin)).
