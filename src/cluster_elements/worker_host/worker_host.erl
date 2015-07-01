@@ -96,9 +96,9 @@ stop(Plugin) ->
     Timeout :: non_neg_integer() | infinity.
 init([Plugin, PluginArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
-    ets:new(Plugin, [named_table, public, set, {read_concurrency, true}]),
+    ets:new(state_table_name(Plugin), [named_table, public, set, {read_concurrency, true}]),
     {ok, InitAns} = Plugin:init(PluginArgs),
-    [ets:insert(Plugin, Entry) || Entry <- maps:to_list(InitAns)],
+    [ets:insert(state_table_name(Plugin), Entry) || Entry <- maps:to_list(InitAns)],
     ?debug("Plugin ~p initialized with args ~p and result ~p", [Plugin, PluginArgs, InitAns]),
     {ok, #host_state{plugin = Plugin, load_info = {[], [], 0, LoadMemorySize}}}.
 
@@ -224,7 +224,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec state_get(Plugin :: atom(), Key :: term()) -> Value :: term() | undefined.
 state_get(Plugin, Key) ->
-    case ets:lookup(Plugin, Key) of
+    case ets:lookup(state_table_name(Plugin), Key) of
         [{_, Value}] -> Value;
         []           -> undefined
     end.
@@ -249,7 +249,7 @@ state_update(Plugin, Key, UpdateFun) when is_function(UpdateFun) ->
 %%--------------------------------------------------------------------
 -spec state_put(Plugin :: atom(), Key :: term(), Value :: term()) -> ok | no_return().
 state_put(Plugin, Key, Value) ->
-    true = ets:insert(Plugin, {Key, Value}),
+    true = ets:insert(state_table_name(Plugin), {Key, Value}),
     ok.
 
 
@@ -260,7 +260,7 @@ state_put(Plugin, Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_delete(Plugin :: atom(), Key :: term()) -> ok | no_return().
 state_delete(Plugin, Key) ->
-    true = ets:delete(Plugin, Key),
+    true = ets:delete(state_table_name(Plugin), Key),
     ok.
 
 %%--------------------------------------------------------------------
@@ -270,7 +270,7 @@ state_delete(Plugin, Key) ->
 %%--------------------------------------------------------------------
 -spec state_to_map(Plugin :: atom()) -> plugin_state().
 state_to_map(Plugin) ->
-    maps:from_list(ets:tab2list(Plugin)).
+    maps:from_list(ets:tab2list(state_table_name(Plugin))).
 
 
 %%%===================================================================
@@ -341,3 +341,13 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
         S ->
             {[Report | New], Old, S, Max}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the name of ETS table holding plugin's state.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_table_name(Plugin :: atom()) -> atom().
+state_table_name(Plugin) ->
+    binary_to_atom(<<"worker_host_state__", (atom_to_binary(Plugin, utf8))/binary>>, utf8).
