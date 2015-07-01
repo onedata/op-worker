@@ -99,7 +99,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) ->
-    mnesia_run(sync_transaction, fun() ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
         ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
         {ok, Key}
     end).
@@ -112,7 +112,7 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Docum
 -spec update(model_behaviour:model_config(), datastore:ext_key(),
     Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
-    mnesia_run(sync_transaction, fun() ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
         case mnesia:read(table_name(ModelConfig), Key, write) of
             [] ->
                 {error, {not_found, ModelName}};
@@ -136,7 +136,7 @@ update(#model_config{name = ModelName} = ModelConfig, Key, Diff) ->
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
-    mnesia_run(sync_transaction, fun() ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
         case mnesia:read(table_name(ModelConfig), Key) of
             [] ->
                 ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
@@ -188,7 +188,7 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
 -spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) ->
     ok | datastore:generic_error().
 add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
-    mnesia_run(sync_transaction, fun() ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
         Links = #links{} =
             case mnesia:read(links_table_name(ModelConfig), Key, write) of
                 [] ->
@@ -208,11 +208,11 @@ add_links(#model_config{} = ModelConfig, Key, LinkSpec) ->
 -spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error().
 delete_links(#model_config{} = ModelConfig, Key, all) ->
-    mnesia_run(sync_transaction, fun() ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
         ok = mnesia:delete(links_table_name(ModelConfig), Key, write)
     end);
 delete_links(#model_config{} = ModelConfig, Key, LinkNames) ->
-    mnesia_run(sync_transaction, fun() ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
         Links = #links{} =
             case mnesia:read(links_table_name(ModelConfig), Key, write) of
                 [] ->
@@ -309,7 +309,7 @@ list_next([], Handle, Fun, AccIn) ->
 -spec delete(model_behaviour:model_config(), datastore:ext_key(), datastore:delete_predicate()) ->
     ok | datastore:generic_error().
 delete(#model_config{} = ModelConfig, Key, Pred) ->
-    mnesia_run(sync_transaction, fun() ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
         case Pred() of
             true ->
                 ok = mnesia:delete(table_name(ModelConfig), Key, write);
@@ -441,3 +441,18 @@ mnesia_run(Method, Fun) when Method =:= sync_transaction; Method =:= transaction
         {aborted, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% If transactions are enabled in #model_config{} returns given TransactionType.
+%% If transactions are disabled in #model_config{} returns corresponding dirty mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_transaction(model_behaviour:model_config(), atom()) -> atom().
+maybe_transaction(#model_config{transactional_global_cache = false}, TransactionType) ->
+    case TransactionType of
+        sync_transaction -> sync_dirty
+    end;
+maybe_transaction(#model_config{transactional_global_cache = true}, TransactionType) ->
+    TransactionType.
