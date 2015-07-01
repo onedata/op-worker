@@ -64,17 +64,42 @@ read_dir(Ctx, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),
+    ?info("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
+    SpacesKey = fslogic_path:spaces_uuid(UserId),
     case Key of
         UserId ->
             {ok, DefaultSpace} = fslogic_spaces:get_default_space(Ctx),
             {ok, DefaultSpaceChildLinks} =
                 case Offset of
-                    0 -> file_meta:list_children(DefaultSpace, Offset, Size - 1);
-                    _ -> file_meta:list_children(DefaultSpace, Offset - 1, Size)
+                    0 ->
+                        file_meta:list_children(DefaultSpace, 0, Size - 1);
+                    _ ->
+                        file_meta:list_children(DefaultSpace, Offset - 1, Size)
                 end,
+                #fuse_response{status = #status{code = ?OK},
+                    fuse_response = #file_children{
+                        child_links = ChildLinks ++ DefaultSpaceChildLinks
+                    }
+                };
+        SpacesKey ->
+            {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
+                onedata_user:get(UserId),
+            SpaceRes = [file_meta:get(SpacesId) || SpacesId <- SpacesIds],
+
+            Children =
+                case Offset < length(SpacesIds)  of
+                    true ->
+                        SpaceLinks = [#child_link{uuid = SpaceId, name = SpaceName} ||
+                            {ok, #document{key = SpaceId, value = #file_meta{name = SpaceName}}} <- SpaceRes],
+
+                        lists:sublist(SpaceLinks, Offset + 1, Size);
+                    false ->
+                        []
+                end,
+
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #file_children{
-                    child_links = ChildLinks ++ DefaultSpaceChildLinks
+                    child_links = Children
                 }
             };
         _ ->

@@ -70,8 +70,10 @@ translate_from_protobuf(#'GetProtocolVersion'{}) ->
     #get_protocol_version{};
 translate_from_protobuf(#'FuseRequest'{fuse_request = {_, Record}}) ->
     #fuse_request{fuse_request = translate_from_protobuf(Record)};
-translate_from_protobuf(#'GetFileAttr'{entry = Entry}) ->
-    #get_file_attr{entry = Entry};
+translate_from_protobuf(#'GetFileAttr'{entry_type = 'PATH', entry = Path}) ->
+    #get_file_attr{entry = {path, Path}};
+translate_from_protobuf(#'GetFileAttr'{entry_type = 'UUID', entry = UUID}) ->
+    #get_file_attr{entry = {uuid, UUID}};
 translate_from_protobuf(#'GetFileChildren'{uuid = UUID, offset = Offset, size = Size}) ->
     #get_file_children{uuid = UUID, offset = Offset, size = Size};
 translate_from_protobuf(#'CreateDir'{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->

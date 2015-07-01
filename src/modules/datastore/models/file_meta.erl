@@ -46,6 +46,8 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
 
+-export([to_uuid/1]).
+
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
@@ -187,8 +189,12 @@ delete({path, Path}) ->
          end);
 delete(Key) ->
     ?run(begin
-             {ok, #document{} = Document} = get(Key),
-             delete(Document)
+             case get(Key) of
+                 {ok, #document{} = Document} ->
+                     delete(Document);
+                 {error, {not_found, _}} ->
+                     ok
+             end
          end).
 
 %%--------------------------------------------------------------------
@@ -402,10 +408,10 @@ setup_onedata_user(UUID) ->
                 false ->
                     {ok, #space_details{name = SpaceName}} =
                         gr_spaces:get_details(provider, SpaceId),
-                    {ok, _} = create({uuid, SpacesRootUUID}, #file_meta{
+                    {ok, _} = create({uuid, SpacesRootUUID}, #document{key = SpaceId, value = #file_meta{
                         name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#770,
                         mtime = CTime, atime = CTime, ctime = CTime, uid = 0
-                    })
+                    }})
             end
         end, Spaces),
 
@@ -581,6 +587,10 @@ to_uuid({path, Path}) ->
 %%--------------------------------------------------------------------
 -spec is_valid_filename(term()) -> boolean().
 is_valid_filename(<<"">>) ->
+    false;
+is_valid_filename(<<".">>) ->
+    false;
+is_valid_filename(<<"..">>) ->
     false;
 is_valid_filename(FileName) when not is_binary(FileName) ->
     false;

@@ -11,6 +11,7 @@
 %%%-------------------------------------------------------------------
 -module(fslogic_req_test_SUITE).
 -author("Krzysztof Trzepla").
+-author("Rafal Slota").
 
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -34,8 +35,8 @@
 -performance({test_cases, []}).
 all() -> [
     fslogic_get_file_attr_test,
-    fslogic_mkdir_and_rmdir_test
-%%     fslogic_read_dir_test
+    fslogic_mkdir_and_rmdir_test,
+    fslogic_read_dir_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -76,87 +77,139 @@ fslogic_get_file_attr_test(Config) ->
 
 fslogic_mkdir_and_rmdir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    RootFileAttr = rpc:call(Worker, fslogic_req_generic, get_file_attr, [Ctx, {path, <<"/">>}]),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
-    #fuse_response{fuse_response = #file_attr{uuid = RootUUID}} = RootFileAttr,
+    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
+    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
 
-    {_, _, UUIDs} = lists:foldl(fun(Leaf, {Path, ParentUUID, FileUUIDs}) ->
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
+
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID1}} = RootFileAttr1,
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID2}} = RootFileAttr2,
+
+    MakeTree = fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
         NewPath = <<Path/binary, "/", Leaf/binary>>,
-
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, rpc:call(
-            Worker, fslogic_req_special, mkdir, [Ctx, ParentUUID, Leaf, 8#644]
+        ct:print("NewPath ~p with parent ~p", [NewPath, ParentUUID]),
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId,
+            #create_dir{parent_uuid = ParentUUID, name = Leaf, mode = 8#755}
         )),
 
-        FileAttr = rpc:call(Worker, fslogic_req_generic, get_file_attr, [Ctx, {path, NewPath}]),
+        FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, NewPath}}),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-        ?assertEqual(FileAttr, rpc:call(Worker, fslogic_req_generic, get_file_attr,
-            [Ctx, {path, <<"/spaces/default_space_name", NewPath/binary>>}])),
+        ?assertEqual(FileAttr, ?req(Worker, SessId, #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
         #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
-        {NewPath, FileUUID, [FileUUID | FileUUIDs]}
-    end, {<<>>, RootUUID, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
+        {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
+    end,
+
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
+    {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<>>, RootUUID2, []}, [<<"dir4">>, <<"dir5">>, <<"dir6">>]),
+
+    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, <<"space_name2">>, <<"dir4">>, <<"dir5">>, <<"dir6">>]),
+    FileAttr = ?req(Worker, SessId1, #get_file_attr{entry = {path, TestPath1}}),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
+    ?assertEqual(FileAttr, ?req(Worker, SessId2, #get_file_attr{entry = {path, TestPath1}})),
+
+    ct:print("UUIDs ~p ~p", [UUIDs1, UUIDs2]),
 
     lists:foreach(fun(UUID) ->
         ?assertMatch(#fuse_response{status = #status{code = ?ENOTEMPTY}},
-            rpc:call(Worker, fslogic_req_generic, delete_file, [Ctx, {uuid, UUID}]))
-    end, lists:reverse(tl(UUIDs))),
+            ?req(Worker, SessId1, #delete_file{uuid = UUID}))
+    end, lists:reverse(tl(UUIDs1))),
 
     lists:foreach(fun(UUID) ->
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-            rpc:call(Worker, fslogic_req_generic, delete_file, [Ctx, {uuid, UUID}]))
-    end, UUIDs).
+        ?assertMatch(#fuse_response{status = #status{code = ?ENOTEMPTY}},
+            ?req(Worker, SessId2, #delete_file{uuid = UUID}))
+    end, lists:reverse(tl(UUIDs2))),
+
+    ok.
 
 fslogic_read_dir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    Ctx = ?config(fslogic_ctx, Config),
+    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId3, UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
+    {SessId4, UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
 
-    lists:foreach(fun({Name, Path}) ->
-        FileAttr = rpc:call(Worker, fslogic_req_generic, get_file_attr, [Ctx, {path, Path}]),
+    ValidateReadDir = fun({SessId, Path, NameList}) ->
+        FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
         #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
-        ?assertMatch(#fuse_response{status = #status{code = ?OK},
-            fuse_response = #file_children{
-                child_links = [#child_link{uuid = _, name = Name}]
-            }
-        }, rpc:call(
-            Worker, fslogic_req_special, read_dir, [Ctx, {uuid, FileUUID}, 0, 10]
-        ))
-    end, [
-        {<<"spaces">>, <<"/">>},
-        {<<"default_space_name">>, <<"/spaces">>}
+
+        ExpectedNames = lists:sort(NameList),
+
+        lists:foreach( %% Size
+            fun(Size) ->
+                lists:foreach( %% Offset step
+                    fun(OffsetStep) ->
+                        {_, Names} = lists:foldl( %% foreach Offset
+                            fun(_, {Offset, CurrentChildren}) ->
+                                Response = ?req(Worker, SessId, #get_file_children{uuid = FileUUID, offset = Offset, size = Size}),
+
+                                ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
+                                #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
+
+                                ct:print("Testing readdir with Path ~p, Offset ~p, Size ~p: ~p", [Path, Offset, Size, Links]),
+
+                                RespNames = lists:map(
+                                    fun(#child_link{uuid = _, name = Name}) ->
+                                        Name
+                                    end, Links),
+
+                                ?assertEqual(min(max(0, length(ExpectedNames) - Offset), Size), length(RespNames)),
+
+                                {Offset + OffsetStep, lists:usort(RespNames ++ CurrentChildren)}
+                            end, {0, []}, lists:seq(1, 2 * round(length(ExpectedNames) / OffsetStep))),
+
+                        ?assertMatch(ExpectedNames, lists:sort(lists:flatten(Names)))
+                    end, lists:seq(1, Size))
+
+            end, lists:seq(1, length(ExpectedNames) + 1))
+    end,
+
+    lists:foreach(ValidateReadDir, [
+        {SessId1, <<"/spaces">>, [<<"space_name1">>, <<"space_name2">>, <<"space_name3">>, <<"space_name4">>]},
+        {SessId2, <<"/spaces">>, [<<"space_name2">>, <<"space_name3">>, <<"space_name4">>]},
+        {SessId3, <<"/spaces">>, [<<"space_name3">>, <<"space_name4">>]},
+        {SessId4, <<"/spaces">>, [<<"space_name4">>]},
+        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME]},
+        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME]},
+        {SessId3, <<"/">>, [?SPACES_BASE_DIR_NAME]},
+        {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]}
     ]),
 
-    RootFileAttr = rpc:call(Worker, fslogic_req_generic, get_file_attr, [Ctx, {path, <<"/">>}]),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
-    #fuse_response{fuse_response = #file_attr{uuid = RootUUID}} = RootFileAttr,
+    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID1}} = RootFileAttr1,
 
-    DefaultSpaceFileAttr = rpc:call(Worker, fslogic_req_generic, get_file_attr,
-        [Ctx, {path, <<"/spaces/default_space_name">>}]),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, DefaultSpaceFileAttr),
-    #fuse_response{fuse_response = #file_attr{uuid = DefaultSpaceUUID}} = DefaultSpaceFileAttr,
+    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID2}} = RootFileAttr2,
+
 
     lists:foreach(fun(Name) ->
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, rpc:call(
-            Worker, fslogic_req_special, mkdir, [Ctx, RootUUID, Name, 8#644]
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
+            Worker, SessId1, #create_dir{parent_uuid = RootUUID1, name = Name, mode = 8#755}
         ))
-    end, [<<"dir1">>, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"dir5">>]),
+    end, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]),
 
-    RootChildren = rpc:call(Worker, fslogic_req_special, read_dir,
-        [Ctx, {uuid, RootUUID}, 0, 10]),
-    DefaultSpaceChildren = rpc:call(Worker, fslogic_req_special, read_dir,
-        [Ctx, {uuid, DefaultSpaceUUID}, 0, 10]),
+    lists:foreach(fun(Name) ->
+        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
+            Worker, SessId2, #create_dir{parent_uuid = RootUUID2, name = Name, mode = 8#755}
+        ))
+    end, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]),
 
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootChildren),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, DefaultSpaceChildren),
+    lists:foreach(ValidateReadDir, [
+        {SessId1, <<"/spaces/space_name1">>, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
+        {SessId1, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
+        {SessId2, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
+        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
+        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]}
+    ]),
 
-    ?assertEqual(6, length(RootChildren#fuse_response.fuse_response#file_children.child_links)),
-
-    ?assertEqual(length(RootChildren#fuse_response.fuse_response#file_children.child_links),
-        length(DefaultSpaceChildren#fuse_response.fuse_response#file_children.child_links) + 1).
+    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -181,8 +234,9 @@ init_per_testcase(_, Config) ->
     User1 = {1, [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
     User2 = {2, [<<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
     User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
+    User4 = {4, [<<"space_id4">>]},
 
-    session_setup(Worker, [User1, User2, User3], Config).
+    session_setup(Worker, [User1, User2, User3, User4], Config).
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -222,8 +276,11 @@ session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
     ]),
     ?assertEqual({ok, onedata_user_setup}, test_utils:receive_msg(
         onedata_user_setup, ?TIMEOUT)),
-    [{{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId}, {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
-        | session_setup(Worker, R, Config)].
+    [
+        {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
+        {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
+        | session_setup(Worker, R, Config)
+    ].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -237,8 +294,15 @@ session_teardown(Worker, Config) ->
         ({{session_id, _}, SessId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
             Acc;
+        ({{spaces, _}, SpaceIds}, Acc) ->
+            lists:foreach(fun(SpaceId) ->
+                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
+            end, SpaceIds),
+            Acc;
         ({{user_id, _}, UserId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_path:spaces_uuid(UserId)])),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
             Acc;

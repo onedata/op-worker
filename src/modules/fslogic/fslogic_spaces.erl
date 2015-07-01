@@ -11,6 +11,7 @@
 %%%-------------------------------------------------------------------
 -module(fslogic_spaces).
 -author("Krzysztof Trzepla").
+-author("Rafal Slota").
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -33,10 +34,7 @@ get_default_space(Ctx) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
         onedata_user:get(UserId),
-    {ok, #space_details{name = DefaultSpaceName}} =
-        gr_spaces:get_details(provider, DefaultSpaceId),
-    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME, DefaultSpaceName]),
-    file_meta:get({path, Path}).
+    file_meta:get({uuid, DefaultSpaceId}).
 
 %%%===================================================================
 %%% Internal functions
