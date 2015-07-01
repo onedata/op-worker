@@ -31,7 +31,8 @@
     hooks = [] :: [{model_behaviour:model_type(), model_behaviour:model_action()}],
     bucket :: datastore:bucket(),
     store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level(),
-    link_store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level()
+    link_store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level(),
+    transactional_global_cache = true :: boolean()
 }).
 
 %% Helper macro for instantiating #model_config record.
