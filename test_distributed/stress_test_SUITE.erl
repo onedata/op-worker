@@ -23,9 +23,26 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([stress_test/1, t1_test/1, t2_test/1]).
+-export([stress_test/1,
+    datastore_mixed_db_test/1, datastore_mixed_global_store_test/1, datastore_mixed_local_store_test/1,
+    datastore_mixed_global_cache_test/1, datastore_mixed_local_cache_test/1, mixed_cast_test/1,
+    file_meta_basic_operations_test/1
+]).
 
--performance([{stress, [t1_test, t2_test]}, {stress_no_clearing, [t1_test, t2_test]}]).
+-performance([
+    {stress, [
+        datastore_mixed_db_test, datastore_mixed_global_store_test, datastore_mixed_local_store_test,
+        datastore_mixed_global_cache_test, datastore_mixed_local_cache_test, mixed_cast_test,
+        file_meta_basic_operations_test
+        % TODO add simmilar test without mocks within cluster
+%%         sequencer_manager_multiple_streams_messages_ordering_test, connection_multi_ping_pong_test,
+%%         event_stream_different_file_id_aggregation_test,
+%%         event_manager_multiple_subscription_test, event_manager_multiple_clients_test
+    ]}, {stress_no_clearing, [
+        datastore_mixed_db_test, datastore_mixed_global_store_test, datastore_mixed_local_store_test,
+        datastore_mixed_global_cache_test, datastore_mixed_local_cache_test, file_meta_basic_operations_test
+    ]}
+]).
 all() ->
     [].
 
@@ -44,39 +61,84 @@ stress_test(Config) ->
 
 -performance([
     {parameters, [
-        [{name, p1}, {value, 10}, {description, "xxx"}]
+        [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
+        [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
+        [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
+        [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
     ]},
-    {config, [{name, stress_test},
-        {parameters, [
-            [{name, p1}, {value, 100}]
-        ]},
-        {description, "Basic config for stress test"}
-    ]}
+    {description, "Performs multipe datastore operations using many threads."}
 ]).
-t1_test(Config) ->
-    [
-        #parameter{name = v1, value = ?config(p1, Config), unit = "us",
-            description = "xxx"}
-    ].
+datastore_mixed_db_test(Config) ->
+    ct:print("aaaa ~p", [performance:should_clear(Config)]),
+    datastore_basic_ops_utils:mixed_test(Config, disk_only).
+
+-performance([
+    {parameters, [
+        [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
+        [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
+        [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
+        [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
+    ]},
+    {description, "Performs multipe datastore operations using many threads."}
+]).
+datastore_mixed_global_store_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, global_only).
+
+-performance([
+    {parameters, [
+        [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
+        [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
+        [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
+        [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
+    ]},
+    {description, "Performs multipe datastore operations using many threads."}
+]).
+datastore_mixed_local_store_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, local_only).
+
+-performance([
+    {parameters, [
+        [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
+        [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
+        [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
+        [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
+    ]},
+    {description, "Performs multipe datastore operations using many threads."}
+]).
+datastore_mixed_global_cache_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, globally_cached).
+
+-performance([
+    {parameters, [
+        [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
+        [{name, docs_per_thead}, {value, 3}, {description, "Number of documents used by single threads."}],
+        [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
+        [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
+    ]},
+    {description, "Performs multipe datastore operations using many threads."}
+]).
+datastore_mixed_local_cache_test(Config) ->
+    datastore_basic_ops_utils:mixed_test(Config, locally_cached).
 
 %%%===================================================================
 
 -performance([
     {parameters, [
-        [{name, p1}, {value, 10}, {description, "xxx"}]
+        [{name, proc_num}, {value, 10}, {description, "Number of threads used during the test."}],
+        [{name, proc_repeats}, {value, 10}, {description, "Number of operations done by single threads."}]
     ]},
-    {config, [{name, stress_test},
-        {parameters, [
-            [{name, p1}, {value, 100}]
-        ]},
-        {description, "Basic config for stress test"}
-    ]}
+    {description, "Performs many one worker_proxy calls with various arguments"}
 ]).
-t2_test(Config) ->
-    [
-        #parameter{name = v1, value = ?config(p1, Config), unit = "us",
-            description = "xxx"}
-    ].
+mixed_cast_test(Config) ->
+    requests_routing_test_SUITE:mixed_cast_test_core(Config).
+
+%%%===================================================================
+
+-performance([
+    {description, "Performs operations on file meta model"}
+]).
+file_meta_basic_operations_test(Config) ->
+    model_file_meta_test_SUITE:basic_operations_test_core(Config).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
