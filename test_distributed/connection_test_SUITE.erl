@@ -44,7 +44,7 @@
 % Some connections get duplicated messages (probably from other sessions),
 % it happens only when using gen_tcp protocol.
 -performance({test_cases, [multi_message_test,
-    multi_ping_pong_test,
+%%     multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test,
     python_client_test]}).
 all() ->
