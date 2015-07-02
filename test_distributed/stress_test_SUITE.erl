@@ -39,8 +39,10 @@
 %%         event_stream_different_file_id_aggregation_test,
 %%         event_manager_multiple_subscription_test, event_manager_multiple_clients_test
     ]}, {stress_no_clearing, [
-        datastore_mixed_db_test, datastore_mixed_global_store_test, datastore_mixed_local_store_test,
-        datastore_mixed_global_cache_test, datastore_mixed_local_cache_test, file_meta_basic_operations_test
+        datastore_mixed_db_test, datastore_mixed_global_cache_test, datastore_mixed_local_cache_test,
+        file_meta_basic_operations_test
+        % TODO add no clearing option to other tests
+%%         file_meta_basic_operations_test
     ]}
 ]).
 all() ->
@@ -69,7 +71,6 @@ stress_test(Config) ->
     {description, "Performs multipe datastore operations using many threads."}
 ]).
 datastore_mixed_db_test(Config) ->
-    ct:print("aaaa ~p", [performance:should_clear(Config)]),
     datastore_basic_ops_utils:mixed_test(Config, disk_only).
 
 -performance([

@@ -439,7 +439,12 @@ mixed_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    case performance:is_stress_test() of
+        true ->
+            put(file_beg, binary_to_list(term_to_binary(os:timestamp())));
+        _ ->
+            disable_cache_clearing(Workers)
+    end,
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -532,25 +537,26 @@ mixed_test(Config, Level) ->
     ?assertEqual([], ErrorsList2),
     ?assertEqual(2*OpsNum, OkNum2),
 
+    case performance:should_clear(Config) of
+        true ->
+            TestFun6 = fun(DocsSet) ->
+                for(1, DocsPerThead, fun(I) ->
+                    BeforeProcessing = os:timestamp(),
+                    Ans = ?call_store(delete, Level, [
+                        some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                    AfterProcessing = os:timestamp(),
+                    Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+                end)
+            end,
 
-
-
-
-    TestFun6 = fun(DocsSet) ->
-        for(1, DocsPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(delete, Level, [
-                some_record, list_to_binary(DocsSet++integer_to_list(I))]),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
-        end)
+            spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun6),
+            OpsNum2 = DocsPerThead * ThreadsNum,
+            {OkNum3, _OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum2),
+            ?assertEqual([], ErrorsList3),
+            ?assertEqual(OpsNum2, OkNum3);
+        false ->
+            ok
     end,
-
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun6),
-    OpsNum2 = DocsPerThead * ThreadsNum,
-    {OkNum3, _OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum2),
-    ?assertEqual([], ErrorsList3),
-    ?assertEqual(OpsNum2, OkNum3),
 
     [
         #parameter{name = create_save_update_time, value = (OkTime+ErrorTime)/(OkNum+ErrorNum), unit = "microsek",
@@ -586,9 +592,15 @@ spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, 
     spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun);
 spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
     Master = self(),
+    FileBeg = case performance:is_stress_test() of
+        true ->
+            "_" ++ get(file_beg) ++ "_";
+        _ ->
+            "_"
+    end,
     spawn(N, fun() ->
         try
-            Fun(integer_to_list(DocsSetNum) ++ "_")
+            Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
             E1:E2 ->
                 Master ! {store_ans, {uncatched_error, E1, E2, erlang:get_stacktrace()}, 0}
