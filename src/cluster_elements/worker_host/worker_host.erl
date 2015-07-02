@@ -350,4 +350,4 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
 %%--------------------------------------------------------------------
 -spec state_table_name(Plugin :: atom()) -> atom().
 state_table_name(Plugin) ->
-    binary_to_atom(<<"worker_host_state__", (atom_to_binary(Plugin, utf8))/binary>>, utf8).
+    Plugin.
