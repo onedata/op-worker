@@ -66,8 +66,8 @@ fslogic_get_file_attr_test(Config) ->
             }
         }, ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}))
     end, [
-        {SessId1, UserId1, 8#1770, UserId1, <<"/">>},
-        {SessId2, UserId2, 8#1770, UserId2, <<"/">>},
+        {SessId1, UserId1, 8#1770, ?ROOT_USER_ID, <<"/">>},
+        {SessId2, UserId2, 8#1770, ?ROOT_USER_ID, <<"/">>},
         {SessId1, <<"spaces">>, 8#1755, ?ROOT_USER_ID, <<"/spaces">>},
         {SessId2, <<"spaces">>, 8#1755, ?ROOT_USER_ID, <<"/spaces">>},
         {SessId1, <<"space_name1">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name1">>},
@@ -184,8 +184,8 @@ fslogic_read_dir_test(Config) ->
         {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]}
     ]),
 
-    RootUUID1 = get_uuid(Worker, SessId1, <<"/">>),
-    RootUUID2 = get_uuid(Worker, SessId2, <<"/">>),
+    RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
+    RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
 
     lists:foreach(fun(Name) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
@@ -219,7 +219,7 @@ chmod_test(Config) ->
     lists:foreach(
         fun(SessId) ->
             Path = <<"/test">>,
-            ParentUUID = get_uuid(Worker, SessId, <<"/">>),
+            ParentUUID = get_uuid_privileged(Worker, SessId, <<"/">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
                 ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"test">>, mode = 8#000})),
             UUID = get_uuid(Worker, SessId, Path),
@@ -254,7 +254,7 @@ default_permissions_test(Config) ->
         lists:foreach(
             fun(SessId) ->
                 ct:print("Testing Path ~p ~p", [Path, SessId]),
-                UUID = get_uuid(Worker, SessId, Path),
+                UUID = get_uuid_privileged(Worker, SessId, Path),
 
                 ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #delete_file{uuid = UUID}))
             end, SessIds)
@@ -273,7 +273,7 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     ct:print("Testing Path ~p ~p", [Path, SessId]),
-                    UUID = get_uuid(Worker, SessId, Path),
+                    UUID = get_uuid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
@@ -290,7 +290,7 @@ default_permissions_test(Config) ->
             ct:print("Testing mkdir ~p ~p ~p ~p ~p", [Parent, Name, Mode, SessIds, Code]),
             lists:foreach(
                 fun(SessId) ->
-                    UUID = get_uuid(Worker, SessId, Parent),
+                    UUID = get_uuid_privileged(Worker, SessId, Parent),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
                         ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = Mode, name = Name}))
                 end, SessIds);
@@ -298,7 +298,7 @@ default_permissions_test(Config) ->
             ct:print("Testing delete ~p ~p ~p", [Path, SessIds, Code]),
             lists:foreach(
                 fun(SessId) ->
-                    UUID = get_uuid(Worker, SessId, Path),
+                    UUID = get_uuid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
                         ?req(Worker, SessId, #delete_file{uuid = UUID}))
                 end, SessIds);
@@ -313,7 +313,7 @@ default_permissions_test(Config) ->
             ct:print("Testing readdir ~p ~p ~p", [Path, SessIds, Code]),
             lists:foreach(
                 fun(SessId) ->
-                    UUID = get_uuid(Worker, SessId, Path),
+                    UUID = get_uuid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
                     ?req(Worker, SessId, #get_file_children{uuid = UUID}))
                 end, SessIds);
@@ -321,7 +321,7 @@ default_permissions_test(Config) ->
             ct:print("Testing chmod ~p ~.8B ~p ~p", [Path, Mode, SessIds, Code]),
                 lists:foreach(
                     fun(SessId) ->
-                        UUID = get_uuid(Worker, SessId, Path),
+                        UUID = get_uuid_privileged(Worker, SessId, Path),
                         ?assertMatch(#fuse_response{status = #status{code = Code}},
                             ?req(Worker, SessId, #change_mode{uuid = UUID, mode = Mode}))
                     end, SessIds)
@@ -365,7 +365,7 @@ default_permissions_test(Config) ->
 
 
 %% Get uuid of given by path file. Possible as root to bypass permissions checks.
-get_uuid(Worker, SessId, Path) ->
+get_uuid_privileged(Worker, SessId, Path) ->
     SessId1 = case Path of
                <<"/">> ->
                    SessId;
@@ -374,7 +374,11 @@ get_uuid(Worker, SessId, Path) ->
                _ ->
                    ?ROOT_SESS_ID
            end,
-    RootFileAttr = ?req(Worker, SessId1, #get_file_attr{entry = {path, Path}}),
+    get_uuid(Worker, SessId1, Path).
+
+
+get_uuid(Worker, SessId, Path) ->
+    RootFileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
     #fuse_response{fuse_response = #file_attr{uuid = UUID}} = RootFileAttr,
     UUID.
