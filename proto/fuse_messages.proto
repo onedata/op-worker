@@ -60,6 +60,16 @@ message UpdateTimes {
     optional int64 ctime = 4 [default = -1];
 }
 
+message ChangeMode {
+    required bytes uuid = 1;
+    required int32 mode = 2;
+}
+
+message Rename {
+    required bytes uuid = 1;
+    required bytes target_path = 2;
+}
+
 // Generic FUSE client response
 message FuseResponse {
     required Status status = 1;
