@@ -45,8 +45,7 @@
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
-
--export([to_uuid/1]).
+-export([get_ancestors/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -160,7 +159,7 @@ get({path, Path}) ->
          end);
 get(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
-    #file_meta{name = ?ROOT_DIR_NAME, is_scope = true}}};
+    #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, uid = ?ROOT_USER_ID}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -292,11 +291,33 @@ list_children(Entry, Offset, Count) ->
 -spec get_parent(Entry :: entry()) -> {ok, datastore:document()} | datastore:get_error().
 get_parent(Entry) ->
     ?run(begin
-             {ok, #document{key = Key}} = get(Entry),
-             {ok, {ParentKey, ?MODEL_NAME}} =
-                 datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
-             get({uuid, ParentKey})
+             case get(Entry) of
+                 {ok, #document{key = ?ROOT_DIR_UUID}} = RootResp ->
+                     RootResp;
+                 {ok, #document{key = Key}} ->
+                     {ok, {ParentKey, ?MODEL_NAME}} =
+                         datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+                     get({uuid, ParentKey})
+             end
          end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns all file's ancestors' uuids.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ancestors(Entry :: entry()) -> {ok, [uuid()]} | datastore:get_error().
+get_ancestors(Entry) ->
+    ?run(begin
+             {ok, #document{key = Key}} = get(Entry),
+             {ok, get_ancestors2(Key, [])}
+    end).
+get_ancestors2(?ROOT_DIR_UUID, Acc) ->
+    Acc;
+get_ancestors2(Key, Acc) ->
+    {ok, {ParentKey, ?MODEL_NAME}} = datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+    get_ancestors2(ParentKey, [ParentKey | Acc]).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -396,10 +417,11 @@ setup_onedata_user(UUID) ->
             case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
                 {ok, #document{key = Key}} -> {ok, Key};
                 {error, {not_found, _}} ->
-                    create({uuid, ?ROOT_DIR_UUID}, #file_meta{
-                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#711,
-                        mtime = CTime, atime = CTime, ctime = CTime, uid = 0
-                    })
+                    create({uuid, ?ROOT_DIR_UUID}, #document{key = ?SPACES_BASE_DIR_NAME, value = #file_meta{
+                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
+                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                        is_scope = true
+                    }})
             end,
 
         lists:foreach(fun(SpaceId) ->
@@ -409,22 +431,25 @@ setup_onedata_user(UUID) ->
                     {ok, #space_details{name = SpaceName}} =
                         gr_spaces:get_details(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID}, #document{key = SpaceId, value = #file_meta{
-                        name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#770,
-                        mtime = CTime, atime = CTime, ctime = CTime, uid = 0
+                        name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#1770,
+                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                        is_scope = true
                     }})
             end
         end, Spaces),
 
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID}, #document{key = UUID,
             value = #file_meta{
-                name = UUID, type = ?DIRECTORY_TYPE, mode = 8#770,
-                mtime = CTime, atime = CTime, ctime = CTime, uid = UUID
+                name = UUID, type = ?DIRECTORY_TYPE, mode = 8#1770,
+                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                is_scope = true
             }
         }),
         {ok, SpacesUUID} = create({uuid, RootUUID}, #document{key = fslogic_path:spaces_uuid(UUID),
             value = #file_meta{
-                name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#755,
-                mtime = CTime, atime = CTime, ctime = CTime, uid = 0
+                name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                is_scope = true
             }
         })
     catch

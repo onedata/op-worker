@@ -47,6 +47,16 @@
     ctime :: file_meta:time()
 }).
 
+-record(change_mode, {
+    uuid :: file_meta:uuid(),
+    mode :: file_meta:mode()
+}).
+
+-record(rename, {
+    uuid :: file_meta:uuid(),
+    target_path :: file_meta:path()
+}).
+
 -record(file_attr, {
     uuid :: file_meta:uuid(),
     name :: file_meta:name(),
@@ -65,7 +75,7 @@
 }).
 
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
-                        #delete_file{} | #update_times{}.
+                        #delete_file{} | #update_times{} | #change_mode{} | #rename{}.
 
 -type fuse_response() :: #file_attr{} | #file_children{}.
 

@@ -93,7 +93,7 @@
 -record(file_meta, {
     name :: file_meta:name(),
     type :: file_meta:type(),
-    mode :: file_meta:posix_permissions(),
+    mode = 0 :: file_meta:posix_permissions(),
     mtime :: file_meta:time(),
     atime :: file_meta:time(),
     ctime :: file_meta:time(),

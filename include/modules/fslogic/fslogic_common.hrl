@@ -34,4 +34,7 @@
 -define(DIRECTORY_TYPE, 'DIR').
 -define(LINK_TYPE, 'LNK').
 
+-define(ROOT_USER_ID, <<"0">>).
+-define(ROOT_SESS_ID, <<"0">>).
+
 -endif.

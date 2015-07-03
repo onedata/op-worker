@@ -83,6 +83,10 @@ translate_from_protobuf(#'DeleteFile'{uuid = UUID}) ->
 translate_from_protobuf(#'UpdateTimes'{uuid = UUID, atime = ATime, mtime = MTime,
     ctime = CTime}) ->
     #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime};
+translate_from_protobuf(#'ChangeMode'{uuid = UUID, mode = Mode}) ->
+    #change_mode{uuid = UUID, mode = Mode};
+translate_from_protobuf(#'Rename'{uuid = UUID, target_path = TargetPath}) ->
+    #rename{uuid = UUID, target_path = TargetPath};
 translate_from_protobuf(undefined) ->
     undefined.
 

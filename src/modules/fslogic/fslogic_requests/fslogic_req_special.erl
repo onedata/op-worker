@@ -29,6 +29,7 @@
 -spec mkdir(Ctx :: fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{}.
+-check_permissions([{write, 2}, {exec, 2}]).
 mkdir(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = Ctx,
     UUID, Name, Mode) ->
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(Ctx),
@@ -60,6 +61,7 @@ mkdir(Ctx, ParentUUID, Name, Mode) ->
 -spec read_dir(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file(),
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{}.
+-check_permissions([{read, 2}]).
 read_dir(Ctx, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),

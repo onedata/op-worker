@@ -126,6 +126,8 @@ basic_operations_test(Config) ->
     ?assertMatch({ok, [#child_link{uuid = U2}]}, ?call(Worker1, list_children, [{path, <<"/spaces">>}, 0, 10])),
     ?assertMatch({ok, []}, ?call(Worker1, list_children, [{path, <<"/spaces/Space 1/dir2/file3">>}, 0, 10])),
 
+    ?assertMatch({ok, [<<"">>, U1, U2, U20]}, ?call(Worker1, get_ancestors, [{path, <<"/spaces/Space 1/dir2/file3">>}])),
+
     {{A15, U15}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 0, 20]),
     {{A15_2, U15_2}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 0, 100]),
     {{A15_3, U15_3}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 0, 1000]),

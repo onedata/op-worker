@@ -30,11 +30,22 @@
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
-
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
     no_return().
-%%-check_permissions({owner, 2}).
-chmod(_, _File, _Mode) ->
+-check_permissions({owner, 2}).
+chmod(_CTX, File, Mode) ->
+    {ok, _} = file_meta:update(File, #{mode => Mode}),
+    #fuse_response{status = #status{code = ?OK}}.
+
+%%--------------------------------------------------------------------
+%% @doc Changes file owner.
+%% For best performance use following arg types: document -> uuid -> path
+%% @end
+%%--------------------------------------------------------------------
+-spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
+    no_return().
+-check_permissions(root).
+chown(_, _File, _UserId) ->
     ?NOT_IMPLEMENTED.
 
 %%--------------------------------------------------------------------
@@ -44,6 +55,7 @@ chmod(_, _File, _Mode) ->
 %%--------------------------------------------------------------------
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{}.
+-check_permissions({none, 2}).
 get_file_attr(Ctx, File) ->
     ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
@@ -66,7 +78,7 @@ get_file_attr(Ctx, File) ->
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{}.
-%%-check_permissions({write, {parent, 2}}).
+-check_permissions([{write, {parent, 2}}, {owner_if_parent_sticky, 2}]).
 delete_file(_, File) ->
     {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
     {ok, FileChildren} = case Type of
@@ -90,11 +102,12 @@ delete_file(_, File) ->
 %% For best performance use following arg types: path -> uuid -> document
 %% @end
 %%--------------------------------------------------------------------
--spec rename_file(fslogic_worker:ctx(), SourcePath :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
+-spec rename_file(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
     no_return().
-%%-check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
-rename_file(_, _SourcePath, _TargetPath) ->
-    ?NOT_IMPLEMENTED.
+-check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
+rename_file(_, SourceEntry, TargetPath) ->
+    ?info("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
+    ok = file_meta:rename(SourceEntry, {path, TargetPath}).
 
 %%--------------------------------------------------------------------
 %% Internal functions

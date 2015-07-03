@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore_model.hrl").
 
 -include("proto/oneclient/handshake_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 
 %% model_behaviour callbacks
@@ -67,6 +68,8 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+get(?ROOT_USER_ID) ->
+    {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 

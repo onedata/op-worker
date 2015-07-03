@@ -29,14 +29,18 @@
 -export([
     fslogic_get_file_attr_test/1,
     fslogic_mkdir_and_rmdir_test/1,
-    fslogic_read_dir_test/1
+    fslogic_read_dir_test/1,
+    chmod_test/1,
+    default_permissions_test/1
 ]).
 
 -performance({test_cases, []}).
 all() -> [
     fslogic_get_file_attr_test,
     fslogic_mkdir_and_rmdir_test,
-    fslogic_read_dir_test
+    fslogic_read_dir_test,
+    chmod_test,
+    default_permissions_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -62,14 +66,14 @@ fslogic_get_file_attr_test(Config) ->
             }
         }, ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}))
     end, [
-        {SessId1, UserId1, 8#770, UserId1, <<"/">>},
-        {SessId2, UserId2, 8#770, UserId2, <<"/">>},
-        {SessId1, <<"spaces">>, 8#755, 0, <<"/spaces">>},
-        {SessId2, <<"spaces">>, 8#755, 0, <<"/spaces">>},
-        {SessId1, <<"space_name1">>, 8#770, 0, <<"/spaces/space_name1">>},
-        {SessId2, <<"space_name2">>, 8#770, 0, <<"/spaces/space_name2">>},
-        {SessId1, <<"space_name3">>, 8#770, 0, <<"/spaces/space_name3">>},
-        {SessId2, <<"space_name4">>, 8#770, 0, <<"/spaces/space_name4">>}
+        {SessId1, UserId1, 8#1770, UserId1, <<"/">>},
+        {SessId2, UserId2, 8#1770, UserId2, <<"/">>},
+        {SessId1, <<"spaces">>, 8#1755, ?ROOT_USER_ID, <<"/spaces">>},
+        {SessId2, <<"spaces">>, 8#1755, ?ROOT_USER_ID, <<"/spaces">>},
+        {SessId1, <<"space_name1">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name1">>},
+        {SessId2, <<"space_name2">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name2">>},
+        {SessId1, <<"space_name3">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name3">>},
+        {SessId2, <<"space_name4">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir">>}}
@@ -77,8 +81,8 @@ fslogic_get_file_attr_test(Config) ->
 
 fslogic_mkdir_and_rmdir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
     RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
     RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
@@ -128,10 +132,10 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
 fslogic_read_dir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    {SessId3, UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
-    {SessId4, UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
 
     ValidateReadDir = fun({SessId, Path, NameList}) ->
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
@@ -151,7 +155,7 @@ fslogic_read_dir_test(Config) ->
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
 
-                                ct:print("Testing readdir with Path ~p, Offset ~p, Size ~p: ~p", [Path, Offset, Size, Links]),
+%%                                 ct:print("Testing readdir with Path ~p, Offset ~p, Size ~p: ~p", [Path, Offset, Size, Links]),
 
                                 RespNames = lists:map(
                                     fun(#child_link{uuid = _, name = Name}) ->
@@ -180,14 +184,8 @@ fslogic_read_dir_test(Config) ->
         {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]}
     ]),
 
-    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
-    #fuse_response{fuse_response = #file_attr{uuid = RootUUID1}} = RootFileAttr1,
-
-    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
-    #fuse_response{fuse_response = #file_attr{uuid = RootUUID2}} = RootFileAttr2,
-
+    RootUUID1 = get_uuid(Worker, SessId1, <<"/">>),
+    RootUUID2 = get_uuid(Worker, SessId2, <<"/">>),
 
     lists:foreach(fun(Name) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
@@ -210,6 +208,176 @@ fslogic_read_dir_test(Config) ->
     ]),
 
     ok.
+
+chmod_test(Config) ->
+    [Worker, _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+
+    lists:foreach(
+        fun(SessId) ->
+            Path = <<"/test">>,
+            ParentUUID = get_uuid(Worker, SessId, <<"/">>),
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}},
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"test">>, mode = 8#000})),
+            UUID = get_uuid(Worker, SessId, Path),
+
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}},
+                ?req(Worker, SessId, #change_mode{uuid = UUID, mode = 8#123})),
+
+            FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
+            #fuse_response{fuse_response = #file_attr{uuid = UUID, mode = 8#123}} = FileAttr
+
+        end, [SessId1, SessId2, SessId3, SessId4]),
+
+    ok.
+
+
+default_permissions_test(Config) ->
+    [Worker, _] = Workers = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+
+    test_utils:mock_new(Workers, check_permissions),
+    test_utils:mock_expect(Workers, check_permissions, validate_scope_access,
+        fun(_, _, _) ->
+            ok
+        end),
+
+    lists:foreach( %% File
+    fun({Path, SessIds}) ->
+        lists:foreach(
+            fun(SessId) ->
+                ct:print("Testing Path ~p ~p", [Path, SessId]),
+                UUID = get_uuid(Worker, SessId, Path),
+
+                ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #delete_file{uuid = UUID}))
+            end, SessIds)
+
+    end, [
+            {<<"/">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name1">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name2">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name3">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name4">>, [SessId1, SessId2, SessId3, SessId4]}
+    ]),
+
+    lists:foreach( %% File
+        fun({Path, SessIds}) ->
+            lists:foreach(
+                fun(SessId) ->
+                    ct:print("Testing Path ~p ~p", [Path, SessId]),
+                    UUID = get_uuid(Worker, SessId, Path),
+                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
+                end, SessIds)
+
+        end, [
+                {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
+                {<<"/spaces/space_name1">>, [SessId2, SessId3, SessId4]},
+                {<<"/spaces/space_name2">>, [SessId3, SessId4]},
+                {<<"/spaces/space_name3">>, [SessId4]},
+                {<<"/spaces/space_name4">>, []}
+        ]),
+
+    lists:foreach(fun %% File
+        ({mkdir, Parent, Name, Mode, SessIds, Code}) ->
+            ct:print("Testing mkdir ~p ~p ~p ~p ~p", [Parent, Name, Mode, SessIds, Code]),
+            lists:foreach(
+                fun(SessId) ->
+                    UUID = get_uuid(Worker, SessId, Parent),
+                    ?assertMatch(#fuse_response{status = #status{code = Code}},
+                        ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = Mode, name = Name}))
+                end, SessIds);
+        ({delete, Path, SessIds, Code}) ->
+            ct:print("Testing delete ~p ~p ~p", [Path, SessIds, Code]),
+            lists:foreach(
+                fun(SessId) ->
+                    UUID = get_uuid(Worker, SessId, Path),
+                    ?assertMatch(#fuse_response{status = #status{code = Code}},
+                        ?req(Worker, SessId, #delete_file{uuid = UUID}))
+                end, SessIds);
+        ({get_attr, Path, SessIds, Code}) ->
+            ct:print("Testing get_attr ~p ~p ~p", [Path, SessIds, Code]),
+            lists:foreach(
+                fun(SessId) ->
+                    ?assertMatch(#fuse_response{status = #status{code = Code}},
+                        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}))
+                end, SessIds);
+        ({readdir, Path, SessIds, Code}) ->
+            ct:print("Testing readdir ~p ~p ~p", [Path, SessIds, Code]),
+            lists:foreach(
+                fun(SessId) ->
+                    UUID = get_uuid(Worker, SessId, Path),
+                    ?assertMatch(#fuse_response{status = #status{code = Code}},
+                    ?req(Worker, SessId, #get_file_children{uuid = UUID}))
+                end, SessIds);
+        ({chmod, Path, Mode, SessIds, Code}) ->
+            ct:print("Testing chmod ~p ~.8B ~p ~p", [Path, Mode, SessIds, Code]),
+                lists:foreach(
+                    fun(SessId) ->
+                        UUID = get_uuid(Worker, SessId, Path),
+                        ?assertMatch(#fuse_response{status = #status{code = Code}},
+                            ?req(Worker, SessId, #change_mode{uuid = UUID, mode = Mode}))
+                    end, SessIds)
+        end,
+        [
+            {mkdir, <<"/spaces/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
+            {mkdir, <<"/spaces/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
+            {mkdir, <<"/spaces/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
+            {get_attr, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {get_attr, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {get_attr, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {get_attr, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {mkdir, <<"/spaces/space_name4">>, <<"test">>, 8#740, [SessId4], ?OK},
+            {mkdir, <<"/spaces/space_name4/test">>, <<"test">>, 8#1770, [SessId4], ?OK},
+            {mkdir, <<"/spaces/space_name4/test/test">>, <<"test">>, 8#730, [SessId4], ?OK},
+            {readdir, <<"/spaces/space_name4/test/test/test">>, [SessId4], ?OK},
+            {readdir, <<"/spaces/space_name4/test/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/spaces/space_name4/test/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/spaces/space_name4/test/test/test">>, [SessId4], ?OK},
+            {delete, <<"/spaces/space_name4/test/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/spaces/space_name4/test/test">>, [SessId4], ?OK},
+            {delete, <<"/spaces/space_name4/test">>, [SessId1, SessId2, SessId3], ?EACCES},
+            {delete, <<"/spaces/space_name4/test">>, [SessId4], ?OK},
+            {chmod, <<"/">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {chmod, <<"/spaces">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {chmod, <<"/spaces/space_name1">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {chmod, <<"/spaces/space_name2">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {chmod, <<"/spaces/space_name3">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {chmod, <<"/spaces/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {mkdir, <<"/spaces/space_name4">>, <<"test">>, 8#740, [SessId3], ?OK},
+            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId1, SessId2, SessId4], ?EACCES},
+            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId3], ?OK}
+        ]),
+
+    test_utils:mock_unload(Workers, [check_permissions]),
+    ok.
+
+
+%% Get uuid of given by path file. Possible as root to bypass permissions checks.
+get_uuid(Worker, SessId, Path) ->
+    SessId1 = case Path of
+               <<"/">> ->
+                   SessId;
+               <<"/spaces">> ->
+                   SessId;
+               _ ->
+                   ?ROOT_SESS_ID
+           end,
+    RootFileAttr = ?req(Worker, SessId1, #get_file_attr{entry = {path, Path}}),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
+    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = RootFileAttr,
+    UUID.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
