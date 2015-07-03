@@ -107,7 +107,8 @@ delete_file(_, File) ->
 -check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
 rename_file(_, SourceEntry, TargetPath) ->
     ?info("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
-    ok = file_meta:rename(SourceEntry, {path, TargetPath}).
+    ok = file_meta:rename(SourceEntry, {path, TargetPath}),
+    #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
 %% Internal functions

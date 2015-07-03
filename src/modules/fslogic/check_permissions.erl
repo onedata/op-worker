@@ -139,7 +139,7 @@ resolve_file_entry({parent, Item}, Inputs) ->
     fslogic_utils:get_parent(resolve_file_entry(Item, Inputs)).
 
 
--spec validate_posix_access(AccessType :: access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
+-spec validate_scope_access(AccessType :: access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_scope_access(_AccessType, _FileDoc, _UserId) ->
     ok.
 
