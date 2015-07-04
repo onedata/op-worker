@@ -119,7 +119,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(global_cc_bucket, get_hooks_config()).
+    ?MODEL_CONFIG(global_cc_bucket, get_hooks_config(),
+        ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL, false).
 
 %%--------------------------------------------------------------------
 %% @doc
