@@ -253,7 +253,7 @@ init_per_testcase(Case, Config) when
     Case =:= no_transactions_save_global_store_test;
     Case =:= no_transactions_update_global_store_test  ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, some_record),
+    test_utils:mock_new(Workers, some_record, [passthrough]),
     test_utils:mock_expect(Workers, some_record, model_init, fun() ->
         #model_config{name = some_record,
             size = record_info(size, some_record),
@@ -261,11 +261,14 @@ init_per_testcase(Case, Config) when
             defaults = #some_record{},
             bucket = test_bucket,
             hooks = [{some_record, update}],
-            store_level = ?GLOBALLY_CACHED_LEVEL,
-            link_store_level = ?GLOBALLY_CACHED_LEVEL,
+            store_level = globally_cached, % use of macro results in test errors
+            link_store_level = globally_cached,
             transactional_global_cache = false
         }
     end),
+    Config;
+
+init_per_testcase(_, Config) ->
     Config.
 
 end_per_testcase(Case, Config) when
@@ -273,4 +276,7 @@ end_per_testcase(Case, Config) when
     Case =:= no_transactions_save_global_store_test;
     Case =:= no_transactions_update_global_store_test  ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [some_record]).
+    test_utils:mock_unload(Workers, [some_record]);
+
+end_per_testcase(_, Config) ->
+    ok.
