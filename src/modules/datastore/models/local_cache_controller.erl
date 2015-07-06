@@ -119,7 +119,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(global_cc_bucket, get_hooks_config(),
+    ?MODEL_CONFIG(local_cc_bucket, get_hooks_config(),
         ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL, false).
 
 %%--------------------------------------------------------------------
@@ -170,7 +170,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec get_hooks_config() -> list().
 get_hooks_config() ->
-    caches_controller:get_hooks_config(?GLOBAL_CACHES).
+    caches_controller:get_hooks_config(?LOCAL_CACHES).
 
 %%--------------------------------------------------------------------
 %% @private
