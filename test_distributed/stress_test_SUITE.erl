@@ -53,7 +53,7 @@ all() ->
 %% ====================================================================
 
 -performance([
-    {description, "Performs stress test"},
+    {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
     {config, [{name, stress}, {description, "Basic config for stress test"}]}
 ]).
 stress_test(Config) ->
@@ -68,7 +68,7 @@ stress_test(Config) ->
         [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
         [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
     ]},
-    {description, "Performs multipe datastore operations using many threads."}
+    {description, "Performs multiple datastore operations using many threads. Level - database."}
 ]).
 datastore_mixed_db_test(Config) ->
     datastore_basic_ops_utils:mixed_test(Config, disk_only).
@@ -80,7 +80,7 @@ datastore_mixed_db_test(Config) ->
         [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
         [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
     ]},
-    {description, "Performs multipe datastore operations using many threads."}
+    {description, "Performs multiple datastore operations using many threads. Level - global store."}
 ]).
 datastore_mixed_global_store_test(Config) ->
     datastore_basic_ops_utils:mixed_test(Config, global_only).
@@ -92,7 +92,7 @@ datastore_mixed_global_store_test(Config) ->
         [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
         [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
     ]},
-    {description, "Performs multipe datastore operations using many threads."}
+    {description, "Performs multiple datastore operations using many threads. Level - local store."}
 ]).
 datastore_mixed_local_store_test(Config) ->
     datastore_basic_ops_utils:mixed_test(Config, local_only).
@@ -104,7 +104,7 @@ datastore_mixed_local_store_test(Config) ->
         [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
         [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
     ]},
-    {description, "Performs multipe datastore operations using many threads."}
+    {description, "Performs multiple datastore operations using many threads. Level - global cache."}
 ]).
 datastore_mixed_global_cache_test(Config) ->
     datastore_basic_ops_utils:mixed_test(Config, globally_cached).
@@ -116,7 +116,7 @@ datastore_mixed_global_cache_test(Config) ->
         [{name, ops_per_doc}, {value, 5}, {description, "Number of oprerations on each document."}],
         [{name, conflicted_threads}, {value, 10}, {description, "Number of threads that work with the same documents set."}]
     ]},
-    {description, "Performs multipe datastore operations using many threads."}
+    {description, "Performs multiple datastore operations using many threads. Level - local cache."}
 ]).
 datastore_mixed_local_cache_test(Config) ->
     datastore_basic_ops_utils:mixed_test(Config, locally_cached).
