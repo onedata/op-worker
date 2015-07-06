@@ -63,14 +63,14 @@ parser.add_argument(
     dest='stress')
 
 parser.add_argument(
-    '--stress_no_clearing', '-str_nc',
+    '--stress-no-clearing', '-str-nc',
     action='store_true',
     default=False,
     help='run stress tests without clearing data between test cases',
     dest='stress_no_clearing')
 
 parser.add_argument(
-    '--stress_time', '-st',
+    '--stress-time', '-st',
     action='append',
     help='time of stress test in sek',
     dest='stress_time')
