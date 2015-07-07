@@ -39,6 +39,7 @@
     {ok, pid(), State :: term()} |
     {error, Reason :: term()}).
 start(_StartType, _StartArgs) ->
+    test_node_starter:start_cover(),
     op_ccm_sup:start_link().
 
 %%--------------------------------------------------------------------
@@ -52,6 +53,7 @@ start(_StartType, _StartArgs) ->
 %%--------------------------------------------------------------------
 -spec(stop(State :: term()) -> term()).
 stop(_State) ->
+    test_node_starter:stop_cover(),
     ok.
 
 %%%===================================================================
