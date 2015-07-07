@@ -1,5 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
+%%% @author Lukasz Opiola
 %%% @copyright (C) 2014 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -11,18 +12,86 @@
 %%%-------------------------------------------------------------------
 -module(oneprovider).
 -author("Rafal Slota").
+-author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-define(GRPKEY_ENV, grpkey_path).
+-define(GRPCSR_ENV, grpcsr_path).
+-define(GRPCERT_ENV, grpcert_path).
+
 %% API
+-export([register_in_gr/3, register_in_gr_dev/3, save_file/2]).
 -export([get_provider_id/0, get_globalregistry_cert/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Registers in GR using config from app.src (cert locations).
+%% @end
+%%--------------------------------------------------------------------
+-spec register_in_gr(KeyFilePassword :: string(), RedirectionPoint :: binary(),
+    ClientName :: binary()) -> ok | {error, term()}.
+register_in_gr(KeyFilePassword, RedirectionPoint, ProviderName) ->
+    GRPKeyPath = gr_plugin:get_key_path(),
+    GRPCertPath = gr_plugin:get_cert_path(),
+    {ok, GRPCSRPath} = gr_plugin:get_csr_path(),
+    % Create a CSR
+    0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
+    {ok, CSR} = file:read_file(GRPCSRPath),
+    {ok, Key} = file:read_file(GRPKeyPath),
+    % Send signing request to GR
+    {ok, IpAddress} = gr_providers:check_ip_address(provider),
+    Parameters = [
+        {<<"urls">>, [IpAddress]},
+        {<<"csr">>, CSR},
+        {<<"redirectionPoint">>, RedirectionPoint},
+        {<<"clientName">>, ProviderName}
+    ],
+    {ok, ProviderId, Cert} = gr_providers:register(provider, Parameters),
+    ok = file:write_file(GRPCertPath, Cert),
+    OtherWorkers = gen_server:call({global, cluster_manager}, get_nodes) -- [node()],
+    save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
+    save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
+    {ok, ProviderId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Registers in GR using config from app.src (cert locations).
+%% @end
+%%--------------------------------------------------------------------
+-spec register_in_gr_dev(KeyFilePassword :: string(), RedirectionPoint :: binary(),
+    ClientName :: binary()) -> ok | {error, term()}.
+register_in_gr_dev(KeyFilePassword, RedirectionPoint, ProviderName) ->
+    GRPKeyPath = gr_plugin:get_key_path(),
+    GRPCertPath = gr_plugin:get_cert_path(),
+    GRPCSRPath = gr_plugin:get_csr_path(),
+    % Create a CSR
+    0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
+    {ok, CSR} = file:read_file(GRPCSRPath),
+    {ok, Key} = file:read_file(GRPKeyPath),
+    % Send signing request to GR
+    {ok, IpAddress} = gr_providers:check_ip_address(provider),
+    Parameters = [
+        {<<"urls">>, [IpAddress]},
+        {<<"csr">>, CSR},
+        {<<"redirectionPoint">>, RedirectionPoint},
+        {<<"clientName">>, ProviderName},
+        {<<"uuid">>, ProviderName}
+    ],
+    {ok, ProviderId, Cert} = gr_providers:register_with_uuid(provider, Parameters),
+    ok = file:write_file(GRPCertPath, Cert),
+    OtherWorkers = gen_server:call({global, cluster_manager}, get_nodes) -- [node()],
+    save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
+    save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
+    {ok, ProviderId}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -88,4 +157,50 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
     end, Attrs),
 
     utils:ensure_binary(ProviderId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves given file on given hosts.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_file_on_hosts(Hosts :: [atom()], Path :: file:name_all(), Content :: binary()) ->
+    ok | {error, [{node(), Reason :: term()}]}.
+save_file_on_hosts(Hosts, Path, Content) ->
+    Res = lists:foldl(
+        fun(Host, Acc) ->
+            case rpc:call(Host, ?MODULE, save_file, [Path, Content]) of
+                ok ->
+                    Acc;
+                {error, Reason} ->
+                    [{Host, Reason} | Acc]
+            end
+        end, [], Hosts),
+    case Res of
+        [] -> ok;
+        Other -> Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves given file under given path.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_file(Path :: file:name_all(), Content :: binary()) -> ok | {error, term()}.
+save_file(Path, Content) ->
+    try
+        file:make_dir(Path),
+        ok = file:write_file(Path, Content),
+        ok
+    catch
+        _:Reason ->
+            ?error("Cannot save file ~p ~p", [Path, Reason]),
+            {error, node()}
+    end.
+
+
+
+
+
+
 
