@@ -21,6 +21,8 @@ import platform
 import sys
 import time
 import re
+import shutil
+import json
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
@@ -55,6 +57,13 @@ parser.add_argument(
     help='run performance tests',
     dest='performance')
 
+parser.add_argument(
+    '--cover', '-cv',
+    action='store_true',
+    default=False,
+    help='run cover analysis',
+    dest='cover')
+
 args = parser.parse_args()
 script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
@@ -72,6 +81,8 @@ with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
         if 'incl_dirs_r' in line:
             dirs_string = re.search(r'\[(.*?)\]', line).group(1)
             dirs = [os.path.join(script_dir, d[1:]) for d in
+                    dirs_string.split(', ')]
+            docker_dirs = [os.path.join('/root/build', d[1:-1]) for d in
                     dirs_string.split(', ')]
         else:
             print(line, file=cover)
@@ -107,8 +118,31 @@ if args.cases:
 
 if args.performance:
     ct_command.extend(['-env', 'performance', 'true'])
-else:
+
+if args.cover:
     ct_command.extend(['-cover', 'cover_tmp.spec'])
+    env_descs = glob.glob(
+        os.path.join(script_dir, 'test_distributed', '*', 'env_desc.json'))
+    for file in env_descs:
+        shutil.copyfile(file, file + '_tmp')
+        with open(file, "r") as jsonFile:
+            data = json.load(jsonFile)
+
+            if data.has_key("op_worker"):
+                for key in data["op_worker"]["nodes"].keys():
+                    data["op_worker"]["nodes"][key]["sys.config"]["covered_dirs"] = docker_dirs
+
+            if data.has_key("op_ccm"):
+                for key in data["op_ccm"]["nodes"].keys():
+                    data["op_ccm"]["nodes"][key]["sys.config"]["covered_dirs"] = docker_dirs
+
+            if data.has_key("globalregistry"):
+                for key in data["globalregistry"]["nodes"].keys():
+                    data["globalregistry"]["nodes"][key]["sys.config"]["covered_dirs"] = docker_dirs
+
+            with open(file, "w") as jsonFile:
+                jsonFile.write(json.dumps(data))
+
 
 command = '''
 import os, subprocess, sys, stat
@@ -154,4 +188,9 @@ ret = docker.run(tty=True,
                  command=['python', '-c', command])
 
 os.remove(new_cover)
+if args.cover:
+    for file in env_descs:
+        os.remove(file)
+        shutil.move(file + '_tmp', file)
+
 sys.exit(ret)
