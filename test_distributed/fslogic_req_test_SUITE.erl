@@ -108,6 +108,14 @@ fslogic_mkdir_and_rmdir_test(Config) ->
         {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
     end,
 
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId1,
+        #create_dir{parent_uuid = RootUUID1, name = <<"double">>, mode = 8#755}
+    )),
+    ?assertMatch(#fuse_response{status = #status{code = ?EEXIST}}, ?req(Worker, SessId1,
+        #create_dir{parent_uuid = RootUUID1, name = <<"double">>, mode = 8#755}
+    )),
+
+
     {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
     {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<>>, RootUUID2, []}, [<<"dir4">>, <<"dir5">>, <<"dir6">>]),
 

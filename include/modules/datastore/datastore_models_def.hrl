@@ -97,7 +97,7 @@
     mtime :: file_meta:time(),
     atime :: file_meta:time(),
     ctime :: file_meta:time(),
-    uid :: file_meta:uuid(),
+    uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
     is_scope = false :: boolean()
 }).

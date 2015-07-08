@@ -128,18 +128,27 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{} = Parent, #document{value = #file_meta{name = FileName}} = FileDoc) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName}} = FileDoc) ->
     ?run(begin
-             case create(FileDoc) of
-                 {ok, UUID} ->
-                     SavedDoc = FileDoc#document{key = UUID},
-                     {ok, Scope} = get_scope(Parent),
-                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                     ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
-                     {ok, UUID};
-                 {error, Reason} ->
-                     {error, Reason}
-             end
+             datastore:run_synchronized(?MODEL_NAME, ParentUUID,
+                 fun() ->
+                     case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
+                         {error, {not_found, _}} ->
+                             case create(FileDoc) of
+                                 {ok, UUID} ->
+                                     SavedDoc = FileDoc#document{key = UUID},
+                                     {ok, Scope} = get_scope(Parent),
+                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                     ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
+                                     {ok, UUID};
+                                 {error, Reason} ->
+                                     {error, Reason}
+                             end;
+                         {ok, _} ->
+                             {error, already_exists}
+                     end
+                 end)
+
          end).
 
 %%--------------------------------------------------------------------
@@ -339,20 +348,24 @@ gen_path(Entry) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_path(path()) -> {ok, {datastore:document(), [uuid()]}} | datastore:generic_error().
-resolve_path(<<?DIRECTORY_SEPARATOR, Path/binary>>) ->
+resolve_path(Path) ->
+    resolve_path({uuid, ?ROOT_DIR_UUID}, Path).
+
+-spec resolve_path(Parent :: entry(), path()) -> {ok, {datastore:document(), [uuid()]}} | datastore:generic_error().
+resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
     ?run(begin
+             {ok, #document{key = RootUUID} = Root} = get(ParentEntry),
              case fslogic_path:split(Path) of
                  [] ->
-                     {ok, #document{key = RootUUID} = Root} = get(?ROOT_DIR_UUID),
                      {ok, {Root, [RootUUID]}};
                  Tokens ->
-                     case datastore:link_walk(?LINK_STORE_LEVEL, ?RESPONSE(get(?ROOT_DIR_UUID)), Tokens, get_leaf) of
+                     case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
                          {ok, {Leaf, KeyPath}} ->
-                             [_ | [RealParentUUID | _]] = lists:reverse([?ROOT_DIR_UUID | KeyPath]),
+                             [_ | [RealParentUUID | _]] = lists:reverse([RootUUID | KeyPath]),
                              {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
                              case ParentUUID of
                                  RealParentUUID ->
-                                     {ok, {Leaf, [?ROOT_DIR_UUID | KeyPath]}};
+                                     {ok, {Leaf, [RootUUID | KeyPath]}};
                                  _ ->
                                      {error, ghost_file}
                              end;
