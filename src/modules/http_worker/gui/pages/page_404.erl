@@ -20,8 +20,7 @@
 -export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
-main() -> <<"ok">>.
-
+main() -> <<"error 404">>.
 
 event(init) -> ok;
 event(terminate) -> ok.

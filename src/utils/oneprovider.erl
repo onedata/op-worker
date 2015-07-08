@@ -48,10 +48,11 @@ register_in_gr(NodeList, KeyFilePassword, ProviderName) ->
     {ok, Key} = file:read_file(GRPKeyPath),
     % Send signing request to GR
     IPAddresses = get_all_nodes_ips(NodeList),
+    RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
     Parameters = [
         {<<"urls">>, IPAddresses},
         {<<"csr">>, CSR},
-        {<<"redirectionPoint">>, hd(IPAddresses)},
+        {<<"redirectionPoint">>, RedirectionPoint},
         {<<"clientName">>, ProviderName}
     ],
     {ok, ProviderId, Cert} = gr_providers:register(provider, Parameters),
@@ -79,10 +80,11 @@ register_in_gr_dev(NodeList, KeyFilePassword, ProviderName) ->
     {ok, Key} = file:read_file(GRPKeyPath),
     % Send signing request to GR
     IPAddresses = get_all_nodes_ips(NodeList),
+    RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
     Parameters = [
         {<<"urls">>, IPAddresses},
         {<<"csr">>, CSR},
-        {<<"redirectionPoint">>, hd(IPAddresses)},
+        {<<"redirectionPoint">>, RedirectionPoint},
         {<<"clientName">>, ProviderName},
         {<<"uuid">>, ProviderName}
     ],
