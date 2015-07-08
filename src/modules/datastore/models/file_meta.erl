@@ -418,7 +418,7 @@ get_scope(Entry) ->
 %% Initializes files metadata for onedata user.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(UUID :: uuid()) -> ok.
+-spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.
 setup_onedata_user(UUID) ->
     try
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
