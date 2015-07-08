@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
+%%% @author Rafal Slota
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -31,6 +31,7 @@
     fslogic_mkdir_and_rmdir_test/1,
     fslogic_read_dir_test/1,
     chmod_test/1,
+    simple_rename_test/1,
     default_permissions_test/1
 ]).
 
@@ -40,6 +41,7 @@ all() -> [
     fslogic_mkdir_and_rmdir_test,
     fslogic_read_dir_test,
     chmod_test,
+    simple_rename_test,
     default_permissions_test
 ].
 
@@ -369,6 +371,57 @@ default_permissions_test(Config) ->
         ]),
 
     test_utils:mock_unload(Workers, [check_permissions]),
+    ok.
+
+
+simple_rename_test(Config) ->
+    [Worker, _] = Workers = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+
+    RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
+    RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
+
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID1}} = RootFileAttr1,
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID2}} = RootFileAttr2,
+
+    MakeTree =
+        fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
+            NewPath = <<Path/binary, "/", Leaf/binary>>,
+            ct:print("NewPath ~p with parent ~p", [NewPath, ParentUUID]),
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId,
+                #create_dir{parent_uuid = ParentUUID, name = Leaf, mode = 8#755}
+            )),
+
+            FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, NewPath}}),
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
+            ?assertEqual(FileAttr, ?req(Worker, SessId, #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
+            #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
+
+            {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
+        end,
+
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
+    [_, ToMove | _] = lists:reverse(UUIDs1),
+
+    RenameResp1 = ?req(Worker, SessId1, #rename{uuid = ToMove, target_path = <<"/spaces/space_name2/dir4">>}),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RenameResp1),
+
+    MovedFileAttr1 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/dir4">>}}),
+    MovedFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/dir4/dir3">>}}),
+    MovedFileAttr3 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir1/dir2">>}}),
+    MovedFileAttr4 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir1/dir2/dir3">>}}),
+
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr1),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr2),
+
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, MovedFileAttr3),
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, MovedFileAttr4),
+
     ok.
 
 

@@ -487,7 +487,7 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {na
              {ok, FileUUID} = update(Subject, #{name => NewName}),
              ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, {FileUUID, ?MODEL_NAME}}),
              ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName),
-             {ok, FileUUID}
+             ok
          end);
 rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, {path, NewPath}) ->
     ?run(begin
@@ -505,7 +505,7 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, 
 
              ok = update_scopes(Subject, NewScope),
 
-             {ok, FileUUID}
+             ok
          end).
 
 %%--------------------------------------------------------------------

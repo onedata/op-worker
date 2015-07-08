@@ -104,11 +104,16 @@ delete_file(_, File) ->
 %%--------------------------------------------------------------------
 -spec rename_file(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
     no_return().
--check_permissions([{write, {parent, {path, 2}}}, {write, {parent, {path, 3}}}]).
+-check_permissions([{write, {parent, 2}}, {write, {parent, {path, 3}}}]).
 rename_file(_, SourceEntry, TargetPath) ->
     ?info("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
-    ok = file_meta:rename(SourceEntry, {path, TargetPath}),
-    #fuse_response{status = #status{code = ?OK}}.
+    case file_meta:exists({path, TargetPath}) of
+        true ->
+            #fuse_response{status = #status{code = ?EEXIST}};
+        false ->
+            ok = file_meta:rename(SourceEntry, {path, TargetPath}),
+            #fuse_response{status = #status{code = ?OK}}
+    end.
 
 %%--------------------------------------------------------------------
 %% Internal functions
