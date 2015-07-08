@@ -29,6 +29,11 @@
 -export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
     handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
 
+%% export for unit tests
+-ifdef(TEST).
+-export([parse_domain/1]).
+-endif.
+
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
