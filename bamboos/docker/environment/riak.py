@@ -17,7 +17,7 @@ RIAK_READY_WAIT_SECONDS = 60 * 5
 
 
 def _riak(cluster_name, node_num):
-    return 'riak_{0}_{1}'.format(cluster_name, node_num)
+    return 'riak{0}_{1}'.format(node_num, cluster_name)
 
 
 def config_entry(cluster_name, node_num, uid):

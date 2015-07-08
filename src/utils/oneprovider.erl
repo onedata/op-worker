@@ -36,9 +36,9 @@
 %% Registers in GR using config from app.src (cert locations).
 %% @end
 %%--------------------------------------------------------------------
--spec register_in_gr(KeyFilePassword :: string(), RedirectionPoint :: binary(),
-    ClientName :: binary()) -> ok | {error, term()}.
-register_in_gr(KeyFilePassword, RedirectionPoint, ProviderName) ->
+-spec register_in_gr(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
+    ok | {error, term()}.
+register_in_gr(NodeList, KeyFilePassword, ProviderName) ->
     GRPKeyPath = gr_plugin:get_key_path(),
     GRPCertPath = gr_plugin:get_cert_path(),
     {ok, GRPCSRPath} = gr_plugin:get_csr_path(),
@@ -47,28 +47,29 @@ register_in_gr(KeyFilePassword, RedirectionPoint, ProviderName) ->
     {ok, CSR} = file:read_file(GRPCSRPath),
     {ok, Key} = file:read_file(GRPKeyPath),
     % Send signing request to GR
-    {ok, IpAddress} = gr_providers:check_ip_address(provider),
+    IPAddresses = get_all_nodes_ips(NodeList),
     Parameters = [
-        {<<"urls">>, [IpAddress]},
+        {<<"urls">>, IPAddresses},
         {<<"csr">>, CSR},
-        {<<"redirectionPoint">>, RedirectionPoint},
+        {<<"redirectionPoint">>, hd(IPAddresses)},
         {<<"clientName">>, ProviderName}
     ],
     {ok, ProviderId, Cert} = gr_providers:register(provider, Parameters),
     ok = file:write_file(GRPCertPath, Cert),
-    OtherWorkers = gen_server:call({global, cluster_manager}, get_nodes) -- [node()],
+    OtherWorkers = NodeList -- [node()],
     save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
     save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
     {ok, ProviderId}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Registers in GR using config from app.src (cert locations).
 %% @end
 %%--------------------------------------------------------------------
--spec register_in_gr_dev(KeyFilePassword :: string(), RedirectionPoint :: binary(),
-    ClientName :: binary()) -> ok | {error, term()}.
-register_in_gr_dev(KeyFilePassword, RedirectionPoint, ProviderName) ->
+-spec register_in_gr_dev(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
+    ok | {error, term()}.
+register_in_gr_dev(NodeList, KeyFilePassword, ProviderName) ->
     GRPKeyPath = gr_plugin:get_key_path(),
     GRPCertPath = gr_plugin:get_cert_path(),
     GRPCSRPath = gr_plugin:get_csr_path(),
@@ -77,17 +78,17 @@ register_in_gr_dev(KeyFilePassword, RedirectionPoint, ProviderName) ->
     {ok, CSR} = file:read_file(GRPCSRPath),
     {ok, Key} = file:read_file(GRPKeyPath),
     % Send signing request to GR
-    {ok, IpAddress} = gr_providers:check_ip_address(provider),
+    IPAddresses = get_all_nodes_ips(NodeList),
     Parameters = [
-        {<<"urls">>, [IpAddress]},
+        {<<"urls">>, IPAddresses},
         {<<"csr">>, CSR},
-        {<<"redirectionPoint">>, RedirectionPoint},
+        {<<"redirectionPoint">>, hd(IPAddresses)},
         {<<"clientName">>, ProviderName},
         {<<"uuid">>, ProviderName}
     ],
     {ok, ProviderId, Cert} = gr_providers:register_with_uuid(provider, Parameters),
     ok = file:write_file(GRPCertPath, Cert),
-    OtherWorkers = gen_server:call({global, cluster_manager}, get_nodes) -- [node()],
+    OtherWorkers = NodeList -- [node()],
     save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
     save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
     {ok, ProviderId}.
@@ -181,6 +182,7 @@ save_file_on_hosts(Hosts, Path, Content) ->
         Other -> Other
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Saves given file under given path.
@@ -199,6 +201,18 @@ save_file(Path, Content) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of all nodes IP addresses.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_nodes_ips(NodeList :: [node()]) -> [binary()].
+get_all_nodes_ips(NodeList) ->
+    utils:pmap(
+        fun(Node) ->
+            {ok, IPAddr} = rpc:call(Node, gr_providers, check_ip_address, [provider]),
+            IPAddr
+        end, NodeList).
 
 
 

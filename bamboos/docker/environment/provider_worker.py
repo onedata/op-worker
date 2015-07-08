@@ -26,8 +26,10 @@ def _tweak_config(config, name, uid):
         sys_config['global_registry_node'] = \
             common.format_hostname(sys_config['global_registry_node'], uid)
 
+    if 'vm.args' not in cfg['nodes']['node']:
+        cfg['nodes']['node']['vm.args'] = {}
     vm_args = cfg['nodes']['node']['vm.args']
-    vm_args['name'] = common.format_nodename(vm_args['name'], uid)
+    vm_args['name'] = common.format_nodename(name, uid)
 
     return cfg, sys_config['db_nodes']
 
@@ -107,7 +109,7 @@ def _riak_up(cluster_name, riak_nodes, dns_servers, uid):
 
 
 def up(image, bindir, logdir, dns, uid, config_path):
-    providers = common.parse_json_file(config_path)['provider']
+    providers = common.parse_json_file(config_path)['providers']
     dns_servers, output = dns_mod.set_up_dns(dns, uid)
     # Workers of every provider are started together
     for provider in providers:
@@ -120,7 +122,6 @@ def up(image, bindir, logdir, dns, uid, config_path):
             configs.append(tw_cfg)
             riak_nodes += db_nodes
 
-        print(configs)
         workers = []
 
         db_node_mappings, riak_out = _riak_up(provider, riak_nodes, dns_servers, uid)

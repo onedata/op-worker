@@ -29,8 +29,10 @@ def _tweak_config(config, name, uid):
     sys_config['ccm_nodes'] = [common.format_nodename(n, uid) for n in
                                sys_config['ccm_nodes']]
 
+    if 'vm.args' not in cfg['nodes']['node']:
+        cfg['nodes']['node']['vm.args'] = {}
     vm_args = cfg['nodes']['node']['vm.args']
-    vm_args['name'] = common.format_nodename(vm_args['name'], uid)
+    vm_args['name'] = common.format_nodename(name, uid)
 
     return cfg
 
@@ -87,7 +89,7 @@ def _ready(container):
 
 
 def up(image, bindir, logdir, dns, uid, config_path):
-    providers = common.parse_json_file(config_path)['provider']
+    providers = common.parse_json_file(config_path)['providers']
     dns_servers, output = dns_mod.set_up_dns(dns, uid)
     # CCMs of every provider are started together
     for provider in providers:
