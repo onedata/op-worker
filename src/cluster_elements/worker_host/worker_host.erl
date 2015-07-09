@@ -28,7 +28,6 @@
 %% round robin databases
 -record(host_state, {
     plugin = non :: module(),
-    plugin_state = [] :: term(),
     load_info :: {
         Loads1 :: list(),
         Loads2 :: list(),
@@ -41,6 +40,10 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([state_get/2, state_put/3, state_update/3, state_delete/2, state_to_map/1]).
+
+-type plugin_state() :: #{term() => term()}.
+-export_type([plugin_state/0]).
 
 %%%===================================================================
 %%% API
@@ -93,9 +96,11 @@ stop(Plugin) ->
     Timeout :: non_neg_integer() | infinity.
 init([Plugin, PluginArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
+    ets:new(state_table_name(Plugin), [named_table, public, set, {read_concurrency, true}]),
     {ok, InitAns} = Plugin:init(PluginArgs),
+    [ets:insert(state_table_name(Plugin), Entry) || Entry <- maps:to_list(InitAns)],
     ?debug("Plugin ~p initialized with args ~p and result ~p", [Plugin, PluginArgs, InitAns]),
-    {ok, #host_state{plugin = Plugin, plugin_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}.
+    {ok, #host_state{plugin = Plugin, load_info = {[], [], 0, LoadMemorySize}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -116,14 +121,10 @@ init([Plugin, PluginArgs, LoadMemorySize]) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
-handle_call({update_plugin_state, StateTransformFun}, _From, State = #host_state{plugin_state = PluginState}) when is_function(StateTransformFun) ->
-    {reply, ok, State#host_state{plugin_state = StateTransformFun(PluginState)}};
-
-handle_call({update_plugin_state, NewPluginState}, _From, State) ->
-    {reply, ok, State#host_state{plugin_state = NewPluginState}};
-
-handle_call(get_plugin_state, _From, State) ->
-    {reply, State#host_state.plugin_state, State};
+handle_call({update_plugin_state, Key, UpdateFun}, _From, State = #host_state{plugin = Plugin}) when is_function(UpdateFun) ->
+    OldValue = state_get(Plugin, Key),
+    NewValue = UpdateFun(OldValue),
+    {reply, state_put(Plugin, Key, NewValue), State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -142,8 +143,8 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast(#worker_request{} = Req, State = #host_state{plugin = Plugin, plugin_state = PluginState}) ->
-    spawn(fun() -> proc_request(Plugin, Req, PluginState) end),
+handle_cast(#worker_request{} = Req, State = #host_state{plugin = Plugin}) ->
+    spawn(fun() -> proc_request(Plugin, Req) end),
     {noreply, State};
 
 handle_cast({progress_report, Report}, State) ->
@@ -215,6 +216,63 @@ terminate(_Reason, #host_state{plugin = Plugin}) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns Value for given Key form plugin's KV state or 'undefined' if the is no such entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_get(Plugin :: atom(), Key :: term()) -> Value :: term() | undefined.
+state_get(Plugin, Key) ->
+    case ets:lookup(state_table_name(Plugin), Key) of
+        [{_, Value}] -> Value;
+        []           -> undefined
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates Value for given Key in plugin's KV state using given function. The function gets as argument old Value and
+%% shall return new Value. The function runs in worker_host's process.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_update(Plugin :: atom(), Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
+    ok | no_return().
+state_update(Plugin, Key, UpdateFun) when is_function(UpdateFun) ->
+    ok = gen_server:call(Plugin, {update_plugin_state, Key, UpdateFun}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Puts Value for given Key into plugin's KV state.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_put(Plugin :: atom(), Key :: term(), Value :: term()) -> ok | no_return().
+state_put(Plugin, Key, Value) ->
+    true = ets:insert(state_table_name(Plugin), {Key, Value}),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes entry for given Key in plugin's KV state.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_delete(Plugin :: atom(), Key :: term()) -> ok | no_return().
+state_delete(Plugin, Key) ->
+    true = ets:delete(state_table_name(Plugin), Key),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns whole plugin's KV state as Erlang's map.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_to_map(Plugin :: atom()) -> plugin_state().
+state_to_map(Plugin) ->
+    maps:from_list(ets:tab2list(state_table_name(Plugin))).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -226,13 +284,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% it sends the answer to dispatcher and logs info about processing time.
 %% @end
 %%--------------------------------------------------------------------
--spec proc_request(Plugin :: atom(), Request :: #worker_request{}, PluginState :: term()) -> Result when
+-spec proc_request(Plugin :: atom(), Request :: #worker_request{}) -> Result when
     Result :: atom().
-proc_request(Plugin, Request = #worker_request{req = Msg}, PluginState) ->
+proc_request(Plugin, Request = #worker_request{req = Msg}) ->
     BeforeProcessingRequest = os:timestamp(),
     Response =
         try
-            Plugin:handle(Msg, PluginState)
+            Plugin:handle(Msg)
         catch
             Type:Error ->
                 ?error_stacktrace("Worker plug-in ~p error: ~p:~p, on request: ~p", [Plugin, Type, Error, Request]),
@@ -284,3 +342,12 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
             {[Report | New], Old, S, Max}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the name of ETS table holding plugin's state.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_table_name(Plugin :: atom()) -> atom().
+state_table_name(Plugin) ->
+    Plugin.

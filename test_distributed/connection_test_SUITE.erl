@@ -36,8 +36,7 @@
     sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1,
     python_client_test/1, proto_version_test/1]).
 
--performance({test_cases, [multi_message_test,
-%%     multi_ping_pong_test,
+-performance({test_cases, [multi_message_test, multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test,
     python_client_test]}).
 all() ->

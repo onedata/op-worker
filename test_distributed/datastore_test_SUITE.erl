@@ -145,12 +145,14 @@ cache_clearing_test(Config) ->
     MemUsage = Mem0 + ToAdd,
 
     ?assertMatch(ok, rpc:call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget])),
+    ?assertMatch(ok, rpc:call(Worker2, application, set_env, [?APP_NAME, mem_to_clear_cache, MemTarget])),
     [{_, Mem1}] = monitoring:get_memory_stats(),
     ?assert(Mem1 > MemTarget),
 
     timer:sleep(1000), % Posthook is async
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker2}, check_mem_synch, 60000)),
     [{_, Mem2}] = monitoring:get_memory_stats(),
+    ct:print("Mem0,1,2: ~p", [{Mem0, Mem1, Mem2}]),
     ?assert(Mem2 < MemTarget),
 
     ok.

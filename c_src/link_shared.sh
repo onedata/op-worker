@@ -2,18 +2,18 @@
 
 #####################################################################
 #  @author Rafal Slota
-#  @copyright (C): 2014 ACK CYFRONET AGH
+#  @copyright (C): 2013 ACK CYFRONET AGH
 #  This software is released under the MIT license
 #  cited in 'LICENSE.txt'.
 #####################################################################
 #  This script is used to include given as first argument
-#  dynamic libraries into onepanel release package based on ldd
+#  dynamic libraries into oneprovider release package based on ldd
 #  output from file given as second agrument. 
 #####################################################################
 
 if [ $# -lt 2 ]
 then
-    echo "Usage: $0 libname file1 [file2...]"
+    echo "Usage: $0 libname file1 [file2...]" 
     exit 1
 fi
 
@@ -40,11 +40,9 @@ do
     for file in $libs_list
     do
         # Copy and link shared library
+        cp -L $file ./$BIN_DIR
         link="`basename $file`"
         target="$BIN_DIR/`basename $(echo $file | sed 's/\.so\..*/\.so/' | sed 's/\.[0-9.]*\.dylib.*/\.dylib/')`"
-        if [ ! -f "$BIN_DIR/$link" ]; then
-            cp -L $file $BIN_DIR
-        fi
         if [ `basename $link` != `basename $target` ]; then
             ln -sf $link $target
         fi

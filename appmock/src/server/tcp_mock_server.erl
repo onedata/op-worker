@@ -37,6 +37,10 @@
 -define(SERVER, ?MODULE).
 % Number of acceptors in ranch listeners
 -define(NUMBER_OF_ACCEPTORS, 10).
+% Timeout of tcp_server_send function - if by this time all connection pids do not report
+% back, the sending is considered failed.
+-define(SEND_TIMEOUT_BASE, timer:seconds(10)).
+-define(SEND_TIMEOUT_PER_MSG, timer:seconds(1)).
 
 % Internal state of the gen server
 -record(state, {
@@ -268,11 +272,14 @@ handle_call({tcp_server_send, Port, Data, Count}, _From, State) ->
                 undefined ->
                     {error, wrong_endpoint};
                 _ ->
+                    Timeout = ?SEND_TIMEOUT_BASE + Count * ?SEND_TIMEOUT_PER_MSG,
                     Result = utils:pmap(
                         fun(Pid) ->
                             Pid ! {self(), send, Data, Count},
                             receive
                                 {Pid, ok} -> ok
+                            after
+                                Timeout -> error
                             end
                         end, ConnectionsForPort),
                     % If all pids reported back, sending succeded
