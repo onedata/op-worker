@@ -193,7 +193,7 @@ save_file_on_hosts(Hosts, Path, Content) ->
 -spec save_file(Path :: file:name_all(), Content :: binary()) -> ok | {error, term()}.
 save_file(Path, Content) ->
     try
-        file:make_dir(Path),
+        file:make_dir(filename:dirname(Path)),
         ok = file:write_file(Path, Content),
         ok
     catch

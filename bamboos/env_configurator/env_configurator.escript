@@ -128,7 +128,7 @@ main([InputJson]) ->
                 {ok, Provider} = call_node(hd(ProviderWorkers), Cookie, oneprovider, register_in_gr_dev,
                     [ProviderWorkers, ?DEFAULT_KEY_FILE_PASSWD, Provider])
             end, Providers),
-        call_node(GRNode, GRCookie, dev_utils, set_up_test_entities, [Users, Groups, Spaces]),
+        ok = call_node(GRNode, GRCookie, dev_utils, set_up_test_entities, [Users, Groups, Spaces]),
         io:format("Global configuration applied sucessfully!~n"),
         ok
     catch
@@ -150,13 +150,6 @@ start_distribution() ->
 
 call_node(Node, Cookie, Module, Function, Args) ->
     erlang:set_cookie(node(), Cookie),
-    case {net_kernel:connect_node(Node), net_adm:ping(Node)} of
-        {true, pong} ->
-            ok;
-        {_, pang} ->
-            io:format("Node ~p not responding to pings.~n", [Node]),
-            init:stop(0)
-    end,
     rpc:call(Node, Module, Function, Args).
 
 
