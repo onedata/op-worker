@@ -16,7 +16,8 @@
     datastore_worker,
     dns_worker,
     session_manager_worker,
-    http_worker
+    http_worker,
+    fslogic_worker
 ]).
 
 -define(MODULES_WITH_ARGS, [
@@ -26,7 +27,8 @@
         {supervisor_spec, session_manager_worker:supervisor_spec()},
         {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
     ]},
-    {http_worker, []}
+    {http_worker, []},
+    {fslogic_worker, []}
 ]).
 
 -endif.

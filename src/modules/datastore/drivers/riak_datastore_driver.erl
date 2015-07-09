@@ -307,7 +307,7 @@ foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
                     {error, Reason1}
             end;
         {error, {notfound, _}} ->
-            {ok, []};
+            {ok, AccIn};
         {error, Reason} ->
             {error, Reason}
     end.

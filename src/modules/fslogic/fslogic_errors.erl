@@ -1,116 +1,114 @@
 %% ===================================================================
 %% @author Rafal Slota
-%% @copyright (C): 2013, ACK CYFRONET AGH
+%% @copyright (C): 2015, ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module provides error translators for generic fslogic errors
+%% @doc: This module provides error translators for generic fslogic errors.
 %% @end
 %% ===================================================================
 -module(fslogic_errors).
 -author("Rafal Slota").
 
--include("errors.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([gen_error_message/2, gen_error_code/1, posix_to_oneerror/1, oneerror_to_posix/1]).
+-export([gen_status_message/1, posix_to_internal/1, internal_to_posix/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
-%% @doc Translates given error that was thrown to {ErrorCode :: fslogic_error(), ErrorDetails :: term()}.
+%% @doc Translates operation error to status messages.
 %%      This function is intended to be extended when new translation is needed.
 %%--------------------------------------------------------------------
--spec gen_error_code(Error :: term()) -> {ErrorCode :: posix_error(), ErrorDetails :: term()}.
-gen_error_code({error, Reason}) ->
-    gen_error_code(Reason);
-
-%% Generic translations below. All custom translations shall be defined ^above this line.
-gen_error_code(ErrorCode) when is_atom(ErrorCode) ->
-    case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
-        true    -> {ErrorCode, no_details};
-        false   -> {?EREMOTEIO, ErrorCode}
+-spec gen_status_message(Error :: term()) -> #status{}.
+gen_status_message({error, Reason}) ->
+    gen_status_message(Reason);
+gen_status_message({not_found, file_meta}) ->
+    #status{code = ?ENOENT, description = describe_error(?ENOENT)};
+gen_status_message(Error) when is_atom(Error) ->
+    case lists:member(Error, ?ERROR_CODES) of
+        true -> #status{code = Error};
+        false -> #status{code = ?EREMOTEIO, description = describe_error(Error)}
     end;
-gen_error_code({ErrorCode, ErrorDetails}) when is_atom(ErrorCode) ->
-    case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
-        true    -> {ErrorCode, ErrorDetails};
-        false   -> {?EREMOTEIO, {ErrorCode, ErrorDetails}}
+gen_status_message({ErrorCode, ErrorDescription}) when
+    is_atom(ErrorCode) and is_binary(ErrorDescription) ->
+    case lists:member(ErrorCode, ?ERROR_CODES) of
+        true -> #status{code = ErrorCode, description = ErrorDescription};
+        false -> #status{code = ?EREMOTEIO, description = ErrorDescription}
     end;
-gen_error_code(UnknownReason) ->
-    {?EREMOTEIO, UnknownReason}.
-
+gen_status_message(_) ->
+    #status{code = ?EREMOTEIO, description = <<"An unknown error occured.">>}.
 
 %%--------------------------------------------------------------------
-%% @doc Convinience method that returns protobuf answer message that is build base on given error code
-%%      and type of request.
+%% @doc Translates POSIX error code to internal error code.
 %% @end
 %%--------------------------------------------------------------------
--spec gen_error_message(RecordName :: atom(), Error :: string()) -> tuple() | no_return().
-gen_error_message(test_message_type, Error) ->
-    #atom{value = Error};
-gen_error_message(RecordName, _Error) ->
-    ?error("Unsupported record: ~p", [RecordName]),
-    throw({unsupported_record, RecordName}).
-
-
-%%--------------------------------------------------------------------
-%% @doc Translates POSIX error code to internal fslogic_error().
-%%--------------------------------------------------------------------
--spec posix_to_oneerror(POSIXErrorCode :: non_neg_integer()) -> ErrorCode :: posix_error().
-posix_to_oneerror(POSIX) when POSIX < 0 -> %% All error codes are currently negative, so translate accordingly
-    posix_to_oneerror(-POSIX);
-posix_to_oneerror(1) ->
+-spec posix_to_internal(POSIXErrorCode :: integer()) ->
+    InternalErrorCode :: code().
+posix_to_internal(-1) ->
     ?EPERM;
-posix_to_oneerror(2) ->
+posix_to_internal(-2) ->
     ?ENOENT;
-posix_to_oneerror(17) ->
+posix_to_internal(-17) ->
     ?EEXIST;
-posix_to_oneerror(13) ->
+posix_to_internal(-13) ->
     ?EACCES;
-posix_to_oneerror(122) ->
+posix_to_internal(-122) ->
     ?EDQUOT;
-posix_to_oneerror(22) ->
+posix_to_internal(-22) ->
     ?EINVAL;
-posix_to_oneerror(39) ->
+posix_to_internal(-39) ->
     ?ENOTEMPTY;
-posix_to_oneerror(95) ->
+posix_to_internal(-95) ->
     ?ENOTSUP;
-posix_to_oneerror(_Unkwn) ->
+posix_to_internal(_) ->
     ?EREMOTEIO.
 
-
 %%--------------------------------------------------------------------
-%% @doc Translates internal fslogic_error() to POSIX error code.
+%% @doc Translates internal error code to POSIX error code.
+%% @end
 %%--------------------------------------------------------------------
--spec oneerror_to_posix(ErrorCode :: posix_error()) -> POSIXErrorCode :: non_neg_integer().
-oneerror_to_posix(?OK) ->
+-spec internal_to_posix(InternalErrorCode :: code()) ->
+    POSIXErrorCode :: non_neg_integer().
+internal_to_posix(?OK) ->
     0;
-oneerror_to_posix(?EPERM) ->
+internal_to_posix(?EPERM) ->
     1;
-oneerror_to_posix(?ENOENT) ->
+internal_to_posix(?ENOENT) ->
     2;
-oneerror_to_posix(?EEXIST) ->
+internal_to_posix(?EEXIST) ->
     17;
-oneerror_to_posix(?EACCES) ->
+internal_to_posix(?EACCES) ->
     13;
-oneerror_to_posix(?EDQUOT) ->
+internal_to_posix(?EDQUOT) ->
     122;
-oneerror_to_posix(?EINVAL) ->
+internal_to_posix(?EINVAL) ->
     22;
-oneerror_to_posix(?ENOTEMPTY) ->
+internal_to_posix(?ENOTEMPTY) ->
     39;
-oneerror_to_posix(?ENOTSUP) ->
+internal_to_posix(?ENOTSUP) ->
     95;
-oneerror_to_posix(_Unkwn) ->
+internal_to_posix(_) ->
     121.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% Internal functions
+%% @doc
+%% Translates error ID to error description.
+%% @end
 %%--------------------------------------------------------------------
+-spec describe_error(ErrorId :: atom()) -> ErrorDescription :: binary().
+describe_error(ErrorId) ->
+    case lists:keyfind(ErrorId, 1, ?ERROR_DESCRIPTIONS) of
+        {ErrorId, ErrorDescription} -> ErrorDescription;
+        false -> atom_to_binary(ErrorId, utf8)
+    end.

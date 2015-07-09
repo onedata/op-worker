@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--export([init/1, handle/1, cleanup/0, fslogic_runner/5, handle_fuse_message/2]).
+-export([init/1, handle/2, cleanup/0, fslogic_runner/5, handle_fuse_message/2]).
 -export([extract_logical_path/1]).
 
 
@@ -45,34 +45,34 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
+    Result :: {ok, State :: term()} | {error, Reason :: term()}.
 
 init(_Args) ->
-    {ok, #{}}.
+    {ok, undefined}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request) -> Result when
+-spec handle(Request, State :: term()) -> Result when
     Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
     {error, Reason} | pong,
     Response :: term(),
     Reason :: term().
-handle(ping) ->
+handle(ping, _) ->
     pong;
 
-handle(healthcheck) ->
+handle(healthcheck, _) ->
     ok;
 
-handle({#fslogic_ctx{} = CTX, #fusemessage{input = RequestBody}}) ->
+handle({#fslogic_ctx{} = CTX, #fusemessage{input = RequestBody}}, _) ->
     RequestType = element(1, RequestBody),
     fslogic_runner(fun maybe_handle_fuse_message/2, CTX, RequestType, RequestBody);
 
 %% Handle requests that have wrong structure.
-handle(_Request) ->
+handle(_Request, _State) ->
     ?log_bad_request(_Request),
     erlang:error(wrong_request).
 

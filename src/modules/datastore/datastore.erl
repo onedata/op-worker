@@ -64,6 +64,7 @@
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
 -export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0]).
+-export([run_synchronized/3]).
 
 %%%===================================================================
 %%% API
@@ -343,6 +344,10 @@ link_walk(Level, #document{key = StartKey} = StartDoc, LinkNames, Mode) when is_
     {ok, {document(), [ext_key()]} | [document()]} | link_error() | get_error().
 link_walk(Level, Key, ModelName, R, Mode) ->
     link_walk7(Level, Key, ModelName, R, [], Mode).
+
+
+run_synchronized(ModelName, ResourceId, Fun) ->
+    exec_driver(ModelName, ?DISTRIBUTED_CACHE_DRIVER, run_synchronized, [ResourceId, Fun]).
 
 %%--------------------------------------------------------------------
 %% @doc

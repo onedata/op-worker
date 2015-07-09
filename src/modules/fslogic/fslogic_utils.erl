@@ -46,6 +46,13 @@ random_ascii_lowercase_sequence(Length) ->
 %%--------------------------------------------------------------------
 %% @doc Returns parent of given file.
 %%--------------------------------------------------------------------
--spec get_parent(fslogic:file()) -> fslogic:file() | no_return().
-get_parent(_File) ->
-    #document{value = #file_meta{}}.
+-spec get_parent(fslogic_worker:file()) -> fslogic_worker:file() | no_return().
+get_parent({path, Path}) ->
+    [_ | R] = lists:reverse(fslogic_path:split(Path)),
+    Tokens = lists:reverse(R),
+    ParentPath = fslogic_path:ensure_path_begins_with_slash(fslogic_path:join(Tokens)),
+    {ok, Doc} = file_meta:get({path, ParentPath}),
+    Doc;
+get_parent(File) ->
+    {ok, Doc} = file_meta:get_parent(File),
+    Doc.

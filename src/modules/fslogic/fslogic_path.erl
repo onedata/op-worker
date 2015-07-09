@@ -13,15 +13,20 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% API
--export([verify_file_name/1]).
+-export([verify_file_path/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, is_space_dir/1]).
 -export([ensure_path_begins_with_slash/1]).
+-export([spaces_uuid/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+spaces_uuid(UserId) ->
+    base64:encode(term_to_binary({UserId, ?SPACES_BASE_DIR_NAME})).
 
 %%--------------------------------------------------------------------
 %% @doc Same as {@link filename:split/1} but platform independent.
@@ -40,6 +45,8 @@ split(Path) ->
 -spec join(list(binary())) -> binary().
 join([]) ->
     <<>>;
+join([<<?DIRECTORY_SEPARATOR>> = Sep, <<?DIRECTORY_SEPARATOR>> | Tokens]) ->
+    join([Sep | Tokens]);
 join([<<?DIRECTORY_SEPARATOR>> = Sep | Tokens]) ->
     <<Sep/binary, (join(Tokens))/binary>>;
 join(Tokens) ->
@@ -68,38 +75,51 @@ binary_join([], _Sep) ->
 binary_join([Part], _Sep) ->
     Part;
 binary_join(List, Sep) ->
-    lists:foldr(fun (A, B) ->
+    lists:foldr(fun(A, B) ->
         if
             bit_size(B) > 0 -> <<A/binary, Sep/binary, B/binary>>;
             true -> A
         end
     end, <<>>, List).
 
-
 %%--------------------------------------------------------------------
-%% @doc Gets file's full name (user's root is added to name, but only when asking about non-group dir).
+%% @doc Gets file's full name (user's root is added to name, but only when
+%% asking about non-group dir).
 %% @end
 %%--------------------------------------------------------------------
-%% @todo: uncomment when implemented
-%% -spec get_full_file_name(fslogic:ctx(), FileName :: file_meta:path()) ->
-%%     {ok, file_meta:path()} | {error, Reason :: any()} | no_return().
-%% get_full_file_name(_CTX, _FileName) ->
-%%     ?NOT_IMPLEMENTED.
-
+-spec get_canonical_file_entry(Ctx :: fslogic_worker:ctx(), Tokens :: [file_meta:path()]) ->
+    FileEntry :: file_meta:entry().
+get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    {uuid, UserId};
+get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME]) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME]),
+    {path, Path};
+get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]) ->
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]),
+    {path, Path};
+get_canonical_file_entry(Ctx, Tokens) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
+        onedata_user:get(UserId),
+    {ok, #document{value = #file_meta{name = DefaultSpaceName}}} = file_meta:get(DefaultSpaceId),
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME,
+        DefaultSpaceName | Tokens]),
+    {path, Path}.
 
 %%--------------------------------------------------------------------
 %% @doc Strips '.' from path. Also if '..' path element if present, path is considered invalid.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_file_name(FileName :: file_meta:path()) -> Result when
+-spec verify_file_path(FileName :: file_meta:path()) -> Result when
     Result :: {ok, Tokens :: [binary()]} | {error, wrong_filename}.
-verify_file_name(FileName) ->
+verify_file_path(FileName) ->
     Tokens = lists:filter(fun(X) -> X =/= <<".">> end, split(FileName)),
     case lists:any(fun(X) -> X =:= <<"..">> end, Tokens) of
         true -> {error, wrong_filename};
         _ -> {ok, Tokens}
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc Gives file basename from given path
@@ -111,7 +131,6 @@ basename(Path) ->
         _ -> [<<?DIRECTORY_SEPARATOR>>]
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc Returns true when Path points to space directory (or space root directory)
 %%--------------------------------------------------------------------
@@ -120,15 +139,15 @@ is_space_dir(Path) ->
     case split(Path) of
         [] -> true;
         [?SPACES_BASE_DIR_NAME] -> true;
-        [?SPACES_BASE_DIR_NAME , _GroupName] ->  true;
+        [?SPACES_BASE_DIR_NAME, _SpaceName] -> true;
         _ -> false
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc Ensures that path begins with "/"
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_path_begins_with_slash(Path :: file_meta:path()) -> file_meta:path().
-ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) -> Path;
+ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) ->
+    Path;
 ensure_path_begins_with_slash(Path) -> <<?DIRECTORY_SEPARATOR, Path/binary>>.
