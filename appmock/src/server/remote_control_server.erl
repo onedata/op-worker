@@ -26,7 +26,7 @@
 -export([rest_endpoint_request_count/2, verify_rest_mock_history/1, reset_rest_mock_history/0]).
 
 -export([tcp_server_specific_message_count/2, tcp_server_all_messages_count/1, tcp_server_send/3]).
--export([reset_tcp_mock_history/0, tcp_server_connection_count/1]).
+-export([tcp_mock_history/1, reset_tcp_mock_history/0, tcp_server_connection_count/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -146,6 +146,16 @@ tcp_server_send(Port, Data, Count) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns full history of messages received on given endpoint.
+%% @end
+%%--------------------------------------------------------------------
+-spec tcp_mock_history(Port :: integer()) -> {ok, [binary()]} | {error, term()}.
+tcp_mock_history(Port) ->
+    tcp_mock_server:tcp_mock_history(Port).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Handles requests to reset ALL mocked TCP endpoints.
 %% @end
 %%--------------------------------------------------------------------
@@ -224,6 +234,10 @@ handle_call(healthcheck, _From, State) ->
             % Check connectivity to tcp server mock verification path with some random data
             PathAllMessCount = list_to_binary(?TCP_SERVER_ALL_MESSAGES_COUNT_PATH(5555)),
             {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, PathAllMessCount, get, [], <<"">>),
+
+            % Check connectivity to tcp server history reset
+            PathMessHistory = list_to_binary(?TCP_SERVER_HISTORY_PATH(5555)),
+            {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, PathMessHistory, get, [], <<"">>),
 
             % Check connectivity to tcp server history reset
             {200, _, _} = appmock_utils:https_request(<<"127.0.0.1">>, RCPort, <<?RESET_TCP_SERVER_HISTORY_PATH>>, get, [], <<"">>),
@@ -327,6 +341,7 @@ start_remote_control_listener() ->
             {?REST_ENDPOINT_REQUEST_COUNT_PATH, remote_control_handler, [?REST_ENDPOINT_REQUEST_COUNT_PATH]},
             {?TCP_SERVER_SPECIFIC_MESSAGE_COUNT_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_SPECIFIC_MESSAGE_COUNT_COWBOY_ROUTE]},
             {?TCP_SERVER_ALL_MESSAGES_COUNT_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_ALL_MESSAGES_COUNT_COWBOY_ROUTE]},
+            {?TCP_SERVER_HISTORY_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_HISTORY_COWBOY_ROUTE]},
             {?TCP_SERVER_SEND_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_SEND_COWBOY_ROUTE]},
             {?RESET_TCP_SERVER_HISTORY_PATH, remote_control_handler, [?RESET_TCP_SERVER_HISTORY_PATH]},
             {?TCP_SERVER_CONNECTION_COUNT_COWBOY_ROUTE, remote_control_handler, [?TCP_SERVER_CONNECTION_COUNT_COWBOY_ROUTE]}
