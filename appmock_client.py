@@ -100,26 +100,30 @@ def tcp_server_specific_message_count(appmock_ip, tcp_port, message_binary):
     return body['result']
 
 
-def tcp_server_wait_for_specific_messages(appmock_ip, tcp_port, data, number_of_messages, accept_more, timeout_sec):
+def tcp_server_wait_for_specific_messages(appmock_ip, tcp_port, data, msg_count=1,
+                                          accept_more=False, return_history=False, timeout_sec=10):
     """
     Returns when given number of specific messages has been received on given port, or after it timeouts.
     The accept_more flag makes the function succeed when there is the same or more messages than expected.
+    The return_history flag causes the function to return full msg history upon success.
     """
     start_time = time.time()
     wait_for = WAIT_STARTING_CHECK_INTERVAL
 
     while True:
         result = tcp_server_specific_message_count(appmock_ip, tcp_port, data)
-        if accept_more and result >= number_of_messages:
-            return
-        elif result == number_of_messages:
-            return
+        if accept_more and result >= msg_count:
+            break
+        elif result == msg_count:
+            break
         elif time.time() - start_time > timeout_sec:
             raise Exception(
                 'tcp_server_wait_for_specific_messages returned error: timeout')
         else:
             time.sleep(wait_for / 1000.0)
             wait_for *= WAIT_INTERVAL_INCREMENT_RATE
+    if return_history:
+        return tcp_server_history(appmock_ip, tcp_port)
 
 
 def tcp_server_all_messages_count(appmock_ip, tcp_port):
@@ -136,34 +140,52 @@ def tcp_server_all_messages_count(appmock_ip, tcp_port):
     return body['result']
 
 
-def tcp_server_wait_for_any_messages(appmock_ip, tcp_port, number_of_messages, accept_more, timeout_sec):
+def tcp_server_wait_for_any_messages(appmock_ip, tcp_port, msg_count=1, accept_more=False,
+                                     return_history=False, timeout_sec=10):
     """
     Returns when given number of any messages has been received on given port, or after it timeouts.
     The accept_more flag makes the function succeed when there is the same or more messages than expected.
+    The return_history flag causes the function to return full msg history upon success.
     """
     start_time = time.time()
     wait_for = WAIT_STARTING_CHECK_INTERVAL
 
     while True:
         result = tcp_server_all_messages_count(appmock_ip, tcp_port)
-        if accept_more and result >= number_of_messages:
-            return
-        elif result == number_of_messages:
-            return
+        if accept_more and result >= msg_count:
+            break
+        elif result == msg_count:
+            break
         elif time.time() - start_time > timeout_sec:
             raise Exception(
                 'tcp_server_wait_for_any_messages returned error: timeout')
         else:
             time.sleep(wait_for / 1000.0)
             # No incrementing wait time here because this fun might be used for benchmarking.
+    if return_history:
+        return tcp_server_history(appmock_ip, tcp_port)
 
 
-def tcp_server_send(appmock_ip, tcp_port, message_binary, message_count=1):
+def tcp_server_send(appmock_ip, tcp_port, message_binary, msg_count=1):
     """
     Orders appmock to send given message to all connected clients, given amount of times."""
     _, _, body = _http_post(appmock_ip, appmock_rc_port,
-                            '/tcp_server_send/{0}/{1}'.format(tcp_port, message_count),
+                            '/tcp_server_send/{0}/{1}'.format(tcp_port, msg_count),
                             True, message_binary)
+    body = json.loads(body)
+    if body['result'] == 'error':
+        raise Exception('tcp_server_send returned error: ' + body['reason'])
+    return body['result']
+
+
+def tcp_server_history(appmock_ip, tcp_port):
+    """
+    Performs a request to an appmock instance to
+    obtain full history of messages received on given endpoint.
+    """
+    _, _, body = _http_post(appmock_ip, appmock_rc_port,
+                            '/tcp_server_history/{0}'.format(tcp_port),
+                            True, '')
     body = json.loads(body)
     if body['result'] == 'error':
         raise Exception('tcp_server_send returned error: ' + body['reason'])
@@ -196,7 +218,8 @@ def tcp_server_connection_count(appmock_ip, tcp_port):
     return body['result']
 
 
-def tcp_server_wait_for_connections(appmock_ip, tcp_port, number_of_connections, accept_more, timeout_sec):
+def tcp_server_wait_for_connections(appmock_ip, tcp_port, number_of_connections=1,
+                                    accept_more=False, timeout_sec=10):
     """
     Returns when given number of connections are established on given port, or after it timeouts.
     The accept_more flag makes the function succeed when there is the same or more connections than expected.
