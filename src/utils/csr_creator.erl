@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2014 ACK CYFRONET AGH
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -11,8 +11,6 @@
 %%%-------------------------------------------------------------------
 -module(csr_creator).
 -author("Lukasz Opiola").
-
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([create_csr/3]).
@@ -40,9 +38,8 @@ init() ->
 %% Returns 0 in case of success and 1 in case of failure.
 %% Can throw an exception if nif was not properly loaded.
 %% @end
--spec create_csr(Password :: string(), KeyFile :: string(), CsrPath :: string()) -> Result when
-    Result :: 0 | 1 | no_return().
+-spec create_csr(Password :: string(), KeyFile :: string(), CsrPath :: string()) -> 0 | 1 | no_return().
 %% ====================================================================
 create_csr(_Password, _KeyFile, _CsrPath) ->
-    throw("NIF library not loaded.").
+    erlang:nif_error({error, not_loaded}).
 

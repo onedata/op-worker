@@ -37,30 +37,36 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec register_in_gr(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
-    ok | {error, term()}.
+    {ok, ProviderID :: binary()} | {error, term()}.
 register_in_gr(NodeList, KeyFilePassword, ProviderName) ->
-    GRPKeyPath = gr_plugin:get_key_path(),
-    GRPCertPath = gr_plugin:get_cert_path(),
-    {ok, GRPCSRPath} = gr_plugin:get_csr_path(),
-    % Create a CSR
-    0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
-    {ok, CSR} = file:read_file(GRPCSRPath),
-    {ok, Key} = file:read_file(GRPKeyPath),
-    % Send signing request to GR
-    IPAddresses = get_all_nodes_ips(NodeList),
-    RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
-    Parameters = [
-        {<<"urls">>, IPAddresses},
-        {<<"csr">>, CSR},
-        {<<"redirectionPoint">>, RedirectionPoint},
-        {<<"clientName">>, ProviderName}
-    ],
-    {ok, ProviderId, Cert} = gr_providers:register(provider, Parameters),
-    ok = file:write_file(GRPCertPath, Cert),
-    OtherWorkers = NodeList -- [node()],
-    save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
-    save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
-    {ok, ProviderId}.
+    try
+        GRPKeyPath = gr_plugin:get_key_path(),
+        GRPCertPath = gr_plugin:get_cert_path(),
+        GRPCSRPath = gr_plugin:get_csr_path(),
+        % Create a CSR
+        0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
+        {ok, CSR} = file:read_file(GRPCSRPath),
+        {ok, Key} = file:read_file(GRPKeyPath),
+        % Send signing request to GR
+        IPAddresses = get_all_nodes_ips(NodeList),
+        RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
+        Parameters = [
+            {<<"urls">>, IPAddresses},
+            {<<"csr">>, CSR},
+            {<<"redirectionPoint">>, RedirectionPoint},
+            {<<"clientName">>, ProviderName}
+        ],
+        {ok, ProviderId, Cert} = gr_providers:register(provider, Parameters),
+        ok = file:write_file(GRPCertPath, Cert),
+        OtherWorkers = NodeList -- [node()],
+        save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
+        save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
+        {ok, ProviderId}
+    catch
+        T:M ->
+            ?error_stacktrace("Cannot register in GlobalRegistry - ~p:~p", [T, M]),
+            {error, M}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -69,31 +75,37 @@ register_in_gr(NodeList, KeyFilePassword, ProviderName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec register_in_gr_dev(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
-    ok | {error, term()}.
+    {ok, ProviderID :: binary()} | {error, term()}.
 register_in_gr_dev(NodeList, KeyFilePassword, ProviderName) ->
-    GRPKeyPath = gr_plugin:get_key_path(),
-    GRPCertPath = gr_plugin:get_cert_path(),
-    GRPCSRPath = gr_plugin:get_csr_path(),
-    % Create a CSR
-    0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
-    {ok, CSR} = file:read_file(GRPCSRPath),
-    {ok, Key} = file:read_file(GRPKeyPath),
-    % Send signing request to GR
-    IPAddresses = get_all_nodes_ips(NodeList),
-    RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
-    Parameters = [
-        {<<"urls">>, IPAddresses},
-        {<<"csr">>, CSR},
-        {<<"redirectionPoint">>, RedirectionPoint},
-        {<<"clientName">>, ProviderName},
-        {<<"uuid">>, ProviderName}
-    ],
-    {ok, ProviderId, Cert} = gr_providers:register_with_uuid(provider, Parameters),
-    ok = file:write_file(GRPCertPath, Cert),
-    OtherWorkers = NodeList -- [node()],
-    save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
-    save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
-    {ok, ProviderId}.
+    try
+        GRPKeyPath = gr_plugin:get_key_path(),
+        GRPCertPath = gr_plugin:get_cert_path(),
+        GRPCSRPath = gr_plugin:get_csr_path(),
+        % Create a CSR
+        0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
+        {ok, CSR} = file:read_file(GRPCSRPath),
+        {ok, Key} = file:read_file(GRPKeyPath),
+        % Send signing request to GR
+        IPAddresses = get_all_nodes_ips(NodeList),
+        RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
+        Parameters = [
+            {<<"urls">>, IPAddresses},
+            {<<"csr">>, CSR},
+            {<<"redirectionPoint">>, RedirectionPoint},
+            {<<"clientName">>, ProviderName},
+            {<<"uuid">>, ProviderName}
+        ],
+        {ok, ProviderId, Cert} = gr_providers:register_with_uuid(provider, Parameters),
+        ok = file:write_file(GRPCertPath, Cert),
+        OtherWorkers = NodeList -- [node()],
+        save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
+        save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
+        {ok, ProviderId}
+    catch
+        T:M ->
+            ?error_stacktrace("Cannot register in GlobalRegistry - ~p:~p", [T, M]),
+            {error, M}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -201,7 +213,7 @@ save_file(Path, Content) ->
     catch
         _:Reason ->
             ?error("Cannot save file ~p ~p", [Path, Reason]),
-            {error, node()}
+            {error, Reason}
     end.
 
 
