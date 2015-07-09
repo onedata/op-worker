@@ -7,7 +7,6 @@
         "nodes": {
             "ccm": {
                 "vm.args": {
-                    "name": "ccm@",
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
@@ -25,7 +24,6 @@
         "nodes": {
             "worker1": {
                 "vm.args": {
-                    "name": "worker1@",
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
@@ -35,7 +33,6 @@
             },
             "worker2": {
                 "vm.args": {
-                    "name": "worker2@",
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {

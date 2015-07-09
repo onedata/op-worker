@@ -1,5 +1,5 @@
 {
-    "op_ccm" : {
+    "op_ccm": {
         "config": {
             "input_dir": "rel/op_ccm",
             "target_dir": "rel/test_cluster"
@@ -7,11 +7,12 @@
         "nodes": {
             "ccm": {
                 "vm.args": {
-                    "name": "ccm@",
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "ccm_nodes": [ "ccm@" ],
+                    "ccm_nodes": [
+                        "ccm@"
+                    ],
                     "worker_num": 1
                 }
             }
@@ -25,12 +26,19 @@
         "nodes": {
             "worker1": {
                 "vm.args": {
-                    "name": "worker1@",
                     "setcookie": "test_cookie"
                 },
                 "sys.config": {
-                    "ccm_nodes": [ "ccm@"],
-                    "db_nodes": [ "127.0.0.1:49161", "127.0.0.1:49162", "127.0.0.1:49163", "127.0.0.1:49164", "127.0.0.1:49165" ]
+                    "ccm_nodes": [
+                        "ccm@"
+                    ],
+                    "db_nodes": [
+                        "127.0.0.1:49161",
+                        "127.0.0.1:49162",
+                        "127.0.0.1:49163",
+                        "127.0.0.1:49164",
+                        "127.0.0.1:49165"
+                    ]
                 }
             }
         }
