@@ -117,6 +117,7 @@ get_provider_id() ->
             ProviderId
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns GR public certificate
@@ -135,6 +136,7 @@ get_globalregistry_cert() ->
             application:set_env(?APP_NAME, globalregistry_certificate, GrCert),
             GrCert
     end.
+
 
 %%%===================================================================
 %%% Internal functions

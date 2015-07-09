@@ -15,6 +15,7 @@
 -include("modules/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+% For now, just print the information that came from GR.
 main() ->
     case openid_utils:validate_login() of
         {error, ErrorID} ->

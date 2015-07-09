@@ -27,8 +27,7 @@
 %% @doc
 %% Authenticates a user via Global Registry.
 %% Should be called from n2o page rendering context.
-%% Upon error, returns predefined error id, which can be user to redirect
-%% the user to error page.
+%% TODO For now, this funciton just returns the information obtained from GR.
 %% @end
 -spec validate_login() -> ok | {error, PredefinedErrorID :: atom()}.
 %% ====================================================================

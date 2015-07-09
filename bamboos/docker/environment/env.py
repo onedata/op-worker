@@ -95,7 +95,9 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
     env_configurator_input['gr_node'] = output['gr_nodes'][0]
     env_configurator_dir = '{0}/../../env_configurator'.format(common.get_script_dir())
 
+    # Newline for output clearance
     print('')
+    # Run env configurator with gathered args
     command = '''epmd -daemon
     ./env_configurator.escript \'{0}\''''
     command = command.format(json.dumps(env_configurator_input))
@@ -103,7 +105,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
         image='onedata/builder',
         interactive=True,
         tty=True,
-        rm=True,  # todo
+        rm=True,
         workdir='/root/build',
         name=common.format_dockername('env_configurator', uid),
         volumes=[(env_configurator_dir, '/root/build', 'ro')],

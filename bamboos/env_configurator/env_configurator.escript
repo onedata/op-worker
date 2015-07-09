@@ -94,25 +94,34 @@
 %%%-------------------------------------------------------------------
 -module(env_configurator).
 
+% Hostname of the node started within this escript
 -define(SCRIPT_NODE_HOSNTAME,
     begin
         Hostname = os:cmd("hostname -f") -- "\n",
         list_to_atom(lists:concat(["env_configurator_", os:getpid(), "@", Hostname]))
     end).
+% Password for keyfiles created for providers
 -define(DEFAULT_KEY_FILE_PASSWD, "").
--define(EXIT_FAILURE_CODE, 1).
 
-
-% Prints a single variable
--define(dump(_Arg), io:format(user, "[DUMP] ~s: ~p~n~n", [??_Arg, _Arg])).
 
 %% API
 -export([main/1]).
 
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% MAin script function.
+%% @end
+%%--------------------------------------------------------------------
+-spec main([InputJSON :: binary()]) -> ok.
 main([InputJson]) ->
     try
         helpers_init(),
-        start_distribution(),
+        {ok, _} = start_distribution(),
         Input = mochijson2:decode(InputJson, [{format, proplist}]),
         GRNode = bin_to_atom(proplists:get_value(<<"gr_node">>, Input)),
         GRCookie = bin_to_atom(proplists:get_value(<<"gr_cookie">>, Input)),
@@ -133,21 +142,35 @@ main([InputJson]) ->
         ok
     catch
         T:M ->
-            io:format("Error in ~s - ~p:~p~n", [escript:script_name(), T, M])
+            io:format("Error in ~s - ~p:~p~n", [escript:script_name(), T, M]),
+            ok
     end;
 
 main(_) ->
-    io:format("Usage: ~s <input_json>~n", [escript:script_name()]).
+    io:format("Usage: ~s <input_json>~n", [escript:script_name()]),
+    ok.
 
 
 %%%===================================================================
-%%% Helper functions
+%%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Start the net kernel with long node name.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_distribution() -> {ok, pid()}.
 start_distribution() ->
     {ok, _Pid} = net_kernel:start([?SCRIPT_NODE_HOSNTAME, longnames]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls an erlang node, given the cookie that it uses.
+%% @end
+%%--------------------------------------------------------------------
+-spec call_node(Node :: node(), Cookie :: atom(), Module :: atom(), Function :: function(), Args :: [term()]) -> term().
 call_node(Node, Cookie, Module, Function, Args) ->
     erlang:set_cookie(node(), Cookie),
     rpc:call(Node, Module, Function, Args).
