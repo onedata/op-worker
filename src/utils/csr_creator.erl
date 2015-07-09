@@ -37,6 +37,7 @@ init() ->
                     _ ->
                         filename:join([priv, LibName])
                 end;
+
             Dir ->
                 filename:join(Dir, LibName)
         end,

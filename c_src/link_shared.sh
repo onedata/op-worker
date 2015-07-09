@@ -20,7 +20,7 @@ fi
 LIB_NAME=$1
 shift
 
-BIN_DIR="./c_lib"
+BIN_DIR="./priv"
 
 rm -f $BIN_DIR/lib${LIB_NAME}*
 
