@@ -99,7 +99,7 @@
         Hostname = os:cmd("hostname -f") -- "\n",
         list_to_atom(lists:concat(["env_configurator_", os:getpid(), "@", Hostname]))
     end).
--define(DEFAULT_KEY_FILE_PASSWD, "password").
+-define(DEFAULT_KEY_FILE_PASSWD, "").
 -define(EXIT_FAILURE_CODE, 1).
 
 

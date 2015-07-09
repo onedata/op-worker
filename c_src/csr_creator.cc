@@ -22,7 +22,7 @@
 
 using namespace Botan;
 
-#define KEY_SIZE 4096
+#define KEY_SIZE 2048
 
 int create_csr(char* password, char* key_path, char* csr_path)
 {
