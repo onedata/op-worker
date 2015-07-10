@@ -12,11 +12,9 @@
 -module(rest_auth).
 -author("Tomasz Lichon").
 
--include("cluster_elements/oneproxy/oneproxy.hrl").
 -include("modules/http_worker/http_common.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("proto/oneproxy/oneproxy_messages.hrl").
 
 %% API
 -export([authenticate/1]).
@@ -69,12 +67,12 @@ authenticate_using_token(Req, Token) ->
 %%--------------------------------------------------------------------
 -spec authenticate_using_cert(req()) -> {{ok, #identity{}} | {error, term()}, req()}.
 authenticate_using_cert(Req) ->
-    {SessionId, Req2} = cowboy_req:header(<<"onedata-internal-client-session-id">>, Req),
-    {SubjectDn, Req3} = cowboy_req:header(<<"onedata-internal-client-subject-dn">>, Req2),
-    CertInfo = #certificate_info{client_session_id = SessionId, client_subject_dn = SubjectDn},
-    case identity:get_or_fetch(CertInfo) of
+    Socket = cowboy_req:get(socket, Req),
+    {ok, Der} = ssl2:peercert(Socket),
+    Certificate = public_key:pkix_decode_cert(Der, otp),
+    case identity:get_or_fetch(Certificate) of
         {ok, #document{value = Iden}} ->
-            {{ok, Iden}, Req3};
+            {{ok, Iden}, Req};
         Error ->
-            {Error, Req3}
+            {Error, Req}
     end.

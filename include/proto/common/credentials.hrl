@@ -13,7 +13,6 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
--include("proto/oneproxy/oneproxy_messages.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -record(token, {
@@ -24,6 +23,5 @@
     otp_cert :: #'OTPCertificate'{},
     chain :: [#'OTPCertificate'{}]
 }).
-
 
 -endif.
