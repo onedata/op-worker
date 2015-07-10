@@ -27,6 +27,9 @@
 
 -define(LINKS_KEY_SUFFIX, "$$").
 
+%% Connections to single Riak node
+-define(CONN_PER_NODE, 10).
+
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
 
@@ -450,7 +453,11 @@ get_connections() ->
         [_ | _] = Connections ->
             Connections;
         _ ->
-            Connections = connect(datastore_worker:state_get(riak_nodes)),
+            Nodes = lists:map(
+                fun(Elem) ->
+                    [Elem || _ <- lists:seq(1, ?CONN_PER_NODE)]
+                end, datastore_worker:state_get(riak_nodes)),
+            Connections = connect(lists:flatten(Nodes)),
             datastore_worker:state_put(riak_connections, Connections),
             Connections
     end.
