@@ -24,65 +24,57 @@
 -include_lib("clproto/include/messages.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
 %% Testing translate_from_protobuf function
 
-translate_status_from_protobuf_test_() ->
+translate_status_from_protobuf_test() ->
   {Internal, Protobuf} = get_status('VOK', <<1,2,3>>),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-translate_file_block_from_protobuf_test_() ->
+translate_file_block_from_protobuf_test() ->
   {Internal, Protobuf} = get_file_block(0,0),
   {Internal2, Protobuf2} = get_file_block(32,2048),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf)),
   [?_assertEqual(Internal2, translator:translate_from_protobuf(Protobuf2))]].
 
-translate_read_event_from_protobuf_test_() ->
+translate_read_event_from_protobuf_test() ->
   {Internal, Protobuf} = get_read_event(1, 2, 512, 100, 1024),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-translate_write_event_from_protobuf_test_() ->
+translate_write_event_from_protobuf_test() ->
   {Internal, Protobuf} = get_write_event(1, 2, 512, 2048, 100, 1024),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-translate_handshake_request_from_protobuf_test_() ->
+translate_handshake_request_from_protobuf_test() ->
   {Internal, Protobuf} = get_handshake_request(1, 1),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-translate_message_stream_from_protobuf_test_() ->
+translate_message_stream_from_protobuf_test() ->
   {Internal, Protobuf} = get_message_stream(1, 1),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-
-translate_end_of_message_stream_from_protobuf_test_() ->
+translate_end_of_message_stream_from_protobuf_test() ->
   {Internal, Protobuf} = get_end_of_message_stream(),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-
-translate_token_from_protobuf_test_() ->
+translate_token_from_protobuf_test() ->
   {Internal, Protobuf} = get_token(1),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-
-translate_ping_from_protobuf_test_() ->
+translate_ping_from_protobuf_test() ->
   {Internal, Protobuf} = get_ping(1),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
 
-
-translate_get_protocol_version_from_protobuf_test_() ->
+translate_get_protocol_version_from_protobuf_test() ->
   {Internal, Protobuf} = get_get_protocol_version(),
   [?_assertEqual(Internal, translator:translate_from_protobuf(Protobuf))].
-
-
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 get_status(Code, Description) ->
   {#status{code = Code, description = Description},
@@ -129,12 +121,10 @@ get_message_stream(StmId, SeqNum) ->
 get_end_of_message_stream() ->
   {#end_of_message_stream{},#'EndOfMessageStream'{}}.
 
-
 get_ping(Data) ->
   {#ping{data = Data},#'Ping'{data = Data} }.
   
 get_get_protocol_version() ->
   {#get_protocol_version{}, #'GetProtocolVersion'{} }.
-
 
 -endif.
