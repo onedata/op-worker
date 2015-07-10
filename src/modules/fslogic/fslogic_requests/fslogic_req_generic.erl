@@ -16,14 +16,20 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod/3, get_file_attr/2, delete_file/2, rename_file/3]).
-
-%% @todo: uncomment 'check_permissions' annotations after implementing
-%%        methods below. Annotations have to be commented out due to dizlyzer errors.
+-export([chmod/3, get_file_attr/2, delete_file/2, rename_file/3, update_times/5]).
 
 %%--------------------------------------------------------------------
 %% API functions
 %%--------------------------------------------------------------------
+
+-check_permissions({none, 2}).
+update_times(_CTX, File, ATime, MTime, CTime) ->
+    UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
+    UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
+    {ok, _} = file_meta:update(File, UpdateMap1),
+    #fuse_response{status = #status{code = ?OK}}.
+
+
 
 %%--------------------------------------------------------------------
 %% @doc Changes file permissions.
@@ -65,7 +71,7 @@ get_file_attr(Ctx, File) ->
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                             #file_attr{
                                 uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                                ctime = CTime, uid = UID, size = Size, name = Name
+                                ctime = CTime, uid = fslogic_utils:gen_storage_uid(UID), size = Size, name = Name
                             }};
         {error, {not_found, _}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -104,7 +110,7 @@ delete_file(_, File) ->
 %%--------------------------------------------------------------------
 -spec rename_file(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
     no_return().
--check_permissions([{write, {parent, 2}}, {write, {parent, {path, 3}}}]).
+-check_permissions([{write, {parent, 2}}, {write, 2}, {write, {parent, {path, 3}}}]).
 rename_file(_, SourceEntry, TargetPath) ->
     ?info("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
     case file_meta:exists({path, TargetPath}) of

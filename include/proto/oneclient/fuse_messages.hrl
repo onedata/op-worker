@@ -61,13 +61,13 @@
     uuid :: file_meta:uuid(),
     name :: file_meta:name(),
     mode :: file_meta:mode(),
-    uid :: file_meta:uuid(),
-    gid :: file_meta:uuid(),
-    atime :: file_meta:time(),
-    mtime :: file_meta:time(),
-    ctime :: file_meta:time(),
+    uid = 0 :: file_meta:uuid(),
+    gid = 0 :: file_meta:uuid(),
+    atime = 0 :: file_meta:time(),
+    mtime = 0 :: file_meta:time(),
+    ctime = 0 :: file_meta:time(),
     type :: file_meta:type(),
-    size :: file_meta:size()
+    size = 0 :: file_meta:size()
 }).
 
 -record(file_children, {

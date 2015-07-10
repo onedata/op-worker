@@ -43,63 +43,6 @@
                     }
                 }
             }
-        },
-        "p2": {
-            "op_ccm": {
-                "config": {
-                    "input_dir": "rel/op_ccm",
-                    "target_dir": "rel/test_cluster"
-                },
-                "nodes": {
-                    "ccm1_p2": {
-                        "vm.args": {
-                            "setcookie": "cookie2"
-                        },
-                        "sys.config": {
-                            "ccm_nodes": [
-                                "ccm1_p2@"
-                            ],
-                            "worker_num": 1
-                        }
-                    }
-                }
-            },
-            "op_worker": {
-                "config": {
-                    "input_dir": "rel/op_worker",
-                    "target_dir": "rel/test_cluster"
-                },
-                "nodes": {
-                    "worker1_p2": {
-                        "vm.args": {
-                            "setcookie": "cookie2"
-                        },
-                        "sys.config": {
-                            "ccm_nodes": [
-                                "ccm1_p2@"
-                            ],
-                            "db_nodes": [
-                                "riaknode1"
-                            ],
-                            "global_registry_node": "gr1@"
-                        }
-                    },
-                    "worker2_p2": {
-                        "vm.args": {
-                            "setcookie": "cookie2"
-                        },
-                        "sys.config": {
-                            "ccm_nodes": [
-                                "ccm1_p2@"
-                            ],
-                            "db_nodes": [
-                                "riaknode1"
-                            ],
-                            "global_registry_node": "gr1@"
-                        }
-                    }
-                }
-            }
         }
     },
     "globalregistry": {
@@ -162,10 +105,6 @@
                     {
                         "provider": "p1",
                         "supported_size": 1000000000
-                    },
-                    {
-                        "provider": "p2",
-                        "supported_size": 1000000000
                     }
                 ]
             },
@@ -182,66 +121,6 @@
                         "supported_size": 1000000000
                     }
                 ]
-            }
-        }
-    },
-    "appmock": {
-        "config": {
-            "input_dir": "rel/appmock",
-            "target_dir": "rel/test_cluster"
-        },
-        "nodes": {
-            "appmock1": {
-                "vm.args": {
-                    "name": "appmock1@"
-                },
-                "sys.config": {
-                    "app_description_file": "./example_app_description.erl"
-                }
-            }
-        }
-    },
-    "oneclient": {
-        "nodes": {
-            "client1": {
-                "name": "client1@",
-                "op_hostname": "worker@",
-                "gr_hostname": "gr1@",
-                "user_cert": "./cert.pem",
-                "user_key": "./cert.pem"
-            },
-            "client2": {
-                "name": "client2@",
-                "op_hostname": "worker@",
-                "gr_hostname": "gr1@",
-                "user_cert": "./cert.pem",
-                "user_key": "./cert.pem"
-            }
-        }
-    },
-    "onepanel": {
-        "config": {
-            "input_dir": "rel_oneprovider/onepanel",
-            "target_dir": "rel/test_cluster"
-        },
-        "nodes": {
-            "onepanel1": {
-                "vm.args": {
-                    "name": "onepanel@onepanel1",
-                    "setcookie": "cookie"
-                },
-                "sys.config": {
-                    "multicast_address": {"string": "239.255.0.1"}
-                }
-            },
-            "onepanel2": {
-                "vm.args": {
-                    "name": "onepanel@onepanel2",
-                    "setcookie": "cookie"
-                },
-                "sys.config": {
-                    "multicast_address": {"string": "239.255.0.1"}
-                }
             }
         }
     }

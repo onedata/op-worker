@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--export([init/1, handle/2, cleanup/0, handle_fuse_request/2]).
+-export([init/1, handle/1, cleanup/0, handle_fuse_request/2]).
 
 %%%===================================================================
 %%% Types
@@ -44,29 +44,29 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Reason :: term()}.
+    Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    {ok, undefined}.
+    {ok, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result when
+-spec handle(Request) -> Result when
     Request :: ping | healthcheck | {fuse_request, SessId :: session:id(),
         FuseRequest :: #fuse_request{}},
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
     {error, Reason} | pong,
     Response :: term(),
     Reason :: term().
-handle(ping, _) ->
+handle(ping) ->
     pong;
-handle(healthcheck, _) ->
+handle(healthcheck) ->
     ok;
-handle({fuse_request, SessId, FuseRequest}, _) ->
+handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
-handle(_Request, _State) ->
+handle(_Request) ->
     ?log_bad_request(_Request),
     erlang:error(wrong_request).
 
@@ -98,7 +98,10 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
     try
         ?debug("Processing request: ~p", [FuseRequest]),
         {ok, #document{value = Session}} = session:get(SessId),
-        handle_fuse_request(#fslogic_ctx{session = Session}, FuseRequest)
+        ?info("Fuse request ~p from user ~p", [FuseRequest, Session]),
+        Resp = handle_fuse_request(#fslogic_ctx{session = Session}, FuseRequest),
+        ?info("Fuse request ~p from user ~p: ~p", [FuseRequest, Session, Resp]),
+        Resp
     catch
         Reason ->
             %% Manually thrown error, normal interrupt case.
@@ -158,6 +161,8 @@ handle_fuse_request(Ctx, #change_mode{uuid = UUID, mode = Mode}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, UUID}, Mode);
 handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
     fslogic_req_generic:rename_file(Ctx, {uuid, UUID}, TargetPath);
+handle_fuse_request(Ctx, #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}) ->
+    fslogic_req_generic:update_times(Ctx, {uuid, UUID}, ATime, MTime, CTime);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

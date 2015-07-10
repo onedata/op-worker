@@ -420,6 +420,7 @@ get_scope(Entry) ->
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.
 setup_onedata_user(UUID) ->
+    ?info("Init user ~p", [UUID]),
     try
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
             onedata_user:get(UUID),

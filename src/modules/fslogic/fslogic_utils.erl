@@ -31,7 +31,7 @@
 -spec gen_storage_uid(ID :: binary()) -> non_neg_integer().
 gen_storage_uid(ID) ->
     <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
-    {ok, LowestGID} = application:get_env(?APP_NAME, lowest_generated_storage_gid),
+    {ok, LowestGID} = {ok, 100000},
     LowestGID + GID0 rem 1000000.
 
 

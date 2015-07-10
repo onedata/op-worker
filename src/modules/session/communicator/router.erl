@@ -90,8 +90,9 @@ route_and_send_answer(#client_message{message_id = Id,
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{fuse_request = FuseRequest}}) ->
     spawn(fun() ->
-        FuseResponse = worker_proxy:call(fslogic, {fuse_request, SessId, FuseRequest}),
+        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, SessId, FuseRequest}),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, SessId)
-    end).
+    end),
+    ok.
