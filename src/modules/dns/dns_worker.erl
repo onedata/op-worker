@@ -22,17 +22,8 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("kernel/src/inet_dns.hrl").
 
-%% This record is used by dns_worker (it contains its state).
--record(state, {
-    %% This record is usually used in read-only mode to get a list of
-    %% nodes to return as DNS response. It is updated periodically by node manager.
-    lb_advice = undefined :: load_balancing:dns_lb_advice() | undefined,
-    % Time of last ld advice update received from dispatcher
-    last_update = {0, 0, 0} :: {integer(), integer(), integer()}
-}).
-
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/1, cleanup/0]).
 
 %% dns_handler_behaviour callbacks
 -export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
@@ -48,15 +39,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, #state{}} | {error, Reason :: term()}.
+    Result :: {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init([]) ->
-    {ok, #state{}};
+    {ok, #{}};
 
-init(InitialState) when is_record(InitialState, state) ->
+init(InitialState) when is_map(InitialState) ->
     {ok, InitialState};
 
 init(test) ->
-    {ok, #state{}};
+    {ok, #{}};
 
 init(_) ->
     throw(unknown_initial_state).
@@ -66,25 +57,26 @@ init(_) ->
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result when
+-spec handle(Request) -> Result when
     Request :: ping | healthcheck,
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: [inet:ip4_address()],
     Reason :: term().
 
-handle(ping, _) ->
+handle(ping) ->
     pong;
 
-handle(healthcheck, State) ->
-    _Reply = healthcheck(State);
+handle(healthcheck) ->
+    _Reply = healthcheck();
 
-handle({update_lb_advice, LBAdvice}, State) ->
+handle({update_lb_advice, LBAdvice}) ->
     ?debug("DNS update of load_balancing advice: ~p", [LBAdvice]),
-    NewState = State#state{last_update = now(), lb_advice = LBAdvice},
-    gen_server:call(?MODULE, {update_plugin_state, NewState});
+    ok = worker_host:state_put(?MODULE, last_update, now()),
+    ok = worker_host:state_put(?MODULE, lb_advice, LBAdvice);
 
-handle({handle_a, Domain}, #state{lb_advice = LBAdvice}) ->
+handle({handle_a, Domain}) ->
+    LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     ?debug("DNS A request: ~s, current advice: ~p", [Domain, LBAdvice]),
     case LBAdvice of
         undefined ->
@@ -113,7 +105,8 @@ handle({handle_a, Domain}, #state{lb_advice = LBAdvice}) ->
             end
     end;
 
-handle({handle_ns, Domain}, #state{lb_advice = LBAdvice}) ->
+handle({handle_ns, Domain}) ->
+    LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     ?debug("DNS NS request: ~s, current advice: ~p", [Domain, LBAdvice]),
     case LBAdvice of
         undefined ->
@@ -141,7 +134,7 @@ handle({handle_ns, Domain}, #state{lb_advice = LBAdvice}) ->
             end
     end;
 
-handle(_Request, _) ->
+handle(_Request) ->
     ?log_bad_request(_Request),
     throw({unsupported_request, _Request}).
 
@@ -310,8 +303,10 @@ parse_domain(DomainArg) ->
 %% healthcheck dns endpoint
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(State :: #state{}) -> ok | {error, Reason :: atom()}.
-healthcheck(#state{last_update = LastUpdate, lb_advice = LBAdvice}) ->
+-spec healthcheck() -> ok | {error, Reason :: atom()}.
+healthcheck() ->
+    LastUpdate = worker_host:state_get(?MODULE, last_update),
+    LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     case LBAdvice of
         undefined ->
             {error, no_lb_advice_received};

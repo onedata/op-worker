@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/1, cleanup/0]).
 
 %% API
 -export([supervisor_spec/0, supervisor_child_spec/0]).
@@ -36,16 +36,16 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Reason :: term()}.
+    Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    {ok, []}.
+    {ok, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result when
+-spec handle(Request) -> Result when
     Request :: ping | healthcheck |
     {get_or_create_session, SessId :: session:id(), Iden :: session:identity(),
         Con :: pid()} |
@@ -54,19 +54,19 @@ init(_Args) ->
     {error, Reason},
     Response :: term(),
     Reason :: term().
-handle(ping, _) ->
+handle(ping) ->
     pong;
 
-handle(healthcheck, _) ->
+handle(healthcheck) ->
     ok;
 
-handle({reuse_or_create_session, SessId, Iden, Con}, _) ->
+handle({reuse_or_create_session, SessId, Iden, Con}) ->
     reuse_or_create_session(SessId, Iden, Con);
 
-handle({remove_session, SessId}, _) ->
+handle({remove_session, SessId}) ->
     remove_session(SessId);
 
-handle(_Request, _) ->
+handle(_Request) ->
     ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------

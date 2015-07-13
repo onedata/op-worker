@@ -16,7 +16,6 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("proto/oneproxy/oneproxy_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -32,7 +31,7 @@
 %% (cert/token)
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#client_message{}, #certificate_info{}) ->
+-spec handle_handshake(#client_message{}, #'OTPCertificate'{}) ->
     {ok, #server_message{}} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = IdToReuse, token = Token = #token{}}}, _) when is_binary(IdToReuse) ->
@@ -41,8 +40,8 @@ handle_handshake(#client_message{message_body = #handshake_request{
     {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}};
 
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = IdToReuse}}, CertInfo) when is_binary(IdToReuse) ->
-    {ok, Iden} = authenticate_using_certificate(CertInfo),
+    session_id = IdToReuse}}, OtpCert) when is_binary(IdToReuse) ->
+    {ok, Iden} = authenticate_using_certificate(OtpCert),
     {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Iden, self()),
     {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}}.
 
@@ -65,7 +64,7 @@ authenticate_using_token(Token) ->
 %% Authenticate client using given certificate. Returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_certificate(#certificate_info{}) -> {ok, #identity{}}.
-authenticate_using_certificate(_CertInfo) ->
+-spec authenticate_using_certificate(#'OTPCertificate'{}) -> {ok, #identity{}}.
+authenticate_using_certificate(_OtpCert) ->
     %identity:get_or_fetch(_CertInfo). todo integrate with identity model
     {ok, #identity{}}.
