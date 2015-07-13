@@ -21,6 +21,8 @@ import platform
 import sys
 import time
 import re
+import shutil
+import json
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
@@ -54,6 +56,13 @@ parser.add_argument(
     default=False,
     help='run performance tests',
     dest='performance')
+
+parser.add_argument(
+    '--cover',
+    action='store_true',
+    default=False,
+    help='run cover analysis',
+    dest='cover')
 
 parser.add_argument(
     '--stress',
@@ -93,6 +102,8 @@ with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
         if 'incl_dirs_r' in line:
             dirs_string = re.search(r'\[(.*?)\]', line).group(1)
             dirs = [os.path.join(script_dir, d[1:]) for d in
+                    dirs_string.split(', ')]
+            docker_dirs = [os.path.join('/root/build', d[1:-1]) for d in
                     dirs_string.split(', ')]
         else:
             print(line, file=cover)
@@ -136,7 +147,24 @@ elif args.stress:
 elif args.stress_no_clearing:
     ct_command.extend(['-env', 'stress_no_clearing', 'true'])
 else:
+
+if args.cover:
     ct_command.extend(['-cover', 'cover_tmp.spec'])
+    env_descs = glob.glob(
+        os.path.join(script_dir, 'test_distributed', '*', 'env_desc.json'))
+    for file in env_descs:
+        shutil.copyfile(file, file + '.bak')
+        with open(file, 'r') as jsonFile:
+            data = json.load(jsonFile)
+
+            for app in ['op_worker', 'op_ccm', 'globalregistry']:
+                if data.has_key(app):
+                    for config in data[app]['nodes'].values():
+                        config['sys.config']['covered_dirs'] = docker_dirs
+
+            with open(file, 'w') as jsonFile:
+                jsonFile.write(json.dumps(data))
+
 
 command = '''
 import os, subprocess, sys, stat
@@ -182,4 +210,9 @@ ret = docker.run(tty=True,
                  command=['python', '-c', command])
 
 os.remove(new_cover)
+if args.cover:
+    for file in env_descs:
+        os.remove(file)
+        shutil.move(file + '.bak', file)
+
 sys.exit(ret)
