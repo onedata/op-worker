@@ -146,9 +146,7 @@ elif args.stress:
     ct_command.extend(['-env', 'stress', 'true'])
 elif args.stress_no_clearing:
     ct_command.extend(['-env', 'stress_no_clearing', 'true'])
-else:
-
-if args.cover:
+elif args.cover:
     ct_command.extend(['-cover', 'cover_tmp.spec'])
     env_descs = glob.glob(
         os.path.join(script_dir, 'test_distributed', '*', 'env_desc.json'))
