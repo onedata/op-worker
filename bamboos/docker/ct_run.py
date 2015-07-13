@@ -58,7 +58,7 @@ parser.add_argument(
     dest='performance')
 
 parser.add_argument(
-    '--cover', '-cv',
+    '--cover',
     action='store_true',
     default=False,
     help='run cover analysis',
@@ -124,23 +124,16 @@ if args.cover:
     env_descs = glob.glob(
         os.path.join(script_dir, 'test_distributed', '*', 'env_desc.json'))
     for file in env_descs:
-        shutil.copyfile(file, file + '_tmp')
-        with open(file, "r") as jsonFile:
+        shutil.copyfile(file, file + '.bak')
+        with open(file, 'r') as jsonFile:
             data = json.load(jsonFile)
 
-            if data.has_key("op_worker"):
-                for key in data["op_worker"]["nodes"].keys():
-                    data["op_worker"]["nodes"][key]["sys.config"]["covered_dirs"] = docker_dirs
+            for app in ['op_worker', 'op_ccm', 'globalregistry']:
+                if data.has_key(app):
+                    for config in data[app]['nodes'].values():
+                        config['sys.config']['covered_dirs'] = docker_dirs
 
-            if data.has_key("op_ccm"):
-                for key in data["op_ccm"]["nodes"].keys():
-                    data["op_ccm"]["nodes"][key]["sys.config"]["covered_dirs"] = docker_dirs
-
-            if data.has_key("globalregistry"):
-                for key in data["globalregistry"]["nodes"].keys():
-                    data["globalregistry"]["nodes"][key]["sys.config"]["covered_dirs"] = docker_dirs
-
-            with open(file, "w") as jsonFile:
+            with open(file, 'w') as jsonFile:
                 jsonFile.write(json.dumps(data))
 
 
@@ -191,6 +184,6 @@ os.remove(new_cover)
 if args.cover:
     for file in env_descs:
         os.remove(file)
-        shutil.move(file + '_tmp', file)
+        shutil.move(file + '.bak', file)
 
 sys.exit(ret)

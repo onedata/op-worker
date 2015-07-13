@@ -32,7 +32,7 @@
     {ok, Pid :: pid()} | {ok, Pid :: pid(), State :: term()} |
     {error, Reason ::term()}.
 start(_StartType, _StartArgs) ->
-    test_node_starter:start_cover(),
+    test_node_starter:maybe_start_cover(),
     op_worker_sup:start_link().
 
 %%--------------------------------------------------------------------
@@ -42,5 +42,5 @@ start(_StartType, _StartArgs) ->
 %%--------------------------------------------------------------------
 -spec stop(State :: term()) -> ok.
 stop(_State) ->
-    test_node_starter:stop_cover(),
+    test_node_starter:maybe_stop_cover(),
     ok.
