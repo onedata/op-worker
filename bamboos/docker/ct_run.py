@@ -64,6 +64,27 @@ parser.add_argument(
     help='run cover analysis',
     dest='cover')
 
+parser.add_argument(
+    '--stress',
+    action='store_true',
+    default=False,
+    help='run stress tests',
+    dest='stress')
+
+parser.add_argument(
+    '--stress-no-clearing',
+    action='store_true',
+    default=False,
+    help='run stress tests without clearing data between test cases',
+    dest='stress_no_clearing')
+
+parser.add_argument(
+    '--stress-time',
+    action='store',
+    help='time of stress test in sek',
+    dest='stress_time')
+
+
 args = parser.parse_args()
 script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
@@ -116,10 +137,16 @@ if args.cases:
     ct_command.append('-case')
     ct_command.extend(args.cases)
 
+if args.stress_time:
+    ct_command.extend(['-env', 'stress_time', args.stress_time])
+
 if args.performance:
     ct_command.extend(['-env', 'performance', 'true'])
-
-if args.cover:
+elif args.stress:
+    ct_command.extend(['-env', 'stress', 'true'])
+elif args.stress_no_clearing:
+    ct_command.extend(['-env', 'stress_no_clearing', 'true'])
+elif args.cover:
     ct_command.extend(['-cover', 'cover_tmp.spec'])
     env_descs = glob.glob(
         os.path.join(script_dir, 'test_distributed', '*', 'env_desc.json'))

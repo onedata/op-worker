@@ -102,13 +102,13 @@ create_delete_test_base(Config, Level, Fun) ->
                       end,
 
     [
-        #parameter{name = create_ok_time, value = OkTime/OkNum, unit = "microsek",
+        #parameter{name = create_ok_time, value = OkTime/OkNum, unit = "us",
             description = "Average time of create operation that ended successfully"},
-        #parameter{name = create_error_time, value = CreateErrorTime, unit = "microsek",
+        #parameter{name = create_error_time, value = CreateErrorTime, unit = "us",
             description = "Average time of create operation that filed (e.g. file exists)"},
         #parameter{name = create_error_num, value = ErrorNum, unit = "-",
             description = "Average numer of create operation that filed (e.g. file exists)"},
-        #parameter{name = delete_time, value = OkTime2/OkNum2, unit = "microsek",
+        #parameter{name = delete_time, value = OkTime2/OkNum2, unit = "us",
             description = "Average time of delete operation"}
     ].
 
@@ -130,7 +130,7 @@ save_test_base(Config, Level, Fun) ->
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
-    TestFun = fun(DocsSet) ->
+    SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
@@ -145,13 +145,13 @@ save_test_base(Config, Level, Fun) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, SaveMany),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, OkTime, _ErrorNum, _ErrorTime, ErrorsList} = count_answers(OpsNum),
     ?assertEqual([], ErrorsList),
     ?assertEqual(OpsNum, OkNum),
 
-    TestFun2 = fun(DocsSet) ->
+    DelMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(delete, Level, [
@@ -161,13 +161,13 @@ save_test_base(Config, Level, Fun) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, 1, TestFun2),
+    spawn_at_nodes(Workers, ThreadsNum, 1, DelMany),
     OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    #parameter{name = save_time, value = OkTime/OkNum, unit = "microsek",
+    #parameter{name = save_time, value = OkTime/OkNum, unit = "us",
         description = "Average time of save operation"}.
 
 update_test(Config, Level) ->
@@ -188,7 +188,7 @@ update_test_base(Config, Level, Fun) ->
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
-    TestFun = fun(DocsSet) ->
+    UpdateMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(J) ->
                 BeforeProcessing = os:timestamp(),
@@ -202,7 +202,7 @@ update_test_base(Config, Level, Fun) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, UpdateMany),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, _OkTime, ErrorNum, ErrorTime, _ErrorsList} = count_answers(OpsNum),
     % TODO change when datastore behavior will be coherent
@@ -211,7 +211,7 @@ update_test_base(Config, Level, Fun) ->
 %%     ?assertEqual(OpsNum, ErrorNum),
     ?assertEqual(OpsNum, OkNum+ErrorNum),
 
-    TestFun2 = fun(DocsSet) ->
+    SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(save, Level, [
@@ -224,18 +224,18 @@ update_test_base(Config, Level, Fun) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, SaveMany),
     OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, UpdateMany),
     {OkNum3, OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum),
     ?assertEqual([], ErrorsList3),
     ?assertEqual(OpsNum, OkNum3),
 
-    TestFun3 = fun(DocsSet) ->
+    ClearFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(delete, Level, [
@@ -245,7 +245,7 @@ update_test_base(Config, Level, Fun) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ClearFun),
     {OkNum4, _OkTime4, _ErrorNum4, _ErrorTime4, ErrorsList4} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList4),
     ?assertEqual(OpsNum2, OkNum4),
@@ -258,9 +258,9 @@ update_test_base(Config, Level, Fun) ->
                       end,
 
     [
-        #parameter{name = update_ok_time, value = OkTime3/OkNum3, unit = "microsek",
+        #parameter{name = update_ok_time, value = OkTime3/OkNum3, unit = "us",
             description = "Average time of update operation that ended successfully"},
-        #parameter{name = update_error_time, value = UpdateErrorTime, unit = "microsek",
+        #parameter{name = update_error_time, value = UpdateErrorTime, unit = "us",
             description = "Average time of update operation that failed (e.g. file does not exist)"},
         #parameter{name = update_error_num, value = ErrorNum, unit = "-",
             description = "Average number of update operation that failed (e.g. file does not exist)"}
@@ -278,7 +278,7 @@ get_test(Config, Level) ->
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
-    TestFun = fun(DocsSet) ->
+    GetMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
@@ -291,7 +291,7 @@ get_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, GetMany),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, _OkTime, ErrorNum, ErrorTime, _ErrorsList} = count_answers(OpsNum),
     % TODO change when datastore behavior will be coherent
@@ -300,7 +300,7 @@ get_test(Config, Level) ->
 %%     ?assertEqual(OpsNum, ErrorNum),
     ?assertEqual(OpsNum, OkNum+ErrorNum),
 
-    TestFun2 = fun(DocsSet) ->
+    SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(save, Level, [
@@ -313,18 +313,18 @@ get_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, SaveMany),
     OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, GetMany),
     {OkNum3, OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum),
     ?assertEqual([], ErrorsList3),
     ?assertEqual(OpsNum, OkNum3),
 
-    TestFun3 = fun(DocsSet) ->
+    ClearFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(delete, Level, [
@@ -334,7 +334,7 @@ get_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ClearFun),
     {OkNum4, _OkTime4, _ErrorNum4, _ErrorTime4, ErrorsList4} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList4),
     ?assertEqual(OpsNum2, OkNum4),
@@ -347,9 +347,9 @@ get_test(Config, Level) ->
                       end,
 
     [
-        #parameter{name = get_ok_time, value = OkTime3/OkNum3, unit = "microsek",
+        #parameter{name = get_ok_time, value = OkTime3/OkNum3, unit = "us",
             description = "Average time of get operation that ended successfully"},
-        #parameter{name = get_error_time, value = GetErrorTime, unit = "microsek",
+        #parameter{name = get_error_time, value = GetErrorTime, unit = "us",
             description = "Average time of get operation that failed (e.g. file does not exist)"},
         #parameter{name = update_error_num, value = ErrorNum, unit = "-",
             description = "Average number of update operation that failed (e.g. file does not exist)"}
@@ -367,7 +367,7 @@ exists_test(Config, Level) ->
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
-    TestFun = fun(DocsSet) ->
+    ExistMultiCheck = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
@@ -380,13 +380,13 @@ exists_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ExistMultiCheck),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, OkTime, _ErrorNum, _ErrorTime, ErrorsList} = count_answers(OpsNum),
     ?assertEqual([], ErrorsList),
     ?assertEqual(OpsNum, OkNum),
 
-    TestFun2 = fun(DocsSet) ->
+    SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(save, Level, [
@@ -399,18 +399,18 @@ exists_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, SaveMany),
     OpsNum2 = DocsPerThead * ThreadsNum,
     {OkNum2, _OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ExistMultiCheck),
     {OkNum3, OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum),
     ?assertEqual([], ErrorsList3),
     ?assertEqual(OpsNum, OkNum3),
 
-    TestFun3 = fun(DocsSet) ->
+    ClearFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(delete, Level, [
@@ -420,15 +420,15 @@ exists_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ClearFun),
     {OkNum4, _OkTime4, _ErrorNum4, _ErrorTime4, ErrorsList4} = count_answers(OpsNum2),
     ?assertEqual([], ErrorsList4),
     ?assertEqual(OpsNum2, OkNum4),
 
     [
-        #parameter{name = exists_true_time, value = OkTime3/OkNum3, unit = "microsek",
+        #parameter{name = exists_true_time, value = OkTime3/OkNum3, unit = "us",
             description = "Average time of exists operation that returned true"},
-        #parameter{name = exists_false_time, value = OkTime/OkNum, unit = "microsek",
+        #parameter{name = exists_false_time, value = OkTime/OkNum, unit = "us",
             description = "Average time of exists operation that returned false"}
     ].
 
@@ -439,12 +439,17 @@ mixed_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    case performance:is_stress_test() of
+        true ->
+            put(file_beg, binary_to_list(term_to_binary(os:timestamp())));
+        _ ->
+            disable_cache_clearing(Workers)
+    end,
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
-    TestFun = fun(DocsSet) ->
+    CreateMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
@@ -459,7 +464,7 @@ mixed_test(Config, Level) ->
         end)
     end,
 
-    TestFun2 = fun(DocsSet) ->
+    SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
@@ -474,7 +479,7 @@ mixed_test(Config, Level) ->
         end)
     end,
 
-    TestFun3 = fun(DocsSet) ->
+    UpdateMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(J) ->
                 BeforeProcessing = os:timestamp(),
@@ -488,9 +493,9 @@ mixed_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun2),
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun3),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, CreateMany),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, SaveMany),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, UpdateMany),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
 
     {OkNum, OkTime, ErrorNum, ErrorTime, _ErrorsList} = count_answers(3*OpsNum),
@@ -500,7 +505,7 @@ mixed_test(Config, Level) ->
 
 
 
-    TestFun4 = fun(DocsSet) ->
+    GetMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
@@ -513,7 +518,7 @@ mixed_test(Config, Level) ->
         end)
     end,
 
-    TestFun5 = fun(DocsSet) ->
+    ExistMultiCheck = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
@@ -526,36 +531,37 @@ mixed_test(Config, Level) ->
         end)
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun4),
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun5),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, GetMany),
+    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ExistMultiCheck),
     {OkNum2, OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(2*OpsNum),
     ?assertEqual([], ErrorsList2),
     ?assertEqual(2*OpsNum, OkNum2),
 
+    case performance:should_clear(Config) of
+        true ->
+            ClearFun = fun(DocsSet) ->
+                for(1, DocsPerThead, fun(I) ->
+                    BeforeProcessing = os:timestamp(),
+                    Ans = ?call_store(delete, Level, [
+                        some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                    AfterProcessing = os:timestamp(),
+                    Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
+                end)
+            end,
 
-
-
-
-    TestFun6 = fun(DocsSet) ->
-        for(1, DocsPerThead, fun(I) ->
-            BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(delete, Level, [
-                some_record, list_to_binary(DocsSet++integer_to_list(I))]),
-            AfterProcessing = os:timestamp(),
-            Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
-        end)
+            spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ClearFun),
+            OpsNum2 = DocsPerThead * ThreadsNum,
+            {OkNum3, _OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum2),
+            ?assertEqual([], ErrorsList3),
+            ?assertEqual(OpsNum2, OkNum3);
+        false ->
+            ok
     end,
 
-    spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun6),
-    OpsNum2 = DocsPerThead * ThreadsNum,
-    {OkNum3, _OkTime3, _ErrorNum3, _ErrorTime3, ErrorsList3} = count_answers(OpsNum2),
-    ?assertEqual([], ErrorsList3),
-    ?assertEqual(OpsNum2, OkNum3),
-
     [
-        #parameter{name = create_save_update_time, value = (OkTime+ErrorTime)/(OkNum+ErrorNum), unit = "microsek",
+        #parameter{name = create_save_update_time, value = (OkTime+ErrorTime)/(OkNum+ErrorNum), unit = "us",
             description = "Average time of create/save/update"},
-        #parameter{name = get_exist_time, value = OkTime2/OkNum2, unit = "microsek",
+        #parameter{name = get_exist_time, value = OkTime2/OkNum2, unit = "us",
             description = "Average time of get/exist"}
     ].
 
@@ -586,9 +592,15 @@ spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, 
     spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun);
 spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
     Master = self(),
+    FileBeg = case performance:is_stress_test() of
+        true ->
+            "_" ++ get(file_beg) ++ "_";
+        _ ->
+            "_"
+    end,
     spawn(N, fun() ->
         try
-            Fun(integer_to_list(DocsSetNum) ++ "_")
+            Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
             E1:E2 ->
                 Master ! {store_ans, {uncatched_error, E1, E2, erlang:get_stacktrace()}, 0}
