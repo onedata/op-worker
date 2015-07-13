@@ -304,31 +304,31 @@ rename_test(Config) ->
     {A8, U8} = ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}]),
     ?assertMatch({ok, _}, {A8, U8}),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [U8, {name, <<"d2">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [U8, {name, <<"d2">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d2">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {name, <<"d3">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {name, <<"d3">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d3">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3">>}])),
 
     ?assertMatch({ok, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3/f1">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d3">>}, {path, <<"/spaces/Space 1/d2">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d3">>}, {path, <<"/spaces/Space 1/d2">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d2">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {path, <<"/spaces/Space 1/d1">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {path, <<"/spaces/Space 1/d1">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d1">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d1">>}, {name, <<"d4">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d1">>}, {name, <<"d4">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d4">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d4">>}])),
 
     %% Inter-space rename
     ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d4">>}])),
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d4">>}, {path, <<"/spaces/Space 2/d1">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d4">>}, {path, <<"/spaces/Space 2/d1">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d4">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d1">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 2/d1">>}])),
     ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1">>}])),

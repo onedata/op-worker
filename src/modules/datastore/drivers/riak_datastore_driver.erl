@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% Bukcet type that is defined in database and configured to store "map" data type
+%% Bucket type that is defined in database and configured to store "map" data type
 -define(RIAK_BUCKET_TYPE, <<"maps">>).
 
 %% Encoded object prefix

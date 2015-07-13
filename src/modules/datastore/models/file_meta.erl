@@ -420,7 +420,7 @@ get_scope(Entry) ->
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.
 setup_onedata_user(UUID) ->
-    ?info("Init user ~p", [UUID]),
+    ?debug("setup_onedata_user ~p", [UUID]),
     try
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
             onedata_user:get(UUID),
@@ -459,7 +459,7 @@ setup_onedata_user(UUID) ->
                 is_scope = true
             }
         }),
-        {ok, SpacesUUID} = create({uuid, RootUUID}, #document{key = fslogic_path:spaces_uuid(UUID),
+        {ok, _SpacesUUID} = create({uuid, RootUUID}, #document{key = fslogic_path:spaces_uuid(UUID),
             value = #file_meta{
                 name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
                 mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
