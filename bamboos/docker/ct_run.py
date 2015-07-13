@@ -13,18 +13,15 @@ All paths used are relative to script's path, not to the running user's CWD.
 Run the script with -h flag to learn about script's running options.
 """
 
-from __future__ import print_function
 import argparse
 import glob
 import os
 import platform
 import sys
 import time
-import re
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
-
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -81,9 +78,6 @@ with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
     print('{{excl_mods, [performance, bare_view, csr_creator, {0}]}}.'.format(
         ', '.join(excluded_modules)), file=cover)
 
-# # Find project's lib dirs
-rel_path = _find_in_file('{sub_dirs,.*\[\"(.*)\"\]}', 'rebar.config')
-
 ct_command = ['ct_run',
               '-no_auto_compile',
               '-dir', '.',
@@ -99,7 +93,6 @@ if dirs:
 else:
     code_paths.extend([os.path.join(script_dir, 'ebin')])
 code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
-print(code_paths)
 ct_command.extend(code_paths)
 
 if args.suites:
