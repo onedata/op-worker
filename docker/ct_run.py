@@ -56,22 +56,22 @@ parser.add_argument(
     dest='performance')
 
 parser.add_argument(
-    '--stress', '-str',
+    '--stress',
     action='store_true',
     default=False,
     help='run stress tests',
     dest='stress')
 
 parser.add_argument(
-    '--stress-no-clearing', '-str-nc',
+    '--stress-no-clearing',
     action='store_true',
     default=False,
     help='run stress tests without clearing data between test cases',
     dest='stress_no_clearing')
 
 parser.add_argument(
-    '--stress-time', '-st',
-    action='append',
+    '--stress-time',
+    action='store',
     help='time of stress test in sek',
     dest='stress_time')
 
@@ -127,8 +127,7 @@ if args.cases:
     ct_command.extend(args.cases)
 
 if args.stress_time:
-    ct_command.extend(['-env', 'stress_time'])
-    ct_command.extend(args.stress_time)
+    ct_command.extend(['-env', 'stress_time', args.stress_time])
 
 if args.performance:
     ct_command.extend(['-env', 'performance', 'true'])
