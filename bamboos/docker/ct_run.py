@@ -25,6 +25,7 @@ import re
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
 
+
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     description='Run Common Tests.')
@@ -77,14 +78,11 @@ with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
             print(line, file=cover)
 
     print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(dirs)), file=cover)
-    print('{{excl_mods, [performance, bare_view, {0}]}}.'.format(
+    print('{{excl_mods, [performance, bare_view, csr_creator, {0}]}}.'.format(
         ', '.join(excluded_modules)), file=cover)
 
 # # Find project's lib dirs
-# # Parse rebar.config and reltool.config for release location
-# with open('rebar.config', 'r') as rebar_config:
-#     for line in inF:
-#         if 'myString' in line:
+rel_path = _find_in_file('{sub_dirs,.*\[\"(.*)\"\]}', 'rebar.config')
 
 ct_command = ['ct_run',
               '-no_auto_compile',
@@ -101,7 +99,6 @@ if dirs:
 else:
     code_paths.extend([os.path.join(script_dir, 'ebin')])
 code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
-code_paths.extend(glob.glob(os.path.join(script_dir, 'rel/op_worker/lib/*')))
 print(code_paths)
 ct_command.extend(code_paths)
 
