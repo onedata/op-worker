@@ -41,13 +41,13 @@ def _node_up(image, bindir, logdir, uid, config, dns_servers):
     (name, sep, hostname) = node_name.partition('@')
 
     command = \
-        '''set -e
-mkdir -p /root/bin/node/log/
+        '''mkdir -p /root/bin/node/log/
 chown {uid}:{gid} /root/bin/node/log/
 chmod ug+s /root/bin/node/log/
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
+set -e
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/op_ccm console'''
     command = command.format(
