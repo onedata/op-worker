@@ -12,6 +12,8 @@
 -module(csr_creator).
 -author("Lukasz Opiola").
 
+-include("global_definitions.hrl").
+
 %% API
 -export([create_csr/3]).
 
@@ -27,9 +29,11 @@
 %% @end
 -spec init() -> ok | {error, Reason :: atom()}.
 init() ->
+    io:format("~nPWD: ~p~n", [os:cmd("hostname -f")]),
+    io:format("~npriv_dir: ~p~n", [code:priv_dir(?APP_NAME)]),
     LibName = "csr_creator_drv",
     LibPath =
-        case code:priv_dir(op_worker) of
+        case code:priv_dir(?APP_NAME) of
             {error, bad_name} ->
                 case filelib:is_dir(filename:join(["..", priv])) of
                     true ->
