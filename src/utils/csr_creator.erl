@@ -29,8 +29,6 @@
 %% @end
 -spec init() -> ok | {error, Reason :: atom()}.
 init() ->
-    io:format("~nPWD: ~p~n", [os:cmd("hostname -f")]),
-    io:format("~npriv_dir: ~p~n", [code:priv_dir(?APP_NAME)]),
     LibName = "csr_creator_drv",
     LibPath =
         case code:priv_dir(?APP_NAME) of

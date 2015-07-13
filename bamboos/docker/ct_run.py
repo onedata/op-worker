@@ -66,18 +66,21 @@ excluded_modules = [os.path.basename(item)[:-4] for item in excluded_modules]
 cover_template = os.path.join(script_dir, 'test_distributed', 'cover.spec')
 new_cover = os.path.join(script_dir, 'test_distributed', 'cover_tmp.spec')
 
-dirs = []
+cover_dirs = []
 with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
     for line in template:
         if 'incl_dirs_r' in line:
             dirs_string = re.search(r'\[(.*?)\]', line).group(1)
-            dirs = [os.path.join(script_dir, d[1:]) for d in
+            cover_dirs = [os.path.join(script_dir, d[1:]) for d in
                     dirs_string.split(', ')]
+        elif 'excl_mods' in line:
+            modules_string = re.search(r'\[(.*?)\]', line).group(1)
+            excluded_modules.extend([d.strip('"') for d in modules_string.split(', ')])
         else:
             print(line, file=cover)
 
-    print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(dirs)), file=cover)
-    print('{{excl_mods, [performance, bare_view, csr_creator, {0}]}}.'.format(
+    print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(cover_dirs)), file=cover)
+    print('{{excl_mods, [{0}]}}.'.format(
         ', '.join(excluded_modules)), file=cover)
 
 ct_command = ['ct_run',
@@ -90,8 +93,8 @@ ct_command = ['ct_run',
               '-include', '../include', '../deps']
 
 code_paths = ['-pa']
-if dirs:
-    code_paths.extend([os.path.join(script_dir, item[:-1]) for item in dirs])
+if cover_dirs:
+    code_paths.extend([os.path.join(script_dir, item[:-1]) for item in cover_dirs])
 else:
     code_paths.extend([os.path.join(script_dir, 'ebin')])
 code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
