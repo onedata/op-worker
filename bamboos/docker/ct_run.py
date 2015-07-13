@@ -13,12 +13,14 @@ All paths used are relative to script's path, not to the running user's CWD.
 Run the script with -h flag to learn about script's running options.
 """
 
+from __future__ import print_function
 import argparse
 import glob
 import os
 import platform
 import sys
 import time
+import re
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
