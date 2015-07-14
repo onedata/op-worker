@@ -159,6 +159,7 @@ elif args.cover:
                 if data.has_key(app):
                     for config in data[app]['nodes'].values():
                         config['sys.config']['covered_dirs'] = docker_dirs
+                        config['sys.config']['covered_excluded_modules'] = ['performance', 'bare_view']
 
             with open(file, 'w') as jsonFile:
                 jsonFile.write(json.dumps(data))
