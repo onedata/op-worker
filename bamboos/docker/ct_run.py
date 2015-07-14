@@ -21,6 +21,8 @@ import platform
 import sys
 import time
 import re
+import shutil
+import json
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
@@ -55,30 +57,63 @@ parser.add_argument(
     help='run performance tests',
     dest='performance')
 
+parser.add_argument(
+    '--cover',
+    action='store_true',
+    default=False,
+    help='run cover analysis',
+    dest='cover')
+
+parser.add_argument(
+    '--stress',
+    action='store_true',
+    default=False,
+    help='run stress tests',
+    dest='stress')
+
+parser.add_argument(
+    '--stress-no-clearing',
+    action='store_true',
+    default=False,
+    help='run stress tests without clearing data between test cases',
+    dest='stress_no_clearing')
+
+parser.add_argument(
+    '--stress-time',
+    action='store',
+    help='time of stress test in sek',
+    dest='stress_time')
+
+
 args = parser.parse_args()
 script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
 
-excluded_modules = glob.glob(
+excl_mods = glob.glob(
     os.path.join(script_dir, 'test_distributed', '*.erl'))
-excluded_modules = [os.path.basename(item)[:-4] for item in excluded_modules]
+excl_mods = [os.path.basename(item)[:-4] for item in excl_mods]
 
 cover_template = os.path.join(script_dir, 'test_distributed', 'cover.spec')
 new_cover = os.path.join(script_dir, 'test_distributed', 'cover_tmp.spec')
 
-dirs = []
+incl_dirs = []
 with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
     for line in template:
         if 'incl_dirs_r' in line:
             dirs_string = re.search(r'\[(.*?)\]', line).group(1)
-            dirs = [os.path.join(script_dir, d[1:]) for d in
+            incl_dirs = [os.path.join(script_dir, d[1:]) for d in
                     dirs_string.split(', ')]
+            docker_dirs = [os.path.join('/root/build', d[1:-1]) for d in
+                    dirs_string.split(', ')]
+        elif 'excl_mods' in line:
+            modules_string = re.search(r'\[(.*?)\]', line).group(1)
+            excl_mods.extend([d.strip('"') for d in modules_string.split(', ')])
         else:
             print(line, file=cover)
 
-    print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(dirs)), file=cover)
-    print('{{excl_mods, [performance, bare_view, {0}]}}.'.format(
-        ', '.join(excluded_modules)), file=cover)
+    print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(incl_dirs)), file=cover)
+    print('{{excl_mods, [{0}]}}.'.format(
+        ', '.join(excl_mods)), file=cover)
 
 ct_command = ['ct_run',
               '-no_auto_compile',
@@ -90,8 +125,8 @@ ct_command = ['ct_run',
               '-include', '../include', '../deps']
 
 code_paths = ['-pa']
-if dirs:
-    code_paths.extend([os.path.join(script_dir, item[:-1]) for item in dirs])
+if incl_dirs:
+    code_paths.extend([os.path.join(script_dir, item[:-1]) for item in incl_dirs])
 else:
     code_paths.extend([os.path.join(script_dir, 'ebin')])
 code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
@@ -105,10 +140,32 @@ if args.cases:
     ct_command.append('-case')
     ct_command.extend(args.cases)
 
+if args.stress_time:
+    ct_command.extend(['-env', 'stress_time', args.stress_time])
+
 if args.performance:
     ct_command.extend(['-env', 'performance', 'true'])
-else:
+elif args.stress:
+    ct_command.extend(['-env', 'stress', 'true'])
+elif args.stress_no_clearing:
+    ct_command.extend(['-env', 'stress_no_clearing', 'true'])
+elif args.cover:
     ct_command.extend(['-cover', 'cover_tmp.spec'])
+    env_descs = glob.glob(
+        os.path.join(script_dir, 'test_distributed', '*', 'env_desc.json'))
+    for file in env_descs:
+        shutil.copyfile(file, file + '.bak')
+        with open(file, 'r') as jsonFile:
+            data = json.load(jsonFile)
+
+            for app in ['op_worker', 'op_ccm', 'globalregistry']:
+                if data.has_key(app):
+                    for config in data[app]['nodes'].values():
+                        config['sys.config']['covered_dirs'] = docker_dirs
+
+            with open(file, 'w') as jsonFile:
+                jsonFile.write(json.dumps(data))
+
 
 command = '''
 import os, subprocess, sys, stat
@@ -154,4 +211,9 @@ ret = docker.run(tty=True,
                  command=['python', '-c', command])
 
 os.remove(new_cover)
+if args.cover:
+    for file in env_descs:
+        os.remove(file)
+        shutil.move(file + '.bak', file)
+
 sys.exit(ret)
