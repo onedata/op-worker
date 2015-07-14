@@ -28,7 +28,7 @@
 -define(LINKS_KEY_SUFFIX, "$$").
 
 %% Connections to single Riak node
--define(CONN_PER_NODE, 100).
+-define(CONN_PER_NODE, 10).
 
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
