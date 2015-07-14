@@ -158,10 +158,18 @@ elif args.cover:
         with open(file, 'r') as jsonFile:
             data = json.load(jsonFile)
 
-            for app in ['op_worker', 'op_ccm', 'globalregistry']:
-                if data.has_key(app):
-                    for config in data[app]['nodes'].values():
-                        config['sys.config']['covered_dirs'] = docker_dirs
+            configs_to_change = []
+            if 'providers' in data:
+                for provider in data['providers']:
+                    if 'op_worker' in data['providers'][provider]:
+                        configs_to_change.extend(data['providers'][provider]['op_worker']['nodes'].values())
+                    if 'op_ccm' in data['providers'][provider]:
+                        configs_to_change.extend(data['providers'][provider]['op_ccm']['nodes'].values())
+            if 'globalregistry' in data:
+                configs_to_change.extend(data['globalregistry']['nodes'].values())
+
+            for config in configs_to_change:
+                config['sys.config']['covered_dirs'] = docker_dirs
 
             with open(file, 'w') as jsonFile:
                 jsonFile.write(json.dumps(data))
