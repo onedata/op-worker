@@ -6,7 +6,6 @@ This software is released under the MIT license cited in 'LICENSE.txt'."""
 
 import os
 import sys
-import time
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(script_dir))
@@ -18,6 +17,7 @@ from environment import appmock, common, docker
 # noinspection PyUnresolvedReferences
 import connection_pool
 import appmock_client
+
 
 # noinspection PyClassHasNoInit
 class TestConnectionPool:
@@ -121,6 +121,21 @@ class TestConnectionPool:
         ]
 
 
+def create_connection_before_handshake_response(ip, accept_handshake=True):
+    handshake = random_str()
+    conn = connection_pool.ConnectionProxy(handshake, accept_handshake)
+    conn.connect(ip, 5555)
+    appmock_client.tcp_server_wait_for_specific_messages(ip, 5555, handshake)
+    return conn
+
+
+def create_connection(ip):
+    conn = create_connection_before_handshake_response(ip)
+    appmock_client.tcp_server_send(ip, 5555, random_str())
+    assert conn.waitForReady()
+    return conn
+
+
 # noinspection PyClassHasNoInit
 class TestConnection:
     @classmethod
@@ -138,20 +153,16 @@ class TestConnection:
     def teardown_class(cls):
         docker.remove(cls.result['docker_ids'], force=True, volumes=True)
 
+    def setup_method(self, _):
+        appmock_client.reset_tcp_server_history(self.ip)
+
     @performance(skip=True)
     def test_connect_should_trigger_handshake(self, parameters):
-        handshake = random_str()
-
-        conn = connection_pool.ConnectionProxy(handshake, True)
-        conn.connect(self.ip, 5555)
-
-        appmock_client.tcp_server_wait_for_specific_messages(self.ip, 5555,
-                                                             handshake)
+        create_connection_before_handshake_response(self.ip)
 
     @performance(skip=True)
     def test_connection_should_receive_handshake_response(self, parameters):
-        conn = connection_pool.ConnectionProxy(random_str(), True)
-        conn.connect(self.ip, 5555)
+        conn = create_connection_before_handshake_response(self.ip)
 
         response = random_str()
         appmock_client.tcp_server_send(self.ip, 5555, response)
@@ -161,8 +172,8 @@ class TestConnection:
     @performance(skip=True)
     def test_connection_should_close_after_rejected_handshake_response(self,
                                                                        parameters):
-        conn = connection_pool.ConnectionProxy(random_str(), False)
-        conn.connect(self.ip, 5555)
+        conn = create_connection_before_handshake_response(self.ip,
+                                                           accept_handshake=False)
 
         assert not conn.isClosed()
 
@@ -172,8 +183,7 @@ class TestConnection:
 
     @performance(skip=True)
     def test_connection_is_ready_after_handshake_response(self, parameters):
-        conn = connection_pool.ConnectionProxy(random_str(), True)
-        conn.connect(self.ip, 5555)
+        conn = create_connection_before_handshake_response(self.ip)
 
         assert not conn.isReady()
 
@@ -184,14 +194,9 @@ class TestConnection:
     @performance(skip=True)
     def test_connection_should_become_ready_after_message_sent(self,
                                                                parameters):
-        conn = connection_pool.ConnectionProxy(random_str(), True)
-        conn.connect(self.ip, 5555)
+        conn = create_connection(self.ip)
 
-        appmock_client.tcp_server_send(self.ip, 5555, random_str())
-
-        conn.waitForReady()
         conn.send(random_str())
-
         assert conn.waitForReady()
 
     @performance({
@@ -207,8 +212,7 @@ class TestConnection:
         """Sends multiple messages using connection and checks whether they
         have been received."""
 
-        conn = connection_pool.ConnectionProxy(random_str(), True)
-        conn.connect(self.ip, 5555)
+        conn = create_connection(self.ip)
 
         msg_num = parameters['msg_num'].value
         msg_size = parameters['msg_size'].value * translate_unit(
@@ -251,11 +255,7 @@ class TestConnection:
     def test_connection_should_receive(self, parameters):
         """Receives multiple messages using connection."""
 
-        conn = connection_pool.ConnectionProxy(random_str(), True)
-        conn.connect(self.ip, 5555)
-
-        appmock_client.tcp_server_send(self.ip, 5555, random_str())
-        conn.getHandshakeResponse()
+        conn = create_connection(self.ip)
 
         msg_num = parameters['msg_num'].value
         msg_size = parameters['msg_size'].value * translate_unit(

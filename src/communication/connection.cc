@@ -127,9 +127,12 @@ void Connection::onResolve(const std::error_code &ec,
 
     auto entries = shuffleEndpoints(iterator);
 #ifndef NDEBUG
-    DLOG(INFO) << "Host resolved as:";
+    std::stringstream ss;
+    ss << "Host resolved as:\n";
     for (auto &entry : entries)
-        DLOG(INFO) << "\t" << entry.endpoint().address().to_string();
+        ss << "\t" << entry.endpoint().address().to_string() << "\n";
+
+    DLOG(INFO) << ss.str();
 #endif
 
     asio::async_connect(m_socket.lowest_layer(), entries.begin(), entries.end(),
