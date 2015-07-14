@@ -180,9 +180,4 @@ translate_protocol_version_to_protobuf_test() ->
 translate_undefined_to_protobuf_test() ->
   ?assertEqual(undefined, translator:translate_to_protobuf(undefined)).
 
-
-%%%===================================================================
-%%% Setup and teardown functions
-%%%===================================================================
-
 -endif.

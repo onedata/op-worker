@@ -21,7 +21,7 @@
 %%% Test functions
 %%%===================================================================
 
-%% tests gen_global_session_id(_ undefined) call
+%% tests gen_global_session_id(_, undefined) call
 undefined_id_test() ->
   ?assertEqual(undefined,
     fslogic_context:gen_global_session_id(<<"Provider">>, undefined)).
@@ -50,7 +50,7 @@ read_id_test() ->
 is_id_test() ->
   ?assert(fslogic_context:is_global_session_id(<<"123::ABC">>)),
   ?assertNot(fslogic_context:is_global_session_id(<<"123:ABC">>)),
-%% Should ID have only one "::" token?
+%% @todo Should ID have only one "::" token?
 %%   ?assertNot(fslogic_context:is_global_session_id(<<"1::2::3">>)),
   ?assertNot(fslogic_context:is_global_session_id(<<"id">>)),
   ?assertNot(fslogic_context:is_global_session_id(<<"">>)).
