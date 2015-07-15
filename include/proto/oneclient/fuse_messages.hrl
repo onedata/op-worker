@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Communication protocol between FUSE client and the server.
+%%% Internal protocol layer between FUSE client and the server.
 %%% @end
 %%%-------------------------------------------------------------------
 

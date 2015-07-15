@@ -51,21 +51,23 @@ gen_status_message(_) ->
 %%--------------------------------------------------------------------
 -spec posix_to_internal(POSIXErrorCode :: integer()) ->
     InternalErrorCode :: code().
-posix_to_internal(-1) ->
+posix_to_internal(Code) when is_integer(Code), Code < 0 ->
+    posix_to_internal(Code * -1);
+posix_to_internal(1) ->
     ?EPERM;
-posix_to_internal(-2) ->
+posix_to_internal(2) ->
     ?ENOENT;
-posix_to_internal(-17) ->
+posix_to_internal(17) ->
     ?EEXIST;
-posix_to_internal(-13) ->
+posix_to_internal(13) ->
     ?EACCES;
-posix_to_internal(-122) ->
+posix_to_internal(122) ->
     ?EDQUOT;
-posix_to_internal(-22) ->
+posix_to_internal(22) ->
     ?EINVAL;
-posix_to_internal(-39) ->
+posix_to_internal(39) ->
     ?ENOTEMPTY;
-posix_to_internal(-95) ->
+posix_to_internal(95) ->
     ?ENOTSUP;
 posix_to_internal(_) ->
     ?EREMOTEIO.
