@@ -170,9 +170,11 @@ elif args.cover:
 
             for config in configs_to_change:
                 config['sys.config']['covered_dirs'] = docker_dirs
-                print(excl_mods)
-                config['sys.config']['covered_excluded_modules'] = ['performance', 'bare_view']
+                config['sys.config']['covered_excluded_modules'] = excl_mods
 
+            print(json.dumps(data))
+            print('')
+            print('')
             with open(file, 'w') as jsonFile:
                 jsonFile.write(json.dumps(data))
 
