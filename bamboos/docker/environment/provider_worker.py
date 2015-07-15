@@ -36,9 +36,6 @@ def _tweak_config(config, name, uid):
 
 def _node_up(image, bindir, logdir, uid, config, dns_servers, db_node_mappings):
     node_name = config['nodes']['node']['vm.args']['name']
-
-    print "Node up", node_name
-
     db_nodes = config['nodes']['node']['sys.config']['db_nodes']
     for i in range(len(db_nodes)):
         db_nodes[i] = db_node_mappings[db_nodes[i]]
@@ -60,8 +57,6 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         uid=os.geteuid(),
         gid=os.getegid())
 
-    print command
-
     volumes = [(bindir, '/root/build', 'ro')]
 
     if logdir:
@@ -79,8 +74,6 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         volumes=volumes,
         dns_list=dns_servers,
         command=command)
-
-    print container
 
     return (
         [container],
