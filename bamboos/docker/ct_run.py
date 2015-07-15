@@ -171,6 +171,8 @@ elif args.cover:
 
             for config in configs_to_change:
                 config['sys.config']['covered_dirs'] = docker_dirs
+                print(excl_mods)
+                config['sys.config']['covered_excluded_modules'] = ['performance', 'bare_view']
 
             with open(file, 'w') as jsonFile:
                 jsonFile.write(json.dumps(data))
@@ -208,21 +210,21 @@ command = command.format(
     cmd=ct_command,
     shed_privileges=(platform.system() == 'Linux'))
 
-ret = docker.run(tty=True,
-                 rm=True,
-                 interactive=True,
-                 workdir=os.path.join(script_dir, 'test_distributed'),
-                 reflect=[(script_dir, 'rw'),
-                          ('/var/run/docker.sock', 'rw')],
-                 name='testmaster_{0}'.format(uid),
-                 hostname='testmaster.{0}.dev.docker'.format(uid),
-                 image=args.image,
-                 command=['python', '-c', command])
-
-os.remove(new_cover)
-if args.cover:
-    for file in env_descs:
-        os.remove(file)
-        shutil.move(file + '.bak', file)
-
-sys.exit(ret)
+# ret = docker.run(tty=True,
+#                  rm=True,
+#                  interactive=True,
+#                  workdir=os.path.join(script_dir, 'test_distributed'),
+#                  reflect=[(script_dir, 'rw'),
+#                           ('/var/run/docker.sock', 'rw')],
+#                  name='testmaster_{0}'.format(uid),
+#                  hostname='testmaster.{0}.dev.docker'.format(uid),
+#                  image=args.image,
+#                  command=['python', '-c', command])
+#
+# os.remove(new_cover)
+# if args.cover:
+#     for file in env_descs:
+#         os.remove(file)
+#         shutil.move(file + '.bak', file)
+#
+# sys.exit(ret)
