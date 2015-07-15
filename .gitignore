@@ -24,6 +24,7 @@ deps
 doc
 logs
 ebin
+priv
 
 c_lib
 c_src/helpers_nif/*.o
