@@ -33,11 +33,11 @@ init() ->
     LibPath =
         case code:priv_dir(?APP_NAME) of
             {error, bad_name} ->
-                case filelib:is_dir(filename:join(["..", priv])) of
+                case filelib:is_dir(filename:join(["..", "priv"])) of
                     true ->
-                        filename:join(["..", priv, LibName]);
+                        filename:join(["..", "priv", LibName]);
                     _ ->
-                        filename:join([priv, LibName])
+                        filename:join(["priv", LibName])
                 end;
 
             Dir ->
