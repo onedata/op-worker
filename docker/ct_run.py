@@ -223,9 +223,9 @@ command = command.format(
 #                  command=['python', '-c', command])
 #
 # os.remove(new_cover)
-# if args.cover:
-#     for file in env_descs:
-#         os.remove(file)
-#         shutil.move(file + '.bak', file)
+if args.cover:
+    for file in env_descs:
+        os.remove(file)
+        shutil.move(file + '.bak', file)
 #
 # sys.exit(ret)
