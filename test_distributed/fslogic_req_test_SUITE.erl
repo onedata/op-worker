@@ -32,6 +32,7 @@
     fslogic_read_dir_test/1,
     chmod_test/1,
     simple_rename_test/1,
+    update_times_test/1,
     default_permissions_test/1
 ]).
 
@@ -42,6 +43,7 @@ all() -> [
     fslogic_read_dir_test,
     chmod_test,
     simple_rename_test,
+    update_times_test,
     default_permissions_test
 ].
 
@@ -375,7 +377,7 @@ default_permissions_test(Config) ->
 
 
 simple_rename_test(Config) ->
-    [Worker, _] = Workers = ?config(op_worker_nodes, Config),
+    [Worker, _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
     {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
@@ -421,6 +423,51 @@ simple_rename_test(Config) ->
 
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, MovedFileAttr3),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, MovedFileAttr4),
+
+    ok.
+
+
+update_times_test(Config) ->
+    [Worker, _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+
+    GetTimes =
+        fun(Entry, SessId) ->
+            FileAttr = ?req(Worker, SessId, #get_file_attr{entry = Entry}),
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
+            #fuse_response{fuse_response = #file_attr{atime = ATime, mtime = MTime, ctime = CTime}} = FileAttr,
+            {ATime, MTime, CTime}
+        end,
+
+    lists:foreach(
+        fun(SessId) ->
+            Path = <<"/test">>,
+            ParentUUID = get_uuid_privileged(Worker, SessId, <<"/">>),
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}},
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"test">>, mode = 8#000})),
+            UUID = get_uuid(Worker, SessId, Path),
+
+            {_OldATime, OldMTime, OldCTime} = GetTimes({uuid, UUID}, SessId),
+
+            NewATime = 1234565,
+            NewMTime = 9275629,
+            NewCTime = 7837652,
+
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}},
+                ?req(Worker, SessId, #update_times{uuid = UUID, atime = NewATime})),
+
+            ?assertMatch({NewATime, OldMTime, OldCTime}, GetTimes({uuid, UUID}, SessId)),
+
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}},
+                ?req(Worker, SessId, #update_times{uuid = UUID, mtime = NewMTime, ctime = NewCTime})),
+
+
+            ?assertMatch({NewATime, NewMTime, NewCTime}, GetTimes({uuid, UUID}, SessId))
+
+        end, [SessId1, SessId2, SessId3, SessId4]),
 
     ok.
 
