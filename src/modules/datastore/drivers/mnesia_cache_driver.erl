@@ -415,9 +415,7 @@ links_table_name(TabName) when is_atom(TabName) ->
 %% Gets Mnesia transaction table name for given model.
 %% @end
 %%--------------------------------------------------------------------
--spec transaction_table_name(model_behaviour:model_config() | atom()) -> atom().
-transaction_table_name(#model_config{name = ModelName}) ->
-    transaction_table_name(ModelName);
+-spec transaction_table_name(atom()) -> atom().
 transaction_table_name(TabName) when is_atom(TabName) ->
     binary_to_atom(<<"dc_transaction_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
 
