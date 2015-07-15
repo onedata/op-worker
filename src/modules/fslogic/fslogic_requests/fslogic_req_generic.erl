@@ -57,10 +57,10 @@ chmod(_CTX, File, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
-    no_return().
+    #fuse_response{} | no_return().
 -check_permissions(root).
 chown(_, _File, _UserId) ->
-    ?NOT_IMPLEMENTED.
+    #fuse_response{status = #status{code = ?ENOTSUP}}.
 
 
 %%--------------------------------------------------------------------
