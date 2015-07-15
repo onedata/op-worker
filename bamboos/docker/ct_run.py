@@ -24,7 +24,6 @@ import re
 import shutil
 import json
 
-
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
 
