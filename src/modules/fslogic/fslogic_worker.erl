@@ -105,7 +105,7 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
     catch
         Reason ->
             %% Manually thrown error, normal interrupt case.
-            report_error(FuseRequest, Reason, warning);
+            report_error(FuseRequest, Reason, debug);
         error:{badmatch, Reason} ->
             %% Bad Match assertion - something went wrong, but it could be expected.
             report_error(FuseRequest, Reason, warning);

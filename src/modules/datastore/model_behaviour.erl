@@ -13,7 +13,8 @@
 
 -include("modules/datastore/datastore_common_internal.hrl").
 
--type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links | fetch_link | foreach_link.
+-type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links |
+                        fetch_link | foreach_link | run_synchronized.
 -type model_type() :: atom().
 -type model_config() :: #model_config{}.
 

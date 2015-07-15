@@ -28,6 +28,9 @@
     session :: #session{}
 }).
 
+%% Stub record
+-record(space_info, {}).
+
 %% File types
 -define(REGULAR_FILE_TYPE, 'REG').
 -define(DIRECTORY_TYPE, 'DIR').
@@ -36,5 +39,6 @@
 %% root user definitions
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
+
 
 -endif.
