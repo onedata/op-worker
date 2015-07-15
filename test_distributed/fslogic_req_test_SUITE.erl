@@ -70,14 +70,14 @@ fslogic_get_file_attr_test(Config) ->
             }
         }, ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}))
     end, [
-        {SessId1, UserId1, 8#1770, ?ROOT_USER_ID, <<"/">>},
-        {SessId2, UserId2, 8#1770, ?ROOT_USER_ID, <<"/">>},
-        {SessId1, <<"spaces">>, 8#1755, ?ROOT_USER_ID, <<"/spaces">>},
-        {SessId2, <<"spaces">>, 8#1755, ?ROOT_USER_ID, <<"/spaces">>},
-        {SessId1, <<"space_name1">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name1">>},
-        {SessId2, <<"space_name2">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name2">>},
-        {SessId1, <<"space_name3">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name3">>},
-        {SessId2, <<"space_name4">>, 8#1770, ?ROOT_USER_ID, <<"/spaces/space_name4">>}
+        {SessId1, UserId1, 8#1770, 0, <<"/">>},
+        {SessId2, UserId2, 8#1770, 0, <<"/">>},
+        {SessId1, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
+        {SessId2, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
+        {SessId1, <<"space_name1">>, 8#1770, 0, <<"/spaces/space_name1">>},
+        {SessId2, <<"space_name2">>, 8#1770, 0, <<"/spaces/space_name2">>},
+        {SessId1, <<"space_name3">>, 8#1770, 0, <<"/spaces/space_name3">>},
+        {SessId2, <<"space_name4">>, 8#1770, 0, <<"/spaces/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir">>}}

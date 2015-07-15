@@ -29,6 +29,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_storage_uid(ID :: binary()) -> non_neg_integer().
+gen_storage_uid(?ROOT_USER_ID) ->
+    0;
 gen_storage_uid(ID) ->
     <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
     {ok, LowestGID} = {ok, 100000},
