@@ -191,8 +191,7 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
   {ok, Uuids} = apply(Model, list, [TimeWindow]),
   lists:foreach(fun(Uuid) ->
     {ModelName, Key} = decode_uuid(Uuid),
-    datastore:delete(Level, ModelName, Key),
-    apply(Model, delete, [Uuid])
+    datastore:delete(Level, ModelName, Key)
   end, Uuids),
   case TimeWindow of
     0 ->
