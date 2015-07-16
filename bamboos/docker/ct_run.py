@@ -89,28 +89,31 @@ args = parser.parse_args()
 script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
 
-excluded_modules = glob.glob(
+excl_mods = glob.glob(
     os.path.join(script_dir, 'test_distributed', '*.erl'))
-excluded_modules = [os.path.basename(item)[:-4] for item in excluded_modules]
+excl_mods = [os.path.basename(item)[:-4] for item in excl_mods]
 
 cover_template = os.path.join(script_dir, 'test_distributed', 'cover.spec')
 new_cover = os.path.join(script_dir, 'test_distributed', 'cover_tmp.spec')
 
-dirs = []
+incl_dirs = []
 with open(cover_template, 'r') as template, open(new_cover, 'w') as cover:
     for line in template:
         if 'incl_dirs_r' in line:
             dirs_string = re.search(r'\[(.*?)\]', line).group(1)
-            dirs = [os.path.join(script_dir, d[1:]) for d in
+            incl_dirs = [os.path.join(script_dir, d[1:]) for d in
                     dirs_string.split(', ')]
             docker_dirs = [os.path.join('/root/build', d[1:-1]) for d in
                     dirs_string.split(', ')]
+        elif 'excl_mods' in line:
+            modules_string = re.search(r'\[(.*?)\]', line).group(1)
+            excl_mods.extend([d.strip('"') for d in modules_string.split(', ')])
         else:
             print(line, file=cover)
 
-    print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(dirs)), file=cover)
-    print('{{excl_mods, [performance, bare_view, {0}]}}.'.format(
-        ', '.join(excluded_modules)), file=cover)
+    print('{{incl_dirs_r, ["{0}]}}.'.format(', "'.join(incl_dirs)), file=cover)
+    print('{{excl_mods, [{0}]}}.'.format(
+        ', '.join(excl_mods)), file=cover)
 
 ct_command = ['ct_run',
               '-no_auto_compile',
@@ -122,8 +125,8 @@ ct_command = ['ct_run',
               '-include', '../include', '../deps']
 
 code_paths = ['-pa']
-if dirs:
-    code_paths.extend([os.path.join(script_dir, item[:-1]) for item in dirs])
+if incl_dirs:
+    code_paths.extend([os.path.join(script_dir, item[:-1]) for item in incl_dirs])
 else:
     code_paths.extend([os.path.join(script_dir, 'ebin')])
 code_paths.extend(glob.glob(os.path.join(script_dir, 'deps', '*', 'ebin')))
@@ -155,11 +158,19 @@ elif args.cover:
         with open(file, 'r') as jsonFile:
             data = json.load(jsonFile)
 
-            for app in ['op_worker', 'op_ccm', 'globalregistry']:
-                if data.has_key(app):
-                    for config in data[app]['nodes'].values():
-                        config['sys.config']['covered_dirs'] = docker_dirs
-                        config['sys.config']['covered_excluded_modules'] = ['performance', 'bare_view']
+            configs_to_change = []
+            if 'providers' in data:
+                for provider in data['providers']:
+                    if 'op_worker' in data['providers'][provider]:
+                        configs_to_change.extend(data['providers'][provider]['op_worker']['nodes'].values())
+                    if 'op_ccm' in data['providers'][provider]:
+                        configs_to_change.extend(data['providers'][provider]['op_ccm']['nodes'].values())
+            if 'globalregistry' in data:
+                configs_to_change.extend(data['globalregistry']['nodes'].values())
+
+            for config in configs_to_change:
+                config['sys.config']['covered_dirs'] = docker_dirs
+                config['sys.config']['covered_excluded_modules'] = excl_mods
 
             with open(file, 'w') as jsonFile:
                 jsonFile.write(json.dumps(data))

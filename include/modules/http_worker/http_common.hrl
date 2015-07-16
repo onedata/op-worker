@@ -12,6 +12,9 @@
 -ifndef(HTTP_COMMON_HRL).
 -define(HTTP_COMMON_HRL, 1).
 
+-include("global_definitions.hrl").
+-include_lib("n2o/include/wf.hrl").
+
 %% Includes from cowboy
 -type req() :: cowboy_req:req().
 

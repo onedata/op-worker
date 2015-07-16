@@ -14,12 +14,12 @@ import os
 import common
 import docker
 
-
 import copy
 import json
 import os
 
 from . import common, docker, riak, dns as dns_mod
+
 
 def _tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
@@ -29,8 +29,10 @@ def _tweak_config(config, name, uid):
     sys_config['ccm_nodes'] = [common.format_nodename(n, uid) for n in
                                sys_config['ccm_nodes']]
 
+    if 'vm.args' not in cfg['nodes']['node']:
+        cfg['nodes']['node']['vm.args'] = {}
     vm_args = cfg['nodes']['node']['vm.args']
-    vm_args['name'] = common.format_nodename(vm_args['name'], uid)
+    vm_args['name'] = common.format_nodename(name, uid)
 
     return cfg
 
@@ -77,27 +79,31 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         [container],
         {
             'docker_ids': [container],
-            'op_ccm_nodes' : [node_name]
+            'op_ccm_nodes': [node_name]
         }
     )
 
+
 def _ready(container):
-    return True #todo implement
+    return True  # todo implement
+
 
 def up(image, bindir, logdir, dns, uid, config_path):
-    config = common.parse_json_file(config_path)['op_ccm']
-    config['config']['target_dir'] = '/root/bin'
-    configs = [_tweak_config(config, node, uid) for node in config['nodes']]
-
+    providers = common.parse_json_file(config_path)['providers']
     dns_servers, output = dns_mod.set_up_dns(dns, uid)
-    ccms = []
+    # CCMs of every provider are started together
+    for provider in providers:
+        config = providers[provider]['op_ccm']
+        config['config']['target_dir'] = '/root/bin'
+        configs = [_tweak_config(config, node, uid) for node in config['nodes']]
 
-    for cfg in configs:
-        ccm, node_out = _node_up(image, bindir, logdir, uid, cfg,
-                                         dns_servers)
-        ccms.extend(ccm)
-        common.merge(output, node_out)
+        ccms = []
+        for cfg in configs:
+            ccm, node_out = _node_up(image, bindir, logdir, uid, cfg,
+                                     dns_servers)
+            ccms.extend(ccm)
+            common.merge(output, node_out)
 
-    common.wait_until(_ready, ccms[0:1], 0)
+        common.wait_until(_ready, ccms[0:1], 0)
 
     return output
