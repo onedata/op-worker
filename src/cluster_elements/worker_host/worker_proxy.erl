@@ -52,8 +52,8 @@ call(WorkerRef, Request, Timeout) ->
     MsgId = make_ref(),
     case choose_node(WorkerRef) of
         {ok, Name, Node} ->
-            gen_server:cast({Name, Node}, #worker_request{req = Request,
-                id = MsgId, reply_to = {proc, self()}}),
+            spawn(Node, worker_host, proc_request,
+                [Name, #worker_request{req = Request, id = MsgId, reply_to = {proc, self()}}]),
             receive
                 #worker_answer{id = MsgId, response = Response} -> Response
             after Timeout ->
@@ -126,8 +126,8 @@ cast(WorkerRef, Request, ReplyTo) ->
 cast(WorkerRef, Request, ReplyTo, MsgId) ->
     case choose_node(WorkerRef) of
         {ok, Name, Node} ->
-            gen_server:cast({Name, Node}, #worker_request{req = Request,
-                id = MsgId, reply_to = ReplyTo});
+            spawn(Node, worker_host, proc_request,
+                [Name, #worker_request{req = Request, id = MsgId, reply_to = ReplyTo}]);
         Error ->
             Error
     end.
