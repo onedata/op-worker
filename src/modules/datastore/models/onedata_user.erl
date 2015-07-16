@@ -141,7 +141,7 @@ fetch(#token{value = Token}) ->
             name = Name, space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
         },
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
-        {ok, _} = onedata_user:create(OnedataUserDoc),
+        {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}
     catch
         _:Reason ->

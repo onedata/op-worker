@@ -249,6 +249,8 @@ model_init() ->
     ReturnValue :: term()) -> ok.
 'after'(onedata_user, create, _, _, {ok, UUID}) ->
     setup_onedata_user(UUID);
+'after'(onedata_user, save, _, _, {ok, UUID}) ->
+    setup_onedata_user(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
