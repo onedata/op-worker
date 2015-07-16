@@ -1,5 +1,4 @@
 #include "communication/communicator.h"
-#include "communication/connection.h"
 #include "communication/declarations.h"
 #include "messages/clientMessage.h"
 #include "messages/serverMessage.h"
@@ -46,7 +45,8 @@ public:
                 catch (std::future_error) {
                 }
                 return onHandshakeResponse(std::move(response));
-            });
+            },
+            [](auto) {});
     }
 
     std::string &handshake() { return m_handshake; }
@@ -105,12 +105,10 @@ private:
 
 class CommunicatorProxy {
 public:
-    CommunicatorProxy(const unsigned int connectionsNumber, std::string host,
-        const unsigned short port, bool propagateExceptions)
-        : m_communicator{connectionsNumber, std::move(host),
-              std::to_string(port), false, createConnection,
-              propagateExceptions ? ConnectionPool::ErrorPolicy::propagate
-                                  : ConnectionPool::ErrorPolicy::ignore}
+    CommunicatorProxy(const std::size_t connectionsNumber, std::string host,
+        const unsigned short port)
+        : m_communicator{
+              connectionsNumber, std::move(host), port, false, createConnection}
     {
     }
 
@@ -165,10 +163,10 @@ private:
 
 boost::shared_ptr<CommunicatorProxy> create(
     const unsigned int connectionsNumber, std::string host,
-    const unsigned short port, bool propagateExceptions)
+    const unsigned short port)
 {
     return boost::make_shared<CommunicatorProxy>(
-        connectionsNumber, std::move(host), port, propagateExceptions);
+        connectionsNumber, std::move(host), port);
 }
 
 std::string prepareReply(

@@ -84,25 +84,6 @@ void TLSSocket::connectAsync(Ptr self, std::string host,
         });
 }
 
-void TLSSocket::sendAsync(
-    Ptr self, asio::const_buffer buffer, Callback<> callback)
-{
-    asio::post(m_ioService, [
-        =,
-        self = std::move(self),
-        callback = std::move(callback)
-    ]() mutable {
-        asio::async_write(m_socket, asio::const_buffers_1{buffer},
-            [ =, self = std::move(self), callback = std::move(callback) ](
-                              const auto ec, const auto read) {
-                if (ec)
-                    callback(ec);
-                else
-                    callback();
-            });
-    });
-}
-
 void TLSSocket::recvAsync(Ptr self, asio::mutable_buffer buffer,
     Callback<asio::mutable_buffer> callback)
 {

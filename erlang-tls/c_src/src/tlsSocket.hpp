@@ -72,7 +72,8 @@ public:
      * @param success Callback function to call on success.
      * @param error Callback function to call on error.
      */
-    void sendAsync(Ptr self, asio::const_buffer buffer, Callback<> callback);
+    template <typename BufferSequence>
+    void sendAsync(Ptr self, const BufferSequence &buffer, Callback<> callback);
 
     /**
      * Asynchronously receives a message from the socket.
@@ -164,6 +165,26 @@ private:
     asio::ssl::stream<asio::ip::tcp::socket> m_socket;
     std::vector<std::vector<unsigned char>> m_certificateChain;
 };
+
+template <typename BufferSequence>
+void TLSSocket::sendAsync(
+    Ptr self, const BufferSequence &buffers, Callback<> callback)
+{
+    asio::post(m_ioService, [
+        =,
+        self = std::move(self),
+        callback = std::move(callback)
+    ]() mutable {
+        asio::async_write(m_socket, buffers,
+            [ =, self = std::move(self), callback = std::move(callback) ](
+                              const auto ec, const auto read) {
+                if (ec)
+                    callback(ec);
+                else
+                    callback();
+            });
+    });
+}
 
 } // namespace etls
 } // namespace one
