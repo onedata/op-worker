@@ -32,9 +32,10 @@
 gen_storage_uid(?ROOT_USER_ID) ->
     0;
 gen_storage_uid(ID) ->
-    <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
-    {ok, LowestGID} = {ok, 100000},
-    LowestGID + GID0 rem 1000000.
+    <<UID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
+    {ok, LowestUID} = application:get_env(?APP_NAME, lowest_generated_storage_uid),
+    {ok, HighestUID} = application:get_env(?APP_NAME, highest_generated_storage_uid),
+    LowestUID + UID0 rem HighestUID.
 
 
 %%--------------------------------------------------------------------
