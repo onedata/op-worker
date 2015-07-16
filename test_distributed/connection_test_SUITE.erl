@@ -157,7 +157,7 @@ multi_message_test(Config) ->
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #event{event = #read_event{counter = Counter}}}, _) ->
+        fun(#client_message{message_body = #event{event = #read_event{counter = Counter}}}) ->
             Self ! Counter,
             ok
         end),
