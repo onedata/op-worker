@@ -6,11 +6,7 @@ This software is released under the MIT license cited in 'LICENSE.txt'."""
 
 import os
 import sys
-import time
-import string
-import random
-
-import pytest
+from multiprocessing import Process
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(script_dir))
@@ -116,14 +112,14 @@ class TestCommunicator:
             request = duration(communicate_time, com.communicate, msg)
             reply = communication_stack.prepareReply(request, msg)
 
+            duration(communicate_time,
+                     appmock_client.tcp_server_wait_for_specific_messages,
+                     self.ip, 5555, request, 1, False, False, 10)
+
             duration(communicate_time, appmock_client.tcp_server_send, self.ip,
                      5555, reply, 1)
 
             assert reply == duration(communicate_time, com.communicateReceive)
-
-        duration(communicate_time,
-                 appmock_client.tcp_server_wait_for_specific_messages,
-                 self.ip, 5555, request, 1, False, False, 600)
 
         return [
             communicate_time_param(communicate_time.ms()),
@@ -136,21 +132,19 @@ class TestCommunicator:
         handshake = com.setHandshake("handshake", False)
         com.connect()
 
-        request = com.send("this is another request")
+        com.sendAsync("this is another request")
 
         appmock_client.tcp_server_wait_for_specific_messages(self.ip, 5555,
                                                              handshake)
-        assert 0 == appmock_client.tcp_server_specific_message_count(self.ip,
-                                                                     5555,
-                                                                     request)
+        assert 1 == appmock_client.tcp_server_all_messages_count(self.ip,
+                                                                 5555)
 
         reply = communication_stack.prepareReply(handshake, "handshakeReply")
         appmock_client.tcp_server_send(self.ip, 5555, reply)
 
         assert com.handshakeResponse() == reply
-        assert 1 == appmock_client.tcp_server_specific_message_count(self.ip,
-                                                                     5555,
-                                                                     request)
+        appmock_client.tcp_server_wait_for_any_messages(self.ip, 5555,
+                                                        msg_count=2)
 
     @performance(skip=True)
     def test_unsuccessful_handshake(self, parameters):

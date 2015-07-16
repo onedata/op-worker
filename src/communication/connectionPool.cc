@@ -62,10 +62,9 @@ void ConnectionPool::connect()
 
     std::generate_n(
         std::back_inserter(m_connections), m_connectionsNumber, [&] {
-            auto connection = m_connectionFactory(
-                m_host, m_port, m_context, asio::wrap(m_ioService, m_onMessage),
-                asio::wrap(m_ioService,
-                    std::bind(&ConnectionPool::onConnectionReady, this, _1)),
+            auto connection = m_connectionFactory(m_host, m_port, m_context,
+                asio::wrap(m_ioService, m_onMessage),
+                std::bind(&ConnectionPool::onConnectionReady, this, _1),
                 m_getHandshake, m_onHandshakeResponse, m_onHandshakeDone);
 
             connection->connect();
@@ -96,29 +95,18 @@ void ConnectionPool::setCertificateData(
 
 void ConnectionPool::send(std::string message, Callback callback, const int)
 {
-    asio::post(m_ioService, [
-        =,
-        message = std::move(message),
-        callback = std::move(callback)
-    ]() mutable {
-        if (m_idleConnections.empty()) {
-            send(std::move(message), std::move(callback), int{});
-            return;
-        }
+    PersistentConnection *conn;
+    m_idleConnections.pop(conn);
 
-        auto &conn = m_idleConnections.front().get();
-        m_idleConnections.pop();
-
-        // There might be a case that the connection has failed between
-        // inserting it into ready queue and popping it here; that's ok
-        // since connection will fail the send instead of erroring out.
-        conn.send(std::move(message), std::move(callback));
-    });
+    // There might be a case that the connection has failed between
+    // inserting it into ready queue and popping it here; that's ok
+    // since connection will fail the send instead of erroring out.
+    conn->send(std::move(message), std::move(callback));
 }
 
 void ConnectionPool::onConnectionReady(PersistentConnection &conn)
 {
-    m_idleConnections.emplace(conn);
+    m_idleConnections.emplace(&conn);
 }
 
 ConnectionPool::~ConnectionPool()

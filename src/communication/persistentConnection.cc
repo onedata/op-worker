@@ -44,18 +44,7 @@ PersistentConnection::PersistentConnection(std::string host,
 
 PersistentConnection::~PersistentConnection()
 {
-    if (m_socket) {
-        auto promise = std::make_shared<std::promise<void>>();
-        auto future = promise->get_future();
-
-        m_socket->closeAsync(
-            m_socket, {[=]() mutable { promise->set_value(); },
-                       [=](auto) mutable { promise->set_value(); }});
-
-        // After wait_for returns, proceed with the shutdown whether the TCP
-        // connection has been gracefully shut down or not.
-        future.wait_for(SHUTDOWN_TIMEOUT);
-    }
+    close();
 }
 
 void PersistentConnection::connect()
@@ -102,12 +91,8 @@ void PersistentConnection::onSent()
 
 void PersistentConnection::onError(const std::error_code &ec)
 {
-    notify(ec);
-
-    m_connected = false;
-    m_socket->shutdownAsync(
-        m_socket, asio::ip::tcp::socket::shutdown_both, {[] {}, [](auto) {}});
-    m_socket.reset();
+    if(!m_socket)
+        return;
 
     auto timer =
         std::make_shared<asio::steady_timer>(m_app.ioService(), RECREATE_DELAY);
@@ -116,6 +101,9 @@ void PersistentConnection::onError(const std::error_code &ec)
         if (!ec)
             this->connect();
     });
+
+    notify(ec);
+    close();
 }
 
 void PersistentConnection::send(std::string message, Callback callback)
@@ -151,6 +139,25 @@ void PersistentConnection::readLoop()
         m_onMessage(std::move(m_inData));
         readLoop();
     });
+}
+
+void PersistentConnection::close()
+{
+    if (m_socket) {
+        m_connected = false;
+        auto promise = std::make_shared<std::promise<void>>();
+        auto future = promise->get_future();
+
+        m_socket->closeAsync(
+            m_socket, {[=]() mutable { promise->set_value(); },
+                       [=](auto) mutable { promise->set_value(); }});
+
+        m_socket.reset();
+
+        // After wait_for returns, proceed with the shutdown whether the TCP
+        // connection has been gracefully shut down or not.
+        future.wait_for(SHUTDOWN_TIMEOUT);
+    }
 }
 
 void PersistentConnection::notify(const std::error_code &ec)

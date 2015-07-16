@@ -37,13 +37,15 @@ struct ConnectionMock : public PersistentConnection {
         std::function<std::error_code(std::string)> onHandshakeResponse,
         std::function<void(std::error_code)> onHandshakeDone)
         : PersistentConnection{std::move(host), port, context,
-              std::move(onMessage), std::move(onReady), getHandshake,
-              onHandshakeResponse, std::move(onHandshakeDone)}
+              std::move(onMessage), onReady, getHandshake, onHandshakeResponse,
+              std::move(onHandshakeDone)}
+        , onReady{onReady}
         , getHandshake{getHandshake}
         , onHandshakeResponse{onHandshakeResponse}
     {
     }
 
+    std::function<void(PersistentConnection &)> onReady;
     std::function<std::string()> getHandshake;
     std::function<std::error_code(std::string)> onHandshakeResponse;
 };
@@ -136,5 +138,11 @@ TEST_F(ConnectionPoolTest, sendShouldNotCallSendOnConnectionBeforeReady)
     connectionPool.connect();
 
     EXPECT_CALL(*connection, send(data, _)).Times(0);
-    connectionPool.send(data, [](auto) {});
+    std::thread t{[&] { connectionPool.send(data, [](auto) {}); }};
+
+    Mock::VerifyAndClearExpectations(connection);
+    EXPECT_CALL(*connection, send(data, _)).Times(1);
+
+    connection->onReady(*connection);
+    t.join();
 }

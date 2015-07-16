@@ -50,7 +50,7 @@ class TestConnectionPool:
             'multiple_large_messages': {
                 'description': 'Sends multiple large messages using connection '
                                'pool.',
-                'parameters': [msg_num_param(10000), msg_size_param(1, 'MB')]
+                'parameters': [msg_num_param(1000), msg_size_param(1, 'MB')]
             }
         }
     })

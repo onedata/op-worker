@@ -12,11 +12,11 @@
 #include "persistentConnection.h"
 
 #include <asio/ssl/context.hpp>
+#include <tbb/concurrent_queue.h>
 
 #include <functional>
 #include <memory>
 #include <string>
-#include <queue>
 #include <vector>
 #include <system_error>
 #include <thread>
@@ -140,7 +140,7 @@ private:
     asio::ssl::context m_context{asio::ssl::context::tlsv12_client};
 
     std::vector<std::unique_ptr<PersistentConnection>> m_connections;
-    std::queue<std::reference_wrapper<PersistentConnection>> m_idleConnections;
+    tbb::concurrent_bounded_queue<PersistentConnection *> m_idleConnections;
 };
 
 } // namespace communication

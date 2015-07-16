@@ -26,7 +26,7 @@
 namespace one {
 namespace communication {
 
-static constexpr std::chrono::seconds RECREATE_DELAY{1};
+static constexpr std::chrono::seconds RECREATE_DELAY{2};
 static constexpr std::chrono::seconds SHUTDOWN_TIMEOUT{5};
 
 /**
@@ -105,6 +105,7 @@ private:
     void onError(const std::error_code &ec);
     void readLoop();
 
+    void close();
     void notify(const std::error_code &ec = {});
     void start();
 

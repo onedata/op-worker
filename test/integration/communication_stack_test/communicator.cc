@@ -120,6 +120,11 @@ public:
         return m_communicator.lastMessageSent();
     }
 
+    void sendAsync(const std::string &description)
+    {
+        std::thread{[=] { send(description); }}.detach();
+    }
+
     std::string communicate(const std::string &description)
     {
         m_future = m_communicator.communicate<ExampleServerMessage>(
@@ -190,6 +195,7 @@ BOOST_PYTHON_MODULE(communication_stack)
         .def("__init__", make_constructor(create))
         .def("connect", &CommunicatorProxy::connect)
         .def("send", &CommunicatorProxy::send)
+        .def("sendAsync", &CommunicatorProxy::sendAsync)
         .def("communicate", &CommunicatorProxy::communicate)
         .def("communicateReceive", &CommunicatorProxy::communicateReceive)
         .def("setHandshake", &CommunicatorProxy::setHandshake)
