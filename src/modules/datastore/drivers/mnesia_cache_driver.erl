@@ -362,6 +362,14 @@ healthcheck(State) ->
         end, ok, State).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
+%% run at the same time.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_synchronized(model_behaviour:model_config(), ResourceId :: binary(), fun(() -> Result)) -> Result
+    when Result :: term().
 run_synchronized(#model_config{name = ModelName}, ResourceID, Fun) ->
     mnesia_run(sync_transaction,
         fun() ->

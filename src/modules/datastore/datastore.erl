@@ -346,6 +346,14 @@ link_walk(Level, Key, ModelName, R, Mode) ->
     link_walk7(Level, Key, ModelName, R, [], Mode).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
+%% run at the same time.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_synchronized(ModelName :: model_behaviour:model_type(), ResourceId :: binary(), fun(() -> Result)) -> Result
+    when Result :: term().
 run_synchronized(ModelName, ResourceId, Fun) ->
     exec_driver(ModelName, ?DISTRIBUTED_CACHE_DRIVER, run_synchronized, [ResourceId, Fun]).
 
