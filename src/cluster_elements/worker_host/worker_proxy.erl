@@ -127,7 +127,8 @@ cast(WorkerRef, Request, ReplyTo, MsgId) ->
     case choose_node(WorkerRef) of
         {ok, Name, Node} ->
             spawn(Node, worker_host, proc_request,
-                [Name, #worker_request{req = Request, id = MsgId, reply_to = ReplyTo}]);
+                [Name, #worker_request{req = Request, id = MsgId, reply_to = ReplyTo}]),
+            ok;
         Error ->
             Error
     end.
