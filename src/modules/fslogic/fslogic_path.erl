@@ -25,14 +25,19 @@
 %%% API functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc Returns UUID of user's main 'spaces' directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec spaces_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
 spaces_uuid(UserId) ->
     base64:encode(term_to_binary({UserId, ?SPACES_BASE_DIR_NAME})).
 
 %%--------------------------------------------------------------------
 %% @doc Same as {@link filename:split/1} but platform independent.
 %% @end
--spec split(Path :: file_meta:path()) -> [binary()].
 %%--------------------------------------------------------------------
+-spec split(Path :: file_meta:path()) -> [binary()].
 split(Path) ->
     Bins = binary:split(Path, <<?DIRECTORY_SEPARATOR>>, [global]),
     Bins1 = [Bin || Bin <- Bins, Bin =/= <<"">>],
@@ -42,6 +47,10 @@ split(Path) ->
         _ -> Bins1
     end.
 
+%%--------------------------------------------------------------------
+%% @doc Joins binary tokens into a binary path.
+%% @end
+%%--------------------------------------------------------------------
 -spec join(list(binary())) -> binary().
 join([]) ->
     <<>>;
