@@ -24,7 +24,9 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([simple_call_test/1, direct_cast_test/1, redirect_cast_test/1, mixed_cast_test/1]).
+-export([mixed_cast_test_core/1]).
 
+-performance({test_cases, [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_test]}).
 all() ->
     [simple_call_test, direct_cast_test, redirect_cast_test, mixed_cast_test].
 
@@ -174,6 +176,13 @@ redirect_cast_test(Config) ->
     ]}
 ]).
 mixed_cast_test(Config) ->
+    mixed_cast_test_core(Config).
+
+%%%===================================================================
+%%% Functions cores (to be reused in stress tests)
+%%%===================================================================
+
+mixed_cast_test_core(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     ProcSendNum = ?config(proc_repeats, Config),
     ProcNum = ?config(proc_num, Config),

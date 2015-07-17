@@ -31,7 +31,8 @@
     hooks = [] :: [{model_behaviour:model_type(), model_behaviour:model_action()}],
     bucket :: datastore:bucket(),
     store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level(),
-    link_store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level()
+    link_store_level = ?DEFAULT_STORE_LEVEL :: datastore:store_level(),
+    transactional_global_cache = true :: boolean()
 }).
 
 %% Helper macro for instantiating #model_config record.
@@ -41,14 +42,17 @@
 %% LinkStoreLevel   :: see #model_config.link_store_level (optional)
 -define(MODEL_CONFIG(Bucket, Hooks), ?MODEL_CONFIG(Bucket, Hooks, ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL)).
 -define(MODEL_CONFIG(Bucket, Hooks, StoreLevel), ?MODEL_CONFIG(Bucket, Hooks, StoreLevel, StoreLevel)).
--define(MODEL_CONFIG(Bucket, Hooks, StoreLevel, LinkStoreLevel), #model_config{name = ?MODULE,
+-define(MODEL_CONFIG(Bucket, Hooks, StoreLevel, LinkStoreLevel),
+    ?MODEL_CONFIG(Bucket, Hooks, StoreLevel, LinkStoreLevel, true)).
+-define(MODEL_CONFIG(Bucket, Hooks, StoreLevel, LinkStoreLevel, Transactions), #model_config{name = ?MODULE,
     size = record_info(size, ?MODULE),
     fields = record_info(fields, ?MODULE),
     defaults = #?MODULE{},
     bucket = Bucket,
     hooks = Hooks,
     store_level = StoreLevel,
-    link_store_level = LinkStoreLevel
+    link_store_level = LinkStoreLevel,
+    transactional_global_cache = Transactions
 }).
 
 -endif.

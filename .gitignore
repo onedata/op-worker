@@ -19,11 +19,13 @@ rel/test_cluster
 rel/*.rpm
 
 test/eunit_results
+test_distributed/cover_tmp.spec
 
 deps
 doc
 logs
 ebin
+priv
 
 c_lib
 c_src/helpers_nif/*.o

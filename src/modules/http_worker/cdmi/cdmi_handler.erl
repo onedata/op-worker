@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("modules/http_worker/http_common.hrl").
--include("cluster_elements/oneproxy/oneproxy.hrl").
 
 %% the state of request, it is created in rest_init function,
 %% and passed to every cowboy callback functions
