@@ -42,10 +42,7 @@ PersistentConnection::PersistentConnection(std::string host,
 {
 }
 
-PersistentConnection::~PersistentConnection()
-{
-    close();
-}
+PersistentConnection::~PersistentConnection() { close(); }
 
 void PersistentConnection::connect()
 {
@@ -91,9 +88,6 @@ void PersistentConnection::onSent()
 
 void PersistentConnection::onError(const std::error_code &ec)
 {
-    if(!m_socket)
-        return;
-
     auto timer =
         std::make_shared<asio::steady_timer>(m_app.ioService(), RECREATE_DELAY);
 
@@ -143,21 +137,15 @@ void PersistentConnection::readLoop()
 
 void PersistentConnection::close()
 {
-    if (m_socket) {
-        m_connected = false;
-        auto promise = std::make_shared<std::promise<void>>();
-        auto future = promise->get_future();
+    if (!m_socket)
+        return;
 
-        m_socket->closeAsync(
-            m_socket, {[=]() mutable { promise->set_value(); },
-                       [=](auto) mutable { promise->set_value(); }});
+    ++m_connectionId;
+    m_connected = false;
 
-        m_socket.reset();
-
-        // After wait_for returns, proceed with the shutdown whether the TCP
-        // connection has been gracefully shut down or not.
-        future.wait_for(SHUTDOWN_TIMEOUT);
-    }
+    auto socket = m_socket;
+    m_socket.reset();
+    socket->closeAsync(socket, {[=] {}, [=](auto) {}});
 }
 
 void PersistentConnection::notify(const std::error_code &ec)
@@ -183,8 +171,21 @@ void PersistentConnection::start()
 template <typename... Args, typename SF>
 etls::Callback<Args...> PersistentConnection::createCallback(SF &&onSuccess)
 {
-    return etls::Callback<Args...>(std::forward<SF>(onSuccess),
-        std::bind(&PersistentConnection::onError, this, _1));
+    const auto connectionId = m_connectionId;
+
+    auto wrappedSuccess = [ =, onSuccess = std::forward<SF>(onSuccess) ](
+        Args && ... args) mutable
+    {
+        if (m_connectionId == connectionId)
+            onSuccess(std::forward<Args>(args)...);
+    };
+
+    auto wrappedError = [=](const std::error_code &ec) {
+        if (m_connectionId == connectionId)
+            onError(ec);
+    };
+
+    return {std::move(wrappedSuccess), std::move(wrappedError)};
 }
 
 template <typename SF> void PersistentConnection::asyncRead(SF &&onSuccess)

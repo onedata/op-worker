@@ -129,6 +129,7 @@ private:
     etls::TLSSocket::Ptr m_socket;
     etls::TLSApplication m_app{1};
     bool m_connected = false;
+    int m_connectionId = 0;
 
     std::uint32_t m_inHeader;
     std::string m_inData;
