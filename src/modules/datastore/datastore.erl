@@ -63,7 +63,7 @@
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
--export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0]).
+-export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, driver_to_module/1]).
 
 %%%===================================================================
 %%% API
@@ -501,9 +501,11 @@ configs_per_bucket(Configs) ->
 init_drivers(Configs, NodeToSync) ->
     lists:foreach(
         fun({Bucket, Models}) ->
-            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
-            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
-            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync)
+            lists:foreach(
+                fun(Driver) ->
+                    DriverModule = driver_to_module(Driver),
+                    ok = DriverModule:init_bucket(Bucket, Models, NodeToSync)
+                end, [?PERSISTENCE_DRIVER, ?LOCAL_CACHE_DRIVER, ?DISTRIBUTED_CACHE_DRIVER])
         end, maps:to_list(configs_per_bucket(Configs))).
 
 %%--------------------------------------------------------------------
@@ -595,7 +597,7 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                 FullArgs = [ModelConfig | Args],
                 case Driver of
                     ?PERSISTENCE_DRIVER ->
-                        worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs});
+                        worker_proxy:call(datastore_worker, {driver_call, driver_to_module(Driver), Method, FullArgs});
                     _ ->
                         erlang:apply(Driver, Method, FullArgs)
                 end;
@@ -621,3 +623,10 @@ exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
             spawn(fun() -> exec_driver(ModelName, Driver2, Method, Args) end),
             Result
     end.
+
+-spec driver_to_module(atom()) -> atom().
+driver_to_module(?PERSISTENCE_DRIVER) ->
+    {ok, DriverModule} = application:get_env(?APP_NAME, ?PERSISTENCE_DRIVER),
+    DriverModule;
+driver_to_module(Driver) ->
+    Driver.

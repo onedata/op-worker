@@ -124,11 +124,11 @@ get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
             {error, {not_found, ModelName}};
         {error, Reason} ->
             {error, Reason};
-        {ok, Value} ->
-            {ok, #document{key = Key, value = from_binary(Value)}};
         {ok, {CAS, Value}} ->
             {ok, #document{key = Key, rev = CAS,
-                value = from_binary(Value)}}
+                value = from_binary(Value)}};
+        {ok, Value} ->
+            {ok, #document{key = Key, value = from_binary(Value)}}
     end.
 
 
