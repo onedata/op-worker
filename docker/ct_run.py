@@ -41,7 +41,6 @@ parser.add_argument(
 parser.add_argument(
     '--suite', '-s',
     action='append',
-    default=['datastore_basic_ops_test_1x1_SUITE'],
     help='name of the test suite',
     dest='suites')
 
