@@ -16,9 +16,6 @@
 -include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% Bukcet type that is defined in database and configured to store "map" data type
--define(RIAK_BUCKET_TYPE, <<"maps">>).
-
 %% Encoded object prefix
 -define(OBJ_PREFIX, "OBJ::").
 
@@ -80,7 +77,7 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
     Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
 update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_function(Diff) ->
     erlang:error(not_implemented);
-update(#model_config{bucket = Bucket, name = ModelName} = ModelConfig, Key, Diff) when is_map(Diff) ->
+update(#model_config{bucket = _Bucket} = ModelConfig, Key, Diff) when is_map(Diff) ->
     case get(ModelConfig, Key) of
         {error, Reason} ->
             {error, Reason};
@@ -357,31 +354,33 @@ from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
 from_binary(Bin) ->
     Bin.
 
-
+-spec links_doc_key(Key :: datastore:key()) -> BinKey :: binary().
 links_doc_key(Key) ->
     BinKey = to_binary(Key),
     <<BinKey/binary, ?LINKS_KEY_SUFFIX>>.
 
-
+-spec to_driver_key(Bucket :: datastore:bucket(), Key :: datastore:key()) -> BinKey :: binary().
 to_driver_key(Bucket, Key) ->
     base64:encode(term_to_binary({Bucket, Key})).
 
-to_model_key(DriverKey) ->
-    {_Bucket, _Key} = binary_to_term(base64:decode(DriverKey)).
 
-
+-spec exec(mcd, add | set, Key :: binary(), Value :: binary(), Expiration :: non_neg_integer()) ->
+    ok | {ok, term()} | {error, term()}.
 exec(mcd, add, Key, Value, Expiration) ->
     callmc_text(do, [{add, 0, Expiration}, Key, Value]);
 exec(mcd, set, Key, Value, Expiration) ->
     callmc_text(set, [Key, Value, Expiration]).
 
 
+-spec exec(mcd, get | remove, Key :: binary()) ->
+    ok | {ok, term()} | {error, term()}.
 exec(mcd, get, Key) ->
     callmc_text(get, [Key]);
 exec(mcd, remove, Key) ->
     callmc_text(delete, [Key]).
 
 
+-spec callmc_text(Method :: atom(), Args :: [term()]) -> ok | {ok, term()} | {error, term()}.
 callmc_text(Method, Args) ->
     callmc_text(Method, Args, 5, undefined).
 callmc_text(Method, Args, Retry, LastError) when Retry > 0 ->
@@ -416,7 +415,7 @@ callmc_text(_Method, _Args, _, LastError) ->
     ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
     {error, {communication_failure, LastError}}.
 
-
+-spec ensure_mc_text_connected() -> ok | {error, term()}.
 ensure_mc_text_connected() ->
     case datastore_worker:state_get(mc_text_connected) of
         {ok, _} -> ok;
@@ -424,10 +423,9 @@ ensure_mc_text_connected() ->
         _ ->
             L = datastore_worker:state_get(db_nodes),
             Servers = lists:map(fun({Hostname, Port}) ->
-                {binary_to_atom(Hostname, utf8), [binary_to_list(Hostname), 11211], 100}
+                {binary_to_atom(Hostname, utf8), [binary_to_list(Hostname), Port], 20}
             end, L),
             Res = mcd_cluster:start_link('MCDCluster', Servers),
-            ?info("ECD started ~p", [Res]),
             datastore_worker:state_put(mc_text_connected, Res),
             case Res of
                 {ok, _} -> ok;

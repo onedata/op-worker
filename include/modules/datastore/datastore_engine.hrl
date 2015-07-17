@@ -13,9 +13,13 @@
 -define(DATASTORE_ENGINE_HRL, 1).
 
 -include("modules/datastore/datastore_common_internal.hrl").
+-include("global_definitions.hrl").
 
 %% Drivers' names
--define(PERSISTENCE_DRIVER, couchbase_datastore_driver).
+-define(PERSISTENCE_DRIVER, begin
+                                {ok, Driver} = application:get_env(?APP_NAME, persistence_driver_module),
+                                Driver
+                            end ).
 -define(LOCAL_CACHE_DRIVER, ets_cache_driver).
 -define(DISTRIBUTED_CACHE_DRIVER, mnesia_cache_driver).
 

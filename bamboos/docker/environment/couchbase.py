@@ -17,19 +17,19 @@ from . import common, docker, dns as dns_mod
 COUCHBASE_READY_WAIT_SECONDS = 60
 
 
-def _couchbase(num):
-    return 'couchbase{0}'.format(num)
+def _couchbase(cluster_name, num):
+    return 'couchbase{0}_{1}'.format(num, cluster_name)
 
 
-def config_entry(num, uid):
-    return '{0}:8091'.format(common.format_hostname(_couchbase(num), uid))
+def config_entry(cluster_name, num, uid):
+    return '{0}:11211'.format(common.format_hostname(_couchbase(cluster_name, num), uid))
 
 
-def _node_up(command, num, dns, image, uid):
-    hostname = common.format_hostname(_couchbase(num), uid)
+def _node_up(command, cluster_name, num, dns, image, uid):
+    hostname = common.format_hostname(_couchbase(cluster_name, num), uid)
     node = docker.run(
         image=image,
-        name=common.format_dockername(_couchbase(num), uid),
+        name=common.format_dockername(_couchbase(cluster_name, num), uid),
         hostname=hostname,
         detach=True,
         interactive=True,
@@ -85,7 +85,7 @@ def _cluster_nodes(containers, master_hostname, uid):
                  stdout=sys.stderr)
 
 
-def up(image, dns, uid, nodes):
+def up(image, dns, uid, cluster_name, nodes):
 
     dns_servers, dns_output = dns_mod.set_up_dns(dns, uid)
     couchbase_output = {}
@@ -94,7 +94,7 @@ def up(image, dns, uid, nodes):
 bash'''
 
     for num in range(nodes):
-        node_out = _node_up(command, num, dns_servers, image, uid)
+        node_out = _node_up(command, cluster_name, num, dns_servers, image, uid)
         common.merge(couchbase_output, node_out)
 
     containers = couchbase_output['docker_ids']
@@ -102,7 +102,7 @@ bash'''
 
     _wait_until(_ready, containers)
 
-    master_hostname = common.format_hostname(_couchbase(0), uid)
+    master_hostname = common.format_hostname(_couchbase(cluster_name, 0), uid)
 
     docker.exec_(containers[0],
                  command=["/opt/couchbase/bin/couchbase-cli", "cluster-init", "-c", "{0}:8091".format(master_hostname),
