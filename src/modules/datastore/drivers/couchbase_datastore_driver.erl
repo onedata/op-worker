@@ -27,45 +27,9 @@
 
 -define(LINKS_KEY_SUFFIX, "$$").
 
--define(POOLS, lists:map(fun(E) -> erlang:list_to_atom("cberl_" ++ erlang:integer_to_list(E)) end, lists:seq(1, 1200))).
-
--define(POOL_ID, lists:nth(crypto:rand_uniform(1, length(?POOLS) + 1), ?POOLS)).
-
--type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
--type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
-
+%% Protocol driver module
 -define(DRIVER, mcd).
 
-
--define('CBE_ADD',      1).
--define('CBE_REPLACE',  2).
--define('CBE_SET',      3).
--define('CBE_APPEND',   4).
--define('CBE_PREPEND',  5).
-
--define('CMD_CONNECT',    0).
--define('CMD_STORE',      1).
--define('CMD_MGET',       2).
--define('CMD_UNLOCK',     3).
--define('CMD_MTOUCH',     4).
--define('CMD_ARITHMETIC', 5).
--define('CMD_REMOVE',     6).
--define('CMD_HTTP',       7).
-
--type handle() :: binary().
-
--record(instance, {handle :: handle(),
-    bucketname :: string(),
-    transcoder :: module(),
-    connected :: true | false,
-    opts :: list()}).
-
--type key() :: string().
--type value() :: string() | list() | integer() | binary().
--type operation_type() :: add | replace | set | append | prepend.
--type instance() :: #instance{}.
--type http_type() :: view | management | raw.
--type http_method() :: get | post | put | delete.
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
@@ -98,8 +62,7 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
         true -> error(term_to_big);
         false -> ok
     end,
-%%     ?info("WTF ~p ~p", [Value, to_binary(Value)]),
-    case exec(?DRIVER, set, to_binary(Key), to_binary(Value), 0) of
+    case exec(?DRIVER, set, to_driver_key(Bucket, Key), to_binary(Value), 0) of
         ok ->
             {ok, Key};
         {ok, _} ->
@@ -138,8 +101,7 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
         true -> error(term_to_big);
         false -> ok
     end,
-%%     ?info("WTF ~p ~p", [Value, to_binary(Value)]),
-    case exec(?DRIVER, add, to_binary(Key), to_binary(Value), 0) of
+    case exec(?DRIVER, add, to_driver_key(Bucket, Key), to_binary(Value), 0) of
         ok ->
             {ok, Key};
         {ok, _} ->
@@ -160,7 +122,7 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
 -spec get(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
-    case exec(?DRIVER, get, to_binary(Key)) of
+    case exec(?DRIVER, get, to_driver_key(Bucket, Key)) of
         {error, key_enoent} ->
             {error, {not_found, ModelName}};
         {error, Reason} ->
@@ -193,7 +155,7 @@ list(#model_config{} = _ModelConfig, _Fun, _AccIn) ->
 delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
     case Pred() of
         true ->
-            case exec(?DRIVER, remove, to_binary(Key)) of
+            case exec(?DRIVER, remove, to_driver_key(Bucket, Key)) of
                 ok ->
                     ok;
                 {ok, deleted} ->
@@ -214,7 +176,7 @@ delete(#model_config{bucket = Bucket} = _ModelConfig, Key, Pred) ->
 %%--------------------------------------------------------------------
 -spec exists(model_behaviour:model_config(), datastore:ext_key()) ->
     {ok, boolean()} | datastore:generic_error().
-exists(#model_config{bucket = Bucket} = ModelConfig, Key) ->
+exists(#model_config{bucket = _Bucket} = ModelConfig, Key) ->
     case get(ModelConfig, Key) of
         {error, {not_found, _}} ->
             {ok, false};
@@ -232,7 +194,7 @@ exists(#model_config{bucket = Bucket} = ModelConfig, Key) ->
 %%--------------------------------------------------------------------
 -spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) ->
     ok | datastore:generic_error().
-add_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
+add_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
     case get(ModelConfig, links_doc_key(Key)) of
         {ok, #document{value = LinkMap}} ->
             add_links4(ModelConfig, Key, Links, LinkMap);
@@ -244,7 +206,7 @@ add_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) when is_list
 
 -spec add_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()], InternalCtx :: term()) ->
     ok | datastore:generic_error().
-add_links4(#model_config{bucket = Bucket} = ModelConfig, Key, [], Ctx) ->
+add_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [], Ctx) ->
     case save(ModelConfig, #document{key = links_doc_key(Key), value = Ctx}) of
         {ok, _} -> ok;
         {error, Reason} ->
@@ -261,9 +223,9 @@ add_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [{LinkName, LinkT
 %%--------------------------------------------------------------------
 -spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error().
-delete_links(#model_config{bucket = Bucket} = ModelConfig, Key, all) ->
+delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, all) ->
     delete(ModelConfig, links_doc_key(Key), ?PRED_ALWAYS);
-delete_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) ->
+delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) ->
     case get(ModelConfig, links_doc_key(Key)) of
         {ok, #document{value = LinkMap}} ->
             delete_links4(ModelConfig, Key, Links, LinkMap);
@@ -275,7 +237,7 @@ delete_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) ->
 
 -spec delete_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()] | all, InternalCtx :: term()) ->
     ok | datastore:generic_error().
-delete_links4(#model_config{bucket = Bucket} = ModelConfig, Key, [], Ctx) ->
+delete_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [], Ctx) ->
     case save(ModelConfig, #document{key = links_doc_key(Key), value = Ctx}) of
         {ok, _} -> ok;
         {error, Reason} ->
@@ -293,7 +255,7 @@ delete_links4(#model_config{} = ModelConfig, Key, [Link | R], Ctx) ->
 %%--------------------------------------------------------------------
 -spec fetch_link(model_behaviour:model_config(), datastore:ext_key(), datastore:link_name()) ->
     {ok, datastore:link_target()} | datastore:link_error().
-fetch_link(#model_config{bucket = Bucket} = ModelConfig, Key, LinkName) ->
+fetch_link(#model_config{bucket = _Bucket} = ModelConfig, Key, LinkName) ->
     case get(ModelConfig, links_doc_key(Key)) of
         {ok, #document{value = LinkMap}} ->
             case maps:get(LinkName, LinkMap, undefined) of
@@ -317,7 +279,7 @@ fetch_link(#model_config{bucket = Bucket} = ModelConfig, Key, LinkName) ->
 -spec foreach_link(model_behaviour:model_config(), Key :: datastore:ext_key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     {ok, Acc :: term()} | datastore:link_error().
-foreach_link(#model_config{bucket = Bucket} = ModelConfig, Key, Fun, AccIn) ->
+foreach_link(#model_config{bucket = _Bucket} = ModelConfig, Key, Fun, AccIn) ->
     case get(ModelConfig, links_doc_key(Key)) of
         {ok, #document{value = LinkMap}} ->
             {ok, maps:fold(Fun, AccIn, LinkMap)};
@@ -336,7 +298,6 @@ foreach_link(#model_config{bucket = Bucket} = ModelConfig, Key, Fun, AccIn) ->
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
     try
-        ensure_mc_connected(),
         ensure_mc_text_connected()
     catch
         _:R -> {error, R}
@@ -346,30 +307,6 @@ healthcheck(_) ->
 %%% Internal functions
 %%%===================================================================
 
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Connects to given CouchBase database nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec connect() -> ok.
-connect() ->
-    case whereis(?POOL_ID) of
-        PID when is_pid(PID) ->
-            ok;
-        _ ->
-            URLs =
-                lists:map(fun({Hostname, Port}) ->
-                    binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port)
-                end, datastore_worker:state_get(db_nodes)),
-            Hosts = string:join(URLs, ";"),
-            lists:foreach(fun(Pool) ->
-                cberl:start_link(Pool, length(URLs) * 5, Hosts, "", "", "default")
-            end, ?POOLS),
-            ?debug("CouchBase init with nodes: ~p", [Hosts])
-    end,
-    ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -420,117 +357,29 @@ from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
 from_binary(Bin) ->
     Bin.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Encodes geven bucket name to format supported by database.
-%% @end
-%%--------------------------------------------------------------------
--spec bucket_encode(datastore:bucket()) -> binary().
-bucket_encode(Bucket) when is_atom(Bucket) ->
-    atom_to_binary(Bucket, utf8);
-bucket_encode(Bucket) when is_binary(Bucket) ->
-    Bucket.
 
 links_doc_key(Key) ->
     BinKey = to_binary(Key),
     <<BinKey/binary, ?LINKS_KEY_SUFFIX>>.
 
 
-exec(cberl_internal, add, Key, Value, Expiration) ->
-    call(add, [Key, Expiration, Value]);
-exec(cberl_internal, set, Key, Value, Expiration) ->
-    call(set, [Key, Expiration, Value]);
-exec(erlmc, add, Key, Value, Expiration) ->
-    callmc(add, [Key, Value, Expiration]);
-exec(erlmc, set, Key, Value, Expiration) ->
-    callmc(set, [Key, Value, Expiration]);
+to_driver_key(Bucket, Key) ->
+    base64:encode(term_to_binary({Bucket, Key})).
+
+to_model_key(DriverKey) ->
+    {_Bucket, _Key} = binary_to_term(base64:decode(DriverKey)).
+
+
 exec(mcd, add, Key, Value, Expiration) ->
     callmc_text(do, [{add, 0, Expiration}, Key, Value]);
 exec(mcd, set, Key, Value, Expiration) ->
     callmc_text(set, [Key, Value, Expiration]).
 
 
-exec(cberl_internal, get, Key) ->
-    call(get, [Key]);
-exec(cberl_internal, remove, Key) ->
-    call(remove, [Key]);
-exec(erlmc, get, Key) ->
-    callmc(get, [Key]);
-exec(erlmc, remove, Key) ->
-    callmc(delete, [Key]);
 exec(mcd, get, Key) ->
     callmc_text(get, [Key]);
 exec(mcd, remove, Key) ->
     callmc_text(delete, [Key]).
-
-
-
-call(Method, Args) ->
-    call(Method, Args, 5, undefined).
-call(Method, Args, Retry, LastError) when Retry > 0 ->
-%%     {Node, Pid} = select_connection(),
-    {Node, Pid} = select_connection_nif(),
-    try apply(cberl_internal, Method, [Pid] ++ Args) of
-        {error, Reason} ->
-            {error, Reason};
-        {_, {error, Reason}} ->
-            {error, Reason};
-        ok -> ok;
-        {ok, Res} ->
-            {ok, Res};
-        {Key, CAS, Value} when is_binary(Key), is_binary(Value) ->
-            {ok, {CAS, Value}};
-        {'EXIT', _, _} = E ->
-            call(Method, Args, Retry - 1, E);
-        {shutdown, _} = E ->
-            call(Method, Args, Retry - 1, E);
-        {normal, _} = E ->
-            call(Method, Args, Retry - 1, E);
-        Other ->
-            {error, Other}
-    catch
-        Class:Reason0 ->
-            NewConn = [Conn || {N, _} = Conn <- datastore_worker:state_get(couchbase_connections), N =/= Node],
-            datastore_worker:state_put(couchbase_connections, NewConn),
-            ?error_stacktrace("CouchBase connection error (type ~p): ~p ~p", [Class, Reason0, NewConn]),
-            call(Method, Args, Retry - 1, Reason0)
-    end;
-call(Method, Args, _, LastError) ->
-    ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
-    {error, {communication_failure, LastError}}.
-
-callmc(Method, Args) ->
-    callmc(Method, Args, 5, undefined).
-callmc(Method, Args, Retry, LastError) when Retry > 0 ->
-    ensure_mc_connected(),
-    try apply(erlmc, Method, Args) of
-        {error, Reason} ->
-            {error, Reason};
-        {_, {error, Reason}} ->
-            {error, Reason};
-        ok -> ok;
-        {ok, Res} ->
-            {ok, Res};
-        {Key, CAS, Value} when is_binary(Key), is_binary(Value) ->
-            {ok, {CAS, Value}};
-        {'EXIT', _, _} = E ->
-            callmc(Method, Args, Retry - 1, E);
-        {shutdown, _} = E ->
-            callmc(Method, Args, Retry - 1, E);
-        {normal, _} = E ->
-            callmc(Method, Args, Retry - 1, E);
-        Other ->
-            {error, Other}
-    catch
-        Class:Reason0 ->
-            datastore_worker:state_put(mc_connected, error),
-            ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
-            callmc(Method, Args, Retry - 1, Reason0)
-    end;
-callmc(Method, Args, _, LastError) ->
-    ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
-    {error, {communication_failure, LastError}}.
 
 
 callmc_text(Method, Args) ->
@@ -559,29 +408,13 @@ callmc_text(Method, Args, Retry, LastError) when Retry > 0 ->
             {error, Other}
     catch
         Class:Reason0 ->
-            datastore_worker:state_put(mc_text_connected, error),
+            datastore_worker:state_put(mc_text_connected, {error, Reason0}),
             ?error_stacktrace("CouchBase connection error (type ~p): ~p", [Class, Reason0]),
             callmc_text(Method, Args, Retry - 1, Reason0)
     end;
-callmc_text(Method, Args, _, LastError) ->
+callmc_text(_Method, _Args, _, LastError) ->
     ?error_stacktrace("CouchBase communication retry failed. Last error: ~p", [LastError]),
     {error, {communication_failure, LastError}}.
-
-
-ensure_mc_connected() ->
-    case datastore_worker:state_get(mc_connected) of
-        {ok, _} -> ok;
-        ok -> ok;
-        _ ->
-            L = datastore_worker:state_get(db_nodes),
-            Servers = lists:map(fun({Hostname, Port}) ->
-                {binary_to_list(Hostname), 11211, 100}
-            end, L),
-            Res = erlmc:start(Servers),
-            ?info("ERLMC started ~p", [Res]),
-            datastore_worker:state_put(mc_connected, Res),
-            Res
-    end.
 
 
 ensure_mc_text_connected() ->
@@ -602,83 +435,3 @@ ensure_mc_text_connected() ->
             end
     end.
 
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Selects riak connection from connection pool retuned by get_connections/0.
-%% @end
-%%--------------------------------------------------------------------
--spec select_connection() -> riak_connection().
-select_connection() ->
-    Connections = get_connections(),
-    lists:nth(crypto:rand_uniform(1, length(Connections) + 1), Connections).
-
-select_connection_nif() ->
-    Connections = get_connections_nif(),
-    lists:nth(crypto:rand_uniform(1, length(Connections) + 1), Connections).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets riak active connections. When no connection is available, tries to
-%% estabilish new connections.
-%% @end
-%%--------------------------------------------------------------------
--spec get_connections() -> [riak_connection()].
-get_connections() ->
-    case datastore_worker:state_get(couchbase_connections) of
-        [_ | _] = Connections ->
-            Connections;
-        _ ->
-            L = datastore_worker:state_get(db_nodes),
-            Connections = connect(L),
-            datastore_worker:state_put(couchbase_connections, Connections),
-            Connections
-    end.
-
-get_connections_nif() ->
-    case datastore_worker:state_get(couchbase_connections) of
-        [_ | _] = Connections ->
-            Connections;
-        _ ->
-            L = datastore_worker:state_get(db_nodes),
-            Connections = connect_nif(L),
-            datastore_worker:state_put(couchbase_connections, Connections),
-            Connections
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Connects to given Riak database nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec connect([riak_node()]) -> [riak_connection()].
-connect([{Hostname, Port} = Node | R]) ->
-    case cberl_worker:start_link([{host, binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port)}, {username, ""},
-                                    {password, ""}, {bucketname, "default"}, {transcoder, cberl_transcoder}]) of
-        {ok, Pid} ->
-            [{Node, Pid} | connect(R)];
-        {error, Reason} ->
-            ?error("Cannot connect to couchbase node ~p due to ~p", [Node, Reason]),
-            connect(R)
-    end;
-connect([]) ->
-    [].
-
-connect_nif([{Hostname, Port} = Node | R]) ->
-    {ok, Handle} = cberl_nif:new(),
-    State = #instance{handle = Handle,
-        transcoder = cberl_transcoder,
-        bucketname ="default",
-        opts = [binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port), "", "", "default"],
-        connected = false},
-    State2 = case cberl_async:connect(State) of
-                 ok -> State#instance{connected = true};
-                 {error, _} -> State#instance{connected = false}
-             end,
-    ?info("CONN NIF ~p", [State2]),
-    [{Node, State2} | connect(R)];
-connect_nif([]) ->
-    [].
