@@ -22,6 +22,8 @@ def _tweak_config(config, name, uid):
     sys_config['ccm_nodes'] = [common.format_nodename(n, uid) for n in
                                sys_config['ccm_nodes']]
 
+    sys_config['persistence_driver_module'] = _db_driver_module(_db_driver(config))
+
     if 'global_registry_node' in sys_config:
         sys_config['global_registry_node'] = \
             common.format_hostname(sys_config['global_registry_node'], uid)
@@ -89,9 +91,9 @@ def _ready(container):
     return common.nagios_up(ip)
 
 
-def _riak_up(cluster_name, riak_nodes, dns_servers, uid):
+def _riak_up(cluster_name, db_nodes, dns_servers, uid):
     db_node_mappings = {}
-    for node in riak_nodes:
+    for node in db_nodes:
         db_node_mappings[node] = ''
 
     i = 0
@@ -107,24 +109,30 @@ def _riak_up(cluster_name, riak_nodes, dns_servers, uid):
 
     return db_node_mappings, riak_output
 
-def _couchbase_up(configs, dns_servers, uid):
+def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
     db_node_mappings = {}
-    for _, db_nodes in configs:
-        for node in db_nodes:
-            db_node_mappings[node] = ''
+    for node in db_nodes:
+        db_node_mappings[node] = ''
 
     i = 0
     for node in iter(db_node_mappings.keys()):
-        db_node_mappings[node] = couchbase.config_entry(i, uid)
+        db_node_mappings[node] = couchbase.config_entry(cluster_name, i, uid)
         i += 1
 
     if i == 0:
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    couchbase_output = couchbase.up('couchbase/server:enterprise-4.0.0-beta', dns, uid, len(db_node_mappings))
+    couchbase_output = couchbase.up('couchbase/server:latest', dns, uid, cluster_name, len(db_node_mappings))
 
     return db_node_mappings, couchbase_output
+
+
+def _db_driver(config):
+    return config['db_driver'] if 'db_driver' in config else 'couchbase'
+
+def _db_driver_module(db_driver):
+    return db_driver + "_datastore_driver"
 
 
 def up(image, bindir, logdir, dns, uid, config_path):
@@ -136,15 +144,25 @@ def up(image, bindir, logdir, dns, uid, config_path):
         config['config']['target_dir'] = '/root/bin'
         tweaked_configs = [_tweak_config(config, node, uid) for node in config['nodes']]
         configs = []
-        riak_nodes = []
+        all_db_nodes = []
         for tw_cfg, db_nodes in tweaked_configs:
             configs.append(tw_cfg)
-            riak_nodes += db_nodes
+            all_db_nodes += db_nodes
 
         workers = []
 
-        db_node_mappings, riak_out = _riak_up(provider, riak_nodes, dns_servers, uid)
-        common.merge(output, riak_out)
+        db_node_mappings = None
+        db_out = None
+        db_driver = _db_driver(config)
+
+        if db_driver == 'riak':
+            db_node_mappings, db_out = _riak_up(provider, all_db_nodes, dns_servers, uid)
+        elif db_driver == 'couchbase':
+            db_node_mappings, db_out = _couchbase_up(provider, all_db_nodes, dns_servers, uid)
+        else:
+            raise ValueError("Invalid db_driver: {0}".format(db_driver))
+
+        common.merge(output, db_out)
 
         for cfg in configs:
             worker, node_out = _node_up(image, bindir, logdir, uid, cfg,
