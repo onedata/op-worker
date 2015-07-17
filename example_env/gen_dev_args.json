@@ -25,6 +25,7 @@
                     "input_dir": "rel/op_worker",
                     "target_dir": "rel/test_cluster"
                 },
+                "db_driver": "couchbase",
                 "nodes": {
                     "worker1_p1": {
                         "vm.args": {
@@ -35,8 +36,8 @@
                                 "ccm1_p1@"
                             ],
                             "db_nodes": [
-                                "riaknode1",
-                                "riaknode2"
+                                "dbnode1",
+                                "dbnode2"
                             ],
                             "global_registry_node": "gr1@"
                         }
@@ -69,6 +70,7 @@
                     "input_dir": "rel/op_worker",
                     "target_dir": "rel/test_cluster"
                 },
+                "db_driver": "riak",
                 "nodes": {
                     "worker1_p2": {
                         "vm.args": {
@@ -79,7 +81,7 @@
                                 "ccm1_p2@"
                             ],
                             "db_nodes": [
-                                "riaknode1"
+                                "dbnode1"
                             ],
                             "global_registry_node": "gr1@"
                         }
