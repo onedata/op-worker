@@ -6,7 +6,6 @@ This software is released under the MIT license cited in 'LICENSE.txt'."""
 
 import os
 import sys
-from multiprocessing import Process
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(script_dir))
