@@ -620,3 +620,13 @@ exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
             spawn(fun() -> exec_driver(ModelName, Driver2, Method, Args) end),
             Result
     end.
+
+exec_driver_no_hooks(ModelName, Driver, Method, Args) when is_atom(Driver) ->
+    ModelConfig = ModelName:model_init(),
+    FullArgs = [ModelConfig | Args],
+    case Driver of
+        ?PERSISTENCE_DRIVER ->
+            worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs});
+        _ ->
+            erlang:apply(Driver, Method, FullArgs)
+    end.

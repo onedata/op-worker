@@ -32,7 +32,7 @@
     node_ip = {127, 0, 0, 1} :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()},
     ccm_con_status = not_connected :: not_connected | connected | registered,
     monitoring_state = undefined :: monitoring:node_monitoring_state(),
-    cache_clearing = true
+    cache_control = true
 }).
 
 
@@ -165,11 +165,11 @@ handle_call(clear_mem_synch, _From, State) ->
     caches_controller:delete_old_keys(globally_cached, 0),
     {reply, ok, State};
 
-handle_call(disable_cache_clearing, _From, State) ->
-    {reply, ok, State#state{cache_clearing = false}};
+handle_call(disable_cache_control, _From, State) ->
+    {reply, ok, State#state{cache_control = false}};
 
-handle_call(enable_cache_clearing, _From, State) ->
-    {reply, ok, State#state{cache_clearing = true}};
+handle_call(enable_cache_control, _From, State) ->
+    {reply, ok, State#state{cache_control = true}};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -196,8 +196,8 @@ handle_cast(ccm_conn_ack, State) ->
     NewState = ccm_conn_ack(State),
     {noreply, NewState};
 
-handle_cast(check_mem, #state{monitoring_state = MonState, cache_clearing = CacheClearing} = State) ->
-    case CacheClearing of
+handle_cast(check_mem, #state{monitoring_state = MonState, cache_control = CacheControl} = State) ->
+    case CacheControl of
         true ->
             MemUsage = monitoring:mem_usage(MonState),
             % Check if memory cleaning of oldest docs should be started

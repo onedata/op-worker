@@ -46,7 +46,9 @@
 
 %% Model that controls utilization of global cache
 -record(global_cache_controller, {
-    timestamp :: tuple()
+    timestamp :: tuple(),
+    status :: ok | to_disk | to_del,
+    to_be_saved :: term()
 }).
 
 %% Model that controls utilization of local cache

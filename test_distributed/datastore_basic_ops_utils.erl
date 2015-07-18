@@ -45,7 +45,7 @@ create_delete_test_base(Config, Level, Fun) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -125,7 +125,7 @@ save_test_base(Config, Level, Fun) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -183,7 +183,7 @@ update_test_base(Config, Level, Fun) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -273,7 +273,7 @@ get_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -362,7 +362,7 @@ exists_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -443,7 +443,7 @@ mixed_test(Config, Level) ->
         true ->
             put(file_beg, binary_to_list(term_to_binary(os:timestamp())));
         _ ->
-            disable_cache_clearing(Workers)
+            disable_cache_control(Workers)
     end,
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
@@ -638,9 +638,9 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
             count_answers(Num - 1, NewAns)
     end.
 
-disable_cache_clearing(Workers) ->
+disable_cache_control(Workers) ->
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
+        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control))
     end, Workers),
     [W | _] = Workers,
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
