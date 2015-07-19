@@ -191,17 +191,37 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
   {ok, Uuids} = apply(Model, list, [TimeWindow]),
   lists:foreach(fun(Uuid) ->
     {ModelName, Key} = decode_uuid(Uuid),
-    datastore:delete(Level, ModelName, Key)
+    apply(Model, delete, [Uuid]),
+    safe_delete(Level, ModelName, Key)
   end, Uuids),
   case TimeWindow of
     0 ->
       lists:foreach(fun(Cache) ->
         {ok, Docs} = datastore:list(Level, Cache, ?GET_ALL, []),
         lists:foreach(fun(Doc) ->
-          datastore:delete(Level, Cache, Doc#document.key)
+          safe_delete(Level, Cache, Doc#document.key)
         end, Docs)
       end, Caches);
     _ ->
       ok
   end,
   ok.
+
+safe_delete(Level, ModelName, Key) ->
+  try
+    {ok, Doc} = datastore:get(disk_only, ModelName, Key),
+    Pred = fun() ->
+      case datastore:get(Level, ModelName, Key) of
+        {ok, Doc} ->
+          true;
+        _ ->
+          false
+      end
+    end,
+    datastore:delete(Level, ModelName, Key, Pred)
+  catch
+    E1:E2 ->
+      ?error_stacktrace("Error in cache controller safe_delete. "
+        +"Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
+      {error, ending_disk_op_failed}
+  end.

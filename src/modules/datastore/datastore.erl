@@ -58,7 +58,7 @@
 -export_type([link_target/0, link_name/0, link_spec/0, normalized_link_spec/0, normalized_link_target/0]).
 
 %% API
--export([save/2, save_async/2, update/4, update_async/4, create/2, create_async/2,
+-export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2,
          get/3, list/4, delete/4, delete/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
@@ -78,18 +78,18 @@
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
+    exec_driver_async(ModelName, Level, save, [maybe_gen_uuid(Document)]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves given #document to memory with async save to disk.
+%% Saves given #document to memory with sync save to disk in case of caches.
 %% @end
 %%--------------------------------------------------------------------
--spec save_async(Level :: store_level(), Document :: datastore:document()) ->
+-spec save_sync(Level :: store_level(), Document :: datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
-save_async(Level, #document{} = Document) ->
+save_sync(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_cache_async(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
+    exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,19 +100,19 @@ save_async(Level, #document{} = Document) ->
     Key :: datastore:ext_key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 update(Level, ModelName, Key, Diff) ->
-    exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff]).
+    exec_driver_async(ModelName, Level, update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates given by key document by replacing given fields with new values.
-%% Sync operation on memory with async operation on disk.
+%% Sync operation on memory with sync operation on disk in case of caches.
 %% @end
 %%--------------------------------------------------------------------
--spec update_async(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+-spec update_sync(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:ext_key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
-update_async(Level, ModelName, Key, Diff) ->
-    exec_cache_async(ModelName, level_to_driver(Level), update, [Key, Diff]).
+update_sync(Level, ModelName, Key, Diff) ->
+    exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,18 +123,19 @@ update_async(Level, ModelName, Key, Diff) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
+    exec_driver_async(ModelName, Level, create, [maybe_gen_uuid(Document)]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates new #document. Sync operation on memory with async operation on disk.
+%% Creates new #document. Sync operation on memory with sync operation on disk
+%% in case of caches.
 %% @end
 %%--------------------------------------------------------------------
--spec create_async(Level :: store_level(), Document :: datastore:document()) ->
+-spec create_sync(Level :: store_level(), Document :: datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
-create_async(Level, #document{} = Document) ->
+create_sync(Level, #document{} = Document) ->
     ModelName = model_name(Document),
-    exec_cache_async(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
+    exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -454,6 +455,23 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
         end, Hooked),
     Return.
 
+%% @private
+%% @doc
+%% Runs synchronously all post-hooks for given model, method, context and
+%% return value. Returns given return value.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_posthooks_synch(Config :: model_behaviour:model_config(),
+    Model :: model_behaviour:model_action(), Level :: store_level(),
+    Context :: term(), ReturnValue) -> ReturnValue when ReturnValue :: term().
+run_posthooks_synch(#model_config{name = ModelName}, Method, Level, Context, Return) ->
+    Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
+    lists:foreach(
+        fun({_, HookedModule}) ->
+            HookedModule:'after'(ModelName, Method, Level, Context, Return)
+        end, Hooked),
+    Return.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -603,6 +621,13 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
         end,
     run_posthooks(ModelConfig, Method, driver_to_level(Driver), Args, Return).
 
+exec_driver_async(ModelName, ?LOCALLY_CACHED_LEVEL, Method, Args) ->
+    exec_cache_async(ModelName, level_to_driver(?LOCALLY_CACHED_LEVEL), Method, Args);
+exec_driver_async(ModelName, ?GLOBALLY_CACHED_LEVEL, Method, Args) ->
+    exec_cache_async(ModelName, level_to_driver(?GLOBALLY_CACHED_LEVEL), Method, Args);
+exec_driver_async(ModelName, Level, Method, Args) ->
+    exec_driver(ModelName, level_to_driver(Level), Method, Args).
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -617,16 +642,17 @@ exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
         {error, Reason} ->
             {error, Reason};
         Result ->
-            spawn(fun() -> exec_driver(ModelName, Driver2, Method, Args) end),
+            spawn(fun() -> exec_cache_async(ModelName, Driver2, Method, Args) end),
             Result
-    end.
-
-exec_driver_no_hooks(ModelName, Driver, Method, Args) when is_atom(Driver) ->
+    end;
+exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
     ModelConfig = ModelName:model_init(),
-    FullArgs = [ModelConfig | Args],
-    case Driver of
-        ?PERSISTENCE_DRIVER ->
-            worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs});
-        _ ->
-            erlang:apply(Driver, Method, FullArgs)
-    end.
+    Return =
+        case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Args) of
+            {ok, NewMethod, NewArgs} ->
+                FullArgs = [ModelConfig | NewArgs],
+                worker_proxy:call(datastore_worker, {driver_call, Driver, NewMethod, FullArgs});
+            {error, Reason} ->
+                {error, Reason}
+        end,
+    run_posthooks_synch(ModelConfig, Method, driver_to_level(Driver), Args, Return).

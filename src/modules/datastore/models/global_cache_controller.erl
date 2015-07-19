@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks and API
--export([save/1, get/1, list/0, list/1, exists/1, delete/1, update/2, create/1, model_init/0,
+-export([save/1, get/1, list/0, list/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
 %%%===================================================================
@@ -87,7 +87,8 @@ list(DocAge) ->
             {abort, Acc};
         (#document{key = Uuid, value = V}, Acc) ->
             T = V#global_cache_controller.timestamp,
-            case timer:now_diff(Now, T) >= 1000*DocAge of
+            U = V#global_cache_controller.last_user,
+            case (timer:now_diff(Now, T) >= 1000*DocAge) and (U =:= non) of
                 true ->
                     {next, [Uuid | Acc]};
                 false ->
@@ -104,6 +105,15 @@ list(DocAge) ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(global_only, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes #document with given key.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(datastore:key(), datastore:delete_predicate()) -> ok | datastore:generic_error().
+delete(Key, Pred) ->
+    datastore:delete(global_only, ?MODULE, Key, Pred).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -133,16 +143,16 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(ModelName, save, Level, [Doc], {ok, _}) ->
-    update_usage_info(Doc#document.key, ModelName, Level, Doc);
-'after'(ModelName, update, Level, [Key, Diff], {ok, _}) ->
-    update_usage_info(Key, ModelName, Level, {Key, Diff});
-'after'(ModelName, create, Level, [Doc], {ok, _}) ->
-    update_usage_info(Doc#document.key, ModelName, Level, Doc);
-'after'(ModelName, get, _Level, [Key], _ReturnValue) ->
+'after'(ModelName, save, disk_only, [Doc], {ok, _}) ->
+    end_disk_op(Doc#document.key, ModelName, save);
+'after'(ModelName, update, disk_only, [Key, _Diff], {ok, _}) ->
+    end_disk_op(Key, ModelName, update);
+'after'(ModelName, create, disk_only, [Doc], {ok, _}) ->
+    end_disk_op(Doc#document.key, ModelName, create);
+'after'(ModelName, get, _Level, [Key], {ok, _}) ->
     update_usage_info(Key, ModelName);
-'after'(ModelName, delete, Level, [Key, Pred], ok) ->
-    del_usage_info(Key, ModelName, Level, {Key, Pred});
+'after'(ModelName, delete, local_only, [Key, _Pred], ok) ->
+    end_disk_op(Key, ModelName, delete);
 'after'(ModelName, exists, _Level, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
@@ -158,13 +168,13 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) ->
     ok | datastore:generic_error().
 before(ModelName, save, disk_only, [Doc]) ->
-    check_disk_op(Doc#document.key, ModelName, Doc, save);
-before(ModelName, update, disk_only, [Key, Diff]) ->
-    check_disk_op(Key, ModelName, {Key, Diff}, save);
+    start_disk_op(Doc#document.key, ModelName);
+before(ModelName, update, disk_only, [Key, _Diff]) ->
+    start_disk_op(Key, ModelName);
 before(ModelName, create, disk_only, [Doc]) ->
-    check_disk_op(Doc#document.key, ModelName, Doc, save);
-before(ModelName, delete, disk_only, [Key, Pred]) ->
-    check_disk_op(Key, ModelName, {Key, Pred}, del);
+    start_disk_op(Doc#document.key, ModelName);
+before(ModelName, delete, disk_only, [Key, _Pred]) ->
+    start_disk_op(Key, ModelName);
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -192,103 +202,80 @@ get_hooks_config() ->
     {ok, datastore:key()} | datastore:generic_error().
 update_usage_info(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-    V = #global_cache_controller{timestamp = os:timestamp()},
-    Doc = #document{key = Uuid, value = V},
-    save(Doc).
+    UpdateFun = fun(Record) ->
+        Record#global_cache_controller{timestamp = os:timestamp()}
+    end,
+    {ok, _} = update(Uuid, UpdateFun).
 
-update_usage_info(Key, ModelName, Level, Value) ->
+end_disk_op(Key, ModelName, Op) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-        {OldStatus, OldV} = case ?MODULE:get(Uuid) of % get is also BIF
-            {ok, OldDoc} ->
-                ValueDoc = OldDoc#document.value,
-                {ValueDoc#global_cache_controller.status, ValueDoc#global_cache_controller.to_be_saved};
-            {error, {not_found, _}} ->
-                {[], []}
+        Pid = self(),
+        case Op of
+            delete ->
+                Pred = fun() ->
+                    LastUser = case ?MODULE:get(Uuid) of % get is also BIF
+                                   {ok, Doc} ->
+                                       Value = Doc#document.value,
+                                       Value#global_cache_controller.last_user;
+                                   {error, {not_found, _}} ->
+                                       non
+                               end,
+                    case LastUser of
+                        Pid ->
+                            true;
+                        _ ->
+                            false
+                    end
+                end,
+                delete(Uuid, Pred);
+            _ ->
+                UpdateFun = fun
+                    (#global_cache_controller{last_user = Pid} = Record) ->
+                        Record#global_cache_controller{last_user = non}
+                end,
+                update(Uuid, UpdateFun)
         end,
-        case {OldStatus, Level, OldV, Value} of
-            {_, global_only, _, V} ->
-                SaveV = #global_cache_controller{timestamp = os:timestamp(), status = to_disk, to_be_saved = V},
-                Doc = #document{key = Uuid, value = SaveV},
-                save(Doc);
-            {to_disk, disk_only, V, V} ->
-                SaveV = #global_cache_controller{timestamp = os:timestamp(), status = ok, to_be_saved = []},
-                Doc = #document{key = Uuid, value = SaveV},
-                save(Doc);
-            ToLog ->
-                ?debug("Not standard global cache update_usage_info: ~p, Args: ~p", [ToLog, {Key, ModelName, Level, Value}]),
-                ok
-        end
+        ok
     catch
         E1:E2 ->
-            ?error_stacktrace("Error in global cache controller update_usage_info. "
-                +"Args: ~p. Error: ~p:~p.", [{Key, ModelName, Level, Value}, E1, E2])
+            ?error_stacktrace("Error in global cache controller end_disk_op. "
+                +"Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
+            {error, ending_disk_op_failed}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Deletes information about usage of a document.
-%% @end
-%%--------------------------------------------------------------------
--spec del_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) ->
-    ok | datastore:generic_error().
-del_usage_info(Key, ModelName, Level, Value) ->
+start_disk_op(Key, ModelName) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-        {OldStatus, OldV} = case ?MODULE:get(Uuid) of % get is also BIF
-                                {ok, OldDoc} ->
-                                    ValueDoc = OldDoc#document.value,
-                                    {ValueDoc#global_cache_controller.status, ValueDoc#global_cache_controller.to_be_saved};
-                                {error, {not_found, _}} ->
-                                    {[], []}
-                            end,
-        case {OldStatus, Level, OldV, Value} of
-            {_, global_only, _, V} ->
-                SaveV = #global_cache_controller{timestamp = os:timestamp(), status = to_del, to_be_saved = V},
-                Doc = #document{key = Uuid, value = SaveV},
-                save(Doc);
-            {to_del, disk_only, V, V} ->
-                delete(Uuid);
-            ToLog ->
-                ?debug("Not standard global cache del_usage_info: ~p, Args: ~p", [ToLog, {Key, ModelName, Level, Value}]),
-                ok
-        end
-    catch
-        E1:E2 ->
-            ?error_stacktrace("Error in global cache controller del_usage_info. "
-                +"Args: ~p. Error: ~p:~p.", [{Key, ModelName, Level, Value}, E1, E2])
-    end.
+        Pid = self(),
 
-check_disk_op(Key, ModelName, Value, Op) ->
-    try
+        V = #global_cache_controller{last_user = Pid, timestamp = os:timestamp()},
+        Doc = #document{key = Uuid, value = V},
+        save(Doc),
+
         {ok, SleepTime} = application:get_env(?APP_NAME, cache_to_disk_delay_ms),
         timer:sleep(SleepTime),
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-        {Status, V} = case ?MODULE:get(Uuid) of % get is also BIF
-            {ok, OldDoc} ->
-                ValueDoc = OldDoc#document.value,
-                {ValueDoc#global_cache_controller.status, ValueDoc#global_cache_controller.to_be_saved};
+
+        LastUser = case ?MODULE:get(Uuid) of % get is also BIF
+            {ok, Doc} ->
+                Value = Doc#document.value,
+                Value#global_cache_controller.last_user;
             {error, {not_found, _}} ->
-                {[], []}
+                Pid
         end,
-        case {Op, Status, V, Value} of
-            {save, to_disk, ToDisk, ToDisk} ->
-                ok;
-            {del, to_del, ToDel, ToDel} ->
-                ok;
-            ToLog ->
-                ?debug("Not standard global cache check_disk_op: ~p, Args: ~p", [ToLog, {Key, ModelName, Value, Op}]),
-                {error, cache_value_changed}
+        case LastUser of
+            Pid ->
+                {ok, SavedValue} = ModelName:get(Key),
+                {ok, save, SavedValue};
+            _ ->
+                {error, not_last_user}
         end
     catch
         E1:E2 ->
-            ?error_stacktrace("Error in global cache controller check_disk_op. "
-                +"Args: ~p. Error: ~p:~p.", [{Key, ModelName, Value, Op}, E1, E2])
+            ?error_stacktrace("Error in global cache controller start_disk_op. "
+                +"Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
+            {error, preparing_disk_op_failed}
     end.
 
-przeniesc memory post_hook do disk pre_hook
-dodac monitorowanie linkow
-zamieniamy get/save na update, przy czyszczeniu sprawdzamy czy jest zgodnosc cache/zawartosc pamieci (po skasowaniu info o cache)
-czyszczac cache uzywamy delete bez hookow (sami kasujemy info o cache)
-co jakis czas robimy czyszczenie starych wpisow mimo wszystko, zeby zapewnic spojnosc cache/dysk
+%% dodac monitorowanie linkow
