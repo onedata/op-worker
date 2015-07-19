@@ -32,7 +32,7 @@
     node_ip = {127, 0, 0, 1} :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()},
     ccm_con_status = not_connected :: not_connected | connected | registered,
     monitoring_state = undefined :: monitoring:node_monitoring_state(),
-    cache_control = true
+    cache_control = true, last_cache_cleaning = {0,0,0}
 }).
 
 
@@ -196,23 +196,33 @@ handle_cast(ccm_conn_ack, State) ->
     NewState = ccm_conn_ack(State),
     {noreply, NewState};
 
-handle_cast(check_mem, #state{monitoring_state = MonState, cache_control = CacheControl} = State) ->
-    case CacheControl of
+handle_cast(check_mem, #state{monitoring_state = MonState, cache_control = CacheControl,
+    last_cache_cleaning = Last} = State) ->
+    NewState = case CacheControl of
         true ->
             MemUsage = monitoring:mem_usage(MonState),
             % Check if memory cleaning of oldest docs should be started
             % even when memory utilization is low (e.g. once a day)
             case caches_controller:should_clear_cache(MemUsage) of
                 true ->
-                    spawn(fun() -> free_memory(MemUsage) end);
+                    spawn(fun() -> free_memory(MemUsage) end),
+                    State#state{last_cache_cleaning = os:timestamp()};
                 _ ->
-                    ok
+                    Now = os:timestamp(),
+                    {ok, CleaningPeriod} = application:get_env(?APP_NAME, clear_cache_max_period_ms),
+                    case timer:now_diff(Now, Last) >= 1000000*CleaningPeriod of
+                        true ->
+                            spawn(fun() -> free_memory() end),
+                            State#state{last_cache_cleaning = Now};
+                        _ ->
+                            State
+                    end
             end;
         false ->
-            ok
+            State
     end,
     next_mem_check(),
-    {noreply, State};
+    {noreply, NewState};
 
 handle_cast(do_heartbeat, State) ->
     NewState = do_heartbeat(State),
@@ -525,6 +535,19 @@ free_memory(NodeMem) ->
                         ok
                 end,
                 Ans
+        end, start, ClearingOrder)
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2]),
+            {error, E2}
+    end.
+
+free_memory() ->
+    try
+        ClearingOrder = [{false, globally_cached}, {false, locally_cached}],
+        lists:foreach(fun
+            ({Aggressive, StoreType}) ->
+                caches_controller:clear_cache(100, Aggressive, StoreType)
         end, start, ClearingOrder)
     catch
         E1:E2 ->
