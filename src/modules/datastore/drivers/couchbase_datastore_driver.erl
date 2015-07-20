@@ -421,15 +421,17 @@ ensure_mc_text_connected() ->
         {ok, _} -> ok;
         ok -> ok;
         _ ->
-            L = datastore_worker:state_get(db_nodes),
-            Servers = lists:map(fun({Hostname, Port}) ->
-                {binary_to_atom(Hostname, utf8), [binary_to_list(Hostname), Port], 20}
-            end, L),
-            Res = mcd_cluster:start_link('MCDCluster', Servers),
-            datastore_worker:state_put(mc_text_connected, Res),
-            case Res of
-                {ok, _} -> ok;
-                E -> E
+            try
+                L = datastore_worker:state_get(db_nodes),
+                Servers = lists:map(fun({Hostname, Port}) ->
+                    {binary_to_atom(Hostname, utf8), [binary_to_list(Hostname), Port], 20}
+                end, L),
+                Res = mcd_cluster:start_link('MCDCluster', Servers),
+                datastore_worker:state_put(mc_text_connected, Res),
+                Res
+            catch
+                _:Reason ->
+                    {error, Reason}
             end
     end.
 
