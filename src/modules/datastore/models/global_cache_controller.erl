@@ -20,7 +20,7 @@
 
 %% model_behaviour callbacks and API
 -export([save/1, get/1, list/0, list/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
+    'after'/5, before/4, list_docs_be_dumped/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -99,6 +99,27 @@ list(DocAge) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns list records not persisted.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_docs_be_dumped() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list_docs_be_dumped() ->
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (#document{key = Uuid, value = V}, Acc) ->
+            U = V#global_cache_controller.last_user,
+            case U =/= non of
+                true ->
+                    {next, [Uuid | Acc]};
+                false ->
+                    {next, Acc}
+            end
+    end,
+    datastore:list(global_only, ?MODEL_NAME, Filter, []).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -151,7 +172,7 @@ model_init() ->
     end_disk_op(Doc#document.key, ModelName, create);
 'after'(ModelName, get, _Level, [Key], {ok, _}) ->
     update_usage_info(Key, ModelName);
-'after'(ModelName, delete, local_only, [Key, _Pred], ok) ->
+'after'(ModelName, delete, disk_only, [Key, _Pred], ok) ->
     end_disk_op(Key, ModelName, delete);
 'after'(ModelName, exists, _Level, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName);
@@ -205,7 +226,14 @@ update_usage_info(Key, ModelName) ->
     UpdateFun = fun(Record) ->
         Record#global_cache_controller{timestamp = os:timestamp()}
     end,
-    {ok, _} = update(Uuid, UpdateFun).
+    case update(Uuid, UpdateFun) of
+        {ok, Ok} ->
+            {ok, Ok};
+        {error,{not_found,global_cache_controller}} ->
+            V = #global_cache_controller{timestamp = os:timestamp()},
+            Doc = #document{key = Uuid, value = V},
+            create(Doc)
+    end.
 
 end_disk_op(Key, ModelName, Op) ->
     try
@@ -231,8 +259,13 @@ end_disk_op(Key, ModelName, Op) ->
                 delete(Uuid, Pred);
             _ ->
                 UpdateFun = fun
-                    (#global_cache_controller{last_user = Pid} = Record) ->
-                        Record#global_cache_controller{last_user = non}
+                    (#global_cache_controller{last_user = LastUser} = Record) ->
+                        case LastUser of
+                            Pid ->
+                                Record#global_cache_controller{last_user = non};
+                            _ ->
+                                throw(user_changed)
+                        end
                 end,
                 update(Uuid, UpdateFun)
         end,
@@ -240,7 +273,7 @@ end_disk_op(Key, ModelName, Op) ->
     catch
         E1:E2 ->
             ?error_stacktrace("Error in global cache controller end_disk_op. "
-                +"Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
+                ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
             {error, ending_disk_op_failed}
     end.
 
@@ -258,23 +291,23 @@ start_disk_op(Key, ModelName) ->
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
 
         LastUser = case ?MODULE:get(Uuid) of % get is also BIF
-            {ok, Doc} ->
-                Value = Doc#document.value,
+            {ok, Doc2} ->
+                Value = Doc2#document.value,
                 Value#global_cache_controller.last_user;
             {error, {not_found, _}} ->
                 Pid
         end,
         case LastUser of
             Pid ->
-                {ok, SavedValue} = ModelName:get(Key),
-                {ok, save, SavedValue};
+                {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
+                {ok, save, [SavedValue]};
             _ ->
                 {error, not_last_user}
         end
     catch
         E1:E2 ->
             ?error_stacktrace("Error in global cache controller start_disk_op. "
-                +"Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
+                ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
             {error, preparing_disk_op_failed}
     end.
 

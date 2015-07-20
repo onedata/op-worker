@@ -59,7 +59,7 @@
 
 %% API
 -export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2,
-         get/3, list/4, delete/4, delete/3, exists/3]).
+         get/3, list/4, delete/4, delete/3, delete_synch/4, delete_synch/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
@@ -167,7 +167,7 @@ list(Level, ModelName, Fun, AccIn) ->
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:ext_key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key, Pred) ->
-    case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
+    case exec_driver_async(ModelName, Level, delete, [Key, Pred]) of
         ok ->
             spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
             spawn(fun() -> catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
@@ -189,6 +189,39 @@ delete(Level, ModelName, Key, Pred) ->
 delete(Level, ModelName, Key) ->
     delete(Level, ModelName, Key, ?PRED_ALWAYS).
 
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes #document with given key. Sync operation on memory with sync operation on disk
+%% in case of caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_synch(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:ext_key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
+delete_synch(Level, ModelName, Key, Pred) ->
+    case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
+        ok ->
+            spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
+            %% @todo: uncomment following line when local cache will support links
+            % spawn(fun() -> catch delete_links(?LOCAL_ONLY_LEVEL, Key, ModelName, all) end),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes #document with given key. Sync operation on memory with sync operation on disk
+%% in case of caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_synch(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:ext_key()) -> ok | datastore:generic_error().
+delete_synch(Level, ModelName, Key) ->
+    delete_synch(Level, ModelName, Key, ?PRED_ALWAYS).
 
 
 %%--------------------------------------------------------------------

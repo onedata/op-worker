@@ -19,7 +19,7 @@
 
 %% API
 -export([clear_local_cache/1, clear_global_cache/1, clear_local_cache/2, clear_global_cache/2]).
--export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1]).
+-export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1, wait_for_dump/0]).
 -export([delete_old_keys/2, get_cache_uuid/2, decode_uuid/1]).
 
 %%%===================================================================
@@ -191,8 +191,8 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
   {ok, Uuids} = apply(Model, list, [TimeWindow]),
   lists:foreach(fun(Uuid) ->
     {ModelName, Key} = decode_uuid(Uuid),
-    apply(Model, delete, [Uuid]),
-    safe_delete(Level, ModelName, Key)
+    safe_delete(Level, ModelName, Key),
+    apply(Model, delete, [Uuid])
   end, Uuids),
   case TimeWindow of
     0 ->
@@ -210,10 +210,11 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
 safe_delete(Level, ModelName, Key) ->
   try
     {ok, Doc} = datastore:get(disk_only, ModelName, Key),
+    Value = Doc#document.value,
     Pred = fun() ->
       case datastore:get(Level, ModelName, Key) of
-        {ok, Doc} ->
-          true;
+        {ok, Doc2} ->
+          Doc2#document.value =:= Value;
         _ ->
           false
       end
@@ -224,4 +225,18 @@ safe_delete(Level, ModelName, Key) ->
       ?error_stacktrace("Error in cache controller safe_delete. "
         +"Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
       {error, ending_disk_op_failed}
+  end.
+
+wait_for_dump() ->
+  wait_for_dump(60).
+
+wait_for_dump(0) ->
+  dump_error;
+wait_for_dump(N) ->
+  case global_cache_controller:list_docs_be_dumped() of
+    {ok, []} ->
+      ok;
+    _ ->
+      timer:sleep(timer:seconds(1)),
+      wait_for_dump(N-1)
   end.
