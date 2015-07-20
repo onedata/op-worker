@@ -122,7 +122,6 @@ update_async(Level, ModelName, Key, Diff) ->
 -spec create(Level :: store_level(), Document :: datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
-    ?info("DT CREATE: ~p", [Document]),
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
 
@@ -624,6 +623,12 @@ exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
             Result
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates datasotre's driver name to handler module.
+%% @end
+%%--------------------------------------------------------------------
 -spec driver_to_module(atom()) -> atom().
 driver_to_module(?PERSISTENCE_DRIVER) ->
     {ok, DriverModule} = application:get_env(?APP_NAME, ?PERSISTENCE_DRIVER),
