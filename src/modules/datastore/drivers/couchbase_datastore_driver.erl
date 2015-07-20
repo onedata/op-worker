@@ -388,6 +388,10 @@ callmc_text(Method, Args, Retry, LastError) when Retry > 0 ->
     try apply(mcd, Method, ['MCDCluster'] ++ Args) of
         {error, notfound} ->
             {error, key_enoent};
+        {error, all_nodes_down} ->
+            datastore_worker:state_put(mc_text_connected, {error, all_nodes_down}),
+            mcd_cluster:stop('MCDCluster'),
+            callmc_text(Method, Args, Retry - 1, all_nodes_down);
         {error, Reason} ->
             {error, Reason};
         {_, {error, Reason}} ->
@@ -403,6 +407,7 @@ callmc_text(Method, Args, Retry, LastError) when Retry > 0 ->
             callmc_text(Method, Args, Retry - 1, E);
         {normal, _} = E ->
             callmc_text(Method, Args, Retry - 1, E);
+
         Other ->
             {error, Other}
     catch
