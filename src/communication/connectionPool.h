@@ -14,6 +14,7 @@
 #include <asio/ssl/context.hpp>
 #include <tbb/concurrent_queue.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -31,7 +32,8 @@ class CertificateData;
 }
 
 /**
- * A @c ConnectionPool is responsible for managing instances of @c Connection.
+ * A @c ConnectionPool is responsible for managing instances of
+ * @c PersistentConnection.
  * It provides a facade for the connections, ensuring that outside entities
  * do not interact with connections directly.
  */
@@ -57,19 +59,18 @@ public:
      * @param connectionsNumber Number of connections that should be maintained
      * by this pool.
      * @param host Hostname of the remote endpoint.
-     * @param service Name of well-known service provided by the remote
-     * endpoint, or a port number.
+     * @param port Port number of the remote endpoint.
      * @param verifyServerCertificate Specifies whether to verify server's
      * SSL certificate.
-     * @param certificateData Certificate data to use for SSL authentication.
+     * @param connectionFactory A function that returns a new connection object
+     * that is then maintained by the @c ConnectionPool.
      */
     ConnectionPool(const std::size_t connectionsNumber, std::string host,
         const unsigned short port, const bool verifyServerCertificate,
         ConnectionFactory connectionFactory);
 
     /**
-     * Creates connections and threads that will work for them.
-     * May throw a connection-related exception.
+     * Creates connections to the remote endpoint specified in the constructor.
      * @note This method is separated from the constructor so that the
      * initialization can be augmented by other communication layers.
      */
@@ -82,6 +83,8 @@ public:
      * @param getHandshake A function that returns a handshake to send through
      * connections.
      * @param onHandshakeResponse A function that takes a handshake response.
+     * @param onHandshakeDone A function that is called whenever handshake
+     * succeeds or fails.
      * @note This method is separated from constructor so that the handshake
      * messages can be translated by other communication layers.
      */
@@ -91,7 +94,7 @@ public:
 
     /**
      * Sets a function to handle received messages.
-     * @param onMessage The received message.
+     * @param onMessage The function handling received messages.
      */
     void setOnMessageCallback(std::function<void(std::string)> onMessage);
 
@@ -105,21 +108,29 @@ public:
     /**
      * Sends a message through one of the managed connections.
      * @param message The message to send.
-     * @return A future fulfilled when the message is sent or (with an
-     * exception) when an error occured.
+     * @param callback Callback function that is called on send success or
+     * error.
      */
     void send(std::string message, Callback callback, const int = int{});
 
     /**
      * Destructor.
-     * Stops the underlying asio:: endpoint and the worker thread and
-     * closes maintained connections.
+     * Calls @c stop().
      */
     virtual ~ConnectionPool();
+
+    /**
+     * Stops the @c ConnectionPool operations.
+     * All connections are dropped. This method exists to break the wait of any
+     * threads waiting in @c send. It is designed to be called at the end of the
+     * main application thread.
+     */
+    void stop();
 
 private:
     void onConnectionReady(PersistentConnection &conn);
 
+    std::atomic<bool> m_stopped{false};
     const std::size_t m_connectionsNumber;
     std::string m_host;
     const unsigned short m_port;

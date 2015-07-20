@@ -95,8 +95,17 @@ void ConnectionPool::setCertificateData(
 
 void ConnectionPool::send(std::string message, Callback callback, const int)
 {
+    if (m_stopped)
+        return;
+
     PersistentConnection *conn;
-    m_idleConnections.pop(conn);
+    try {
+        m_idleConnections.pop(conn);
+    }
+    catch (const tbb::user_abort &) {
+        // We have aborted the wait by calling stop()
+        return;
+    }
 
     // There might be a case that the connection has failed between
     // inserting it into ready queue and popping it here; that's ok
@@ -109,10 +118,17 @@ void ConnectionPool::onConnectionReady(PersistentConnection &conn)
     m_idleConnections.emplace(&conn);
 }
 
-ConnectionPool::~ConnectionPool()
+ConnectionPool::~ConnectionPool() { stop(); }
+
+void ConnectionPool::stop()
 {
-    m_ioService.stop();
-    m_thread.join();
+    if (!m_stopped) {
+        m_stopped = true;
+        m_connections.clear();
+        m_idleConnections.abort();
+        m_ioService.stop();
+        m_thread.join();
+    }
 }
 
 } // namespace communication

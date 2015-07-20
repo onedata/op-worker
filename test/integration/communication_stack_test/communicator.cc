@@ -2,6 +2,7 @@
 #include "communication/declarations.h"
 #include "messages/clientMessage.h"
 #include "messages/serverMessage.h"
+#include "messages/handshakeRequest.h"
 
 #include "messages.pb.h"
 
@@ -33,7 +34,8 @@ public:
     std::string &lastMessageSent() { return m_lastMessageSent; }
 
     auto setHandshake(std::function<std::string()> getHandshake,
-        std::function<std::error_code(std::string)> onHandshakeResponse)
+        std::function<std::error_code(std::string)> onHandshakeResponse,
+        std::function<void(std::error_code)> onHandshakeDone)
     {
         m_handshake = getHandshake();
         return LowerLayer::setHandshake(std::move(getHandshake),
@@ -143,12 +145,9 @@ public:
 
     std::string setHandshake(const std::string &description, bool fail)
     {
-        m_communicator.binaryTranslator.setHandshake(
-            [=] {
-                ExampleClientMessage msg{description};
-                return msg.serialize();
-            },
-            [=](ServerMessagePtr) {
+        m_communicator.setHandshake(
+            [=] { return messages::HandshakeRequest{description}; },
+            [=](auto) {
                 return fail ? std::make_error_code(std::errc::bad_message)
                             : std::error_code{};
             });

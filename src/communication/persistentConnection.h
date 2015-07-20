@@ -30,36 +30,22 @@ static constexpr std::chrono::seconds RECREATE_DELAY{2};
 static constexpr std::chrono::seconds SHUTDOWN_TIMEOUT{5};
 
 /**
- * @c Connection class represents a single TCP/TLS connection between the
- * client and a remote endpoint.
- * The Connection uses @c shared_from_this() to hold a temporary ownership of
- * itself; i.e. it ensures that the object will continue to exist while
- * a callback is in progress or any operations are scheduled on the object.
+ * @c PersistentConnection class represents a single TCP/TLS connection between
+ * the client and a remote endpoint.
  *
- * On destruction, parent object is expected to call @c close() and reset
- * @c io_service associated with the object. All scheduled callbacks are dropped
- * along with associated shared pointers when the service is reset. If a
- * callback was already in progress, it won't be able to schedule new socket
- * operations as the socket is closed, and thus all shared pointers will
- * eventually be dropped.
- *
- * A @c Connection object can optionally send a custom handshake message
- * immediately after establishing a secure connection to the server. The object
- * then waits for a handshake response (and passes it up to
+ * A @c PersistentConnection object can optionally send a custom handshake
+ * message immediately after establishing a secure connection to the server. The
+ * object then waits for a handshake response (and passes it up to
  * @c onHandshakeResponse callback) before indicating that it is ready to send
  * data. The @c onHandshakeResponse callback can decide to close the connection
  * by returning false.
  *
- * Aside from handshake-related callbacks, there are three main events that
- * a @c Connection instance can emit: @c onReady, @c onClosed and
+ * Aside from handshake-related callbacks, there are two main events that
+ * a @c PersistentConnection instance can emit: @c onReady and
  * @c onMessageReceived.
- * - @c onReady indicates that the @c Connection object is ready to send next
- *   message. Sending message before @c onReady is emitted is illegal, as is
- *   sending multiple messages after receiving a single @c onReady.
- * - @c onClosed is emitted when the connection has been closed, whether as
- *   a result of an error or through normal operation. The parent is expected
- *   to drop any references to the @c Connection instance, as it's no longer
- *   in a valid state.
+ * - @c onReady indicates that the @c PersistentConnection object is ready to
+ *   send next message. Sending message before @c onReady is emitted is illegal,
+ *   as is sending multiple messages after receiving a single @c onReady.
  * - @c onMessageReceived is emitted when a message from the remote endpoint has
  *   been received.
  *
@@ -72,8 +58,17 @@ public:
 
     /**
      * Constructor.
-     * @param context asio SSL context used to establish a secure
-     * connection with the server.
+     * @param host Hostname of the remote endpoint.
+     * @param port Port number of the remote endpoint.
+     * @param context asio SSL context used to establish a secure connection
+     * with the server.
+     * @param onMessage Callback called with a message received from the server.
+     * @param onReady Callback called when the connection is ready to send data.
+     * @param getHandshake Function returning a handshake message.
+     * @param onHandshakeResponse Callback called with a handshake response
+     * received from the server.
+     * @param onHandshakeDone Callback called when handshake is done with
+     * success or error.
      */
     PersistentConnection(std::string host, const unsigned short port,
         asio::ssl::context &context, std::function<void(std::string)> onMessage,
@@ -89,7 +84,17 @@ public:
      */
     virtual ~PersistentConnection();
 
+    /**
+     * Sends a message through the managed connection.
+     * @param message The message to send.
+     * @param callback Callback called when the message is successfuly sent or
+     * failed with error.
+     */
     virtual void send(std::string message, Callback callback);
+
+    /**
+     * Starts the managed connection.
+     */
     virtual void connect();
 
     PersistentConnection(const PersistentConnection &) = delete;
