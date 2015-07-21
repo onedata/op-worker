@@ -36,7 +36,7 @@ find_package(Glog REQUIRED)
 set(Boost_USE_STATIC_LIBS       OFF)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
-find_package(Boost COMPONENTS filesystem system REQUIRED)
+find_package(Boost COMPONENTS filesystem system thread REQUIRED)
 
 # Utility libs
 find_library(LTDL_LIBRARY ltdl)
@@ -103,6 +103,9 @@ set_target_properties(helpersShared PROPERTIES
     INSTALL_RPATH "${CUSTOM_RPATH}")
 
 install(TARGETS helpersShared LIBRARY DESTINATION lib)
+install(DIRECTORY src/helpers DESTINATION include)
+install(DIRECTORY deps/asio/asio/include DESTINATION .)
+
 
 enable_testing()
 add_subdirectory(test)

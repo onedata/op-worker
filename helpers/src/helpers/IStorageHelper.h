@@ -24,6 +24,10 @@
 #include <system_error>
 #include <future>
 
+#define BOOST_THREAD_PROVIDES_FUTURE
+#include <boost/thread.hpp>
+#include <boost/thread/future.hpp>
+
 namespace one {
 namespace helpers {
 
@@ -39,8 +43,8 @@ struct StorageHelperCTX {
 
 using CTXRef = StorageHelperCTX &;
 
-template <class T> using future_t = std::future<T>;
-template <class T> using promise_t = std::promise<T>;
+template <class T> using future_t = boost::future<T>;
+template <class T> using promise_t = boost::promise<T>;
 
 /**
  * The IStorageHelper interface.
@@ -103,7 +107,7 @@ public:
 
 protected:
     template <class T>
-    static void setPosixError(std::shared_ptr<std::promise<T>> p, int posixCode)
+    static void setPosixError(std::shared_ptr<promise_t<T>> p, int posixCode)
     {
         p->set_exception(std::make_exception_ptr(makePosixError(posixCode)));
     }

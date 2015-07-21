@@ -310,7 +310,7 @@ future_t<void> DirectIOHelper::ash_release(
 future_t<void> DirectIOHelper::ash_flush(
     const boost::filesystem::path &p, CTXRef ctx)
 {
-    std::promise<void> promise;
+    promise_t<void> promise;
     promise.set_value();
     return promise.get_future();
 }
@@ -318,7 +318,7 @@ future_t<void> DirectIOHelper::ash_flush(
 future_t<void> DirectIOHelper::ash_fsync(
     const boost::filesystem::path &p, int isdatasync, CTXRef ctx)
 {
-    std::promise<void> promise;
+    promise_t<void> promise;
     promise.set_value();
     return promise.get_future();
 }
