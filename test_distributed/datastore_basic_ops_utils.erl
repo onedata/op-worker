@@ -23,8 +23,8 @@
 
 -define(REQUEST_TIMEOUT, timer:seconds(30)).
 
--export([create_delete_test/2, create_async_delete_test/2, save_test/2, save_async_test/2,
-    update_test/2, update_async_test/2, get_test/2, exists_test/2, mixed_test/2]).
+-export([create_delete_test/2, create_sync_delete_test/2, save_test/2, save_sync_test/2, update_test/2,
+    update_sync_test/2, get_test/2, exists_test/2, mixed_test/2, set_hooks/2, unset_hooks/2]).
 
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
 
@@ -33,12 +33,12 @@
 %% ====================================================================
 
 create_delete_test(Config, Level) ->
-    create_delete_test_base(Config, Level, create).
+    create_delete_test_base(Config, Level, create, delete).
 
-create_async_delete_test(Config, Level) ->
-    create_delete_test_base(Config, Level, create_async).
+create_sync_delete_test(Config, Level) ->
+    create_delete_test_base(Config, Level, create_sync, delete_sync).
 
-create_delete_test_base(Config, Level, Fun) ->
+create_delete_test_base(Config, Level, Fun, Fun2) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
@@ -81,7 +81,7 @@ create_delete_test_base(Config, Level, Fun) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(delete, Level, [
+                Ans = ?call_store(Fun2, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -115,8 +115,8 @@ create_delete_test_base(Config, Level, Fun) ->
 save_test(Config, Level) ->
     save_test_base(Config, Level, save).
 
-save_async_test(Config, Level) ->
-    save_test_base(Config, Level, save_async).
+save_sync_test(Config, Level) ->
+    save_test_base(Config, Level, save_sync).
 
 save_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -173,8 +173,8 @@ save_test_base(Config, Level, Fun) ->
 update_test(Config, Level) ->
     update_test_base(Config, Level, update).
 
-update_async_test(Config, Level) ->
-    update_test_base(Config, Level, update_async).
+update_sync_test(Config, Level) ->
+    update_test_base(Config, Level, update_sync).
 
 update_test_base(Config, Level, Fun) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -643,4 +643,44 @@ disable_cache_control(Workers) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control))
     end, Workers),
     [W | _] = Workers,
+    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
+
+set_hooks(Case, Config) ->
+    case string:str(atom_to_list(Case), "cache") > 0 of
+        true ->
+            ok;
+        _ ->
+            Workers = ?config(op_worker_nodes, Config),
+
+            Methods = [save, get, exists, delete, update, create],
+            ModelConfig = lists:map(fun(Method) ->
+                {some_record, Method}
+            end, Methods),
+
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}]))
+                end, ModelConfig)
+            end, Workers)
+    end,
+    Config.
+
+unset_hooks(Case, Config) ->
+    case string:str(atom_to_list(Case), "cache") > 0 of
+        true ->
+            ok;
+        _ ->
+            Workers = ?config(op_worker_nodes, Config),
+
+            Methods = [save, get, exists, delete, update, create],
+            ModelConfig = lists:map(fun(Method) ->
+                {some_record, Method}
+            end, Methods),
+
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
+                end, ModelConfig)
+            end, Workers)
+    end.

@@ -46,7 +46,7 @@ all() ->
 % checks if cache is monitored
 cache_monitoring_test(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
-    disable_cache_control(Workers), % Automatic cleaning may influence results
+    disable_cache_control_and_set_dump_delay(Workers, 5000), % Automatic cleaning may influence results
 
     Key = <<"key">>,
     ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
@@ -59,7 +59,10 @@ cache_monitoring_test(Config) ->
     Uuid = caches_controller:get_cache_uuid(Key, some_record),
     ?assertMatch(true, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
     ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
-% dodac sprawdzenie zapisu na dysk
+
+    ?assertMatch({ok, false}, ?call_store(Worker2, exists, [disk_only, some_record, Key])),
+    timer:sleep(5000),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, Key])),
     ok.
 
 % checks if caches controller clears caches
@@ -674,9 +677,12 @@ to_timestamp(T) ->
     {trunc(T/1000000000), trunc(T/1000) rem 1000000, trunc(T*1000) rem 1000000}.
 
 disable_cache_control(Workers) ->
+    disable_cache_control_and_set_dump_delay(Workers, 1000).
+
+disable_cache_control_and_set_dump_delay(Workers, Delay) ->
     lists:foreach(fun(W) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control)),
-        ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, cache_to_disk_delay_ms, 1000]))
+        ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, cache_to_disk_delay_ms, Delay]))
     end, Workers),
     [W | _] = Workers,
     ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),

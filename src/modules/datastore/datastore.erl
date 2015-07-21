@@ -59,7 +59,7 @@
 
 %% API
 -export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2,
-         get/3, list/4, delete/4, delete/3, delete_synch/4, delete_synch/3, exists/3]).
+         get/3, list/4, delete/4, delete/3, delete_sync/4, delete_sync/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
@@ -197,9 +197,9 @@ delete(Level, ModelName, Key) ->
 %% in case of caches.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_synch(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+-spec delete_sync(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:ext_key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
-delete_synch(Level, ModelName, Key, Pred) ->
+delete_sync(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
             spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
@@ -218,10 +218,10 @@ delete_synch(Level, ModelName, Key, Pred) ->
 %% in case of caches.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_synch(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+-spec delete_sync(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:ext_key()) -> ok | datastore:generic_error().
-delete_synch(Level, ModelName, Key) ->
-    delete_synch(Level, ModelName, Key, ?PRED_ALWAYS).
+delete_sync(Level, ModelName, Key) ->
+    delete_sync(Level, ModelName, Key, ?PRED_ALWAYS).
 
 
 %%--------------------------------------------------------------------
@@ -494,10 +494,10 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
 %% return value. Returns given return value.
 %% @end
 %%--------------------------------------------------------------------
--spec run_posthooks_synch(Config :: model_behaviour:model_config(),
+-spec run_posthooks_sync(Config :: model_behaviour:model_config(),
     Model :: model_behaviour:model_action(), Level :: store_level(),
     Context :: term(), ReturnValue) -> ReturnValue when ReturnValue :: term().
-run_posthooks_synch(#model_config{name = ModelName}, Method, Level, Context, Return) ->
+run_posthooks_sync(#model_config{name = ModelName}, Method, Level, Context, Return) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     lists:foreach(
         fun({_, HookedModule}) ->
@@ -691,4 +691,4 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
             {error, Reason} ->
                 {error, Reason}
         end,
-    run_posthooks_synch(ModelConfig, Method, driver_to_level(Driver), Args, Return).
+    run_posthooks_sync(ModelConfig, Method, driver_to_level(Driver), Args, Return).

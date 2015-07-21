@@ -17,7 +17,7 @@
 -include("datastore_basic_ops_utils.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([create_delete_db_test/1, save_db_test/1, update_db_test/1, get_db_test/1, exists_db_test/1,
     create_delete_global_store_test/1, save_global_store_test/1,
     update_global_store_test/1, get_global_store_test/1, exists_global_store_test/1,
@@ -168,3 +168,9 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
+
+init_per_testcase(Case, Config) ->
+    datastore_basic_ops_utils:set_hooks(Case, Config).
+
+end_per_testcase(Case, Config) ->
+    datastore_basic_ops_utils:unset_hooks(Case, Config).
