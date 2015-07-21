@@ -390,8 +390,16 @@ callmc_text(Method, Args, Retry, LastError) when Retry > 0 ->
             {error, key_enoent};
         {error, all_nodes_down} ->
             datastore_worker:state_put(mc_text_connected, {error, all_nodes_down}),
-            mcd_cluster:stop('MCDCluster'),
+            catch mcd_cluster:stop('MCDCluster'),
             callmc_text(Method, Args, Retry - 1, all_nodes_down);
+        {error, noproc} ->
+            datastore_worker:state_put(mc_text_connected, {error, noproc}),
+            catch mcd_cluster:stop('MCDCluster'),
+            callmc_text(Method, Args, Retry - 1, noproc);
+        {error, {normal, _}} ->
+            datastore_worker:state_put(mc_text_connected, {error, no_genserver}),
+            catch mcd_cluster:stop('MCDCluster'),
+            callmc_text(Method, Args, Retry - 1, no_genserver);
         {error, Reason} ->
             {error, Reason};
         {_, {error, Reason}} ->
