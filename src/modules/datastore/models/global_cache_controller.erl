@@ -164,15 +164,15 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(ModelName, save, disk_only, [Doc], _) ->
+'after'(ModelName, save, disk_only, [Doc], {ok, _}) ->
     end_disk_op(Doc#document.key, ModelName, save);
-'after'(ModelName, update, disk_only, [Key, _Diff], _) ->
+'after'(ModelName, update, disk_only, [Key, _Diff], {ok, _}) ->
     end_disk_op(Key, ModelName, update);
-'after'(ModelName, create, disk_only, [Doc], _) ->
+'after'(ModelName, create, disk_only, [Doc], {ok, _}) ->
     end_disk_op(Doc#document.key, ModelName, create);
 'after'(ModelName, get, _Level, [Key], {ok, _}) ->
     update_usage_info(Key, ModelName);
-'after'(ModelName, delete, disk_only, [Key, _Pred], _) ->
+'after'(ModelName, delete, disk_only, [Key, _Pred], ok) ->
     end_disk_op(Key, ModelName, delete);
 'after'(ModelName, exists, _Level, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName);
