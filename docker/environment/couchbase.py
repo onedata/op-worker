@@ -75,9 +75,9 @@ def _wait_until(condition, containers):
     common.wait_until(condition, containers, COUCHBASE_READY_WAIT_SECONDS)
 
 
-def _cluster_nodes(containers, master_hostname, uid):
+def _cluster_nodes(containers, cluster_name, master_hostname, uid):
     for num, container in enumerate(containers[1:]):
-        hostname = common.format_hostname(_couchbase(num + 1), uid)
+        hostname = common.format_hostname(_couchbase(cluster_name, num + 1), uid)
         docker.exec_(container,
                  command=["/opt/couchbase/bin/couchbase-cli", "rebalance", "-c", "{0}:8091".format(master_hostname),
                           "-u", "admin", "-p", "password", "--server-add={0}:8091".format(hostname),
@@ -116,7 +116,7 @@ bash'''
                  stdout=sys.stderr)
 
     if len(containers) > 1:
-        _cluster_nodes(containers, master_hostname, uid)
+        _cluster_nodes(containers, cluster_name, master_hostname, uid)
 
     common.merge(couchbase_output, dns_output)
 
