@@ -223,7 +223,7 @@ safe_delete(Level, ModelName, Key) ->
   catch
     E1:E2 ->
       ?error_stacktrace("Error in cache controller safe_delete. "
-        +"Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
+        ++"Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
       {error, ending_disk_op_failed}
   end.
 

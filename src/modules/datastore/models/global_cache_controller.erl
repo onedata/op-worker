@@ -189,13 +189,15 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) ->
     ok | datastore:generic_error().
 before(ModelName, save, disk_only, [Doc]) ->
-    start_disk_op(Doc#document.key, ModelName);
+    start_disk_op(Doc#document.key, ModelName, save);
 before(ModelName, update, disk_only, [Key, _Diff]) ->
-    start_disk_op(Key, ModelName);
+    start_disk_op(Key, ModelName, update);
 before(ModelName, create, disk_only, [Doc]) ->
-    start_disk_op(Doc#document.key, ModelName);
+    start_disk_op(Doc#document.key, ModelName, create);
 before(ModelName, delete, disk_only, [Key, _Pred]) ->
-    start_disk_op(Key, ModelName);
+    start_disk_op(Key, ModelName, delete);
+before(ModelName, get, disk_only, [Key]) ->
+    check_get(Key, ModelName);
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -235,6 +237,19 @@ update_usage_info(Key, ModelName) ->
             create(Doc)
     end.
 
+check_get(Key, ModelName) ->
+    Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+    case ?MODULE:get(Uuid) of % get is also BIF
+        {ok, Doc} ->
+            Value = Doc#document.value,
+            case Value#global_cache_controller.action of
+                delete -> {error, {not_found, ModelName}};
+                _ -> ok
+            end;
+        {error, {not_found, _}} ->
+            ok
+    end.
+
 end_disk_op(Key, ModelName, Op) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
@@ -262,7 +277,7 @@ end_disk_op(Key, ModelName, Op) ->
                     (#global_cache_controller{last_user = LastUser} = Record) ->
                         case LastUser of
                             Pid ->
-                                Record#global_cache_controller{last_user = non};
+                                Record#global_cache_controller{last_user = non, action = non};
                             _ ->
                                 throw(user_changed)
                         end
@@ -273,16 +288,16 @@ end_disk_op(Key, ModelName, Op) ->
     catch
         E1:E2 ->
             ?error_stacktrace("Error in global cache controller end_disk_op. "
-                ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
+                ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, Op}, E1, E2]),
             {error, ending_disk_op_failed}
     end.
 
-start_disk_op(Key, ModelName) ->
+start_disk_op(Key, ModelName, Op) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
         Pid = self(),
 
-        V = #global_cache_controller{last_user = Pid, timestamp = os:timestamp()},
+        V = #global_cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op},
         Doc = #document{key = Uuid, value = V},
         save(Doc),
 
@@ -299,16 +314,23 @@ start_disk_op(Key, ModelName) ->
         end,
         case LastUser of
             Pid ->
-                {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
-                {ok, save, [SavedValue]};
+                case Op of
+                    delete ->
+                        ok;
+                    _ ->
+                        {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
+                        {ok, save, [SavedValue]}
+                end;
             _ ->
                 {error, not_last_user}
         end
     catch
         E1:E2 ->
             ?error_stacktrace("Error in global cache controller start_disk_op. "
-                ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName}, E1, E2]),
+                ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, Op}, E1, E2]),
             {error, preparing_disk_op_failed}
     end.
 
 %% dodac monitorowanie linkow
+% wymuszenie zapisu co jakis czas
+% dodac zrzut przy czyszczeniu cache

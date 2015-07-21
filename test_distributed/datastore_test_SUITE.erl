@@ -33,14 +33,11 @@
 -export([utilize_memory/2]).
 
 -performance({test_cases, []}).
-%% all() ->
-%%     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-%%      global_cache_list_test, persistance_test, local_cache_list_test,
-%%      disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
-%%      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 all() ->
-    [
-        cache_monitoring_test, old_keys_cleaning_test].
+    [local_cache_test, global_cache_test, global_cache_atomic_update_test,
+     global_cache_list_test, persistance_test, local_cache_list_test,
+     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
+     cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test function
@@ -62,7 +59,7 @@ cache_monitoring_test(Config) ->
     Uuid = caches_controller:get_cache_uuid(Key, some_record),
     ?assertMatch(true, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
     ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
-
+% dodac sprawdzenie zapisu na dysk
     ok.
 
 % checks if caches controller clears caches
@@ -580,6 +577,7 @@ generic_links_test(Config, Level) ->
     ?assertMatch(ok, ?call_store(Worker2, add_links, [Level, Doc1, [{link2, Doc2}, {link3, Doc3}]])),
     ?assertMatch(ok,
         ?call_store(Worker1, some_record, delete, [Key2])),
+    timer:sleep(1000), % wait for hooks
     ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, link3])),
 
     Ret8 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link2]),
@@ -681,4 +679,5 @@ disable_cache_control(Workers) ->
         ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, cache_to_disk_delay_ms, 1000]))
     end, Workers),
     [W | _] = Workers,
+    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).

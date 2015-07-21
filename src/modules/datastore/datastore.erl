@@ -685,6 +685,9 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
             {ok, NewMethod, NewArgs} ->
                 FullArgs = [ModelConfig | NewArgs],
                 worker_proxy:call(datastore_worker, {driver_call, Driver, NewMethod, FullArgs});
+            ok ->
+                FullArgs = [ModelConfig | Args],
+                worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs});
             {error, Reason} ->
                 {error, Reason}
         end,
