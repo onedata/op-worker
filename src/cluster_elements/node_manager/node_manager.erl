@@ -97,6 +97,7 @@ refresh_ip_address() ->
     State :: term(),
     Timeout :: non_neg_integer() | infinity.
 init([]) ->
+    process_flag(trap_exit,true),
     try
         listener_starter:start_protocol_listener(),
         listener_starter:start_gui_listener(),

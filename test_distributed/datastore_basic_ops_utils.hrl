@@ -118,6 +118,20 @@
     "Document may be updated many times.")
 ).
 
+-define(no_transactions_create_delete_test_def,
+    ?basic_test_def("Performs multipe non-transactional create/delete operations using many threads.")
+).
+
+-define(no_transactions_save_test_def,
+    ?basic_test_def("Performs multipe non-transactional save operations using many threads. "
+    "Document may be saved many times.")
+).
+
+-define(no_transactions_update_test_def,
+    ?basic_test_def("Performs multipe non-transactional update operations using many threads. "
+    "Document may be updated many times.")
+).
+
 -define(get_test_def,
     ?basic_test_def("Performs multipe get operations using many threads.")
 ).
