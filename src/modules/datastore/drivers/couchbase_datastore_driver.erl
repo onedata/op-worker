@@ -440,6 +440,7 @@ ensure_mc_text_connected() ->
                     {binary_to_atom(Hostname, utf8), [binary_to_list(Hostname), Port], 20}
                 end, L),
                 Res = mcd_cluster:start_link('MCDCluster', Servers),
+                ?info("Starting mcd_cluster ~p", [Res]),
                 datastore_worker:state_put(mc_text_connected, Res),
                 Res
             catch
