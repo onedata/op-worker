@@ -164,15 +164,15 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(ModelName, save, disk_only, [Doc], {ok, _}) ->
+'after'(ModelName, save, disk_only, [Doc], _) ->
     end_disk_op(Doc#document.key, ModelName, save);
-'after'(ModelName, update, disk_only, [Key, _Diff], {ok, _}) ->
+'after'(ModelName, update, disk_only, [Key, _Diff], _) ->
     end_disk_op(Key, ModelName, update);
-'after'(ModelName, create, disk_only, [Doc], {ok, _}) ->
+'after'(ModelName, create, disk_only, [Doc], _) ->
     end_disk_op(Doc#document.key, ModelName, create);
 'after'(ModelName, get, _Level, [Key], {ok, _}) ->
     update_usage_info(Key, ModelName);
-'after'(ModelName, delete, disk_only, [Key, _Pred], ok) ->
+'after'(ModelName, delete, disk_only, [Key, _Pred], _) ->
     end_disk_op(Key, ModelName, delete);
 'after'(ModelName, exists, _Level, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName);
@@ -239,7 +239,7 @@ update_usage_info(Key, ModelName) ->
 
 check_get(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-    case ?MODULE:get(Uuid) of % get is also BIF
+    case get(Uuid) of
         {ok, Doc} ->
             Value = Doc#document.value,
             case Value#global_cache_controller.action of
@@ -257,7 +257,7 @@ end_disk_op(Key, ModelName, Op) ->
         case Op of
             delete ->
                 Pred = fun() ->
-                    LastUser = case ?MODULE:get(Uuid) of % get is also BIF
+                    LastUser = case get(Uuid) of
                                    {ok, Doc} ->
                                        Value = Doc#document.value,
                                        Value#global_cache_controller.last_user;
@@ -305,7 +305,7 @@ start_disk_op(Key, ModelName, Op) ->
         timer:sleep(SleepTime),
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
 
-        LastUser = case ?MODULE:get(Uuid) of % get is also BIF
+        LastUser = case get(Uuid) of
             {ok, Doc2} ->
                 Value = Doc2#document.value,
                 Value#global_cache_controller.last_user;

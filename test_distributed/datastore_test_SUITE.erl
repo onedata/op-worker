@@ -408,7 +408,10 @@ end_per_testcase(Case, Config) when
     end, Workers);
 
 end_per_testcase(_, Config) ->
-    ok.
+    Workers = ?config(op_worker_nodes, Config),
+    [W | _] = Workers,
+    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
 
 %%%===================================================================
 %%% Internal functions
@@ -683,7 +686,4 @@ disable_cache_control_and_set_dump_delay(Workers, Delay) ->
     lists:foreach(fun(W) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control)),
         ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, cache_to_disk_delay_ms, Delay]))
-    end, Workers),
-    [W | _] = Workers,
-    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
+    end, Workers).

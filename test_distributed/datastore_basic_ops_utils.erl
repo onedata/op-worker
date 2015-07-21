@@ -113,12 +113,12 @@ create_delete_test_base(Config, Level, Fun, Fun2) ->
     ].
 
 save_test(Config, Level) ->
-    save_test_base(Config, Level, save).
+    save_test_base(Config, Level, save, delete).
 
 save_sync_test(Config, Level) ->
-    save_test_base(Config, Level, save_sync).
+    save_test_base(Config, Level, save_sync, delete_sync).
 
-save_test_base(Config, Level, Fun) ->
+save_test_base(Config, Level, Fun, Fun2) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
@@ -154,7 +154,7 @@ save_test_base(Config, Level, Fun) ->
     DelMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(delete, Level, [
+            Ans = ?call_store(Fun2, Level, [
                 some_record, list_to_binary(DocsSet++integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -171,12 +171,12 @@ save_test_base(Config, Level, Fun) ->
         description = "Average time of save operation"}.
 
 update_test(Config, Level) ->
-    update_test_base(Config, Level, update).
+    update_test_base(Config, Level, update, save, delete).
 
 update_sync_test(Config, Level) ->
-    update_test_base(Config, Level, update_sync).
+    update_test_base(Config, Level, update_sync, save_sync, delete_sync).
 
-update_test_base(Config, Level, Fun) ->
+update_test_base(Config, Level, Fun, Fun2, Fun3) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
@@ -214,7 +214,7 @@ update_test_base(Config, Level, Fun) ->
     SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(save, Level, [
+            Ans = ?call_store(Fun2, Level, [
                 #document{
                     key = list_to_binary(DocsSet++integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -238,7 +238,7 @@ update_test_base(Config, Level, Fun) ->
     ClearFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(delete, Level, [
+            Ans = ?call_store(Fun3, Level, [
                 some_record, list_to_binary(DocsSet++integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -641,13 +641,10 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
 disable_cache_control(Workers) ->
     lists:foreach(fun(W) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control))
-    end, Workers),
-    [W | _] = Workers,
-    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
+    end, Workers).
 
 set_hooks(Case, Config) ->
-    case string:str(atom_to_list(Case), "cache") > 0 of
+    case check_config_name(Case) of
         true ->
             ok;
         _ ->
@@ -667,9 +664,12 @@ set_hooks(Case, Config) ->
     Config.
 
 unset_hooks(Case, Config) ->
-    case string:str(atom_to_list(Case), "cache") > 0 of
+    case check_config_name(Case) of
         true ->
-            ok;
+            Workers = ?config(op_worker_nodes, Config),
+            [W | _] = Workers,
+            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+            ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
         _ ->
             Workers = ?config(op_worker_nodes, Config),
 
@@ -684,3 +684,7 @@ unset_hooks(Case, Config) ->
                 end, ModelConfig)
             end, Workers)
     end.
+
+check_config_name(Case) ->
+    CStr = atom_to_list(Case),
+    (string:str(CStr, "cache") > 0) and (string:str(CStr, "sync") == 0).
