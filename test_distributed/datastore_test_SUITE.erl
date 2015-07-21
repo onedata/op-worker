@@ -46,7 +46,10 @@ all() ->
 % checks if cache is monitored
 cache_monitoring_test(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
-    disable_cache_control_and_set_dump_delay(Workers, 5000), % Automatic cleaning may influence results
+    disable_cache_control_and_set_dump_delay(Workers, timer:seconds(5)), % Automatic cleaning may influence results
+    lists:foreach(fun(W) ->
+        ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(10)]))
+    end, Workers),
 
     Key = <<"key">>,
     ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [
@@ -63,6 +66,33 @@ cache_monitoring_test(Config) ->
     ?assertMatch({ok, false}, ?call_store(Worker2, exists, [disk_only, some_record, Key])),
     timer:sleep(5000),
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, Key])),
+
+    % Check dump delay
+    Key2 = <<"key2">>,
+    for(2, fun() ->
+        ?assertMatch({ok, _}, ?call_store(Worker1, some_record, save, [
+            #document{
+                key = Key2,
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+        timer:sleep(3500)
+    end),
+    ?assertMatch({ok, false}, ?call_store(Worker2, exists, [disk_only, some_record, Key2])),
+    timer:sleep(5000),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, Key2])),
+
+    % Check forced dump
+    Key3 = <<"key3">>,
+    for(4, fun() ->
+        ?assertMatch({ok, _}, ?call_store(Worker1, some_record, save, [
+            #document{
+                key = Key3,
+                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
+            }])),
+        timer:sleep(3500)
+    end),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, Key3])),
+
     ok.
 
 % checks if caches controller clears caches
@@ -687,3 +717,9 @@ disable_cache_control_and_set_dump_delay(Workers, Delay) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control)),
         ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, cache_to_disk_delay_ms, Delay]))
     end, Workers).
+
+for(1, F) ->
+    F();
+for(N, F) ->
+    F(),
+    for(N - 1, F).

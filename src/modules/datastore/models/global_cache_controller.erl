@@ -232,7 +232,8 @@ update_usage_info(Key, ModelName) ->
         {ok, Ok} ->
             {ok, Ok};
         {error,{not_found,global_cache_controller}} ->
-            V = #global_cache_controller{timestamp = os:timestamp()},
+            TS = os:timestamp(),
+            V = #global_cache_controller{timestamp = TS, last_action_time = TS},
             Doc = #document{key = Uuid, value = V},
             create(Doc)
     end.
@@ -277,7 +278,7 @@ end_disk_op(Key, ModelName, Op) ->
                     (#global_cache_controller{last_user = LastUser} = Record) ->
                         case LastUser of
                             Pid ->
-                                Record#global_cache_controller{last_user = non, action = non};
+                                Record#global_cache_controller{last_user = non, action = non, last_action_time = os:timestamp()};
                             _ ->
                                 throw(user_changed)
                         end
@@ -297,20 +298,29 @@ start_disk_op(Key, ModelName, Op) ->
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
         Pid = self(),
 
-        V = #global_cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op},
-        Doc = #document{key = Uuid, value = V},
-        save(Doc),
+        UpdateFun = fun(Record) ->
+            Record#global_cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
+        end,
+        case update(Uuid, UpdateFun) of
+            {ok, Ok} ->
+                {ok, Ok};
+            {error,{not_found,global_cache_controller}} ->
+                TS = os:timestamp(),
+                V = #global_cache_controller{last_user = Pid, timestamp = TS, action = Op, last_action_time = TS},
+                Doc = #document{key = Uuid, value = V},
+                create(Doc)
+        end,
 
         {ok, SleepTime} = application:get_env(?APP_NAME, cache_to_disk_delay_ms),
         timer:sleep(SleepTime),
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
 
-        LastUser = case get(Uuid) of
+        {LastUser, LAT} = case get(Uuid) of
             {ok, Doc2} ->
                 Value = Doc2#document.value,
-                Value#global_cache_controller.last_user;
+                {Value#global_cache_controller.last_user, Value#global_cache_controller.last_action_time};
             {error, {not_found, _}} ->
-                Pid
+                {Pid, 0}
         end,
         case LastUser of
             Pid ->
@@ -322,7 +332,18 @@ start_disk_op(Key, ModelName, Op) ->
                         {ok, save, [SavedValue]}
                 end;
             _ ->
-                {error, not_last_user}
+                {ok, ForceTime} = application:get_env(?APP_NAME, cache_to_disk_force_delay_ms),
+                case timer:now_diff(os:timestamp(), LAT) >= 1000*ForceTime of
+                    true ->
+                        UpdateFun2 = fun(Record) ->
+                            Record#global_cache_controller{last_action_time = os:timestamp()}
+                        end,
+                        update(Uuid, UpdateFun2),
+                        {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
+                        {ok, save, [SavedValue]};
+                    _ ->
+                        {error, not_last_user}
+                end
         end
     catch
         E1:E2 ->
@@ -332,5 +353,4 @@ start_disk_op(Key, ModelName, Op) ->
     end.
 
 %% dodac monitorowanie linkow
-% wymuszenie zapisu co jakis czas
 % dodac zrzut przy czyszczeniu cache

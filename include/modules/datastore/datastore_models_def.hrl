@@ -47,8 +47,9 @@
 %% Model that controls utilization of global cache
 -record(global_cache_controller, {
     timestamp :: tuple(),
-    action = non,
-    last_user = non :: pid() | non
+    action = non :: atom(),
+    last_user = non :: pid() | non,
+    last_action_time :: tuple()
 }).
 
 %% Model that controls utilization of local cache
