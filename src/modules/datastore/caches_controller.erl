@@ -195,8 +195,8 @@ wait_for_dump() ->
 wait_for_dump(0) ->
   dump_error;
 wait_for_dump(N) ->
-  case global_cache_controller:list_docs_be_dumped() of
-    {ok, []} ->
+  case {global_cache_controller:list_docs_be_dumped(), local_cache_controller:list_docs_be_dumped()} of
+    {{ok, []}, {ok, []}} ->
       ok;
     _ ->
       timer:sleep(timer:seconds(1)),

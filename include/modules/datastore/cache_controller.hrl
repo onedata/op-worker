@@ -9,6 +9,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -ifndef(CACHE_CONTROLLER_HRL).
