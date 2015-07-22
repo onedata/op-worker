@@ -55,12 +55,22 @@ struct StorageHelperCTX {
         , gid(0)
     {
     }
+
+    StorageHelperCTX()
+        : m_ffi(local_ffi)
+        , uid(0)
+        , gid(0)
+    {
+    }
+
+private:
+    fuse_file_info local_ffi;
 };
 
 using CTXRef = StorageHelperCTX &;
 
-template <class T> using future_t = boost::future<T>;
-template <class T> using promise_t = boost::promise<T>;
+template <class T> using future_t = std::future<T>;
+template <class T> using promise_t = std::promise<T>;
 
 /**
  * The IStorageHelper interface.
@@ -125,7 +135,7 @@ protected:
     template <class T>
     static void setPosixError(std::shared_ptr<promise_t<T>> p, int posixCode)
     {
-        p->set_exception(makePosixError(posixCode));
+        p->set_exception(std::make_exception_ptr(makePosixError(posixCode)));
     }
 
     static std::system_error makePosixError(int posixCode)
