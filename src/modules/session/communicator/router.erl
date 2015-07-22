@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("proto/oneclient/message_id.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -68,14 +69,8 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 %%--------------------------------------------------------------------
 -spec route_and_ignore_answer(#client_message{}) -> ok.
 route_and_ignore_answer(#client_message{session_id = SessionId,
-    message_body = #read_event{} = Evt}) ->
-    event_manager:emit(Evt, SessionId);
-route_and_ignore_answer(#client_message{session_id = SessionId,
-    message_body = #write_event{} = Evt}) ->
-    event_manager:emit(Evt, SessionId);
-route_and_ignore_answer(Msg = #client_message{}) ->
-    ?info("route_and_ignore_answer(~p)", [Msg]),
-    ok. %todo
+    message_body = #event{event = Evt}}) ->
+    event_manager:emit(Evt, SessionId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -92,6 +87,12 @@ route_and_send_answer(#client_message{message_id = Id,
     message_body = #get_protocol_version{}, session_id = SessId}) ->
     ProtoV = #server_message{message_id = Id, message_body = #protocol_version{}},
     communicator:send(ProtoV, SessId);
-route_and_send_answer(Msg = #client_message{}) ->
-    ?info("route_and_send_answer(~p)", [Msg]),
-    ok. %todo
+route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
+    spawn(fun() ->
+        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, SessId, FuseRequest}),
+        communicator:send(#server_message{
+            message_id = Id, message_body = FuseResponse
+        }, SessId)
+    end),
+    ok.

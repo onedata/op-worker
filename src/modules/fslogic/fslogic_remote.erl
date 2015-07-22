@@ -34,7 +34,7 @@
 prerouting(_, _, []) ->
     {error, no_providers};
 prerouting(_SpaceInfo, RequestBody, [RerouteTo | _Providers]) ->
-    Path = fslogic:extract_logical_path(RequestBody),
+    Path = <<>>,
 
     %% Replace all paths in this request with their "full" versions (with /spaces prefix).
     {ok, FullPath} = {ok, undefined}, %% @todo: get non-ambiguous path or file UUID

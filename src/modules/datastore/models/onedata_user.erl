@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore_model.hrl").
 
 -include("proto/oneclient/handshake_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 
 %% model_behaviour callbacks
@@ -67,6 +68,8 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+get(?ROOT_USER_ID) ->
+    {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -127,17 +130,22 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetch user from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Token :: #token{}) -> {ok, datastore:document()} | datastore:get_error().
+-spec fetch(Token :: #token{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#token{value = Token}) ->
-    case gr_users:get_details({user, Token}) of
-        {ok, #user_details{id = Id, name = Name}} ->
-            NewDoc = #document{key = Id, value = #onedata_user{name = Name}},
-            case onedata_user:save(NewDoc) of
-                {ok, _} -> {ok, NewDoc};
-                Error -> Error
-            end;
-        Error ->
-            Error
+    try
+        {ok, #user_details{id = Id, name = Name}} =
+            gr_users:get_details({user, Token}),
+        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
+            gr_users:get_spaces({user, Token}),
+        OnedataUser = #onedata_user{
+            name = Name, space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
+        },
+        OnedataUserDoc = #document{key = Id, value = OnedataUser},
+        {ok, _} = onedata_user:save(OnedataUserDoc),
+        {ok, OnedataUserDoc}
+    catch
+        _:Reason ->
+            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
