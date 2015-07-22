@@ -419,6 +419,24 @@ init_per_testcase(Case, Config) when
     end, Workers),
     Config;
 
+init_per_testcase(Case, Config) when
+    Case =:= local_cache_test;
+    Case =:= local_cache_list_test ->
+    Workers = ?config(op_worker_nodes, Config),
+
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
+    ModelConfig = lists:map(fun(Method) ->
+        {some_record, Method}
+    end, Methods),
+
+    lists:foreach(fun(W) ->
+        lists:foreach(fun(MC) ->
+            ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}])),
+            ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, local_cache_controller}]))
+        end, ModelConfig)
+    end, Workers),
+    Config;
+
 init_per_testcase(_, Config) ->
     Config.
 
@@ -439,6 +457,27 @@ end_per_testcase(Case, Config) when
             ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
         end, ModelConfig)
     end, Workers);
+
+end_per_testcase(Case, Config) when
+    Case =:= local_cache_test;
+    Case =:= local_cache_list_test ->
+    Workers = ?config(op_worker_nodes, Config),
+    [W | _] = Workers,
+
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
+    ModelConfig = lists:map(fun(Method) ->
+        {some_record, Method}
+    end, Methods),
+
+    lists:foreach(fun(W) ->
+        lists:foreach(fun(MC) ->
+            ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, local_cache_controller}])),
+            ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
+        end, ModelConfig)
+    end, Workers),
+
+    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),

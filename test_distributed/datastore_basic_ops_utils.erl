@@ -644,17 +644,24 @@ disable_cache_control(Workers) ->
     end, Workers).
 
 set_hooks(Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
+    ModelConfig = lists:map(fun(Method) ->
+        {some_record, Method}
+    end, Methods),
+
     case check_config_name(Case) of
-        true ->
+        global ->
             ok;
+        local ->
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}])),
+                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, local_cache_controller}]))
+                end, ModelConfig)
+            end, Workers);
         _ ->
-            Workers = ?config(op_worker_nodes, Config),
-
-            Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
-            ModelConfig = lists:map(fun(Method) ->
-                {some_record, Method}
-            end, Methods),
-
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
                     ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}]))
@@ -664,20 +671,29 @@ set_hooks(Case, Config) ->
     Config.
 
 unset_hooks(Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    [W | _] = Workers,
+
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
+    ModelConfig = lists:map(fun(Method) ->
+        {some_record, Method}
+    end, Methods),
+
     case check_config_name(Case) of
-        true ->
-            Workers = ?config(op_worker_nodes, Config),
-            [W | _] = Workers,
+        global ->
             ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
             ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
+        local ->
+            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+            ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)),
+
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, local_cache_controller}])),
+                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
+                end, ModelConfig)
+            end, Workers);
         _ ->
-            Workers = ?config(op_worker_nodes, Config),
-
-            Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
-            ModelConfig = lists:map(fun(Method) ->
-                {some_record, Method}
-            end, Methods),
-
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
                     ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
@@ -687,4 +703,14 @@ unset_hooks(Case, Config) ->
 
 check_config_name(Case) ->
     CStr = atom_to_list(Case),
-    (string:str(CStr, "cache") > 0) and (string:str(CStr, "sync") == 0).
+    case (string:str(CStr, "cache") > 0) and (string:str(CStr, "sync") == 0) of
+        true ->
+            case string:str(CStr, "global") > 0 of
+                true ->
+                    global;
+                _ ->
+                    local
+            end;
+        _ ->
+            no_hooks
+    end.
