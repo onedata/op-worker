@@ -27,7 +27,7 @@
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(File :: fslogic:file(), Flags :: fslogic:open_flags(), ForceClusterProxy :: boolean()) ->
+-spec get_file_location(File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags(), ForceClusterProxy :: boolean()) ->
     no_return().
 get_file_location(_File, _Flags, _ForceClusterProxy) ->
     ?NOT_IMPLEMENTED.
@@ -37,7 +37,7 @@ get_file_location(_File, _Flags, _ForceClusterProxy) ->
 %% @doc Gets new file location (implicit mknod operation).
 %% @end
 %%--------------------------------------------------------------------
--spec get_new_file_location(File :: file_meta:path(), Flags :: fslogic:open_flags(), ForceClusterProxy :: boolean()) ->
+-spec get_new_file_location(File :: file_meta:path(), Flags :: fslogic_worker:open_flags(), ForceClusterProxy :: boolean()) ->
     no_return().
 get_new_file_location(_File, _Flags, _ForceClusterProxy) ->
     ?NOT_IMPLEMENTED.

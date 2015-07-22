@@ -108,7 +108,7 @@ protobuf_msg_test(Config) ->
     remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
-        fun(#client_message{message_body = #read_event{}}) ->
+        fun(#client_message{message_body = #event{event = #read_event{}}}, _) ->
             ok
         end),
     Msg = #'ClientMessage'{
@@ -157,7 +157,7 @@ multi_message_test(Config) ->
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #read_event{counter = Counter}}) ->
+        fun(#client_message{message_body = #event{event = #read_event{counter = Counter}}}) ->
             Self ! Counter,
             ok
         end),
