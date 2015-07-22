@@ -146,7 +146,7 @@ command = command.format(
     gid=os.getegid(),
     src=args.src,
     dst=destination,
-    shed_privileges=(platform.system() == 'Linux' and os.geteuid() != 0),
+    shed_privileges=False,
     groups=args.groups)
 
 reflect = [(destination, 'rw')]

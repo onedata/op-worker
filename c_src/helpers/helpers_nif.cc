@@ -1,127 +1,283 @@
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
+#define BOOST_THREAD_PROVIDES_EXECUTORS
 
 #include "helpers/storageHelperFactory.h"
-#include "directIOHelper.h"
 
+#include <boost/thread/executors/basic_thread_pool.hpp>
+
+#include <string>
+#include <memory>
+#include <vector>
+#include <random>
+#include <tuple>
 #include "nifpp.h"
 
 #include <pwd.h>
 #include <grp.h>
 
+
+
 #ifndef __APPLE__
 #include <sys/fsuid.h>
 #endif
 
-namespace one {
-namespace helpers {
-namespace enif {
-    std::shared_ptr<communication::Communicator> nullCommunicator = nullptr;
-    BufferLimits limits = BufferLimits();
-    asio::io_service dio_service;
-    asio::io_service cproxy_service;
+namespace {
+/**
+ * @defgroup StaticAtoms Statically created atoms for ease of usage.
+ * @{
+ */
+nifpp::str_atom ok{"ok"};
+nifpp::str_atom error{"error"};
+/** @} */
 
-    StorageHelperFactory SHFactory = StorageHelperFactory(nullCommunicator,  limits, dio_service, cproxy_service);
 
-}
-}
+class io_service_executor
+  {
+
+  public:
+    BOOST_THREAD_NO_COPYABLE(io_service_executor)
+
+    /**
+     * Effects: creates a thread pool that runs closures on @c thread_count threads.
+     */
+    io_service_executor(asio::io_service &io_service)
+        : _io_service(io_service)
+    {};
+    /**
+     * Effects: Destroys the thread pool.
+     * Synchronization: The completion of all the closures happen before the completion of the thread pool destructor.
+     */
+    ~io_service_executor() {};
+
+    /**
+     * Effects: close the thread_pool for submissions. The worker threads will work until
+     */
+    void close() { };
+
+    /**
+     * Returns: whether the pool is closed for submissions.
+     */
+    bool is_close() { return false; }
+
+    /**
+     * Effects: The specified function will be scheduled for execution at some point in the future.
+     * If invoking closure throws an exception the thread pool will call std::terminate, as is the case with threads.
+     * Synchronization: completion of closure on a particular thread happens before destruction of thread's thread local variables.
+     * Throws: sync_queue_is_closed if the thread pool is closed.
+     *
+     */
+    template <typename T>
+    void submit(T closure) {
+        _io_service.post(closure);
+    }
+
+    /**
+     * This must be called from an scheduled task.
+     * Effects: reschedule functions until pred()
+     */
+    template <typename Pred>
+    void reschedule_until(Pred const& pred) {
+
+    }
+
+    private:
+        asio::io_service &_io_service;
+  };
+
+
+using helper_ptr = std::shared_ptr<one::helpers::IStorageHelper>;
+using handle_t = std::tuple<one::helpers::StorageHelperCTX*, fuse_file_info*>;
+using reqid_t = std::tuple<int, int, int>;
+
+
+
+std::shared_ptr<one::communication::Communicator> nullCommunicator = nullptr;
+one::helpers::BufferLimits limits = one::helpers::BufferLimits();
+asio::io_service dio_service;
+asio::io_service cproxy_service;
+asio::io_service::work dio_work(dio_service);
+asio::io_service::work cproxy_work(cproxy_service);
+
+std::vector<std::thread> workers;
+
+boost::basic_thread_pool executor(10);
+io_service_executor io_executor(dio_service);
+
+one::helpers::StorageHelperFactory SHFactory = one::helpers::StorageHelperFactory(nullCommunicator, limits, dio_service, cproxy_service);
+
 }
 
 using std::string;
-using namespace nifpp;
-
-
-/// RAII FS user UID/GID holder class
-class UserCTX
+//using namespace nifpp;
+//
+one::helpers::IStorageHelper::ArgsMap get_args(ErlNifEnv* env, ERL_NIF_TERM term)
 {
+    one::helpers::IStorageHelper::ArgsMap args;
+
+    if(enif_is_list(env, term) && !enif_is_empty_list(env, term))
+    {
+        int i = 0;
+        ERL_NIF_TERM list, head, tail;
+        for(list = term; enif_get_list_cell(env, list, &head, &tail); list = tail)
+            args.emplace(one::helpers::srvArg(i), nifpp::get<string>(env, head));
+    }
+
+    return std::move(args);
+}
+
+/**
+ * A shared pointer wrapper to help with Erlang NIF environment management.
+ */
+class Env {
 public:
-
-    UserCTX(ErlNifEnv* env, ERL_NIF_TERM uidTerm, ERL_NIF_TERM gidTerm)
+    /**
+     * Creates a new environment by creating a @c shared_ptr with a custom
+     * deleter.
+     */
+    Env()
+        : env{enif_alloc_env(), enif_free_env}
     {
-        uid_t uid = -1;
-        gid_t gid = -1;
-
-        if(!get(env, uidTerm, uid)) {
-            uid = uNameToUID(get<string>(env, uidTerm));
-        }
-
-        if(!get(env, gidTerm, gid)) {
-            gid = gNameToGID(get<string>(env, gidTerm));
-        }
-
-        initCTX(uid, gid);
     }
 
-    ~UserCTX()
-    {
-// Only to make compilation possible - helpers_nif does NOT support platforms other then Linux
-#ifndef __APPLE__
-        setfsuid(0);
-        setfsgid(0);
-#endif
-    }
+    /**
+     * Implicit conversion operator to @cErlNifEnv* .
+     */
+    operator ErlNifEnv *() { return env.get(); }
 
-    uid_t uid()
-    {
-        return m_uid;
-    }
-
-    gid_t gid()
-    {
-       return m_gid;
-    }
+    ErlNifEnv *get() { return env.get(); }
 
 private:
-    uid_t   m_uid;
-    gid_t   m_gid;
-
-    void initCTX(uid_t uid, gid_t gid)
-    {
-        m_uid = uid;
-        m_gid = gid;
-
-// Only to make compilation possible - helpers_nif does NOT support platforms other then Linux
-#ifndef __APPLE__
-        if(uid != 0) {
-            setgroups(0, nullptr);
-            setegid(-1);
-            seteuid(-1);
-        }
-
-        setfsuid(m_uid);
-        setfsgid(m_gid);
-#endif
-    }
-
-    uid_t uNameToUID(std::string uname)
-    {
-        struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
-        return (ownerInfo ? ownerInfo->pw_uid : -1);
-    }
-
-    gid_t gNameToGID(std::string gname, std::string uname = "")
-    {
-        struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
-        struct group  *groupInfo = getgrnam(gname.c_str()); // Static buffer, do NOT free !
-
-        gid_t primary_gid = (ownerInfo ? ownerInfo->pw_gid : -1);
-        return (groupInfo ? groupInfo->gr_gid : primary_gid);
-    }
-
+    std::shared_ptr<ErlNifEnv> env;
 };
 
 
-void handle_result(ErlNifEnv* env, ErlNifPid pid, one::helpers::future_t<void> &f)
+
+
+template <typename... Args, std::size_t... I>
+ERL_NIF_TERM wrap_helper(
+    ERL_NIF_TERM (*fun)(ErlNifEnv *, Env, ErlNifPid, reqid_t, Args...), ErlNifEnv *env,
+    const ERL_NIF_TERM args[], std::index_sequence<I...>)
 {
     try {
-        f.get();
-        enif_send(env, &pid, env, make(env, 0));
-    } catch(std::system_error &e) {
-        enif_send(env, &pid, env, make(env, e.code().value()));
+        ErlNifPid pid;
+        enif_self(env, &pid);
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+
+        auto reqId = std::make_tuple(std::rand(), std::rand(), std::rand());
+        return fun(env, Env{}, pid, reqId, nifpp::get<Args>(env, args[I])...);
+    }
+    catch (const nifpp::badarg &) {
+        return enif_make_badarg(env);
+    }
+    catch (const std::system_error &e) {
+        return nifpp::make(
+            env, std::make_tuple(error, nifpp::str_atom{e.code().message()}));
+    }
+    catch (const std::exception &e) {
+        return nifpp::make(env, std::make_tuple(error, std::string{e.what()}));
     }
 }
 
-#define BADARG enif_make_badarg(env)
+template <typename... Args>
+ERL_NIF_TERM wrap(ERL_NIF_TERM (*fun)(ErlNifEnv *, Env, ErlNifPid, reqid_t, Args...),
+    ErlNifEnv *env, const ERL_NIF_TERM args[])
+{
+    return wrap_helper(fun, env, args, std::index_sequence_for<Args...>{});
+}
 
+
+uid_t uNameToUID(std::string uname)
+{
+    struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
+    return (ownerInfo ? ownerInfo->pw_uid : -1);
+}
+
+gid_t gNameToGID(std::string gname, std::string uname = "")
+{
+    struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
+    struct group  *groupInfo = getgrnam(gname.c_str()); // Static buffer, do NOT free !
+
+    gid_t primary_gid = (ownerInfo ? ownerInfo->pw_gid : -1);
+    return (groupInfo ? groupInfo->gr_gid : primary_gid);
+}
+
+
+void handle_result(Env env, ErlNifPid pid, reqid_t reqId, one::helpers::future_t<void> &f)
+{
+    try {
+        f.get();
+        enif_send(env, &pid, env, nifpp::make(env, std::make_tuple(reqId, ok)));
+    } catch(std::system_error &e) {
+        enif_send(env, &pid, env, nifpp::make(env, std::make_tuple(reqId, std::make_tuple(error, nifpp::str_atom{e.code().message()}))));
+    }
+}
+
+void async_handle_result(Env localEnv, ErlNifPid pid, reqid_t reqId, one::helpers::future_t<void> &future)
+{
+    io_executor.submit([&future, localEnv, pid, reqId]() { handle_result(localEnv, pid, reqId, future); });
+}
+
+static ERL_NIF_TERM new_helper_obj(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    auto helperName = nifpp::get<string>(env, argv[0]);
+    auto helperArgs = get_args(env, argv[1]);
+    auto helperObj = SHFactory.getStorageHelper(helperName, helperArgs);
+    if(!helperObj) {
+        return make(env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
+    } else {
+        auto resource =
+                    nifpp::construct_resource<helper_ptr>(helperObj);
+
+        return make(env, std::make_tuple(ok, resource));
+    }
+
+}
+
+static ERL_NIF_TERM new_helper_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    auto ffi_resource = nifpp::construct_resource<fuse_file_info>();
+    auto ctx_resource = nifpp::construct_resource<one::helpers::StorageHelperCTX>(*ffi_resource);
+    return nifpp::make(env, std::make_tuple(ok, std::make_tuple(ctx_resource, ffi_resource)));
+}
+
+
+
+
+static ERL_NIF_TERM set_user_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    one::helpers::StorageHelperCTX* ctx;
+    std::tie(ctx, std::ignore) = nifpp::get<handle_t>(env, argv[0]);
+
+    auto uidTerm = argv[1];
+    auto gidTerm = argv[2];
+
+    if(!nifpp::get(env, uidTerm, ctx->uid)) {
+        ctx->uid = uNameToUID(nifpp::get<string>(env, uidTerm));
+    }
+
+    if(!nifpp::get(env, gidTerm, ctx->gid)) {
+        ctx->gid = gNameToGID(nifpp::get<string>(env, gidTerm));
+    }
+
+    return nifpp::make(env, ok);
+}
+
+
+static ERL_NIF_TERM get_user_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    one::helpers::StorageHelperCTX* ctx;
+    std::tie(ctx, std::ignore) = nifpp::get<handle_t>(env, argv[0]);
+    return make(env, std::make_tuple(ok, std::make_tuple(ctx->uid, ctx->gid)));
+}
+
+ERL_NIF_TERM mkdir(ErlNifEnv *env, Env localEnv, ErlNifPid pid, reqid_t reqId, helper_ptr helper, handle_t ctx, std::string file, uint32_t mode)
+{
+    auto future = helper->ash_mkdir(file, mode);
+    async_handle_result(localEnv, pid, reqId, future);
+    return make(env, std::make_tuple(ok, reqId));
+}
 
 /*********************************************************************
 *
@@ -129,27 +285,21 @@ void handle_result(ErlNifEnv* env, ErlNifPid pid, one::helpers::future_t<void> &
 *       All functions below are described in helpers_nif.erl
 *
 *********************************************************************/
+extern "C" {
 
-resource_ptr<one::helpers::IStorageHelper> get_helper(ErlNifEnv* env, ERL_NIF_TERM term)
-{
-    resource_ptr<one::helpers::IStorageHelper> helper;
-    get(env, term, helper);
-    return std::move(helper);
-}
+//static ERL_NIF_TERM sh_link(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+//{
+//    UserCTX(env, argv[1], argv[2]);
+//    auto sh = get_helper(env, argv[0]);
+//    auto pid = get<ErlNifPid>(env, argv[3]);
 
-static ERL_NIF_TERM sh_link(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    UserCTX(env, argv[1], argv[2]);
-    auto sh = get_helper(env, argv[0]);
-    auto pid = get<ErlNifPid>(env, argv[3]);
+//    auto future = sh->ash_link(get<string>(env, argv[4]).c_str(), get<string>(env, argv[5]).c_str());
+//    future.then([=](one::helpers::future_t<void> f) {
+//        handle_result(env, pid, f);
+//    });
 
-    auto future = sh->ash_link(get<string>(env, argv[4]).c_str(), get<string>(env, argv[5]).c_str());
-    future.then([=](one::helpers::future_t<void> f) {
-        handle_result(env, pid, f);
-    });
-
-    return make(env, str_atom("ok"));
-}
+//    return make(env, str_atom("ok"));
+//}
 
 //static ERL_NIF_TERM sh_getattr(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 //{
@@ -298,37 +448,27 @@ static ERL_NIF_TERM sh_link(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 //
 //    return make(env, sh->sh_fsync(get<string>(env, argv[4]).c_str(), get<int>(env, argv[5]), &ffi));
 //}
-//
-//static ERL_NIF_TERM sh_mkdir(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-//{
-//    auto sh = get_helper(env, argv[0]);
-//
-//    return make(env, sh->sh_mkdir(get<string>(env, argv[4]).c_str(), get<int>(env, argv[5])));
-//}
 
-static ERL_NIF_TERM sh_rmdir(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_mkdir(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    UserCTX(env, argv[1], argv[2]);
-    auto sh = get_helper(env, argv[0]);
-    auto pid = get<ErlNifPid>(env, argv[3]);
-
-    auto future = sh->ash_rmdir(get<string>(env, argv[4]).c_str());
-    future.then([=](one::helpers::future_t<void> f) {
-        handle_result(env, pid, f);
-    });
-
-    return make(env, str_atom("ok"));
+    return wrap(mkdir, env, argv);
 }
 
 static int load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
-    return !(register_resource<one::helpers::DirectIOHelper>(env, "helper", "DirectIO"));
+    for(auto i = 0; i < 20; ++i) {
+        workers.push_back(std::thread([]() { dio_service.run(); }));
+    }
+
+    return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
+             nifpp::register_resource<one::helpers::StorageHelperCTX>(env, nullptr, "StorageHelperCTX") &&
+             nifpp::register_resource<fuse_file_info>(env, nullptr, "fuse_file_info"));
 }
 
 
 static ErlNifFunc nif_funcs[] =
 {
-    {"link",        6, sh_link},
+//    {"link",        6, sh_link},
 //    {"getattr",     5, sh_getattr},
 //    {"access",      6, sh_access},
 //    {"mknod",       7, sh_mknod},
@@ -344,9 +484,15 @@ static ErlNifFunc nif_funcs[] =
 //    {"statfs",      5, sh_statfs},
 //    {"release",     6, sh_release},
 //    {"fsync",       7, sh_fsync},
-//    {"mkdir",       6, sh_mkdir},
-    {"rmdir",       5, sh_rmdir}
+//    {"rmdir",       5, sh_rmdir},
+    {"mkdir",           4, sh_mkdir},
+    {"new_helper_obj",  2, new_helper_obj},
+    {"new_helper_ctx",  0, new_helper_ctx},
+    {"set_user_ctx",    3, set_user_ctx},
+    {"get_user_ctx",    1, get_user_ctx}
 };
 
 
-ERL_NIF_INIT(helpers_nif, nif_funcs, &load, NULL, NULL, NULL);
+ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
+
+} // extern C

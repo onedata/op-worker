@@ -28,15 +28,31 @@
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
 
+//#include "erl_nif.h"
+//
+//extern "C" {
+//
+//static ErlNifFunc nif_funcs[] = {
+//
+//};
+//
+//ERL_NIF_INIT(helpers_nif, nif_funcs, NULL, NULL, NULL, NULL)
+//
+//}
+
 namespace one {
 namespace helpers {
 
 struct StorageHelperCTX {
 
     fuse_file_info &m_ffi;
+    uid_t uid;
+    gid_t gid;
 
     StorageHelperCTX(fuse_file_info &ffi)
         : m_ffi(ffi)
+        , uid(0)
+        , gid(0)
     {
     }
 };
@@ -109,7 +125,7 @@ protected:
     template <class T>
     static void setPosixError(std::shared_ptr<promise_t<T>> p, int posixCode)
     {
-        p->set_exception(std::make_exception_ptr(makePosixError(posixCode)));
+        p->set_exception(makePosixError(posixCode));
     }
 
     static std::system_error makePosixError(int posixCode)

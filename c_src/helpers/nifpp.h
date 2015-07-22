@@ -1065,6 +1065,17 @@ TERM make(ErlNifEnv *env, const std::unordered_map<TK,TV> &var)
 
 // convenience wrappers for get()
 
+template <typename T>
+int get(ErlNifEnv *env, ERL_NIF_TERM term, std::shared_ptr<T> &var)
+{
+    std::shared_ptr<T> *ptr;
+    if (!get(env, term, ptr))
+        return 0;
+
+    var = *ptr;
+    return 1;
+}
+
 template<typename T>
 T get(ErlNifEnv *env, ERL_NIF_TERM term)
 {
