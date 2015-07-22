@@ -99,7 +99,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
     MakeTree = fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
         NewPath = <<Path/binary, "/", Leaf/binary>>,
-        ct:print("NewPath ~p with parent ~p", [NewPath, ParentUUID]),
+        %% ct:print("NewPath ~p with parent ~p", [NewPath, ParentUUID]),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId,
             #create_dir{parent_uuid = ParentUUID, name = Leaf, mode = 8#755}
         )),
@@ -128,7 +128,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
     ?assertEqual(FileAttr, ?req(Worker, SessId2, #get_file_attr{entry = {path, TestPath1}})),
 
-    ct:print("UUIDs ~p ~p", [UUIDs1, UUIDs2]),
+    %% ct:print("UUIDs ~p ~p", [UUIDs1, UUIDs2]),
 
     lists:foreach(fun(UUID) ->
         ?assertMatch(#fuse_response{status = #status{code = ?ENOTEMPTY}},
@@ -167,7 +167,7 @@ fslogic_read_dir_test(Config) ->
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
 
-%%                                 ct:print("Testing readdir with Path ~p, Offset ~p, Size ~p: ~p", [Path, Offset, Size, Links]),
+%%                                 %% ct:print("Testing readdir with Path ~p, Offset ~p, Size ~p: ~p", [Path, Offset, Size, Links]),
 
                                 RespNames = lists:map(
                                     fun(#child_link{uuid = _, name = Name}) ->
@@ -265,7 +265,7 @@ default_permissions_test(Config) ->
     fun({Path, SessIds}) ->
         lists:foreach(
             fun(SessId) ->
-                ct:print("Testing Path ~p ~p", [Path, SessId]),
+                %% ct:print("Testing Path ~p ~p", [Path, SessId]),
                 UUID = get_uuid_privileged(Worker, SessId, Path),
 
                 ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #delete_file{uuid = UUID}))
@@ -284,7 +284,7 @@ default_permissions_test(Config) ->
         fun({Path, SessIds}) ->
             lists:foreach(
                 fun(SessId) ->
-                    ct:print("Testing Path ~p ~p", [Path, SessId]),
+                    %% ct:print("Testing Path ~p ~p", [Path, SessId]),
                     UUID = get_uuid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
                 end, SessIds)
@@ -299,7 +299,7 @@ default_permissions_test(Config) ->
 
     lists:foreach(fun %% File
         ({mkdir, Parent, Name, Mode, SessIds, Code}) ->
-            ct:print("Testing mkdir ~p ~p ~p ~p ~p", [Parent, Name, Mode, SessIds, Code]),
+            %% ct:print("Testing mkdir ~p ~p ~p ~p ~p", [Parent, Name, Mode, SessIds, Code]),
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Parent),
@@ -307,7 +307,7 @@ default_permissions_test(Config) ->
                         ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = Mode, name = Name}))
                 end, SessIds);
         ({delete, Path, SessIds, Code}) ->
-            ct:print("Testing delete ~p ~p ~p", [Path, SessIds, Code]),
+            %% ct:print("Testing delete ~p ~p ~p", [Path, SessIds, Code]),
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
@@ -315,14 +315,14 @@ default_permissions_test(Config) ->
                         ?req(Worker, SessId, #delete_file{uuid = UUID}))
                 end, SessIds);
         ({get_attr, Path, SessIds, Code}) ->
-            ct:print("Testing get_attr ~p ~p ~p", [Path, SessIds, Code]),
+            %% ct:print("Testing get_attr ~p ~p ~p", [Path, SessIds, Code]),
             lists:foreach(
                 fun(SessId) ->
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
                         ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}))
                 end, SessIds);
         ({readdir, Path, SessIds, Code}) ->
-            ct:print("Testing readdir ~p ~p ~p", [Path, SessIds, Code]),
+            %% ct:print("Testing readdir ~p ~p ~p", [Path, SessIds, Code]),
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
@@ -330,7 +330,7 @@ default_permissions_test(Config) ->
                     ?req(Worker, SessId, #get_file_children{uuid = UUID}))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->
-            ct:print("Testing chmod ~p ~.8B ~p ~p", [Path, Mode, SessIds, Code]),
+            %% ct:print("Testing chmod ~p ~.8B ~p ~p", [Path, Mode, SessIds, Code]),
                 lists:foreach(
                     fun(SessId) ->
                         UUID = get_uuid_privileged(Worker, SessId, Path),
@@ -394,7 +394,7 @@ simple_rename_test(Config) ->
     MakeTree =
         fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
             NewPath = <<Path/binary, "/", Leaf/binary>>,
-            ct:print("NewPath ~p with parent ~p", [NewPath, ParentUUID]),
+            %% ct:print("NewPath ~p with parent ~p", [NewPath, ParentUUID]),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId,
                 #create_dir{parent_uuid = ParentUUID, name = Leaf, mode = 8#755}
             )),

@@ -251,6 +251,8 @@ model_init() ->
     setup_onedata_user(UUID);
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
     setup_onedata_user(UUID);
+'after'(onedata_user, update, _, _, {ok, UUID}) ->
+    setup_onedata_user(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -418,6 +420,8 @@ get_scope(Entry) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Initializes files metadata for onedata user.
+%% This function can and should be used to ensure that user's FS is fully synchronised. Normally
+%% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.

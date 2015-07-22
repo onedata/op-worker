@@ -68,7 +68,7 @@ handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
 handle(_Request) ->
     ?log_bad_request(_Request),
-    erlang:error(wrong_request).
+    {error, wrong_request}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,10 +110,10 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
             %% Bad Match assertion - something went wrong, but it could be expected.
             report_error(FuseRequest, Reason, warning);
         error:{case_clause, Reason} ->
-            %% Bad Match assertion - something went seriously wrong and we should know about it.
+            %% Case Clause assertion - something went seriously wrong and we should know about it.
             report_error(FuseRequest, Reason, error);
         error:Reason ->
-            %% Bad Match assertion - something went horribly wrong. This should not happen.
+            %% Something went horribly wrong. This should not happen.
             report_error(FuseRequest, Reason, error)
     end.
 

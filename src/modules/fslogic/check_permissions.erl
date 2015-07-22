@@ -156,6 +156,7 @@ resolve_file_entry({parent, Item}, Inputs) ->
 %%--------------------------------------------------------------------
 %% @doc Checks whether given user has given permission on scope given file.
 %%      This function is always called before validate_posix_access/3 and shall handle all special cases.
+%% @todo: Implement this method. Currently expected behaviour is to throw ENOENT instead EACCES for all spaces dirs.
 %%--------------------------------------------------------------------
 -spec validate_scope_access(AccessType :: access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_scope_access(_AccessType, _FileDoc, _UserId) ->
