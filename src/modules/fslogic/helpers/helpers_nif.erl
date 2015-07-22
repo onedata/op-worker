@@ -15,10 +15,14 @@
 -include("global_definitions.hrl").
 
 -type resource_handle() :: term().
+-type flag() :: 'O_RDONLY' | 'O_WRONLY' | 'O_RDWR'.
+
+-record(statbuf, {st_dev, st_ino, st_mode, st_nlink, st_uid, st_gid, st_rdev, st_size, st_atime, st_mtime, st_ctime, st_blksize, st_blocks}).
 
 %% API
 -export([new_helper_obj/2, new_helper_ctx/0, set_user_ctx/3, get_user_ctx/1]).
 -export([username_to_uid/1, groupname_to_gid/1]).
+-export([set_flags/2, get_flags/1]).
 -export([getattr/3, access/4, mknod/5, mkdir/4, unlink/3, rmdir/3, symlink/4, rename/4, link/4, chmod/4, chown/5]).
 -export([truncate/4, open/3, read/5, write/5, release/3, flush/3, fsync/4]).
 -export([load/1]).
@@ -40,6 +44,7 @@ new_helper_ctx() ->
 set_user_ctx(_HelperCTX, _User, _Group) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
+-spec get_user_ctx(HelperCTX :: resource_handle()) -> {ok, {UID :: integer(), GID :: integer()}}.
 get_user_ctx(_HelperCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
@@ -51,8 +56,16 @@ username_to_uid(_UName) ->
 groupname_to_gid(_GName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
+-spec set_flags(HelperCTX :: resource_handle(), [flag()]) -> ok.
+set_flags(_HelperCTX, _Flags) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+-spec get_flags(HelperCTX :: resource_handle()) -> {ok, Flags :: [flag()]}.
+get_flags(_HelperCTX) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
 -spec getattr(HelperInstance :: term(), HelperCTX :: term(), File :: helpers:file()) ->
-    ok | {error, Reason :: helpers:error_code()}.
+    {ok, #statbuf{}} | {error, Reason :: helpers:error_code()}.
 getattr(_HelperInstance, _HelperCTX, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 

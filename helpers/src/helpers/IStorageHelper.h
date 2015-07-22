@@ -64,7 +64,7 @@ struct StorageHelperCTX {
     }
 
 private:
-    fuse_file_info local_ffi;
+    fuse_file_info local_ffi = {0};
 };
 
 using CTXRef = StorageHelperCTX &;
