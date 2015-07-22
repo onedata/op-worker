@@ -548,7 +548,7 @@ free_memory() ->
         lists:foreach(fun
             ({Aggressive, StoreType}) ->
                 caches_controller:clear_cache(100, Aggressive, StoreType)
-        end, start, ClearingOrder)
+        end, ClearingOrder)
     catch
         E1:E2 ->
             ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2]),

@@ -452,7 +452,9 @@ model_name(Record) when is_tuple(Record) ->
 %%--------------------------------------------------------------------
 -spec run_prehooks(Config :: model_behaviour:model_config(),
     Method :: model_behaviour:model_action(), Level :: store_level(),
-    Context :: term()) -> ok | {error, Reason :: term()}.
+    Context :: term()) -> ok | {ok, NewMethod, NewArgs} | {error, Reason :: term()} when
+    NewMethod :: atom(),
+    NewArgs :: list().
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
@@ -674,7 +676,7 @@ exec_driver_async(ModelName, Level, Method, Args) ->
 %% Executes given model action with async execution on second driver.
 %% @end
 %%--------------------------------------------------------------------
--spec exec_cache_async(model_behaviour:model_type(), [atom()],
+-spec exec_cache_async(model_behaviour:model_type(), [atom()] | atom(),
     Method :: store_driver_behaviour:driver_action(), [term()]) ->
     ok | {ok, term()} | {error, term()}.
 exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->

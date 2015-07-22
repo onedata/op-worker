@@ -99,6 +99,7 @@
   end_disk_op(Key, ModelName, Op) ->
     try
       Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+      Pid = self(),
       case Op of
         delete ->
           delete_dump_info(Uuid);
