@@ -63,7 +63,7 @@
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
--export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0]).
+-export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, level_to_driver/1]).
 
 %%%===================================================================
 %%% API
@@ -169,10 +169,7 @@ list(Level, ModelName, Fun, AccIn) ->
 delete(Level, ModelName, Key, Pred) ->
     case exec_driver_async(ModelName, Level, delete, [Key, Pred]) of
         ok ->
-            spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
-            spawn(fun() -> catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
-            %% @todo: uncomment following line when local cache will support links
-            % spawn(fun() -> catch delete_links(?LOCAL_ONLY_LEVEL, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(Level, Key, ModelName, all) end),
             ok;
         {error, Reason} ->
             {error, Reason}
@@ -257,7 +254,7 @@ add_links(Level, Key, ModelName, {_LinkName, _LinkTarget} = LinkSpec) ->
     add_links(Level, Key, ModelName, [LinkSpec]);
 add_links(Level, Key, ModelName, Links) when is_list(Links) ->
     _ModelConfig = ModelName:model_init(),
-    exec_driver(ModelName, level_to_driver(Level), add_links, [Key, normalize_link_target(Links)]).
+    exec_driver_async(ModelName, Level, add_links, [Key, normalize_link_target(Links)]).
 
 
 %%--------------------------------------------------------------------
@@ -278,7 +275,7 @@ delete_links(Level, #document{key = Key} = Doc, LinkNames) ->
 -spec delete_links(Level :: store_level(), ext_key(), model_behaviour:model_type(), link_name() | [link_name()] | all) -> ok | generic_error().
 delete_links(Level, Key, ModelName, LinkNames) when is_list(LinkNames); LinkNames =:= all ->
     _ModelConfig = ModelName:model_init(),
-    exec_driver(ModelName, level_to_driver(Level), delete_links, [Key, LinkNames]);
+    exec_driver_async(ModelName, Level, delete_links, [Key, LinkNames]);
 delete_links(Level, Key, ModelName, LinkName) ->
     delete_links(Level, Key, ModelName, [LinkName]).
 
@@ -623,6 +620,7 @@ driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
 exec_driver(ModelName, [Driver], Method, Args) when is_atom(Driver) ->
     exec_driver(ModelName, Driver, Method, Args);
 exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
+    % TODO - foreach_link metchod may not have all links in memory!!!
     case exec_driver(ModelName, Driver, Method, Args) of
         {error, {not_found, _}} when Method =:= get ->
             exec_driver(ModelName, Rest, Method, Args);

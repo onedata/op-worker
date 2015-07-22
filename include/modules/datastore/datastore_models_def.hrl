@@ -49,7 +49,8 @@
     timestamp :: tuple(),
     action = non :: atom(),
     last_user = non :: pid() | non,
-    last_action_time :: tuple()
+    last_action_time :: tuple(),
+    deleted_links = [] :: list()
 }).
 
 %% Model that controls utilization of local cache

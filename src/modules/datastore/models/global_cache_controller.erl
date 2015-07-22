@@ -170,12 +170,18 @@ model_init() ->
     end_disk_op(Key, ModelName, update);
 'after'(ModelName, create, disk_only, [Doc], {ok, _}) ->
     end_disk_op(Doc#document.key, ModelName, create);
-'after'(ModelName, get, _Level, [Key], {ok, _}) ->
+'after'(ModelName, get, disk_only, [Key], {ok, Doc}) ->
+    update_usage_info(Key, ModelName, Doc);
+'after'(ModelName, get, global_only, [Key], {ok, _}) ->
     update_usage_info(Key, ModelName);
 'after'(ModelName, delete, disk_only, [Key, _Pred], ok) ->
     end_disk_op(Key, ModelName, delete);
-'after'(ModelName, exists, _Level, [Key], {ok, true}) ->
+'after'(ModelName, delete, global_only, [Key, _Pred], ok) ->
+    delete_dump_info(Key, ModelName);
+'after'(ModelName, exists, global_only, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName);
+'after'(ModelName, delete_links, disk_only, [Key, LinkNames], ok) ->
+    log_link_del(Key, ModelName, LinkNames, stop);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -198,6 +204,10 @@ before(ModelName, delete, disk_only, [Key, _Pred]) ->
     start_disk_op(Key, ModelName, delete);
 before(ModelName, get, disk_only, [Key]) ->
     check_get(Key, ModelName);
+before(ModelName, fetch_link, disk_only, [Key, LinkName]) ->
+    check_get(Key, ModelName, LinkName);
+before(ModelName, delete_links, disk_only, [Key, LinkNames]) ->
+    log_link_del(Key, ModelName, LinkNames, start);
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -238,6 +248,15 @@ update_usage_info(Key, ModelName) ->
             create(Doc)
     end.
 
+update_usage_info(Key, ModelName, Doc) ->
+    update_usage_info(Key, ModelName),
+    datastore:create(global_only, Doc),
+    datastore:foreach_link(disk_only, Key, ModelName,
+        fun(LinkName, LinkTarget, _) ->
+            datastore:add_links(global_only, Key, ModelName, {LinkName, LinkTarget})
+        end,
+    []).
+
 check_get(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     case get(Uuid) of
@@ -251,28 +270,49 @@ check_get(Key, ModelName) ->
             ok
     end.
 
+check_get(Key, ModelName, LinkName) ->
+    Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+    case get(Uuid) of
+        {ok, Doc} ->
+            Value = Doc#document.value,
+            Links = Value#global_cache_controller.deleted_links,
+            case lists:member(LinkName, Links) or lists:member(all, Links) of
+                true -> {error, link_not_found};
+                _ -> ok
+            end;
+        {error, {not_found, _}} ->
+            ok
+    end.
+
+delete_dump_info(Key, ModelName) ->
+    Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+    delete_dump_info(Uuid).
+
+delete_dump_info(Uuid) ->
+    Pred = fun() ->
+        LastUser = case get(Uuid) of
+                       {ok, Doc} ->
+                           Value = Doc#document.value,
+                           Value#global_cache_controller.last_user;
+                       {error, {not_found, _}} ->
+                           non
+                   end,
+        case LastUser of
+            Pid ->
+                true;
+            _ ->
+                false
+        end
+    end,
+    delete(Uuid, Pred).
+
 end_disk_op(Key, ModelName, Op) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
         Pid = self(),
         case Op of
             delete ->
-                Pred = fun() ->
-                    LastUser = case get(Uuid) of
-                                   {ok, Doc} ->
-                                       Value = Doc#document.value,
-                                       Value#global_cache_controller.last_user;
-                                   {error, {not_found, _}} ->
-                                       non
-                               end,
-                    case LastUser of
-                        Pid ->
-                            true;
-                        _ ->
-                            false
-                    end
-                end,
-                delete(Uuid, Pred);
+                delete_dump_info(Uuid);
             _ ->
                 UpdateFun = fun
                     (#global_cache_controller{last_user = LastUser} = Record) ->
@@ -290,6 +330,57 @@ end_disk_op(Key, ModelName, Op) ->
         E1:E2 ->
             ?error_stacktrace("Error in global cache controller end_disk_op. "
                 ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, Op}, E1, E2]),
+            {error, ending_disk_op_failed}
+    end.
+
+log_link_del(Key, ModelName, LinkNames, start) ->
+    try
+        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+
+        UpdateFun = fun(#global_cache_controller{deleted_links = DL} = Record) ->
+            case LinkNames of
+                LNs when is_list(LNs) ->
+                    Record#global_cache_controller{deleted_links = DL ++ LinkNames};
+                _ ->
+                    Record#global_cache_controller{deleted_links = DL ++ [LinkNames]}
+            end
+        end,
+        case update(Uuid, UpdateFun) of
+            {ok, Ok} ->
+                {ok, Ok};
+            {error,{not_found,global_cache_controller}} ->
+                TS = os:timestamp(),
+                V = case LinkNames of
+                        LNs when is_list(LNs) ->
+                            #global_cache_controller{timestamp = TS, deleted_links = LinkNames};
+                        _ ->
+                            #global_cache_controller{timestamp = TS, deleted_links = [LinkNames]}
+                    end,
+                Doc = #document{key = Uuid, value = V},
+                create(Doc)
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error in global cache controller log_link_del. "
+            ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, LinkNames, start}, E1, E2]),
+            {error, preparing_disk_op_failed}
+    end;
+log_link_del(Key, ModelName, LinkNames, stop) ->
+    try
+        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+        UpdateFun = fun(#global_cache_controller{deleted_links = DL} = Record) ->
+            case LinkNames of
+                LNs when is_list(LNs) ->
+                    Record#global_cache_controller{deleted_links = DL -- LinkNames};
+                _ ->
+                    Record#global_cache_controller{deleted_links = DL -- [LinkNames]}
+            end
+        end,
+        update(Uuid, UpdateFun)
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error in global cache controller log_link_del. "
+            ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, LinkNames, stop}, E1, E2]),
             {error, ending_disk_op_failed}
     end.
 
@@ -353,4 +444,3 @@ start_disk_op(Key, ModelName, Op) ->
     end.
 
 %% dodac monitorowanie linkow
-% dodac zrzut przy czyszczeniu cache

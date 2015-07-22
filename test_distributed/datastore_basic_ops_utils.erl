@@ -650,7 +650,7 @@ set_hooks(Case, Config) ->
         _ ->
             Workers = ?config(op_worker_nodes, Config),
 
-            Methods = [save, get, exists, delete, update, create],
+            Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
             ModelConfig = lists:map(fun(Method) ->
                 {some_record, Method}
             end, Methods),
@@ -673,7 +673,7 @@ unset_hooks(Case, Config) ->
         _ ->
             Workers = ?config(op_worker_nodes, Config),
 
-            Methods = [save, get, exists, delete, update, create],
+            Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
             ModelConfig = lists:map(fun(Method) ->
                 {some_record, Method}
             end, Methods),

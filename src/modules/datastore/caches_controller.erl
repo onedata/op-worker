@@ -137,7 +137,7 @@ clear_cache(_MemUsage, TargetMemUse, StoreType, [TimeWindow | Windows]) ->
 %%--------------------------------------------------------------------
 -spec get_hooks_config(Models :: list()) -> list().
 get_hooks_config(Models) ->
-  Methods = [save, get, exists, delete, update, create],
+  Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
   lists:foldl(fun(Model, Ans) ->
     ModelConfig = lists:map(fun(Method) ->
       {Model, Method}
@@ -187,6 +187,7 @@ delete_old_keys(locally_cached, TimeWindow) ->
 %%--------------------------------------------------------------------
 -spec delete_old_keys(Model :: global_cache_controller | local_cache_controller,
     Level :: global_only | local_only, Caches :: list(), TimeWindow :: integer()) -> ok.
+% TODO Add dumping cache to disk in case of recent faliures
 delete_old_keys(Model, Level, Caches, TimeWindow) ->
   {ok, Uuids} = apply(Model, list, [TimeWindow]),
   lists:foreach(fun(Uuid) ->
@@ -209,7 +210,10 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
 
 safe_delete(Level, ModelName, Key) ->
   try
-    {ok, Doc} = datastore:get(disk_only, ModelName, Key),
+    ModelConfig = ModelName:model_init(),
+    FullArgs = [ModelConfig, Key],
+    {ok, Doc} = worker_proxy:call(datastore_worker, {driver_call, datastore:level_to_driver(Level), get, FullArgs}),
+
     Value = Doc#document.value,
     Pred = fun() ->
       case datastore:get(Level, ModelName, Key) of

@@ -129,10 +129,12 @@ old_keys_cleaning_test(Config) ->
     ?assertMatch(ok, ?call_store(Worker2, global_cache_controller, delete, [CorruptedUuid])),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 1])),
+    timer:sleep(1000), % Posthook is async
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, CorruptedKey])),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 0])),
+    timer:sleep(1000), % Posthook is async
     ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, CorruptedKey])),
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, CorruptedKey])),
     ok.
@@ -151,6 +153,7 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
     end, KeysWithTimes),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, TimeWindow])),
+    timer:sleep(1000), % Posthook is async
 
     Uuid = caches_controller:get_cache_uuid(K, some_record),
     ?assertMatch(false, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
@@ -404,7 +407,7 @@ init_per_testcase(Case, Config) when
     Case =:= link_walk_test ->
     Workers = ?config(op_worker_nodes, Config),
 
-    Methods = [save, get, exists, delete, update, create],
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
     ModelConfig = lists:map(fun(Method) ->
         {some_record, Method}
     end, Methods),
@@ -426,7 +429,7 @@ end_per_testcase(Case, Config) when
     Case =:= link_walk_test ->
     Workers = ?config(op_worker_nodes, Config),
 
-    Methods = [save, get, exists, delete, update, create],
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
     ModelConfig = lists:map(fun(Method) ->
         {some_record, Method}
     end, Methods),
