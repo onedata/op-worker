@@ -45,42 +45,42 @@ healthcheck_undefined_test_() ->
   {setup,
     fun healthcheck_undefined_setup/0,
     fun healthcheck_undefined_teardown/1,
-    fun(_) -> [
-      ?_assertMatch({error, no_lb_advice_received}, dns_worker:handle(healthcheck)),
-      ?_assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-      ?_assertEqual(1, meck:num_calls(worker_host, state_get, ['_', last_update])),
-      ?_assert(meck:validate(worker_host))
-    ] end}.
+    [fun() ->
+      ?assertMatch({error, no_lb_advice_received}, dns_worker:handle(healthcheck)),
+      ?assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+      ?assertEqual(1, meck:num_calls(worker_host, state_get, ['_', last_update])),
+      ?assert(meck:validate(worker_host))
+    end]}.
 
 %% tests handle(healthcheck) call when DNS is out of sync
 healthcheck_outofsync_test_() ->
   {setup,
     fun healthcheck_outofsync_setup/0,
     fun healthcheck_outofsync_teardown/1,
-    fun(_) -> [
-      ?_assertEqual(out_of_sync, dns_worker:handle(healthcheck)),
-      ?_assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-      ?_assertEqual(1, meck:num_calls(worker_host, state_get, ['_', last_update])),
-      ?_assertEqual(1, meck:num_calls(application, get_env, ['_', dns_disp_out_of_sync_threshold])),
-      ?_assertEqual(1, meck:num_calls(timer, now_diff, '_')),
-      ?_assert(meck:validate(application)),
-      ?_assert(meck:validate(worker_host)),
-      ?_assert(meck:validate(timer))
-    ] end}.
+    [fun() ->
+      ?assertEqual(out_of_sync, dns_worker:handle(healthcheck)),
+      ?assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+      ?assertEqual(1, meck:num_calls(worker_host, state_get, ['_', last_update])),
+      ?assertEqual(1, meck:num_calls(application, get_env, ['_', dns_disp_out_of_sync_threshold])),
+      ?assertEqual(1, meck:num_calls(timer, now_diff, '_')),
+      ?assert(meck:validate(application)),
+      ?assert(meck:validate(worker_host)),
+      ?assert(meck:validate(timer))
+    end]}.
 
 %% tests parse_domain() function
 domain_parser_test_() ->
   {setup,
     fun domain_parser_setup/0,
     fun domain_parser_teardown/1,
-    fun(_) -> [
-      ?_assertEqual({"", "onedata.org"}, dns_worker:parse_domain("onedata.org")),
-      ?_assertEqual({"cyfronet", "onedata.org"}, dns_worker:parse_domain("cyfronet.onedata.org")),
-      ?_assertEqual({"plgrid", "onedata.org"}, dns_worker:parse_domain("www.plgrid.onedata.org")),
-      ?_assertEqual(unknown_domain, dns_worker:parse_domain("agh.edu.pl")),
-      ?_assertEqual(4, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
-      ?_assert(meck:validate(application))
-    ] end}.
+    [fun() ->
+      ?assertEqual({"", "onedata.org"}, dns_worker:parse_domain("onedata.org")),
+      ?assertEqual({"cyfronet", "onedata.org"}, dns_worker:parse_domain("cyfronet.onedata.org")),
+      ?assertEqual({"plgrid", "onedata.org"}, dns_worker:parse_domain("www.plgrid.onedata.org")),
+      ?assertEqual(unknown_domain, dns_worker:parse_domain("agh.edu.pl")),
+      ?assertEqual(4, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
+      ?assert(meck:validate(application))
+    end]}.
 
 %% tests handling bad requests
 bad_request_handle_test() ->
@@ -97,87 +97,87 @@ handle_domain_test_() ->
     {setup,
       fun domain_undefined_lbadvice_setup/0,
       fun domain_teardown/1,
-      fun(_) -> [
-        ?_assertEqual(serv_fail, dns_worker:handle({handle_a, "onedata.org"})),
-        ?_assertEqual(serv_fail, dns_worker:handle({handle_ns, "onedata.org"})),
-        ?_assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-        ?_assert(meck:validate(worker_host))
-      ] end},
+      [fun() ->
+        ?assertEqual(serv_fail, dns_worker:handle({handle_a, "onedata.org"})),
+        ?assertEqual(serv_fail, dns_worker:handle({handle_ns, "onedata.org"})),
+        ?assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+        ?assert(meck:validate(worker_host))
+      end]},
 %% domain is not in onedata.org
     {setup,
       fun domain_proper_setup/0,
       fun domain_teardown/1,
-      fun(_) -> [
-        ?_assertEqual(refused, dns_worker:handle({handle_a, "agh.edu.pl"})),
-        ?_assertEqual(refused, dns_worker:handle({handle_ns, "agh.edu.pl"})),
-        ?_assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-        ?_assertEqual(2, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
-        ?_assert(meck:validate(worker_host)),
-        ?_assert(meck:validate(application))
-      ] end},
+      [fun() ->
+        ?assertEqual(refused, dns_worker:handle({handle_a, "agh.edu.pl"})),
+        ?assertEqual(refused, dns_worker:handle({handle_ns, "agh.edu.pl"})),
+        ?assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+        ?assertEqual(2, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
+        ?assert(meck:validate(worker_host)),
+        ?assert(meck:validate(application))
+      end]},
 %% empty domain prefix
     {setup,
       fun domain_proper_setup/0,
       fun domain_teardown/1,
-      fun(_) -> [
-        ?_assertEqual(nx_domain, dns_worker:handle({handle_a, "onedata.org"})),
-        ?_assertEqual(nx_domain, dns_worker:handle({handle_ns, "onedata.org"})),
-        ?_assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-        ?_assertEqual(2, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
-        ?_assert(meck:validate(worker_host)),
-        ?_assert(meck:validate(application))
-      ] end},
+      [fun() ->
+        ?assertEqual(nx_domain, dns_worker:handle({handle_a, "onedata.org"})),
+        ?assertEqual(nx_domain, dns_worker:handle({handle_ns, "onedata.org"})),
+        ?assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+        ?assertEqual(2, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
+        ?assert(meck:validate(worker_host)),
+        ?assert(meck:validate(application))
+      end]},
 %% multiple-part domain prefix
     {setup,
       fun domain_proper_setup/0,
       fun domain_teardown/1,
-      fun(_) -> [
-        ?_assertEqual(nx_domain, dns_worker:handle({handle_a, "cyf.kr.onedata.org"})),
-        ?_assertEqual(nx_domain, dns_worker:handle({handle_ns, "cyf.kr.onedata.org"})),
-        ?_assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-        ?_assertEqual(2, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
-        ?_assert(meck:validate(worker_host)),
-        ?_assert(meck:validate(application))
-      ] end}
+      [fun() ->
+        ?assertEqual(nx_domain, dns_worker:handle({handle_a, "cyf.kr.onedata.org"})),
+        ?assertEqual(nx_domain, dns_worker:handle({handle_ns, "cyf.kr.onedata.org"})),
+        ?assertEqual(2, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+        ?assertEqual(2, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
+        ?assert(meck:validate(worker_host)),
+        ?assert(meck:validate(application))
+      end]}
     ].
 
-%% test proper call of habdle({handle_a, Domain})
+%% test proper call of handle({handle_a, Domain})
 a_test_() ->
     {setup,
       fun domain_proper_setup/0,
       fun domain_teardown/1,
-      fun(_) -> [
-        ?_assertEqual(dns_worker:handle({handle_a, "one.onedata.org"}),
+      [fun() ->
+        ?assertEqual(dns_worker:handle({handle_a, "one.onedata.org"}),
           {ok,
             [{answer, "one.onedata.org", 60, a, {127,0,0,1}},
              {answer, "one.onedata.org", 60, a, {127,0,0,2}},
              {aa, true}]}),
-        ?_assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-        ?_assertEqual(1, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
-        ?_assertEqual(1, meck:num_calls(load_balancing, choose_nodes_for_dns, ['_'])),
-        ?_assert(meck:validate(worker_host)),
-        ?_assert(meck:validate(application)),
-        ?_assert(meck:validate(load_balancing))
-      ] end}.
+        ?assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+        ?assertEqual(1, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
+        ?assertEqual(1, meck:num_calls(load_balancing, choose_nodes_for_dns, ['_'])),
+        ?assert(meck:validate(worker_host)),
+        ?assert(meck:validate(application)),
+        ?assert(meck:validate(load_balancing))
+      end]}.
 
 %% test proper call of habdle({handle_ns, Domain})
 ns_test_() ->
     {setup,
       fun domain_proper_setup/0,
       fun domain_teardown/1,
-      fun(_) -> [
-        ?_assertEqual(dns_worker:handle({handle_ns, "two.onedata.org"}),
+      [fun() ->
+        ?assertEqual(dns_worker:handle({handle_ns, "two.onedata.org"}),
           {ok,
             [{answer, "two.onedata.org", 600, ns, "127.0.0.1"},
              {answer, "two.onedata.org", 600, ns, "127.0.0.2"},
              {aa, true}]}),
-        ?_assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
-        ?_assertEqual(1, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
-        ?_assertEqual(1, meck:num_calls(load_balancing, choose_ns_nodes_for_dns, ['_'])),
-        ?_assert(meck:validate(worker_host)),
-        ?_assert(meck:validate(application)),
-        ?_assert(meck:validate(load_balancing))
-      ] end}.
+        ?assertEqual(1, meck:num_calls(worker_host, state_get, ['_', lb_advice])),
+        ?assertEqual(1, meck:num_calls(application, get_env, ['_', global_registry_hostname])),
+        ?assertEqual(1, meck:num_calls(load_balancing, choose_ns_nodes_for_dns, ['_'])),
+        ?assert(meck:validate(worker_host)),
+        ?assert(meck:validate(application)),
+        ?assert(meck:validate(load_balancing))
+      end]}.
 
 %%%===================================================================
 %%% Setup and teardown functions
