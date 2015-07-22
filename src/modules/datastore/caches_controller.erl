@@ -175,6 +175,34 @@ delete_old_keys(globally_cached, TimeWindow) ->
 delete_old_keys(locally_cached, TimeWindow) ->
   delete_old_keys(local_cache_controller, local_only, ?LOCAL_CACHES, TimeWindow).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Waits for dumping cache to disk
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_dump() ->
+  ok | dump_error.
+wait_for_dump() ->
+  wait_for_dump(60).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waits for dumping cache to disk
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_dump(N :: integer()) ->
+  ok | dump_error.
+wait_for_dump(0) ->
+  dump_error;
+wait_for_dump(N) ->
+  case global_cache_controller:list_docs_be_dumped() of
+    {ok, []} ->
+      ok;
+    _ ->
+      timer:sleep(timer:seconds(1)),
+      wait_for_dump(N-1)
+  end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -208,6 +236,14 @@ delete_old_keys(Model, Level, Caches, TimeWindow) ->
   end,
   ok.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes info from memory when it is dumped to disk.
+%% @end
+%%--------------------------------------------------------------------
+-spec safe_delete(Level :: datastore:store_level(), ModelName :: model_behaviour:model_type(), Key :: datastore:key()) ->
+  ok | datastore:generic_error().
 safe_delete(Level, ModelName, Key) ->
   try
     ModelConfig = ModelName:model_init(),
@@ -228,19 +264,5 @@ safe_delete(Level, ModelName, Key) ->
     E1:E2 ->
       ?error_stacktrace("Error in cache controller safe_delete. "
         ++"Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
-      {error, ending_disk_op_failed}
-  end.
-
-wait_for_dump() ->
-  wait_for_dump(60).
-
-wait_for_dump(0) ->
-  dump_error;
-wait_for_dump(N) ->
-  case global_cache_controller:list_docs_be_dumped() of
-    {ok, []} ->
-      ok;
-    _ ->
-      timer:sleep(timer:seconds(1)),
-      wait_for_dump(N-1)
+      {error, safe_delete_failed}
   end.

@@ -76,7 +76,7 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list records older then DocAge (in ms).
+%% Returns list of records older then DocAge (in ms).
 %% @end
 %%--------------------------------------------------------------------
 -spec list(DocAge :: integer()) -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
@@ -99,7 +99,7 @@ list(DocAge) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list records not persisted.
+%% Returns list of records not persisted.
 %% @end
 %%--------------------------------------------------------------------
 -spec list_docs_be_dumped() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
@@ -248,6 +248,14 @@ update_usage_info(Key, ModelName) ->
             create(Doc)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates information about usage of a document and saves doc to memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
+    Doc :: datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 update_usage_info(Key, ModelName, Doc) ->
     update_usage_info(Key, ModelName),
     datastore:create(global_only, Doc),
@@ -257,6 +265,14 @@ update_usage_info(Key, ModelName, Doc) ->
         end,
     []).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if get operation should be performed.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_get(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) ->
+    ok | {error, {not_found, model_behaviour:model_type()}}.
 check_get(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     case get(Uuid) of
@@ -270,6 +286,14 @@ check_get(Key, ModelName) ->
             ok
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if get link operation should be performed.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_get(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
+    LinkName :: datastore:link_name()) -> ok | {error, link_not_found}.
 check_get(Key, ModelName, LinkName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     case get(Uuid) of
@@ -284,11 +308,28 @@ check_get(Key, ModelName, LinkName) ->
             ok
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Delates info about dumping of cache to disk
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_dump_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) ->
+    ok | datastore:generic_error().
 delete_dump_info(Key, ModelName) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     delete_dump_info(Uuid).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Delates info about dumping of cache to disk
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_dump_info(Uuid :: binary()) ->
+    ok | datastore:generic_error().
 delete_dump_info(Uuid) ->
+    Pid = self(),
     Pred = fun() ->
         LastUser = case get(Uuid) of
                        {ok, Doc} ->
@@ -306,10 +347,17 @@ delete_dump_info(Uuid) ->
     end,
     delete(Uuid, Pred).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves dump information after disk operation.
+%% @end
+%%--------------------------------------------------------------------
+-spec end_disk_op(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
+    Op :: atom()) -> ok | {error, ending_disk_op_failed}.
 end_disk_op(Key, ModelName, Op) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-        Pid = self(),
         case Op of
             delete ->
                 delete_dump_info(Uuid);
@@ -333,6 +381,84 @@ end_disk_op(Key, ModelName, Op) ->
             {error, ending_disk_op_failed}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves dump information about disk operation and decides if it should be done.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_disk_op(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
+    Op :: atom()) -> ok | {ok, save, [SavedValue]} | {error, Error} when
+    SavedValue :: datastore:document(),
+    Error :: not_last_user | preparing_disk_op_failed.
+start_disk_op(Key, ModelName, Op) ->
+    try
+        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+        Pid = self(),
+
+        UpdateFun = fun(Record) ->
+            Record#global_cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
+        end,
+        case update(Uuid, UpdateFun) of
+            {ok, Ok} ->
+                {ok, Ok};
+            {error,{not_found,global_cache_controller}} ->
+                TS = os:timestamp(),
+                V = #global_cache_controller{last_user = Pid, timestamp = TS, action = Op, last_action_time = TS},
+                Doc = #document{key = Uuid, value = V},
+                create(Doc)
+        end,
+
+        {ok, SleepTime} = application:get_env(?APP_NAME, cache_to_disk_delay_ms),
+        timer:sleep(SleepTime),
+        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+
+        {LastUser, LAT} = case get(Uuid) of
+                              {ok, Doc2} ->
+                                  Value = Doc2#document.value,
+                                  {Value#global_cache_controller.last_user, Value#global_cache_controller.last_action_time};
+                              {error, {not_found, _}} ->
+                                  {Pid, 0}
+                          end,
+        case LastUser of
+            Pid ->
+                case Op of
+                    delete ->
+                        ok;
+                    _ ->
+                        {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
+                        {ok, save, [SavedValue]}
+                end;
+            _ ->
+                {ok, ForceTime} = application:get_env(?APP_NAME, cache_to_disk_force_delay_ms),
+                case timer:now_diff(os:timestamp(), LAT) >= 1000*ForceTime of
+                    true ->
+                        UpdateFun2 = fun(Record) ->
+                            Record#global_cache_controller{last_action_time = os:timestamp()}
+                        end,
+                        update(Uuid, UpdateFun2),
+                        {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
+                        {ok, save, [SavedValue]};
+                    _ ->
+                        {error, not_last_user}
+                end
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error in global cache controller start_disk_op. "
+            ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, Op}, E1, E2]),
+            {error, preparing_disk_op_failed}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Saves info about links deleting.
+%% @end
+%%--------------------------------------------------------------------
+-spec log_link_del(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
+    LinkNames :: list() | all, Phase :: start | stop) ->
+    {ok, datastore:key()} | datastore:generic_error().
 log_link_del(Key, ModelName, LinkNames, start) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
@@ -383,64 +509,3 @@ log_link_del(Key, ModelName, LinkNames, stop) ->
             ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, LinkNames, stop}, E1, E2]),
             {error, ending_disk_op_failed}
     end.
-
-start_disk_op(Key, ModelName, Op) ->
-    try
-        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-        Pid = self(),
-
-        UpdateFun = fun(Record) ->
-            Record#global_cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
-        end,
-        case update(Uuid, UpdateFun) of
-            {ok, Ok} ->
-                {ok, Ok};
-            {error,{not_found,global_cache_controller}} ->
-                TS = os:timestamp(),
-                V = #global_cache_controller{last_user = Pid, timestamp = TS, action = Op, last_action_time = TS},
-                Doc = #document{key = Uuid, value = V},
-                create(Doc)
-        end,
-
-        {ok, SleepTime} = application:get_env(?APP_NAME, cache_to_disk_delay_ms),
-        timer:sleep(SleepTime),
-        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-
-        {LastUser, LAT} = case get(Uuid) of
-            {ok, Doc2} ->
-                Value = Doc2#document.value,
-                {Value#global_cache_controller.last_user, Value#global_cache_controller.last_action_time};
-            {error, {not_found, _}} ->
-                {Pid, 0}
-        end,
-        case LastUser of
-            Pid ->
-                case Op of
-                    delete ->
-                        ok;
-                    _ ->
-                        {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
-                        {ok, save, [SavedValue]}
-                end;
-            _ ->
-                {ok, ForceTime} = application:get_env(?APP_NAME, cache_to_disk_force_delay_ms),
-                case timer:now_diff(os:timestamp(), LAT) >= 1000*ForceTime of
-                    true ->
-                        UpdateFun2 = fun(Record) ->
-                            Record#global_cache_controller{last_action_time = os:timestamp()}
-                        end,
-                        update(Uuid, UpdateFun2),
-                        {ok, SavedValue} = datastore:get(global_only, ModelName, Key),
-                        {ok, save, [SavedValue]};
-                    _ ->
-                        {error, not_last_user}
-                end
-        end
-    catch
-        E1:E2 ->
-            ?error_stacktrace("Error in global cache controller start_disk_op. "
-                ++ "Args: ~p. Error: ~p:~p.", [{Key, ModelName, Op}, E1, E2]),
-            {error, preparing_disk_op_failed}
-    end.
-
-%% dodac monitorowanie linkow

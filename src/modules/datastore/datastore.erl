@@ -652,6 +652,15 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
         end,
     run_posthooks(ModelConfig, Method, driver_to_level(Driver), Args, Return).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes given model action on given level. Decides if execution should be async.
+%% @end
+%%--------------------------------------------------------------------
+-spec exec_driver_async(model_behaviour:model_type(), Level :: store_level(),
+    Method :: store_driver_behaviour:driver_action(), [term()]) ->
+    ok | {ok, term()} | {error, term()}.
 exec_driver_async(ModelName, ?LOCALLY_CACHED_LEVEL, Method, Args) ->
     exec_cache_async(ModelName, level_to_driver(?LOCALLY_CACHED_LEVEL), Method, Args);
 exec_driver_async(ModelName, ?GLOBALLY_CACHED_LEVEL, Method, Args) ->
