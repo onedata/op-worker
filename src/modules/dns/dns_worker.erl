@@ -76,7 +76,6 @@ handle({update_lb_advice, LBAdvice}) ->
     ok = worker_host:state_put(?MODULE, lb_advice, LBAdvice);
 
 handle({handle_a, Domain}) ->
-    ?dump({handle_a, Domain}),
     LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     ?debug("DNS A request: ~s, current advice: ~p", [Domain, LBAdvice]),
     case LBAdvice of
@@ -94,7 +93,7 @@ handle({handle_a, Domain}) ->
                             [dns_server:authoritative_answer_flag(true)]
                     };
                 Other ->
-                    % Return whatever parse_domain returned (nxdomain | refused)
+                    % Return whatever parse_domain returned (nx_domain | refused)
                     Other
             end
     end;
@@ -117,7 +116,7 @@ handle({handle_ns, Domain}) ->
                             [dns_server:authoritative_answer_flag(true)]
                     };
                 Other ->
-                    % Return whatever parse_domain returned (nxdomain | refused)
+                    % Return whatever parse_domain returned (nx_domain | refused)
                     Other
             end
     end;
@@ -259,10 +258,11 @@ handle_txt(_Domain) ->
 %% Parses the DNS query domain and check if it ends with provider domain.
 %% Accepts only domains that fulfill above condition and have a
 %% maximum of one part subdomain.
-%% Otherwise, returns unknown_domain.
+%% Returns NXDOMAIN when the query domain has more parts.
+%% Returns REFUSED when query domain is not the same as provider's.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_domain(Domain :: string()) -> ok | refused | nxdomain.
+-spec parse_domain(Domain :: string()) -> ok | refused | nx_domain.
 parse_domain(DomainArg) ->
     ProviderDomain = oneprovider:get_provider_domain(),
     % If requested domain starts with 'www.', ignore the suffix
