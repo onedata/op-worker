@@ -20,8 +20,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
-% TODO !!!!!!!!!!!
-%% -include_lib("kernel/src/inet_dns.hrl").
+-include_lib("kernel/src/inet_dns.hrl").
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -91,8 +90,7 @@ handle({handle_a, Domain}) ->
                     Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
                     {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
                     {ok,
-                        % TODO!!!!! ?S_A
-                            [dns_server:answer_record(Domain, TTL, a, IP) || IP <- Nodes] ++
+                            [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- Nodes] ++
                             [dns_server:authoritative_answer_flag(true)]
                     };
                 Other ->
@@ -115,8 +113,7 @@ handle({handle_ns, Domain}) ->
                     Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
                     {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
                     {ok,
-                        % TODO!!
-                            [dns_server:answer_record(Domain, TTL, ns, inet_parse:ntoa(IP)) || IP <- Nodes] ++
+                            [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- Nodes] ++
                             [dns_server:authoritative_answer_flag(true)]
                     };
                 Other ->
@@ -328,30 +325,29 @@ healthcheck() ->
 %%--------------------------------------------------------------------
 -spec check_dns_connectivity() -> ok | {error, server_not_responding}.
 check_dns_connectivity() ->
-%%     {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
-%%     {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
-%%     Query = inet_dns:encode(
-%%         #dns_rec{
-%%             header = #dns_header{
-%%                 id = crypto:rand_uniform(1, 16#FFFF),
-%%                 opcode = 'query',
-%%                 rd = true
-%%             },
-%%             qdlist = [#dns_query{
-%%                 domain = "localhost",
-%%                 type = soa,
-%%                 class = in
-%%             }],
-%%             arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
-%%         }),
-%%     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-%%     gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
-%%     case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
-%%         {ok, _} ->
-%%             % DNS is working
-%%             ok;
-%%         _ ->
-%%             % DNS is not working
-%%             {error, server_not_responding}
-%%     end.
-    ok.
+    {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
+    Query = inet_dns:encode(
+        #dns_rec{
+            header = #dns_header{
+                id = crypto:rand_uniform(1, 16#FFFF),
+                opcode = 'query',
+                rd = true
+            },
+            qdlist = [#dns_query{
+                domain = "localhost",
+                type = soa,
+                class = in
+            }],
+            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
+        }),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
+    case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
+        {ok, _} ->
+            % DNS is working
+            ok;
+        _ ->
+            % DNS is not working
+            {error, server_not_responding}
+    end.
