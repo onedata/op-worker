@@ -55,7 +55,7 @@
         }
     },
     "appmock_domains": {
-        "p3": {
+        "gr": {
             "appmock": {
                 "appmock1": {
                     "mocked_app": "globalregistry",
