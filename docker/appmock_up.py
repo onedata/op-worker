@@ -1,4 +1,4 @@
-env_configurator.escript#!/usr/bin/env python
+#!/usr/bin/env python
 # coding=utf-8
 
 """Authors: Łukasz Opioła, Konrad Zemek
