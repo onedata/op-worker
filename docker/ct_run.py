@@ -163,15 +163,17 @@ elif args.cover:
                 for provider in data['provider_domains']:
                     if 'op_worker' in data['provider_domains'][provider]:
                         configs_to_change.extend(
-                            data['provider_domains'][provider]['op_worker'][
-                                'nodes'].values())
+                            data['provider_domains'][provider][
+                                'op_worker'].values())
                     if 'op_ccm' in data['provider_domains'][provider]:
                         configs_to_change.extend(
-                            data['provider_domains'][provider]['op_ccm'][
-                                'nodes'].values())
-            if 'globalregistry' in data:
-                configs_to_change.extend(
-                    data['globalregistry']['nodes'].values())
+                            data['provider_domains'][provider][
+                                'op_ccm'].values())
+            if 'globalregistry_domains' in data:
+                for globalregistry in data['globalregistry_domains']:
+                    configs_to_change.extend(
+                        data['globalregistry_domains'][globalregistry][
+                            'globalregistry'].values())
 
             for config in configs_to_change:
                 config['sys.config']['covered_dirs'] = docker_dirs
