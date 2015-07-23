@@ -20,7 +20,8 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("kernel/src/inet_dns.hrl").
+% TODO !!!!!!!!!!!
+%% -include_lib("kernel/src/inet_dns.hrl").
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -76,6 +77,7 @@ handle({update_lb_advice, LBAdvice}) ->
     ok = worker_host:state_put(?MODULE, lb_advice, LBAdvice);
 
 handle({handle_a, Domain}) ->
+    ?dump({handle_a, Domain}),
     LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     ?debug("DNS A request: ~s, current advice: ~p", [Domain, LBAdvice]),
     case LBAdvice of
@@ -84,24 +86,18 @@ handle({handle_a, Domain}) ->
             serv_fail;
         _ ->
             case parse_domain(Domain) of
-                unknown_domain ->
-                    % Unrecognizable domain
-                    refused;
-                {Prefix, _Suffix} ->
-                    % Accept all prefixes that consist of one part
-                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                        true ->
-                            % Prefix OK, return nodes to connect to
-                            Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
-                            {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
-                            {ok,
-                                    [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- Nodes] ++
-                                    [dns_server:authoritative_answer_flag(true)]
-                            };
-                        false ->
-                            % Return NX domain for other prefixes
-                            nx_domain
-                    end
+                ok ->
+                    % Prefix OK, return nodes to connect to
+                    Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
+                    {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
+                    {ok,
+                        % TODO!!!!! ?S_A
+                            [dns_server:answer_record(Domain, TTL, a, IP) || IP <- Nodes] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
+                Other ->
+                    % Return whatever parse_domain returned (nxdomain | refused)
+                    Other
             end
     end;
 
@@ -114,23 +110,18 @@ handle({handle_ns, Domain}) ->
             serv_fail;
         _ ->
             case parse_domain(Domain) of
-                unknown_domain ->
-                    % Unrecognizable domain
-                    refused;
-                {Prefix, _Suffix} ->
-                    % Accept all prefixes that consist of one part
-                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                        true ->
-                            % Prefix OK, return NS nodes of the cluster
-                            Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
-                            {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
-                            {ok,
-                                    [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- Nodes] ++
-                                    [dns_server:authoritative_answer_flag(true)]
-                            };
-                        false ->
-                            nx_domain
-                    end
+                ok ->
+                    % Prefix OK, return NS nodes of the cluster
+                    Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
+                    {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
+                    {ok,
+                        % TODO!!
+                            [dns_server:answer_record(Domain, TTL, ns, inet_parse:ntoa(IP)) || IP <- Nodes] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
+                Other ->
+                    % Return whatever parse_domain returned (nxdomain | refused)
+                    Other
             end
     end;
 
@@ -268,32 +259,38 @@ handle_txt(_Domain) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Split the domain name into prefix and suffix, where suffix matches the
-%% canonical globalregistry hostname (retrieved from env). The split is made on the dot between prefix and suffix.
-%% If that's not possible, returns unknown_domain.
+%% Parses the DNS query domain and check if it ends with provider domain.
+%% Accepts only domains that fulfill above condition and have a
+%% maximum of one part subdomain.
+%% Otherwise, returns unknown_domain.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_domain(Domain :: string()) -> {Prefix :: string(), Suffix :: string()} | unknown_domain.
+-spec parse_domain(Domain :: string()) -> ok | refused | nxdomain.
 parse_domain(DomainArg) ->
-    % If requested domain starts with 'www.', ignore it
-    Domain = case DomainArg of
-                 "www." ++ Rest -> Rest;
-                 Other -> Other
-             end,
-    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_NAME, global_registry_hostname),
-    case ProviderHostnameWithoutDot =:= Domain of
-        true ->
-            {"", ProviderHostnameWithoutDot};
-        false ->
-            ProviderHostname = "." ++ ProviderHostnameWithoutDot,
-            HostNamePos = string:rstr(Domain, ProviderHostname),
-            % If hostname is at this position, it's a suffix (the string ends with it)
-            ValidHostNamePos = length(Domain) - length(ProviderHostname) + 1,
-            case HostNamePos =:= ValidHostNamePos of
-                false ->
-                    unknown_domain;
-                true ->
-                    {string:sub_string(Domain, 1, HostNamePos - 1), ProviderHostnameWithoutDot}
+    ProviderDomain = oneprovider:get_provider_domain(),
+    % If requested domain starts with 'www.', ignore the suffix
+    QueryDomain = case DomainArg of
+                      "www." ++ Rest -> Rest;
+                      Other -> Other
+                  end,
+
+    % If queried domain ends with provider domain -> continue
+    % otherwise -> REFUSED
+    case string:rstr(QueryDomain, ProviderDomain) of
+        0 ->
+            refused;
+        _ ->
+            case QueryDomain of
+                ProviderDomain ->
+                    ok;
+                _ ->
+                    % Check if queried domain is in form
+                    % 'first_part.provider.domain' - strip out the
+                    % first_part and compare. If not, return NXDOMAIN.
+                    case string:join(tl(string:tokens(QueryDomain, ".")), ".") of
+                        ProviderDomain -> ok;
+                        _ -> nx_domain
+                    end
             end
     end.
 
@@ -331,29 +328,30 @@ healthcheck() ->
 %%--------------------------------------------------------------------
 -spec check_dns_connectivity() -> ok | {error, server_not_responding}.
 check_dns_connectivity() ->
-    {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
-    {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
-    Query = inet_dns:encode(
-        #dns_rec{
-            header = #dns_header{
-                id = crypto:rand_uniform(1, 16#FFFF),
-                opcode = 'query',
-                rd = true
-            },
-            qdlist = [#dns_query{
-                domain = "localhost",
-                type = soa,
-                class = in
-            }],
-            arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
-        }),
-    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-    gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
-    case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
-        {ok, _} ->
-            % DNS is working
-            ok;
-        _ ->
-            % DNS is not working
-            {error, server_not_responding}
-    end.
+%%     {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+%%     {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
+%%     Query = inet_dns:encode(
+%%         #dns_rec{
+%%             header = #dns_header{
+%%                 id = crypto:rand_uniform(1, 16#FFFF),
+%%                 opcode = 'query',
+%%                 rd = true
+%%             },
+%%             qdlist = [#dns_query{
+%%                 domain = "localhost",
+%%                 type = soa,
+%%                 class = in
+%%             }],
+%%             arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, <<>>}]
+%%         }),
+%%     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+%%     gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
+%%     case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
+%%         {ok, _} ->
+%%             % DNS is working
+%%             ok;
+%%         _ ->
+%%             % DNS is not working
+%%             {error, server_not_responding}
+%%     end.
+    ok.

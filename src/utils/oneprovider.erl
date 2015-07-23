@@ -24,12 +24,47 @@
 -define(GRPCERT_ENV, grpcert_path).
 
 %% API
--export([register_in_gr/3, register_in_gr_dev/3, save_file/2]).
+-export([get_node_hostname/0, get_node_ip/0]).
+-export([get_provider_domain/0]).
 -export([get_provider_id/0, get_globalregistry_cert/0]).
+-export([register_in_gr/3, register_in_gr_dev/3, save_file/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the hostname of the node, based on its erlang node name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_node_hostname() -> string().
+get_node_hostname() ->
+    utils:get_host(node()).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the IP of the node, retrieved from node_manager, which has
+%% acquired it by contacting GR.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_node_ip() -> {byte(), byte(), byte(), byte()}.
+get_node_ip() ->
+    node_manager:get_ip_address().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the domain of the provider, which is specified in env.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_domain() -> string().
+get_provider_domain() ->
+    {ok, Domain} = application:get_env(?APP_NAME, provider_domain),
+    gui_str:to_list(Domain).
+
 
 %%--------------------------------------------------------------------
 %% @doc
