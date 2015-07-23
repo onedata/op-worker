@@ -272,34 +272,36 @@ parse_domain(DomainArg) ->
                       Other -> Other
                   end,
 
-    % If queried domain ends with provider domain -> continue
-    % otherwise -> REFUSED
+    % Check if queried domain ends with provider domain
     case string:rstr(QueryDomain, ProviderDomain) of
         0 ->
-            refused;
+            % If not, check if following are true:
+            % 1. GR domain: gr.domain
+            % 2. provider domain: prov_subdomain.gr.domain
+            % 3. queried domain: first_part.gr.domain
+            % If not, return REFUSED
+            QDTail = string:join(tl(string:tokens(QueryDomain, ".")), "."),
+            PDTail = string:join(tl(string:tokens(ProviderDomain, ".")), "."),
+            case QDTail =:= GRDomain andalso PDTail =:= GRDomain of
+                true ->
+                    ok;
+                false ->
+                    refused
+            end;
         _ ->
+            % Queried domain does end with provider domain
             case QueryDomain of
                 ProviderDomain ->
                     ok;
                 _ ->
                     % Check if queried domain is in form
                     % 'first_part.provider.domain' - strip out the
-                    % first_part and compare.
+                    % first_part and compare. If not, return NXDOMAIN
                     case string:join(tl(string:tokens(QueryDomain, ".")), ".") of
                         ProviderDomain ->
                             ok;
                         _ ->
-                            % If not, check if following are true:
-                            % 1. GR domain: gr.domain
-                            % 2. provider domain: prov_subdomain.gr.domain
-                            % 3. queried domain: first_part.gr.domain
-                            % If not, return NXDOMAIN
-                            QDTail = string:join(tl(string:tokens(QueryDomain, ".")), "."),
-                            PDTail = string:join(tl(string:tokens(ProviderDomain, ".")), "."),
-                            case QDTail =:= GRDomain andalso PDTail =:= GRDomain of
-                                true -> ok;
-                                false -> nx_domain
-                            end
+                            nx_domain
                     end
             end
     end.
