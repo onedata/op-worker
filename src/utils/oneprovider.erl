@@ -25,7 +25,7 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
--export([get_provider_domain/0]).
+-export([get_provider_domain/0, get_gr_domain/0]).
 -export([get_provider_id/0, get_globalregistry_cert/0]).
 -export([register_in_gr/3, register_in_gr_dev/3, save_file/2]).
 
@@ -64,6 +64,16 @@ get_node_ip() ->
 get_provider_domain() ->
     {ok, Domain} = application:get_env(?APP_NAME, provider_domain),
     gui_str:to_list(Domain).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the domain of GR, which is specified in env.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_gr_domain() -> string().
+get_gr_domain() ->
+    gr_plugin:get_gr_url().
 
 
 %%--------------------------------------------------------------------
