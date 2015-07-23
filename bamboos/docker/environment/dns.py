@@ -21,10 +21,13 @@ def _dns_ready(dns):
     hostname = common.get_docker_name(dns)
     # If the dns is working, it should return
     # its own ip when asked about its hostname
-    result = subprocess.check_output(
-        ['dig', '+short', '@{0}'.format(ip), hostname],
-        stdin=None, stderr=None)
-    return result.strip('\n') == ip
+    try:
+        result = subprocess.check_output(
+            ['dig', '+short', '@{0}'.format(ip), hostname],
+            stdin=None, stderr=None)
+        return result.strip('\n') == ip
+    except:
+        return False
 
 
 def dns_hostname(uid):
