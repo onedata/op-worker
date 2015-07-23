@@ -157,55 +157,6 @@ def format_hostname(domain_parts, uid):
     return '.'.join(domain_parts).replace('@', '')
 
 
-# def format_op_ccm_hostname(node_name, provider_name, uid):
-#     """Formats hostname for a docker (hosting op_ccm) based on node name, subdomain and uid.
-#     NOTE: Hostnames are also used as docker names!
-#     node_name - unique name, e.g.: 'ccm1'
-#     provider_name - unique provider name, e.g.: 'prov1'
-#     uid - timestamp
-#     """
-#     return _format_hostname(node_name, provider_name, uid)
-#
-#
-# def format_op_worker_hostname(node_name, provider_name, uid):
-#     """Formats hostname for a docker (hosting op_ccm) based on node name, subdomain and uid.
-#     NOTE: Hostnames are also used as docker names!
-#     node_name - unique name, e.g.: 'worker1'
-#     provider_name - unique provider name, e.g.: 'prov1'
-#     uid - timestamp
-#     """
-#     return _format_hostname(node_name, provider_name, uid)
-#
-#
-# def format_gr_hostname(node_name, uid):
-#     """Formats hostname for a docker (hosting GR) based on node name and uid.
-#     NOTE: Hostnames are also used as docker names!
-#     node_name - unique name, e.g.: 'gr1'
-#     uid - timestamp
-#     """
-#     return _format_hostname(node_name, '', uid)
-#
-#
-# def format_gr_db_hostname(db_node_name, gr_name, uid):
-#     """Formats hostname for a docker (hosting bigcouch for GR) based on
-#     db node name nad gr name.
-#     NOTE: Hostnames are also used as docker names!
-#     db_node_name - unique name withi GR, e.g.: 'db1'
-#     gr_name - unique name of GR, e.g.: 'gr1'
-#     uid - timestamp
-#     """
-#     return _format_hostname(db_node_name, gr_name, uid)
-#
-#
-# def format_hostname(node_name, uid):
-#     """Formats hostname for a docker based on node name and uid.
-#     NOTE: Hostnames are also used as docker names!
-#     node_name - unique name, e.g.: 'gr1', 'oneclient1', 'skydns'
-#     uid - timestamp
-#     """
-#     return _format_hostname(node_name, '', uid)
-
-
 def format_erl_node_name(app_name, hostname):
     """Formats full node name for an erlang VM hosted on docker based on app_name and hostname.
     NOTE: Hostnames are also used as docker names!
