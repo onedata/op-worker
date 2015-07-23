@@ -145,7 +145,7 @@ model_init() ->
 -spec before(ModelName :: model_behaviour:model_type(),
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term()) ->
-    ok| {ok, save, [datastore:document()]} | datastore:generic_error().
+    ok | {ok, save, [datastore:document()]} | datastore:generic_error().
 ?BEFORE.
 
 %%%===================================================================

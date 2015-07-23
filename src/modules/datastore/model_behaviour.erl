@@ -84,7 +84,7 @@
 %%--------------------------------------------------------------------
 -callback 'after'(ModelName :: model_type(), Method :: model_action(),
                     Level :: datastore:store_level(), Context :: term(),
-                    ReturnValue :: term()) -> ok.
+                    ReturnValue :: term()) -> ok | datastore:generic_error().
 
 
 %%--------------------------------------------------------------------
@@ -94,4 +94,5 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback before(ModelName :: model_type(), Method :: model_action(),
-                    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+                    Level :: datastore:store_level(), Context :: term()) ->
+                    ok | {ok, save, [datastore:document()]} | datastore:generic_error().
