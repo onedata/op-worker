@@ -622,7 +622,7 @@ driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
 exec_driver(ModelName, [Driver], Method, Args) when is_atom(Driver) ->
     exec_driver(ModelName, Driver, Method, Args);
 exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
-    % TODO - foreach_link metchod may not have all links in memory!!!
+    % TODO - foreach_link metchod may not have all links in memory nor at disk!!!
     case exec_driver(ModelName, Driver, Method, Args) of
         {error, {not_found, _}} when Method =:= get ->
             exec_driver(ModelName, Rest, Method, Args);
@@ -630,7 +630,7 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
             exec_driver(ModelName, Rest, Method, Args);
         {error, Reason} ->
             {error, Reason};
-        Result when Method =:= get; Method =:= fetch_link ->
+        Result when Method =:= get; Method =:= fetch_link ; Method =:= foreach_link ->
             Result;
         {ok, true} = Result when Method =:= exists ->
             Result;

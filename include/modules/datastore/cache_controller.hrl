@@ -133,6 +133,7 @@
       UpdateFun = fun(Record) ->
         Record#__Cache{last_user = Pid, timestamp = os:timestamp(), action = Op}
       end,
+      % TODO - not transactional updates in local store
       case update(Uuid, UpdateFun) of
         {ok, Ok} ->
           {ok, Ok};
@@ -199,8 +200,8 @@
         end
       end,
       case update(Uuid, UpdateFun) of
-        {ok, Ok} ->
-          {ok, Ok};
+        {ok, _} ->
+          ok;
         {error,{not_found,__Cache}} ->
           TS = os:timestamp(),
           V = case LinkNames of
@@ -210,7 +211,9 @@
                   #__Cache{timestamp = TS, deleted_links = [LinkNames]}
               end,
           Doc = #document{key = Uuid, value = V},
-          create(Doc)
+          % TODO what happen if create fails?
+          create(Doc),
+          ok
       end
     catch
       E1:E2 ->

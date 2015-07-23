@@ -134,7 +134,7 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(),
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
-    ReturnValue :: term()) -> ok.
+    ReturnValue :: term()) -> ok | datastore:generic_error().
 ?AFTER(global_only).
 
 %%--------------------------------------------------------------------
@@ -145,7 +145,7 @@ model_init() ->
 -spec before(ModelName :: model_behaviour:model_type(),
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term()) ->
-    ok | datastore:generic_error().
+    ok| {ok, save, [datastore:document()]} | datastore:generic_error().
 ?BEFORE.
 
 %%%===================================================================
@@ -242,5 +242,5 @@ get_hooks_config() ->
 %%--------------------------------------------------------------------
 -spec log_link_del(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
     LinkNames :: list() | all, Phase :: start | stop) ->
-    {ok, datastore:key()} | datastore:generic_error().
+    ok | {error, preparing_disk_op_failed} | {error, ending_disk_op_failed}.
 ?LOG_LINK_DEL(global_cache_controller).
