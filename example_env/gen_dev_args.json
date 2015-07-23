@@ -158,10 +158,6 @@
                     {
                         "provider": "p1",
                         "supported_size": 1000000000
-                    },
-                    {
-                        "provider": "p2",
-                        "supported_size": 1000000000
                     }
                 ]
             },
@@ -174,7 +170,7 @@
                 ],
                 "providers": [
                     {
-                        "provider": "p1",
+                        "provider": "p2",
                         "supported_size": 1000000000
                     }
                 ]
