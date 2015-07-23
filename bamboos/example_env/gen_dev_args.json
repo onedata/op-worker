@@ -64,7 +64,7 @@
                         "ccm_nodes": [
                             "ccm1"
                         ],
-                        "worker_num": 1
+                        "worker_num": 2
                     }
                 }
             },
