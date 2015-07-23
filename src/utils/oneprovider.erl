@@ -73,7 +73,8 @@ get_provider_domain() ->
 %%--------------------------------------------------------------------
 -spec get_gr_domain() -> string().
 get_gr_domain() ->
-    gr_plugin:get_gr_url().
+    {ok, Hostname} = application:get_env(?APP_NAME, global_registry_domain),
+    gui_str:to_list(Hostname).
 
 
 %%--------------------------------------------------------------------
