@@ -54,7 +54,7 @@
                 }
             }
         },
-        "p2": {
+        "p2.gr": {
             "op_ccm": {
                 "ccm1": {
                     "vm.args": {
@@ -149,6 +149,7 @@
             "s1": {
                 "users": [
                     "u1",
+                    "u2",
                     "u3"
                 ],
                 "groups": [
@@ -170,7 +171,7 @@
                 ],
                 "providers": [
                     {
-                        "provider": "p2",
+                        "provider": "p2.gr",
                         "supported_size": 1000000000
                     }
                 ]
