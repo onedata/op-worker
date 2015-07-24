@@ -89,24 +89,17 @@ handle({handle_a, Domain}) ->
             serv_fail;
         _ ->
             case parse_domain(Domain) of
-                unknown_domain ->
-                    % Unrecognizable domain
-                    refused;
-                {Prefix, _Suffix} ->
-                    % Accept all prefixes that consist of one part
-                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                        true ->
-                            % Prefix OK, return nodes to connect to
-                            Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
-                            {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
-                            {ok,
-                                    [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- Nodes] ++
-                                    [dns_server:authoritative_answer_flag(true)]
-                            };
-                        false ->
-                            % Return NX domain for other prefixes
-                            nx_domain
-                    end
+                ok ->
+                    % Prefix OK, return nodes to connect to
+                    Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
+                    {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
+                    {ok,
+                            [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- Nodes] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
+                Other ->
+                    % Return whatever parse_domain returned (nx_domain | refused)
+                    Other
             end
     end;
 
@@ -119,23 +112,17 @@ handle({handle_ns, Domain}) ->
             serv_fail;
         _ ->
             case parse_domain(Domain) of
-                unknown_domain ->
-                    % Unrecognizable domain
-                    refused;
-                {Prefix, _Suffix} ->
-                    % Accept all prefixes that consist of one part
-                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                        true ->
-                            % Prefix OK, return NS nodes of the cluster
-                            Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
-                            {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
-                            {ok,
-                                    [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- Nodes] ++
-                                    [dns_server:authoritative_answer_flag(true)]
-                            };
-                        false ->
-                            nx_domain
-                    end
+                ok ->
+                    % Prefix OK, return NS nodes of the cluster
+                    Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
+                    {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
+                    {ok,
+                            [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- Nodes] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
+                Other ->
+                    % Return whatever parse_domain returned (nx_domain | refused)
+                    Other
             end
     end;
 
@@ -273,32 +260,54 @@ handle_txt(_Domain) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Split the domain name into prefix and suffix, where suffix matches the
-%% canonical globalregistry hostname (retrieved from env). The split is made on the dot between prefix and suffix.
-%% If that's not possible, returns unknown_domain.
+%% Parses the DNS query domain and check if it ends with provider domain.
+%% Accepts only domains that fulfill above condition and have a
+%% maximum of one part subdomain.
+%% Returns NXDOMAIN when the query domain has more parts.
+%% Returns REFUSED when query domain is not the same as provider's.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_domain(Domain :: string()) -> {Prefix :: string(), Suffix :: string()} | unknown_domain.
+-spec parse_domain(Domain :: string()) -> ok | refused | nx_domain.
 parse_domain(DomainArg) ->
-    % If requested domain starts with 'www.', ignore it
-    Domain = case DomainArg of
-                 "www." ++ Rest -> Rest;
-                 Other -> Other
-             end,
-    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_NAME, global_registry_hostname),
-    case ProviderHostnameWithoutDot =:= Domain of
-        true ->
-            {"", ProviderHostnameWithoutDot};
-        false ->
-            ProviderHostname = "." ++ ProviderHostnameWithoutDot,
-            HostNamePos = string:rstr(Domain, ProviderHostname),
-            % If hostname is at this position, it's a suffix (the string ends with it)
-            ValidHostNamePos = length(Domain) - length(ProviderHostname) + 1,
-            case HostNamePos =:= ValidHostNamePos of
-                false ->
-                    unknown_domain;
+    ProviderDomain = oneprovider:get_provider_domain(),
+    GRDomain = oneprovider:get_gr_domain(),
+    % If requested domain starts with 'www.', ignore the suffix
+    QueryDomain = case DomainArg of
+                      "www." ++ Rest -> Rest;
+                      Other -> Other
+                  end,
+
+    % Check if queried domain ends with provider domain
+    case string:rstr(QueryDomain, ProviderDomain) of
+        0 ->
+            % If not, check if following are true:
+            % 1. GR domain: gr.domain
+            % 2. provider domain: prov_subdomain.gr.domain
+            % 3. queried domain: first_part.gr.domain
+            % If not, return REFUSED
+            QDTail = string:join(tl(string:tokens(QueryDomain, ".")), "."),
+            PDTail = string:join(tl(string:tokens(ProviderDomain, ".")), "."),
+            case QDTail =:= GRDomain andalso PDTail =:= GRDomain of
                 true ->
-                    {string:sub_string(Domain, 1, HostNamePos - 1), ProviderHostnameWithoutDot}
+                    ok;
+                false ->
+                    refused
+            end;
+        _ ->
+            % Queried domain does end with provider domain
+            case QueryDomain of
+                ProviderDomain ->
+                    ok;
+                _ ->
+                    % Check if queried domain is in form
+                    % 'first_part.provider.domain' - strip out the
+                    % first_part and compare. If not, return NXDOMAIN
+                    case string:join(tl(string:tokens(QueryDomain, ".")), ".") of
+                        ProviderDomain ->
+                            ok;
+                        _ ->
+                            nx_domain
+                    end
             end
     end.
 
