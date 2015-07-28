@@ -4,6 +4,8 @@
 #include "helpers/storageHelperFactory.h"
 
 #include <boost/thread/executors/basic_thread_pool.hpp>
+#include <asio/executor_work.hpp>
+#include <asio.hpp>
 
 #include <string>
 #include <memory>
@@ -11,6 +13,7 @@
 #include <random>
 #include <tuple>
 #include <map>
+#include <system_error>
 #include "nifpp.h"
 
 #include <pwd.h>
@@ -35,27 +38,132 @@ using helper_ptr = std::shared_ptr<one::helpers::IStorageHelper>;
 using helper_ctx_ptr = std::shared_ptr<one::helpers::StorageHelperCTX>;
 using reqid_t = std::tuple<int, int, int>;
 
+class HelpersNIF {
+public:
+    std::shared_ptr<one::communication::Communicator> nullCommunicator = nullptr;
+    one::helpers::BufferLimits limits = one::helpers::BufferLimits();
+    asio::io_service dio_service;
+    asio::io_service cproxy_service;
+    asio::io_service callback_service;
+    asio::executor_work<asio::io_service::executor_type> dio_work = asio::make_work(dio_service);
+    asio::executor_work<asio::io_service::executor_type> cproxy_work = asio::make_work(cproxy_service);
+    asio::executor_work<asio::io_service::executor_type> callback_work = asio::make_work(callback_service);
 
+    std::vector<std::thread> workers;
 
-std::shared_ptr<one::communication::Communicator> nullCommunicator = nullptr;
-one::helpers::BufferLimits limits = one::helpers::BufferLimits();
-asio::io_service dio_service;
-asio::io_service cproxy_service;
-asio::io_service callback_service;
-asio::io_service::work dio_work(dio_service);
-asio::io_service::work cproxy_work(cproxy_service);
-asio::io_service::work callback_work(callback_service);
+    one::helpers::StorageHelperFactory SHFactory = one::helpers::StorageHelperFactory(nullCommunicator, limits, dio_service, cproxy_service);
 
-std::vector<std::thread> workers;
+    HelpersNIF()
+    {
+    }
 
-one::helpers::StorageHelperFactory SHFactory = one::helpers::StorageHelperFactory(nullCommunicator, limits, dio_service, cproxy_service);
+    ~HelpersNIF()
+    {
+        dio_service.stop();
+        callback_service.stop();
+
+        for(auto &th : workers) {
+            th.join();
+        }
+    }
+
+} application;
 
 std::map<nifpp::str_atom, int> atom_to_flag = {
-    {"O_RDONLY", O_RDONLY},
-    {"O_WRONLY", O_WRONLY},
-    {"O_RDWR", O_RDWR}
+    {"O_NONBLOCK", O_NONBLOCK},
+    {"O_APPEND",   O_APPEND},
+    {"O_ASYNC",    O_ASYNC},
+    {"O_FSYNC",    O_FSYNC},
+    {"O_NOFOLLOW", O_NOFOLLOW},
+    {"O_CREAT",    O_CREAT},
+    {"O_TRUNC",    O_TRUNC},
+    {"O_EXCL",     O_EXCL},
+    {"O_RDONLY",    O_RDONLY},
+    {"O_WRONLY",    O_WRONLY},
+    {"O_RDWR",      O_RDWR}
 };
-std::map<int, nifpp::str_atom> flag_to_atom;
+
+
+std::map<std::error_code, nifpp::str_atom> error_to_atom = {
+    {std::error_code(static_cast<int>(std::errc::address_family_not_supported), std::system_category()),        nifpp::str_atom("eafnosupport")},
+    {std::error_code(static_cast<int>(std::errc::address_in_use), std::system_category()),                      nifpp::str_atom("eaddrinuse")},
+    {std::error_code(static_cast<int>(std::errc::address_not_available), std::system_category()),               nifpp::str_atom("eaddrnotavail")},
+    {std::error_code(static_cast<int>(std::errc::already_connected), std::system_category()),                   nifpp::str_atom("eisconn")},
+    {std::error_code(static_cast<int>(std::errc::argument_list_too_long), std::system_category()),              nifpp::str_atom("e2big")},
+    {std::error_code(static_cast<int>(std::errc::argument_out_of_domain), std::system_category()),              nifpp::str_atom("edom")},
+    {std::error_code(static_cast<int>(std::errc::bad_address), std::system_category()),                         nifpp::str_atom("efault")},
+    {std::error_code(static_cast<int>(std::errc::bad_file_descriptor), std::system_category()),                 nifpp::str_atom("ebadf")},
+    {std::error_code(static_cast<int>(std::errc::bad_message), std::system_category()),                         nifpp::str_atom("ebadmsg")},
+    {std::error_code(static_cast<int>(std::errc::broken_pipe), std::system_category()),                         nifpp::str_atom("epipe")},
+    {std::error_code(static_cast<int>(std::errc::connection_aborted), std::system_category()),                  nifpp::str_atom("econnaborted")},
+    {std::error_code(static_cast<int>(std::errc::connection_already_in_progress), std::system_category()),      nifpp::str_atom("ealready")},
+    {std::error_code(static_cast<int>(std::errc::connection_refused), std::system_category()),                  nifpp::str_atom("econnrefused")},
+    {std::error_code(static_cast<int>(std::errc::connection_reset), std::system_category()),                    nifpp::str_atom("econnreset")},
+    {std::error_code(static_cast<int>(std::errc::cross_device_link), std::system_category()),                   nifpp::str_atom("exdev")},
+    {std::error_code(static_cast<int>(std::errc::destination_address_required), std::system_category()),        nifpp::str_atom("edestaddrreq")},
+    {std::error_code(static_cast<int>(std::errc::device_or_resource_busy), std::system_category()),             nifpp::str_atom("ebusy")},
+    {std::error_code(static_cast<int>(std::errc::directory_not_empty), std::system_category()),                 nifpp::str_atom("enotempty")},
+    {std::error_code(static_cast<int>(std::errc::executable_format_error), std::system_category()),             nifpp::str_atom("enoexec")},
+    {std::error_code(static_cast<int>(std::errc::file_exists), std::system_category()),                         nifpp::str_atom("eexist")},
+    {std::error_code(static_cast<int>(std::errc::file_too_large), std::system_category()),                      nifpp::str_atom("efbig")},
+    {std::error_code(static_cast<int>(std::errc::filename_too_long), std::system_category()),                   nifpp::str_atom("enametoolong")},
+    {std::error_code(static_cast<int>(std::errc::function_not_supported), std::system_category()),              nifpp::str_atom("enosys")},
+    {std::error_code(static_cast<int>(std::errc::host_unreachable), std::system_category()),                    nifpp::str_atom("ehostunreach")},
+    {std::error_code(static_cast<int>(std::errc::identifier_removed), std::system_category()),                  nifpp::str_atom("eidrm")},
+    {std::error_code(static_cast<int>(std::errc::illegal_byte_sequence), std::system_category()),               nifpp::str_atom("eilseq")},
+    {std::error_code(static_cast<int>(std::errc::inappropriate_io_control_operation), std::system_category()),  nifpp::str_atom("enotty")},
+    {std::error_code(static_cast<int>(std::errc::interrupted), std::system_category()),                         nifpp::str_atom("eintr")},
+    {std::error_code(static_cast<int>(std::errc::invalid_argument), std::system_category()),                    nifpp::str_atom("einval")},
+    {std::error_code(static_cast<int>(std::errc::invalid_seek), std::system_category()),                        nifpp::str_atom("espipe")},
+    {std::error_code(static_cast<int>(std::errc::io_error), std::system_category()),                            nifpp::str_atom("eio")},
+    {std::error_code(static_cast<int>(std::errc::is_a_directory), std::system_category()),                      nifpp::str_atom("eisdir")},
+    {std::error_code(static_cast<int>(std::errc::message_size), std::system_category()),                        nifpp::str_atom("emsgsize")},
+    {std::error_code(static_cast<int>(std::errc::network_down), std::system_category()),                        nifpp::str_atom("enetdown")},
+    {std::error_code(static_cast<int>(std::errc::network_reset), std::system_category()),                       nifpp::str_atom("enetreset")},
+    {std::error_code(static_cast<int>(std::errc::network_unreachable), std::system_category()),                 nifpp::str_atom("enetunreach")},
+    {std::error_code(static_cast<int>(std::errc::no_buffer_space), std::system_category()),                     nifpp::str_atom("enobufs")},
+    {std::error_code(static_cast<int>(std::errc::no_child_process), std::system_category()),                    nifpp::str_atom("echild")},
+    {std::error_code(static_cast<int>(std::errc::no_link), std::system_category()),                             nifpp::str_atom("enolink")},
+    {std::error_code(static_cast<int>(std::errc::no_lock_available), std::system_category()),                   nifpp::str_atom("enolck")},
+    {std::error_code(static_cast<int>(std::errc::no_message_available), std::system_category()),                nifpp::str_atom("enodata")},
+    {std::error_code(static_cast<int>(std::errc::no_message), std::system_category()),                          nifpp::str_atom("enomsg")},
+    {std::error_code(static_cast<int>(std::errc::no_protocol_option), std::system_category()),                  nifpp::str_atom("enoprotoopt")},
+    {std::error_code(static_cast<int>(std::errc::no_space_on_device), std::system_category()),                  nifpp::str_atom("enospc")},
+    {std::error_code(static_cast<int>(std::errc::no_stream_resources), std::system_category()),                 nifpp::str_atom("enosr")},
+    {std::error_code(static_cast<int>(std::errc::no_such_device_or_address), std::system_category()),           nifpp::str_atom("enxio")},
+    {std::error_code(static_cast<int>(std::errc::no_such_device), std::system_category()),                      nifpp::str_atom("enodev")},
+    {std::error_code(static_cast<int>(std::errc::no_such_file_or_directory), std::system_category()),           nifpp::str_atom("enoent")},
+    {std::error_code(static_cast<int>(std::errc::no_such_process), std::system_category()),                     nifpp::str_atom("esrch")},
+    {std::error_code(static_cast<int>(std::errc::not_a_directory), std::system_category()),                     nifpp::str_atom("enotdir")},
+    {std::error_code(static_cast<int>(std::errc::not_a_socket), std::system_category()),                        nifpp::str_atom("enotsock")},
+    {std::error_code(static_cast<int>(std::errc::not_a_stream), std::system_category()),                        nifpp::str_atom("enostr")},
+    {std::error_code(static_cast<int>(std::errc::not_connected), std::system_category()),                       nifpp::str_atom("enotconn")},
+    {std::error_code(static_cast<int>(std::errc::not_enough_memory), std::system_category()),                   nifpp::str_atom("enomem")},
+    {std::error_code(static_cast<int>(std::errc::not_supported), std::system_category()),                       nifpp::str_atom("enotsup")},
+    {std::error_code(static_cast<int>(std::errc::operation_canceled), std::system_category()),                  nifpp::str_atom("ecanceled")},
+    {std::error_code(static_cast<int>(std::errc::operation_in_progress), std::system_category()),               nifpp::str_atom("einprogress")},
+    {std::error_code(static_cast<int>(std::errc::operation_not_permitted), std::system_category()),             nifpp::str_atom("eperm")},
+    {std::error_code(static_cast<int>(std::errc::operation_not_supported), std::system_category()),             nifpp::str_atom("eopnotsupp")},
+    {std::error_code(static_cast<int>(std::errc::operation_would_block), std::system_category()),               nifpp::str_atom("ewouldblock")},
+    {std::error_code(static_cast<int>(std::errc::owner_dead), std::system_category()),                          nifpp::str_atom("eownerdead")},
+    {std::error_code(static_cast<int>(std::errc::permission_denied), std::system_category()),                   nifpp::str_atom("eacces")},
+    {std::error_code(static_cast<int>(std::errc::protocol_error), std::system_category()),                      nifpp::str_atom("eproto")},
+    {std::error_code(static_cast<int>(std::errc::protocol_not_supported), std::system_category()),              nifpp::str_atom("eprotonosupport")},
+    {std::error_code(static_cast<int>(std::errc::read_only_file_system), std::system_category()),               nifpp::str_atom("erofs")},
+    {std::error_code(static_cast<int>(std::errc::resource_deadlock_would_occur), std::system_category()),       nifpp::str_atom("edeadlk")},
+    {std::error_code(static_cast<int>(std::errc::resource_unavailable_try_again), std::system_category()),      nifpp::str_atom("eagain")},
+    {std::error_code(static_cast<int>(std::errc::result_out_of_range), std::system_category()),                 nifpp::str_atom("erange")},
+    {std::error_code(static_cast<int>(std::errc::state_not_recoverable), std::system_category()),               nifpp::str_atom("enotrecoverable")},
+    {std::error_code(static_cast<int>(std::errc::stream_timeout), std::system_category()),                      nifpp::str_atom("etime")},
+    {std::error_code(static_cast<int>(std::errc::text_file_busy), std::system_category()),                      nifpp::str_atom("etxtbsy")},
+    {std::error_code(static_cast<int>(std::errc::timed_out), std::system_category()),                           nifpp::str_atom("etimedout")},
+    {std::error_code(static_cast<int>(std::errc::too_many_files_open_in_system), std::system_category()),       nifpp::str_atom("enfile")},
+    {std::error_code(static_cast<int>(std::errc::too_many_files_open), std::system_category()),                 nifpp::str_atom("emfile")},
+    {std::error_code(static_cast<int>(std::errc::too_many_links), std::system_category()),                      nifpp::str_atom("emlink")},
+    {std::error_code(static_cast<int>(std::errc::too_many_symbolic_link_levels), std::system_category()),       nifpp::str_atom("eloop")},
+    {std::error_code(static_cast<int>(std::errc::value_too_large), std::system_category()),                     nifpp::str_atom("eoverflow")},
+    {std::error_code(static_cast<int>(std::errc::wrong_protocol_type), std::system_category()),                 nifpp::str_atom("eprototype")}
+};
 
 }
 
@@ -231,27 +339,32 @@ void handle_result(const NifCTX ctx, std::shared_ptr<one::helpers::future_t<T>> 
     try {
         handle_future(ctx, f);
     } catch(std::system_error &e) {
-        enif_send(ctx.env, &ctx.reqPid, ctx.env, nifpp::make(ctx.env, std::make_tuple(ctx.reqId, std::make_tuple(error, nifpp::str_atom{e.code().message()}))));
+        auto it = error_to_atom.find(e.code());
+        nifpp::str_atom reason{e.code().message()};
+        if(it != error_to_atom.end())
+            reason = it->second;
+
+        enif_send(ctx.env, &ctx.reqPid, ctx.env, nifpp::make(ctx.env, std::make_tuple(ctx.reqId, std::make_tuple(error, reason))));
     }
 }
 
 template<class T, class H>
 void async_handle_result(const NifCTX &ctx, std::shared_ptr<one::helpers::future_t<T>> future, H &res_holder)
 {
-    callback_service.post([future, ctx, res_holder]() { handle_result(ctx, future); });
+    application.callback_service.post([future, ctx, res_holder]() { handle_result(ctx, future); });
 }
 
 template<class T, class H = int>
 void async_handle_result(const NifCTX &ctx, std::shared_ptr<one::helpers::future_t<T>> future)
 {
-    callback_service.post([future, ctx]() { handle_result(ctx, future); });
+    application.callback_service.post([future, ctx]() { handle_result(ctx, future); });
 }
 
 static ERL_NIF_TERM new_helper_obj(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     auto helperName = nifpp::get<string>(env, argv[0]);
     auto helperArgs = get_args(env, argv[1]);
-    auto helperObj = SHFactory.getStorageHelper(helperName, helperArgs);
+    auto helperObj = application.SHFactory.getStorageHelper(helperName, helperArgs);
     if(!helperObj) {
         return make(env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
     } else {
@@ -290,13 +403,19 @@ static ERL_NIF_TERM set_user_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
 
         auto uidTerm = argv[1];
         auto gidTerm = argv[2];
+        long uid = -1;
+        long gid = -1;
 
-        if(!nifpp::get(env, uidTerm, ctx->uid)) {
+        if(!nifpp::get(env, uidTerm, uid)) {
             ctx->uid = uNameToUID(nifpp::get<string>(env, uidTerm));
+        } else {
+            ctx->uid = uid;
         }
 
-        if(!nifpp::get(env, gidTerm, ctx->gid)) {
+        if(!nifpp::get(env, gidTerm, gid)) {
             ctx->gid = gNameToGID(nifpp::get<string>(env, gidTerm));
+        } else {
+            ctx->gid = gid;
         }
 
         return nifpp::make(env, ok);
@@ -318,7 +437,13 @@ static ERL_NIF_TERM get_flags(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
         auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
         std::vector<nifpp::str_atom> flags;
         for(auto &flag : atom_to_flag) {
-            if(ctx->m_ffi.flags & flag.second) {
+            if((ctx->m_ffi.flags & flag.second) == flag.second) {
+                flags.push_back(flag.first);
+            }
+        }
+
+        for(auto &flag : atom_to_open_mode) {
+            if((ctx->m_ffi.flags & O_ACCMODE) == flag.second) {
                 flags.push_back(flag.first);
             }
         }
@@ -335,12 +460,34 @@ static ERL_NIF_TERM set_flags(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
         nifpp::list_for_each<nifpp::str_atom>(env, argv[1], [&ctx](nifpp::str_atom atom) {
             auto it = atom_to_flag.find(atom);
             if(it == atom_to_flag.end()) {
-                throw nifpp::badarg();
+                auto it_o = atom_to_open_mode.find(atom);
+                if(it_o == atom_to_open_mode.end()) {
+                    throw nifpp::badarg();
+                } else {
+                    ctx->m_ffi.flags |= it_o->second;
+                }
             } else {
                 ctx->m_ffi.flags |= it->second;
             }
         });
 
+        return nifpp::make(env, ok);
+    });
+}
+
+static ERL_NIF_TERM get_fd(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    return handle_errors(env, [&]() {
+        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
+        return nifpp::make(env, std::make_tuple(ok, ctx->m_ffi.fh));
+    });
+}
+
+static ERL_NIF_TERM set_fd(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    return handle_errors(env, [&]() {
+        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
+        ctx->m_ffi.fh = nifpp::get<int>(env, argv[1]);
         return nifpp::make(env, ok);
     });
 }
@@ -501,23 +648,13 @@ extern "C" {
 static int load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
     for(auto i = 0; i < 5; ++i) {
-        workers.push_back(std::thread([]() { dio_service.run(); }));
-        workers.push_back(std::thread([]() { callback_service.run(); }));
+        application.workers.push_back(std::thread([]() { application.dio_service.run(); }));
+        application.workers.push_back(std::thread([]() { application.callback_service.run(); }));
     }
 
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
              nifpp::register_resource<helper_ctx_ptr>(env, nullptr, "helper_ctx") &&
              nifpp::register_resource<fuse_file_info>(env, nullptr, "fuse_file_info"));
-}
-
-static void unload(ErlNifEnv* env, void* priv_data)
-{
-    dio_service.stop();
-    callback_service.stop();
-
-    for(auto &th : workers) {
-        th.join();
-    }
 }
 
 static ERL_NIF_TERM sh_getattr(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -634,6 +771,8 @@ static ErlNifFunc nif_funcs[] =
 
     {"set_flags",       2, set_flags},
     {"get_flags",       1, get_flags},
+    {"set_fd",          2, set_fd},
+    {"get_fd",          1, get_fd},
     {"username_to_uid", 1, username_to_uid},
     {"groupname_to_gid",1, groupname_to_gid},
     {"new_helper_obj",  2, new_helper_obj},
@@ -643,6 +782,6 @@ static ErlNifFunc nif_funcs[] =
 };
 
 
-ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, unload);
+ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
 } // extern C
