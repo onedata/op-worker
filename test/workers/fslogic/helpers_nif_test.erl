@@ -70,6 +70,10 @@ ctx_test_() ->
                         ?assert(lists:member('O_NONBLOCK', Flags1)),
                         ?assert(lists:member('O_ASYNC', Flags1)),
                         ?assert(lists:member('O_TRUNC', Flags1)),
+
+                        ?assertError(badarg, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK', "unknown_type"])),
+                        ?assertError(badarg, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK', 'unknown_flag'])),
+
                         ok
                     end},
                 {"User is set correctly",
@@ -94,12 +98,12 @@ ctx_test_() ->
 
 username_to_uid_test() ->
     ?assertMatch({ok, 0}, helpers_nif:username_to_uid(<<"root">>)),
-    ?assertMatch({ok, -1}, helpers_nif:username_to_uid(<<"sadmlknfqlwknd">>)),
+    ?assertMatch({error, einval}, helpers_nif:username_to_uid(<<"sadmlknfqlwknd">>)),
     ok.
 
 groupname_to_gid_test() ->
     ?assertMatch({ok, 0}, helpers_nif:groupname_to_gid(<<"root">>)),
-    ?assertMatch({ok, -1}, helpers_nif:groupname_to_gid(<<"sadmlknfqlwknd">>)),
+    ?assertMatch({error, einval}, helpers_nif:groupname_to_gid(<<"sadmlknfqlwknd">>)),
     ok.
 
 -endif.

@@ -77,7 +77,10 @@ std::map<nifpp::str_atom, int> atom_to_flag = {
     {"O_NOFOLLOW", O_NOFOLLOW},
     {"O_CREAT",    O_CREAT},
     {"O_TRUNC",    O_TRUNC},
-    {"O_EXCL",     O_EXCL},
+    {"O_EXCL",     O_EXCL}
+};
+
+std::map<nifpp::str_atom, int> atom_to_open_mode = {
     {"O_RDONLY",    O_RDONLY},
     {"O_WRONLY",    O_WRONLY},
     {"O_RDWR",      O_RDWR}
@@ -386,13 +389,25 @@ static ERL_NIF_TERM new_helper_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
 static ERL_NIF_TERM username_to_uid(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
      auto uidTerm = argv[0];
-     return nifpp::make(env, std::make_tuple(ok, uNameToUID(nifpp::get<string>(env, uidTerm))));
+     auto uid = uNameToUID(nifpp::get<string>(env, uidTerm));
+     if(uid != static_cast<uid_t>(-1)) {
+        return nifpp::make(env, std::make_tuple(ok, uid));
+     } else {
+        auto einval = std::error_code(static_cast<int>(std::errc::invalid_argument), std::system_category());
+        return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
+     }
 }
 
 static ERL_NIF_TERM groupname_to_gid(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
      auto gidTerm = argv[0];
-     return nifpp::make(env, std::make_tuple(ok, gNameToGID(nifpp::get<string>(env, gidTerm))));
+     auto gid = gNameToGID(nifpp::get<string>(env, gidTerm));
+     if(gid != static_cast<gid_t>(-1)) {
+        return nifpp::make(env, std::make_tuple(ok, gid));
+     } else {
+        auto einval = std::error_code(static_cast<int>(std::errc::invalid_argument), std::system_category());
+        return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
+     }
 }
 
 static ERL_NIF_TERM set_user_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -457,7 +472,7 @@ static ERL_NIF_TERM set_flags(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
     return handle_errors(env, [&]() {
         auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
         ctx->m_ffi.flags = 0;
-        nifpp::list_for_each<nifpp::str_atom>(env, argv[1], [&ctx](nifpp::str_atom atom) {
+        auto foreach_result = nifpp::list_for_each<nifpp::str_atom>(env, argv[1], [&ctx](nifpp::str_atom atom) {
             auto it = atom_to_flag.find(atom);
             if(it == atom_to_flag.end()) {
                 auto it_o = atom_to_open_mode.find(atom);
@@ -470,6 +485,9 @@ static ERL_NIF_TERM set_flags(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
                 ctx->m_ffi.flags |= it->second;
             }
         });
+
+        if(!foreach_result)
+            throw nifpp::badarg();
 
         return nifpp::make(env, ok);
     });
