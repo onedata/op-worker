@@ -187,11 +187,12 @@ void DirectIOHelper::ash_open(CTXRef ctx,
     const boost::filesystem::path &p, GeneralCallback<int> callback)
 {
     m_workerService.post([=, &ctx]() {
-        const int res = open(root(p).c_str(), ctx.m_ffi.flags);
+        int res = open(root(p).c_str(), ctx.m_ffi.flags);
         if (res == -1) {
             callback(-1, makePosixError(errno));
         }
         else {
+            ctx.m_ffi.fh = res;
             callback(res, SuccessCode);
         }
     });
