@@ -68,6 +68,11 @@ private:
 };
 
 using CTXRef = StorageHelperCTX &;
+using ErrorRef = std::system_error;
+
+template<class... T>
+using GeneralCallback = std::function<void(T..., ErrorRef)>;
+using VoidCallback = GeneralCallback<>;
 
 template <class T> using future_t = std::future<T>;
 template <class T> using promise_t = std::promise<T>;
@@ -84,52 +89,52 @@ public:
 
     virtual ~IStorageHelper() = default;
 
-    virtual future_t<struct stat> ash_getattr(
-        const boost::filesystem::path &p) = 0;
-    virtual future_t<void> ash_access(
-        const boost::filesystem::path &p, int mask) = 0;
-    virtual future_t<std::string> ash_readlink(
-        const boost::filesystem::path &p) = 0;
-    virtual future_t<std::vector<std::string>> ash_readdir(
+    virtual void ash_getattr(CTXRef ctx, const boost::filesystem::path &p,
+                                   GeneralCallback<struct stat>) = 0;
+    virtual void ash_access(CTXRef ctx,
+        const boost::filesystem::path &p, int mask, VoidCallback) = 0;
+    virtual void ash_readlink(CTXRef ctx,
+        const boost::filesystem::path &p, GeneralCallback<std::string>) = 0;
+    virtual void ash_readdir(CTXRef ctx,
         const boost::filesystem::path &p, off_t offset, size_t count,
-        CTXRef ctx) = 0;
-    virtual future_t<void> ash_mknod(
-        const boost::filesystem::path &p, mode_t mode, dev_t rdev) = 0;
-    virtual future_t<void> ash_mkdir(
-        const boost::filesystem::path &p, mode_t mode) = 0;
-    virtual future_t<void> ash_unlink(const boost::filesystem::path &p) = 0;
-    virtual future_t<void> ash_rmdir(const boost::filesystem::path &p) = 0;
-    virtual future_t<void> ash_symlink(const boost::filesystem::path &from,
-        const boost::filesystem::path &to) = 0;
-    virtual future_t<void> ash_rename(const boost::filesystem::path &from,
-        const boost::filesystem::path &to) = 0;
-    virtual future_t<void> ash_link(const boost::filesystem::path &from,
-        const boost::filesystem::path &to) = 0;
-    virtual future_t<void> ash_chmod(
-        const boost::filesystem::path &p, mode_t mode) = 0;
-    virtual future_t<void> ash_chown(
-        const boost::filesystem::path &p, uid_t uid, gid_t gid) = 0;
-    virtual future_t<void> ash_truncate(
-        const boost::filesystem::path &p, off_t size) = 0;
+        GeneralCallback<std::vector<std::string>&>) = 0;
+    virtual void ash_mknod(CTXRef ctx,
+        const boost::filesystem::path &p, mode_t mode, dev_t rdev, VoidCallback) = 0;
+    virtual void ash_mkdir(CTXRef ctx,
+        const boost::filesystem::path &p, mode_t mode, VoidCallback) = 0;
+    virtual void ash_unlink(CTXRef ctx,const boost::filesystem::path &p, VoidCallback) = 0;
+    virtual void ash_rmdir(CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
+    virtual void ash_symlink(CTXRef ctx, const boost::filesystem::path &from,
+        const boost::filesystem::path &to, VoidCallback) = 0;
+    virtual void ash_rename(CTXRef ctx, const boost::filesystem::path &from,
+        const boost::filesystem::path &to, VoidCallback) = 0;
+    virtual void ash_link(CTXRef ctx, const boost::filesystem::path &from,
+        const boost::filesystem::path &to, VoidCallback) = 0;
+    virtual void ash_chmod(CTXRef ctx,
+        const boost::filesystem::path &p, mode_t mode, VoidCallback) = 0;
+    virtual void ash_chown(CTXRef ctx,
+        const boost::filesystem::path &p, uid_t uid, gid_t gid, VoidCallback) = 0;
+    virtual void ash_truncate(CTXRef ctx,
+        const boost::filesystem::path &p, off_t size, VoidCallback) = 0;
 
-    virtual future_t<int> ash_open(
-        const boost::filesystem::path &p, CTXRef ctx) = 0;
-    virtual future_t<asio::mutable_buffer> ash_read(
+    virtual void ash_open(CTXRef ctx,
+        const boost::filesystem::path &p, GeneralCallback<int>) = 0;
+    virtual void ash_read(CTXRef ctx,
         const boost::filesystem::path &p, asio::mutable_buffer buf,
-        off_t offset, CTXRef ctx) = 0;
-    virtual future_t<int> ash_write(const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset, CTXRef ctx) = 0;
-    virtual future_t<void> ash_release(
-        const boost::filesystem::path &p, CTXRef ctx) = 0;
-    virtual future_t<void> ash_flush(
-        const boost::filesystem::path &p, CTXRef ctx) = 0;
-    virtual future_t<void> ash_fsync(
-        const boost::filesystem::path &p, int isdatasync, CTXRef ctx) = 0;
+        off_t offset, GeneralCallback<asio::mutable_buffer>) = 0;
+    virtual void ash_write(CTXRef ctx, const boost::filesystem::path &p,
+        asio::const_buffer buf, off_t offset, GeneralCallback<int>) = 0;
+    virtual void ash_release(CTXRef ctx,
+        const boost::filesystem::path &p, VoidCallback) = 0;
+    virtual void ash_flush(CTXRef ctx,
+        const boost::filesystem::path &p, VoidCallback) = 0;
+    virtual void ash_fsync(CTXRef ctx,
+        const boost::filesystem::path &p, int isdatasync, VoidCallback) = 0;
 
-    virtual asio::mutable_buffer sh_read(const boost::filesystem::path &p,
-        asio::mutable_buffer buf, off_t offset, CTXRef ctx) = 0;
-    virtual int sh_write(const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset, CTXRef ctx) = 0;
+    virtual asio::mutable_buffer sh_read(CTXRef ctx, const boost::filesystem::path &p,
+        asio::mutable_buffer buf, off_t offset) = 0;
+    virtual int sh_write(CTXRef ctx, const boost::filesystem::path &p,
+        asio::const_buffer buf, off_t offset) = 0;
 
 protected:
     template <class T>
