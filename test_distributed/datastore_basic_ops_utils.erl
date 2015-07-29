@@ -600,6 +600,7 @@ spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, Conflicted
     end,
     spawn(N, fun() ->
         try
+            timer:sleep(timer:seconds(1)), % sleep to allow all threads start
             Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
             E1:E2 ->
