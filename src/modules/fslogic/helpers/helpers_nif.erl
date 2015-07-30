@@ -13,13 +13,15 @@
 -on_load(init/0).
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/helpers.hrl").
 
 -type resource_handle() :: term().
 -type open_mode() :: 'O_RDONLY' | 'O_WRONLY' | 'O_RDWR'. %% Exactly one of those
 -type flag() :: open_mode() | 'O_NONBLOCK' | 'O_APPEND' | 'O_ASYNC' | 'O_FSYNC' | 'O_NOFOLLOW' | 'O_CREAT' | 'O_TRUNC' | 'O_EXCL'. %% Any of those
 -type fd() :: non_neg_integer().
+-type nif_string() :: string() | binary().
 
--record(statbuf, {st_dev, st_ino, st_mode, st_nlink, st_uid, st_gid, st_rdev, st_size, st_atime, st_mtime, st_ctime, st_blksize, st_blocks}).
+-export_type([nif_string/0, resource_handle/0]).
 
 %% API
 -export([new_helper_obj/2, new_helper_ctx/0, set_user_ctx/3, get_user_ctx/1]).
