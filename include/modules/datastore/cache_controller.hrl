@@ -301,8 +301,9 @@
       (#document{key = Uuid, value = V}, Acc) ->
         T = V#__Cache.timestamp,
         U = V#__Cache.last_user,
+        Age = timer:now_diff(Now, T),
         case U of
-          non when timer:now_diff(Now, T) >= 1000*MinDocAge ->
+          non when Age >= 1000*MinDocAge ->
             {next, [Uuid | Acc]};
           _ ->
             {next, Acc}
