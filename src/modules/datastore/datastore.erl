@@ -64,7 +64,6 @@
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
 -export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, level_to_driver/1]).
--export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0]).
 -export([run_synchronized/3]).
 
 %%%===================================================================
