@@ -13,20 +13,7 @@
 -ifndef(COMMON_MESSAGES_HRL).
 -define(COMMON_MESSAGES_HRL, 1).
 
-% POSIX error code
--type code() :: 'VOK' |
-                'VENOENT' |
-                'VEACCES' |
-                'VEEXIST' |
-                'VEIO' |
-                'VENOTSUP' |
-                'VENOTEMPTY' |
-                'VEREMOTEIO' |
-                'VEPERM' |
-                'VEINVAL' |
-                'VEDQUOT' |
-                'VENOATTR' |
-                'VECOMM'.
+-include("errors.hrl").
 
 -record(status, {
     code :: code(),

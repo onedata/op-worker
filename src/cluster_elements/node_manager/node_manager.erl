@@ -37,7 +37,7 @@
 
 
 %% API
--export([start_link/0, stop/0, refresh_ip_address/0]).
+-export([start_link/0, stop/0, get_ip_address/0, refresh_ip_address/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -72,6 +72,15 @@ stop() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns node's IP address.
+%% @end
+%%--------------------------------------------------------------------
+get_ip_address() ->
+    gen_server:call(?NODE_MANAGER_NAME, get_ip_address).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Tries to contact GR and refresh node's IP Address.
 %% @end
 %%--------------------------------------------------------------------
@@ -99,6 +108,7 @@ refresh_ip_address() ->
 init([]) ->
     process_flag(trap_exit,true),
     try
+        ensure_correct_hostname(),
         listener_starter:start_protocol_listener(),
         listener_starter:start_gui_listener(),
         listener_starter:start_rest_listener(),
@@ -113,8 +123,8 @@ init([]) ->
             monitoring_state = MonitoringState}}
     catch
         _:Error ->
-            ?error_stacktrace("Cannot initialize listeners: ~p", [Error]),
-            {stop, cannot_initialize_listeners}
+            ?error_stacktrace("Cannot start node_manager: ~p", [Error]),
+            {stop, cannot_start_node_manager}
     end.
 
 %%--------------------------------------------------------------------
@@ -143,6 +153,9 @@ handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) ->
                 _ -> out_of_sync
             end,
     {reply, Reply, State};
+
+handle_call(get_ip_address, _From, State = #state{node_ip = IPAddress}) ->
+    {reply, IPAddress, State};
 
 % only for tests
 handle_call(check_mem_synch, _From, State) ->
@@ -566,3 +579,25 @@ next_mem_check() ->
     Interval = timer:minutes(IntervalMin),
     % random to reduce probability that two nodes clear memory simultanosly
     erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Makes sure node hostname belongs to provider domain.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_correct_hostname() -> ok | no_return().
+ensure_correct_hostname() ->
+    Hostname = oneprovider:get_node_hostname(),
+    Domain = oneprovider:get_provider_domain(),
+    case string:join(tl(string:tokens(Hostname, ".")), ".") of
+        Domain ->
+            ok;
+        _ ->
+            ?error("Node hostname must be in provider domain. Check env conf. "
+            "Current configuration:~nHostname: ~p~nDomain: ~p",
+                [Hostname, Domain]),
+            throw(wrong_hostname)
+    end.
+

@@ -22,6 +22,7 @@
 %% TODO Add non_transactional updates (each update creates tmp ets!)
 -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
+-export([run_synchronized/3]).
 
 -record(links, {key, link_map = #{}}).
 
@@ -46,6 +47,7 @@ init_bucket(_BucketName, Models, NodeToSync) ->
             Node = node(),
             Table = table_name(ModelName),
             LinkTable = links_table_name(ModelName),
+            TransactionTable = transaction_table_name(ModelName),
             case NodeToSync == Node of
                 true -> %% No mnesia nodes -> create new table
                     MakeTable = fun(TabName, RecordName, RecordFields) ->
@@ -62,11 +64,13 @@ init_bucket(_BucketName, Models, NodeToSync) ->
                     end,
                     {
                         MakeTable(Table, ModelName, [key | Fields]),
-                        MakeTable(LinkTable, links, record_info(fields, links))
+                        MakeTable(LinkTable, links, record_info(fields, links)),
+                        MakeTable(TransactionTable, ModelName, [key | Fields])
                     };
                 _ -> %% there is at least one mnesia node -> join cluster
                     Tables = [table_name(MName) || MName <- ?MODELS] ++
-                             [links_table_name(MName) || MName <- ?MODELS],
+                             [links_table_name(MName) || MName <- ?MODELS] ++
+                             [transaction_table_name(MName) || MName <- ?MODELS],
                     ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, ?MNESIA_WAIT_TIMEOUT]),
                     ExpandTable = fun(TabName) ->
                         case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
@@ -85,7 +89,8 @@ init_bucket(_BucketName, Models, NodeToSync) ->
                     end,
                     {
                         ExpandTable(Table),
-                        ExpandTable(LinkTable)
+                        ExpandTable(LinkTable),
+                        ExpandTable(TransactionTable)
                     }
             end
         end, Models),
@@ -356,6 +361,32 @@ healthcheck(State) ->
             (_, _, Acc) -> Acc
         end, ok, State).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
+%% run at the same time.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_synchronized(model_behaviour:model_config(), ResourceId :: binary(), fun(() -> Result)) -> Result
+    when Result :: term().
+run_synchronized(#model_config{name = ModelName}, ResourceID, Fun) ->
+    mnesia_run(sync_transaction,
+        fun() ->
+            Nodes = lists:usort(mnesia:table_info(table_name(ModelName), where_to_write)),
+            case mnesia:lock({global, ResourceID, Nodes}, write) of
+                ok ->
+                    Fun();
+                Nodes0 ->
+                    case lists:usort(Nodes0) of
+                        Nodes ->
+                            Fun();
+                        LessNodes ->
+                            {error, {lock_error, Nodes -- LessNodes}}
+                    end
+            end
+        end).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -384,6 +415,18 @@ links_table_name(#model_config{name = ModelName}) ->
     links_table_name(ModelName);
 links_table_name(TabName) when is_atom(TabName) ->
     binary_to_atom(<<"dc_links_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets Mnesia transaction table name for given model.
+%% @end
+%%--------------------------------------------------------------------
+-spec transaction_table_name(atom()) -> atom().
+transaction_table_name(TabName) when is_atom(TabName) ->
+    binary_to_atom(<<"dc_transaction_", (erlang:atom_to_binary(TabName, utf8))/binary>>, utf8).
+
 
 %%--------------------------------------------------------------------
 %% @private

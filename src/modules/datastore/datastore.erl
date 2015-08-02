@@ -64,6 +64,8 @@
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
 -export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, level_to_driver/1]).
+-export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0]).
+-export([run_synchronized/3]).
 
 %%%===================================================================
 %%% API
@@ -374,6 +376,18 @@ link_walk(Level, #document{key = StartKey} = StartDoc, LinkNames, Mode) when is_
     {ok, {document(), [ext_key()]} | [document()]} | link_error() | get_error().
 link_walk(Level, Key, ModelName, R, Mode) ->
     link_walk7(Level, Key, ModelName, R, [], Mode).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
+%% run at the same time.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_synchronized(ModelName :: model_behaviour:model_type(), ResourceId :: binary(), fun(() -> Result)) -> Result
+    when Result :: term().
+run_synchronized(ModelName, ResourceId, Fun) ->
+    exec_driver(ModelName, ?DISTRIBUTED_CACHE_DRIVER, run_synchronized, [ResourceId, Fun]).
 
 %%--------------------------------------------------------------------
 %% @doc
