@@ -9,11 +9,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--include("global_definitions.hrl").
--include_lib("ctool/include/logging.hrl").
-
 -ifndef(CACHE_CONTROLLER_HRL).
 -define(CACHE_CONTROLLER_HRL, 1).
+
+-include("global_definitions.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(UPDATE_USAGE_INFO2(__Cache),
   update_usage_info(Key, ModelName) ->
@@ -24,7 +24,7 @@
     case update(Uuid, UpdateFun) of
       {ok, Ok} ->
         {ok, Ok};
-      {error,{not_found,__Cache}} ->
+      {error, {not_found,__Cache}} ->
         TS = os:timestamp(),
         V = #__Cache{timestamp = TS, last_action_time = TS},
         Doc = #document{key = Uuid, value = V},
@@ -65,7 +65,7 @@
       {ok, Doc} ->
         Value = Doc#document.value,
         Links = Value#__Cache.deleted_links,
-        case lists:member(LinkName, Links) or lists:member(all, Links) of
+        case lists:member(LinkName, Links) orelse lists:member(all, Links) of
           true -> {error, link_not_found};
           _ -> ok
         end;
@@ -95,7 +95,7 @@
     delete(Uuid, Pred)
 ).
 
--define(END_DICK_OP(__Cache),
+-define(END_DISK_OP(__Cache),
   end_disk_op(Key, ModelName, Op) ->
     try
       Uuid = caches_controller:get_cache_uuid(Key, ModelName),
@@ -133,11 +133,11 @@
       UpdateFun = fun(Record) ->
         Record#__Cache{last_user = Pid, timestamp = os:timestamp(), action = Op}
       end,
-      % TODO - not transactional updates in local store
+      % TODO - not transactional updates in local store - add transactional create and update on ets
       case update(Uuid, UpdateFun) of
         {ok, Ok} ->
           {ok, Ok};
-        {error,{not_found,__Cache}} ->
+        {error, {not_found,__Cache}} ->
           TS = os:timestamp(),
           V = #__Cache{last_user = Pid, timestamp = TS, action = Op, last_action_time = TS},
           Doc = #document{key = Uuid, value = V},
@@ -187,57 +187,52 @@
 ).
 
 -define(LOG_LINK_DEL(__Cache),
-  log_link_del(Key, ModelName, LinkNames, start) ->
+  log_link_del(Key, ModelName, LinkNames, Action) ->
+    LogDel = fun
+      (Uuid, LinkNames, start) ->
+        UpdateFun = fun(#__Cache{deleted_links = DL} = Record) ->
+          case LinkNames of
+            LNs when is_list(LNs) ->
+              Record#__Cache{deleted_links = DL ++ LinkNames};
+            _ ->
+              Record#__Cache{deleted_links = DL ++ [LinkNames]}
+          end
+        end,
+        case update(Uuid, UpdateFun) of
+          {ok, _} ->
+            ok;
+          {error, {not_found,__Cache}} ->
+            TS = os:timestamp(),
+            V = case LinkNames of
+                  LNs when is_list(LNs) ->
+                    #__Cache{timestamp = TS, deleted_links = LinkNames};
+                  _ ->
+                    #__Cache{timestamp = TS, deleted_links = [LinkNames]}
+                end,
+            Doc = #document{key = Uuid, value = V},
+            % TODO what happen if create fails?
+            create(Doc),
+            ok
+        end;
+      (Uuid, LinkNames, stop) ->
+        UpdateFun = fun(#__Cache{deleted_links = DL} = Record) ->
+          case LinkNames of
+            LNs when is_list(LNs) ->
+              Record#__Cache{deleted_links = DL -- LinkNames};
+            _ ->
+              Record#__Cache{deleted_links = DL -- [LinkNames]}
+          end
+        end,
+        update(Uuid, UpdateFun)
+    end,
     try
       Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-  
-      UpdateFun = fun(#__Cache{deleted_links = DL} = Record) ->
-        case LinkNames of
-          LNs when is_list(LNs) ->
-            Record#__Cache{deleted_links = DL ++ LinkNames};
-          _ ->
-            Record#__Cache{deleted_links = DL ++ [LinkNames]}
-        end
-      end,
-      case update(Uuid, UpdateFun) of
-        {ok, _} ->
-          ok;
-        {error,{not_found,__Cache}} ->
-          TS = os:timestamp(),
-          V = case LinkNames of
-                LNs when is_list(LNs) ->
-                  #__Cache{timestamp = TS, deleted_links = LinkNames};
-                _ ->
-                  #__Cache{timestamp = TS, deleted_links = [LinkNames]}
-              end,
-          Doc = #document{key = Uuid, value = V},
-          % TODO what happen if create fails?
-          create(Doc),
-          ok
-      end
+      LogDel(Uuid, LinkNames, Action)
     catch
       E1:E2 ->
         ?error_stacktrace("Error in ~p log_link_del. Args: ~p. Error: ~p:~p.",
-          [{__Cache, Key, ModelName, LinkNames, start}, E1, E2]),
+          [{__Cache, Key, ModelName, LinkNames, Action}, E1, E2]),
         {error, preparing_disk_op_failed}
-    end;
-  log_link_del(Key, ModelName, LinkNames, stop) ->
-    try
-      Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-      UpdateFun = fun(#__Cache{deleted_links = DL} = Record) ->
-        case LinkNames of
-          LNs when is_list(LNs) ->
-            Record#__Cache{deleted_links = DL -- LinkNames};
-          _ ->
-            Record#__Cache{deleted_links = DL -- [LinkNames]}
-        end
-      end,
-      update(Uuid, UpdateFun)
-    catch
-      E1:E2 ->
-        ?error_stacktrace("Error in ~p log_link_del. Args: ~p. Error: ~p:~p.",
-          [{__Cache, Key, ModelName, LinkNames, stop}, E1, E2]),
-        {error, ending_disk_op_failed}
     end
 ).
 
@@ -274,7 +269,7 @@
   'after'(ModelName, delete, disk_only, [Key, _Pred], ok) ->
     end_disk_op(Key, ModelName, delete);
   'after'(ModelName, delete, __Level, [Key, _Pred], ok) ->
-  Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+    Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     delete_dump_info(Uuid);
   'after'(ModelName, exists, __Level, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName);
@@ -289,20 +284,16 @@
     Filter = fun
       ('$end_of_table', Acc) ->
         {abort, Acc};
-      (#document{key = Uuid, value = V}, Acc) ->
-        U = V#__Cache.last_user,
-        case U =/= non of
-          true ->
-            {next, [Uuid | Acc]};
-          false ->
-            {next, Acc}
-        end
+      (#document{value = #__Cache{last_user = non}}, Acc) ->
+        {next, Acc};
+      (#document{key = Uuid}, Acc) ->
+        {next, [Uuid | Acc]}
     end,
     datastore:list(__Level, MODEL_NAME, Filter, [])
 ).
 
 -define(LIST_OLDER(__Cache, __Level, MODEL_NAME),
-  list(DocAge) ->
+  list(MinDocAge) ->
     Now = os:timestamp(),
     Filter = fun
       ('$end_of_table', Acc) ->
@@ -310,10 +301,10 @@
       (#document{key = Uuid, value = V}, Acc) ->
         T = V#__Cache.timestamp,
         U = V#__Cache.last_user,
-        case (timer:now_diff(Now, T) >= 1000*DocAge) and (U =:= non) of
-          true ->
+        case U of
+          non when timer:now_diff(Now, T) >= 1000*MinDocAge ->
             {next, [Uuid | Acc]};
-          false ->
+          _ ->
             {next, Acc}
         end
     end,

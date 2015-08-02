@@ -693,10 +693,10 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
         case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Args) of
             {ok, NewMethod, NewArgs} ->
                 FullArgs = [ModelConfig | NewArgs],
-                worker_proxy:call(datastore_worker, {driver_call, Driver, NewMethod, FullArgs});
+                worker_proxy:call(datastore_worker, {driver_call, Driver, NewMethod, FullArgs}, timer:minutes(5));
             ok ->
                 FullArgs = [ModelConfig | Args],
-                worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs});
+                worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs}, timer:minutes(5));
             {error, Reason} ->
                 {error, Reason}
         end,

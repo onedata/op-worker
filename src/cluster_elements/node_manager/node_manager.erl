@@ -197,32 +197,31 @@ handle_cast(ccm_conn_ack, State) ->
     {noreply, NewState};
 
 handle_cast(check_mem, #state{monitoring_state = MonState, cache_control = CacheControl,
-    last_cache_cleaning = Last} = State) ->
-    NewState = case CacheControl of
-        true ->
-            MemUsage = monitoring:mem_usage(MonState),
-            % Check if memory cleaning of oldest docs should be started
-            % even when memory utilization is low (e.g. once a day)
-            case caches_controller:should_clear_cache(MemUsage) of
-                true ->
-                    spawn(fun() -> free_memory(MemUsage) end),
-                    State#state{last_cache_cleaning = os:timestamp()};
-                _ ->
-                    Now = os:timestamp(),
-                    {ok, CleaningPeriod} = application:get_env(?APP_NAME, clear_cache_max_period_ms),
-                    case timer:now_diff(Now, Last) >= 1000000*CleaningPeriod of
-                        true ->
-                            spawn(fun() -> free_memory() end),
-                            State#state{last_cache_cleaning = Now};
-                        _ ->
-                            State
-                    end
-            end;
-        false ->
-            State
-    end,
+    last_cache_cleaning = Last} = State) when CacheControl =:= true ->
+    MemUsage = monitoring:mem_usage(MonState),
+    % Check if memory cleaning of oldest docs should be started
+    % even when memory utilization is low (e.g. once a day)
+    NewState = case caches_controller:should_clear_cache(MemUsage) of
+                   true ->
+                       spawn(fun() -> free_memory(MemUsage) end),
+                       State#state{last_cache_cleaning = os:timestamp()};
+                   _ ->
+                       Now = os:timestamp(),
+                       {ok, CleaningPeriod} = application:get_env(?APP_NAME, clear_cache_max_period_ms),
+                       case timer:now_diff(Now, Last) >= 1000000*CleaningPeriod of
+                           true ->
+                               spawn(fun() -> free_memory() end),
+                               State#state{last_cache_cleaning = Now};
+                           _ ->
+                               State
+                       end
+               end,
     next_mem_check(),
     {noreply, NewState};
+
+handle_cast(check_mem, State) ->
+    next_mem_check(),
+    {noreply, State};
 
 handle_cast(do_heartbeat, State) ->
     NewState = do_heartbeat(State),

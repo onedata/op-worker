@@ -220,7 +220,7 @@ get_hooks_config() ->
 %%--------------------------------------------------------------------
 -spec end_disk_op(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
     Op :: atom()) -> ok | {error, ending_disk_op_failed}.
-?END_DICK_OP(local_cache_controller).
+?END_DISK_OP(local_cache_controller).
 
 %%--------------------------------------------------------------------
 %% @private
