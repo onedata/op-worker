@@ -663,6 +663,8 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                     _ ->
                         erlang:apply(Driver, Method, FullArgs)
                 end;
+            {ok, _NewMethod, _NewArgs} ->
+                {error, prehook_ans_not_supported};
             {error, Reason} ->
                 {error, Reason}
         end,
