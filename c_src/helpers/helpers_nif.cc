@@ -92,7 +92,7 @@ std::map<nifpp::str_atom, int> atom_to_open_mode = {
 };
 
 
-std::map<bifpp::str_atom, int> atom_to_file_type = {
+std::map<nifpp::str_atom, int> atom_to_file_type = {
     {"S_IFREG",    S_IFREG},
     {"S_IFCHR",    S_IFCHR},
     {"S_IFBLK",    S_IFBLK},
