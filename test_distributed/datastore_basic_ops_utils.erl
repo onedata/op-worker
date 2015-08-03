@@ -681,10 +681,10 @@ unset_hooks(Case, Config) ->
 
     case check_config_name(Case) of
         global ->
-            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
             ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
         local ->
-            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
             ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)),
 
             lists:foreach(fun(W) ->

@@ -19,7 +19,7 @@
 
 %% model_behaviour callbacks and API
 -export([save/1, get/1, list/0, list/1, exists/1, delete/1, delete/2, update/2, create/1, model_init/0,
-    'after'/5, before/4, list_docs_be_dumped/0]).
+    'after'/5, before/4, list_docs_to_be_dumped/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -86,7 +86,7 @@ list() ->
 %% Returns list of records not persisted.
 %% @end
 %%--------------------------------------------------------------------
--spec list_docs_be_dumped() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+-spec list_docs_to_be_dumped() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 ?LIST_DOCS_TO_BE_DUMPED(local_cache_controller, local_only, ?MODEL_NAME).
 
 %%--------------------------------------------------------------------

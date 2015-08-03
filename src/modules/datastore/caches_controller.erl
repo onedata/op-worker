@@ -20,7 +20,7 @@
 
 %% API
 -export([clear_local_cache/1, clear_global_cache/1, clear_local_cache/2, clear_global_cache/2]).
--export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1, wait_for_dump/0]).
+-export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1, wait_for_cache_dump/0]).
 -export([delete_old_keys/2, get_cache_uuid/2, decode_uuid/1]).
 
 %%%===================================================================
@@ -181,27 +181,27 @@ delete_old_keys(locally_cached, TimeWindow) ->
 %% Waits for dumping cache to disk
 %% @end
 %%--------------------------------------------------------------------
--spec wait_for_dump() ->
+-spec wait_for_cache_dump() ->
   ok | dump_error.
-wait_for_dump() ->
-  wait_for_dump(60).
+wait_for_cache_dump() ->
+  wait_for_cache_dump(60).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Waits for dumping cache to disk
 %% @end
 %%--------------------------------------------------------------------
--spec wait_for_dump(N :: integer()) ->
+-spec wait_for_cache_dump(N :: integer()) ->
   ok | dump_error.
-wait_for_dump(0) ->
+wait_for_cache_dump(0) ->
   dump_error;
-wait_for_dump(N) ->
-  case {global_cache_controller:list_docs_be_dumped(), local_cache_controller:list_docs_be_dumped()} of
+wait_for_cache_dump(N) ->
+  case {global_cache_controller:list_docs_to_be_dumped(), local_cache_controller:list_docs_to_be_dumped()} of
     {{ok, []}, {ok, []}} ->
       ok;
     _ ->
       timer:sleep(timer:seconds(1)),
-      wait_for_dump(N-1)
+      wait_for_cache_dump(N-1)
   end.
 
 %%%===================================================================
@@ -249,7 +249,8 @@ safe_delete(Level, ModelName, Key) ->
   try
     ModelConfig = ModelName:model_init(),
     FullArgs = [ModelConfig, Key],
-    {ok, Doc} = worker_proxy:call(datastore_worker, {driver_call, datastore:level_to_driver(Level), get, FullArgs}),
+    {ok, Doc} = worker_proxy:call(datastore_worker,
+      {driver_call, datastore:level_to_driver(Level), get, FullArgs}),
 
     Value = Doc#document.value,
     Pred = fun() ->

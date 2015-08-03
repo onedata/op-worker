@@ -114,7 +114,7 @@ old_keys_cleaning_test(Config) ->
             }]))
     end, KeysWithTimes),
     timer:sleep(1000), % Posthook is async
-    ?assertMatch(ok, rpc:call(Worker1, caches_controller, wait_for_dump, [])),
+    ?assertMatch(ok, rpc:call(Worker1, caches_controller, wait_for_cache_dump, [])),
     check_clearing(lists:reverse(KeysWithTimes), Worker1, Worker2),
 
     CorruptedKey = list_to_binary("old_keys_cleaning_test_c"),
@@ -124,7 +124,7 @@ old_keys_cleaning_test(Config) ->
             value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
         }])),
     timer:sleep(1000), % Posthook is async
-    ?assertMatch(ok, rpc:call(Worker1, caches_controller, wait_for_dump, [])),
+    ?assertMatch(ok, rpc:call(Worker1, caches_controller, wait_for_cache_dump, [])),
     CorruptedUuid = caches_controller:get_cache_uuid(CorruptedKey, some_record),
     ?assertMatch(ok, ?call_store(Worker2, global_cache_controller, delete, [CorruptedUuid])),
 
@@ -188,7 +188,7 @@ cache_clearing_test(Config) ->
     ?assert(Mem1 > MemTarget),
 
     timer:sleep(1000), % Posthook is async
-    ?assertMatch(ok, rpc:call(Worker2, caches_controller, wait_for_dump, [])),
+    ?assertMatch(ok, rpc:call(Worker2, caches_controller, wait_for_cache_dump, [])),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker2}, check_mem_synch, 60000)),
     [{_, Mem2}] = monitoring:get_memory_stats(),
     ?assert(Mem2 < MemTarget),
@@ -476,13 +476,13 @@ end_per_testcase(Case, Config) when
         end, ModelConfig)
     end, Workers),
 
-    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     [W | _] = Workers,
-    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_dump, [])),
+    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
 
 %%%===================================================================

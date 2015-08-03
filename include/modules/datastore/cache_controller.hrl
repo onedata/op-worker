@@ -108,7 +108,8 @@
                         (#__Cache{last_user = LastUser} = Record) ->
                             case LastUser of
                                 Pid ->
-                                    Record#__Cache{last_user = non, action = non, last_action_time = os:timestamp()};
+                                    Record#__Cache{last_user = non, action = non,
+                                        last_action_time = os:timestamp()};
                                 _ ->
                                     throw(user_changed)
                             end
@@ -149,12 +150,12 @@
             Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     
             {LastUser, LAT} = case get(Uuid) of
-                                                    {ok, Doc2} ->
-                                                        Value = Doc2#document.value,
-                                                        {Value#__Cache.last_user, Value#__Cache.last_action_time};
-                                                    {error, {not_found, _}} ->
-                                                        {Pid, 0}
-                                                end,
+                {ok, Doc2} ->
+                    Value = Doc2#document.value,
+                    {Value#__Cache.last_user, Value#__Cache.last_action_time};
+                {error, {not_found, _}} ->
+                    {Pid, 0}
+            end,
             case LastUser of
                 Pid ->
                     case Op of
@@ -280,7 +281,7 @@
 ).
 
 -define(LIST_DOCS_TO_BE_DUMPED(__Cache, __Level, MODEL_NAME),
-    list_docs_be_dumped() ->
+    list_docs_to_be_dumped() ->
         Filter = fun
             ('$end_of_table', Acc) ->
                 {abort, Acc};
