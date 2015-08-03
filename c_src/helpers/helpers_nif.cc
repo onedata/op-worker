@@ -90,6 +90,16 @@ std::map<nifpp::str_atom, int> atom_to_open_mode = {
     {"O_WRONLY",    O_WRONLY},
     {"O_RDWR",      O_RDWR}
 };
+
+
+std::map<bifpp::str_atom, int> atom_to_file_type = {
+    {"S_IFREG",    S_IFREG},
+    {"S_IFCHR",    S_IFCHR},
+    {"S_IFBLK",    S_IFBLK},
+    {"S_IFIFO",    S_IFIFO},
+    {"S_IFSOCK",   S_IFSOCK}
+};
+
 /** @} */
 
 
@@ -426,11 +436,16 @@ static ERL_NIF_TERM get_flag_value(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
     auto flag = nifpp::get<nifpp::str_atom>(env, argv[0]);
     auto it = atom_to_flag.find(flag);
     if(it == atom_to_flag.end()) {
-        auto it_o = atom_to_open_mode.find(flag);
-        if(it_o == atom_to_open_mode.end()) {
-            throw nifpp::badarg();
+        auto it_0 = atom_to_open_mode.find(flag);
+        if(it_0 == atom_to_open_mode.end()) {
+            auto it_1 = atom_to_open_mode.find(flag);
+                if(it_1 == atom_to_file_type.end()) {
+                    throw nifpp::badarg();
+                } else {
+                    return nifpp::make(env, it_1->second);
+                }
         } else {
-            return nifpp::make(env, it_o->second);
+            return nifpp::make(env, it_0->second);
         }
     } else {
         return nifpp::make(env, it->second);
