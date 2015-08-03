@@ -36,7 +36,7 @@
     }}).
 
 %% API
--export([start_link/3, stop/1]).
+-export([start_link/3, stop/1, proc_request/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -143,9 +143,10 @@ handle_call(_Request, _From, State) ->
     | {stop, Reason :: term(), NewState},
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
-handle_cast(#worker_request{} = Req, State = #host_state{plugin = Plugin}) ->
-    spawn(fun() -> proc_request(Plugin, Req) end),
-    {noreply, State};
+%% Spawning migrated to worker proxy
+%% handle_cast(#worker_request{} = Req, State = #host_state{plugin = Plugin}) ->
+%%     spawn(fun() -> proc_request(Plugin, Req) end),
+%%     {noreply, State};
 
 handle_cast({progress_report, Report}, State) ->
     NewLoadInfo = save_progress(Report, State#host_state.load_info),

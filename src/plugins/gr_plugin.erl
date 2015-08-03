@@ -31,9 +31,10 @@
 %%--------------------------------------------------------------------
 -spec get_gr_url() -> string().
 get_gr_url() ->
-    {ok, Node} = application:get_env(?APP_NAME, global_registry_node),
+    {ok, Hname} = application:get_env(?APP_NAME, global_registry_domain),
+    Hostname = gui_str:to_list(Hname),
     {ok, Port} = application:get_env(?APP_NAME, global_registry_rest_port),
-    string:join(["https://", utils:get_host(Node), ":", integer_to_list(Port)], "").
+    string:join(["https://", Hostname, ":", integer_to_list(Port)], "").
 
 %%--------------------------------------------------------------------
 %% @doc

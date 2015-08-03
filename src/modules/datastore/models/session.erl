@@ -15,6 +15,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_model.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
@@ -67,6 +68,8 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+get(?ROOT_SESS_ID) ->
+    {ok, #document{key = ?ROOT_SESS_ID, value = #session{identity = #identity{user_id = ?ROOT_USER_ID}}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 

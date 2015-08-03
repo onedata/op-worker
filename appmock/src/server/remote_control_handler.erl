@@ -148,9 +148,7 @@ handle_request(?TCP_SERVER_SPECIFIC_MESSAGE_COUNT_COWBOY_ROUTE, Req) ->
                     {ok, Count} ->
                         ?TCP_SERVER_SPECIFIC_MESSAGE_COUNT_PACK_RESPONSE(Count);
                     {error, wrong_endpoint} ->
-                        ?TCP_SERVER_SPECIFIC_MESSAGE_COUNT_PACK_ERROR_WRONG_ENDPOINT;
-                    {error, counter_mode} ->
-                        ?TCP_SERVER_SPECIFIC_MESSAGE_COUNT_PACK_ERROR_COUNTER_MODE
+                        ?TCP_SERVER_SPECIFIC_MESSAGE_COUNT_PACK_ERROR_WRONG_ENDPOINT
                 end,
     Req2 = cowboy_req:set_resp_body(appmock_utils:encode_to_json(ReplyTerm), Req),
     Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req2),

@@ -85,18 +85,21 @@
 
 %% Local, cached version of globalregistry user
 -record(onedata_user, {
-    name :: binary()
+    name :: binary(),
+    space_ids :: [binary()]
 }).
 
 
 -record(file_meta, {
-    name :: binary(),
-%%     type :: file_meta:type(),
-%%     posix_permissions :: file_meta:posix_permissions(),
-    is_scope = false :: boolean(),
-    mtime :: non_neg_integer(),
-    atime :: non_neg_integer(),
-    ctime :: non_neg_integer()
+    name :: file_meta:name(),
+    type :: file_meta:type(),
+    mode = 0 :: file_meta:posix_permissions(),
+    mtime :: file_meta:time(),
+    atime :: file_meta:time(),
+    ctime :: file_meta:time(),
+    uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
+    size = 0 :: file_meta:size(),
+    is_scope = false :: boolean()
 }).
 
 -endif.
