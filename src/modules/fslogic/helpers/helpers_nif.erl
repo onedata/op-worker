@@ -16,7 +16,7 @@
 -include("modules/fslogic/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type apply_helper_nif :: term().
+-type resource_handle() :: term().
 -type open_mode() :: 'O_RDONLY' | 'O_WRONLY' | 'O_RDWR'. %% Exactly one of those
 -type flag() :: open_mode() | 'O_NONBLOCK' | 'O_APPEND' | 'O_ASYNC' | 'O_FSYNC' | 'O_NOFOLLOW' | 'O_CREAT' | 'O_TRUNC' | 'O_EXCL'. %% Any of those
 -type file_type() :: 'S_IFREG' | 'S_IFCHR' | 'S_IFBLK' | 'S_IFIFO' | 'S_IFSOCK'.
