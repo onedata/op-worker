@@ -75,13 +75,7 @@ std::map<nifpp::str_atom, int> atom_to_flag = {
     {"O_NOFOLLOW", O_NOFOLLOW},
     {"O_CREAT",    O_CREAT},
     {"O_TRUNC",    O_TRUNC},
-    {"O_EXCL",     O_EXCL},
-
-    {"S_IFREG",    S_IFREG},
-    {"S_IFCHR",    S_IFCHR},
-    {"S_IFBLK",    S_IFBLK},
-    {"S_IFIFO",    S_IFIFO},
-    {"S_IFSOCK",   S_IFSOCK}
+    {"O_EXCL",     O_EXCL}
 };
 
 
