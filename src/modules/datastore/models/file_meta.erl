@@ -39,13 +39,15 @@
 -define(ROOT_DIR_UUID, <<"">>).
 -define(ROOT_DIR_NAME, <<"">>).
 
+-define(SNAPSHOT_SEPARATOR, "::").
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
--export([get_ancestors/1]).
+-export([get_ancestors/1, attach_location/3]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -139,6 +141,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                                      SavedDoc = FileDoc#document{key = UUID},
                                      {ok, Scope} = get_scope(Parent),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, 1), SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
                                      {ok, UUID};
                                  {error, Reason} ->
@@ -282,9 +285,19 @@ list_children(Entry, Offset, Count) ->
                  (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
                      Acc;
                  (LinkName, {_Key, ?MODEL_NAME}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
-                     {Skip - 1, Count1, Acc};
+                     case is_snapshot(LinkName) of
+                         true ->
+                             {Skip, Count1, Acc};
+                         false ->
+                             {Skip - 1, Count1, Acc}
+                     end;
                  (LinkName, {Key, ?MODEL_NAME}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
-                     {0, Count1 - 1, [#child_link{uuid = Key, name = LinkName} | Acc]};
+                     case is_snapshot(LinkName) of
+                         true ->
+                             {0, Count1, Acc};
+                         false ->
+                             {0, Count1 - 1, [#child_link{uuid = Key, name = LinkName} | Acc]}
+                     end;
                  (_LinkName, _LinkTarget, AccIn) ->
                      AccIn
              end, {Offset, Count, []}),
@@ -478,6 +491,12 @@ setup_onedata_user(UUID) ->
             "due to: ~p:~p", [Error, Reason])
     end.
 
+attach_location(Entry, #document{key = LocId}, ProviderId) ->
+    attach_location(Entry, LocId, ProviderId);
+attach_location(Entry, LocId, ProviderId) ->
+    {ok, FDoc} = get(Entry),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {file_location, LocId}}),
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -640,10 +659,18 @@ is_valid_filename(<<"..">>) ->
 is_valid_filename(FileName) when not is_binary(FileName) ->
     false;
 is_valid_filename(FileName) when is_binary(FileName) ->
-    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
-        [] -> true;
-        _ -> false
-    end.
+    DirSep =
+        case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
+            [] -> true;
+            _ -> false
+        end,
+    SnapSep =
+        case binary:matches(FileName, <<?SNAPSHOT_SEPARATOR>>) of
+            [] -> true;
+            _ -> false
+        end,
+
+    SnapSep andalso DirSep.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -661,3 +688,21 @@ normalize_error({ok, Inv}) ->
     normalize_error({invalid_response, normalize_error(Inv)});
 normalize_error(Reason) ->
     Reason.
+
+
+snapshot_name(FileName, Version) ->
+    <<FileName/binary, ?SNAPSHOT_SEPARATOR, (integer_to_binary(Version))/binary>>.
+
+is_snapshot(FileName) ->
+    try
+        [FN, VR] = binary:split(FileName, <<?SNAPSHOT_SEPARATOR>>),
+        _ = binary_to_integer(VR),
+        is_valid_filename(FN)
+    catch
+        _:_ ->
+            false
+    end.
+
+
+location_ref(ProviderId) ->
+    <<"location_", ProviderId/binary>>.

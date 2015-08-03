@@ -39,5 +39,8 @@ get_file_location(_File, _Flags, _ForceClusterProxy) ->
 %%--------------------------------------------------------------------
 -spec get_new_file_location(File :: file_meta:path(), Flags :: fslogic_worker:open_flags(), ForceClusterProxy :: boolean()) ->
     no_return().
-get_new_file_location(_File, _Flags, _ForceClusterProxy) ->
+get_new_file_location(CTX, ParentUUID, Name, _Flags, _ForceClusterProxy) ->
+
+    file_meta:create({uuid, ParentUUID}, #file_meta{}),
+
     ?NOT_IMPLEMENTED.

@@ -12,9 +12,10 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/helpers.hrl").
+-include("modules/datastore/datastore.hrl").
 
 %% API
--export([new_handle/2]).
+-export([new_handle/1, new_handle/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3, chown/4, truncate/3]).
 -export([open/3, read/4, write/4, release/2, flush/2, fsync/3]).
 
@@ -30,6 +31,16 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%% new_handle/1
+%%--------------------------------------------------------------------
+%% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_handle(#helper_init{}) -> handle().
+new_handle(#helper_init{name = Name, args = Args}) ->
+    new_handle(Name, Args).
+
 
 %% new_handle/2
 %%--------------------------------------------------------------------

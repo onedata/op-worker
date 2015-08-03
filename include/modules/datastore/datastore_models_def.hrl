@@ -31,7 +31,9 @@
     identity,
     file_meta,
     global_cache_controller,
-    local_cache_controller
+    local_cache_controller,
+    storage,
+    file_location
 ]).
 
 %% List of all global caches
@@ -100,6 +102,27 @@
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
     is_scope = false :: boolean()
+}).
+
+
+-record(helper_init, {name :: binary(), args :: [binary()]}).
+
+-record(storage, {
+    name :: binary(),
+    helpers :: [#helper_init{}]
+}).
+
+-record(file_block, {
+    storage_id :: datastore:key(),
+    file_id :: binary(),
+    offset :: non_neg_integer(),
+    size :: non_neg_integer()
+
+}).
+
+-record(file_location, {
+    provider_id :: binary(),
+    blocks :: []
 }).
 
 -endif.
