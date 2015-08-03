@@ -75,7 +75,13 @@ std::map<nifpp::str_atom, int> atom_to_flag = {
     {"O_NOFOLLOW", O_NOFOLLOW},
     {"O_CREAT",    O_CREAT},
     {"O_TRUNC",    O_TRUNC},
-    {"O_EXCL",     O_EXCL}
+    {"O_EXCL",     O_EXCL},
+
+    {"S_IFREG",    S_IFREG},
+    {"S_IFCHR",    S_IFCHR},
+    {"S_IFBLK",    S_IFBLK},
+    {"S_IFIFO",    S_IFIFO},
+    {"S_IFSOCK",   S_IFSOCK}
 };
 
 
@@ -405,12 +411,29 @@ static ERL_NIF_TERM new_helper_obj(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
     auto helperArgs = get_helper_args(env, argv[1]);
     auto helperObj = application.SHFactory.getStorageHelper(helperName, helperArgs);
     if(!helperObj) {
-        return make(env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
+        return nifpp::make(env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
     } else {
         auto resource =
                     nifpp::construct_resource<helper_ptr>(helperObj);
 
-        return make(env, std::make_tuple(ok, resource));
+        return nifpp::make(env, std::make_tuple(ok, resource));
+    }
+
+}
+
+static ERL_NIF_TERM get_flag_value(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    auto flag = nifpp::get<nifpp::str_atom>(env, argv[0]);
+    auto it = atom_to_flag.find(flag);
+    if(it == atom_to_flag.end()) {
+        auto it_o = atom_to_open_mode.find(flag);
+        if(it_o == atom_to_open_mode.end()) {
+            throw nifpp::badarg();
+        } else {
+            return nifpp::make(env, it_o->second);
+        }
+    } else {
+        return nifpp::make(env, it->second);
     }
 
 }
@@ -636,7 +659,7 @@ static ERL_NIF_TERM chmod(NifCTX ctx, const std::string file, const mode_t mode)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM chown(NifCTX ctx, const std::string file, const uid_t uid, const gid_t gid)
+static ERL_NIF_TERM chown(NifCTX ctx, const std::string file, const int uid, const int gid)
 {
     ctx.helper_obj->ash_chown(*ctx.helper_ctx, file, uid, gid, [=](ErrorRef e) {
         handle_result(ctx, e);
@@ -845,7 +868,8 @@ static ErlNifFunc nif_funcs[] =
     {"new_helper_obj",  2, new_helper_obj},
     {"new_helper_ctx",  0, new_helper_ctx},
     {"set_user_ctx",    3, set_user_ctx},
-    {"get_user_ctx",    1, get_user_ctx}
+    {"get_user_ctx",    1, get_user_ctx},
+    {"get_flag_value",  1, get_flag_value}
 };
 
 
