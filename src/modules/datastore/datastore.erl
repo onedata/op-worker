@@ -500,6 +500,7 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
         end, Hooked),
     Return.
 
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Runs synchronously all post-hooks for given model, method, context and
