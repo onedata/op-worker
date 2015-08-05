@@ -38,81 +38,80 @@
 %%% API
 %%%===================================================================
 
-%% new_helper_obj/2
 %%--------------------------------------------------------------------
 %% @doc Creates new helper object. Returned handle is only valid within local Erlang-VM.
+%% @end
 %%--------------------------------------------------------------------
 -spec new_helper_obj(HelperName :: string() | binary(), HelperArgs :: [string() | binary()]) ->
     {ok, HelperObj :: resource_handle()} | {error, invalid_helper}.
 new_helper_obj(_HelperName, _HelperArgs) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% new_helper_ctx/0
 %%--------------------------------------------------------------------
 %% @doc Creates new helper context object. Returned handle is only valid within local Erlang-VM.
+%% @end
 %%--------------------------------------------------------------------
 -spec new_helper_ctx() -> {ok, HelperCTX :: resource_handle()}.
 new_helper_ctx() ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% new_helper_ctx/0
 %%--------------------------------------------------------------------
 %% @doc Creates new helper context object. Returned handle is only valid within local Erlang-VM.
+%% @end
 %%--------------------------------------------------------------------
--spec get_flag_value(flag() | open_mode()) -> non_neg_integer().
+-spec get_flag_value(flag() | open_mode() | file_type()) -> non_neg_integer().
 get_flag_value(_Flag) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% set_user_ctx/3
 %%--------------------------------------------------------------------
 %% @doc Sets FS UID / FS GID in given helper context.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_user_ctx(HelperCTX :: resource_handle(), User :: integer(), Group :: integer()) -> ok.
 set_user_ctx(_HelperCTX, _User, _Group) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
-%% get_user_ctx/1
 %%--------------------------------------------------------------------
 %% @doc Gets current FS UID / FS GID from given helper context.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_user_ctx(HelperCTX :: resource_handle()) -> {ok, {UID :: integer(), GID :: integer()}}.
 get_user_ctx(_HelperCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% username_to_uid/1
 %%--------------------------------------------------------------------
 %% @doc Transalates given username to UID.
+%% @end
 %%--------------------------------------------------------------------
 -spec username_to_uid(UName :: string() | binary()) -> {ok, UID :: integer()}.
 username_to_uid(_UName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% groupname_to_gid/1
 %%--------------------------------------------------------------------
 %% @doc Translates given groupname to GID.
+%% @end
 %%--------------------------------------------------------------------
 -spec groupname_to_gid(GName :: string() | binary()) -> {ok, GID :: integer()}.
 groupname_to_gid(_GName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% set_flags/2
 %%--------------------------------------------------------------------
 %% @doc Set 'flags' field in helper context.
+%% @end
 %%--------------------------------------------------------------------
 -spec set_flags(HelperCTX :: resource_handle(), [flag()]) -> ok.
 set_flags(_HelperCTX, _Flags) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% get_flags/1
 %%--------------------------------------------------------------------
 %% @doc Gets 'flags' field value from helper context.
-%%--------------------------------------------------------------------
+%% @end
+%%----------------------------------------------------
 -spec get_flags(HelperCTX :: resource_handle()) -> {ok, Flags :: [flag()]}.
 get_flags(_HelperCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% set_fd/2
 %%--------------------------------------------------------------------
 %% @doc Gets 'fh' (file handle) field in helper context. Normally open/3 sets this field, so this function
 %%      shall be used only to override it.
@@ -122,15 +121,14 @@ get_flags(_HelperCTX) ->
 set_fd(_HelperCTX, _FD) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% get_fd/1
 %%--------------------------------------------------------------------
 %% @doc Gets 'fh' field value from helper context.
+%% @end
 %%--------------------------------------------------------------------
 -spec get_fd(HelperCTX :: resource_handle()) -> {ok, FD :: fd()}.
 get_fd(_HelperCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% getattr/3
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -141,7 +139,6 @@ get_fd(_HelperCTX) ->
 getattr(_HelperInstance, _HelperCTX, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% access/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -152,7 +149,6 @@ getattr(_HelperInstance, _HelperCTX, _File) ->
 access(_HelperInstance, _HelperCTX, _File, _Mask) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% mknod/5
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -163,7 +159,6 @@ access(_HelperInstance, _HelperCTX, _File, _Mask) ->
 mknod(_HelperInstance, _HelperCTX, _File, _Mode, _Dev) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% mkdir/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -174,7 +169,6 @@ mknod(_HelperInstance, _HelperCTX, _File, _Mode, _Dev) ->
 mkdir(_HelperInstance, _HelperCTX, _File, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% unlink/3
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -185,7 +179,6 @@ mkdir(_HelperInstance, _HelperCTX, _File, _Mode) ->
 unlink(_HelperInstance, _HelperCTX, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% rmdir/3
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -196,7 +189,6 @@ unlink(_HelperInstance, _HelperCTX, _File) ->
 rmdir(_HelperInstance, _HelperCTX, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% symlink/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -207,7 +199,6 @@ rmdir(_HelperInstance, _HelperCTX, _File) ->
 symlink(_HelperInstance, _HelperCTX, _File, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% rename/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -218,7 +209,6 @@ symlink(_HelperInstance, _HelperCTX, _File, _Mode) ->
 rename(_HelperInstance, _HelperCTX, _From, _To) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% link/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -229,7 +219,6 @@ rename(_HelperInstance, _HelperCTX, _From, _To) ->
 link(_HelperInstance, _HelperCTX, _From, _To) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% chmod/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -240,7 +229,6 @@ link(_HelperInstance, _HelperCTX, _From, _To) ->
 chmod(_HelperInstance, _HelperCTX, _File, _Mode) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% chown/5
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -251,7 +239,6 @@ chmod(_HelperInstance, _HelperCTX, _File, _Mode) ->
 chown(_HelperInstance, _HelperCTX, _File, _UID, _GID) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% truncate/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -262,7 +249,6 @@ chown(_HelperInstance, _HelperCTX, _File, _UID, _GID) ->
 truncate(_HelperInstance, _HelperCTX, _File, _Size) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% open/3
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -273,7 +259,6 @@ truncate(_HelperInstance, _HelperCTX, _File, _Size) ->
 open(_HelperInstance, _HelperCTX, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% read/5
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -284,7 +269,6 @@ open(_HelperInstance, _HelperCTX, _File) ->
 read(_HelperInstance, _HelperCTX, _File, _Offset, _Size) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% write/5
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -295,7 +279,6 @@ read(_HelperInstance, _HelperCTX, _File, _Offset, _Size) ->
 write(_HelperInstance, _HelperCTX, _File, _Offset, _Data) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% release/3
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -306,7 +289,6 @@ write(_HelperInstance, _HelperCTX, _File, _Offset, _Data) ->
 release(_HelperInstance, _HelperCTX, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% flush/3
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
@@ -317,7 +299,6 @@ release(_HelperInstance, _HelperCTX, _File) ->
 flush(_HelperInstance, _HelperCTX, _File) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%% fsync/4
 %%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.

@@ -25,13 +25,12 @@
 -type error_code() :: atom().
 -type handle() :: #helper_handle{}.
 
--export_type([file/0, error_code/0]).
+-export_type([file/0, error_code/0, handle/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%% new_handle/2
 %%--------------------------------------------------------------------
 %% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
 %% @end
@@ -42,7 +41,6 @@ new_handle(HelperName, HelperArgs) ->
     {ok, CTX} = helpers_nif:new_helper_ctx(),
     #helper_handle{instance = Instance, ctx = CTX}.
 
-%% getattr/2
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -52,7 +50,6 @@ new_handle(HelperName, HelperArgs) ->
 getattr(#helper_handle{} = HelperHandle, File) ->
     apply_helper_nif(HelperHandle, getattr, [File]).
 
-%% access/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -62,7 +59,6 @@ getattr(#helper_handle{} = HelperHandle, File) ->
 access(#helper_handle{} = HelperHandle, File, Mask) ->
     apply_helper_nif(HelperHandle, access, [File, Mask]).
 
-%% mknod/4
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -72,7 +68,6 @@ access(#helper_handle{} = HelperHandle, File, Mask) ->
 mknod(#helper_handle{} = HelperHandle, File, Mode, reg) ->
     apply_helper_nif(HelperHandle, mknod, [File, Mode bor helpers_nif:get_flag_value('S_IFREG'), 0]).
 
-%% mkdir/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -82,7 +77,6 @@ mknod(#helper_handle{} = HelperHandle, File, Mode, reg) ->
 mkdir(#helper_handle{} = HelperHandle, File, Mode) ->
     apply_helper_nif(HelperHandle, mkdir, [File, Mode]).
 
-%% unlink/2
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -92,7 +86,6 @@ mkdir(#helper_handle{} = HelperHandle, File, Mode) ->
 unlink(#helper_handle{} = HelperHandle, File) ->
     apply_helper_nif(HelperHandle, unlink, [File]).
 
-%% rmdir/2
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -102,7 +95,6 @@ unlink(#helper_handle{} = HelperHandle, File) ->
 rmdir(#helper_handle{} = HelperHandle, File) ->
     apply_helper_nif(HelperHandle, rmdir, [File]).
 
-%% symlink/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -112,7 +104,6 @@ rmdir(#helper_handle{} = HelperHandle, File) ->
 symlink(#helper_handle{} = HelperHandle, From, To) ->
     apply_helper_nif(HelperHandle, symlink, [From, To]).
 
-%% rename/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -122,7 +113,6 @@ symlink(#helper_handle{} = HelperHandle, From, To) ->
 rename(#helper_handle{} = HelperHandle, From, To) ->
     apply_helper_nif(HelperHandle, rename, [From, To]).
 
-%% link/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -132,7 +122,6 @@ rename(#helper_handle{} = HelperHandle, From, To) ->
 link(#helper_handle{} = HelperHandle, From, To) ->
     apply_helper_nif(HelperHandle, link, [From, To]).
 
-%% chmod/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -142,7 +131,6 @@ link(#helper_handle{} = HelperHandle, From, To) ->
 chmod(#helper_handle{} = HelperHandle, File, Mode) ->
     apply_helper_nif(HelperHandle, chmod, [File, Mode]).
 
-%% chown/4
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -152,7 +140,6 @@ chmod(#helper_handle{} = HelperHandle, File, Mode) ->
 chown(#helper_handle{} = HelperHandle, File, UID, GID) ->
     apply_helper_nif(HelperHandle, chown, [File, UID, GID]).
 
-%% truncate/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -162,7 +149,6 @@ chown(#helper_handle{} = HelperHandle, File, UID, GID) ->
 truncate(#helper_handle{} = HelperHandle, File, Size) ->
     apply_helper_nif(HelperHandle, truncate, [File, Size]).
 
-%% open/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -179,7 +165,6 @@ open(#helper_handle{} = HelperHandle, File, rw) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDWR']),
     apply_helper_nif(HelperHandle, open, [File]).
 
-%% read/4
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -190,7 +175,6 @@ open(#helper_handle{} = HelperHandle, File, rw) ->
 read(#helper_handle{} = HelperHandle, File, Offset, Size) ->
     apply_helper_nif(HelperHandle, read, [File, Offset, Size]).
 
-%% write/4
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -201,7 +185,6 @@ read(#helper_handle{} = HelperHandle, File, Offset, Size) ->
 write(#helper_handle{} = HelperHandle, File, Offset, Data) ->
     apply_helper_nif(HelperHandle, write, [File, Offset, Data]).
 
-%% release/2
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -211,7 +194,6 @@ write(#helper_handle{} = HelperHandle, File, Offset, Data) ->
 release(#helper_handle{} = HelperHandle, File) ->
     apply_helper_nif(HelperHandle, release, [File]).
 
-%% flush/2
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -221,7 +203,6 @@ release(#helper_handle{} = HelperHandle, File) ->
 flush(#helper_handle{} = HelperHandle, File) ->
     apply_helper_nif(HelperHandle, flush, [File]).
 
-%% fsync/3
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
 %%      First argument shall be #helper_handle{} from new_handle/2.
@@ -238,8 +219,8 @@ fsync(#helper_handle{} = HelperHandle, File, false) ->
 %%%===================================================================
 
 
-%% apply_helper_nif/3
 %%--------------------------------------------------------------------
+%% @private
 %% @doc Calls given helpers_nif method with given args while inserting HelperInstance :: resource_handle() and
 %%      HelperCTX :: resource_handle() to this arguments list (from given #helper_handle{}.
 %%      After call, receives and returns response.
