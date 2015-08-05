@@ -17,46 +17,54 @@
 %%% Main function
 %%%===================================================================
 
-main(_) ->
+
+%%%===================================================================
+%%% Main function
+%%%===================================================================
+
+main([BaseDir]) ->
   % gettint lists of excluded modules and ebin directories
   % from cover.spec file
-  {ok, Terms} = file:consult("test_distributed/cover.spec"),
+  {ok, Terms} = file:consult(filename:join([BaseDir, "test_distributed/cover.spec"])),
   ExcludedModules = lists:map(fun(X) -> atom_to_list(X) end, get_excluded_modules(Terms)),
   EbinDirs = get_ebin_directories(Terms),
   % lists of module names
-  AllModules = [get_modules_list(X, ".beam") || X <- EbinDirs],
-  {_, CtModules} = get_modules_list("test_distributed", ".erl"),
+  AllModules = [get_modules_list(filename:join([BaseDir, X]), ".beam") || X <- EbinDirs],
+  {_, CtModules} = get_modules_list(filename:join([BaseDir, "test_distributed"]), ".erl"),
   OmittedModules = CtModules ++ ExcludedModules,
-
+io:format("Ping~n"),
   % loading .beam files for cover server
   cover:start(),
-  [[cover:compile_beam(Ebin ++ "/" ++ M)
+  [[cover:compile_beam(filename:join([Ebin, M]))
       || M <- Modules, not lists:member(M, OmittedModules)]
     || {Ebin, Modules} <- AllModules],
-
+io:format("Ping~n"),
   % getting directory name in which coverage reports from CT are
-  {ok, LS} = file:list_dir("test_distributed/logs"),
+  {ok, LS} = file:list_dir(filename:join([BaseDir, "test_distributed", "logs"])),
   CT_dir = hd(lists:filter(
     fun(X) -> lists:prefix("ct_run", X) end,
     LS)),
   % loading coverage reports
-  ok = cover:import("test_distributed/logs/" ++ CT_dir ++ "/all.coverdata"),
-  ok = cover:import(".eunit/eunit.coverdata"),
-
+  ok = cover:import(filename:join([BaseDir, "test_distributed", "logs", CT_dir, "/all.coverdata"])),
+  ok = cover:import(filename:join([BaseDir, ".eunit", "eunit.coverdata"])),
+io:format("Ping~n"),
   % output directory; if exists, we re-create it
-  case file:make_dir("test_coverage") of
+  CoverDirPath = filename:join([BaseDir, "test_coverage"]),
+  case file:make_dir(CoverDirPath) of
     ok -> ok;
-    {error, eexist} -> file:del_dir("test_coverage"),
-      file:make_dir("test_coverage")
+    {error, eexist} -> file:del_dir(CoverDirPath),
+      file:make_dir(CoverDirPath)
   end,
-
+io:format("Ping~n"),
   % generating reports for single modules
   [cover:analyze_to_file(
-      Mod, "test_coverage/" ++ atom_to_list(Mod) ++ ".COVER.html", [html])
+      Mod,
+      filename:join([BaseDir, "test_coverage", atom_to_list(Mod) ++ ".COVER.html"]),
+      [html])
     || Mod <- cover:modules()],
   % generating .coverdata, just in case
-  cover:export("test_coverage/merged.coverdata"),
-
+  cover:export(filename:join([BaseDir, "test_coverage", "merged.coverdata"])),
+io:format("Ping~n"),
   % generating coverage stats for each module
   % [{module, {covered, noncovered}}]
   RawCoverage = [cover:analyse(Mod, module) || Mod <- cover:modules()],
@@ -67,8 +75,8 @@ main(_) ->
     end,
     ModulesCoverage),
   % generating index.html
-  generate_html_report(ModulesCoverage_Sorted),
-
+  generate_html_report(ModulesCoverage_Sorted, BaseDir),
+io:format("Ping~n"),
   cover:stop().
 
 %%%===================================================================
@@ -129,8 +137,10 @@ generate_summary_line(ModulesCoverage) ->
 %%% and for whole project and saves it in index.html file.
 %%% @end
 %%%-------------------------------------------------------------------
-generate_html_report(ModulesCoverage) ->
-  {ok, Report} = file:open("test_coverage/index.html", [write]),
+generate_html_report(ModulesCoverage, BaseDir) ->
+  {ok, Report} = file:open(
+    filename:join([BaseDir, "test_coverage", "index.html"]),
+    [write]),
   file:write(Report, "<html>\n<body>\n"),
   file:write(Report, "<table border=3 cellpadding=5>\n"),
   file:write(Report, "<tr><th>Module</th><th>Covered (%)</th>
