@@ -18,6 +18,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("modules/event_manager/events.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -46,7 +47,16 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    {ok, #{}}.
+    Sub = #write_event_subscription{
+        producer = all,
+        event_stream = ?WRITE_EVENT_STREAM#event_stream{
+            metadata = 0,
+            emission_time = 500,
+            handlers = [fun(Evts) -> worker_proxy:cast(fslogic_worker, {write_event, Evts}) end]
+        }
+    },
+    {ok, SubId} = event_manager:subscribe(#subscription{value = Sub}),
+    {ok, #{sub_id => SubId}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -66,6 +76,9 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
+handle(#write_event{blocks = Blocks, file_id = FileUUID}) ->
+    fslogic_blocks:update(FileUUID, Blocks),
+    ?info("WRITE: ~p", [Evts]);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -99,7 +112,7 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
         ?debug("Processing request: ~p", [FuseRequest]),
         {ok, #document{value = Session}} = session:get(SessId),
         ?info("Fuse request ~p from user ~p", [FuseRequest, Session]),
-        Resp = handle_fuse_request(#fslogic_ctx{session = Session}, FuseRequest),
+        Resp = handle_fuse_request(#fslogic_ctx{session = Session, session_id = SessId}, FuseRequest),
         ?info("Fuse request ~p from user ~p: ~p", [FuseRequest, Session, Resp]),
         Resp
     catch

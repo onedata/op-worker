@@ -25,7 +25,8 @@
 
 %% Context definition
 -record(fslogic_ctx, {
-    session :: #session{}
+    session :: #session{},
+    session_id :: session:id()
 }).
 
 %% Stub record

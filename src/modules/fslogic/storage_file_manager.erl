@@ -13,9 +13,10 @@
 
 -include("types.hrl").
 -include("errors.hrl").
+-include("modules/datastore/datastore.hrl").
 
--export([mkdir/1, mkdir/2, mv/2, chmod/2, chown/3, link/2]).
--export([stat/1, read/3, write/3, create/1, create/2, truncate/2, rm/1]).
+-export([mkdir/4, mv/2, chmod/2, chown/3, link/2]).
+-export([stat/1, read/3, write/3, create/4, truncate/2, rm/1]).
 
 %%%===================================================================
 %%% API
@@ -27,20 +28,23 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(Path :: file_path()) -> {ok, file_id()} | error_reply().
-mkdir(Path) ->
-    DefaultMode = 777, % TODO retrieve default mode
-    mkdir(Path, DefaultMode).
+mkdir(Storage, Path, Mode) ->
+    create(Storage, Path, Mode, false).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a directory on storage with given perms.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec mkdir(Path :: file_path(), Mode :: perms_octal()) -> {ok, file_id()} | error_reply().
-mkdir(_Path, _Mode) ->
-    {ok, <<"">>}.
+mkdir(Storage, Path, Mode, Recursive) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    case helpers:mkdir(HelperHandle, Path, Mode) of
+        ok ->
+            ok;
+        {error, enoent} when Recursive ->
+            Tokens = fslogic_path:split(Path),
+            LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
+            ok = mkdir(Storage, LeafLess, 8#755, true),
+            mkdir(Storage, Path, Mode, false);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -126,21 +130,23 @@ read(_FileHandle, _Offset, _MaxSize) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create(Path :: file_path()) -> {ok, file_id()} | error_reply().
-create(Path) ->
-    DefaultMode = 777, % TODO retrieve default mode
-    create(Path, DefaultMode).
+create(Storage, Path, Mode) ->
+    create(Storage, Path, Mode, false).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a new file on storage with given permissions.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec create(Path :: file_path(), Mode :: perms_octal()) -> {ok, file_id()} | error_reply().
-create(_Path, _Mode) ->
-    {ok, <<"">>}.
+create(Storage, Path, Mode, Recursive) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    case helpers:mknod(HelperHandle, Path, Mode, reg) of
+        ok ->
+            ok;
+        {error, enoent} when Recursive ->
+            Tokens = fslogic_path:split(Path),
+            LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
+            ok = mkdir(Storage, LeafLess, 8#333, true),
+            create(Storage, Path, Mode, false);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 
 %%--------------------------------------------------------------------

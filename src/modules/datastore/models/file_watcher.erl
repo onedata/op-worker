@@ -8,7 +8,7 @@
 %%% @doc @todo: Write me!
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_location).
+-module(file_watcher).
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
@@ -16,11 +16,21 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4]).
--export([run_synchronized/2]).
+    'after'/5, before/4, list/0]).
+-export([insert_open_watcher/2]).
 
-run_synchronized(ResId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResId, Fun).
+insert_open_watcher(Key, SessionId) ->
+    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
+        fun() ->
+            case get(Key) of
+                {ok, #document{value = #file_watcher{open_sessions = OpenSess} = Value} = Doc} ->
+                    {ok, _} = save(Doc#document{value = Value#file_watcher{open_sessions = [SessionId | OpenSess]}}),
+                    ok;
+                {error, {not_found, _}} ->
+                    {ok, _} = create(#document{key = Key, value = #file_watcher{open_sessions = [SessionId]}}),
+                    ok
+            end
+        end).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -33,8 +43,11 @@ run_synchronized(ResId, Fun) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+save(#document{key = Key} = Document) when is_binary(Key) ->
+    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
+        fun() ->
+            datastore:save(?STORE_LEVEL, Document)
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -53,6 +66,11 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
+create(#document{key = Key} = Document) when is_binary(Key) ->
+    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
+        fun() ->
+            datastore:create(?STORE_LEVEL, Document)
+        end);
 create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
@@ -90,7 +108,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(system, [{file_meta, create}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,6 +119,8 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
+'after'(file_meta, create, _Level, _Context, {ok, Key}) ->
+    create(#document{key = Key, value = #file_watcher{}});
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -115,3 +135,16 @@ model_init() ->
     ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+
+
+res_id(Key) ->
+    <<"watcher_", Key/binary>>.

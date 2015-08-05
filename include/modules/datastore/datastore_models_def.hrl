@@ -33,7 +33,8 @@
     global_cache_controller,
     local_cache_controller,
     storage,
-    file_location
+    file_location,
+    file_watcher
 ]).
 
 %% List of all global caches
@@ -125,4 +126,9 @@
     blocks :: []
 }).
 
+
+-record(file_watcher, {
+    open_sessions = [],
+    attr_sessions = []
+}).
 -endif.

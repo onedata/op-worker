@@ -40,6 +40,7 @@
 -define(ROOT_DIR_NAME, <<"">>).
 
 -define(SNAPSHOT_SEPARATOR, "::").
+-define(LOCATION_PREFIX, "location_").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -47,7 +48,7 @@
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
--export([get_ancestors/1, attach_location/3]).
+-export([get_ancestors/1, attach_location/3, get_locations/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -308,6 +309,19 @@ list_children(Entry, Offset, Count) ->
                      {error, Reason}
              end
          end).
+
+
+get_locations(Entry) ->
+    ?run(begin
+    {ok, #document{} = File} = get(Entry),
+    datastore:foreach_link(?LINK_STORE_LEVEL, File,
+        fun
+            (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
+                [Key | AccIn];
+            (_LinkName, _LinkTarget, AccIn) ->
+                AccIn
+        end, [])
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -705,4 +719,4 @@ is_snapshot(FileName) ->
 
 
 location_ref(ProviderId) ->
-    <<"location_", ProviderId/binary>>.
+    <<?LOCATION_PREFIX, ProviderId/binary>>.
