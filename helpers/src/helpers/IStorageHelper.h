@@ -28,18 +28,6 @@
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
 
-//#include "erl_nif.h"
-//
-//extern "C" {
-//
-//static ErlNifFunc nif_funcs[] = {
-//
-//};
-//
-//ERL_NIF_INIT(helpers_nif, nif_funcs, NULL, NULL, NULL, NULL)
-//
-//}
-
 namespace one {
 namespace helpers {
 
