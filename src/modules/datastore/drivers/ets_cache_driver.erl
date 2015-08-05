@@ -68,7 +68,7 @@ update(#model_config{bucket = ModelName} = ModelConfig, Key, Diff) when is_funct
             NewValue = Diff(Value),
             true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
             {ok, Key}
-    end.
+    end;
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_map(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [] ->
