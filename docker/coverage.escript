@@ -32,22 +32,22 @@ main([BaseDir]) ->
   AllModules = [get_modules_list(filename:join([BaseDir, X]), ".beam") || X <- EbinDirs],
   {_, CtModules} = get_modules_list(filename:join([BaseDir, "test_distributed"]), ".erl"),
   OmittedModules = CtModules ++ ExcludedModules,
-io:format("Ping~n"),
+
   % loading .beam files for cover server
   cover:start(),
   [[cover:compile_beam(filename:join([Ebin, M]))
       || M <- Modules, not lists:member(M, OmittedModules)]
     || {Ebin, Modules} <- AllModules],
-io:format("Ping~n"),
+
   % getting directory name in which coverage reports from CT are
   {ok, LS} = file:list_dir(filename:join([BaseDir, "test_distributed", "logs"])),
   CT_dir = hd(lists:filter(
     fun(X) -> lists:prefix("ct_run", X) end,
     LS)),
   % loading coverage reports
-  ok = cover:import(filename:join([BaseDir, "test_distributed", "logs", CT_dir, "/all.coverdata"])),
+  ok = cover:import(filename:join([BaseDir, "test_distributed", "logs", CT_dir, "all.coverdata"])),
   ok = cover:import(filename:join([BaseDir, ".eunit", "eunit.coverdata"])),
-io:format("Ping~n"),
+
   % output directory; if exists, we re-create it
   CoverDirPath = filename:join([BaseDir, "test_coverage"]),
   case file:make_dir(CoverDirPath) of
@@ -55,7 +55,7 @@ io:format("Ping~n"),
     {error, eexist} -> file:del_dir(CoverDirPath),
       file:make_dir(CoverDirPath)
   end,
-io:format("Ping~n"),
+
   % generating reports for single modules
   [cover:analyze_to_file(
       Mod,
@@ -64,7 +64,7 @@ io:format("Ping~n"),
     || Mod <- cover:modules()],
   % generating .coverdata, just in case
   cover:export(filename:join([BaseDir, "test_coverage", "merged.coverdata"])),
-io:format("Ping~n"),
+
   % generating coverage stats for each module
   % [{module, {covered, noncovered}}]
   RawCoverage = [cover:analyse(Mod, module) || Mod <- cover:modules()],
@@ -76,7 +76,7 @@ io:format("Ping~n"),
     ModulesCoverage),
   % generating index.html
   generate_html_report(ModulesCoverage_Sorted, BaseDir),
-io:format("Ping~n"),
+
   cover:stop().
 
 %%%===================================================================
