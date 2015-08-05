@@ -24,7 +24,6 @@
 #include <system_error>
 #include <future>
 
-
 namespace one {
 namespace helpers {
 
@@ -123,11 +122,7 @@ public:
 
 protected:
     template <class T>
-<<<<<<< HEAD
     static void setPosixError(std::shared_ptr<promise_t<T>> p, int posixCode)
-=======
-    static void setPosixError(std::shared_ptr<std::promise<T>> p, int posixCode)
->>>>>>> origin/develop
     {
         p->set_exception(std::make_exception_ptr(makePosixError(posixCode)));
     }
