@@ -120,7 +120,7 @@
         catch
             E1:E2 ->
                 ?error_stacktrace("Error in ~p end_disk_op. Args: ~p. Error: ~p:~p.", 
-                    [{__Cache, Key, ModelName, Op}, E1, E2]),
+                    [__Cache, {Key, ModelName, Op}, E1, E2]),
                 {error, ending_disk_op_failed}
         end
 ).
@@ -182,7 +182,7 @@
         catch
             E1:E2 ->
                 ?error_stacktrace("Error in ~p start_disk_op. Args: ~p. Error: ~p:~p.",
-                    [{__Cache, Key, ModelName, Op}, E1, E2]),
+                    [__Cache, {Key, ModelName, Op}, E1, E2]),
                 {error, preparing_disk_op_failed}
         end
 ).
@@ -232,7 +232,7 @@
         catch
             E1:E2 ->
                 ?error_stacktrace("Error in ~p log_link_del. Args: ~p. Error: ~p:~p.",
-                    [{__Cache, Key, ModelName, LinkNames, Action}, E1, E2]),
+                    [__Cache, {Key, ModelName, LinkNames, Action}, E1, E2]),
                 {error, preparing_disk_op_failed}
         end
 ).
