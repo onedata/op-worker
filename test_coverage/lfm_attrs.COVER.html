@@ -1,0 +1,91 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/lfm_attrs.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/fslogic/lfm_submodules/lfm_attrs.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %% @doc This module performs attributes-related operations of lfm_submodules.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(lfm_attrs).
+        |  
+        |  -include("types.hrl").
+        |  -include("errors.hrl").
+        |  
+        |  %% API
+        |  -export([stat/1, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns file attributes.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec stat(FileKey :: file_key()) -&gt; {ok, file_attributes()} | error_reply().
+        |  stat(_Path) -&gt;
+<font color=red>     0..|      {ok, undefined}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns file's extended attribute by key.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -&gt; {ok, xattr_value()} | error_reply().
+        |  get_xattr(_Path, _Key) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Updates file's extended attribute by key.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -&gt; ok |  error_reply().
+        |  set_xattr(_Path, _Key, _Value) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Removes file's extended attribute by key.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -&gt; ok |  error_reply().
+        |  remove_xattr(_Path, _Key) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns complete list of extended attributes of a file.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list_xattr(FileKey :: file_key()) -&gt; {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
+        |  list_xattr(_Path) -&gt;
+<font color=red>     0..|      {ok, []}.</font>
+        |  
+        |  
+</pre>
+</body>
+</html>

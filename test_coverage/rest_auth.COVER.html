@@ -1,0 +1,92 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/rest_auth.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/http_worker/helpers/rest_auth.erl by COVER 2015-08-06 at 11:00:42
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Tomasz Lichon
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% Helper function for user authentication in REST/CDMI
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(rest_auth).
+        |  -author("Tomasz Lichon").
+        |  
+        |  -include("modules/http_worker/http_common.hrl").
+        |  -include("modules/datastore/datastore.hrl").
+        |  -include("proto/oneclient/handshake_messages.hrl").
+        |  
+        |  %% API
+        |  -export([authenticate/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Authenticates user basing on request headers
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec authenticate(Req :: req()) -&gt; {{ok, #identity{}} | {error, term()}, req()}.
+        |  authenticate(Req) -&gt;
+     2..|      case cowboy_req:header(&lt;&lt;"X-Auth-Token"&gt;&gt;, Req) of
+        |          {undefined, NewReq} -&gt;
+     2..|              case cowboy_req:header(&lt;&lt;"x-auth-token"&gt;&gt;, NewReq) of
+        |                  {undefined, NewReq2} -&gt;
+<font color=red>     0..|                      authenticate_using_cert(NewReq2);</font>
+        |                  {Token, NewReq2}-&gt;
+     2..|                      authenticate_using_token(NewReq2, Token)
+        |              end;
+        |          {Token, NewReq} -&gt;
+<font color=red>     0..|              authenticate_using_token(NewReq, Token)</font>
+        |      end.
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Athenticates user basing on provided token
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec authenticate_using_token(req(), Token :: binary()) -&gt; {{ok, #identity{}} | {error, term()}, req()}.
+        |  authenticate_using_token(Req, Token) -&gt;
+     2..|      case identity:get_or_fetch(#token{value = Token}) of
+        |          {ok, #document{value = Iden}} -&gt;
+     1..|              {{ok, Iden}, Req};
+        |          Error -&gt;
+     1..|              {Error, Req}
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Athenticates user basing on onedata-internal certificate headers
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec authenticate_using_cert(req()) -&gt; {{ok, #identity{}} | {error, term()}, req()}.
+        |  authenticate_using_cert(Req) -&gt;
+<font color=red>     0..|      Socket = cowboy_req:get(socket, Req),</font>
+<font color=red>     0..|      {ok, Der} = ssl2:peercert(Socket),</font>
+<font color=red>     0..|      Certificate = public_key:pkix_decode_cert(Der, otp),</font>
+<font color=red>     0..|      case identity:get_or_fetch(Certificate) of</font>
+        |          {ok, #document{value = Iden}} -&gt;
+<font color=red>     0..|              {{ok, Iden}, Req};</font>
+        |          Error -&gt;
+<font color=red>     0..|              {Error, Req}</font>
+        |      end.
+</pre>
+</body>
+</html>

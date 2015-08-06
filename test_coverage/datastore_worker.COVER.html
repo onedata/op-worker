@@ -1,0 +1,150 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/datastore_worker.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/datastore/datastore_worker.erl by COVER 2015-08-06 at 11:00:42
+
+****************************************************************************
+
+        |  %%%--------------------------------------------------------------------
+        |  %%% @author Rafal Slota
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%--------------------------------------------------------------------
+        |  %%% @doc datastore worker's implementation
+        |  %%% @end
+        |  %%%--------------------------------------------------------------------
+        |  -module(datastore_worker).
+        |  -author("Rafal Slota").
+        |  
+        |  -behaviour(worker_plugin_behaviour).
+        |  
+        |  -include("global_definitions.hrl").
+        |  -include("modules/datastore/datastore_engine.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% worker_plugin_behaviour callbacks
+        |  -export([init/1, handle/1, cleanup/0]).
+        |  -export([state_get/1, state_put/2]).
+        |  
+        |  %%%===================================================================
+        |  %%% worker_plugin_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback init/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(Args :: term()) -&gt;
+        |      {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
+        |  init(_Args) -&gt;
+        |  
+        |      %% Get Riak nodes
+    30..|      RiakNodes =
+        |          case application:get_env(?APP_NAME, db_nodes) of
+        |              {ok, Nodes} -&gt;
+    30..|                  lists:map(
+        |                      fun(NodeString) -&gt;
+    50..|                          [HostName, Port] = string:tokens(atom_to_list(NodeString), ":"),
+    50..|                          {list_to_binary(HostName), list_to_integer(Port)}
+        |                      end, Nodes);
+        |              _ -&gt;
+<font color=red>     0..|                  []</font>
+        |          end,
+        |  
+    30..|      State = lists:foldl(
+        |          fun(Model, StateAcc) -&gt;
+   240..|              #model_config{name = RecordName} = ModelConfig = Model:model_init(),
+   240..|              maps:put(RecordName, ModelConfig, StateAcc)
+        |          end, #{}, ?MODELS),
+        |  
+    30..|      {ok, State#{riak_nodes =&gt; RiakNodes}}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback handle/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle(Request) -&gt; Result when
+        |      Request :: ping | healthcheck |
+        |      {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
+        |      Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
+        |      {error, Reason},
+        |      Response :: term(),
+        |      Reason :: term().
+        |  handle(ping) -&gt;
+<font color=red>     0..|      pong;</font>
+        |  
+        |  handle(healthcheck) -&gt;
+    89..|      State = worker_host:state_to_map(?MODULE),
+    89..|      HC = #{
+        |          datastore_state_init =&gt; datastore:healthcheck(),
+        |          ?PERSISTENCE_DRIVER =&gt; catch ?PERSISTENCE_DRIVER:healthcheck(State),
+        |          ?LOCAL_CACHE_DRIVER =&gt; catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
+        |          ?DISTRIBUTED_CACHE_DRIVER =&gt; catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+        |      },
+        |  
+    89..|      maps:fold(
+        |          fun
+        |              (_, ok, AccIn) -&gt;
+   356..|                  AccIn;
+        |              (K, {error, Reason}, _AccIn) when is_atom(K) -&gt;
+<font color=red>     0..|                  ?error("Driver ~p healthcheck error: ~p", [K, Reason]),</font>
+<font color=red>     0..|                  {error, K};</font>
+        |              (K, Reason, _AccIn) -&gt;
+<font color=red>     0..|                  ?error("Unknown status of driver ~p, healthcheck error: ~p", [K, Reason]),</font>
+<font color=red>     0..|                  {error, unknown_driver_status}</font>
+        |          end, ok, HC);
+        |  
+        |  %% Proxy call to given datastore driver
+        |  handle({driver_call, Module, Method, Args}) -&gt;
+ 26795..|      try erlang:apply(Module, Method, Args) of
+ 17380..|          ok -&gt; ok;
+  7324..|          {ok, Response} -&gt; {ok, Response};
+  2041..|          {error, Reason} -&gt; {error, Reason}
+        |      catch
+        |          _:Reason -&gt;
+    50..|              ?error_stacktrace("datastore request failed due to ~p", [Reason]),
+    50..|              {error, Reason}
+        |      end;
+        |  
+        |  %% Unknown request
+        |  handle(_Request) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback cleanup/0
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec cleanup() -&gt; Result when
+        |      Result :: ok.
+        |  cleanup() -&gt;
+    30..|      ok.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Puts given Value in datastore worker's state
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec state_put(Key :: term(), Value :: term()) -&gt; ok.
+        |  state_put(Key, Value) -&gt;
+    30..|      worker_host:state_put(?MODULE, Key, Value).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Puts Value from datastore worker's state
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec state_get(Key :: term()) -&gt; Value :: term().
+        |  state_get(Key) -&gt;
+ 29999..|      worker_host:state_get(?MODULE, Key).
+</pre>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/global_cache_controller.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/datastore/models/global_cache_controller.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Michal Wrzeszcz
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc Model that is used to controle memory utilization by global cache.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(global_cache_controller).
+        |  -author("Michal Wrzeszcz").
+        |  -behaviour(model_behaviour).
+        |  
+        |  -include("modules/datastore/datastore.hrl").
+        |  -include("modules/datastore/datastore_model.hrl").
+        |  -include("modules/datastore/datastore_engine.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% model_behaviour callbacks and API
+        |  -export([save/1, get/1, list/0, list/1, exists/1, delete/1, update/2, create/1, model_init/0,
+        |      'after'/5, before/4]).
+        |  
+        |  %%%===================================================================
+        |  %%% model_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback save/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec save(datastore:document()) -&gt;
+        |      {ok, datastore:key()} | datastore:generic_error().
+        |  save(Document) -&gt;
+ 15859..|      datastore:save(global_only, Document).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback update/2. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec update(datastore:key(), Diff :: datastore:document_diff()) -&gt;
+        |      {ok, datastore:key()} | datastore:update_error().
+        |  update(Key, Diff) -&gt;
+<font color=red>     0..|      datastore:update(global_only, ?MODULE, Key, Diff).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback create/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create(datastore:document()) -&gt;
+        |      {ok, datastore:key()} | datastore:create_error().
+        |  create(Document) -&gt;
+<font color=red>     0..|      datastore:create(global_only, Document).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback get/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get(datastore:key()) -&gt; {ok, datastore:document()} | datastore:get_error().
+        |  get(Key) -&gt;
+    15..|      datastore:get(global_only, ?MODULE, Key).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns list of all records.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list() -&gt; {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+        |  list() -&gt;
+<font color=red>     0..|      datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns list records older then DocAge (in ms).
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list(DocAge :: integer()) -&gt; {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+        |  list(DocAge) -&gt;
+    49..|      Now = os:timestamp(),
+    49..|      Filter = fun
+        |          ('$end_of_table', Acc) -&gt;
+    49..|              {abort, Acc};
+        |          (#document{key = Uuid, value = V}, Acc) -&gt;
+  1128..|              T = V#global_cache_controller.timestamp,
+  1128..|              case timer:now_diff(Now, T) &gt;= 1000*DocAge of
+        |                  true -&gt;
+   312..|                      {next, [Uuid | Acc]};
+        |                  false -&gt;
+   816..|                      {next, Acc}
+        |              end
+        |      end,
+    49..|      datastore:list(global_only, ?MODEL_NAME, Filter, []).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback delete/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec delete(datastore:key()) -&gt; ok | datastore:generic_error().
+        |  delete(Key) -&gt;
+  5885..|      datastore:delete(global_only, ?MODULE, Key).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback exists/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec exists(datastore:key()) -&gt; datastore:exists_return().
+        |  exists(Key) -&gt;
+    17..|      ?RESPONSE(datastore:exists(global_only, ?MODULE, Key)).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback model_init/0. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec model_init() -&gt; model_behaviour:model_config().
+        |  model_init() -&gt;
+ 45425..|      ?MODEL_CONFIG(global_cc_bucket, get_hooks_config(),
+        |          ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL, false).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback 'after'/5. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec 'after'(ModelName :: model_behaviour:model_type(),
+        |      Method :: model_behaviour:model_action(),
+        |      Level :: datastore:store_level(), Context :: term(),
+        |      ReturnValue :: term()) -&gt; ok.
+        |  'after'(ModelName, save, disk_only, [Doc], {ok, _}) -&gt;
+  2160..|      update_usage_info(Doc#document.key, ModelName);
+        |  'after'(ModelName, update, disk_only, [Key, _Diff], {ok, _}) -&gt;
+  1761..|      update_usage_info(Key, ModelName);
+        |  'after'(ModelName, create, disk_only, [Doc], {ok, _}) -&gt;
+   586..|      update_usage_info(Doc#document.key, ModelName);
+        |  'after'(ModelName, get, _Level, [Key], _ReturnValue) -&gt;
+  9751..|      update_usage_info(Key, ModelName);
+        |  'after'(ModelName, delete, global_only, [Key, _Pred], ok) -&gt;
+  5884..|      del_usage_info(Key, ModelName);
+        |  'after'(ModelName, exists, _Level, [Key], {ok, true}) -&gt;
+  1586..|      update_usage_info(Key, ModelName);
+        |  'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) -&gt;
+ 27542..|      ok.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback before/4. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec before(ModelName :: model_behaviour:model_type(),
+        |      Method :: model_behaviour:model_action(),
+        |      Level :: datastore:store_level(), Context :: term()) -&gt;
+        |      ok | datastore:generic_error().
+        |  before(_ModelName, _Method, _Level, _Context) -&gt;
+ 49270..|      ok.
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Provides hooks configuration.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_hooks_config() -&gt; list().
+        |  get_hooks_config() -&gt;
+ 45425..|      caches_controller:get_hooks_config(?GLOBAL_CACHES).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Updates information about usage of a document.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec update_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) -&gt;
+        |      {ok, datastore:key()} | datastore:generic_error().
+        |  update_usage_info(Key, ModelName) -&gt;
+ 15844..|      Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+ 15844..|      V = #global_cache_controller{timestamp = os:timestamp()},
+ 15844..|      Doc = #document{key = Uuid, value = V},
+ 15844..|      save(Doc).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Deletes information about usage of a document.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec del_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) -&gt;
+        |      ok | datastore:generic_error().
+        |  del_usage_info(Key, ModelName) -&gt;
+  5884..|      Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+  5884..|      delete(Uuid).</pre>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/check_permissions.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/fslogic/check_permissions.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Rafal Slota
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc check_permissions annotation implementation.
+        |  %%%      This annotation shall check whether annotation's caller has given
+        |  %%%      permissions to file that is also somewhere within annotation's arguments.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(check_permissions).
+        |  -annotation('function').
+        |  -author("Rafal Slota").
+        |  
+        |  -include("modules/fslogic/fslogic_common.hrl").
+        |  -include("errors.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% API
+        |  -export([before_advice/4, after_advice/5]).
+        |  
+        |  %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
+        |  -type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {parent, item_definition()}.
+        |  -type access_type() :: write | read | exec. %% Check whether user has write/read/exec permissions
+        |  -type check_type() :: owner %% Check whether user owns the item
+        |                      | none  %% Noop check. Doesn't check given item, but validates ancestors' exec permission.
+        |                      | owner_if_parent_sticky. %% Check whether user owns the item but only if parent of the item
+        |                                                %% has sticky bit.
+        |  
+        |  -type access_definition() :: root | {check_type() | access_type(), item_definition()}.
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc annotation's before_advice implementation.
+        |  %%      #annotation.data type is [access_definition()] | access_definition()
+        |  %%--------------------------------------------------------------------
+        |  -spec before_advice(#annotation{}, atom(), atom(), [term()]) -&gt; term().
+        |  %% generic calls
+        |  before_advice(#annotation{data = []}, _M, _F, Args) -&gt;
+   916..|      Args;
+        |  before_advice(#annotation{data = [Obj | R]} = A, M, F, [#fslogic_ctx{} | _Inputs] = Args) -&gt;
+  1049..|      ?debug("check_permissions's before_advice args ~p", [Args]),
+  1049..|      NewArgs = before_advice(A#annotation{data = Obj}, M, F, Args),
+   991..|      before_advice(A#annotation{data = R}, M, F, NewArgs);
+        |  
+        |  %% actual before_advice impl.
+        |  before_advice(#annotation{}, _M, _F, [#fslogic_ctx{session = #session{identity = #identity{user_id = ?ROOT_USER_ID}}} | _Inputs] = Args) -&gt;
+    77..|      Args;   %% Always allow access by root user
+        |  before_advice(#annotation{data = root}, _M, _F, [#fslogic_ctx{} | _Inputs] = Args) -&gt;
+<font color=red>     0..|      throw(?EACCES); %% At this point user is not root so deny any requests that require root</font>
+        |  
+        |  %% Check whether user owns the item
+        |  before_advice(#annotation{data = {owner, Item}}, _M, _F,
+        |      [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) -&gt;
+        |  
+    43..|      #document{value = #file_meta{uid = OwnerId}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
+        |  
+    43..|      case UserId of
+        |          OwnerId -&gt;
+     9..|              ok = validate_ancestors_exec(Subj, UserId),
+     9..|              Args;
+    34..|          _       -&gt; throw(?EACCES)
+        |      end;
+        |  
+        |  %% Noop check. Doesn't check given item, but validates ancestors' exec permission.
+        |  before_advice(#annotation{data = {none, Item}}, _M, _F,
+        |      [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) -&gt;
+        |  
+   124..|      #document{value = #file_meta{}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
+   121..|      ok = validate_ancestors_exec(Subj, UserId),
+        |  
+   109..|      Args;
+        |  
+        |  %% Check whether user owns the item but only if parent of the item has sticky bit.
+        |  before_advice(#annotation{data = {owner_if_parent_sticky, Item}}, _M, _F,
+        |      [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) -&gt;
+        |  
+    14..|      #document{value = #file_meta{}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
+    14..|      #document{value = #file_meta{mode = Mode}} = fslogic_utils:get_parent(Subj),
+        |  
+    14..|      case (Mode band (8#1 bsl 9)) &gt; 0 of
+        |          true -&gt;
+    11..|              before_advice(#annotation{data = {owner, Item}}, _M, _F, Args);
+        |          false -&gt;
+     3..|              Args
+        |      end;
+        |  
+        |  %% Check whether user has write/read/exec permissions
+        |  before_advice(#annotation{data = {AccessType, Item}}, _M, _F,
+        |      [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) -&gt;
+        |  
+  1035..|      #document{value = #file_meta{is_scope = IsScope}} = FileDoc = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
+        |  
+  1035..|      case IsScope of
+        |          true  -&gt;
+   993..|              ok = validate_scope_access(AccessType, FileDoc, UserId);
+        |          false -&gt;
+    42..|              ok
+        |      end,
+        |      
+  1035..|      ok = validate_posix_access(AccessType, FileDoc, UserId),
+   993..|      ok = validate_ancestors_exec(FileDoc, UserId),
+        |  
+   984..|      Args.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc annotation's after_advice implementation.
+        |  %%--------------------------------------------------------------------
+        |  -spec after_advice(#annotation{}, atom(), atom(), [term()], term()) -&gt; term().
+        |  after_advice(#annotation{}, _M, _F, _Inputs, Result) -&gt;
+  1107..|      Result.
+        |  
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Returns file that shall be the subject of permission validation instead given file.
+        |  %%      E.g. for virtual "/" directory returns deafult space file.
+        |  %%--------------------------------------------------------------------
+        |  -spec get_validation_subject(fslogic_worker:ctx(), FileEntry :: fslogic_worker:file()) -&gt; fslogic_worker:file() | no_return().
+        |  get_validation_subject(CTX = #fslogic_ctx{}, FileEntry) -&gt;
+  1216..|      get_validation_subject(fslogic_context:get_user_id(CTX), FileEntry);
+        |  get_validation_subject(UserId, FileEntry) -&gt;
+  3606..|      {ok, #document{key = FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
+  3603..|      case FileId of
+        |          UserId -&gt;
+   596..|              {ok, #document{} = SpaceDoc} = fslogic_spaces:get_default_space(UserId),
+   596..|              SpaceDoc;
+        |          _ -&gt;
+  3007..|              FileDoc
+        |      end.
+        |  
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Extracts file() from argument list (Inputs) based on Item description.
+        |  %%--------------------------------------------------------------------
+        |  -spec resolve_file_entry(item_definition(), [term()]) -&gt; fslogic_worker:file().
+        |  resolve_file_entry(Item, Inputs) when is_integer(Item) -&gt;
+  1216..|      lists:nth(Item - 1, Inputs);
+        |  resolve_file_entry({path, Item}, Inputs) when is_integer(Item) -&gt;
+     1..|      {path, resolve_file_entry(Item, Inputs)};
+        |  resolve_file_entry({parent, Item}, Inputs) -&gt;
+    54..|      fslogic_utils:get_parent(resolve_file_entry(Item, Inputs)).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Checks whether given user has given permission on scope given file.
+        |  %%      This function is always called before validate_posix_access/3 and shall handle all special cases.
+        |  %% @todo: Implement this method. Currently expected behaviour is to throw ENOENT instead EACCES for all spaces dirs.
+        |  %%--------------------------------------------------------------------
+        |  -spec validate_scope_access(AccessType :: access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -&gt; ok | no_return().
+        |  validate_scope_access(_AccessType, _FileDoc, _UserId) -&gt;
+   993..|      ok.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Checks whether given user has given permission on given file (POSIX permission check).
+        |  %%--------------------------------------------------------------------
+        |  -spec validate_posix_access(AccessType :: access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -&gt; ok | no_return().
+        |  validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId) -&gt;
+  4440..|      ReqBit = case AccessType of
+   852..|                   read  -&gt; 8#4;
+   124..|                   write -&gt; 8#2;
+  3464..|                   exec  -&gt; 8#1
+        |               end,
+        |  
+  4440..|      IsAccessable = case UserId of
+        |                         OwnerId -&gt;
+    63..|                             ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as owner.", [UserId, ReqBit, FileDoc, Mode]),
+    63..|                             ((ReqBit bsl 6) band Mode) &gt; 0;
+        |                         _ -&gt;
+  4377..|                             {ok, #document{value = #onedata_user{space_ids = Spaces}}} = onedata_user:get(UserId),
+  4377..|                             {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
+  4377..|                             case lists:member(ScopeUUID, Spaces) of
+        |                                 true -&gt;
+  1943..|                                     ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as space member.", [UserId, ReqBit, FileDoc, Mode]),
+  1943..|                                     ((ReqBit bsl 3) band Mode) &gt; 0;
+        |                                 false -&gt;
+  2434..|                                     ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as other (Spaces ~p, scope ~p).", [UserId, ReqBit, FileDoc, Mode, Spaces, ScopeUUID]),
+  2434..|                                     (ReqBit band Mode) &gt; 0
+        |                             end
+        |                     end,
+        |  
+  4440..|      case IsAccessable of
+  4377..|          true    -&gt; ok;
+    63..|          false   -&gt; throw(?EACCES)
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Checks whether given user has execute permission on all file's ancestors.
+        |  %%--------------------------------------------------------------------
+        |  -spec validate_ancestors_exec(Subj :: fslogic_worker:file(), UserId :: onedata_user:id()) -&gt; ok | no_return().
+        |  validate_ancestors_exec(Subj, UserId) -&gt;
+  1123..|      {ok, #document{value = #file_meta{is_scope = IsScope}} = SubjDoc} = file_meta:get(Subj),
+  1123..|      {ok, AncestorsIds} = file_meta:get_ancestors(SubjDoc),
+  1123..|      case IsScope of
+        |          true -&gt;
+  1015..|              ok = validate_posix_access(exec, SubjDoc, UserId);
+        |          false -&gt;
+   108..|              ok
+        |      end,
+  1120..|      lists:map(
+        |          fun(AncestorId) -&gt;
+  2390..|              #document{value = #file_meta{}} = FileDoc = get_validation_subject(UserId, {uuid, AncestorId}),
+  2390..|              ok = validate_posix_access(exec, FileDoc, UserId)
+        |          end, AncestorsIds),
+  1102..|      ok.</pre>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/lfm_files.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/fslogic/lfm_submodules/lfm_files.erl by COVER 2015-08-06 at 11:00:44
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %% @doc This module performs file-related operations of lfm_submodules.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(lfm_files).
+        |  
+        |  -include("types.hrl").
+        |  -include("errors.hrl").
+        |  
+        |  %% API
+        |  %% Functions operating on directories or files
+        |  -export([exists/1, mv/2, cp/2, rm/1]).
+        |  %% Functions operating on files
+        |  -export([create/1, open/2, write/3, read/3, truncate/2, get_block_map/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Checks if a file or directory exists.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec exists(FileKey :: file_key()) -&gt; {ok, boolean()} | error_reply().
+        |  exists(_FileKey) -&gt;
+<font color=red>     0..|      {ok, false}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Moves a file or directory to a new location.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -&gt; ok | error_reply().
+        |  mv(_FileKeyFrom, _PathTo) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Copies a file or directory to given location.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -&gt; ok | error_reply().
+        |  cp(_PathFrom, _PathTo) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Removes a file or an empty directory.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec rm(FileKey :: file_key()) -&gt; ok | error_reply().
+        |  rm(_FileKey) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Creates a new file.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create(Path :: file_path()) -&gt; {ok, file_id()} | error_reply().
+        |  create(_Path) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Opens a file in selected mode and returns a file handle used to read or write.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec open(FileKey :: file_id_or_path(), OpenType :: open_type()) -&gt; {ok, file_handle()} | error_reply().
+        |  open(_FileKey, _OpenType) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Writes data to a file. Returns number of written bytes.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -&gt; {ok, integer()} | error_reply().
+        |  write(_FileHandle, _Offset, _Buffer) -&gt;
+<font color=red>     0..|      {ok, 0}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Reads requested part of a file.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -&gt; {ok, binary()} | error_reply().
+        |  read(_FileHandle, _Offset, _MaxSize) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Truncates a file.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec truncate(FileKey :: file_key(), Size :: integer()) -&gt; ok | error_reply().
+        |  truncate(_FileKey, _Size) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns block map for a file.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_block_map(FileKey :: file_key()) -&gt; {ok, [block_range()]} | error_reply().
+        |  get_block_map(_FileKey) -&gt;
+<font color=red>     0..|      {ok, []}.</font>
+</pre>
+</body>
+</html>

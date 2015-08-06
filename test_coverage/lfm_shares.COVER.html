@@ -1,0 +1,69 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/lfm_shares.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/fslogic/lfm_submodules/lfm_shares.erl by COVER 2015-08-06 at 11:00:45
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %% @doc This module performs shares-related operations of lfm_submodules.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(lfm_shares).
+        |  
+        |  -include("types.hrl").
+        |  -include("errors.hrl").
+        |  
+        |  %% API
+        |  -export([create_share/2, get_share/1, remove_share/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Creates a share for given file. File can be shared with anyone or
+        |  %% only specified group of users.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) -&gt;
+        |      {ok, ShareID :: share_id()} | error_reply().
+        |  create_share(_Path, _ShareWith) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns shared file by share_id.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_share(ShareID :: share_id()) -&gt; {ok, {file_id(), file_name()}} | error_reply().
+        |  get_share(_ShareID) -&gt;
+<font color=red>     0..|      {ok, {&lt;&lt;""&gt;&gt;, &lt;&lt;""&gt;&gt;}}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Removes file share by ShareID.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec remove_share(ShareID :: share_id()) -&gt; ok | error_reply().
+        |  remove_share(_ShareID) -&gt;
+<font color=red>     0..|      ok.</font>
+</pre>
+</body>
+</html>

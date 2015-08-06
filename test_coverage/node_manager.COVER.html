@@ -1,0 +1,595 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/node_manager.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/cluster_elements/node_manager/node_manager.erl by COVER 2015-08-06 at 11:00:44
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Michal Wrzeszcz
+        |  %%% @author Tomasz Lichon
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2013 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module is a gen_server that coordinates the
+        |  %%% life cycle of node. It starts/stops appropriate services and communicates
+        |  %%% with ccm.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(node_manager).
+        |  -author("Michal Wrzeszcz").
+        |  -author("Tomasz Lichon").
+        |  -author("Lukasz Opiola").
+        |  
+        |  -behaviour(gen_server).
+        |  
+        |  -include("global_definitions.hrl").
+        |  -include("modules_and_args.hrl").
+        |  -include("cluster_elements/worker_host/worker_protocol.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  -include_lib("ctool/include/global_definitions.hrl").
+        |  
+        |  %% This record is used by node_manager (it contains its state).
+        |  %% It hold the status of connection to ccm.
+        |  -record(state, {
+        |      node_ip = {127, 0, 0, 1} :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()},
+        |      ccm_con_status = not_connected :: not_connected | connected | registered,
+        |      monitoring_state = undefined :: monitoring:node_monitoring_state(),
+        |      cache_clearing = true
+        |  }).
+        |  
+        |  
+        |  %% API
+        |  -export([start_link/0, stop/0, get_ip_address/0, refresh_ip_address/0]).
+        |  
+        |  %% gen_server callbacks
+        |  -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts node manager
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_link() -&gt; Result when
+        |      Result :: {ok, Pid}
+        |      | ignore
+        |      | {error, Error},
+        |      Pid :: pid(),
+        |      Error :: {already_started, Pid} | term().
+        |  start_link() -&gt;
+    30..|      gen_server:start_link({local, ?NODE_MANAGER_NAME}, ?MODULE, [], []).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Stops node manager
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec stop() -&gt; ok.
+        |  stop() -&gt;
+<font color=red>     0..|      gen_server:cast(?NODE_MANAGER_NAME, stop).</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns node's IP address.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  get_ip_address() -&gt;
+<font color=red>     0..|      gen_server:call(?NODE_MANAGER_NAME, get_ip_address).</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Tries to contact GR and refresh node's IP Address.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  refresh_ip_address() -&gt;
+<font color=red>     0..|      gen_server:cast(?NODE_MANAGER_NAME, refresh_ip_address).</font>
+        |  
+        |  %%%===================================================================
+        |  %%% gen_server callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Initializes the server
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(Args :: term()) -&gt; Result when
+        |      Result :: {ok, State}
+        |      | {ok, State, Timeout}
+        |      | {ok, State, hibernate}
+        |      | {stop, Reason :: term()}
+        |      | ignore,
+        |      State :: term(),
+        |      Timeout :: non_neg_integer() | infinity.
+        |  init([]) -&gt;
+    30..|      process_flag(trap_exit,true),
+    30..|      try
+    30..|          ensure_correct_hostname(),
+    30..|          listener_starter:start_protocol_listener(),
+    30..|          listener_starter:start_gui_listener(),
+    30..|          listener_starter:start_rest_listener(),
+    30..|          listener_starter:start_redirector_listener(),
+    30..|          listener_starter:start_dns_listeners(),
+    30..|          gen_server:cast(self(), connect_to_ccm),
+    30..|          next_mem_check(),
+    30..|          NodeIP = check_node_ip_address(),
+    30..|          MonitoringState = monitoring:start(NodeIP),
+    30..|          {ok, #state{node_ip = NodeIP,
+        |              ccm_con_status = not_connected,
+        |              monitoring_state = MonitoringState}}
+        |      catch
+        |          _:Error -&gt;
+<font color=red>     0..|              ?error_stacktrace("Cannot start node_manager: ~p", [Error]),</font>
+<font color=red>     0..|              {stop, cannot_start_node_manager}</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Handling call messages
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -&gt; Result when
+        |      Result :: {reply, Reply, NewState}
+        |      | {reply, Reply, NewState, Timeout}
+        |      | {reply, Reply, NewState, hibernate}
+        |      | {noreply, NewState}
+        |      | {noreply, NewState, Timeout}
+        |      | {noreply, NewState, hibernate}
+        |      | {stop, Reason, Reply, NewState}
+        |      | {stop, Reason, NewState},
+        |      Reply :: nagios_handler:healthcheck_response() | term(),
+        |      NewState :: term(),
+        |      Timeout :: non_neg_integer() | infinity,
+        |      Reason :: term().
+        |  
+        |  handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) -&gt;
+    89..|      Reply = case ConnStatus of
+    89..|                  registered -&gt; ok;
+<font color=red>     0..|                  _ -&gt; out_of_sync</font>
+        |              end,
+    89..|      {reply, Reply, State};
+        |  
+        |  handle_call(get_ip_address, _From, State = #state{node_ip = IPAddress}) -&gt;
+<font color=red>     0..|      {reply, IPAddress, State};</font>
+        |  
+        |  % only for tests
+        |  handle_call(check_mem_synch, _From, State) -&gt;
+     1..|      Ans = case monitoring:get_memory_stats() of
+        |          [{&lt;&lt;"mem"&gt;&gt;, MemUsage}] -&gt;
+     1..|              case caches_controller:should_clear_cache(MemUsage) of
+        |                  true -&gt;
+     1..|                      free_memory(MemUsage);
+        |                  _ -&gt;
+<font color=red>     0..|                      ok</font>
+        |              end;
+        |          _ -&gt;
+<font color=red>     0..|              cannot_check_mem_usage</font>
+        |      end,
+     1..|      {reply, Ans, State};
+        |  
+        |  % only for tests
+        |  handle_call(clear_mem_synch, _From, State) -&gt;
+    37..|      caches_controller:delete_old_keys(locally_cached, 0),
+    37..|      caches_controller:delete_old_keys(globally_cached, 0),
+    37..|      {reply, ok, State};
+        |  
+        |  handle_call(disable_cache_clearing, _From, State) -&gt;
+   176..|      {reply, ok, State#state{cache_clearing = false}};
+        |  
+        |  handle_call(enable_cache_clearing, _From, State) -&gt;
+<font color=red>     0..|      {reply, ok, State#state{cache_clearing = true}};</font>
+        |  
+        |  handle_call(_Request, _From, State) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request),</font>
+<font color=red>     0..|      {reply, wrong_request, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Handling cast messages
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_cast(Request :: term(), State :: term()) -&gt; Result when
+        |      Result :: {noreply, NewState}
+        |      | {noreply, NewState, Timeout}
+        |      | {noreply, NewState, hibernate}
+        |      | {stop, Reason :: term(), NewState},
+        |      NewState :: term(),
+        |      Timeout :: non_neg_integer() | infinity.
+        |  handle_cast(connect_to_ccm, State) -&gt;
+    61..|      NewState = connect_to_ccm(State),
+    61..|      {noreply, NewState};
+        |  
+        |  handle_cast(ccm_conn_ack, State) -&gt;
+    31..|      NewState = ccm_conn_ack(State),
+    31..|      {noreply, NewState};
+        |  
+        |  handle_cast(check_mem, #state{monitoring_state = MonState, cache_clearing = CacheClearing} = State) -&gt;
+<font color=red>     0..|      case CacheClearing of</font>
+        |          true -&gt;
+<font color=red>     0..|              MemUsage = monitoring:mem_usage(MonState),</font>
+        |              % Check if memory cleaning of oldest docs should be started
+        |              % even when memory utilization is low (e.g. once a day)
+<font color=red>     0..|              case caches_controller:should_clear_cache(MemUsage) of</font>
+        |                  true -&gt;
+<font color=red>     0..|                      spawn(fun() -&gt; free_memory(MemUsage) end);</font>
+        |                  _ -&gt;
+<font color=red>     0..|                      ok</font>
+        |              end;
+        |          false -&gt;
+<font color=red>     0..|              ok</font>
+        |      end,
+<font color=red>     0..|      next_mem_check(),</font>
+<font color=red>     0..|      {noreply, State};</font>
+        |  
+        |  handle_cast(do_heartbeat, State) -&gt;
+  3629..|      NewState = do_heartbeat(State),
+  3629..|      {noreply, NewState};
+        |  
+        |  handle_cast({update_lb_advices, Advices}, State) -&gt;
+  3661..|      NewState = update_lb_advices(State, Advices),
+  3661..|      {noreply, NewState};
+        |  
+        |  handle_cast(refresh_ip_address, #state{monitoring_state = MonState} = State) -&gt;
+<font color=red>     0..|      NodeIP = check_node_ip_address(),</font>
+<font color=red>     0..|      NewMonState = monitoring:refresh_ip_address(NodeIP, MonState),</font>
+<font color=red>     0..|      {noreply, State#state{node_ip = NodeIP, monitoring_state = NewMonState}};</font>
+        |  
+        |  handle_cast(stop, State) -&gt;
+<font color=red>     0..|      {stop, normal, State};</font>
+        |  
+        |  handle_cast(_Request, State) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request),</font>
+<font color=red>     0..|      {reply, wrong_request, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Handling all non call/cast messages
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_info(Info :: timeout | term(), State :: term()) -&gt; Result when
+        |      Result :: {noreply, NewState}
+        |      | {noreply, NewState, Timeout}
+        |      | {noreply, NewState, hibernate}
+        |      | {stop, Reason :: term(), NewState},
+        |      NewState :: term(),
+        |      Timeout :: non_neg_integer() | infinity.
+        |  
+        |  handle_info({timer, Msg}, State) -&gt;
+  3660..|      gen_server:cast(?NODE_MANAGER_NAME, Msg),
+  3660..|      {noreply, State};
+        |  
+        |  handle_info({nodedown, Node}, State) -&gt;
+<font color=red>     0..|      {ok, CCMNodes} = application:get_env(?APP_NAME, ccm_nodes),</font>
+<font color=red>     0..|      case lists:member(Node, CCMNodes) of</font>
+        |          false -&gt;
+<font color=red>     0..|              ?warning("Node manager received unexpected nodedown msg: ~p", [{nodedown, Node}]);</font>
+        |          true -&gt;
+<font color=red>     0..|              ok</font>
+        |              % TODO maybe node_manager should be restarted along with all workers to
+        |              % avoid desynchronization of modules between nodes.
+        |  %%             ?error("Connection to CCM lost, restarting node"),
+        |  %%             throw(connection_to_ccm_lost)
+        |      end,
+<font color=red>     0..|      {noreply, State};</font>
+        |  
+        |  handle_info(_Request, State) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request),</font>
+<font color=red>     0..|      {noreply, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% This function is called by a gen_server when it is about to
+        |  %% terminate. It should be the opposite of Module:init/1 and do any
+        |  %% necessary cleaning up. When it returns, the gen_server terminates
+        |  %% with Reason. The return value is ignored.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec terminate(Reason, State :: term()) -&gt; Any :: term() when
+        |      Reason :: normal
+        |      | shutdown
+        |      | {shutdown, term()}
+        |      | term().
+        |  terminate(_Reason, _State) -&gt;
+    30..|      ?info("Shutting down ~p due to ~p", [?MODULE, _Reason]),
+    29..|      listener_starter:stop_listeners().
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Convert process state when code is changed
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec code_change(OldVsn, State :: term(), Extra :: term()) -&gt; Result when
+        |      Result :: {ok, NewState :: term()} | {error, Reason :: term()},
+        |      OldVsn :: Vsn | {down, Vsn},
+        |      Vsn :: term().
+        |  code_change(_OldVsn, State, _Extra) -&gt;
+<font color=red>     0..|      {ok, State}.</font>
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Connects with ccm and tells that the node is alive.
+        |  %% First it establishes network connection, next sends message to ccm.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec connect_to_ccm(State :: #state{}) -&gt; #state{}.
+        |  connect_to_ccm(State = #state{ccm_con_status = registered}) -&gt;
+        |      % Already registered, do nothing
+    30..|      State;
+        |  connect_to_ccm(State = #state{ccm_con_status = connected}) -&gt;
+        |      % Connected, but not registered (workers did not start), check again in some time
+     1..|      {ok, Interval} = application:get_env(?APP_NAME, ccm_connection_retry_period),
+     1..|      gen_server:cast({global, ?CCM}, {ccm_conn_req, node()}),
+     1..|      erlang:send_after(Interval, self(), {timer, connect_to_ccm}),
+     1..|      State;
+        |  connect_to_ccm(State = #state{ccm_con_status = not_connected}) -&gt;
+        |      % Not connected to CCM, try and automatically schedule the next try
+    30..|      {ok, CcmNodes} = application:get_env(?APP_NAME, ccm_nodes),
+    30..|      {ok, Interval} = application:get_env(?APP_NAME, ccm_connection_retry_period),
+    30..|      erlang:send_after(Interval, self(), {timer, connect_to_ccm}),
+    30..|      case (catch init_net_connection(CcmNodes)) of
+        |          ok -&gt;
+    30..|              ?info("Initializing connection to CCM"),
+    30..|              gen_server:cast({global, ?CCM}, {ccm_conn_req, node()}),
+    30..|              State#state{ccm_con_status = connected};
+        |          Err -&gt;
+<font color=red>     0..|              ?debug("No connection with CCM: ~p, retrying in ~p ms", [Err, Interval]),</font>
+<font color=red>     0..|              State#state{ccm_con_status = not_connected}</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Saves information about ccm connection when ccm answers to its request
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec ccm_conn_ack(State :: term()) -&gt; #state{}.
+        |  ccm_conn_ack(State = #state{ccm_con_status = connected}) -&gt;
+    30..|      ?info("Successfully connected to CCM"),
+    30..|      init_node(),
+    30..|      ?info("Node initialized"),
+    30..|      gen_server:cast({global, ?CCM}, {init_ok, node()}),
+    30..|      {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval),
+    30..|      erlang:send_after(Interval, self(), {timer, do_heartbeat}),
+    30..|      State#state{ccm_con_status = registered};
+        |  ccm_conn_ack(State) -&gt;
+        |      % Already registered or not connected, do nothing
+     1..|      ?warning("node_manager received redundant ccm_conn_ack"),
+     1..|      State.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Performs calls to CCM with heartbeat. The heartbeat message consists of
+        |  %% current monitoring data. The data is updated directly before sending.
+        |  %% The CCM will perform an 'update_lb_advices' cast perodically, using
+        |  %% newest node states from node managers for calculations.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec do_heartbeat(State :: #state{}) -&gt; #state{}.
+        |  do_heartbeat(#state{ccm_con_status = registered, monitoring_state = MonState} = State) -&gt;
+  3629..|      {ok, Interval} = application:get_env(?APP_NAME, heartbeat_interval),
+  3629..|      erlang:send_after(Interval, self(), {timer, do_heartbeat}),
+  3629..|      NewMonState = monitoring:update(MonState),
+  3629..|      NodeState = monitoring:get_node_state(NewMonState),
+  3629..|      ?debug("Sending heartbeat to CCM"),
+  3629..|      gen_server:cast({global, ?CCM}, {heartbeat, NodeState}),
+  3629..|      State#state{monitoring_state = NewMonState};
+        |  
+        |  % Stop heartbeat if node_manager is not registered in CCM
+        |  do_heartbeat(State) -&gt;
+<font color=red>     0..|      State.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Receives lb advices update from CCM and follows it to DNS worker and dispatcher.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec update_lb_advices(State :: #state{}, LBAdvices) -&gt; #state{} when
+        |      LBAdvices :: {load_balancing:dns_lb_advice(), load_balancing:dispatcher_lb_advice()}.
+        |  update_lb_advices(State, {DNSAdvice, DispatcherAdvice}) -&gt;
+  3661..|      gen_server:cast(?DISPATCHER_NAME, {update_lb_advice, DispatcherAdvice}),
+  3661..|      worker_proxy:call({dns_worker, node()}, {update_lb_advice, DNSAdvice}),
+  3661..|      State.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Initializes network connection with cluster that contains nodes
+        |  %% given in argument.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init_net_connection(Nodes :: list()) -&gt; ok | {error, not_connected}.
+        |  init_net_connection([]) -&gt;
+<font color=red>     0..|      {error, not_connected};</font>
+        |  init_net_connection([Node | Nodes]) -&gt;
+    30..|      case net_adm:ping(Node) of
+        |          pong -&gt;
+    30..|              global:sync(),
+    30..|              case global:whereis_name(?CCM) of
+        |                  undefined -&gt;
+<font color=red>     0..|                      ?error("Connection to node ~p global_synch error", [Node]),</font>
+<font color=red>     0..|                      rpc:eval_everywhere(erlang, disconnect_node, [node()]),</font>
+<font color=red>     0..|                      {error, global_synch};</font>
+        |                  _ -&gt;
+    30..|                      ?debug("Connection to node ~p initialized", [Node]),
+    30..|                      erlang:monitor_node(Node, true),
+    30..|                      ok
+        |              end;
+        |          pang -&gt;
+<font color=red>     0..|              ?error("Cannot connect to node ~p", [Node]),</font>
+<font color=red>     0..|              init_net_connection(Nodes)</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Init node as worker of oneprovider cluster
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init_node() -&gt; ok.
+        |  init_node() -&gt;
+    30..|      {ok, NodeToSync} = gen_server:call({global, ?CCM}, get_node_to_sync),
+    30..|      ok = datastore:ensure_state_loaded(NodeToSync),
+    30..|      ?info("Datastore synchronized"),
+    30..|      init_workers().
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts all workers defined in "modules_and_args.hrl" on node, and notifies
+        |  %% ccm about successfull init
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init_workers() -&gt; ok.
+        |  init_workers() -&gt;
+    30..|      lists:foreach(fun({Module, Args}) -&gt; ok = start_worker(Module, Args) end, ?MODULES_WITH_ARGS),
+    30..|      ?info("All workers started"),
+    30..|      ok.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Starts worker node with dedicated supervisor as brother. Both entities
+        |  %% are started under MAIN_WORKER_SUPERVISOR supervision.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_worker(Module :: atom(), Args :: term()) -&gt; ok | {error, term()}.
+        |  start_worker(Module, Args) -&gt;
+   150..|      try
+   150..|          {ok, LoadMemorySize} = application:get_env(?APP_NAME, worker_load_memory_size),
+   150..|          WorkerSupervisorName = ?WORKER_HOST_SUPERVISOR_NAME(Module),
+   150..|          {ok, _} = supervisor:start_child(
+        |              ?MAIN_WORKER_SUPERVISOR_NAME,
+        |              {Module, {worker_host, start_link, [Module, Args, LoadMemorySize]}, transient, 5000, worker, [worker_host]}
+        |          ),
+   150..|          {ok, _} = supervisor:start_child(
+        |              ?MAIN_WORKER_SUPERVISOR_NAME,
+        |              {WorkerSupervisorName, {worker_host_sup, start_link, [WorkerSupervisorName, Args]}, transient, infinity, supervisor, [worker_host_sup]}
+        |          ),
+   150..|          ?info("Worker: ~s started", [Module])
+        |      catch
+        |          _:Error -&gt;
+<font color=red>     0..|              ?error_stacktrace("Error: ~p during start of worker: ~s", [Error, Module]),</font>
+<font color=red>     0..|              {error, Error}</font>
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Checks IP address of this node by asking GR. If the check cannot be performed,
+        |  %% it assumes a 127.0.0.1 address and logs an alert.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec check_node_ip_address() -&gt; IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
+        |  check_node_ip_address() -&gt;
+    30..|      try
+    30..|          IPCheckPath = "/provider/test/check_my_ip",
+    30..|          {ok, "200", _ResponseHeaders, JSON} = gr_endpoint:noauth_request(provider, IPCheckPath, get),
+    26..|          IPBin = mochijson2:decode(JSON),
+    26..|          {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
+    26..|          IP
+        |      catch T:M -&gt;
+     4..|          ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
+     4..|          {127, 0, 0, 1}
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Clears memory caches.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec free_memory(NodeMem :: number()) -&gt; ok | mem_usage_too_high | cannot_check_mem_usage | {error, term()}.
+        |  free_memory(NodeMem) -&gt;
+     1..|      try
+     1..|          AvgMem = gen_server:call({global, ?CCM}, get_avg_mem_usage),
+     1..|          ClearingOrder = case NodeMem &gt;= AvgMem of
+        |              true -&gt;
+<font color=red>     0..|                  [{false, locally_cached}, {false, globally_cached}, {true, locally_cached}, {true, globally_cached}];</font>
+        |              _ -&gt;
+     1..|                  [{false, globally_cached}, {false, locally_cached}, {true, globally_cached}, {true, locally_cached}]
+        |          end,
+     1..|          lists:foldl(fun
+        |              ({_Aggressive, _StoreType}, ok) -&gt;
+     1..|                  ok;
+        |              ({Aggressive, StoreType}, _) -&gt;
+     3..|                  Ans = caches_controller:clear_cache(NodeMem, Aggressive, StoreType),
+     3..|                  case Ans of
+        |                      mem_usage_too_high -&gt;
+     2..|                          ?warning("Not able to free enough memory clearing cache ~p with param ~p", [StoreType, Aggressive]);
+        |                      _ -&gt;
+     1..|                          ok
+        |                  end,
+     3..|                  Ans
+        |          end, start, ClearingOrder)
+        |      catch
+        |          E1:E2 -&gt;
+<font color=red>     0..|              ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2]),</font>
+<font color=red>     0..|              {error, E2}</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Plans next memory checking.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec next_mem_check() -&gt; TimerRef :: reference().
+        |  next_mem_check() -&gt;
+    30..|      {ok, IntervalMin} = application:get_env(?APP_NAME, check_mem_interval_minutes),
+    30..|      Interval = timer:minutes(IntervalMin),
+        |      % random to reduce probability that two nodes clear memory simultanosly
+    30..|      erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Makes sure node hostname belongs to provider domain.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec ensure_correct_hostname() -&gt; ok | no_return().
+        |  ensure_correct_hostname() -&gt;
+    30..|      Hostname = oneprovider:get_node_hostname(),
+    30..|      Domain = oneprovider:get_provider_domain(),
+    30..|      case string:join(tl(string:tokens(Hostname, ".")), ".") of
+        |          Domain -&gt;
+    30..|              ok;
+        |          _ -&gt;
+<font color=red>     0..|              ?error("Node hostname must be in provider domain. Check env conf. "</font>
+        |              "Current configuration:~nHostname: ~p~nDomain: ~p",
+        |                  [Hostname, Domain]),
+<font color=red>     0..|              throw(wrong_hostname)</font>
+        |      end.
+        |  
+</pre>
+</body>
+</html>

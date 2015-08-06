@@ -1,0 +1,140 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/subscription.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/datastore/models/subscription.erl by COVER 2015-08-06 at 11:00:40
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Krzysztof Trzepla
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc Sequencer model.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(subscription).
+        |  -author("Krzysztof Trzepla").
+        |  -behaviour(model_behaviour).
+        |  
+        |  -include("modules/datastore/datastore_model.hrl").
+        |  
+        |  -define(BATCH_SIZE, 100).
+        |  
+        |  %% model_behaviour callbacks
+        |  -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+        |      model_init/0, 'after'/5, before/4]).
+        |  
+        |  %%%===================================================================
+        |  %%% model_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback save/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec save(datastore:document()) -&gt;
+        |      {ok, datastore:key()} | datastore:generic_error().
+        |  save(Document) -&gt;
+<font color=red>     0..|      datastore:save(?STORE_LEVEL, Document).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback update/2. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec update(datastore:key(), Diff :: datastore:document_diff()) -&gt;
+        |      {ok, datastore:key()} | datastore:update_error().
+        |  update(Key, Diff) -&gt;
+<font color=red>     0..|      datastore:update(?STORE_LEVEL, ?MODEL_NAME, Key, Diff).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback create/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create(datastore:document()) -&gt;
+        |      {ok, datastore:key()} | datastore:create_error().
+        |  create(Document) -&gt;
+    11..|      datastore:create(?STORE_LEVEL, Document).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback get/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get(datastore:key()) -&gt; {ok, datastore:document()} | datastore:get_error().
+        |  get(Key) -&gt;
+<font color=red>     0..|      datastore:get(?STORE_LEVEL, ?MODEL_NAME, Key).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns list of all records.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list() -&gt; {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+        |  list() -&gt;
+   185..|      datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback delete/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec delete(datastore:key()) -&gt; ok | datastore:generic_error().
+        |  delete(Key) -&gt;
+    11..|      datastore:delete(?STORE_LEVEL, ?MODEL_NAME, Key).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback exists/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec exists(datastore:key()) -&gt; datastore:exists_return().
+        |  exists(Key) -&gt;
+<font color=red>     0..|      ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODEL_NAME, Key)).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback model_init/0. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec model_init() -&gt; model_behaviour:model_config().
+        |  model_init() -&gt;
+   518..|      ?MODEL_CONFIG(event_manager_bucket, [], ?GLOBAL_ONLY_LEVEL).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback 'after'/5. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec 'after'(ModelName :: model_behaviour:model_type(),
+        |      Method :: model_behaviour:model_action(),
+        |      Level :: datastore:store_level(), Context :: term(),
+        |      ReturnValue :: term()) -&gt; ok.
+        |  'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback before/4. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec before(ModelName :: model_behaviour:model_type(),
+        |      Method :: model_behaviour:model_action(),
+        |      Level :: datastore:store_level(), Context :: term()) -&gt;
+        |      ok | datastore:generic_error().
+        |  before(_ModelName, _Method, _Level, _Context) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+</pre>
+</body>
+</html>

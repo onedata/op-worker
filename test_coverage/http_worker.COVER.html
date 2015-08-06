@@ -1,0 +1,133 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/http_worker.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/http_worker/http_worker.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %%%--------------------------------------------------------------------
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2014 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%--------------------------------------------------------------------
+        |  %%% @doc This module implements worker_plugin_behaviour callbacks.
+        |  %%% It is responsible for spawning processes which then process HTTP requests.
+        |  %%% @end
+        |  %%%--------------------------------------------------------------------
+        |  -module(http_worker).
+        |  -author("Lukasz Opiola").
+        |  
+        |  -behaviour(worker_plugin_behaviour).
+        |  
+        |  -include("proto/common/credentials.hrl").
+        |  -include("modules/datastore/datastore.hrl").
+        |  -include_lib("global_definitions.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% worker_plugin_behaviour callbacks
+        |  -export([init/1, handle/1, cleanup/0]).
+        |  
+        |  %%%===================================================================
+        |  %%% worker_plugin_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback init/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(Args :: term()) -&gt; Result when
+        |      Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
+        |  init(_Args) -&gt;
+    30..|      GrCert = oneprovider:get_globalregistry_cert(),
+    30..|      identity:save(#document{key = GrCert, value = ?GLOBALREGISTRY_IDENTITY}),
+    30..|      {ok, #{}}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback handle/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle(Request) -&gt; Result when
+        |      Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
+        |      Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
+        |      {error, Reason} | pong,
+        |      Response :: term(),
+        |      Reason :: term().
+        |  handle(ping) -&gt;
+   405..|      pong;
+        |  
+        |  handle(healthcheck) -&gt;
+    89..|      Endpoints = [protocol_handler, gui, redirector, rest],
+    89..|      lists:foldl(
+        |          fun
+   356..|              (Endpoint, ok) -&gt; healthcheck(Endpoint);
+<font color=red>     0..|              (_, Error) -&gt; Error</font>
+        |          end, ok, Endpoints);
+        |  
+        |  handle({spawn_handler, SocketPid}) -&gt;
+   255..|      Pid = spawn(
+        |          fun() -&gt;
+   255..|              erlang:monitor(process, SocketPid),
+   255..|              opn_cowboy_bridge:set_socket_pid(SocketPid),
+   255..|              opn_cowboy_bridge:request_processing_loop()
+        |          end),
+   255..|      {ok, Pid};
+        |  
+        |  handle(_Request) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback cleanup/0
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec cleanup() -&gt; Result when
+        |      Result :: ok | {error, Error},
+        |      Error :: timeout | term().
+        |  cleanup() -&gt;
+    30..|      ok.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% healthcheck given endpoint
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec healthcheck(Endpoint :: atom()) -&gt; ok | {error, Reason :: atom()}.
+        |  healthcheck(protocol_handler) -&gt;
+    89..|      {ok, ProtocolHandlerPort} = application:get_env(?APP_NAME, protocol_handler_port),
+    89..|      case ssl:connect("127.0.0.1", ProtocolHandlerPort, [{packet, 4}, {active, false}]) of
+        |          {ok, Sock} -&gt;
+    89..|              ssl:close(Sock),
+    89..|              ok;
+<font color=red>     0..|          _ -&gt; {error, no_protocol_handler}</font>
+        |      end;
+        |  healthcheck(gui) -&gt;
+    89..|      {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
+    89..|      case ibrowse:send_req("https://127.0.0.1:" ++ integer_to_list(GuiPort), [], get) of
+        |          {ok, _, _, _} -&gt;
+    89..|              ok;
+<font color=red>     0..|          _ -&gt; {error, no_gui}</font>
+        |      end;
+        |  healthcheck(redirector) -&gt;
+    89..|      {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
+    89..|      case ibrowse:send_req("http://127.0.0.1:" ++ integer_to_list(RedirectPort), [], get) of
+    89..|          {ok, _, _, _} -&gt; ok;
+<font color=red>     0..|          _ -&gt; {error, no_http_redirector}</font>
+        |      end;
+        |  healthcheck(rest) -&gt;
+    89..|      {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
+    89..|      case ibrowse:send_req("https://127.0.0.1:" ++ integer_to_list(RestPort), [], get) of
+    89..|          {ok, _, _, _} -&gt; ok;
+<font color=red>     0..|          _ -&gt; {error, no_rest}</font>
+        |      end.
+        |  
+</pre>
+</body>
+</html>

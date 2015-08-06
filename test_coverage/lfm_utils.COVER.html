@@ -1,0 +1,57 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/lfm_utils.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/fslogic/lfm_utils.erl by COVER 2015-08-06 at 11:00:44
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc This module offers some high-level convenience functions using
+        |  %%% logical_files_manager underneath.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(lfm_utils).
+        |  
+        |  -include("types.hrl").
+        |  -include("errors.hrl").
+        |  
+        |  %% API
+        |  -export([write_all/3, ls_all/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Writes data to a file. Returns ok only if all the data has been written.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec write_all(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -&gt; ok | error_reply().
+        |  write_all(_FileHandle, _Offset, _Buffer) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Lists all contents of a directory.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec ls_all(Path :: binary()) -&gt; {ok, [{file_id(), file_name()}]} | error_reply().
+        |  ls_all(_Path) -&gt;
+<font color=red>     0..|      {ok, []}.</font>
+</pre>
+</body>
+</html>

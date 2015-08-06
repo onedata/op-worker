@@ -1,0 +1,75 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/fslogic_utils.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/fslogic/fslogic_utils.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %% ===================================================================
+        |  %% @author Rafal Slota
+        |  %% @copyright (C): 2013 ACK CYFRONET AGH
+        |  %% This software is released under the MIT license
+        |  %% cited in 'LICENSE.txt'.
+        |  %% @end
+        |  %% ===================================================================
+        |  %% @doc: This module exports utility tools for fslogic
+        |  %% @end
+        |  %% ===================================================================
+        |  -module(fslogic_utils).
+        |  
+        |  
+        |  -include("global_definitions.hrl").
+        |  -include("modules/fslogic/fslogic_common.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% API
+        |  -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1]).
+        |  
+        |  
+        |  %%%===================================================================
+        |  %%% API functions
+        |  %%%===================================================================
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id, space id, etc)
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec gen_storage_uid(ID :: binary()) -&gt; non_neg_integer().
+        |  gen_storage_uid(?ROOT_USER_ID) -&gt;
+    99..|      0;
+        |  gen_storage_uid(ID) -&gt;
+    79..|      &lt;&lt;UID0:16/big-unsigned-integer-unit:8&gt;&gt; = crypto:hash(md5, ID),
+    79..|      {ok, LowestUID} = application:get_env(?APP_NAME, lowest_generated_storage_uid),
+    79..|      {ok, HighestUID} = application:get_env(?APP_NAME, highest_generated_storage_uid),
+    79..|      LowestUID + UID0 rem HighestUID.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Create random sequence consisting of lowercase ASCII letters.
+        |  %%--------------------------------------------------------------------
+        |  -spec random_ascii_lowercase_sequence(Length :: integer()) -&gt; list().
+        |  random_ascii_lowercase_sequence(Length) -&gt;
+<font color=red>     0..|      lists:foldl(fun(_, Acc) -&gt; [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Returns parent of given file.
+        |  %%--------------------------------------------------------------------
+        |  -spec get_parent(fslogic_worker:file()) -&gt; fslogic_worker:file() | no_return().
+        |  get_parent({path, Path}) -&gt;
+     1..|      [_ | R] = lists:reverse(fslogic_path:split(Path)),
+     1..|      Tokens = lists:reverse(R),
+     1..|      ParentPath = fslogic_path:ensure_path_begins_with_slash(fslogic_path:join(Tokens)),
+     1..|      {ok, Doc} = file_meta:get({path, ParentPath}),
+     1..|      Doc;
+        |  get_parent(File) -&gt;
+    67..|      {ok, Doc} = file_meta:get_parent(File),
+    67..|      Doc.
+</pre>
+</body>
+</html>

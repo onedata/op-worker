@@ -1,0 +1,225 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/session_manager_worker.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/session/session_manager_worker.erl by COVER 2015-08-06 at 11:00:44
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Krzysztof Trzepla
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module implements {@link worker_plugin_behaviour} and is responsible
+        |  %%% for creation and removal of clients' sessions.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(session_manager_worker).
+        |  -author("Krzysztof Trzepla").
+        |  
+        |  -behaviour(worker_plugin_behaviour).
+        |  
+        |  -include("modules/datastore/datastore.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% worker_plugin_behaviour callbacks
+        |  -export([init/1, handle/1, cleanup/0]).
+        |  
+        |  %% API
+        |  -export([supervisor_spec/0, supervisor_child_spec/0]).
+        |  
+        |  -define(SESSION_WORKER_SUP, session_manager_worker_sup).
+        |  
+        |  %%%===================================================================
+        |  %%% worker_plugin_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback init/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(Args :: term()) -&gt; Result when
+        |      Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
+        |  init(_Args) -&gt;
+    30..|      {ok, #{}}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback handle/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle(Request) -&gt; Result when
+        |      Request :: ping | healthcheck |
+        |      {get_or_create_session, SessId :: session:id(), Iden :: session:identity(),
+        |          Con :: pid()} |
+        |      {remove_session, SessId :: session:id()},
+        |      Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
+        |      {error, Reason},
+        |      Response :: term(),
+        |      Reason :: term().
+        |  handle(ping) -&gt;
+<font color=red>     0..|      pong;</font>
+        |  
+        |  handle(healthcheck) -&gt;
+    89..|      ok;
+        |  
+        |  handle({reuse_or_create_session, SessId, Iden, Con}) -&gt;
+   189..|      reuse_or_create_session(SessId, Iden, Con);
+        |  
+        |  handle({remove_session, SessId}) -&gt;
+   123..|      remove_session(SessId);
+        |  
+        |  handle(_Request) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback cleanup/0
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec cleanup() -&gt; Result when
+        |      Result :: ok | {error, Error},
+        |      Error :: timeout | term().
+        |  cleanup() -&gt;
+    30..|      ok.
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns a supervisor spec for a event manager worker supervisor.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec supervisor_spec() -&gt;
+        |      {RestartStrategy :: supervisor:strategy(), MaxR :: integer(), MaxT :: integer()}.
+        |  supervisor_spec() -&gt;
+    30..|      RestartStrategy = simple_one_for_one,
+    30..|      MaxRestarts = 0,
+    30..|      RestartTimeWindowSecs = 1,
+    30..|      {RestartStrategy, MaxRestarts, RestartTimeWindowSecs}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns a supervisor child_spec for a event dispatcher supervisor.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec supervisor_child_spec() -&gt; [supervisor:child_spec()].
+        |  supervisor_child_spec() -&gt;
+    30..|      Id = Module = session_sup,
+    30..|      Restart = temporary,
+    30..|      Shutdown = infinity,
+    30..|      Type = supervisor,
+    30..|      [{Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}].
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Tries to reuse active session. If session does not exist it is created.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec reuse_or_create_session(SessId :: session:id(),
+        |      Iden :: session:identity(), Con :: pid()) -&gt;
+        |      {ok, reused | created} | {error, Reason :: term()}.
+        |  reuse_or_create_session(SessId, Iden, Con) -&gt;
+   195..|      case reuse_session(SessId, Iden, Con) of
+     6..|          {ok, reused} -&gt; {ok, reused};
+   189..|          {error, {not_found, _}} -&gt; create_session(SessId, Iden, Con);
+<font color=red>     0..|          {error, Reason} -&gt; {error, Reason}</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Reuses active session or returns with an error.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec reuse_session(SessId :: session:id(), Iden :: session:identity(),
+        |      Con :: pid()) -&gt; {ok, reused} |{error, Reason :: invalid_identity | term()}.
+        |  reuse_session(SessId, Iden, Con) -&gt;
+   221..|      case session:get(SessId) of
+        |          {ok, #document{value = #session{identity = Iden, communicator = undefined}}} -&gt;
+    26..|              reuse_session(SessId, Iden, Con);
+        |          {ok, #document{value = #session{identity = Iden, communicator = Comm}}} -&gt;
+     6..|              ok = communicator:add_connection(Comm, Con),
+     6..|              {ok, reused};
+        |          {ok, #document{}} -&gt;
+<font color=red>     0..|              {error, invalid_identity};</font>
+        |          {error, Reason} -&gt;
+   189..|              {error, Reason}
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Creates new session or if session exists tries to reuse it.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create_session(SessId :: session:id(), Iden :: session:identity(),
+        |      Con :: pid()) -&gt; {ok, created} | {error, Reason :: term()}.
+        |  create_session(SessId, Iden, Con) -&gt;
+   189..|      case session:create(#document{key = SessId, value = #session{identity = Iden}}) of
+        |          {ok, SessId} -&gt;
+   183..|              {ok, _} = start_session_sup(SessId, Con),
+   183..|              {ok, created};
+        |          {error, already_exists} -&gt;
+     6..|              reuse_or_create_session(SessId, Iden, Con);
+        |          {error, Reason} -&gt;
+<font color=red>     0..|              {error, Reason}</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Removes session from cache and stops session supervisor.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec remove_session(SessId :: session:id()) -&gt; ok | {error, Reason :: term()}.
+        |  remove_session(SessId) -&gt;
+   123..|      case session:get(SessId) of
+        |          {ok, #document{value = #session{session_sup = undefined}}} -&gt;
+<font color=red>     0..|              session:delete(SessId);</font>
+        |          {ok, #document{value = #session{session_sup = SessSup, node = Node}}} -&gt;
+    62..|              ok = session:delete(SessId),
+    62..|              stop_session_sup(Node, SessSup);
+        |          {error, Reason} -&gt;
+    61..|              {error, Reason}
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Starts session supervisor supervised by event manager
+        |  %% worker supervisor.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_session_sup(SessId :: session:id(), Con :: pid()) -&gt;
+        |      supervisor:startchild_ret().
+        |  start_session_sup(SessId, Con) -&gt;
+   183..|      supervisor:start_child(?SESSION_WORKER_SUP, [SessId, Con]).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Stops event dispatcher supervisor and its children.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec stop_session_sup(Node :: node(), SessSup :: pid()) -&gt;
+        |      ok | {error, Reason :: term()}.
+        |  stop_session_sup(Node, SessSup) -&gt;
+    62..|      supervisor:terminate_child({?SESSION_WORKER_SUP, Node}, SessSup).</pre>
+</body>
+</html>

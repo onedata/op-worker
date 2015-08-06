@@ -1,0 +1,386 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/dns_worker.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/dns/dns_worker.erl by COVER 2015-08-06 at 11:00:41
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2013 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module implements {@link worker_plugin_behaviour} and
+        |  %%% manages a DNS server module.
+        |  %%% In addition, it implements {@link dns_handler_behaviour} -
+        |  %%% DNS query handling logic.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(dns_worker).
+        |  -author("Lukasz Opiola").
+        |  
+        |  -behaviour(worker_plugin_behaviour).
+        |  -behaviour(dns_handler_behaviour).
+        |  
+        |  -include("global_definitions.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  -include_lib("kernel/src/inet_dns.hrl").
+        |  
+        |  %% worker_plugin_behaviour callbacks
+        |  -export([init/1, handle/1, cleanup/0]).
+        |  
+        |  %% dns_handler_behaviour callbacks
+        |  -export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
+        |      handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
+        |  
+        |  %% export for unit tests
+        |  -ifdef(TEST).
+        |  -export([parse_domain/1]).
+        |  -endif.
+        |  
+        |  %%%===================================================================
+        |  %%% worker_plugin_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback init/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(Args :: term()) -&gt; Result when
+        |      Result :: {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
+        |  init([]) -&gt;
+    31..|      {ok, #{}};
+        |  
+        |  init(InitialState) when is_map(InitialState) -&gt;
+     2..|      {ok, InitialState};
+        |  
+        |  init(test) -&gt;
+     1..|      {ok, #{}};
+        |  
+        |  init(_) -&gt;
+     2..|      throw(unknown_initial_state).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback handle/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle(Request) -&gt; Result when
+        |      Request :: ping | healthcheck,
+        |      Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
+        |      {error, Reason},
+        |      Response :: [inet:ip4_address()],
+        |      Reason :: term().
+        |  
+        |  handle(ping) -&gt;
+     3..|      pong;
+        |  
+        |  handle(healthcheck) -&gt;
+    91..|      _Reply = healthcheck();
+        |  
+        |  handle({update_lb_advice, LBAdvice}) -&gt;
+  3661..|      ?debug("DNS update of load_balancing advice: ~p", [LBAdvice]),
+  3661..|      ok = worker_host:state_put(?MODULE, last_update, now()),
+  3661..|      ok = worker_host:state_put(?MODULE, lb_advice, LBAdvice);
+        |  
+        |  handle({handle_a, Domain}) -&gt;
+    15..|      LBAdvice = worker_host:state_get(?MODULE, lb_advice),
+    15..|      ?debug("DNS A request: ~s, current advice: ~p", [Domain, LBAdvice]),
+    15..|      case LBAdvice of
+        |          undefined -&gt;
+        |              % The DNS server is still out of sync, return serv fail
+     1..|              serv_fail;
+        |          _ -&gt;
+    14..|              case parse_domain(Domain) of
+        |                  ok -&gt;
+        |                      % Prefix OK, return nodes to connect to
+    11..|                      Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
+    11..|                      {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
+    11..|                      {ok,
+    52..|                              [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP &lt;- Nodes] ++
+        |                              [dns_server:authoritative_answer_flag(true)]
+        |                      };
+        |                  Other -&gt;
+        |                      % Return whatever parse_domain returned (nx_domain | refused)
+     3..|                      Other
+        |              end
+        |      end;
+        |  
+        |  handle({handle_ns, Domain}) -&gt;
+     5..|      LBAdvice = worker_host:state_get(?MODULE, lb_advice),
+     5..|      ?debug("DNS NS request: ~s, current advice: ~p", [Domain, LBAdvice]),
+     5..|      case LBAdvice of
+        |          undefined -&gt;
+        |              % The DNS server is still out of sync, return serv fail
+     1..|              serv_fail;
+        |          _ -&gt;
+     4..|              case parse_domain(Domain) of
+        |                  ok -&gt;
+        |                      % Prefix OK, return NS nodes of the cluster
+     1..|                      Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
+     1..|                      {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
+     1..|                      {ok,
+     2..|                              [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP &lt;- Nodes] ++
+        |                              [dns_server:authoritative_answer_flag(true)]
+        |                      };
+        |                  Other -&gt;
+        |                      % Return whatever parse_domain returned (nx_domain | refused)
+     3..|                      Other
+        |              end
+        |      end;
+        |  
+        |  handle(_Request) -&gt;
+     3..|      ?log_bad_request(_Request),
+     3..|      throw({unsupported_request, _Request}).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link worker_plugin_behaviour} callback cleanup/0
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec cleanup() -&gt; Result when
+        |      Result :: ok.
+        |  cleanup() -&gt;
+    30..|      dns_server:stop(?APPLICATION_SUPERVISOR_NAME).
+        |  
+        |  
+        |  %%%===================================================================
+        |  %%% dns_handler_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type A.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_a(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_a(Domain) -&gt;
+    10..|      worker_proxy:call(dns_worker, {handle_a, Domain}).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type NS.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_ns(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_ns(Domain) -&gt;
+<font color=red>     0..|      worker_proxy:call(dns_worker, {handle_ns, Domain}).</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type CNAME.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_cname(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_cname(_Domain) -&gt;
+<font color=red>     0..|      not_impl.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type MX.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_mx(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_mx(_Domain) -&gt;
+<font color=red>     0..|      not_impl.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type SOA.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_soa(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_soa(_Domain) -&gt;
+    81..|      not_impl.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type WKS.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_wks(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_wks(_Domain) -&gt;
+<font color=red>     0..|      not_impl.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type PTR.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_ptr(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_ptr(_Domain) -&gt;
+<font color=red>     0..|      not_impl.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type HINFO.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_hinfo(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_hinfo(_Domain) -&gt;
+<font color=red>     0..|      not_impl.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type MINFO.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_minfo(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  %% ====================================================================
+        |  handle_minfo(_Domain) -&gt;
+<font color=red>     0..|      not_impl.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles DNS queries of type TXT.
+        |  %% See {@link dns_handler_behaviour} for reference.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_txt(Domain :: string()) -&gt; dns_handler_behaviour:handler_reply().
+        |  handle_txt(_Domain) -&gt;
+<font color=red>     0..|      not_impl.</font>
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Parses the DNS query domain and check if it ends with provider domain.
+        |  %% Accepts only domains that fulfill above condition and have a
+        |  %% maximum of one part subdomain.
+        |  %% Returns NXDOMAIN when the query domain has more parts.
+        |  %% Returns REFUSED when query domain is not the same as provider's.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec parse_domain(Domain :: string()) -&gt; ok | refused | nx_domain.
+        |  parse_domain(DomainArg) -&gt;
+    26..|      ProviderDomain = oneprovider:get_provider_domain(),
+    26..|      GRDomain = oneprovider:get_gr_domain(),
+        |      % If requested domain starts with 'www.', ignore the suffix
+    26..|      QueryDomain = case DomainArg of
+     5..|                        "www." ++ Rest -&gt; Rest;
+    21..|                        Other -&gt; Other
+        |                    end,
+        |  
+        |      % Check if queried domain ends with provider domain
+    26..|      case string:rstr(QueryDomain, ProviderDomain) of
+        |          0 -&gt;
+        |              % If not, check if following are true:
+        |              % 1. GR domain: gr.domain
+        |              % 2. provider domain: prov_subdomain.gr.domain
+        |              % 3. queried domain: first_part.gr.domain
+        |              % If not, return REFUSED
+    12..|              QDTail = string:join(tl(string:tokens(QueryDomain, ".")), "."),
+    12..|              PDTail = string:join(tl(string:tokens(ProviderDomain, ".")), "."),
+    12..|              case QDTail =:= GRDomain andalso PDTail =:= GRDomain of
+        |                  true -&gt;
+     4..|                      ok;
+        |                  false -&gt;
+     8..|                      refused
+        |              end;
+        |          _ -&gt;
+        |              % Queried domain does end with provider domain
+    14..|              case QueryDomain of
+        |                  ProviderDomain -&gt;
+     2..|                      ok;
+        |                  _ -&gt;
+        |                      % Check if queried domain is in form
+        |                      % 'first_part.provider.domain' - strip out the
+        |                      % first_part and compare. If not, return NXDOMAIN
+    12..|                      case string:join(tl(string:tokens(QueryDomain, ".")), ".") of
+        |                          ProviderDomain -&gt;
+    11..|                              ok;
+        |                          _ -&gt;
+     1..|                              nx_domain
+        |                      end
+        |              end
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% healthcheck dns endpoint
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec healthcheck() -&gt; ok | {error, Reason :: atom()}.
+        |  healthcheck() -&gt;
+    91..|      LastUpdate = worker_host:state_get(?MODULE, last_update),
+    91..|      LBAdvice = worker_host:state_get(?MODULE, lb_advice),
+    91..|      case LBAdvice of
+        |          undefined -&gt;
+     9..|              {error, no_lb_advice_received};
+        |          _ -&gt;
+    82..|              {ok, Threshold} = application:get_env(?APP_NAME, dns_disp_out_of_sync_threshold),
+        |              % Threshold is in millisecs, now_diff is in microsecs
+    82..|              case timer:now_diff(now(), LastUpdate) &gt; Threshold * 1000 of
+        |                  true -&gt;
+        |                      % DNS is out of sync
+     1..|                      out_of_sync;
+        |                  false -&gt;
+        |                      % DNS is synced, check if it responds to requests.
+    81..|                      check_dns_connectivity()
+        |              end
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Checks if DNS server responds to requests.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec check_dns_connectivity() -&gt; ok | {error, server_not_responding}.
+        |  check_dns_connectivity() -&gt;
+    81..|      {ok, HealthcheckTimeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    81..|      {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
+    81..|      Query = inet_dns:encode(
+        |          #dns_rec{
+        |              header = #dns_header{
+        |                  id = crypto:rand_uniform(1, 16#FFFF),
+        |                  opcode = 'query',
+        |                  rd = true
+        |              },
+        |              qdlist = [#dns_query{
+        |                  domain = "localhost",
+        |                  type = soa,
+        |                  class = in
+        |              }],
+        |              arlist = [{dns_rr_opt, ".", opt, 1280, 0, 0, 0, &lt;&lt;&gt;&gt;}]
+        |          }),
+    81..|      {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    81..|      gen_udp:send(Socket, "127.0.0.1", DNSPort, Query),
+    81..|      case gen_udp:recv(Socket, 65535, HealthcheckTimeout) of
+        |          {ok, _} -&gt;
+        |              % DNS is working
+    81..|              ok;
+        |          _ -&gt;
+        |              % DNS is not working
+<font color=red>     0..|              {error, server_not_responding}</font>
+        |      end.</pre>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/gr_plugin.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/plugins/gr_plugin.erl by COVER 2015-08-06 at 11:00:41
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Krzysztof Trzepla
+        |  %%% @copyright (C) 2014 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module implements gr_plugin_behaviour in order
+        |  %%% to customize connection settings to Global Registry.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(gr_plugin).
+        |  -author("Krzysztof Trzepla").
+        |  
+        |  -behaviour(gr_plugin_behaviour).
+        |  
+        |  -include("global_definitions.hrl").
+        |  
+        |  %% gr_plugin_behaviour API
+        |  -export([get_gr_url/0, get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
+        |  
+        |  %%%===================================================================
+        |  %%% gr_plugin_behaviour API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Should return a Global Registry URL.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_gr_url() -&gt; string().
+        |  get_gr_url() -&gt;
+    32..|      {ok, Hname} = application:get_env(?APP_NAME, global_registry_domain),
+    32..|      Hostname = gui_str:to_list(Hname),
+    32..|      {ok, Port} = application:get_env(?APP_NAME, global_registry_rest_port),
+    32..|      string:join(["https://", Hostname, ":", integer_to_list(Port)], "").
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Should return a path to file containing provider's private key.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_key_path() -&gt; file:name_all().
+        |  get_key_path() -&gt;
+<font color=red>     0..|      {ok, KeyFile} = application:get_env(?APP_NAME, global_registry_provider_key_path),</font>
+<font color=red>     0..|      KeyFile.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Should return a path to file containing provider's private key.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_csr_path() -&gt; file:name_all().
+        |  get_csr_path() -&gt;
+<font color=red>     0..|      {ok, CSRFile} = application:get_env(?APP_NAME, global_registry_provider_csr_path),</font>
+<font color=red>     0..|      CSRFile.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Should return a path to file containing provider's
+        |  %% public certificate signed by Global Registry.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_cert_path() -&gt; file:name_all().
+        |  get_cert_path() -&gt;
+<font color=red>     0..|      {ok, CertFile} = application:get_env(?APP_NAME, global_registry_provider_cert_path),</font>
+<font color=red>     0..|      CertFile.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Should return a path to file containing Global Registry
+        |  %% CA certificate.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_cacert_path() -&gt; file:name_all().
+        |  get_cacert_path() -&gt;
+    30..|      {ok, CACertFile} = application:get_env(?APP_NAME, global_registry_ca_cert_path),
+    30..|      CACertFile.
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+</pre>
+</body>
+</html>

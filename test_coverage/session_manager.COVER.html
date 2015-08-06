@@ -1,0 +1,69 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/session_manager.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/session/session_manager.erl by COVER 2015-08-06 at 11:00:41
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Krzysztof Trzepla
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module is responsible for creating and forwarding requests to
+        |  %%% session worker.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(session_manager).
+        |  -author("Krzysztof Trzepla").
+        |  
+        |  %% API
+        |  -export([reuse_or_create_session/3, remove_session/1]).
+        |  
+        |  -define(TIMEOUT, timer:seconds(20)).
+        |  -define(SESSION_WORKER, session_manager_worker).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Reuses active session or creates one for user with given identity.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec reuse_or_create_session(SessId :: session:id(),
+        |      Iden :: session:identity(), Con :: pid()) -&gt;
+        |      {ok, reused | created} |{error, Reason :: term()}.
+        |  reuse_or_create_session(SessId, Iden, Con) -&gt;
+   189..|      worker_proxy:call(
+        |          ?SESSION_WORKER,
+        |          {reuse_or_create_session, SessId, Iden, Con},
+        |          ?TIMEOUT
+        |      ).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Removes session identified by session ID.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec remove_session(SessId :: session:id()) -&gt; ok | {error, Reason :: term()}.
+        |  remove_session(SessId) -&gt;
+   244..|      worker_proxy:call(
+        |          ?SESSION_WORKER,
+        |          {remove_session, SessId},
+        |          ?TIMEOUT
+        |      ).
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+</pre>
+</body>
+</html>

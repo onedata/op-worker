@@ -1,0 +1,112 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/datastore_utils.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/datastore/datastore_utils.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Rafal Slota
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc Utility and common functions for datastore module.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(datastore_utils).
+        |  -author("Rafal Slota").
+        |  
+        |  -include("modules/datastore/datastore_common_internal.hrl").
+        |  
+        |  -define(KEY_LEN, 32).
+        |  
+        |  %% API
+        |  -export([shallow_to_map/1, shallow_to_record/1, gen_uuid/0, gen_uuid/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Converts given tuple or record into map.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec shallow_to_map(tuple()) -&gt; #{term() =&gt; term()}.
+        |  shallow_to_map(#{'$record' := ModelName} = Map) when is_atom(ModelName) -&gt;
+<font color=red>     0..|      Map;</font>
+        |  shallow_to_map(Record) when is_tuple(Record) -&gt;
+  8839..|      ModelName = element(1, Record),
+  8839..|      try ModelName:model_init() of
+        |          #model_config{fields = Fields} -&gt;
+  6364..|              [_ | Values1] = tuple_to_list(Record),
+  6364..|              Map = maps:from_list(lists:zip(Fields, Values1)),
+  6364..|              Map#{'$record' =&gt; ModelName}
+        |      catch
+        |          _:_ -&gt; %% encode as tuple
+  2475..|              Values = tuple_to_list(Record),
+  2475..|              Keys = lists:seq(1, length(Values)),
+  2475..|              KeyValue = lists:zip(Keys, Values),
+  2475..|              Map = maps:from_list(KeyValue),
+  2475..|              Map#{'$record' =&gt; undefined}
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Converts given map to record or tuple (reverses shallow_to_map/1).
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec shallow_to_record(tuple() | #{term() =&gt; term()}) -&gt; tuple().
+        |  shallow_to_record(Record) when is_tuple(Record) -&gt;
+<font color=red>     0..|      Record;</font>
+        |  shallow_to_record(#{'$record' := undefined} = Map) -&gt;
+   314..|      MapList = maps:to_list(maps:remove('$record', Map)),
+   314..|      FieldList = [FieldValue || {_, FieldValue} &lt;- lists:usort(MapList)],
+   314..|      list_to_tuple(FieldList);
+        |  shallow_to_record(#{'$record' := ModelName} = Map) -&gt;
+        |  
+  3932..|      #model_config{fields = Fields, defaults = Defaults} = ModelName:model_init(),
+  3932..|      [_ | Values1] = tuple_to_list(Defaults),
+  3932..|      Defaults1 = lists:zip(Fields, Values1),
+  3932..|      Values =
+        |          lists:map(
+        |              fun({FieldName, DefaultValue}) -&gt;
+ 14349..|                  maps:get(FieldName, Map, DefaultValue)
+        |              end, Defaults1),
+        |  
+  3932..|      list_to_tuple([ModelName | Values]).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Generates random UUID.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec gen_uuid() -&gt; binary().
+        |  gen_uuid() -&gt;
+   374..|      base64:encode(crypto:rand_bytes(?KEY_LEN)).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Generates UUID based on given term.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec gen_uuid(term()) -&gt; binary().
+        |  gen_uuid(Term) -&gt;
+<font color=red>     0..|      base64:encode(term_to_binary(Term)).</font>
+        |  
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================</pre>
+</body>
+</html>

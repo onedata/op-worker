@@ -1,0 +1,291 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/listener_starter.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/cluster_elements/node_manager/listener_starter.erl by COVER 2015-08-06 at 11:00:40
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Tomasz Lichon
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module provides functions allowing to start listeners
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(listener_starter).
+        |  -author("Tomasz Lichon").
+        |  
+        |  -include("global_definitions.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
+        |  -define(ONECLIENT_URI_PATH, "/oneclient").
+        |  -define(ONEPROVIDER_URI_PATH, "/oneprovider").
+        |  
+        |  % Custom cowboy bridge module
+        |  -define(COWBOY_BRIDGE_MODULE, n2o_handler).
+        |  
+        |  % Session logic module
+        |  -define(SESSION_LOGIC_MODULE, session_logic).
+        |  
+        |  % GUI routing module
+        |  -define(GUI_ROUTING_MODULE, gui_routes).
+        |  
+        |  % Paths in gui static directory
+        |  -define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+        |  
+        |  % Cowboy listener references
+        |  -define(HTTPS_LISTENER, https).
+        |  -define(REST_LISTENER, rest).
+        |  -define(HTTP_REDIRECTOR_LISTENER, http).
+        |  -define(TCP_PROTO_LISTENER, tcp_proto).
+        |  
+        |  %% API
+        |  -export([start_protocol_listener/0, start_gui_listener/0, start_redirector_listener/0, start_rest_listener/0,
+        |      start_dns_listeners/0, stop_listeners/0]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts a cowboy listener for request_dispatcher.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_protocol_listener() -&gt; {ok, pid()} | no_return().
+        |  start_protocol_listener() -&gt;
+    30..|      {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
+    30..|      {ok, DispatcherPoolSize} =
+        |          application:get_env(?APP_NAME, protocol_handler_pool_size),
+    30..|      {ok, CertFile} =
+        |          application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
+    30..|      Ip = case application:get_env(?APP_NAME, protocol_handler_bind_addr) of
+    28..|               {ok, loopback} -&gt; {127, 0, 0, 1};
+     2..|               {ok, all} -&gt; {0, 0, 0, 0}
+        |           end,
+        |  
+    30..|      {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
+        |          ranch_ssl2, [
+        |              {ip, Ip},
+        |              {port, Port},
+        |              {certfile, CertFile}
+        |          ],
+        |          connection, []
+        |      ).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts a cowboy listener for n2o GUI.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_gui_listener() -&gt; {ok, pid()} | no_return().
+        |  start_gui_listener() -&gt;
+        |      % Get params from env for gui
+    30..|      {ok, DocRoot} =
+        |          application:get_env(?APP_NAME, http_worker_static_files_root),
+    30..|      {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
+    30..|      {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
+    30..|      {ok, GuiNbAcceptors} =
+        |          application:get_env(?APP_NAME, http_worker_number_of_acceptors),
+    30..|      {ok, MaxKeepAlive} =
+        |          application:get_env(?APP_NAME, http_worker_max_keepalive),
+    30..|      {ok, Timeout} =
+        |          application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+        |  
+        |      % Setup GUI dispatch opts for cowboy
+    30..|      GUIDispatch = [
+        |          % Matching requests will be redirected to the same address without leading 'www.'
+        |          % Cowboy does not have a mechanism to match every hostname starting with 'www.'
+        |          % This will match hostnames with up to 6 segments
+        |          % e. g. www.seg2.seg3.seg4.seg5.com
+        |          {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
+        |              [
+        |                  {delegation, true},
+        |                  {handler_module, https_redirect_handler},
+        |                  {handler_opts, []}
+        |              ]}
+        |          ]},
+        |          % Proper requests are routed to handler modules
+        |          {'_', static_dispatches(DocRoot, ?STATIC_PATHS) ++ [
+        |              {"/nagios/[...]", opn_cowboy_bridge,
+        |                  [
+        |                      {delegation, true},
+        |                      {handler_module, nagios_handler},
+        |                      {handler_opts, []}
+        |                  ]},
+        |              {'_', opn_cowboy_bridge,
+        |                  [
+        |                      {delegation, true},
+        |                      {handler_module, n2o_handler},
+        |                      {handler_opts, []}
+        |                  ]}
+        |          ]}
+        |      ],
+        |  
+        |      % Create ets tables and set envs needed by n2o
+    30..|      gui_utils:init_n2o_ets_and_envs(GuiPort, ?GUI_ROUTING_MODULE,
+        |          ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
+        |  
+        |      % Start the listener for web gui and nagios handler
+    30..|      {ok, _} = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
+        |          ranch_ssl2, [
+        |              {ip, {127, 0, 0, 1}},
+        |              {port, GuiPort},
+        |              {certfile, Cert}
+        |          ], cowboy_protocol, [
+        |              {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
+        |              {max_keepalive, MaxKeepAlive},
+        |              {timeout, timer:seconds(Timeout)},
+        |              % On every request, add headers that improve security to the response
+        |              {onrequest, fun gui_utils:onrequest_adjust_headers/1}
+        |          ]).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts a cowboy listener that will redirect all requests of http to https.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_redirector_listener() -&gt; {ok, pid()} | no_return().
+        |  start_redirector_listener() -&gt;
+    30..|      {ok, RedirectPort} =
+        |          application:get_env(?APP_NAME, http_worker_redirect_port),
+    30..|      {ok, RedirectNbAcceptors} =
+        |          application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
+    30..|      {ok, Timeout} =
+        |          application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+    30..|      RedirectDispatch = [
+        |          {'_', [
+        |              {'_', opn_cowboy_bridge,
+        |                  [
+        |                      {delegation, true},
+        |                      {handler_module, opn_redirect_handler},
+        |                      {handler_opts, []}
+        |                  ]}
+        |          ]}
+        |      ],
+    30..|      {ok, _} = cowboy:start_http(?HTTP_REDIRECTOR_LISTENER, RedirectNbAcceptors,
+        |          [
+        |              {port, RedirectPort}
+        |          ],
+        |          [
+        |              {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
+        |              {max_keepalive, 1},
+        |              {timeout, timer:seconds(Timeout)}
+        |          ]).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts a cowboy listener for REST requests.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_rest_listener() -&gt; {ok, pid()} | no_return().
+        |  start_rest_listener() -&gt;
+    30..|      {ok, NbAcceptors} =
+        |          application:get_env(?APP_NAME, http_worker_number_of_acceptors),
+    30..|      {ok, Timeout} =
+        |          application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+    30..|      {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
+    30..|      {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
+        |  
+    30..|      RestDispatch = [
+        |          {'_', [
+        |              {"/rest/:version/[...]", opn_cowboy_bridge,
+        |                  [
+        |                      {delegation, true},
+        |                      {handler_module, rest_handler},
+        |                      {handler_opts, []}
+        |                  ]},
+        |              {"/cdmi/[...]", opn_cowboy_bridge,
+        |                  [
+        |                      {delegation, true},
+        |                      {handler_module, cdmi_handler},
+        |                      {handler_opts, []}
+        |                  ]}
+        |          ]}
+        |      ],
+        |  
+        |      % Start the listener for REST handler
+    30..|      {ok, _} = ranch:start_listener(?REST_LISTENER, NbAcceptors,
+        |          ranch_ssl2, [
+        |              {ip, {127, 0, 0, 1}},
+        |              {port, RestPort},
+        |              {certfile, Cert}
+        |          ], cowboy_protocol, [
+        |              {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
+        |              {max_keepalive, 1},
+        |              {timeout, timer:seconds(Timeout)}
+        |          ]).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts DNS UDP and TCP listeners.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_dns_listeners() -&gt; ok | no_return().
+        |  start_dns_listeners() -&gt;
+    30..|      {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
+    30..|      {ok, EdnsMaxUdpSize} = application:get_env(?APP_NAME, edns_max_udp_size),
+    30..|      {ok, TCPNumAcceptors} =
+        |          application:get_env(?APP_NAME, dns_tcp_acceptor_pool_size),
+    30..|      {ok, TCPTImeout} = application:get_env(?APP_NAME, dns_tcp_timeout_seconds),
+    30..|      OnFailureFun = fun() -&gt;
+<font color=red>     0..|          ?error("Could not start DNS server on node ~p.", [node()])</font>
+        |      end,
+    30..|      ok = dns_server:start(?APPLICATION_SUPERVISOR_NAME, DNSPort, dns_worker,
+        |          EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Stops all listeners defined in this module
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec stop_listeners() -&gt; ok.
+        |  stop_listeners() -&gt;
+    29..|      Listeners =
+        |          [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
+    29..|      Results = lists:map(
+        |          fun(?SESSION_LOGIC_MODULE) -&gt;
+    29..|              catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);
+    87..|              (X) -&gt; {X, catch cowboy:stop_listener(X)}
+        |          end, Listeners),
+    29..|      lists:foreach(
+    87..|          fun({_, ok}) -&gt; ok;
+    29..|              (ok) -&gt; ok;
+        |              ({X, Error}) -&gt;
+<font color=red>     0..|                  ?error("Error on stopping listener ~p: ~p", [X, Error])</font>
+        |          end, Results).
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Generates static file routing rules for cowboy.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec static_dispatches(DocRoot :: string(), StaticPaths :: [string()]) -&gt; [term()].
+        |  static_dispatches(DocRoot, StaticPaths) -&gt;
+    30..|      _StaticDispatches = lists:map(fun(Dir) -&gt;
+   210..|          {Dir ++ "[...]", opn_cowboy_bridge,
+        |              [
+        |                  {delegation, true},
+        |                  {handler_module, cowboy_static},
+        |                  {handler_opts, {dir, DocRoot ++ Dir}}
+        |              ]}
+        |      end, StaticPaths).
+</pre>
+</body>
+</html>

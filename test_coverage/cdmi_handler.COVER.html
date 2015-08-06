@@ -1,0 +1,172 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/cdmi_handler.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/http_worker/cdmi/cdmi_handler.erl by COVER 2015-08-06 at 11:00:40
+
+****************************************************************************
+
+        |  %%%--------------------------------------------------------------------
+        |  %%% @author Tomasz Lichon
+        |  %%% @copyright (C) 2013 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%--------------------------------------------------------------------
+        |  %%% @doc This is a cowboy handler module, implementing cowboy_rest interface.
+        |  %%% It handles cdmi object/container PUT, GET and DELETE requests
+        |  %%% @end
+        |  %%%--------------------------------------------------------------------
+        |  -module(cdmi_handler).
+        |  -author("Tomasz Lichon").
+        |  
+        |  -include("modules/http_worker/http_common.hrl").
+        |  
+        |  %% the state of request, it is created in rest_init function,
+        |  %% and passed to every cowboy callback functions
+        |  -record(state, {}).
+        |  
+        |  %% API
+        |  -export([init/3, terminate/3, rest_init/2, resource_exists/2, malformed_request/2,
+        |      allowed_methods/2, content_types_provided/2, content_types_accepted/2,
+        |      delete_resource/2]).
+        |  
+        |  %% Content type routing functions
+        |  -export([get_cdmi_container/2, put_cdmi_container/2]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Imposes a cowboy upgrade protocol to cowboy_rest - this module is
+        |  %% now treated as REST module by cowboy.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(term(), term(), term()) -&gt; {upgrade, protocol, cowboy_rest, req(), term()}.
+        |  init(_, Req, Opts) -&gt;
+<font color=red>     0..|      {upgrade, protocol, cowboy_rest, Req, Opts}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Handles cleanup
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec terminate(Reason :: term(), req(), #state{}) -&gt; ok.
+        |  terminate(_, _, _) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Called right after protocol upgrade to init the request context.
+        |  %% Will shut down the connection if the peer doesn't provide a valid
+        |  %% proxy certificate.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec rest_init(req(), term()) -&gt; {ok, req(), term()} | {shutdown, req()}.
+        |  rest_init(Req, _Opts) -&gt;
+<font color=red>     0..|      {ok, Req, #state{}}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Returns methods that are allowed.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec allowed_methods(req(), #state{} | {error, term()}) -&gt; {[binary()], req(), #state{}}.
+        |  allowed_methods(Req, State) -&gt;
+<font color=red>     0..|      {[&lt;&lt;"PUT"&gt;&gt;, &lt;&lt;"GET"&gt;&gt;, &lt;&lt;"DELETE"&gt;&gt;], Req, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Checks if request contains all mandatory fields and their values are set properly
+        |  %% depending on requested operation
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec malformed_request(req(), #state{}) -&gt; {boolean(), req(), #state{}}.
+        |  malformed_request(Req, State) -&gt;
+<font color=red>     0..|      {false, Req, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Determines if resource identified by Filepath exists.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec resource_exists(req(), #state{}) -&gt; {boolean(), req(), #state{}}.
+        |  resource_exists(Req, State) -&gt;
+<font color=red>     0..|      {false, Req, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Returns content types that can be provided.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec content_types_provided(req(), #state{}) -&gt;
+        |      {[{binary(), atom()}], req(), #state{}}.
+        |  content_types_provided(Req, State) -&gt;
+<font color=red>     0..|      {[</font>
+        |          {&lt;&lt;"application/cdmi-container"&gt;&gt;, get_cdmi_container}
+        |      ], Req, State}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc Cowboy callback function
+        |  %% Returns content-types that are accepted by REST handler and what
+        |  %% functions should be used to process the requests.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec content_types_accepted(req(), #state{}) -&gt;
+        |      {[{binary(), atom()}], req(), #state{}}.
+        |  content_types_accepted(Req, State) -&gt;
+<font color=red>     0..|      {[</font>
+        |          {&lt;&lt;"application/cdmi-container"&gt;&gt;, put_cdmi_container}
+        |      ], Req, State}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Cowboy callback function
+        |  %% Handles DELETE requests.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec delete_resource(req(), #state{}) -&gt; {term(), req(), #state{}}.
+        |  delete_resource(Req, State) -&gt;
+<font color=red>     0..|      {true, Req, State}.</font>
+        |  
+        |  %%%===================================================================
+        |  %%% Content type routing functions
+        |  %%%===================================================================
+        |  %%--------------------------------------------------------------------
+        |  %% This functions are needed by cowboy for registration in
+        |  %% content_types_accepted/content_types_provided methods and simply delegates
+        |  %% their responsibility to adequate handler modules
+        |  %%-------------------------------------------------------------------
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles GET with "application/cdmi-container" content-type
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_cdmi_container(req(), #state{}) -&gt; {term(), req(), #state{}}.
+        |  get_cdmi_container(Req, State) -&gt;
+<font color=red>     0..|      {&lt;&lt;"ok"&gt;&gt;, Req, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Handles PUT with "application/cdmi-container" content-type
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec put_cdmi_container(req(), #state{}) -&gt; {term(), req(), #state{}}.
+        |  put_cdmi_container(Req, State) -&gt;
+<font color=red>     0..|      {true, Req, State}.</font>
+</pre>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/local_cache_controller.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/datastore/models/local_cache_controller.erl by COVER 2015-08-06 at 11:00:44
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Michal Wrzeszcz
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc Model that is used to controle memory utilization by local cache.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(local_cache_controller).
+        |  -author("Michal Wrzeszcz").
+        |  -behaviour(model_behaviour).
+        |  
+        |  -include("modules/datastore/datastore.hrl").
+        |  -include("modules/datastore/datastore_model.hrl").
+        |  -include("modules/datastore/datastore_engine.hrl").
+        |  
+        |  %% model_behaviour callbacks and API
+        |  -export([save/1, get/1, list/0, list/1, exists/1, delete/1, update/2, create/1, model_init/0,
+        |      'after'/5, before/4]).
+        |  
+        |  %%%===================================================================
+        |  %%% model_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback save/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec save(datastore:document()) -&gt;
+        |      {ok, datastore:key()} | datastore:generic_error().
+        |  save(Document) -&gt;
+<font color=red>     0..|      datastore:save(local_only, Document).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback update/2. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec update(datastore:key(), Diff :: datastore:document_diff()) -&gt;
+        |      {ok, datastore:key()} | datastore:update_error().
+        |  update(Key, Diff) -&gt;
+<font color=red>     0..|      datastore:update(local_only, ?MODULE, Key, Diff).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback create/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create(datastore:document()) -&gt;
+        |      {ok, datastore:key()} | datastore:create_error().
+        |  create(Document) -&gt;
+<font color=red>     0..|      datastore:create(local_only, Document).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback get/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get(datastore:key()) -&gt; {ok, datastore:document()} | datastore:get_error().
+        |  get(Key) -&gt;
+<font color=red>     0..|      datastore:get(local_only, ?MODULE, Key).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns list of all records.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list() -&gt; {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+        |  list() -&gt;
+<font color=red>     0..|      datastore:list(local_only, ?MODEL_NAME, ?GET_ALL, []).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns list records older then DocAge (in ms).
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list(DocAge :: integer()) -&gt; {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+        |  list(DocAge) -&gt;
+    40..|      Now = os:timestamp(),
+    40..|      Filter = fun
+        |          ('$end_of_table', Acc) -&gt;
+    40..|              {abort, Acc};
+        |          (#document{key = Uuid, value = V}, Acc) -&gt;
+<font color=red>     0..|              T = V#local_cache_controller.timestamp,</font>
+<font color=red>     0..|              case timer:now_diff(Now, T) &gt;= 1000*DocAge of</font>
+        |                  true -&gt;
+<font color=red>     0..|                      {next, [Uuid | Acc]};</font>
+        |                  false -&gt;
+<font color=red>     0..|                      {next, Acc}</font>
+        |              end
+        |      end,
+    40..|      datastore:list(local_only, ?MODEL_NAME, Filter, []).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback delete/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec delete(datastore:key()) -&gt; ok | datastore:generic_error().
+        |  delete(Key) -&gt;
+<font color=red>     0..|      datastore:delete(local_only, ?MODULE, Key).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback exists/1. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec exists(datastore:key()) -&gt; datastore:exists_return().
+        |  exists(Key) -&gt;
+<font color=red>     0..|      ?RESPONSE(datastore:exists(local_only, ?MODULE, Key)).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback model_init/0. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec model_init() -&gt; model_behaviour:model_config().
+        |  model_init() -&gt;
+   100..|      ?MODEL_CONFIG(local_cc_bucket, get_hooks_config(),
+        |          ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL, false).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback 'after'/5. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec 'after'(ModelName :: model_behaviour:model_type(),
+        |      Method :: model_behaviour:model_action(),
+        |      Level :: datastore:store_level(), Context :: term(),
+        |      ReturnValue :: term()) -&gt; ok.
+        |  'after'(ModelName, save, disk_only, [Doc], {ok, _}) -&gt;
+<font color=red>     0..|      update_usage_info(Doc#document.key, ModelName);</font>
+        |  'after'(ModelName, update, disk_only, [Key, _Diff], {ok, _}) -&gt;
+<font color=red>     0..|      update_usage_info(Key, ModelName);</font>
+        |  'after'(ModelName, create, disk_only, [Doc], {ok, _}) -&gt;
+<font color=red>     0..|      update_usage_info(Doc#document.key, ModelName);</font>
+        |  'after'(ModelName, get, _Level, [Key], _ReturnValue) -&gt;
+<font color=red>     0..|      update_usage_info(Key, ModelName);</font>
+        |  'after'(ModelName, delete, local_only, [Key, _Pred], ok) -&gt;
+<font color=red>     0..|      del_usage_info(Key, ModelName);</font>
+        |  'after'(ModelName, exists, _Level, [Key], {ok, true}) -&gt;
+<font color=red>     0..|      update_usage_info(Key, ModelName);</font>
+        |  'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link model_behaviour} callback before/4. 
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec before(ModelName :: model_behaviour:model_type(),
+        |      Method :: model_behaviour:model_action(),
+        |      Level :: datastore:store_level(), Context :: term()) -&gt;
+        |      ok | datastore:generic_error().
+        |  before(_ModelName, _Method, _Level, _Context) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Provides hooks configuration.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_hooks_config() -&gt; list().
+        |  get_hooks_config() -&gt;
+   100..|      caches_controller:get_hooks_config(?LOCAL_CACHES).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Updates information about usage of a document.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec update_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) -&gt;
+        |      {ok, datastore:key()} | datastore:generic_error().
+        |  update_usage_info(Key, ModelName) -&gt;
+<font color=red>     0..|      Uuid = caches_controller:get_cache_uuid(Key, ModelName),</font>
+<font color=red>     0..|      V = #local_cache_controller{timestamp = os:timestamp()},</font>
+<font color=red>     0..|      Doc = #document{key = Uuid, value = V},</font>
+<font color=red>     0..|      save(Doc).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Deletes information about usage of a document.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec del_usage_info(Key :: datastore:key(), ModelName :: model_behaviour:model_type()) -&gt;
+        |      ok | datastore:generic_error().
+        |  del_usage_info(Key, ModelName) -&gt;
+<font color=red>     0..|      Uuid = caches_controller:get_cache_uuid(Key, ModelName),</font>
+<font color=red>     0..|      delete(Uuid).</font>
+</pre>
+</body>
+</html>

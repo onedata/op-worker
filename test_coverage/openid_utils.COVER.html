@@ -1,0 +1,81 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/openid_utils.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/http_worker/gui/openid_utils.erl by COVER 2015-08-06 at 11:00:39
+
+****************************************************************************
+
+        |  %% ===================================================================
+        |  %% @author Lukasz Opiola
+        |  %% @copyright (C): 2014 ACK CYFRONET AGH
+        |  %% This software is released under the MIT license
+        |  %% cited in 'LICENSE.txt'.
+        |  %% @end
+        |  %% ===================================================================
+        |  %% @doc: This library is used to authenticate users that have been redirected
+        |  %% from global registry.
+        |  %% @end
+        |  %% ===================================================================
+        |  -module(openid_utils).
+        |  
+        |  -include("modules/http_worker/http_common.hrl").
+        |  -include("global_definitions.hrl").
+        |  -include("proto/common/credentials.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  -include_lib("ctool/include/global_registry/gr_openid.hrl").
+        |  
+        |  
+        |  %% ====================================================================
+        |  %% API functions
+        |  %% ====================================================================
+        |  -export([validate_login/0]).
+        |  
+        |  %% validate_login/0
+        |  %% ====================================================================
+        |  %% @doc
+        |  %% Authenticates a user via Global Registry.
+        |  %% Should be called from n2o page rendering context.
+        |  %% TODO For now, this funciton just returns the information obtained from GR.
+        |  %% @end
+        |  -spec validate_login() -&gt; ok | {error, PredefinedErrorID :: atom()}.
+        |  %% ====================================================================
+        |  validate_login() -&gt;
+<font color=red>     0..|      try</font>
+<font color=red>     0..|          AuthorizationCode = gui_ctx:url_param(&lt;&lt;"code"&gt;&gt;),</font>
+        |          {ok, #token_response{
+        |              access_token = AccessToken,
+        |              refresh_token = RefreshToken,
+        |              expires_in = ExpiresIn,
+        |              id_token = #id_token{
+        |                  sub = GRUID,
+        |                  name = Name,
+        |                  logins = Logins,
+        |                  emails = EmailList}
+<font color=red>     0..|          }} = gr_openid:get_token_response(</font>
+        |              provider,
+        |              [{&lt;&lt;"code"&gt;&gt;, AuthorizationCode}, {&lt;&lt;"grant_type"&gt;&gt;, &lt;&lt;"authorization_code"&gt;&gt;}]
+        |          ),
+<font color=red>     0..|          {ok, _} = onedata_user:fetch(#token{value = AccessToken}),</font>
+<font color=red>     0..|          [</font>
+        |              {access_token, AccessToken},
+        |              {refresh_token, RefreshToken},
+        |              {expires_in, ExpiresIn},
+        |              {sub, GRUID},
+        |              {name, Name},
+        |              {logins, Logins},
+        |              {emails, EmailList}
+        |          ]
+        |      catch
+        |          Type:Message -&gt;
+<font color=red>     0..|              ?error_stacktrace("Cannot validate login ~p:~p", [Type, Message]),</font>
+<font color=red>     0..|              {error, cannot_validate_login}</font>
+        |      end.
+        |  
+        |  
+</pre>
+</body>
+</html>

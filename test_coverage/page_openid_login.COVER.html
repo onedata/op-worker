@@ -1,0 +1,43 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/page_openid_login.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/http_worker/gui/pages/page_openid_login.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %% ===================================================================
+        |  %% @author Lukasz Opiola
+        |  %% @copyright (C): 2014 ACK CYFRONET AGH
+        |  %% This software is released under the MIT license
+        |  %% cited in 'LICENSE.txt'.
+        |  %% @end
+        |  %% ===================================================================
+        |  %% @doc: This file contains n2o website code.
+        |  %% This page performs authentication of users that are redirected
+        |  %% from the Global Registry.
+        |  %% @end
+        |  %% ===================================================================
+        |  -module(page_openid_login).
+        |  -compile(export_all).
+        |  -include("modules/http_worker/http_common.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  % For now, just print the information that came from GR.
+        |  main() -&gt;
+<font color=red>     0..|      case openid_utils:validate_login() of</font>
+        |          {error, ErrorID} -&gt;
+<font color=red>     0..|              gui_str:format("Error: ~p~n", [ErrorID]);</font>
+        |          Props -&gt;
+<font color=red>     0..|              gui_str:format_bin("~p", [Props])</font>
+        |      end.
+        |  
+        |  
+<font color=red>     0..|  event(init) -&gt; ok;</font>
+<font color=red>     0..|  event(terminate) -&gt; ok.</font>
+</pre>
+</body>
+</html>

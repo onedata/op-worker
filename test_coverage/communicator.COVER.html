@@ -1,0 +1,290 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/communicator.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/session/communicator/communicator.erl by COVER 2015-08-06 at 11:00:45
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Krzysztof Trzepla
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module implements gen_server behaviour and is responsible
+        |  %%% for managing connections.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(communicator).
+        |  -author("Krzysztof Trzepla").
+        |  
+        |  -behaviour(gen_server).
+        |  
+        |  -include("proto/oneclient/message_id.hrl").
+        |  -include("proto/oneclient/client_messages.hrl").
+        |  -include("proto/oneclient/server_messages.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% API
+        |  -export([start_link/2]).
+        |  -export([send/2, communicate/2, communicate_async/2, communicate_async/3]).
+        |  -export([add_connection/2, remove_connection/2]).
+        |  
+        |  %% gen_server callbacks
+        |  -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+        |      code_change/3]).
+        |  
+        |  -define(SERVER, ?MODULE).
+        |  
+        |  -define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(30)).
+        |  
+        |  -define(MSG_RETRANSMISSION_INTERVAL, timer:seconds(5)).
+        |  
+        |  -record(state, {
+        |      session_id :: session:id(),
+        |      connections = [] :: [pid()]
+        |  }).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts the server.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_link(SessId :: session:id(), Con :: pid()) -&gt;
+        |      {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+        |  start_link(SessId, Con) -&gt;
+   149..|      gen_server:start_link(?MODULE, [SessId, Con], []).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Sends a message to the client identified by given session_id.
+        |  %% No reply is expected.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec send(Msg :: #server_message{} | term(), SessId :: session:id()) -&gt; ok.
+        |  send(#server_message{} = Msg, SessId) -&gt;
+ 11151..|      {ok, CommPid} = session:get_communicator(SessId),
+ 11151..|      gen_server:cast(CommPid, {send, Msg});
+        |  send(Msg, SessId) -&gt;
+   149..|      send(#server_message{message_body = Msg}, SessId).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Sends a message to the server and waits for a reply.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec communicate(Msg :: #server_message{}, SessId :: session:id()) -&gt;
+        |      {ok, #client_message{}} | {error, timeout}.
+        |  communicate(ServerMsg, SessId) -&gt;
+     1..|      {ok, MsgId} = communicate_async(ServerMsg, SessId, self()),
+     1..|      receive
+     1..|          #client_message{message_id = MsgId} = ClientMsg -&gt; {ok, ClientMsg}
+        |      after
+        |          ?DEFAULT_REQUEST_TIMEOUT -&gt;
+<font color=red>     0..|              {error, timeout}</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Sends message and expects answer (with generated id) in message's default worker.
+        |  %% @equiv communicate_async(Msg, SessId, undefined)
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec communicate_async(Msg :: #server_message{}, SessId :: session:id()) -&gt;
+        |      {ok, #message_id{}}.
+        |  communicate_async(Msg, SessId) -&gt;
+     1..|      communicate_async(Msg, SessId, undefined).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Sends server_message to client, identified by given session_id.
+        |  %% This function overrides message_id of request.
+        |  %% When ReplyPid is undefined, the answer will be routed to default handler worker.
+        |  %% Otherwise the client answer will be send to ReplyPid process as:
+        |  %% #client_message{message_id = MessageId}
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec communicate_async(Msg :: #server_message{}, SessId :: session:id(),
+        |      Recipient :: pid() | undefined) -&gt; {ok, #message_id{}}.
+        |  communicate_async(Msg, SessId, Recipient) -&gt;
+     3..|      {ok, GeneratedId} = message_id:generate(Recipient),
+     3..|      MsgWithId = Msg#server_message{message_id = GeneratedId},
+     3..|      {ok, CommPid} = session:get_communicator(SessId),
+     3..|      ok = gen_server:cast(CommPid, {send, MsgWithId}),
+     3..|      {ok, GeneratedId}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Adds connection to the communicator given by pid or session_id
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec add_connection(session:id() | pid(), ConnectionPid :: pid()) -&gt; ok.
+        |  add_connection(CommPid, ConnectionPid) when is_pid(CommPid) -&gt;
+<font color=red>     0..|      gen_server:call(CommPid, {add_connection, ConnectionPid});</font>
+        |  add_connection(SessId, ConnectionPid) -&gt;
+<font color=red>     0..|      {ok, CommPid} = session:get_communicator(SessId),</font>
+<font color=red>     0..|      add_connection(CommPid, ConnectionPid).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Removes connection from the communicator associated with given session
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec remove_connection(SessId :: session:id(), ConnectionPid :: pid()) -&gt; ok.
+        |  remove_connection(SessId, ConnectionPid) -&gt;
+    97..|      {ok, CommPid} = session:get_communicator(SessId),
+    18..|      gen_server:call(CommPid, {remove_connection, ConnectionPid}).
+        |  
+        |  %%%===================================================================
+        |  %%% gen_server callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Initializes the server.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(Args :: term()) -&gt;
+        |      {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+        |      {stop, Reason :: term()} | ignore.
+        |  init([SessId, Con]) -&gt;
+   149..|      process_flag(trap_exit, true),
+   149..|      {ok, SessId} = session:update(SessId, #{communicator =&gt; self()}),
+   149..|      {ok, #state{session_id = SessId, connections = [Con]}}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Handles call messages.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+        |      State :: #state{}) -&gt;
+        |      {reply, Reply :: term(), NewState :: #state{}} |
+        |      {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
+        |      {noreply, NewState :: #state{}} |
+        |      {noreply, NewState :: #state{}, timeout() | hibernate} |
+        |      {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
+        |      {stop, Reason :: term(), NewState :: #state{}}.
+        |  handle_call({add_connection, Con}, _From, #state{connections = Cons} = State) -&gt;
+<font color=red>     0..|      {reply, ok, State#state{connections = [Con | Cons]}};</font>
+        |  
+        |  handle_call({remove_connection, Con}, _From, #state{connections = Cons} = State) -&gt;
+    18..|      {reply, ok, State#state{connections = lists:delete(Con, Cons)}};
+        |  
+        |  handle_call(_Request, _From, State) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request),</font>
+<font color=red>     0..|      {reply, ok, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Handles cast messages.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_cast(Request :: term(), State :: #state{}) -&gt;
+        |      {noreply, NewState :: #state{}} |
+        |      {noreply, NewState :: #state{}, timeout() | hibernate} |
+        |      {stop, Reason :: term(), NewState :: #state{}}.
+        |  handle_cast({send, #server_message{} = Msg}, State = #state{connections = ConnList}) -&gt;
+ 11154..|      try_send(Msg, ConnList),
+ 11154..|      {noreply, State};
+        |  
+        |  handle_cast(_Request, State) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Request),</font>
+<font color=red>     0..|      {noreply, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Handles all non call/cast messages.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec handle_info(Info :: timeout() | term(), State :: #state{}) -&gt;
+        |      {noreply, NewState :: #state{}} |
+        |      {noreply, NewState :: #state{}, timeout() | hibernate} |
+        |      {stop, Reason :: term(), NewState :: #state{}}.
+        |  handle_info({timer, Msg}, State) -&gt;
+<font color=red>     0..|      gen_server:cast(self(), Msg),</font>
+<font color=red>     0..|      {noreply, State};</font>
+        |  
+        |  handle_info({'EXIT', _, normal}, State) -&gt;
+ 11131..|      {noreply, State};
+        |  
+        |  handle_info(_Info, State) -&gt;
+<font color=red>     0..|      ?log_bad_request(_Info),</font>
+<font color=red>     0..|      {noreply, State}.</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% This function is called by a gen_server when it is about to
+        |  %% terminate. It should be the opposite of Module:init/1 and do any
+        |  %% necessary cleaning up. When it returns, the gen_server terminates
+        |  %% with Reason. The return value is ignored.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+        |      State :: #state{}) -&gt; term().
+        |  terminate(Reason, #state{session_id = SessId} = State) -&gt;
+   149..|      ?log_terminate(Reason, State),
+   149..|      session_manager:remove_session(SessId).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Converts process state when code is changed.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
+        |      Extra :: term()) -&gt; {ok, NewState :: #state{}} | {error, Reason :: term()}.
+        |  code_change(_OldVsn, State, _Extra) -&gt;
+<font color=red>     0..|      {ok, State}.</font>
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Send Msg to random connection.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec try_send(Msg :: #server_message{}, Connections :: [pid()]) -&gt;
+        |      ok | {error, Reason :: term()}.
+        |  try_send(Msg, Connections) -&gt;
+ 11154..|      RandomConnection =
+ 11154..|          try utils:random_element(Connections)
+<font color=red>     0..|          catch _:_ -&gt; error_empty_connection_pool</font>
+        |          end,
+ 11154..|      CommunicatorPid = self(),
+ 11154..|      spawn_link( %todo test performance of spawning vs notifying about each message
+        |          fun() -&gt;
+ 11154..|              try connection:send(RandomConnection, Msg) of
+ 11126..|                  ok -&gt; ok;
+        |                  Error -&gt;
+<font color=red>     0..|                      ?warning("Could not send message ~p, due to error: ~p, retrying in ~p seconds.",</font>
+        |                          [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
+<font color=red>     0..|                      erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})</font>
+        |              catch
+        |                  _:Error -&gt;
+     5..|                      ?warning_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
+        |                          [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
+     5..|                      erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
+        |              end
+        |          end),
+ 11154..|      ok.</pre>
+</body>
+</html>

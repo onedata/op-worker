@@ -1,0 +1,514 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/mnesia_cache_driver.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/datastore/drivers/mnesia_cache_driver.erl by COVER 2015-08-06 at 11:00:43
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Rafal Slota
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc Mnesia database driver.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(mnesia_cache_driver).
+        |  -author("Rafal Slota").
+        |  -behaviour(store_driver_behaviour).
+        |  
+        |  -include("global_definitions.hrl").
+        |  -include("modules/datastore/datastore.hrl").
+        |  -include("modules/datastore/datastore_common_internal.hrl").
+        |  -include_lib("ctool/include/logging.hrl").
+        |  
+        |  %% store_driver_behaviour callbacks
+        |  -export([init_bucket/3, healthcheck/1]).
+        |  %% TODO Add non_transactional updates (each update creates tmp ets!)
+        |  -export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
+        |  -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
+        |  -export([run_synchronized/3]).
+        |  
+        |  -record(links, {key, link_map = #{}}).
+        |  
+        |  %% Batch size for list operation
+        |  -define(LIST_BATCH_SIZE, 100).
+        |  
+        |  -define(MNESIA_WAIT_TIMEOUT, timer:seconds(20)).
+        |  
+        |  %%%===================================================================
+        |  %%% store_driver_behaviour callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback init_bucket/2.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init_bucket(Bucket :: datastore:bucket(), Models :: [model_behaviour:model_config()], NodeToSync :: node()) -&gt; ok.
+        |  init_bucket(_BucketName, Models, NodeToSync) -&gt;
+   240..|      lists:foreach( %% model
+        |          fun(#model_config{name = ModelName, fields = Fields}) -&gt;
+   240..|              Node = node(),
+   240..|              Table = table_name(ModelName),
+   240..|              LinkTable = links_table_name(ModelName),
+   240..|              TransactionTable = transaction_table_name(ModelName),
+   240..|              case NodeToSync == Node of
+        |                  true -&gt; %% No mnesia nodes -&gt; create new table
+   104..|                      MakeTable = fun(TabName, RecordName, RecordFields) -&gt;
+   312..|                          Ans = case mnesia:create_table(TabName, [{record_name, RecordName}, {attributes, RecordFields},
+        |                              {ram_copies, [Node]}, {type, set}]) of
+   312..|                              {atomic, ok} -&gt; ok;
+        |                              {aborted, {already_exists, TabName}} -&gt;
+<font color=red>     0..|                                  ok;</font>
+        |                              {aborted, Reason} -&gt;
+<font color=red>     0..|                                  ?error("Cannot init mnesia cluster (table ~p) on node ~p due to ~p", [TabName, node(), Reason]),</font>
+<font color=red>     0..|                                  throw(Reason)</font>
+        |                          end,
+   312..|                          ?info("Creating mnesia table: ~p, result: ~p", [TabName, Ans])
+        |                      end,
+   104..|                      {
+        |                          MakeTable(Table, ModelName, [key | Fields]),
+        |                          MakeTable(LinkTable, links, record_info(fields, links)),
+        |                          MakeTable(TransactionTable, ModelName, [key | Fields])
+        |                      };
+        |                  _ -&gt; %% there is at least one mnesia node -&gt; join cluster
+   136..|                      Tables = [table_name(MName) || MName &lt;- ?MODELS] ++
+  1088..|                               [links_table_name(MName) || MName &lt;- ?MODELS] ++
+  1088..|                               [transaction_table_name(MName) || MName &lt;- ?MODELS],
+   136..|                      ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, ?MNESIA_WAIT_TIMEOUT]),
+   136..|                      ExpandTable = fun(TabName) -&gt;
+   408..|                          case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of
+        |                              {ok, [Node]} -&gt;
+   408..|                                  case rpc:call(NodeToSync, mnesia, add_table_copy, [TabName, Node, ram_copies]) of
+        |                                      {atomic, ok} -&gt;
+   408..|                                          ?info("Expanding mnesia cluster (table ~p) from ~p to ~p", [TabName, NodeToSync, node()]);
+        |                                      {aborted, Reason} -&gt;
+<font color=red>     0..|                                          ?error("Cannot replicate mnesia table ~p to node ~p due to: ~p", [TabName, node(), Reason])</font>
+        |                                  end,
+   408..|                                  ok;
+        |                              {error, Reason} -&gt;
+<font color=red>     0..|                                  ?error("Cannot expand mnesia cluster (table ~p) on node ~p due to ~p", [TabName, node(), Reason]),</font>
+<font color=red>     0..|                                  throw(Reason)</font>
+        |                          end
+        |                      end,
+   136..|                      {
+        |                          ExpandTable(Table),
+        |                          ExpandTable(LinkTable),
+        |                          ExpandTable(TransactionTable)
+        |                      }
+        |              end
+        |          end, Models),
+   240..|      ok.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback save/2.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec save(model_behaviour:model_config(), datastore:document()) -&gt;
+        |      {ok, datastore:ext_key()} | datastore:generic_error().
+        |  save(#model_config{} = ModelConfig, #document{key = Key, value = Value} = _Document) -&gt;
+ 17541..|      mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() -&gt;
+ 19910..|          ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
+ 17541..|          {ok, Key}
+        |      end).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback update/2.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec update(model_behaviour:model_config(), datastore:ext_key(),
+        |      Diff :: datastore:document_diff()) -&gt; {ok, datastore:ext_key()} | datastore:update_error().
+        |  update(#model_config{name = ModelName} = ModelConfig, Key, Diff) -&gt;
+  3520..|      mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() -&gt;
+  7538..|          case mnesia:read(table_name(ModelConfig), Key, write) of
+        |              [] -&gt;
+  1323..|                  {error, {not_found, ModelName}};
+        |              [Value] when is_map(Diff) -&gt;
+  1996..|                  NewValue = maps:merge(datastore_utils:shallow_to_map(strip_key(Value)), Diff),
+  1996..|                  ok = mnesia:write(table_name(ModelConfig),
+        |                      inject_key(Key, datastore_utils:shallow_to_record(NewValue)), write),
+  1996..|                  {ok, Key};
+        |              [Value] when is_function(Diff) -&gt;
+   201..|                  NewValue = Diff(strip_key(Value)),
+   201..|                  ok = mnesia:write(table_name(ModelConfig), inject_key(Key, NewValue), write),
+   201..|                  {ok, Key}
+        |          end
+        |      end).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback create/2.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create(model_behaviour:model_config(), datastore:document()) -&gt;
+        |      {ok, datastore:ext_key()} | datastore:create_error().
+        |  create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) -&gt;
+  5337..|      mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() -&gt;
+  5526..|          case mnesia:read(table_name(ModelConfig), Key) of
+        |              [] -&gt;
+  4214..|                  ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
+  4160..|                  {ok, Key};
+        |              [_Record] -&gt;
+  1177..|                  {error, already_exists}
+        |          end
+        |      end).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback get/2.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get(model_behaviour:model_config(), datastore:ext_key()) -&gt;
+        |      {ok, datastore:document()} | datastore:get_error().
+        |  get(#model_config{name = ModelName} = ModelConfig, Key) -&gt;
+ 33752..|      case mnesia:dirty_read(table_name(ModelConfig), Key) of
+   999..|          [] -&gt; {error, {not_found, ModelName}};
+ 32753..|          [Value] -&gt; {ok, #document{key = Key, value = strip_key(Value)}}
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback list/3.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list(model_behaviour:model_config(),
+        |      Fun :: datastore:list_fun(), AccIn :: term()) -&gt;
+        |      {ok, Handle :: term()} | datastore:generic_error() | no_return().
+        |  list(#model_config{} = ModelConfig, Fun, AccIn) -&gt;
+   338..|      SelectAll = [{'_', [], ['$_']}],
+   338..|      mnesia_run(async_dirty, fun() -&gt;
+   338..|          case mnesia:select(table_name(ModelConfig), SelectAll, ?LIST_BATCH_SIZE, none) of
+        |              {Obj, Handle} -&gt;
+    56..|                  list_next(Obj, Handle, Fun, AccIn);
+        |              '$end_of_table' -&gt;
+   282..|                  list_next('$end_of_table', undefined, Fun, AccIn)
+        |          end
+        |      end).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback add_links/3.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) -&gt;
+        |      ok | datastore:generic_error().
+        |  add_links(#model_config{} = ModelConfig, Key, LinkSpec) -&gt;
+   546..|      mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() -&gt;
+   546..|          Links = #links{} =
+        |              case mnesia:read(links_table_name(ModelConfig), Key, write) of
+        |                  [] -&gt;
+   239..|                      #links{key = Key};
+        |                  [Value] -&gt;
+   307..|                      Value
+        |              end,
+   546..|          Links1 = Links#links{link_map = maps:merge(Links#links.link_map, maps:from_list(LinkSpec))},
+   546..|          ok = mnesia:write(links_table_name(ModelConfig), Links1, write)
+        |      end).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback delete_links/3.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) -&gt;
+        |      ok | datastore:generic_error().
+        |  delete_links(#model_config{} = ModelConfig, Key, all) -&gt;
+ 13921..|      mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() -&gt;
+ 28924..|          ok = mnesia:delete(links_table_name(ModelConfig), Key, write)
+        |      end);
+        |  delete_links(#model_config{} = ModelConfig, Key, LinkNames) -&gt;
+   223..|      mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() -&gt;
+   247..|          Links = #links{} =
+        |              case mnesia:read(links_table_name(ModelConfig), Key, write) of
+        |                  [] -&gt;
+    31..|                      #links{key = Key};
+        |                  [Value] -&gt;
+   192..|                      Value
+        |              end,
+   223..|          LinksMap =
+        |              lists:foldl(fun(LinkName, Map) -&gt;
+   225..|                  maps:remove(LinkName, Map)
+        |              end, Links#links.link_map, LinkNames),
+   223..|          Links1 = Links#links{link_map = LinksMap},
+   223..|          ok = mnesia:write(links_table_name(ModelConfig), Links1, write)
+        |      end).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback fetch_link/3.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec fetch_link(model_behaviour:model_config(), datastore:ext_key(), datastore:link_name()) -&gt;
+        |      {ok, datastore:link_target()} | datastore:link_error().
+        |  fetch_link(#model_config{} = ModelConfig, Key, LinkName) -&gt;
+  5841..|      case mnesia:dirty_read(links_table_name(ModelConfig), Key) of
+     5..|          [] -&gt; {error, link_not_found};
+        |          [Value] -&gt;
+  5836..|              Map = Value#links.link_map,
+  5836..|              case maps:get(LinkName, Map, undefined) of
+        |                  undefined -&gt;
+   284..|                      {error, link_not_found};
+        |                  {_TargetKey, _TargetModel} = Target -&gt;
+  5552..|                      {ok, Target}
+        |              end
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback foreach_link/4.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec foreach_link(model_behaviour:model_config(), Key :: datastore:ext_key(),
+        |      fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -&gt; Acc :: term()), AccIn :: term()) -&gt;
+        |      {ok, Acc :: term()} | datastore:link_error().
+        |  foreach_link(#model_config{} = ModelConfig, Key, Fun, AccIn) -&gt;
+  1239..|      case mnesia:dirty_read(links_table_name(ModelConfig), Key) of
+<font color=red>     0..|          [] -&gt; {ok, AccIn};</font>
+        |          [Value] -&gt;
+  1239..|              Map = Value#links.link_map,
+  1239..|              try maps:fold(Fun, AccIn, Map) of
+  1239..|                  AccOut -&gt; {ok, AccOut}
+        |              catch
+        |                  _:Reason -&gt;
+<font color=red>     0..|                      {error, Reason}</font>
+        |              end
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Internat helper - accumulator for list/3.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec list_next([term()] | '$end_of_table', term(), datastore:list_fun(), term()) -&gt;
+        |      {ok, Acc :: term()} | datastore:generic_error().
+        |  list_next([Obj | R], Handle, Fun, AccIn) -&gt;
+  8009..|      Doc =  #document{key = get_key(Obj), value = strip_key(Obj)},
+  8009..|      case Fun(Doc, AccIn) of
+        |          {next, NewAcc} -&gt;
+  8009..|              list_next(R, Handle, Fun, NewAcc);
+        |          {abort, NewAcc} -&gt;
+<font color=red>     0..|              {ok, NewAcc}</font>
+        |      end;
+        |  list_next('$end_of_table' = EoT, Handle, Fun, AccIn) -&gt;
+   338..|      case Fun(EoT, AccIn) of
+        |          {next, NewAcc} -&gt;
+<font color=red>     0..|              list_next(EoT, Handle, Fun, NewAcc);</font>
+        |          {abort, NewAcc} -&gt;
+   338..|              {ok, NewAcc}
+        |      end;
+        |  list_next([], Handle, Fun, AccIn) -&gt;
+   129..|      case mnesia:select(Handle) of
+        |          {Objects, NewHandle} -&gt;
+    73..|              list_next(Objects, NewHandle, Fun, AccIn);
+        |          '$end_of_table' -&gt;
+    56..|              list_next('$end_of_table', undefined, Fun, AccIn)
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback delete/2.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec delete(model_behaviour:model_config(), datastore:ext_key(), datastore:delete_predicate()) -&gt;
+        |      ok | datastore:generic_error().
+        |  delete(#model_config{} = ModelConfig, Key, Pred) -&gt;
+ 11870..|      mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() -&gt;
+ 14690..|          case Pred() of
+        |              true -&gt;
+ 14688..|                  ok = mnesia:delete(table_name(ModelConfig), Key, write);
+        |              false -&gt;
+     2..|                  ok
+        |          end
+        |      end).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback exists/2.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec exists(model_behaviour:model_config(), datastore:ext_key()) -&gt;
+        |      {ok, boolean()} | datastore:generic_error().
+        |  exists(#model_config{} = ModelConfig, Key) -&gt;
+  1313..|      case mnesia:dirty_read(table_name(ModelConfig), Key) of
+   644..|          [] -&gt; {ok, false};
+   669..|          [_Record] -&gt; {ok, true}
+        |      end.
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% {@link store_driver_behaviour} callback healthcheck/1.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec healthcheck(WorkerState :: term()) -&gt; ok | {error, Reason :: term()}.
+        |  healthcheck(State) -&gt;
+    89..|      maps:fold(
+        |          fun
+        |              (_, #model_config{name = ModelName}, ok) -&gt;
+   712..|                  case mnesia:table_info(table_name(ModelName), where_to_write) of
+        |                      Nodes when is_list(Nodes) -&gt;
+   712..|                          case lists:member(node(), Nodes) of
+   712..|                              true -&gt; ok;
+        |                              false -&gt;
+<font color=red>     0..|                                  {error, {no_active_mnesia_table, table_name(ModelName)}}</font>
+        |                          end;
+<font color=red>     0..|                      {error, Error} -&gt; {error, Error};</font>
+<font color=red>     0..|                      Error -&gt; {error, Error}</font>
+        |                  end;
+   148..|              (_, _, Acc) -&gt; Acc
+        |          end, ok, State).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
+        |  %% run at the same time.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec run_synchronized(model_behaviour:model_config(), ResourceId :: binary(), fun(() -&gt; Result)) -&gt; Result
+        |      when Result :: term().
+        |  run_synchronized(#model_config{name = ModelName}, ResourceID, Fun) -&gt;
+   260..|      mnesia_run(sync_transaction,
+        |          fun() -&gt;
+   260..|              Nodes = lists:usort(mnesia:table_info(table_name(ModelName), where_to_write)),
+   260..|              case mnesia:lock({global, ResourceID, Nodes}, write) of
+        |                  ok -&gt;
+<font color=red>     0..|                      Fun();</font>
+        |                  Nodes0 -&gt;
+   260..|                      case lists:usort(Nodes0) of
+        |                          Nodes -&gt;
+   260..|                              Fun();
+        |                          LessNodes -&gt;
+<font color=red>     0..|                              {error, {lock_error, Nodes -- LessNodes}}</font>
+        |                      end
+        |              end
+        |          end).
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Gets Mnesia table name for given model.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec table_name(model_behaviour:model_config() | atom()) -&gt; atom().
+        |  table_name(#model_config{name = ModelName}) -&gt;
+ 89476..|      table_name(ModelName);
+        |  table_name(TabName) when is_atom(TabName) -&gt;
+ 91776..|      binary_to_atom(&lt;&lt;"dc_", (erlang:atom_to_binary(TabName, utf8))/binary&gt;&gt;, utf8).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Gets Mnesia links table name for given model.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec links_table_name(model_behaviour:model_config() | atom()) -&gt; atom().
+        |  links_table_name(#model_config{name = ModelName}) -&gt;
+ 37566..|      links_table_name(ModelName);
+        |  links_table_name(TabName) when is_atom(TabName) -&gt;
+ 38894..|      binary_to_atom(&lt;&lt;"dc_links_", (erlang:atom_to_binary(TabName, utf8))/binary&gt;&gt;, utf8).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Gets Mnesia transaction table name for given model.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec transaction_table_name(atom()) -&gt; atom().
+        |  transaction_table_name(TabName) when is_atom(TabName) -&gt;
+  1328..|      binary_to_atom(&lt;&lt;"dc_transaction_", (erlang:atom_to_binary(TabName, utf8))/binary&gt;&gt;, utf8).
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Inserts given key as second element of given tuple.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec inject_key(Key :: datastore:ext_key(), Tuple :: tuple()) -&gt; NewTuple :: tuple().
+        |  inject_key(Key, Tuple) when is_tuple(Tuple) -&gt;
+ 26321..|      [RecordName | Fields] = tuple_to_list(Tuple),
+ 26321..|      list_to_tuple([RecordName | [Key | Fields]]).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Strips second element of given tuple (reverses inject_key/2).
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec strip_key(Tuple :: tuple()) -&gt; NewTuple :: tuple().
+        |  strip_key(Tuple) when is_tuple(Tuple) -&gt;
+ 42959..|      [RecordName, _Key | Fields] = tuple_to_list(Tuple),
+ 42959..|      list_to_tuple([RecordName | Fields]).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Returns key of a tuple.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec get_key(Tuple :: tuple()) -&gt; Key :: term().
+        |  get_key(Tuple) when is_tuple(Tuple) -&gt;
+  8009..|      [_RecordName, Key | _Fields] = tuple_to_list(Tuple),
+  8009..|      Key.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Convinience function for executing given Mnesia's transaction-like function and normalizing Result.
+        |  %% Available methods: sync_dirty, async_dirty, sync_transaction, transaction.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec mnesia_run(Method :: atom(), Fun :: fun(() -&gt; term())) -&gt; term().
+        |  mnesia_run(Method, Fun) when Method =:= sync_dirty; Method =:= async_dirty -&gt;
+ 30067..|      try mnesia:Method(Fun) of
+        |          Result -&gt;
+ 30067..|              Result
+        |      catch
+        |          _:Reason -&gt;
+<font color=red>     0..|              {error, Reason}</font>
+        |      end;
+        |  mnesia_run(Method, Fun) when Method =:= sync_transaction; Method =:= transaction -&gt;
+ 23489..|      case mnesia:Method(Fun) of
+        |          {atomic, Result} -&gt;
+ 23482..|              Result;
+        |          {aborted, Reason} -&gt;
+<font color=red>     0..|              {error, Reason}</font>
+        |      end.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% If transactions are enabled in #model_config{} returns given TransactionType.
+        |  %% If transactions are disabled in #model_config{} returns corresponding dirty mode.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec maybe_transaction(model_behaviour:model_config(), atom()) -&gt; atom().
+        |  maybe_transaction(#model_config{transactional_global_cache = false}, TransactionType) -&gt;
+ 29729..|      case TransactionType of
+ 29729..|          sync_transaction -&gt; sync_dirty
+        |      end;
+        |  maybe_transaction(#model_config{transactional_global_cache = true}, TransactionType) -&gt;
+ 23229..|      TransactionType.</pre>
+</body>
+</html>

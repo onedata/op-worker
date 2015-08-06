@@ -1,0 +1,179 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/storage_file_manager.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/fslogic/storage_file_manager.erl by COVER 2015-08-06 at 11:00:45
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Lukasz Opiola
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc This module provides high level file system operations that
+        |  %%% operates directly on storage.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(storage_file_manager).
+        |  
+        |  -include("types.hrl").
+        |  -include("errors.hrl").
+        |  
+        |  -export([mkdir/1, mkdir/2, mv/2, chmod/2, chown/3, link/2]).
+        |  -export([stat/1, read/3, write/3, create/1, create/2, truncate/2, rm/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Creates a directory on storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec mkdir(Path :: file_path()) -&gt; {ok, file_id()} | error_reply().
+        |  mkdir(Path) -&gt;
+<font color=red>     0..|      DefaultMode = 777, % TODO retrieve default mode</font>
+<font color=red>     0..|      mkdir(Path, DefaultMode).</font>
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Creates a directory on storage with given perms.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec mkdir(Path :: file_path(), Mode :: perms_octal()) -&gt; {ok, file_id()} | error_reply().
+        |  mkdir(_Path, _Mode) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Moves a file or directory to a new location on storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec mv(FileHandleFrom :: file_handle(), PathOnStorageTo :: file_path()) -&gt; ok | error_reply().
+        |  mv(_FileHandleFrom, _PathOnStorageTo) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Changes the permissions of a file on storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec chmod(FileHandle :: file_handle(), NewPerms :: perms_octal()) -&gt; ok | error_reply().
+        |  chmod(_FileHandle, _NewPerms) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Changes owner of a file on storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec chown(FileHandle :: file_handle(), User :: user_id(), Group :: group_id()) -&gt; ok | error_reply().
+        |  chown(_FileHandle, _User, _Group) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Creates a symbolic link on storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec link(Path :: binary(), TargetFileHandle :: file_handle()) -&gt; {ok, file_id()} | error_reply().
+        |  link(_Path, _TargetFileHandle) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Returns file attributes, reading them from storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec stat(FileHandle :: file_handle()) -&gt; {ok, file_attributes()} | error_reply().
+        |  stat(_FileHandle) -&gt;
+<font color=red>     0..|      {ok, undefined}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Writes data to a file on storage. Returns number of written bytes.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -&gt; {ok, integer()} | error_reply().
+        |  write(_FileHandle, _Offset, _Buffer) -&gt;
+<font color=red>     0..|      {ok, 0}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Reads requested part of a file from storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -&gt; {ok, binary()} | error_reply().
+        |  read(_FileHandle, _Offset, _MaxSize) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Creates a new file on storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create(Path :: file_path()) -&gt; {ok, file_id()} | error_reply().
+        |  create(Path) -&gt;
+<font color=red>     0..|      DefaultMode = 777, % TODO retrieve default mode</font>
+<font color=red>     0..|      create(Path, DefaultMode).</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Creates a new file on storage with given permissions.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec create(Path :: file_path(), Mode :: perms_octal()) -&gt; {ok, file_id()} | error_reply().
+        |  create(_Path, _Mode) -&gt;
+<font color=red>     0..|      {ok, &lt;&lt;""&gt;&gt;}.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Truncates a file on storage.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec truncate(FileHandle :: file_handle(), Size :: integer()) -&gt; ok | error_reply().
+        |  truncate(_FileHandle, _Size) -&gt;
+<font color=red>     0..|      ok.</font>
+        |  
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Removes a file or an empty directory.
+        |  %%
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec rm(Path :: file_path()) -&gt; ok | error_reply().
+        |  rm(_Path) -&gt;
+<font color=red>     0..|      ok.</font>
+</pre>
+</body>
+</html>

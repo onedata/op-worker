@@ -1,0 +1,104 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/sequencer_stream_sup.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/modules/sequencer_manager/sequencer_stream_sup.erl by COVER 2015-08-06 at 11:00:45
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Krzysztof Trzepla
+        |  %%% @copyright (C) 2015 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% This module implements supervisor behaviour and is responsible
+        |  %%% for supervising and restarting sequencer streams.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(sequencer_stream_sup).
+        |  -author("Krzysztof Trzepla").
+        |  
+        |  -behaviour(supervisor).
+        |  
+        |  %% API
+        |  -export([start_link/0, start_sequencer_stream/4]).
+        |  
+        |  %% Supervisor callbacks
+        |  -export([init/1]).
+        |  
+        |  %%%===================================================================
+        |  %%% API functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts the supervisor
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_link() -&gt; {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+        |  start_link() -&gt;
+   183..|      supervisor:start_link(?MODULE, []).
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Starts sequencer stream supervised by sequencer stream supervisor.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec start_sequencer_stream(SeqStmSup :: pid(), SeqMan :: pid(),
+        |      SessId :: session:id(), StmId :: non_neg_integer()) -&gt;
+        |      supervisor:startchild_ret().
+        |  start_sequencer_stream(SeqStmSup, SeqMan, SessId, StmId) -&gt;
+    12..|      supervisor:start_child(SeqStmSup, [SeqMan, SessId, StmId]).
+        |  
+        |  %%%===================================================================
+        |  %%% Supervisor callbacks
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Whenever a supervisor is started using supervisor:start_link/[2,3],
+        |  %% this function is called by the new process to find out about
+        |  %% restart strategy, maximum restart frequency and child
+        |  %% specifications.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec init(Args :: term()) -&gt;
+        |      {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
+        |          MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
+        |          [ChildSpec :: supervisor:child_spec()]
+        |      }} |
+        |      ignore.
+        |  init([]) -&gt;
+   183..|      RestartStrategy = simple_one_for_one,
+   183..|      MaxRestarts = 3,
+   183..|      RestartTimeWindowSecs = 1,
+   183..|      {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+        |          sequencer_stream_spec()
+        |      ]}}.
+        |  
+        |  %%%===================================================================
+        |  %%% Internal functions
+        |  %%%===================================================================
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @private
+        |  %% @doc
+        |  %% Returns a supervisor child_spec for a sequencer stream.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -spec sequencer_stream_spec() -&gt; supervisor:child_spec().
+        |  sequencer_stream_spec() -&gt;
+   183..|      Id = Module = sequencer_stream,
+   183..|      Restart = transient,
+   183..|      Shutdown = timer:seconds(10),
+   183..|      Type = worker,
+   183..|      {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.</pre>
+</body>
+</html>

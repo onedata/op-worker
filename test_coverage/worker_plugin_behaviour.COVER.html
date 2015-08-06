@@ -1,0 +1,52 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>/home/piotrek/Dokumenty/OneData/merge_merge/op-worker/test_coverage/worker_plugin_behaviour.COVER.html</title>
+</head><body style='background-color: white; color: black'>
+<pre>
+File generated from /home/piotrek/Dokumenty/OneData/merge_merge/op-worker/ebin/../src/cluster_elements/worker_host/worker_plugin_behaviour.erl by COVER 2015-08-06 at 11:00:40
+
+****************************************************************************
+
+        |  %%%-------------------------------------------------------------------
+        |  %%% @author Michal Wrzeszcz
+        |  %%% @copyright (C) 2013 ACK CYFRONET AGH
+        |  %%% This software is released under the MIT license
+        |  %%% cited in 'LICENSE.txt'.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  %%% @doc
+        |  %%% It is the behaviour of each application component. All
+        |  %%% components defined in subdirectories of oneprovider_modules must implement it.
+        |  %%% @end
+        |  %%%-------------------------------------------------------------------
+        |  -module(worker_plugin_behaviour).
+        |  -author("Michal Wrzeszcz").
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Initialize module
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -callback init(Args :: term()) -&gt;
+        |      {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% Do your work.
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -callback handle(Request :: term()) -&gt;
+        |      nagios_handler:healthcheck_response() | ok | pong | {ok, Answer :: term()} |
+        |      {error, Reason :: term()}.
+        |  
+        |  %%--------------------------------------------------------------------
+        |  %% @doc
+        |  %% The module will not be used anymore. Clean up!
+        |  %% @end
+        |  %%--------------------------------------------------------------------
+        |  -callback cleanup() -&gt; ok | {error, Reason :: term()}.
+</pre>
+</body>
+</html>
