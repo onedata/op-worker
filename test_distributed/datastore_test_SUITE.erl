@@ -641,6 +641,7 @@ generic_links_test(Config, Level) ->
     ?assertMatch({ok, #document{key = Key3, value = #some_record{field1 = 3}}}, Ret1),
 
     ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, [link2, link3]])),
+    timer:sleep(1000), % wait for hooks
 
     Ret4 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link2]),
     Ret5 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link3]),
@@ -657,6 +658,7 @@ generic_links_test(Config, Level) ->
         ?call_store(Worker1, some_record, delete, [Key2])),
     timer:sleep(1000), % wait for hooks
     ?assertMatch(ok, ?call_store(Worker1, delete_links, [Level, Doc1, link3])),
+    timer:sleep(1000), % wait for hooks
 
     Ret8 = ?call_store(Worker1, fetch_link_target, [Level, Doc1, link2]),
     Ret9 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link3]),
