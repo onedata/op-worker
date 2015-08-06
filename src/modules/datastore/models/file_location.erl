@@ -90,7 +90,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(file_locations, [{file_location, save}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

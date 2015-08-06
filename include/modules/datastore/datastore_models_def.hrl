@@ -102,6 +102,7 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
+    version = 1,
     is_scope = false :: boolean()
 }).
 
@@ -113,16 +114,10 @@
     helpers :: [#helper_init{}]
 }).
 
--record(file_block, {
-    storage_id :: datastore:key(),
-    file_id :: binary(),
-    offset :: non_neg_integer(),
-    size :: non_neg_integer()
-
-}).
-
 -record(file_location, {
     provider_id :: binary(),
+    storage_id :: binary(),
+    file_id :: binary(),
     blocks :: []
 }).
 

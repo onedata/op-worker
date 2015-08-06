@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/3, get_new_file_location/5]).
+-export([get_file_location/4, get_new_file_location/5]).
 
 %%%===================================================================
 %%% API functions
@@ -28,10 +28,18 @@
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags(), ForceClusterProxy :: boolean()) ->
+-spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags(), ForceClusterProxy :: boolean()) ->
     no_return().
-get_file_location(_File, _Flags, _ForceClusterProxy) ->
-    ?NOT_IMPLEMENTED.
+get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceClusterProxy) ->
+    {ok, #document{key = UUID}} = file_meta:get(File),
+    ok = file_watcher:insert_open_watcher(UUID, SessId),
+    {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
+    FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
+    #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
+
+
+    #fuse_response{status = #status{code = ?OK}, fuse_response =
+        #file_location{provider_id = cluster_manager:provider_id(), storage_id = StorageId, file_id = FileId, blocks = Blocks}}.
 
 
 %%--------------------------------------------------------------------
@@ -57,7 +65,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
 
     {ok, UUID} = file_meta:create({uuid, ParentUUID}, File),
 
-    FileId = file_meta:gen_path({uuid, UUID}),
+    FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
     ok = storage_file_manager:create(Storage, FileId, Mode, true),
 
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
@@ -66,7 +74,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
 
     file_meta:attach_location({uuid, UUID}, LocId, cluster_manager:provider_id()),
 
-    SessId = fslogic_context:
     ok = file_watcher:insert_open_watcher(UUID, SessId),
 
-    #fuse_response{status = #status{code = ?OK}}.
+    #fuse_response{status = #status{code = ?OK}, fuse_response =
+        #file_location{provider_id = cluster_manager:provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.

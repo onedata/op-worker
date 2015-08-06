@@ -16,7 +16,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1]).
+-export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
+-export([get_local_file_location/1]).
 
 
 %%%===================================================================
@@ -59,3 +60,16 @@ get_parent({path, Path}) ->
 get_parent(File) ->
     {ok, Doc} = file_meta:get_parent(File),
     Doc.
+
+gen_storage_file_id(Entry) ->
+    {ok, Path} = file_meta:gen_path(Entry),
+    {ok, #document{value = #file_meta{version = Version}}} = file_meta:get(Entry),
+    file_meta:snapshot_name(Path, Version).
+
+
+get_local_file_location(Entry) ->
+    LProviderId = cluster_manager:provider_id(),
+    {ok, LocIds} = file_meta:get_locations(Entry),
+    Locations = [file_location:get(LocId) || LocId <- LocIds],
+    [LocalLocation] = [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations, LProviderId =:= ProviderId],
+    LocalLocation.

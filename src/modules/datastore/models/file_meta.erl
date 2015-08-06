@@ -49,6 +49,7 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1]).
+-export([snapshot_name/2]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -131,8 +132,9 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName}} = FileDoc) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
     ?run(begin
+             false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->
                      case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
@@ -142,7 +144,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                                      SavedDoc = FileDoc#document{key = UUID},
                                      {ok, Scope} = get_scope(Parent),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, 1), SavedDoc}),
+                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
                                      {ok, UUID};
                                  {error, Reason} ->
@@ -508,8 +510,13 @@ setup_onedata_user(UUID) ->
 attach_location(Entry, #document{key = LocId}, ProviderId) ->
     attach_location(Entry, LocId, ProviderId);
 attach_location(Entry, LocId, ProviderId) ->
-    {ok, FDoc} = get(Entry),
+    {ok, #document{key = FileId} = FDoc} = get(Entry),
     ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {file_location, LocId}}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {file_meta, FileId}}).
+
+
+get_current_snapshot(Entry) ->
+    {ok, 1}.
 
 %%%===================================================================
 %%% Internal functions
@@ -706,6 +713,17 @@ normalize_error(Reason) ->
 
 snapshot_name(FileName, Version) ->
     <<FileName/binary, ?SNAPSHOT_SEPARATOR, (integer_to_binary(Version))/binary>>.
+
+
+to_snaphot(Entry) ->
+    {ok, #document{value = #file_meta{name = Name}}} = get(Entry),
+    case is_snapshot(Name) of
+        true -> Name;
+        false ->
+            {ok, Version} = get_current_snapshot(Entry),
+            snapshot_name(Name, Version)
+    end.
+
 
 is_snapshot(FileName) ->
     try
