@@ -118,7 +118,7 @@ protected:
     }
 
 public:
-    void set_void_promise(std::shared_ptr<std::promise<void>> p, ErrorRef e) {
+    void set_void_promise(std::shared_ptr<std::promise<void>> p, one::helpers::error_t e) {
         if(e.code()) {
             p->set_exception(std::make_exception_ptr(e));
         } else {
@@ -127,7 +127,7 @@ public:
     }
 
     template<class T>
-    void set_promise(std::shared_ptr<std::promise<T>> p, T value, ErrorRef e) {
+    void set_promise(std::shared_ptr<std::promise<T>> p, T value, one::helpers::error_t e) {
         if(e.code()) {
             p->set_exception(std::make_exception_ptr(e));
         } else {
@@ -255,7 +255,8 @@ TEST_F(DirectIOHelperTest, shouldMakeSymlink)
 
 TEST_F(DirectIOHelperTest, shouldReadSymlink)
 {
-    ::symlink((boost::filesystem::path(DIO_TEST_ROOT) / "from").c_str(), (boost::filesystem::path(DIO_TEST_ROOT) / "to").c_str());
+    auto sres = ::symlink((boost::filesystem::path(DIO_TEST_ROOT) / "from").c_str(), (boost::filesystem::path(DIO_TEST_ROOT) / "to").c_str());
+    assert(0 == sres);
 
     auto p = make_promise<std::string>();
     proxy->ash_readlink(ctx, "to", std::bind(&DirectIOHelperTest::set_promise<std::string>, this, p, _1, _2));
@@ -326,7 +327,7 @@ TEST_F(DirectIOHelperTest, SyncBench)
 {
     ctx.m_ffi.flags |= O_RDWR;
 
-    proxy->ash_open(ctx, testFileId, [=](int, ErrorRef e) {
+    proxy->ash_open(ctx, testFileId, [=](int, one::helpers::error_t e) {
         char stmp[BENCH_BLOCK_SIZE];
         auto writeBuf = asio::buffer(stmp, BENCH_BLOCK_SIZE);
         for(auto i = 0; i < BENCH_LOOP_COUNT; ++i) {

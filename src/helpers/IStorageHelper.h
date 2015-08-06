@@ -30,18 +30,32 @@ namespace helpers {
 struct StorageHelperCTX {
 
     fuse_file_info &m_ffi;
+    uid_t uid;
+    gid_t gid;
 
     StorageHelperCTX(fuse_file_info &ffi)
         : m_ffi(ffi)
+        , uid(0)
+        , gid(0)
     {
     }
+
+    StorageHelperCTX()
+        : m_ffi(local_ffi)
+        , uid(0)
+        , gid(0)
+    {
+    }
+
+private:
+    fuse_file_info local_ffi = {0};
 };
 
 using CTXRef = StorageHelperCTX &;
-using ErrorRef = std::system_error;
+using error_t = std::system_error;
 
 template<class... T>
-using GeneralCallback = std::function<void(T..., ErrorRef)>;
+using GeneralCallback = std::function<void(T..., error_t)>;
 using VoidCallback = GeneralCallback<>;
 
 template <class T> using future_t = std::future<T>;
