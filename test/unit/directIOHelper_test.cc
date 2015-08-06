@@ -119,8 +119,8 @@ protected:
 
 public:
     void set_void_promise(std::shared_ptr<std::promise<void>> p, one::helpers::error_t e) {
-        if(e.code()) {
-            p->set_exception(std::make_exception_ptr(e));
+        if(e) {
+            p->set_exception(std::make_exception_ptr(std::system_error(e)));
         } else {
             p->set_value();
         }
@@ -128,8 +128,8 @@ public:
 
     template<class T>
     void set_promise(std::shared_ptr<std::promise<T>> p, T value, one::helpers::error_t e) {
-        if(e.code()) {
-            p->set_exception(std::make_exception_ptr(e));
+        if(e) {
+            p->set_exception(std::make_exception_ptr(std::system_error(e)));
         } else {
             p->set_value(value);
         }

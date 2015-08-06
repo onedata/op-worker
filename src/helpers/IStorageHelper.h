@@ -52,9 +52,9 @@ private:
 };
 
 using CTXRef = StorageHelperCTX &;
-using error_t = std::system_error;
+using error_t = std::error_code;
 
-template<class... T>
+template <class... T>
 using GeneralCallback = std::function<void(T..., error_t)>;
 using VoidCallback = GeneralCallback<>;
 
@@ -74,63 +74,60 @@ public:
     virtual ~IStorageHelper() = default;
 
     virtual void ash_getattr(CTXRef ctx, const boost::filesystem::path &p,
-                                   GeneralCallback<struct stat>) = 0;
-    virtual void ash_access(CTXRef ctx,
-        const boost::filesystem::path &p, int mask, VoidCallback) = 0;
-    virtual void ash_readlink(CTXRef ctx,
-        const boost::filesystem::path &p, GeneralCallback<std::string>) = 0;
-    virtual void ash_readdir(CTXRef ctx,
-        const boost::filesystem::path &p, off_t offset, size_t count,
-        GeneralCallback<std::vector<std::string>&>) = 0;
-    virtual void ash_mknod(CTXRef ctx,
-        const boost::filesystem::path &p, mode_t mode, dev_t rdev, VoidCallback) = 0;
-    virtual void ash_mkdir(CTXRef ctx,
-        const boost::filesystem::path &p, mode_t mode, VoidCallback) = 0;
-    virtual void ash_unlink(CTXRef ctx,const boost::filesystem::path &p, VoidCallback) = 0;
-    virtual void ash_rmdir(CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
+        GeneralCallback<struct stat>) = 0;
+    virtual void ash_access(CTXRef ctx, const boost::filesystem::path &p,
+        int mask, VoidCallback) = 0;
+    virtual void ash_readlink(CTXRef ctx, const boost::filesystem::path &p,
+        GeneralCallback<std::string>) = 0;
+    virtual void ash_readdir(CTXRef ctx, const boost::filesystem::path &p,
+        off_t offset, size_t count,
+        GeneralCallback<std::vector<std::string> &>) = 0;
+    virtual void ash_mknod(CTXRef ctx, const boost::filesystem::path &p,
+        mode_t mode, dev_t rdev, VoidCallback) = 0;
+    virtual void ash_mkdir(CTXRef ctx, const boost::filesystem::path &p,
+        mode_t mode, VoidCallback) = 0;
+    virtual void ash_unlink(
+        CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
+    virtual void ash_rmdir(
+        CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
     virtual void ash_symlink(CTXRef ctx, const boost::filesystem::path &from,
         const boost::filesystem::path &to, VoidCallback) = 0;
     virtual void ash_rename(CTXRef ctx, const boost::filesystem::path &from,
         const boost::filesystem::path &to, VoidCallback) = 0;
     virtual void ash_link(CTXRef ctx, const boost::filesystem::path &from,
         const boost::filesystem::path &to, VoidCallback) = 0;
-    virtual void ash_chmod(CTXRef ctx,
-        const boost::filesystem::path &p, mode_t mode, VoidCallback) = 0;
-    virtual void ash_chown(CTXRef ctx,
-        const boost::filesystem::path &p, uid_t uid, gid_t gid, VoidCallback) = 0;
-    virtual void ash_truncate(CTXRef ctx,
-        const boost::filesystem::path &p, off_t size, VoidCallback) = 0;
+    virtual void ash_chmod(CTXRef ctx, const boost::filesystem::path &p,
+        mode_t mode, VoidCallback) = 0;
+    virtual void ash_chown(CTXRef ctx, const boost::filesystem::path &p,
+        uid_t uid, gid_t gid, VoidCallback) = 0;
+    virtual void ash_truncate(CTXRef ctx, const boost::filesystem::path &p,
+        off_t size, VoidCallback) = 0;
 
-    virtual void ash_open(CTXRef ctx,
-        const boost::filesystem::path &p, GeneralCallback<int>) = 0;
-    virtual void ash_read(CTXRef ctx,
-        const boost::filesystem::path &p, asio::mutable_buffer buf,
-        off_t offset, GeneralCallback<asio::mutable_buffer>) = 0;
+    virtual void ash_open(
+        CTXRef ctx, const boost::filesystem::path &p, GeneralCallback<int>) = 0;
+    virtual void ash_read(CTXRef ctx, const boost::filesystem::path &p,
+        asio::mutable_buffer buf, off_t offset,
+        GeneralCallback<asio::mutable_buffer>) = 0;
     virtual void ash_write(CTXRef ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset, GeneralCallback<int>) = 0;
-    virtual void ash_release(CTXRef ctx,
-        const boost::filesystem::path &p, VoidCallback) = 0;
-    virtual void ash_flush(CTXRef ctx,
-        const boost::filesystem::path &p, VoidCallback) = 0;
-    virtual void ash_fsync(CTXRef ctx,
-        const boost::filesystem::path &p, int isdatasync, VoidCallback) = 0;
+    virtual void ash_release(
+        CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
+    virtual void ash_flush(
+        CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
+    virtual void ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
+        int isdatasync, VoidCallback) = 0;
 
-    virtual asio::mutable_buffer sh_read(CTXRef ctx, const boost::filesystem::path &p,
-        asio::mutable_buffer buf, off_t offset) = 0;
+    virtual asio::mutable_buffer sh_read(CTXRef ctx,
+        const boost::filesystem::path &p, asio::mutable_buffer buf,
+        off_t offset) = 0;
     virtual int sh_write(CTXRef ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset) = 0;
 
 protected:
-    template <class T>
-    static void setPosixError(std::shared_ptr<std::promise<T>> p, int posixCode)
-    {
-        p->set_exception(std::make_exception_ptr(makePosixError(posixCode)));
-    }
-
-    static std::system_error makePosixError(int posixCode)
+    static error_t makePosixError(int posixCode)
     {
         posixCode = posixCode > 0 ? posixCode : -posixCode;
-        return std::system_error(posixCode, std::system_category());
+        return error_t(posixCode, std::system_category());
     }
 };
 
