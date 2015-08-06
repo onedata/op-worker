@@ -516,7 +516,9 @@ init_per_testcase(_, Config) ->
     User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
     User4 = {4, [<<"space_id4">>]},
 
-    session_setup(Worker, [User1, User2, User3, User4], Config).
+    Ans = session_setup(Worker, [User1, User2, User3, User4], Config),
+    timer:sleep(timer:seconds(1)), % for hooks
+    Ans.
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
