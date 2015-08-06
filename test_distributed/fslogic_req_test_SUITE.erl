@@ -13,7 +13,6 @@
 -author("Krzysztof Trzepla").
 -author("Rafal Slota").
 
--include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -21,6 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
