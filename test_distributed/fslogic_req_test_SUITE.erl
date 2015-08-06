@@ -13,6 +13,7 @@
 -author("Krzysztof Trzepla").
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
