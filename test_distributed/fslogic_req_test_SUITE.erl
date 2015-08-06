@@ -523,7 +523,10 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, Config),
-    mocks_teardown(Workers, [file_meta, gr_spaces]).
+    mocks_teardown(Workers, [file_meta, gr_spaces]),
+
+    ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [])),
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, 60000)).
 
 %%%===================================================================
 %%% Internal functions
