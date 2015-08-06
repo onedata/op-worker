@@ -98,7 +98,6 @@ private:
 
     const boost::filesystem::path m_rootPath;
     asio::io_service &m_workerService;
-
     static const error_t SuccessCode;
 };
 
