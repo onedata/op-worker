@@ -104,17 +104,17 @@
         "Document may be updated many times.")
 ).
 
--define(create_async_delete_test_def,
-    ?basic_test_def("Performs multipe create_async/delete operations using many threads.")
+-define(create_sync_delete_test_def,
+    ?basic_test_def("Performs multipe create_sync/delete_sync operations using many threads.")
 ).
 
--define(save_async_test_def,
-    ?basic_test_def("Performs multipe save_async operations using many threads. "
+-define(save_sync_test_def,
+    ?basic_test_def("Performs multipe save_sync operations using many threads. "
     "Document may be saved many times.")
 ).
 
--define(update_async_test_def,
-    ?basic_test_def("Performs multipe update_async operations using many threads. "
+-define(update_sync_test_def,
+    ?basic_test_def("Performs multipe update_sync operations using many threads. "
     "Document may be updated many times.")
 ).
 

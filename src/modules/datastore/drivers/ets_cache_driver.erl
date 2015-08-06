@@ -60,8 +60,15 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %%--------------------------------------------------------------------
 -spec update(model_behaviour:model_config(), datastore:ext_key(),
     Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
-update(#model_config{bucket = _Bucket} = _ModelConfig, _Key, Diff) when is_function(Diff) ->
-    erlang:error(not_implemented);
+update(#model_config{bucket = ModelName} = ModelConfig, Key, Diff) when is_function(Diff) ->
+    case ets:lookup(table_name(ModelConfig), Key) of
+        [] ->
+            {error, {not_found, ModelName}};
+        [{_, Value}] ->
+            NewValue = Diff(Value),
+            true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
+            {ok, Key}
+    end;
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_map(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [] ->
