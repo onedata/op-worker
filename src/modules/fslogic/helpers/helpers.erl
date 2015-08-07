@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Wrapper for helpers_nif module. Calls its methods in synchronous manner (call + response receive).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helpers).
@@ -15,8 +15,8 @@
 
 %% API
 -export([new_handle/2]).
--export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3, chown/4, truncate/3]).
--export([open/3, read/4, write/4, release/2, flush/2, fsync/3]).
+-export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
+-export([chown/4, truncate/3, open/3, read/4, write/4, release/2, flush/2, fsync/3]).
 
 %% Internal context record.
 -record(helper_handle, {instance, ctx, timeout = timer:seconds(30)}).

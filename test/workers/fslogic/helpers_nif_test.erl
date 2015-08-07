@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Test for basic context management in helpers_nif module
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helpers_nif_test).

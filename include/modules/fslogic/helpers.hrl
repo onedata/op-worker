@@ -14,6 +14,7 @@
 -define(HELPERS_HRL, 1).
 
 %% File attributes returned by storage helpers
+%% Eqiv of standard POSIX 'struct stat'
 -record(statbuf, {
     st_dev, st_ino, st_mode, st_nlink, st_uid,
     st_gid, st_rdev, st_size, st_atime, st_mtime,
