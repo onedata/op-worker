@@ -445,6 +445,7 @@ ensure_mc_text_connected() ->
                 Res
             catch
                 _:Reason ->
+                    ?error("Could start mcd_cluster (couchbase connection) due to: ~p", [Reason]),	
                     {error, Reason}
             end
     end.
