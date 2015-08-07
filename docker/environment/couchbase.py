@@ -87,7 +87,7 @@ def _cluster_nodes(containers, cluster_name, master_hostname, uid):
 
 def up(image, dns, uid, cluster_name, nodes):
 
-    dns_servers, dns_output = dns_mod.set_up_dns(dns, uid)
+    dns_servers, dns_output = dns_mod.maybe_start(dns, uid)
     couchbase_output = {}
 
     command = '''/etc/init.d/couchbase-server start
