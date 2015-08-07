@@ -23,6 +23,7 @@
     },
     "provider_domains": {
         "p1": {
+            "db_driver": "couchbase",
             "op_ccm": {
                 "ccm1": {
                     "vm.args": {
@@ -37,7 +38,6 @@
                 }
             },
             "op_worker": {
-                "db_driver": "couchbase",
                 "worker1": {
                     "vm.args": {
                         "setcookie": "cookie1"
@@ -56,6 +56,7 @@
             }
         },
         "p2.gr": {
+            "db_driver": "riak",
             "op_ccm": {
                 "ccm1": {
                     "vm.args": {
@@ -70,7 +71,6 @@
                 }
             },
             "op_worker": {
-                "db_driver": "riak",
                 "worker1": {
                     "vm.args": {
                         "setcookie": "cookie2"

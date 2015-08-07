@@ -44,7 +44,7 @@ def _tweak_config(config, name, op_instance, uid):
     # Set the provider domain (needed for nodes to start)
     sys_config['provider_domain'] = provider_domain(op_instance, uid)
 
-    sys_config['persistence_driver_module'] = _db_driver_module(_db_driver(config))
+    sys_config['persistence_driver_module'] = _db_driver_module(cfg['db_driver'])
 
     if 'global_registry_domain' in sys_config:
         gr_hostname = globalregistry.gr_domain(
@@ -165,7 +165,8 @@ def up(image, bindir, logdir, dns_server, uid, config_path):
                 'input_dir': input_dir,
                 'target_dir': '/root/bin'
             },
-            'nodes': config['provider_domains'][op_instance]['op_worker']
+            'nodes': config['provider_domains'][op_instance]['op_worker'],
+            'db_driver': _db_driver(config['provider_domains'][op_instance])
         }
 
         # Tweak configs, retrieve lis of riak nodes to start
@@ -179,7 +180,7 @@ def up(image, bindir, logdir, dns_server, uid, config_path):
 
         db_node_mappings = None
         db_out = None
-        db_driver = _db_driver(config)
+        db_driver = _db_driver(config['provider_domains'][op_instance])
 
         # Start db nodes, obtain mappings
         if db_driver == 'riak':
