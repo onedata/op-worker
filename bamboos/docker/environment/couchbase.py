@@ -29,7 +29,7 @@ def _node_up(command, cluster_name, num, dns, image, uid):
     hostname = common.format_hostname(_couchbase(cluster_name, num), uid)
     node = docker.run(
         image=image,
-        name=common.format_dockername(_couchbase(cluster_name, num), uid),
+        name=hostname,
         hostname=hostname,
         detach=True,
         interactive=True,
