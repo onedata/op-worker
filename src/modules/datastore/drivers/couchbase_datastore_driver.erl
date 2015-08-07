@@ -281,7 +281,7 @@ foreach_link(#model_config{bucket = _Bucket} = ModelConfig, Key, Fun, AccIn) ->
         {ok, #document{value = LinkMap}} ->
             {ok, maps:fold(Fun, AccIn, LinkMap)};
         {error, {not_found, _}} ->
-            AccIn;
+            {ok, AccIn};
         {error, Reason} ->
             {error, Reason}
     end.
