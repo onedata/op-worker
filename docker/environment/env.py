@@ -120,7 +120,6 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
         env_configurator_dir = '{0}/../../env_configurator'.format(
             common.get_script_dir())
 
-        print(json.dumps(env_configurator_input))
         # Newline for clearer output
         print('')
         # Run env configurator with gathered args
