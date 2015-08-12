@@ -99,13 +99,8 @@ start_gui_listener() ->
         % e. g. www.seg2.seg3.seg4.seg5.com
         {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
             [
-<<<<<<< HEAD
                 {delegation, false},
                 {handler_module, redirect_handler},
-=======
-                {delegation, true},
-                {handler_module, https_redirect_handler},
->>>>>>> 53e59ad7a4bdf1b6e1967470292063241c515077
                 {handler_opts, []}
             ]}
         ]},
