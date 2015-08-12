@@ -48,7 +48,8 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
 
     # Start appmock instances
     if 'appmock_domains' in config:
-        am_output = appmock.up(image, bin_am, dns_server, uid, config_path)
+        am_output = appmock.up(image, bin_am, logdir, dns_server,
+                               uid, config_path)
         common.merge(output, am_output)
         # Make sure appmock domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
@@ -120,7 +121,6 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
         env_configurator_dir = '{0}/../../env_configurator'.format(
             common.get_script_dir())
 
-        print(json.dumps(env_configurator_input))
         # Newline for clearer output
         print('')
         # Run env configurator with gathered args
