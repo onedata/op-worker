@@ -152,7 +152,7 @@ EOF
         command=gr_command)
 
 
-def _docker_up(image, bindir, logdir, config, dns_servers):
+def _docker_up(image, bindir, config, dns_servers, logdir):
     """Starts the docker but does not start GR
     as dns.config update is needed first
     """
@@ -210,7 +210,7 @@ sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
     }
 
 
-def up(image, bindir, logdir, dns_server, uid, config_path):
+def up(image, bindir, dns_server, uid, config_path, logdir=None):
     config = common.parse_json_file(config_path)
     input_dir = config['dirs_config']['globalregistry']['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
@@ -230,7 +230,7 @@ def up(image, bindir, logdir, dns_server, uid, config_path):
         gr_ips = []
         gr_configs = {}
         for cfg in tweaked_configs:
-            gr, node_out = _docker_up(image, bindir, logdir, cfg, dns_servers)
+            gr, node_out = _docker_up(image, bindir, cfg, dns_servers, logdir)
             common.merge(output, node_out)
             gr_configs[gr] = cfg
             gr_ips.append(common.get_docker_ip(gr))
