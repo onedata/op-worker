@@ -14,7 +14,7 @@ import string
 
 from . import common, docker, dns, provider_ccm, provider_worker, globalregistry
 
-APPMOCK_WAIT_FOR_NAGIOS_SECONDS = 60 * 5
+APPMOCK_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 
 
 def domain(appmock_instance, uid):

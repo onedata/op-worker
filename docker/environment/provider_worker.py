@@ -11,7 +11,7 @@ import os
 
 from . import common, docker, riak, dns, globalregistry, provider_ccm
 
-PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60
+PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 
 
 def provider_domain(op_instance, uid):
