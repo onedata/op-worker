@@ -16,6 +16,12 @@ from environment import appmock, common
 
 
 parser = common.standard_arg_parser('Bring up appmock nodes.')
+parser.add_argument(
+    '-l', '--logdir',
+    action='store',
+    default=None,
+    help='path to a directory where the logs will be stored',
+    dest='logdir')
 
 args = parser.parse_args()
 config = appmock.up(args.image, args.bin, args.logdir, args.dns,
