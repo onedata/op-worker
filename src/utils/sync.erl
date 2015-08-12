@@ -33,7 +33,7 @@
         filename:join([_ProjectDir, _RelDir, _ReleaseName])
     end).
 
-%% Predefined file with config used by this escript (location relative to including project root).
+%% Predefined file with config (location relative to including project root).
 -define(GUI_CONFIG_LOCATION, "rel/gui.config").
 
 %% API
