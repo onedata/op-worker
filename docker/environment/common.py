@@ -44,7 +44,7 @@ def wait_until(condition, containers, timeout):
     for container in containers:
         while not condition(container):
             if time.time() > deadline:
-                message = 'ERROR: timeout while waiting for condition {0} ' \
+                message = 'Timeout while waiting for condition {0} ' \
                 'of container {1}'
                 message = message.format(condition.__name__, container)
                 raise ValueError(message)
