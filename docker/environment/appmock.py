@@ -70,7 +70,7 @@ def _tweak_config(config, appmock_node, appmock_instance, uid):
     return cfg
 
 
-def _node_up(image, bindir, logdir, config, config_path, dns_servers):
+def _node_up(image, bindir, config, config_path, dns_servers, logdir):
     node_name = config['nodes']['node']['vm.args']['name']
     (name, sep, hostname) = node_name.partition('@')
 
@@ -127,7 +127,7 @@ def _ready(node):
     return common.nagios_up(node_ip, '9999')
 
 
-def up(image, bindir, logdir, dns_server, uid, config_path):
+def up(image, bindir, dns_server, uid, config_path, logdir=None):
     config = common.parse_json_file(config_path)
     input_dir = config['dirs_config']['appmock']['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
@@ -149,8 +149,8 @@ def up(image, bindir, logdir, dns_server, uid, config_path):
         appmock_ips = []
         appmocks = []
         for cfg in tweaked_configs:
-            appmock_id, node_out = _node_up(image, bindir, logdir, cfg,
-                                            config_path, dns_servers)
+            appmock_id, node_out = _node_up(image, bindir, cfg,
+                                            config_path, dns_servers, logdir)
             appmocks.append(appmock_id)
             mocked_app = cfg['nodes']['node']['mocked_app']
             if mocked_app == 'op_worker' or mocked_app == 'globalregistry':
