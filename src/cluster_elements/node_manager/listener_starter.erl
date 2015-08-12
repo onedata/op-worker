@@ -100,7 +100,7 @@ start_gui_listener() ->
         {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
             [
                 {delegation, false},
-                {handler_module, redirect_handler},
+                {handler_module, https_redirect_handler},
                 {handler_opts, []}
             ]}
         ]},
