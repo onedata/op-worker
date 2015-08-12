@@ -18,5 +18,6 @@ from environment import appmock, common
 parser = common.standard_arg_parser('Bring up appmock nodes.')
 
 args = parser.parse_args()
-config = appmock.up(args.image, args.bin, args.dns, args.uid, args.config_path)
+config = appmock.up(args.image, args.bin, args.logdir, args.dns,
+                    args.uid, args.config_path)
 print(json.dumps(config))
