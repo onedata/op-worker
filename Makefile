@@ -1,5 +1,9 @@
 REPO            ?= op-worker
 
+# distro for package building
+DISTRIBUTION    ?= none
+export DISTRIBUTION
+
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
 PKG_ID           = op-worker-$(PKG_VERSION)
@@ -58,6 +62,9 @@ eunit:
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
+coverage:
+	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR)
+
 ##
 ## Dialyzer targets local
 ##
@@ -73,7 +80,7 @@ plt:
 	        ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
 	        mnesia edoc common_test test_server syntax_tools compiler ./deps/*/ebin; \
 	fi; exit 0
-            
+
 
 # Dialyzes the project.
 dialyzer: plt

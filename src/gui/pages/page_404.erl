@@ -21,10 +21,14 @@
 -export([main/0, event/1, api_event/3]).
 
 %% Template points to the template file, which will be filled with content
+<<<<<<< HEAD:src/gui/pages/page_404.erl
 main() ->
     gui_jq:wire(#api{name = "api_fun", tag = "api_fun"}),
     #dtl{file = "page_404", app = ?APP_NAME, bindings = [{message, <<"Dzien dobry">>}]}.
 
+=======
+main() -> <<"error 404">>.
+>>>>>>> 53e59ad7a4bdf1b6e1967470292063241c515077:src/modules/http_worker/gui/pages/page_404.erl
 
 api_event("api_fun", _, _) ->
     random:seed(now()),

@@ -18,7 +18,7 @@
 -include("global_definitions.hrl").
 
 %% gr_plugin_behaviour API
--export([get_gr_url/0, get_key_path/0, get_cert_path/0, get_cacert_path/0]).
+-export([get_gr_url/0, get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
 
 %%%===================================================================
 %%% gr_plugin_behaviour API
@@ -31,9 +31,10 @@
 %%--------------------------------------------------------------------
 -spec get_gr_url() -> string().
 get_gr_url() ->
-    {ok, Node} = application:get_env(?APP_NAME, global_registry_node),
+    {ok, Hname} = application:get_env(?APP_NAME, global_registry_domain),
+    Hostname = gui_str:to_list(Hname),
     {ok, Port} = application:get_env(?APP_NAME, global_registry_rest_port),
-    string:join(["https://", utils:get_host(Node), ":", integer_to_list(Port)], "").
+    string:join(["https://", Hostname, ":", integer_to_list(Port)], "").
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -44,6 +45,16 @@ get_gr_url() ->
 get_key_path() ->
     {ok, KeyFile} = application:get_env(?APP_NAME, global_registry_provider_key_path),
     KeyFile.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Should return a path to file containing provider's private key.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_csr_path() -> file:name_all().
+get_csr_path() ->
+    {ok, CSRFile} = application:get_env(?APP_NAME, global_registry_provider_csr_path),
+    CSRFile.
 
 %%--------------------------------------------------------------------
 %% @doc

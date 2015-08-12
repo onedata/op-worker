@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% Bukcet type that is defined in database and configured to store "map" data type
+%% Bucket type that is defined in database and configured to store "map" data type
 -define(RIAK_BUCKET_TYPE, <<"maps">>).
 
 %% Encoded object prefix
@@ -26,6 +26,9 @@
 -define(ATOM_PREFIX, "ATOM::").
 
 -define(LINKS_KEY_SUFFIX, "$$").
+
+%% Connections to single Riak node
+-define(CONN_PER_NODE, 10).
 
 -type riak_node() :: {HostName :: binary(), Port :: non_neg_integer()}.
 -type riak_connection() :: {riak_node(), ConnectionHandle :: term()}.
@@ -307,7 +310,7 @@ foreach_link(#model_config{bucket = Bucket} = _ModelConfig, Key, Fun, AccIn) ->
                     {error, Reason1}
             end;
         {error, {notfound, _}} ->
-            {ok, []};
+            {ok, AccIn};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -450,7 +453,11 @@ get_connections() ->
         [_ | _] = Connections ->
             Connections;
         _ ->
-            Connections = connect(datastore_worker:state_get(riak_nodes)),
+            Nodes = lists:map(
+                fun(Elem) ->
+                    [Elem || _ <- lists:seq(1, ?CONN_PER_NODE)]
+                end, datastore_worker:state_get(riak_nodes)),
+            Connections = connect(lists:flatten(Nodes)),
             datastore_worker:state_put(riak_connections, Connections),
             Connections
     end.

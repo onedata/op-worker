@@ -95,13 +95,41 @@
 ).
 
 -define(save_test_def,
-    ?basic_test_def("Performs multipe saves operations using many threads. "
+    ?basic_test_def("Performs multipe save operations using many threads. "
         "Document may be saved many times.")
 ).
 
 -define(update_test_def,
     ?basic_test_def("Performs multipe update operations using many threads. "
         "Document may be updated many times.")
+).
+
+-define(create_sync_delete_test_def,
+    ?basic_test_def("Performs multipe create_sync/delete_sync operations using many threads.")
+).
+
+-define(save_sync_test_def,
+    ?basic_test_def("Performs multipe save_sync operations using many threads. "
+    "Document may be saved many times.")
+).
+
+-define(update_sync_test_def,
+    ?basic_test_def("Performs multipe update_sync operations using many threads. "
+    "Document may be updated many times.")
+).
+
+-define(no_transactions_create_delete_test_def,
+    ?basic_test_def("Performs multipe non-transactional create/delete operations using many threads.")
+).
+
+-define(no_transactions_save_test_def,
+    ?basic_test_def("Performs multipe non-transactional save operations using many threads. "
+    "Document may be saved many times.")
+).
+
+-define(no_transactions_update_test_def,
+    ?basic_test_def("Performs multipe non-transactional update operations using many threads. "
+    "Document may be updated many times.")
 ).
 
 -define(get_test_def,

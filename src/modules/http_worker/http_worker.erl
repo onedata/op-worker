@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/1, cleanup/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -32,27 +32,27 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, State :: term()} | {error, Reason :: term()}.
+    Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     GrCert = oneprovider:get_globalregistry_cert(),
     identity:save(#document{key = GrCert, value = ?GLOBALREGISTRY_IDENTITY}),
-    {ok, undefined}.
+    {ok, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result when
+-spec handle(Request) -> Result when
     Request :: ping | healthcheck | {spawn_handler, SocketPid :: pid()},
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
     {error, Reason} | pong,
     Response :: term(),
     Reason :: term().
-handle(ping, _) ->
+handle(ping) ->
     pong;
 
-handle(healthcheck, _) ->
+handle(healthcheck) ->
     Endpoints = [protocol_handler, gui, redirector, rest],
     lists:foldl(
         fun
@@ -60,7 +60,7 @@ handle(healthcheck, _) ->
             (_, Error) -> Error
         end, ok, Endpoints);
 
-handle({spawn_handler, SocketPid}, _) ->
+handle({spawn_handler, SocketPid}) ->
     Pid = spawn(
         fun() ->
             erlang:monitor(process, SocketPid),
@@ -69,7 +69,7 @@ handle({spawn_handler, SocketPid}, _) ->
         end),
     {ok, Pid};
 
-handle(_Request, _) ->
+handle(_Request) ->
     ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------

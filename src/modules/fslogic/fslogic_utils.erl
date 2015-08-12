@@ -29,10 +29,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_storage_uid(ID :: binary()) -> non_neg_integer().
+gen_storage_uid(?ROOT_USER_ID) ->
+    0;
 gen_storage_uid(ID) ->
-    <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
-    {ok, LowestGID} = application:get_env(?APP_NAME, lowest_generated_storage_gid),
-    LowestGID + GID0 rem 1000000.
+    <<UID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
+    {ok, LowestUID} = application:get_env(?APP_NAME, lowest_generated_storage_uid),
+    {ok, HighestUID} = application:get_env(?APP_NAME, highest_generated_storage_uid),
+    LowestUID + UID0 rem HighestUID.
 
 
 %%--------------------------------------------------------------------
@@ -46,6 +49,13 @@ random_ascii_lowercase_sequence(Length) ->
 %%--------------------------------------------------------------------
 %% @doc Returns parent of given file.
 %%--------------------------------------------------------------------
--spec get_parent(fslogic:file()) -> fslogic:file() | no_return().
-get_parent(_File) ->
-    #document{value = #file_meta{}}.
+-spec get_parent(fslogic_worker:file()) -> fslogic_worker:file() | no_return().
+get_parent({path, Path}) ->
+    [_ | R] = lists:reverse(fslogic_path:split(Path)),
+    Tokens = lists:reverse(R),
+    ParentPath = fslogic_path:ensure_path_begins_with_slash(fslogic_path:join(Tokens)),
+    {ok, Doc} = file_meta:get({path, ParentPath}),
+    Doc;
+get_parent(File) ->
+    {ok, Doc} = file_meta:get_parent(File),
+    Doc.

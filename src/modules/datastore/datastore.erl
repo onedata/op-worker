@@ -58,11 +58,13 @@
 -export_type([link_target/0, link_name/0, link_spec/0, normalized_link_spec/0, normalized_link_target/0]).
 
 %% API
--export([save/2, update/4, create/2, get/3, list/4, delete/4, delete/3, exists/3]).
+-export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2,
+         get/3, list/4, delete/4, delete/3, delete_sync/4, delete_sync/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
--export([configs_per_bucket/1, ensure_state_loaded/1]).
+-export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, level_to_driver/1]).
+-export([run_synchronized/3]).
 
 %%%===================================================================
 %%% API
@@ -77,6 +79,17 @@
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(Level, #document{} = Document) ->
     ModelName = model_name(Document),
+    exec_driver_async(ModelName, Level, save, [maybe_gen_uuid(Document)]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves given #document to memory with sync save to disk in case of caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_sync(Level :: store_level(), Document :: datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:generic_error().
+save_sync(Level, #document{} = Document) ->
+    ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), save, [maybe_gen_uuid(Document)]).
 
 %%--------------------------------------------------------------------
@@ -88,6 +101,18 @@ save(Level, #document{} = Document) ->
     Key :: datastore:ext_key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 update(Level, ModelName, Key, Diff) ->
+    exec_driver_async(ModelName, Level, update, [Key, Diff]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates given by key document by replacing given fields with new values.
+%% Sync operation on memory with sync operation on disk in case of caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_sync(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+update_sync(Level, ModelName, Key, Diff) ->
     exec_driver(ModelName, level_to_driver(Level), update, [Key, Diff]).
 
 %%--------------------------------------------------------------------
@@ -98,6 +123,18 @@ update(Level, ModelName, Key, Diff) ->
 -spec create(Level :: store_level(), Document :: datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(Level, #document{} = Document) ->
+    ModelName = model_name(Document),
+    exec_driver_async(ModelName, Level, create, [maybe_gen_uuid(Document)]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new #document. Sync operation on memory with sync operation on disk
+%% in case of caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_sync(Level :: store_level(), Document :: datastore:document()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create_sync(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
 
@@ -131,12 +168,9 @@ list(Level, ModelName, Fun, AccIn) ->
 -spec delete(Level :: store_level(), ModelName :: model_behaviour:model_type(),
     Key :: datastore:ext_key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
 delete(Level, ModelName, Key, Pred) ->
-    case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
+    case exec_driver_async(ModelName, Level, delete, [Key, Pred]) of
         ok ->
-            spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
-            spawn(fun() -> catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
-            %% @todo: uncomment following line when local cache will support links
-            % spawn(fun() -> catch delete_links(?LOCAL_ONLY_LEVEL, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(Level, Key, ModelName, all) end),
             ok;
         {error, Reason} ->
             {error, Reason}
@@ -153,6 +187,39 @@ delete(Level, ModelName, Key, Pred) ->
 delete(Level, ModelName, Key) ->
     delete(Level, ModelName, Key, ?PRED_ALWAYS).
 
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes #document with given key. Sync operation on memory with sync operation on disk
+%% in case of caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_sync(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:ext_key(), Pred :: delete_predicate()) -> ok | datastore:generic_error().
+delete_sync(Level, ModelName, Key, Pred) ->
+    case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
+        ok ->
+            spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
+            spawn(fun() -> catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
+            %% @todo: uncomment following line when local cache will support links
+            % spawn(fun() -> catch delete_links(?LOCAL_ONLY_LEVEL, Key, ModelName, all) end),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes #document with given key. Sync operation on memory with sync operation on disk
+%% in case of caches.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_sync(Level :: store_level(), ModelName :: model_behaviour:model_type(),
+    Key :: datastore:ext_key()) -> ok | datastore:generic_error().
+delete_sync(Level, ModelName, Key) ->
+    delete_sync(Level, ModelName, Key, ?PRED_ALWAYS).
 
 
 %%--------------------------------------------------------------------
@@ -188,7 +255,7 @@ add_links(Level, Key, ModelName, {_LinkName, _LinkTarget} = LinkSpec) ->
     add_links(Level, Key, ModelName, [LinkSpec]);
 add_links(Level, Key, ModelName, Links) when is_list(Links) ->
     _ModelConfig = ModelName:model_init(),
-    exec_driver(ModelName, level_to_driver(Level), add_links, [Key, normalize_link_target(Links)]).
+    exec_driver_async(ModelName, Level, add_links, [Key, normalize_link_target(Links)]).
 
 
 %%--------------------------------------------------------------------
@@ -209,7 +276,7 @@ delete_links(Level, #document{key = Key} = Doc, LinkNames) ->
 -spec delete_links(Level :: store_level(), ext_key(), model_behaviour:model_type(), link_name() | [link_name()] | all) -> ok | generic_error().
 delete_links(Level, Key, ModelName, LinkNames) when is_list(LinkNames); LinkNames =:= all ->
     _ModelConfig = ModelName:model_init(),
-    exec_driver(ModelName, level_to_driver(Level), delete_links, [Key, LinkNames]);
+    exec_driver_async(ModelName, Level, delete_links, [Key, LinkNames]);
 delete_links(Level, Key, ModelName, LinkName) ->
     delete_links(Level, Key, ModelName, [LinkName]).
 
@@ -309,6 +376,31 @@ link_walk(Level, #document{key = StartKey} = StartDoc, LinkNames, Mode) when is_
 link_walk(Level, Key, ModelName, R, Mode) ->
     link_walk7(Level, Key, ModelName, R, [], Mode).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
+%% run at the same time.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_synchronized(ModelName :: model_behaviour:model_type(), ResourceId :: binary(), fun(() -> Result)) -> Result
+    when Result :: term().
+run_synchronized(ModelName, ResourceId, Fun) ->
+    exec_driver(ModelName, ?DISTRIBUTED_CACHE_DRIVER, run_synchronized, [ResourceId, Fun]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback healthcheck/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | {error, Reason :: term()}.
+healthcheck() ->
+    case ets:info(?LOCAL_STATE) of
+        undefined ->
+            {error, {no_ets, ?LOCAL_STATE}};
+        _ -> ok
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -373,7 +465,9 @@ model_name(Record) when is_tuple(Record) ->
 %%--------------------------------------------------------------------
 -spec run_prehooks(Config :: model_behaviour:model_config(),
     Method :: model_behaviour:model_action(), Level :: store_level(),
-    Context :: term()) -> ok | {error, Reason :: term()}.
+    Context :: term()) -> ok | {ok, NewMethod, NewArgs} | {error, Reason :: term()} when
+    NewMethod :: atom(),
+    NewArgs :: list().
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
@@ -403,6 +497,24 @@ run_posthooks(#model_config{name = ModelName}, Method, Level, Context, Return) -
         fun({_, HookedModule}) ->
             spawn(fun() ->
                 HookedModule:'after'(ModelName, Method, Level, Context, Return) end)
+        end, Hooked),
+    Return.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Runs synchronously all post-hooks for given model, method, context and
+%% return value. Returns given return value.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_posthooks_sync(Config :: model_behaviour:model_config(),
+    Model :: model_behaviour:model_action(), Level :: store_level(),
+    Context :: term(), ReturnValue) -> ReturnValue when ReturnValue :: term().
+run_posthooks_sync(#model_config{name = ModelName}, Method, Level, Context, Return) ->
+    Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
+    lists:foreach(
+        fun({_, HookedModule}) ->
+            HookedModule:'after'(ModelName, Method, Level, Context, Return)
         end, Hooked),
     Return.
 
@@ -524,10 +636,15 @@ driver_to_level(?DISTRIBUTED_CACHE_DRIVER) ->
 exec_driver(ModelName, [Driver], Method, Args) when is_atom(Driver) ->
     exec_driver(ModelName, Driver, Method, Args);
 exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
+    % TODO - foreach_link metchod may not have all links in memory nor at disk!!!
     case exec_driver(ModelName, Driver, Method, Args) of
+        {error, {not_found, _}} when Method =:= get ->
+            exec_driver(ModelName, Rest, Method, Args);
+        {error, link_not_found} when Method =:= fetch_link ->
+            exec_driver(ModelName, Rest, Method, Args);
         {error, Reason} ->
             {error, Reason};
-        Result when Method =:= get; Method =:= fetch_link ->
+        Result when Method =:= get; Method =:= fetch_link ; Method =:= foreach_link ->
             Result;
         {ok, true} = Result when Method =:= exists ->
             Result;
@@ -546,8 +663,57 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                     _ ->
                         erlang:apply(Driver, Method, FullArgs)
                 end;
+            {ok, _NewMethod, _NewArgs} ->
+                {error, prehook_ans_not_supported};
             {error, Reason} ->
                 {error, Reason}
         end,
     run_posthooks(ModelConfig, Method, driver_to_level(Driver), Args, Return).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes given model action on given level. Decides if execution should be async.
+%% @end
+%%--------------------------------------------------------------------
+-spec exec_driver_async(model_behaviour:model_type(), Level :: store_level(),
+    Method :: store_driver_behaviour:driver_action(), [term()]) ->
+    ok | {ok, term()} | {error, term()}.
+exec_driver_async(ModelName, ?LOCALLY_CACHED_LEVEL, Method, Args) ->
+    exec_cache_async(ModelName, level_to_driver(?LOCALLY_CACHED_LEVEL), Method, Args);
+exec_driver_async(ModelName, ?GLOBALLY_CACHED_LEVEL, Method, Args) ->
+    exec_cache_async(ModelName, level_to_driver(?GLOBALLY_CACHED_LEVEL), Method, Args);
+exec_driver_async(ModelName, Level, Method, Args) ->
+    exec_driver(ModelName, level_to_driver(Level), Method, Args).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Executes given model action with async execution on second driver.
+%% @end
+%%--------------------------------------------------------------------
+-spec exec_cache_async(model_behaviour:model_type(), [atom()] | atom(),
+    Method :: store_driver_behaviour:driver_action(), [term()]) ->
+    ok | {ok, term()} | {error, term()}.
+exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
+    case exec_driver(ModelName, Driver1, Method, Args) of
+        {error, Reason} ->
+            {error, Reason};
+        Result ->
+            spawn(fun() -> exec_cache_async(ModelName, Driver2, Method, Args) end),
+            Result
+    end;
+exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
+    ModelConfig = ModelName:model_init(),
+    Return =
+        case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Args) of
+            {ok, NewMethod, NewArgs} ->
+                FullArgs = [ModelConfig | NewArgs],
+                worker_proxy:call(datastore_worker, {driver_call, Driver, NewMethod, FullArgs}, timer:minutes(5));
+            ok ->
+                FullArgs = [ModelConfig | Args],
+                worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs}, timer:minutes(5));
+            {error, Reason} ->
+                {error, Reason}
+        end,
+    run_posthooks_sync(ModelConfig, Method, driver_to_level(Driver), Args, Return).

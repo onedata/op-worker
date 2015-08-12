@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/1, cleanup/0]).
 -export([state_get/1, state_put/2]).
 
 %%%===================================================================
@@ -31,7 +31,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, #{term() => term()}} | {error, Reason :: term()}.
+    {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
 
     %% Get Riak nodes
@@ -60,18 +60,20 @@ init(_Args) ->
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result when
+-spec handle(Request) -> Result when
     Request :: ping | healthcheck |
     {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
     Reason :: term().
-handle(ping, _State) ->
+handle(ping) ->
     pong;
 
-handle(healthcheck, State) ->
+handle(healthcheck) ->
+    State = worker_host:state_to_map(?MODULE),
     HC = #{
+        datastore_state_init => datastore:healthcheck(),
         ?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
         ?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
         ?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
@@ -90,7 +92,7 @@ handle(healthcheck, State) ->
         end, ok, HC);
 
 %% Proxy call to given datastore driver
-handle({driver_call, Module, Method, Args}, _State) ->
+handle({driver_call, Module, Method, Args}) ->
     try erlang:apply(Module, Method, Args) of
         ok -> ok;
         {ok, Response} -> {ok, Response};
@@ -102,7 +104,7 @@ handle({driver_call, Module, Method, Args}, _State) ->
     end;
 
 %% Unknown request
-handle(_Request, _) ->
+handle(_Request) ->
     ?log_bad_request(_Request).
 
 %%--------------------------------------------------------------------
@@ -122,10 +124,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    gen_server:call(?MODULE, {update_plugin_state,
-        fun(State) ->
-            maps:put(Key, Value, State)
-        end}).
+    worker_host:state_put(?MODULE, Key, Value).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -134,4 +133,4 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    maps:get(Key, gen_server:call(?MODULE, get_plugin_state), undefined).
+    worker_host:state_get(?MODULE, Key).

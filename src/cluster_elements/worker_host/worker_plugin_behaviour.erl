@@ -19,14 +19,14 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback init(Args :: term()) ->
-    {ok, State :: term()} | {error, Reason :: term()}.
+    {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Do your work.
 %% @end
 %%--------------------------------------------------------------------
--callback handle(Request :: term(), State :: term()) ->
+-callback handle(Request :: term()) ->
     nagios_handler:healthcheck_response() | ok | pong | {ok, Answer :: term()} |
     {error, Reason :: term()}.
 

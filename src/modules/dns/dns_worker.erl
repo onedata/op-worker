@@ -22,21 +22,17 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("kernel/src/inet_dns.hrl").
 
-%% This record is used by dns_worker (it contains its state).
--record(state, {
-    %% This record is usually used in read-only mode to get a list of
-    %% nodes to return as DNS response. It is updated periodically by node manager.
-    lb_advice = undefined :: load_balancing:dns_lb_advice() | undefined,
-    % Time of last ld advice update received from dispatcher
-    last_update = {0, 0, 0} :: {integer(), integer(), integer()}
-}).
-
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/1, cleanup/0]).
 
 %% dns_handler_behaviour callbacks
 -export([handle_a/1, handle_ns/1, handle_cname/1, handle_soa/1, handle_wks/1,
     handle_ptr/1, handle_hinfo/1, handle_minfo/1, handle_mx/1, handle_txt/1]).
+
+%% export for unit tests
+-ifdef(TEST).
+-export([parse_domain/1]).
+-endif.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -48,15 +44,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, #state{}} | {error, Reason :: term()}.
+    Result :: {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init([]) ->
-    {ok, #state{}};
+    {ok, #{}};
 
-init(InitialState) when is_record(InitialState, state) ->
+init(InitialState) when is_map(InitialState) ->
     {ok, InitialState};
 
 init(test) ->
-    {ok, #state{}};
+    {ok, #{}};
 
 init(_) ->
     throw(unknown_initial_state).
@@ -66,25 +62,26 @@ init(_) ->
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(Request, State :: term()) -> Result when
+-spec handle(Request) -> Result when
     Request :: ping | healthcheck,
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: [inet:ip4_address()],
     Reason :: term().
 
-handle(ping, _) ->
+handle(ping) ->
     pong;
 
-handle(healthcheck, State) ->
-    _Reply = healthcheck(State);
+handle(healthcheck) ->
+    _Reply = healthcheck();
 
-handle({update_lb_advice, LBAdvice}, State) ->
+handle({update_lb_advice, LBAdvice}) ->
     ?debug("DNS update of load_balancing advice: ~p", [LBAdvice]),
-    NewState = State#state{last_update = now(), lb_advice = LBAdvice},
-    gen_server:call(?MODULE, {update_plugin_state, NewState});
+    ok = worker_host:state_put(?MODULE, last_update, now()),
+    ok = worker_host:state_put(?MODULE, lb_advice, LBAdvice);
 
-handle({handle_a, Domain}, #state{lb_advice = LBAdvice}) ->
+handle({handle_a, Domain}) ->
+    LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     ?debug("DNS A request: ~s, current advice: ~p", [Domain, LBAdvice]),
     case LBAdvice of
         undefined ->
@@ -92,28 +89,22 @@ handle({handle_a, Domain}, #state{lb_advice = LBAdvice}) ->
             serv_fail;
         _ ->
             case parse_domain(Domain) of
-                unknown_domain ->
-                    % Unrecognizable domain
-                    refused;
-                {Prefix, _Suffix} ->
-                    % Accept all prefixes that consist of one part
-                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                        true ->
-                            % Prefix OK, return nodes to connect to
-                            Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
-                            {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
-                            {ok,
-                                    [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- Nodes] ++
-                                    [dns_server:authoritative_answer_flag(true)]
-                            };
-                        false ->
-                            % Return NX domain for other prefixes
-                            nx_domain
-                    end
+                ok ->
+                    % Prefix OK, return nodes to connect to
+                    Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
+                    {ok, TTL} = application:get_env(?APP_NAME, dns_a_response_ttl),
+                    {ok,
+                            [dns_server:answer_record(Domain, TTL, ?S_A, IP) || IP <- Nodes] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
+                Other ->
+                    % Return whatever parse_domain returned (nx_domain | refused)
+                    Other
             end
     end;
 
-handle({handle_ns, Domain}, #state{lb_advice = LBAdvice}) ->
+handle({handle_ns, Domain}) ->
+    LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     ?debug("DNS NS request: ~s, current advice: ~p", [Domain, LBAdvice]),
     case LBAdvice of
         undefined ->
@@ -121,27 +112,21 @@ handle({handle_ns, Domain}, #state{lb_advice = LBAdvice}) ->
             serv_fail;
         _ ->
             case parse_domain(Domain) of
-                unknown_domain ->
-                    % Unrecognizable domain
-                    refused;
-                {Prefix, _Suffix} ->
-                    % Accept all prefixes that consist of one part
-                    case string:str(Prefix, ".") =:= 0 andalso length(Prefix) > 0 of
-                        true ->
-                            % Prefix OK, return NS nodes of the cluster
-                            Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
-                            {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
-                            {ok,
-                                    [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- Nodes] ++
-                                    [dns_server:authoritative_answer_flag(true)]
-                            };
-                        false ->
-                            nx_domain
-                    end
+                ok ->
+                    % Prefix OK, return NS nodes of the cluster
+                    Nodes = load_balancing:choose_ns_nodes_for_dns(LBAdvice),
+                    {ok, TTL} = application:get_env(?APP_NAME, dns_ns_response_ttl),
+                    {ok,
+                            [dns_server:answer_record(Domain, TTL, ?S_NS, inet_parse:ntoa(IP)) || IP <- Nodes] ++
+                            [dns_server:authoritative_answer_flag(true)]
+                    };
+                Other ->
+                    % Return whatever parse_domain returned (nx_domain | refused)
+                    Other
             end
     end;
 
-handle(_Request, _) ->
+handle(_Request) ->
     ?log_bad_request(_Request),
     throw({unsupported_request, _Request}).
 
@@ -275,32 +260,54 @@ handle_txt(_Domain) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Split the domain name into prefix and suffix, where suffix matches the
-%% canonical globalregistry hostname (retrieved from env). The split is made on the dot between prefix and suffix.
-%% If that's not possible, returns unknown_domain.
+%% Parses the DNS query domain and check if it ends with provider domain.
+%% Accepts only domains that fulfill above condition and have a
+%% maximum of one part subdomain.
+%% Returns NXDOMAIN when the query domain has more parts.
+%% Returns REFUSED when query domain is not the same as provider's.
 %% @end
 %%--------------------------------------------------------------------
--spec parse_domain(Domain :: string()) -> {Prefix :: string(), Suffix :: string()} | unknown_domain.
+-spec parse_domain(Domain :: string()) -> ok | refused | nx_domain.
 parse_domain(DomainArg) ->
-    % If requested domain starts with 'www.', ignore it
-    Domain = case DomainArg of
-                 "www." ++ Rest -> Rest;
-                 Other -> Other
-             end,
-    {ok, ProviderHostnameWithoutDot} = application:get_env(?APP_NAME, global_registry_hostname),
-    case ProviderHostnameWithoutDot =:= Domain of
-        true ->
-            {"", ProviderHostnameWithoutDot};
-        false ->
-            ProviderHostname = "." ++ ProviderHostnameWithoutDot,
-            HostNamePos = string:rstr(Domain, ProviderHostname),
-            % If hostname is at this position, it's a suffix (the string ends with it)
-            ValidHostNamePos = length(Domain) - length(ProviderHostname) + 1,
-            case HostNamePos =:= ValidHostNamePos of
-                false ->
-                    unknown_domain;
+    ProviderDomain = oneprovider:get_provider_domain(),
+    GRDomain = oneprovider:get_gr_domain(),
+    % If requested domain starts with 'www.', ignore the suffix
+    QueryDomain = case DomainArg of
+                      "www." ++ Rest -> Rest;
+                      Other -> Other
+                  end,
+
+    % Check if queried domain ends with provider domain
+    case string:rstr(QueryDomain, ProviderDomain) of
+        0 ->
+            % If not, check if following are true:
+            % 1. GR domain: gr.domain
+            % 2. provider domain: prov_subdomain.gr.domain
+            % 3. queried domain: first_part.gr.domain
+            % If not, return REFUSED
+            QDTail = string:join(tl(string:tokens(QueryDomain, ".")), "."),
+            PDTail = string:join(tl(string:tokens(ProviderDomain, ".")), "."),
+            case QDTail =:= GRDomain andalso PDTail =:= GRDomain of
                 true ->
-                    {string:sub_string(Domain, 1, HostNamePos - 1), ProviderHostnameWithoutDot}
+                    ok;
+                false ->
+                    refused
+            end;
+        _ ->
+            % Queried domain does end with provider domain
+            case QueryDomain of
+                ProviderDomain ->
+                    ok;
+                _ ->
+                    % Check if queried domain is in form
+                    % 'first_part.provider.domain' - strip out the
+                    % first_part and compare. If not, return NXDOMAIN
+                    case string:join(tl(string:tokens(QueryDomain, ".")), ".") of
+                        ProviderDomain ->
+                            ok;
+                        _ ->
+                            nx_domain
+                    end
             end
     end.
 
@@ -310,8 +317,10 @@ parse_domain(DomainArg) ->
 %% healthcheck dns endpoint
 %% @end
 %%--------------------------------------------------------------------
--spec healthcheck(State :: #state{}) -> ok | {error, Reason :: atom()}.
-healthcheck(#state{last_update = LastUpdate, lb_advice = LBAdvice}) ->
+-spec healthcheck() -> ok | {error, Reason :: atom()}.
+healthcheck() ->
+    LastUpdate = worker_host:state_get(?MODULE, last_update),
+    LBAdvice = worker_host:state_get(?MODULE, lb_advice),
     case LBAdvice of
         undefined ->
             {error, no_lb_advice_received};

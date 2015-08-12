@@ -17,13 +17,11 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("proto/oneproxy/oneproxy_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
--include_lib("clproto/include/oneproxy_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -34,23 +32,17 @@
     end_per_testcase/2]).
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
-    client_communiate_async_test/1, multi_ping_pong_test/1,
+    client_communicate_async_test/1, multi_ping_pong_test/1,
     sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1,
     python_client_test/1, proto_version_test/1]).
 
-% todo repair oneproxy error:
-% [error] <0.1099.0>@oneproxy:main_loop:234 [ oneproxy 5555 ] handle_client_read failed due to: tlsv1 alert internal error
-% todo repair multi_ping_pong_test performance error:
-% Some connections get duplicated messages (probably from other sessions),
-% it happens only when using gen_tcp protocol.
--performance({test_cases, [multi_message_test,
-%%     multi_ping_pong_test,
+-performance({test_cases, [multi_message_test, multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test,
     python_client_test]}).
 all() ->
     [token_connection_test, cert_connection_test, protobuf_msg_test,
         multi_message_test, client_send_test, client_communicate_test,
-        client_communiate_async_test, multi_ping_pong_test,
+        client_communicate_async_test, multi_ping_pong_test,
         sequential_ping_pong_test, multi_connection_test, bandwidth_test,
         python_client_test, proto_version_test].
 
@@ -67,54 +59,56 @@ token_connection_test(Config) ->
 
     % then
     {ok, {Sock, _}} = connect_via_token(Worker1),
-    ok = ssl:close(Sock),
-    ?assertMatch({error, _}, ssl:connection_info(Sock)).
+    ok = ssl2:close(Sock).
 
+% todo VFS-1158 Modify & enable the test after veryfing client certificate.
 cert_connection_test(Config) ->
-    % given
-    remove_pending_messages(),
-    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
-        session_id = <<"session_id">>
-    }}},
-    HandshakeReqRaw = messages:encode_msg(HandshakeReq),
-    Pid = self(),
-    test_utils:mock_expect(Workers, serializator, deserialize_oneproxy_certificate_info_message,
-        fun(Data) ->
-            Ans = meck:passthrough([Data]),
-            Pid ! {certificate_info_message, Ans},
-            Ans
-        end),
-    Cert = ?TEST_FILE(Config, "peer.pem"),
-
-    % when
-    {ok, Sock} = ssl:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
-        {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
-    {ok, {certificate_info_message, {ok, CertInfo}}} =
-        test_utils:receive_any(timer:seconds(5)),
-    ok = ssl:send(Sock, HandshakeReqRaw),
-    {ok, {ssl, _, RawHandshakeResponse}} = test_utils:receive_any(timer:seconds(5)),
-
-    % then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    ?assertMatch(#certificate_info{}, CertInfo),
-    ?assertNotEqual(undefined, CertInfo#certificate_info.client_session_id),
-    ?assertNotEqual(undefined, CertInfo#certificate_info.client_subject_dn),
-    ?assert(is_binary(CertInfo#certificate_info.client_session_id)),
-    ?assert(is_binary(CertInfo#certificate_info.client_subject_dn)),
-    HandshakeResponse = messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
-    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
-    SessionId}}} = HandshakeResponse,
-    ?assert(is_binary(SessionId)),
-    ok = ssl:close(Sock),
-    ?assertMatch({error, _}, ssl:connection_info(Sock)).
+%%     % given
+%%     remove_pending_messages(),
+%%     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
+%%     HandshakeReq = #'ClientMessage'{message_body = {handshake_request, #'HandshakeRequest'{
+%%         session_id = <<"session_id">>
+%%     }}},
+%%     HandshakeReqRaw = messages:encode_msg(HandshakeReq),
+%%     Cert = ?TEST_FILE(Config, "peer.pem"),
+%%
+%%     {ok, CertPem} = file:read_file(Cert),
+%%     PemEntries = public_key:pem_decode(CertPem),
+%%     CertDer = lists:keyfind('Certificate', 1, PemEntries),
+%%
+%%     Self = self(),
+%%     test_utils:mock_expect(Workers, connection, init,
+%%         fun(Ref, Socket, Transport, Opts) ->
+%%             Self ! self(),
+%%             meck:passthrough([Ref, Socket, Transport, Opts])
+%%         end),
+%%
+%%     % when
+%%     {ok, Sock} = ssl2:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
+%%         {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
+%%
+%%     {ok, Pid} = test_utils:receive_any(timer:seconds(5)),
+%%     State = sys:get_state(Pid),
+%%     #'OTPCertificate'{} = Cert = erlang:element(2, State),
+%%
+%%     ok = ssl2:send(Sock, HandshakeReqRaw),
+%%     {ok, {ssl, _, RawHandshakeResponse}} = test_utils:receive_any(timer:seconds(5)),
+%%
+%%     % then
+%%     ?assertEqual(CertDer, ssl2:peercert(Sock)),
+%%     HandshakeResponse = messages:decode_msg(RawHandshakeResponse, 'ServerMessage'),
+%%     #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{session_id =
+%%     SessionId}}} = HandshakeResponse,
+%%     ?assert(is_binary(SessionId)),
+%%     ok = ssl2:close(Sock),
+    ok.
 
 protobuf_msg_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
-        fun(#client_message{message_body = #read_event{}}) ->
+        fun(#client_message{message_body = #event{event = #read_event{}}}, _) ->
             ok
         end),
     Msg = #'ClientMessage'{
@@ -127,11 +121,10 @@ protobuf_msg_test(Config) ->
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
-    ok = ssl:send(Sock, RawMsg),
+    ok = ssl2:send(Sock, RawMsg),
 
     % then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    ok = ssl:close(Sock).
+    ok = ssl2:close(Sock).
 
 -performance([
     {repeats, 3},
@@ -139,15 +132,9 @@ protobuf_msg_test(Config) ->
         [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
         [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {config, [{name, ssl_through_oneproxy},
+    {config, [{name, ssl},
         {parameters, [
             [{name, msg_num}, {value, 100000}]
-        ]}
-    ]},
-    {config, [{name, tcp_direct},
-        {parameters, [
-            [{name, msg_num}, {value, 100000}],
-            [{name, transport}, {value, gen_tcp}]
         ]}
     ]}
 ]).
@@ -156,7 +143,6 @@ multi_message_test(Config) ->
     remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
-    Transport = ?config(transport, Config),
     Self = self(),
     MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(
@@ -171,15 +157,15 @@ multi_message_test(Config) ->
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #read_event{counter = Counter}}) ->
+        fun(#client_message{message_body = #event{event = #read_event{counter = Counter}}}) ->
             Self ! Counter,
             ok
         end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
     T1 = os:timestamp(),
-    lists:foreach(fun(E) -> ok = Transport:send(Sock, E) end, RawEvents),
+    lists:foreach(fun(E) -> ok = ssl2:send(Sock, E) end, RawEvents),
     T2 = os:timestamp(),
 
     % then
@@ -188,7 +174,7 @@ multi_message_test(Config) ->
             ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
         end, MsgNumbers),
     T3 = os:timestamp(),
-    ok = Transport:close(Sock),
+    ok = ssl2:close(Sock),
     [
         #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
         #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
@@ -221,7 +207,7 @@ client_send_test(Config) ->
 
     % then
     ?assertEqual(ServerMessageProtobuf, receive_server_message()),
-    ok = ssl:close(Sock).
+    ok = ssl2:close(Sock).
 
 client_communicate_test(Config) ->
     % given
@@ -240,9 +226,9 @@ client_communicate_test(Config) ->
 
     % then
     ?assertMatch({ok, #client_message{message_body = Status}}, CommunicateResult),
-    ok = ssl:close(Sock).
+    ok = ssl2:close(Sock).
 
-client_communiate_async_test(Config) ->
+client_communicate_async_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
@@ -283,7 +269,7 @@ client_communiate_async_test(Config) ->
 
     % then
     ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
-    ok = ssl:close(Sock).
+    ok = ssl2:close(Sock).
 
 -performance([
     {repeats, 3},
@@ -295,15 +281,9 @@ client_communiate_async_test(Config) ->
     {description, "Opens 'connections_num' connections and for each connection, "
     "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
     "messages."},
-    {config, [{name, ssl_through_oneproxy},
+    {config, [{name, ssl},
         {parameters, [
             [{name, msg_num}, {value, 100000}]
-        ]}
-    ]},
-    {config, [{name, tcp_direct},
-        {parameters, [
-            [{name, msg_num}, {value, 100000}],
-            [{name, transport}, {value, gen_tcp}]
         ]}
     ]}
 ]).
@@ -311,7 +291,6 @@ multi_ping_pong_test(Config) ->
     % given
     remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    Transport = ?config(transport, Config),
     ConnNumbers = ?config(connections_num, Config),
     MsgNum = ?config(msg_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
@@ -329,9 +308,9 @@ multi_ping_pong_test(Config) ->
         spawn_link(
             fun() ->
                 % when
-                {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+                {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
                 lists:foreach(fun(E) ->
-                    ok = Transport:send(Sock, E)
+                    ok = ssl2:send(Sock, E)
                 end, RawPings),
                 Received = lists:map(
                     fun(_) ->
@@ -347,7 +326,7 @@ multi_ping_pong_test(Config) ->
                     fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
                         ?assertEqual(Id, MsgId)
                     end, IdToMessage),
-                ok = Transport:close(Sock),
+                ok = ssl2:close(Sock),
                 Self ! success
             end)
         || _ <- ConnNumbersList
@@ -388,7 +367,7 @@ sequential_ping_pong_test(Config) ->
     T1 = os:timestamp(),
     lists:foldl(fun(E, N) ->
         % send ping & receive pong
-        ok = ssl:send(Sock, E),
+        ok = ssl2:send(Sock, E),
         Pong = receive_server_message(),
 
         % validate pong
@@ -401,8 +380,7 @@ sequential_ping_pong_test(Config) ->
     T2 = os:timestamp(),
 
     % then
-    ?assertMatch({ok, _}, ssl:connection_info(Sock)),
-    ok = ssl:close(Sock),
+    ok = ssl2:close(Sock),
 
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
@@ -433,10 +411,9 @@ multi_connection_test(Config) ->
         fun(ConnectionAns) ->
             ?assertMatch({ok, {_, _}}, ConnectionAns),
             {ok, {Sock, SessId}} = ConnectionAns,
-            ?assert(is_binary(SessId)),
-            ?assertMatch({ok, _}, ssl:connection_info(Sock))
+            ?assert(is_binary(SessId))
         end, Connections),
-    lists:foreach(fun({ok, {Sock, _}}) -> ssl:close(Sock) end, Connections).
+    lists:foreach(fun({ok, {Sock, _}}) -> ssl2:close(Sock) end, Connections).
 
 -performance([
     {repeats, 3},
@@ -445,15 +422,9 @@ multi_connection_test(Config) ->
         [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
         [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
     ]},
-    {config, [{name, ssl_through_oneproxy},
+    {config, [{name, ssl},
         {parameters, [
             [{name, packet_num}, {value, 1000}]
-        ]}
-    ]},
-    {config, [{name, tcp_direct},
-        {parameters, [
-            [{name, packet_num}, {value, 1000}],
-            [{name, transport}, {value, gen_tcp}]
         ]}
     ]}
 ]).
@@ -463,7 +434,6 @@ bandwidth_test(Config) ->
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
-    Transport = ?config(transport, Config),
     Data = crypto:rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
@@ -475,10 +445,10 @@ bandwidth_test(Config) ->
         end),
 
     % when
-    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}], Transport),
+    {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
     T1 = os:timestamp(),
     lists:foreach(fun(_) ->
-        ok = Transport:send(Sock, PacketRaw)
+        ok = ssl2:send(Sock, PacketRaw)
     end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
 
@@ -489,7 +459,7 @@ bandwidth_test(Config) ->
                 test_utils:receive_msg(router_message_called, timer:seconds(5)))
         end, lists:seq(1, PacketNum)),
     T3 = os:timestamp(),
-    Transport:close(Sock),
+    ssl2:close(Sock),
     [
         #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
         #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
@@ -574,7 +544,7 @@ proto_version_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
 
     % when
-    ok = ssl:send(Sock, GetProtoVersionRaw),
+    ok = ssl2:send(Sock, GetProtoVersionRaw),
     ProtoVersion = receive_server_message(),
 
     %then
@@ -590,7 +560,7 @@ proto_version_test(Config) ->
     } = ProtoVersion,
     ?assert(is_integer(Major)),
     ?assert(is_integer(Minor)),
-    ok = ssl:close(Sock).
+    ok = ssl2:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -602,7 +572,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(cert_connection_test, Config) ->
-    ssl:start(),
+    application:ensure_started(ssl2),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, serializator),
     mock_identity(Workers),
@@ -610,10 +580,10 @@ init_per_testcase(cert_connection_test, Config) ->
 
 init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
-    orelse Case =:= client_communiate_async_test
+    orelse Case =:= client_communicate_async_test
     orelse Case =:= bandwidth_test
     orelse Case =:= python_client_test ->
-    ssl:start(),
+    application:ensure_started(ssl2),
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, router),
     mock_identity(Workers),
@@ -622,25 +592,23 @@ init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     mock_identity(Workers),
-    ssl:start(),
+    application:ensure_started(ssl2),
     Config.
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     unmock_identity(Workers),
     test_utils:mock_validate(Workers, serializator),
-    test_utils:mock_unload(Workers, serializator),
-    ssl:stop();
+    test_utils:mock_unload(Workers, serializator);
 
 end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
     orelse Case =:= multi_message_test
-    orelse Case =:= client_communiate_async_test
+    orelse Case =:= client_communicate_async_test
     orelse Case =:= bandwidth_test ->
     Workers = ?config(op_worker_nodes, Config),
     unmock_identity(Workers),
     test_utils:mock_validate(Workers, router),
-    test_utils:mock_unload(Workers, router),
-    ssl:stop();
+    test_utils:mock_unload(Workers, router);
 
 end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -648,13 +616,11 @@ end_per_testcase(python_client_test, Config) ->
     file:delete(?TEST_FILE(Config, "message.arg")),
     unmock_identity(Workers),
     test_utils:mock_validate(Workers, router),
-    test_utils:mock_unload(Workers, router),
-    ssl:stop();
+    test_utils:mock_unload(Workers, router);
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    unmock_identity(Workers),
-    ssl:stop().
+    unmock_identity(Workers).
 
 %%%===================================================================
 %%% Internal functions
@@ -667,24 +633,21 @@ end_per_testcase(_, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec connect_via_token(Node :: node()) ->
-    {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}}.
+    {ok, {Sock :: ssl2:socket(), SessId :: session:id()}} | no_return().
 connect_via_token(Node) ->
-    connect_via_token(Node, [{active, true}], ssl).
+    connect_via_token(Node, [{active, true}]).
 
 connect_via_token(Node, SocketOpts) ->
-    connect_via_token(Node, SocketOpts, ssl).
-
-connect_via_token(Node, SocketOpts, Transport) ->
-    connect_via_token(Node, SocketOpts, Transport, crypto:rand_bytes(10)).
+    connect_via_token(Node, SocketOpts, crypto:rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using token, with custom socket opts
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), ssl | tcp, session:id()) ->
+-spec connect_via_token(Node :: node(), SocketOpts :: list(), session:id()) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, Transport, SessId) ->
+connect_via_token(Node, SocketOpts, SessId) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = SessId,
@@ -696,31 +659,20 @@ connect_via_token(Node, SocketOpts, Transport, SessId) ->
             Other -> [{active, Other}]
         end,
     OtherOpts = proplists:delete(active, SocketOpts),
-    CertInfoMessageRaw = oneproxy_messages:encode_msg(#'CertificateInfo'{}),
-    {ok, ExternalPort} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
-    {Port, AdditionalOpts} =
-        case Transport of
-            gen_tcp ->
-                {rpc:call(Node, oneproxy, get_local_port, [ExternalPort]), []};
-            ssl ->
-                {ExternalPort, [{reuse_sessions, false}]} % todo repair oneproxy and delete reuse_sessions flag
-        end,
+    {ok, Port} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
+    AdditionalOpts = [{reuse_sessions, false}], % todo delete reuse_sessions flag
 
     % when
-    {ok, Sock} = Transport:connect(utils:get_host_as_atom(Node), Port, [binary,
-        {packet, 4}, {active, once}] ++ OtherOpts ++ AdditionalOpts),
-    case Transport of
-        gen_tcp -> ok = Transport:send(Sock, CertInfoMessageRaw);
-        _ -> ok
-    end,
-    ok = Transport:send(Sock, TokenAuthMessageRaw),
+    {ok, Sock} = (catch ssl2:connect(utils:get_host(Node), Port, [binary,
+        {packet, 4}, {active, once}] ++ OtherOpts ++ AdditionalOpts, timer:minutes(1))),
+    ok = ssl2:send(Sock, TokenAuthMessageRaw),
 
     % then
     HandshakeResponse = receive_server_message(),
     ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, HandshakeResponse),
     #'ServerMessage'{message_body = {handshake_response,
         #'HandshakeResponse'{session_id = SessionId}}} = HandshakeResponse,
-    setopts(Transport, Sock, ActiveOpt),
+    ssl2:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessionId}}.
 
 %%--------------------------------------------------------------------
@@ -729,13 +681,13 @@ connect_via_token(Node, SocketOpts, Transport, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec spawn_ssl_echo_client(NodeToConnect :: node()) ->
-    {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}}.
+    {ok, {Sock :: ssl2:socket(), SessId :: session:id()}}.
 spawn_ssl_echo_client(NodeToConnect) ->
     {ok, {Sock, SessionId}} = connect_via_token(NodeToConnect, []),
     SslEchoClient =
         fun Loop() ->
             % receive data from server
-            case ssl:recv(Sock, 0) of
+            case ssl2:recv(Sock, 0) of
                 {ok, Data} ->
                     % decode
                     #'ServerMessage'{message_id = Id, message_body = Body} =
@@ -747,7 +699,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
                             ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
-                            ?assertEqual(ok, ssl:send(Sock, ClientAnsRaw))
+                            ?assertEqual(ok, ssl2:send(Sock, ClientAnsRaw))
                     end,
 
                     %loop back
@@ -758,18 +710,6 @@ spawn_ssl_echo_client(NodeToConnect) ->
         end,
     spawn_link(SslEchoClient),
     {ok, {Sock, SessionId}}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Set ssl/tcp socket opts
-%% @end
-%%--------------------------------------------------------------------
--spec setopts(ssl | tcp, Sock :: term(), list()) ->
-    ok | {error, term()}.
-setopts(ssl, Sock, Opts) ->
-    ssl:setopts(Sock, Opts);
-setopts(gen_tcp, Sock, Opts) ->
-    inet:setopts(Sock, Opts).
 
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, identity),

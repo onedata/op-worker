@@ -18,7 +18,6 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("proto/oneproxy/oneproxy_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -29,14 +28,14 @@
     code_change/3]).
 
 -record(sock_state, {
+    certificate :: #'OTPCertificate'{},
     % handler responses
     ok :: atom(),
     closed :: atom(),
     error :: atom(),
     % actual connection state
-    socket :: port(),
+    socket :: ssl2:socket(),
     transport :: module(),
-    certificate_info :: #certificate_info{},
     session_id :: session:id()
 }).
 
@@ -71,7 +70,7 @@ send_async(Pid, Req) ->
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: atom(), Socket :: term(), Transport :: atom(), Opts :: list()) ->
+-spec start_link(Ref :: atom(), Socket :: ssl2:socket(), Transport :: atom(), Opts :: list()) ->
     {ok, Pid :: pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
@@ -82,19 +81,26 @@ start_link(Ref, Socket, Transport, Opts) ->
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term(), Socket :: port(), Transport :: atom(), Opts :: list()) ->
+-spec init(Args :: term(), Socket :: ssl2:socket(), Transport :: atom(), Opts :: list()) ->
     no_return().
 init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
+    Certificate =
+        case ssl2:peercert(Socket) of
+            {error, _} -> undefined;
+            {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
+        end,
+
     gen_server:enter_loop(?MODULE, [], #sock_state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
         closed = Closed,
-        error = Error
+        error = Error,
+        certificate = Certificate
     }, ?TIMEOUT).
 
 %%%===================================================================
@@ -160,16 +166,11 @@ handle_cast(_Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: port(),
+-spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: ssl2:socket(),
     Data :: binary()} | term(), State :: #sock_state{}) ->
     {noreply, NewState :: #sock_state{}} |
     {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
-    transport = Transport, certificate_info = undefined}) ->
-    activate_socket_once(Socket, Transport),
-    handle_oneproxy_certificate_info_message(State, Data);
-
 handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
     transport = Transport}) ->
     activate_socket_once(Socket, Transport),
@@ -224,26 +225,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handle first message after opening connection - information from
-%% oneproxy about peer certificate
-%% @end
-%%--------------------------------------------------------------------
--spec handle_oneproxy_certificate_info_message(#sock_state{}, binary()) ->
-    {noreply, NewState :: #sock_state{}, timeout()} |
-    {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_oneproxy_certificate_info_message(State, Data) ->
-    try serializator:deserialize_oneproxy_certificate_info_message(Data) of
-        {ok, #certificate_info{} = Info} ->
-            {noreply, State#sock_state{certificate_info = Info}, ?TIMEOUT}
-    catch
-        _:Error ->
-            ?error_stacktrace("Cannot decode oneproxy CertificateInfo message, error: ~p", [Error]),
-            {stop, Error, State}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Handle usual client data, it is decoded and passed to subsequent handler
 %% functions
 %% @end
@@ -273,7 +254,7 @@ handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
 -spec handle_handshake(#sock_state{}, #client_message{}) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_handshake(State = #sock_state{certificate_info = Cert, socket = Sock,
+handle_handshake(State = #sock_state{certificate = Cert, socket = Sock,
     transport = Transp}, Msg) ->
     try auth_manager:handle_handshake(Msg, Cert) of
         {ok, Response = #server_message{message_body =
@@ -312,7 +293,7 @@ handle_normal_message(State = #sock_state{session_id = SessId,
 %% via erlang message
 %% @end
 %%--------------------------------------------------------------------
--spec activate_socket_once(Socket :: port(), Transport :: module()) -> ok.
+-spec activate_socket_once(Socket :: ssl2:socket(), Transport :: module()) -> ok.
 activate_socket_once(Socket, Transport) ->
     ok = Transport:setopts(Socket, [{active, once}]).
 
@@ -323,7 +304,7 @@ activate_socket_once(Socket, Transport) ->
 %% via erlang message
 %% @end
 %%--------------------------------------------------------------------
--spec send_server_message(Socket :: port(), Transport :: module(),
+-spec send_server_message(Socket :: ssl2:socket(), Transport :: module(),
     ServerMessage :: #server_message{}) -> ok.
 send_server_message(Socket, Transport, ServerMsg) ->
     {ok, Data} = serializator:serialize_server_message(ServerMsg),
