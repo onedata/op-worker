@@ -44,7 +44,7 @@ def _tweak_config(config, ccm_node, op_instance, uid):
     return cfg
 
 
-def _node_up(image, bindir, logdir, config, dns_servers):
+def _node_up(image, bindir, config, dns_servers, logdir):
     node_name = config['nodes']['node']['vm.args']['name']
 
     (name, sep, hostname) = node_name.partition('@')
@@ -92,7 +92,7 @@ def _ready(container):
     return True  # todo implement
 
 
-def up(image, bindir, logdir, dns_server, uid, config_path):
+def up(image, bindir, dns_server, uid, config_path, logdir=None):
     config = common.parse_json_file(config_path)
     input_dir = config['dirs_config']['op_ccm']['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
@@ -113,7 +113,7 @@ def up(image, bindir, logdir, dns_server, uid, config_path):
 
         ccms = []
         for cfg in tweaked_configs:
-            node_out = _node_up(image, bindir, logdir, cfg, dns_servers)
+            node_out = _node_up(image, bindir, cfg, dns_servers, logdir)
             ccms.extend(node_out['docker_ids'])
             common.merge(output, node_out)
 
