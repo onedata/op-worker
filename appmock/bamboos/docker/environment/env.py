@@ -48,8 +48,8 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
 
     # Start appmock instances
     if 'appmock_domains' in config:
-        am_output = appmock.up(image, bin_am, logdir, dns_server,
-                               uid, config_path)
+        am_output = appmock.up(image, bin_am, dns_server,
+                               uid, config_path, logdir)
         common.merge(output, am_output)
         # Make sure appmock domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
@@ -58,8 +58,8 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
 
     # Start globalregistry instances
     if 'globalregistry_domains' in config:
-        gr_output = globalregistry.up(image, bin_gr, logdir, dns_server,
-                                      uid, config_path)
+        gr_output = globalregistry.up(image, bin_gr, dns_server,
+                                      uid, config_path, logdir)
         common.merge(output, gr_output)
         # Make sure GR domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
@@ -69,15 +69,13 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
     # Start provider cluster instances
     if 'provider_domains' in config:
         # Start op_ccm instances
-        op_ccm_output = provider_ccm.up(image, bin_op_ccm, logdir, dns_server,
-                                        uid,
-                                        config_path)
+        op_ccm_output = provider_ccm.up(image, bin_op_ccm, dns_server,
+                                        uid, config_path, logdir)
         common.merge(output, op_ccm_output)
 
         # Start op_worker instances
-        op_worker_output = provider_worker.up(image, bin_op_worker, logdir,
-                                              dns_server,
-                                              uid, config_path)
+        op_worker_output = provider_worker.up(image, bin_op_worker, dns_server,
+                                              uid, config_path, logdir)
         common.merge(output, op_worker_output)
         # Make sure OP domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
