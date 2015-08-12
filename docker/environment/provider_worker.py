@@ -11,7 +11,7 @@ import os
 
 from . import common, docker, riak, dns, globalregistry, provider_ccm
 
-PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60
+PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 
 
 def provider_domain(op_instance, uid):
@@ -81,7 +81,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     volumes = [(bindir, '/root/build', 'ro')]
 
     if logdir:
-        logdir = os.path.join(os.path.abspath(logdir), name)
+        logdir = os.path.join(os.path.abspath(logdir), hostname)
         volumes.extend([(logdir, '/root/bin/node/log', 'rw')])
 
     container = docker.run(

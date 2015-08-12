@@ -18,13 +18,13 @@ import sys
 
 from . import docker
 
-
 try:
     import xml.etree.cElementTree as eTree
 except ImportError:
     import xml.etree.ElementTree as eTree
 
 requests.packages.urllib3.disable_warnings()
+
 
 def nagios_up(ip, port=None):
     url = 'https://{0}{1}/nagios'.format(ip, (':' + port) if port else '')
@@ -44,9 +44,10 @@ def wait_until(condition, containers, timeout):
     for container in containers:
         while not condition(container):
             if time.time() > deadline:
-                warning = 'WARNING: timeout while waiting for condition {0}'
-                print(warning.format(condition.__name__), file=sys.stderr)
-                break
+                message = 'Timeout while waiting for condition {0} ' \
+                'of container {1}'
+                message = message.format(condition.__name__, container)
+                raise ValueError(message)
 
             time.sleep(1)
 
