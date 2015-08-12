@@ -186,7 +186,7 @@ sed -i 's/-setcookie monster/-setcookie {cookie}/g' /opt/bigcouch/etc/vm.args
     volumes = [(bindir, '/root/build', 'ro')]
 
     if logdir:
-        logdir = os.path.join(os.path.abspath(logdir), gr_name)
+        logdir = os.path.join(os.path.abspath(logdir), gr_hostname)
         volumes.extend([(logdir, '/root/bin/node/log', 'rw')])
 
     # Just start the docker, GR will be started later when dns.config is updated
