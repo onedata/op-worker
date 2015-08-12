@@ -53,7 +53,7 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/onepanel console'''
+/root/bin/node/bin/op_panel console'''
     command = command.format(
         gen_dev_args=json.dumps({'onepanel': config}),
         uid=os.geteuid(),
