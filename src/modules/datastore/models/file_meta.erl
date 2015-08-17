@@ -586,13 +586,16 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                      ok = datastore:add_links(?LINK_STORE_LEVEL, CurrentUUID, ?MODEL_NAME, {scope, {ScopeUUID, ?MODEL_NAME}})
                  end,
 
+             Master = self(),
              ReceiverFun =
                  fun Receiver() ->
                      receive
                          {Entry0, ScopeUUID0} ->
                              SetterFun(Entry0, ScopeUUID0),
                              Receiver();
-                         exit -> ok
+                         exit ->
+                           ok,
+                           Master ! scope_setting_done
                      end
                  end,
              Setters = [spawn_link(ReceiverFun) || _ <- lists:seq(1, ?SET_SCOPER_WORKERS)],
@@ -605,7 +608,14 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                          {error, Reason}
                  end,
 
-             [Setter ! exit || Setter <- Setters],
+             lists:foreach(fun(Setter) ->
+               Setter ! exit,
+               receive
+                 scope_setting_done -> ok
+               after 200 ->
+                 ?error("set_scopes error for entry: ~p", [Entry])
+               end
+             end, Setters),
              Res
          end).
 
