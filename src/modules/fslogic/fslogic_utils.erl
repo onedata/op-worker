@@ -68,7 +68,7 @@ gen_storage_file_id(Entry) ->
 
 
 get_local_file_location(Entry) ->
-    LProviderId = cluster_manager:provider_id(),
+    LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),
     Locations = [file_location:get(LocId) || LocId <- LocIds],
     [LocalLocation] = [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations, LProviderId =:= ProviderId],

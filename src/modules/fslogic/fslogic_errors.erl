@@ -31,6 +31,8 @@ gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
 gen_status_message({not_found, file_meta}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
+gen_status_message(already_exists) ->
+    #status{code = ?EEXIST, description = describe_error(?EEXIST)};
 gen_status_message(Error) when is_atom(Error) ->
     case lists:member(Error, ?ERROR_CODES) of
         true -> #status{code = Error};
@@ -42,7 +44,8 @@ gen_status_message({ErrorCode, ErrorDescription}) when
         true -> #status{code = ErrorCode, description = ErrorDescription};
         false -> #status{code = ?EREMOTEIO, description = ErrorDescription}
     end;
-gen_status_message(_) ->
+gen_status_message(Reason) ->
+    ?error("Unknown error occured: ~p", [Reason]),
     #status{code = ?EREMOTEIO, description = <<"An unknown error occured.">>}.
 
 %%--------------------------------------------------------------------

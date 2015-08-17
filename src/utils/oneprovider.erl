@@ -168,12 +168,16 @@ get_provider_id() ->
         {ok, ProviderId} ->
             ProviderId;
         _ ->
-            {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),
-            [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
-            PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
-            ProviderId = get_provider_id(PeerCert),
-            application:set_env(?APP_NAME, provider_id, ProviderId),
-            ProviderId
+            case file:read_file(gr_plugin:get_cert_path()) of
+                {ok, Bin} ->
+                    [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
+                    PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
+                    ProviderId = get_provider_id(PeerCert),
+                    application:set_env(?APP_NAME, provider_id, ProviderId),
+                    ProviderId;
+                {error, _} ->
+                    <<"non_global_provider">>
+            end
     end.
 
 

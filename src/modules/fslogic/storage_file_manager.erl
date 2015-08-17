@@ -14,6 +14,7 @@
 -include("types.hrl").
 -include("errors.hrl").
 -include("modules/datastore/datastore.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([mkdir/4, mv/2, chmod/2, chown/3, link/2]).
 -export([stat/1, read/3, write/3, create/4, truncate/2, rm/1]).
@@ -136,6 +137,7 @@ create(Storage, Path, Mode) ->
 create(Storage, Path, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
+    ?error("helper:create ~p ~p ~p", [HelperHandle, Path, Mode]),
     case helpers:mknod(HelperHandle, Path, Mode, reg) of
         ok ->
             ok;

@@ -14,7 +14,7 @@
 %%% This module is merely a convenient wrapper that calls functions from lfm_xxx modules.
 %%% @end
 %%%-------------------------------------------------------------------
--module(logical_file_manager).
+-module(file_manager).
 
 
 % TODO Issues connected with logical_files_manager
@@ -44,7 +44,7 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2, rm/1]).
 %% Functions operating on files
--export([create/1, open/2, write/3, read/3, truncate/2, get_block_map/1]).
+-export([create/3, open/2, write/3, read/3, truncate/2, get_block_map/1]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
@@ -155,9 +155,10 @@ rm(FileKey) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create(Path :: file_path()) -> {ok, file_id()} | error_reply().
-create(Path) ->
-    lfm_files:create(Path).
+-spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+    {ok, file_id()} | error_reply().
+create(SessId, Path, Mode) ->
+    lfm_files:create(SessId, Path, Mode).
 
 
 %%--------------------------------------------------------------------

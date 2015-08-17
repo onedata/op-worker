@@ -74,6 +74,20 @@
     child_links :: [#child_link{}]
 }).
 
+-record(get_new_file_location, {
+    name :: file_meta:name(),
+    parent_uuid :: file_meta:uuid(),
+    flags :: atom(),
+    mode = 8#644 :: file_meta:posix_permissions(),
+    force_cluster_proxy = false :: boolean()
+}).
+
+-record(get_file_location, {
+    uuid :: file_meta:uuid(),
+    flags :: atom(),
+    force_cluster_proxy = false :: boolean()
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{}.
 

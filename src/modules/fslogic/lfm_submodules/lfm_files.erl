@@ -12,12 +12,14 @@
 
 -include("types.hrl").
 -include("errors.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("modules/datastore/datastore.hrl").
 
 %% API
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2, rm/1]).
 %% Functions operating on files
--export([create/1, open/2, write/3, read/3, truncate/2, get_block_map/1]).
+-export([create/3, open/2, write/3, read/3, truncate/2, get_block_map/1]).
 
 %%%===================================================================
 %%% API
@@ -73,9 +75,31 @@ rm(_FileKey) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create(Path :: file_path()) -> {ok, file_id()} | error_reply().
-create(_Path) ->
-    {ok, <<"">>}.
+-spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+    {ok, file_id()} | error_reply().
+create(SessId, Path, Mode) ->
+    CTX = fslogic_context:new(SessId),
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    {ok, CanonicalPath} = file_meta:gen_path(CanonicalFileEntry),
+    {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
+    {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode}}) of
+        #fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
+            %% @todo: handle different cluster_ids (via cluster proxy)
+            {ok, #document{value = Storage}} = storage:get(StorageId),
+            case storage_file_manager:create(Storage, FileId, Mode, true) of
+                ok ->
+                    %% @todo: remove file watchers
+                    {ok, UUID};
+                {error, Reason} ->
+                    file_meta:delete({uuid, UUID}),
+                    %% @todo: cleanup
+                    {error, Reason}
+            end;
+        #fuse_response{status = #status{code = Code}} ->
+            {error, Code}
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -55,7 +55,7 @@ init(_Args) ->
             handlers = [fun(Evts) -> worker_proxy:cast(fslogic_worker, {write_event, Evts}) end]
         }
     },
-    {ok, SubId} = event_manager:subscribe(#subscription{value = Sub}),
+    {ok, SubId} = event_manager:subscribe(Sub),
     {ok, #{sub_id => SubId}}.
 
 %%--------------------------------------------------------------------
@@ -76,9 +76,10 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
-handle(#write_event{blocks = Blocks, file_id = FileUUID}) ->
+handle(#write_event{blocks = Blocks, file_id = FileUUID} = Evts) ->
     fslogic_blocks:update(FileUUID, Blocks),
-    ?info("WRITE: ~p", [Evts]);
+    ?info("WRITE: ~p", [Evts]),
+    ok;
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -110,10 +111,8 @@ cleanup() ->
 maybe_handle_fuse_request(SessId, FuseRequest) ->
     try
         ?debug("Processing request: ~p", [FuseRequest]),
-        {ok, #document{value = Session}} = session:get(SessId),
-        ?info("Fuse request ~p from user ~p", [FuseRequest, Session]),
-        Resp = handle_fuse_request(#fslogic_ctx{session = Session, session_id = SessId}, FuseRequest),
-        ?info("Fuse request ~p from user ~p: ~p", [FuseRequest, Session, Resp]),
+        Resp = handle_fuse_request(fslogic_context:new(SessId), FuseRequest),
+        ?info("Fuse request ~p from user ~p: ~p", [FuseRequest, SessId, Resp]),
         Resp
     catch
         Reason ->
@@ -176,6 +175,11 @@ handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
     fslogic_req_generic:rename_file(Ctx, {uuid, UUID}, TargetPath);
 handle_fuse_request(Ctx, #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, UUID}, ATime, MTime, CTime);
+handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = ParentUUID, flags = Flags,
+                                                force_cluster_proxy = ForceClusterProxy, mode = Mode}) ->
+    fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags, ForceClusterProxy);
+handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags, force_cluster_proxy = ForceClusterProxy}) ->
+    fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags, ForceClusterProxy);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

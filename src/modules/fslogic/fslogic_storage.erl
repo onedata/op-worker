@@ -15,7 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([select_helper/1, select_storage/1]).
+-export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2]).
 
 %%%===================================================================
 %%% API
@@ -26,8 +26,16 @@ select_helper(Storage) ->
     {ok, Helper}.
 
 select_storage(#fslogic_ctx{}) ->
-    [#document{} = Storage | _] = storage:list(),
+    {ok, [#document{} = Storage | _]} = storage:list(),
     {ok, Storage}.
+
+
+new_helper_init(HelperName, HelperArgs) ->
+    #helper_init{name = HelperName, args = HelperArgs}.
+
+
+new_storage(Name, Helpers) ->
+    #storage{name = Name, helpers = Helpers}.
 
 %%%===================================================================
 %%% Internal functions

@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/4, get_new_file_location/5]).
+-export([get_file_location/4, get_new_file_location/6]).
 
 %%%===================================================================
 %%% API functions
@@ -39,19 +39,19 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceC
 
 
     #fuse_response{status = #status{code = ?OK}, fuse_response =
-        #file_location{provider_id = cluster_manager:provider_id(), storage_id = StorageId, file_id = FileId, blocks = Blocks}}.
+        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = Blocks}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc Gets new file location (implicit mknod operation).
 %% @end
 %%--------------------------------------------------------------------
--spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(), Flags :: fslogic_worker:open_flags(),
+-spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(),
     ForceClusterProxy :: boolean()) -> no_return().
-get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name, _Flags, _ForceClusterProxy) ->
+get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name, Mode, _Flags, _ForceClusterProxy) ->
 
-    {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX),
-    Mode = 8#644,
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
         name = Name,
@@ -66,15 +66,14 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     {ok, UUID} = file_meta:create({uuid, ParentUUID}, File),
 
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
-    ok = storage_file_manager:create(Storage, FileId, Mode, true),
 
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
-        provider_id = cluster_manager:provider_id()},
+        provider_id = oneprovider:get_provider_id()},
     {ok, LocId} = file_location:create(#document{value = Location}),
 
-    file_meta:attach_location({uuid, UUID}, LocId, cluster_manager:provider_id()),
+    file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
 
     ok = file_watcher:insert_open_watcher(UUID, SessId),
 
     #fuse_response{status = #status{code = ?OK}, fuse_response =
-        #file_location{provider_id = cluster_manager:provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.
+        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.

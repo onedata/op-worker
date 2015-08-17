@@ -17,7 +17,7 @@
 
 %% API
 -export([verify_file_path/1, get_canonical_file_entry/2]).
--export([basename/1, split/1, join/1, is_space_dir/1]).
+-export([basename/1, split/1, join/1, is_space_dir/1, basename_and_parent/1]).
 -export([ensure_path_begins_with_slash/1]).
 -export([spaces_uuid/1]).
 
@@ -137,7 +137,18 @@ verify_file_path(FileName) ->
 basename(Path) ->
     case lists:reverse(split(Path)) of
         [Leaf | _] -> Leaf;
-        _ -> [<<?DIRECTORY_SEPARATOR>>]
+        _ -> <<?DIRECTORY_SEPARATOR>>
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Gives file basename from given path
+-spec basename_and_parent(Path :: file_meta:path()) -> {Name :: file_meta:name(), Parent :: file_meta:path()}.
+%% ==================================================================
+basename_and_parent(Path) ->
+    case lists:reverse(split(Path)) of
+        [Leaf | Tokens] ->
+            {Leaf, join([<<?DIRECTORY_SEPARATOR>> | lists:reverse(Tokens)])};
+        _ -> {<<"">>, <<?DIRECTORY_SEPARATOR>>}
     end.
 
 %%--------------------------------------------------------------------

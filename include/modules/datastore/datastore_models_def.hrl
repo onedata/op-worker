@@ -115,6 +115,7 @@
 }).
 
 -record(file_location, {
+    uuid :: file_meta:uuid(),
     provider_id :: binary(),
     storage_id :: binary(),
     file_id :: binary(),

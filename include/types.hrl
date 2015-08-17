@@ -15,16 +15,16 @@
 
 %%--------------------------------------------------------------------
 %% IDs of entities
--type file_id() :: binary().
+-type file_id() :: file_meta:uuid().
 -type group_id() :: binary().
 -type user_id() :: binary().
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
 %% Types connected with files
--type file_path() :: binary().
--type file_handle() :: binary().
--type file_name() :: binary().
+-type file_path() :: file_meta:path().
+-type file_handle() :: term().
+-type file_name() :: file_meta:name().
 -type file_id_or_path() :: {uuid, file_id()} | {path, file_path()}.
 -type file_key() :: {uuid, file_id()} | {path, file_path()} | {handle, file_handle()}.
 -type open_type() :: read | write | rdwr.

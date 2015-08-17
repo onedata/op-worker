@@ -511,8 +511,8 @@ attach_location(Entry, #document{key = LocId}, ProviderId) ->
     attach_location(Entry, LocId, ProviderId);
 attach_location(Entry, LocId, ProviderId) ->
     {ok, #document{key = FileId} = FDoc} = get(Entry),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {file_location, LocId}}),
-    ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {file_meta, FileId}}).
+    ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}}).
 
 
 get_current_snapshot(Entry) ->
@@ -713,16 +713,6 @@ normalize_error(Reason) ->
 
 snapshot_name(FileName, Version) ->
     <<FileName/binary, ?SNAPSHOT_SEPARATOR, (integer_to_binary(Version))/binary>>.
-
-
-to_snaphot(Entry) ->
-    {ok, #document{value = #file_meta{name = Name}}} = get(Entry),
-    case is_snapshot(Name) of
-        true -> Name;
-        false ->
-            {ok, Version} = get_current_snapshot(Entry),
-            snapshot_name(Name, Version)
-    end.
 
 
 is_snapshot(FileName) ->

@@ -14,6 +14,9 @@
 
 -include("modules/datastore/datastore_model.hrl").
 
+-define(ROOT_STORAGE, <<"">>).
+-define(STORAGE_LOCK_ID, <<"storage_res_id">>).
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4, list/0]).
@@ -49,8 +52,22 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+create(#document{value = #storage{name = Name}} = Document) ->
+    datastore:run_synchronized(?MODEL_NAME, ?STORAGE_LOCK_ID, fun() ->
+        case datastore:fetch_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, Name) of
+            {ok, _} ->
+                {error, aleady_exists};
+            {error, link_not_found} ->
+                _ = datastore:create(?STORE_LEVEL, #document{key = ?ROOT_STORAGE, value = #storage{}}),
+                case datastore:create(?STORE_LEVEL, Document) of
+                    {error, Reason} ->
+                        {error, Reason};
+                    {ok, Key} ->
+                        ok = datastore:add_links(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
+                        {ok, Key}
+                end
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,4 +136,8 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+    datastore:foreach_link(?LINK_STORE_LEVEL, ?ROOT_STORAGE, ?MODEL_NAME,
+        fun(_LinkName, {Key, storage}, AccIn) ->
+            {ok, Doc} = get(Key),
+            [Doc | AccIn]
+        end, []).
