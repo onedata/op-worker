@@ -1,9 +1,5 @@
-#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
-#define BOOST_THREAD_PROVIDES_EXECUTORS
-
 #include "helpers/storageHelperFactory.h"
 
-#include <boost/thread/executors/basic_thread_pool.hpp>
 #include <asio/executor_work.hpp>
 #include <asio.hpp>
 
@@ -19,7 +15,6 @@
 #include <pwd.h>
 #include <grp.h>
 
-
 namespace {
 /**
  * @defgroup StaticAtoms Statically created atoms for ease of usage.
@@ -29,38 +24,39 @@ nifpp::str_atom ok{"ok"};
 nifpp::str_atom error{"error"};
 /** @} */
 
-
 using helper_ptr = std::shared_ptr<one::helpers::IStorageHelper>;
 using helper_ctx_ptr = std::shared_ptr<one::helpers::StorageHelperCTX>;
 using reqid_t = std::tuple<int, int, int>;
 using one::helpers::ErrorRef;
 
-
 /**
  * Static resource holder.
  */
 struct HelpersNIF {
-    std::shared_ptr<one::communication::Communicator> nullCommunicator = nullptr;
+    std::shared_ptr<one::communication::Communicator> nullCommunicator =
+        nullptr;
     one::helpers::BufferLimits limits = one::helpers::BufferLimits();
-    asio::io_service dio_service;
-    asio::io_service cproxy_service;
-    asio::executor_work<asio::io_service::executor_type> dio_work = asio::make_work(dio_service);
+    asio::io_service dioService;
+    asio::io_service cproxyService;
+    asio::executor_work<asio::io_service::executor_type> dio_work =
+        asio::make_work(dioService);
 
     std::vector<std::thread> workers;
 
-    one::helpers::StorageHelperFactory SHFactory = one::helpers::StorageHelperFactory(nullCommunicator, limits, dio_service, cproxy_service);
+    one::helpers::StorageHelperFactory SHFactory =
+        one::helpers::StorageHelperFactory(
+            nullCommunicator, limits, dioService, cproxyService);
 
     ~HelpersNIF()
     {
-        dio_service.stop();
+        dioService.stop();
 
-        for(auto &th : workers) {
+        for (auto &th : workers) {
             th.join();
         }
     }
 
 } application;
-
 
 /**
  * @defgroup ModeTranslators Maps translating nifpp::str_atom into corresponding
@@ -96,6 +92,10 @@ std::map<nifpp::str_atom, int> atom_to_file_type = {
 
 /** @} */
 
+template <class T> std::error_code make_error_code(T code)
+{
+    return make_error_code(code);
+}
 
 /**
  * @defgroup Errors Maps translating std::error_code to corresponding
@@ -103,90 +103,86 @@ std::map<nifpp::str_atom, int> atom_to_file_type = {
  * @{
  */
 std::map<std::error_code, nifpp::str_atom> error_to_atom = {
-    {std::error_code(static_cast<int>(std::errc::address_family_not_supported), std::system_category()),        nifpp::str_atom("eafnosupport")},
-    {std::error_code(static_cast<int>(std::errc::address_in_use), std::system_category()),                      nifpp::str_atom("eaddrinuse")},
-    {std::error_code(static_cast<int>(std::errc::address_not_available), std::system_category()),               nifpp::str_atom("eaddrnotavail")},
-    {std::error_code(static_cast<int>(std::errc::already_connected), std::system_category()),                   nifpp::str_atom("eisconn")},
-    {std::error_code(static_cast<int>(std::errc::argument_list_too_long), std::system_category()),              nifpp::str_atom("e2big")},
-    {std::error_code(static_cast<int>(std::errc::argument_out_of_domain), std::system_category()),              nifpp::str_atom("edom")},
-    {std::error_code(static_cast<int>(std::errc::bad_address), std::system_category()),                         nifpp::str_atom("efault")},
-    {std::error_code(static_cast<int>(std::errc::bad_file_descriptor), std::system_category()),                 nifpp::str_atom("ebadf")},
-    {std::error_code(static_cast<int>(std::errc::bad_message), std::system_category()),                         nifpp::str_atom("ebadmsg")},
-    {std::error_code(static_cast<int>(std::errc::broken_pipe), std::system_category()),                         nifpp::str_atom("epipe")},
-    {std::error_code(static_cast<int>(std::errc::connection_aborted), std::system_category()),                  nifpp::str_atom("econnaborted")},
-    {std::error_code(static_cast<int>(std::errc::connection_already_in_progress), std::system_category()),      nifpp::str_atom("ealready")},
-    {std::error_code(static_cast<int>(std::errc::connection_refused), std::system_category()),                  nifpp::str_atom("econnrefused")},
-    {std::error_code(static_cast<int>(std::errc::connection_reset), std::system_category()),                    nifpp::str_atom("econnreset")},
-    {std::error_code(static_cast<int>(std::errc::cross_device_link), std::system_category()),                   nifpp::str_atom("exdev")},
-    {std::error_code(static_cast<int>(std::errc::destination_address_required), std::system_category()),        nifpp::str_atom("edestaddrreq")},
-    {std::error_code(static_cast<int>(std::errc::device_or_resource_busy), std::system_category()),             nifpp::str_atom("ebusy")},
-    {std::error_code(static_cast<int>(std::errc::directory_not_empty), std::system_category()),                 nifpp::str_atom("enotempty")},
-    {std::error_code(static_cast<int>(std::errc::executable_format_error), std::system_category()),             nifpp::str_atom("enoexec")},
-    {std::error_code(static_cast<int>(std::errc::file_exists), std::system_category()),                         nifpp::str_atom("eexist")},
-    {std::error_code(static_cast<int>(std::errc::file_too_large), std::system_category()),                      nifpp::str_atom("efbig")},
-    {std::error_code(static_cast<int>(std::errc::filename_too_long), std::system_category()),                   nifpp::str_atom("enametoolong")},
-    {std::error_code(static_cast<int>(std::errc::function_not_supported), std::system_category()),              nifpp::str_atom("enosys")},
-    {std::error_code(static_cast<int>(std::errc::host_unreachable), std::system_category()),                    nifpp::str_atom("ehostunreach")},
-    {std::error_code(static_cast<int>(std::errc::identifier_removed), std::system_category()),                  nifpp::str_atom("eidrm")},
-    {std::error_code(static_cast<int>(std::errc::illegal_byte_sequence), std::system_category()),               nifpp::str_atom("eilseq")},
-    {std::error_code(static_cast<int>(std::errc::inappropriate_io_control_operation), std::system_category()),  nifpp::str_atom("enotty")},
-    {std::error_code(static_cast<int>(std::errc::interrupted), std::system_category()),                         nifpp::str_atom("eintr")},
-    {std::error_code(static_cast<int>(std::errc::invalid_argument), std::system_category()),                    nifpp::str_atom("einval")},
-    {std::error_code(static_cast<int>(std::errc::invalid_seek), std::system_category()),                        nifpp::str_atom("espipe")},
-    {std::error_code(static_cast<int>(std::errc::io_error), std::system_category()),                            nifpp::str_atom("eio")},
-    {std::error_code(static_cast<int>(std::errc::is_a_directory), std::system_category()),                      nifpp::str_atom("eisdir")},
-    {std::error_code(static_cast<int>(std::errc::message_size), std::system_category()),                        nifpp::str_atom("emsgsize")},
-    {std::error_code(static_cast<int>(std::errc::network_down), std::system_category()),                        nifpp::str_atom("enetdown")},
-    {std::error_code(static_cast<int>(std::errc::network_reset), std::system_category()),                       nifpp::str_atom("enetreset")},
-    {std::error_code(static_cast<int>(std::errc::network_unreachable), std::system_category()),                 nifpp::str_atom("enetunreach")},
-    {std::error_code(static_cast<int>(std::errc::no_buffer_space), std::system_category()),                     nifpp::str_atom("enobufs")},
-    {std::error_code(static_cast<int>(std::errc::no_child_process), std::system_category()),                    nifpp::str_atom("echild")},
-    {std::error_code(static_cast<int>(std::errc::no_link), std::system_category()),                             nifpp::str_atom("enolink")},
-    {std::error_code(static_cast<int>(std::errc::no_lock_available), std::system_category()),                   nifpp::str_atom("enolck")},
-    {std::error_code(static_cast<int>(std::errc::no_message_available), std::system_category()),                nifpp::str_atom("enodata")},
-    {std::error_code(static_cast<int>(std::errc::no_message), std::system_category()),                          nifpp::str_atom("enomsg")},
-    {std::error_code(static_cast<int>(std::errc::no_protocol_option), std::system_category()),                  nifpp::str_atom("enoprotoopt")},
-    {std::error_code(static_cast<int>(std::errc::no_space_on_device), std::system_category()),                  nifpp::str_atom("enospc")},
-    {std::error_code(static_cast<int>(std::errc::no_stream_resources), std::system_category()),                 nifpp::str_atom("enosr")},
-    {std::error_code(static_cast<int>(std::errc::no_such_device_or_address), std::system_category()),           nifpp::str_atom("enxio")},
-    {std::error_code(static_cast<int>(std::errc::no_such_device), std::system_category()),                      nifpp::str_atom("enodev")},
-    {std::error_code(static_cast<int>(std::errc::no_such_file_or_directory), std::system_category()),           nifpp::str_atom("enoent")},
-    {std::error_code(static_cast<int>(std::errc::no_such_process), std::system_category()),                     nifpp::str_atom("esrch")},
-    {std::error_code(static_cast<int>(std::errc::not_a_directory), std::system_category()),                     nifpp::str_atom("enotdir")},
-    {std::error_code(static_cast<int>(std::errc::not_a_socket), std::system_category()),                        nifpp::str_atom("enotsock")},
-    {std::error_code(static_cast<int>(std::errc::not_a_stream), std::system_category()),                        nifpp::str_atom("enostr")},
-    {std::error_code(static_cast<int>(std::errc::not_connected), std::system_category()),                       nifpp::str_atom("enotconn")},
-    {std::error_code(static_cast<int>(std::errc::not_enough_memory), std::system_category()),                   nifpp::str_atom("enomem")},
-    {std::error_code(static_cast<int>(std::errc::not_supported), std::system_category()),                       nifpp::str_atom("enotsup")},
-    {std::error_code(static_cast<int>(std::errc::operation_canceled), std::system_category()),                  nifpp::str_atom("ecanceled")},
-    {std::error_code(static_cast<int>(std::errc::operation_in_progress), std::system_category()),               nifpp::str_atom("einprogress")},
-    {std::error_code(static_cast<int>(std::errc::operation_not_permitted), std::system_category()),             nifpp::str_atom("eperm")},
-    {std::error_code(static_cast<int>(std::errc::operation_not_supported), std::system_category()),             nifpp::str_atom("eopnotsupp")},
-    {std::error_code(static_cast<int>(std::errc::operation_would_block), std::system_category()),               nifpp::str_atom("ewouldblock")},
-    {std::error_code(static_cast<int>(std::errc::owner_dead), std::system_category()),                          nifpp::str_atom("eownerdead")},
-    {std::error_code(static_cast<int>(std::errc::permission_denied), std::system_category()),                   nifpp::str_atom("eacces")},
-    {std::error_code(static_cast<int>(std::errc::protocol_error), std::system_category()),                      nifpp::str_atom("eproto")},
-    {std::error_code(static_cast<int>(std::errc::protocol_not_supported), std::system_category()),              nifpp::str_atom("eprotonosupport")},
-    {std::error_code(static_cast<int>(std::errc::read_only_file_system), std::system_category()),               nifpp::str_atom("erofs")},
-    {std::error_code(static_cast<int>(std::errc::resource_deadlock_would_occur), std::system_category()),       nifpp::str_atom("edeadlk")},
-    {std::error_code(static_cast<int>(std::errc::resource_unavailable_try_again), std::system_category()),      nifpp::str_atom("eagain")},
-    {std::error_code(static_cast<int>(std::errc::result_out_of_range), std::system_category()),                 nifpp::str_atom("erange")},
-    {std::error_code(static_cast<int>(std::errc::state_not_recoverable), std::system_category()),               nifpp::str_atom("enotrecoverable")},
-    {std::error_code(static_cast<int>(std::errc::stream_timeout), std::system_category()),                      nifpp::str_atom("etime")},
-    {std::error_code(static_cast<int>(std::errc::text_file_busy), std::system_category()),                      nifpp::str_atom("etxtbsy")},
-    {std::error_code(static_cast<int>(std::errc::timed_out), std::system_category()),                           nifpp::str_atom("etimedout")},
-    {std::error_code(static_cast<int>(std::errc::too_many_files_open_in_system), std::system_category()),       nifpp::str_atom("enfile")},
-    {std::error_code(static_cast<int>(std::errc::too_many_files_open), std::system_category()),                 nifpp::str_atom("emfile")},
-    {std::error_code(static_cast<int>(std::errc::too_many_links), std::system_category()),                      nifpp::str_atom("emlink")},
-    {std::error_code(static_cast<int>(std::errc::too_many_symbolic_link_levels), std::system_category()),       nifpp::str_atom("eloop")},
-    {std::error_code(static_cast<int>(std::errc::value_too_large), std::system_category()),                     nifpp::str_atom("eoverflow")},
-    {std::error_code(static_cast<int>(std::errc::wrong_protocol_type), std::system_category()),                 nifpp::str_atom("eprototype")}
+    {make_error_code(std::errc::address_family_not_supported),        nifpp::str_atom("eafnosupport")},
+    {make_error_code(std::errc::address_in_use),                      nifpp::str_atom("eaddrinuse")},
+    {make_error_code(std::errc::address_not_available),               nifpp::str_atom("eaddrnotavail")},
+    {make_error_code(std::errc::already_connected),                   nifpp::str_atom("eisconn")},
+    {make_error_code(std::errc::argument_list_too_long),              nifpp::str_atom("e2big")},
+    {make_error_code(std::errc::argument_out_of_domain),              nifpp::str_atom("edom")},
+    {make_error_code(std::errc::bad_address),                         nifpp::str_atom("efault")},
+    {make_error_code(std::errc::bad_file_descriptor),                 nifpp::str_atom("ebadf")},
+    {make_error_code(std::errc::bad_message),                         nifpp::str_atom("ebadmsg")},
+    {make_error_code(std::errc::broken_pipe),                         nifpp::str_atom("epipe")},
+    {make_error_code(std::errc::connection_aborted),                  nifpp::str_atom("econnaborted")},
+    {make_error_code(std::errc::connection_already_in_progress),      nifpp::str_atom("ealready")},
+    {make_error_code(std::errc::connection_refused),                  nifpp::str_atom("econnrefused")},
+    {make_error_code(std::errc::connection_reset),                    nifpp::str_atom("econnreset")},
+    {make_error_code(std::errc::cross_device_link),                   nifpp::str_atom("exdev")},
+    {make_error_code(std::errc::destination_address_required),        nifpp::str_atom("edestaddrreq")},
+    {make_error_code(std::errc::device_or_resource_busy),             nifpp::str_atom("ebusy")},
+    {make_error_code(std::errc::directory_not_empty),                 nifpp::str_atom("enotempty")},
+    {make_error_code(std::errc::executable_format_error),             nifpp::str_atom("enoexec")},
+    {make_error_code(std::errc::file_exists),                         nifpp::str_atom("eexist")},
+    {make_error_code(std::errc::file_too_large),                      nifpp::str_atom("efbig")},
+    {make_error_code(std::errc::filename_too_long),                   nifpp::str_atom("enametoolong")},
+    {make_error_code(std::errc::function_not_supported),              nifpp::str_atom("enosys")},
+    {make_error_code(std::errc::host_unreachable),                    nifpp::str_atom("ehostunreach")},
+    {make_error_code(std::errc::identifier_removed),                  nifpp::str_atom("eidrm")},
+    {make_error_code(std::errc::illegal_byte_sequence),               nifpp::str_atom("eilseq")},
+    {make_error_code(std::errc::inappropriate_io_control_operation),  nifpp::str_atom("enotty")},
+    {make_error_code(std::errc::interrupted),                         nifpp::str_atom("eintr")},
+    {make_error_code(std::errc::invalid_argument),                    nifpp::str_atom("einval")},
+    {make_error_code(std::errc::invalid_seek),                        nifpp::str_atom("espipe")},
+    {make_error_code(std::errc::io_error),                            nifpp::str_atom("eio")},
+    {make_error_code(std::errc::is_a_directory),                      nifpp::str_atom("eisdir")},
+    {make_error_code(std::errc::message_size),                        nifpp::str_atom("emsgsize")},
+    {make_error_code(std::errc::network_down),                        nifpp::str_atom("enetdown")},
+    {make_error_code(std::errc::network_reset),                       nifpp::str_atom("enetreset")},
+    {make_error_code(std::errc::network_unreachable),                 nifpp::str_atom("enetunreach")},
+    {make_error_code(std::errc::no_buffer_space),                     nifpp::str_atom("enobufs")},
+    {make_error_code(std::errc::no_child_process),                    nifpp::str_atom("echild")},
+    {make_error_code(std::errc::no_link),                             nifpp::str_atom("enolink")},
+    {make_error_code(std::errc::no_lock_available),                   nifpp::str_atom("enolck")},
+    {make_error_code(std::errc::no_message_available),                nifpp::str_atom("enodata")},
+    {make_error_code(std::errc::no_message),                          nifpp::str_atom("enomsg")},
+    {make_error_code(std::errc::no_protocol_option),                  nifpp::str_atom("enoprotoopt")},
+    {make_error_code(std::errc::no_space_on_device),                  nifpp::str_atom("enospc")},
+    {make_error_code(std::errc::no_stream_resources),                 nifpp::str_atom("enosr")},
+    {make_error_code(std::errc::no_such_device_or_address),           nifpp::str_atom("enxio")},
+    {make_error_code(std::errc::no_such_device),                      nifpp::str_atom("enodev")},
+    {make_error_code(std::errc::no_such_file_or_directory),           nifpp::str_atom("enoent")},
+    {make_error_code(std::errc::no_such_process),                     nifpp::str_atom("esrch")},
+    {make_error_code(std::errc::not_a_directory),                     nifpp::str_atom("enotdir")},
+    {make_error_code(std::errc::not_a_socket),                        nifpp::str_atom("enotsock")},
+    {make_error_code(std::errc::not_a_stream),                        nifpp::str_atom("enostr")},
+    {make_error_code(std::errc::not_connected),                       nifpp::str_atom("enotconn")},
+    {make_error_code(std::errc::not_enough_memory),                   nifpp::str_atom("enomem")},
+    {make_error_code(std::errc::not_supported),                       nifpp::str_atom("enotsup")},
+    {make_error_code(std::errc::operation_canceled),                  nifpp::str_atom("ecanceled")},
+    {make_error_code(std::errc::operation_in_progress),               nifpp::str_atom("einprogress")},
+    {make_error_code(std::errc::operation_not_permitted),             nifpp::str_atom("eperm")},
+    {make_error_code(std::errc::operation_not_supported),             nifpp::str_atom("eopnotsupp")},
+    {make_error_code(std::errc::operation_would_block),               nifpp::str_atom("ewouldblock")},
+    {make_error_code(std::errc::owner_dead),                          nifpp::str_atom("eownerdead")},
+    {make_error_code(std::errc::permission_denied),                   nifpp::str_atom("eacces")},
+    {make_error_code(std::errc::protocol_error),                      nifpp::str_atom("eproto")},
+    {make_error_code(std::errc::protocol_not_supported),              nifpp::str_atom("eprotonosupport")},
+    {make_error_code(std::errc::read_only_file_system),               nifpp::str_atom("erofs")},
+    {make_error_code(std::errc::resource_deadlock_would_occur),       nifpp::str_atom("edeadlk")},
+    {make_error_code(std::errc::resource_unavailable_try_again),      nifpp::str_atom("eagain")},
+    {make_error_code(std::errc::result_out_of_range),                 nifpp::str_atom("erange")},
+    {make_error_code(std::errc::state_not_recoverable),               nifpp::str_atom("enotrecoverable")},
+    {make_error_code(std::errc::stream_timeout),                      nifpp::str_atom("etime")},
+    {make_error_code(std::errc::text_file_busy),                      nifpp::str_atom("etxtbsy")},
+    {make_error_code(std::errc::timed_out),                           nifpp::str_atom("etimedout")},
+    {make_error_code(std::errc::too_many_files_open_in_system),       nifpp::str_atom("enfile")},
+    {make_error_code(std::errc::too_many_files_open),                 nifpp::str_atom("emfile")},
+    {make_error_code(std::errc::too_many_links),                      nifpp::str_atom("emlink")},
+    {make_error_code(std::errc::too_many_symbolic_link_levels),       nifpp::str_atom("eloop")},
+    {make_error_code(std::errc::value_too_large),                     nifpp::str_atom("eoverflow")},
+    {make_error_code(std::errc::wrong_protocol_type),                 nifpp::str_atom("eprototype")}
 };
 /** @} */
-
-} // namespace
-
-using std::string;
 
 /**
  * A shared pointer wrapper to help with Erlang NIF environment management.
@@ -213,18 +209,18 @@ private:
     std::shared_ptr<ErlNifEnv> env;
 };
 
-
 /**
  * NIF context holder for all common operations.
  */
 struct NifCTX {
-    NifCTX(ErlNifEnv *env, Env localEnv, ErlNifPid pid, reqid_t reqId, helper_ptr helper_obj, helper_ctx_ptr helper_ctx)
+    NifCTX(ErlNifEnv *env, Env localEnv, ErlNifPid pid, reqid_t reqId,
+        helper_ptr helperObj, helper_ctx_ptr helperCTX)
         : env(env)
         , localEnv(localEnv)
         , reqPid(pid)
         , reqId(reqId)
-        , helper_obj(helper_obj)
-        , helper_ctx(helper_ctx)
+        , helperObj(helperObj)
+        , helperCTX(helperCTX)
     {
     }
 
@@ -232,36 +228,34 @@ struct NifCTX {
     Env localEnv;
     ErlNifPid reqPid;
     reqid_t reqId;
-    helper_ptr helper_obj;
-    helper_ctx_ptr helper_ctx;
-
+    helper_ptr helperObj;
+    helper_ctx_ptr helperCTX;
 };
-
 
 /**
  * Converts NIF term to one::helpers::IStorageHelper::ArgsMap structure.
  */
-one::helpers::IStorageHelper::ArgsMap get_helper_args(ErlNifEnv* env, ERL_NIF_TERM term)
+one::helpers::IStorageHelper::ArgsMap get_helper_args(
+    ErlNifEnv *env, ERL_NIF_TERM term)
 {
     one::helpers::IStorageHelper::ArgsMap args;
 
-    if(enif_is_list(env, term) && !enif_is_empty_list(env, term))
-    {
+    if (enif_is_list(env, term) && !enif_is_empty_list(env, term)) {
         int i = 0;
         ERL_NIF_TERM list, head, tail;
-        for(list = term; enif_get_list_cell(env, list, &head, &tail); list = tail)
-            args.emplace(one::helpers::srvArg(i), nifpp::get<string>(env, head));
+        for (list = term; enif_get_list_cell(env, list, &head, &tail);
+             list = tail, ++i)
+            args.emplace(
+                one::helpers::srvArg(i), nifpp::get<std::string>(env, head));
     }
 
-    return std::move(args);
+    return args;
 }
-
 
 /**
  * Runs given function and returns result or error term.
  */
-template <class T>
-ERL_NIF_TERM handle_errors(ErlNifEnv *env, T fun)
+template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, const T &fun)
 {
     try {
         return fun();
@@ -278,11 +272,9 @@ ERL_NIF_TERM handle_errors(ErlNifEnv *env, T fun)
     }
 }
 
-
 template <typename... Args, std::size_t... I>
-ERL_NIF_TERM wrap_helper(
-    ERL_NIF_TERM (*fun)(NifCTX ctx, Args...), ErlNifEnv *env,
-    const ERL_NIF_TERM args[], std::index_sequence<I...>)
+ERL_NIF_TERM wrap_helper(ERL_NIF_TERM (*fun)(NifCTX ctx, Args...),
+    ErlNifEnv *env, const ERL_NIF_TERM args[], std::index_sequence<I...>)
 {
     return handle_errors(env, [&]() {
         ErlNifPid pid;
@@ -291,115 +283,128 @@ ERL_NIF_TERM wrap_helper(
         std::random_device rd;
         std::mt19937 gen(rd());
 
-
         auto reqId = std::make_tuple(std::rand(), std::rand(), std::rand());
-        return fun(NifCTX(env, Env(), pid, reqId, nifpp::get<helper_ptr>(env, args[0]), nifpp::get<helper_ctx_ptr>(env, args[1])), nifpp::get<Args>(env, args[2 + I])...);
+        return fun(
+            NifCTX(env, Env(), pid, reqId, nifpp::get<helper_ptr>(env, args[0]),
+                nifpp::get<helper_ctx_ptr>(env, args[1])),
+            nifpp::get<Args>(env, args[2 + I])...);
     });
 }
 
 template <typename... Args>
-ERL_NIF_TERM wrap(ERL_NIF_TERM (*fun)(NifCTX, Args...),
-    ErlNifEnv *env, const ERL_NIF_TERM args[])
+ERL_NIF_TERM wrap(ERL_NIF_TERM (*fun)(NifCTX, Args...), ErlNifEnv *env,
+    const ERL_NIF_TERM args[])
 {
     return wrap_helper(fun, env, args, std::index_sequence_for<Args...>{});
 }
 
+template <typename... Args, std::size_t... I>
+ERL_NIF_TERM noctx_wrap_helper(ERL_NIF_TERM (*fun)(ErlNifEnv *env, Args...),
+    ErlNifEnv *env, const ERL_NIF_TERM args[], std::index_sequence<I...>)
+{
+    return handle_errors(
+        env, [&]() { return fun(env, nifpp::get<Args>(env, args[I])...); });
+}
+
+template <typename... Args>
+ERL_NIF_TERM noctx_wrap(ERL_NIF_TERM (*fun)(ErlNifEnv *env, Args...),
+    ErlNifEnv *env, const ERL_NIF_TERM args[])
+{
+    return noctx_wrap_helper(
+        fun, env, args, std::index_sequence_for<Args...>{});
+}
 
 /**
  * Translates user name to uid.
  */
-uid_t uNameToUID(std::string uname)
+uid_t uNameToUID(const std::string &uname)
 {
-    struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
+    struct passwd *ownerInfo =
+        getpwnam(uname.c_str()); // Static buffer, do NOT free !
     return (ownerInfo ? ownerInfo->pw_uid : -1);
 }
-
 
 /**
  * Translates group name to gid.
  */
-gid_t gNameToGID(std::string gname, std::string uname = "")
+gid_t gNameToGID(const std::string &gname, const std::string &uname = "")
 {
-    struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
-    struct group  *groupInfo = getgrnam(gname.c_str()); // Static buffer, do NOT free !
+    struct passwd *ownerInfo =
+        getpwnam(uname.c_str()); // Static buffer, do NOT free !
+    struct group *groupInfo =
+        getgrnam(gname.c_str()); // Static buffer, do NOT free !
 
     gid_t primary_gid = (ownerInfo ? ownerInfo->pw_gid : -1);
     return (groupInfo ? groupInfo->gr_gid : primary_gid);
 }
 
-
 /**
- * Handle asio::mutable_buffer value from helpers and send it to requesting process.
+ * Handle asio::mutable_buffer value from helpers and send it to requesting
+ * process.
  */
 void handle_value(const NifCTX &ctx, asio::mutable_buffer buffer)
 {
     nifpp::binary bin(asio::buffer_size(buffer));
-    memcpy(bin.data, asio::buffer_cast<const char*>(buffer), asio::buffer_size(buffer));
-    enif_send(ctx.env, &ctx.reqPid, ctx.env, nifpp::make(ctx.env, std::make_tuple(ctx.reqId, std::make_tuple(ok, nifpp::make(ctx.env, bin)))));
+    asio::buffer_copy(asio::mutable_buffer{bin.data, bin.size}, buffer);
+    enif_send(ctx.env, &ctx.reqPid, ctx.env,
+        nifpp::make(ctx.env,
+                  std::make_tuple(ctx.reqId,
+                        std::make_tuple(ok, nifpp::make(ctx.env, bin)))));
 }
-
 
 /**
  * Handle struct stat value from helpers and send it to requesting process.
  */
 void handle_value(const NifCTX &ctx, struct stat &s)
 {
-    auto record = std::make_tuple(nifpp::str_atom("statbuf"),
-                      s.st_dev,
-                      s.st_ino,
-                      s.st_mode,
-                      s.st_nlink,
-                      s.st_uid,
-                      s.st_gid,
-                      s.st_rdev,
-                      s.st_size,
-                      s.st_atime,
-                      s.st_mtime,
-                      s.st_ctime,
-                      s.st_blksize,
-                      s.st_blocks);
-    enif_send(ctx.env, &ctx.reqPid, ctx.env, nifpp::make(ctx.env, std::make_tuple(ctx.reqId, std::make_tuple(ok, record))));
+    auto record =
+        std::make_tuple(nifpp::str_atom("statbuf"), s.st_dev, s.st_ino,
+            s.st_mode, s.st_nlink, s.st_uid, s.st_gid, s.st_rdev, s.st_size,
+            s.st_atime, s.st_mtime, s.st_ctime, s.st_blksize, s.st_blocks);
+    enif_send(ctx.env, &ctx.reqPid, ctx.env,
+        nifpp::make(ctx.env,
+                  std::make_tuple(ctx.reqId, std::make_tuple(ok, record))));
 }
-
 
 /**
  * Handle generic result from helpers and send it to requesting process.
  */
-template<class T>
-void handle_value(const NifCTX &ctx, T &response)
+template <class T> void handle_value(const NifCTX &ctx, T &response)
 {
-    enif_send(ctx.env, &ctx.reqPid, ctx.env, nifpp::make(ctx.env, std::make_tuple(ctx.reqId, std::make_tuple(ok, response))));
+    enif_send(ctx.env, &ctx.reqPid, ctx.env,
+        nifpp::make(ctx.env,
+                  std::make_tuple(ctx.reqId, std::make_tuple(ok, response))));
 }
-
 
 /**
  * Handle void value from helpers and send it to requesting process.
  */
 void handle_value(const NifCTX &ctx)
 {
-    enif_send(ctx.env, &ctx.reqPid, ctx.env, nifpp::make(ctx.env, std::make_tuple(ctx.reqId, ok)));
+    enif_send(ctx.env, &ctx.reqPid, ctx.env,
+        nifpp::make(ctx.env, std::make_tuple(ctx.reqId, ok)));
 }
-
 
 /**
  * Handles result from helpers callback either process return value or error.
  */
-template<class... T>
+template <class... T>
 void handle_result(const NifCTX ctx, ErrorRef e, T... value)
 {
-    if(!e.code()) {
+    if (!e.code()) {
         handle_value(ctx, value...);
-    } else {
+    }
+    else {
         auto it = error_to_atom.find(e.code());
         nifpp::str_atom reason{e.code().message()};
-        if(it != error_to_atom.end())
+        if (it != error_to_atom.end())
             reason = it->second;
 
-        enif_send(ctx.env, &ctx.reqPid, ctx.env, nifpp::make(ctx.env, std::make_tuple(ctx.reqId, std::make_tuple(error, reason))));
+        enif_send(ctx.env, &ctx.reqPid, ctx.env,
+            nifpp::make(ctx.env, std::make_tuple(ctx.reqId,
+                                     std::make_tuple(error, reason))));
     }
 }
-
-\
 
 /*********************************************************************
 *
@@ -408,96 +413,66 @@ void handle_result(const NifCTX ctx, ErrorRef e, T... value)
 *
 *********************************************************************/
 
-
-static ERL_NIF_TERM new_helper_obj(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM new_helper_obj(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-    auto helperName = nifpp::get<string>(env, argv[0]);
+    auto helperName = nifpp::get<std::string>(env, argv[0]);
     auto helperArgs = get_helper_args(env, argv[1]);
-    auto helperObj = application.SHFactory.getStorageHelper(helperName, helperArgs);
-    if(!helperObj) {
-        return nifpp::make(env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
-    } else {
-        auto resource =
-                    nifpp::construct_resource<helper_ptr>(helperObj);
+    auto helperObj =
+        application.SHFactory.getStorageHelper(helperName, helperArgs);
+    if (!helperObj)
+        return nifpp::make(
+            env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
 
-        return nifpp::make(env, std::make_tuple(ok, resource));
-    }
+    auto resource = nifpp::construct_resource<helper_ptr>(helperObj);
 
+    return nifpp::make(env, std::make_tuple(ok, resource));
 }
 
-static ERL_NIF_TERM get_flag_value(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM username_to_uid(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-    auto flag = nifpp::get<nifpp::str_atom>(env, argv[0]);
-    auto it = atom_to_flag.find(flag);
-    if(it == atom_to_flag.end()) {
-        auto it_0 = atom_to_open_mode.find(flag);
-        if(it_0 == atom_to_open_mode.end()) {
-            auto it_1 = atom_to_open_mode.find(flag);
-                if(it_1 == atom_to_file_type.end()) {
-                    throw nifpp::badarg();
-                } else {
-                    return nifpp::make(env, it_1->second);
-                }
-        } else {
-            return nifpp::make(env, it_0->second);
-        }
-    } else {
-        return nifpp::make(env, it->second);
-    }
-
-}
-
-static ERL_NIF_TERM new_helper_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    auto ctx = std::make_shared<one::helpers::StorageHelperCTX>();
-    auto ctx_resource = nifpp::construct_resource<helper_ctx_ptr>(ctx);
-    return nifpp::make(env, std::make_tuple(ok, ctx_resource));
-}
-
-static ERL_NIF_TERM username_to_uid(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-     auto uidTerm = argv[0];
-     auto uid = uNameToUID(nifpp::get<string>(env, uidTerm));
-     if(uid != static_cast<uid_t>(-1)) {
+    auto uidTerm = argv[0];
+    auto uid = uNameToUID(nifpp::get<std::string>(env, uidTerm));
+    if (uid != static_cast<uid_t>(-1))
         return nifpp::make(env, std::make_tuple(ok, uid));
-     } else {
-        auto einval = std::error_code(static_cast<int>(std::errc::invalid_argument), std::system_category());
-        return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
-     }
+
+    auto einval = make_error_code(std::errc::invalid_argument);
+    return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
 }
 
-static ERL_NIF_TERM groupname_to_gid(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM groupname_to_gid(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-     auto gidTerm = argv[0];
-     auto gid = gNameToGID(nifpp::get<string>(env, gidTerm));
-     if(gid != static_cast<gid_t>(-1)) {
+    auto gidTerm = argv[0];
+    auto gid = gNameToGID(nifpp::get<std::string>(env, gidTerm));
+    if (gid != static_cast<gid_t>(-1))
         return nifpp::make(env, std::make_tuple(ok, gid));
-     } else {
-        auto einval = std::error_code(static_cast<int>(std::errc::invalid_argument), std::system_category());
-        return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
-     }
+
+    auto einval = make_error_code(std::errc::invalid_argument);
+    return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
 }
 
-static ERL_NIF_TERM set_user_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM set_user_ctx(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return handle_errors(env, [&]() {
         auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
-
 
         auto uidTerm = argv[1];
         auto gidTerm = argv[2];
         long uid = -1;
         long gid = -1;
 
-        if(!nifpp::get(env, uidTerm, uid)) {
-            ctx->uid = uNameToUID(nifpp::get<string>(env, uidTerm));
-        } else {
+        if (!nifpp::get(env, uidTerm, uid)) {
+            ctx->uid = uNameToUID(nifpp::get<std::string>(env, uidTerm));
+        }
+        else {
             ctx->uid = uid;
         }
 
-        if(!nifpp::get(env, gidTerm, gid)) {
-            ctx->gid = gNameToGID(nifpp::get<string>(env, gidTerm));
-        } else {
+        if (!nifpp::get(env, gidTerm, gid)) {
+            ctx->gid = gNameToGID(nifpp::get<std::string>(env, gidTerm));
+        }
+        else {
             ctx->gid = gid;
         }
 
@@ -505,350 +480,399 @@ static ERL_NIF_TERM set_user_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
     });
 }
 
-
-static ERL_NIF_TERM get_user_ctx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM get_flag_value(ErlNifEnv *env, nifpp::str_atom flag)
 {
-    return handle_errors(env, [&]() {
-        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
-        return make(env, std::make_tuple(ok, std::make_tuple(ctx->uid, ctx->gid)));
-    });
+    auto it = atom_to_flag.find(flag);
+    if (it != atom_to_flag.end())
+        return nifpp::make(env, it->second);
+
+    it = atom_to_open_mode.find(flag);
+    if (it != atom_to_open_mode.end())
+        return nifpp::make(env, it->second);
+
+    it = atom_to_file_type.find(flag);
+    if (it != atom_to_file_type.end())
+        return nifpp::make(env, it->second);
+
+    throw nifpp::badarg();
 }
 
-static ERL_NIF_TERM get_flags(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM new_helper_ctx(ErlNifEnv *env)
 {
-    return handle_errors(env, [&]() {
-        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
-        std::vector<nifpp::str_atom> flags;
-        for(auto &flag : atom_to_flag) {
-            if((ctx->m_ffi.flags & flag.second) == flag.second) {
-                flags.push_back(flag.first);
-            }
-        }
-
-        for(auto &flag : atom_to_open_mode) {
-            if((ctx->m_ffi.flags & O_ACCMODE) == flag.second) {
-                flags.push_back(flag.first);
-            }
-        }
-
-        return nifpp::make(env, std::make_tuple(ok, flags));
-    });
+    auto ctx = std::make_shared<one::helpers::StorageHelperCTX>();
+    auto ctx_resource = nifpp::construct_resource<helper_ctx_ptr>(ctx);
+    return nifpp::make(env, std::make_tuple(ok, ctx_resource));
 }
 
-static ERL_NIF_TERM set_flags(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM get_user_ctx(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
-    return handle_errors(env, [&]() {
-        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
-        ctx->m_ffi.flags = 0;
-        auto foreach_result = nifpp::list_for_each<nifpp::str_atom>(env, argv[1], [&ctx](nifpp::str_atom atom) {
-            auto it = atom_to_flag.find(atom);
-            if(it == atom_to_flag.end()) {
-                auto it_o = atom_to_open_mode.find(atom);
-                if(it_o == atom_to_open_mode.end()) {
-                    throw nifpp::badarg();
-                } else {
-                    ctx->m_ffi.flags |= it_o->second;
-                }
-            } else {
-                ctx->m_ffi.flags |= it->second;
-            }
+    return nifpp::make(
+        env, std::make_tuple(ok, std::make_tuple(ctx->uid, ctx->gid)));
+}
+
+ERL_NIF_TERM get_flags(ErlNifEnv *env, helper_ctx_ptr ctx)
+{
+    std::vector<nifpp::str_atom> flags;
+    for (auto &flag : atom_to_flag) {
+        if (ctx->m_ffi.flags & flag.second) {
+            flags.push_back(flag.first);
+        }
+    }
+
+    for (auto &flag : atom_to_open_mode) {
+        // Mask only open mode (ACCMODE) and compare by value
+        if ((ctx->m_ffi.flags & O_ACCMODE) == flag.second) {
+            flags.push_back(flag.first);
+        }
+    }
+
+    return nifpp::make(env, std::make_tuple(ok, flags));
+}
+
+ERL_NIF_TERM set_flags(
+    ErlNifEnv *env, helper_ctx_ptr ctx, std::vector<nifpp::str_atom> flagAtoms)
+{
+    ctx->m_ffi.flags = 0;
+    for (auto &atom : flagAtoms) {
+        auto flagTerm = get_flag_value(env, atom);
+        auto flag = nifpp::get<int>(env, flagTerm);
+        ctx->m_ffi.flags |= flag;
+    }
+
+    return nifpp::make(env, ok);
+}
+
+ERL_NIF_TERM get_fd(ErlNifEnv *env, helper_ctx_ptr ctx)
+{
+    return nifpp::make(env, std::make_tuple(ok, ctx->m_ffi.fh));
+}
+
+ERL_NIF_TERM set_fd(ErlNifEnv *env, helper_ctx_ptr ctx, int fh)
+{
+    ctx->m_ffi.fh = fh;
+    return nifpp::make(env, ok);
+}
+
+ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
+{
+    ctx.helperObj->ash_getattr(
+        *ctx.helperCTX, file, [=](struct stat statbuf, ErrorRef e) {
+            handle_result(ctx, e, statbuf);
         });
 
-        if(!foreach_result)
-            throw nifpp::badarg();
-
-        return nifpp::make(env, ok);
-    });
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM get_fd(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM access(NifCTX ctx, const std::string file, const int mask)
 {
-    return handle_errors(env, [&]() {
-        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
-        return nifpp::make(env, std::make_tuple(ok, ctx->m_ffi.fh));
-    });
-}
-
-static ERL_NIF_TERM set_fd(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    return handle_errors(env, [&]() {
-        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
-        ctx->m_ffi.fh = nifpp::get<int>(env, argv[1]);
-        return nifpp::make(env, ok);
-    });
-}
-
-static ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
-{
-    ctx.helper_obj->ash_getattr(*ctx.helper_ctx, file, [=](struct stat statbuf, ErrorRef e) {
-        handle_result(ctx, e, statbuf);
-    });
+    ctx.helperObj->ash_access(
+        *ctx.helperCTX, file, mask, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM access(NifCTX ctx, const std::string file, const int mask)
+ERL_NIF_TERM mknod(
+    NifCTX ctx, const std::string file, const mode_t mode, const dev_t dev)
 {
-    ctx.helper_obj->ash_access(*ctx.helper_ctx, file, mask, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_mknod(*ctx.helperCTX, file, mode, dev,
+        [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM mknod(NifCTX ctx, const std::string file, const mode_t mode, const dev_t dev)
+ERL_NIF_TERM mkdir(NifCTX ctx, const std::string file, const mode_t mode)
 {
-    ctx.helper_obj->ash_mknod(*ctx.helper_ctx, file, mode, dev, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_mkdir(
+        *ctx.helperCTX, file, mode, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM mkdir(NifCTX ctx, const std::string file, const mode_t mode)
+ERL_NIF_TERM unlink(NifCTX ctx, const std::string file)
 {
-    ctx.helper_obj->ash_mkdir(*ctx.helper_ctx, file, mode, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_unlink(
+        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM unlink(NifCTX ctx, const std::string file)
+ERL_NIF_TERM rmdir(NifCTX ctx, const std::string file)
 {
-    ctx.helper_obj->ash_unlink(*ctx.helper_ctx, file, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_rmdir(
+        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM rmdir(NifCTX ctx, const std::string file)
+ERL_NIF_TERM symlink(NifCTX ctx, const std::string from, const std::string to)
 {
-    ctx.helper_obj->ash_rmdir(*ctx.helper_ctx, file, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_symlink(
+        *ctx.helperCTX, from, to, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM symlink(NifCTX ctx, const std::string from, const std::string to)
+ERL_NIF_TERM rename(NifCTX ctx, const std::string from, const std::string to)
 {
-    ctx.helper_obj->ash_symlink(*ctx.helper_ctx, from, to, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_rename(
+        *ctx.helperCTX, from, to, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM rename(NifCTX ctx, const std::string from, const std::string to)
+ERL_NIF_TERM link(NifCTX ctx, const std::string from, const std::string to)
 {
-    ctx.helper_obj->ash_rename(*ctx.helper_ctx, from, to, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_link(
+        *ctx.helperCTX, from, to, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM link(NifCTX ctx, const std::string from, const std::string to)
+ERL_NIF_TERM chmod(NifCTX ctx, const std::string file, const mode_t mode)
 {
-    ctx.helper_obj->ash_link(*ctx.helper_ctx, from, to, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_chmod(
+        *ctx.helperCTX, file, mode, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM chmod(NifCTX ctx, const std::string file, const mode_t mode)
+ERL_NIF_TERM chown(
+    NifCTX ctx, const std::string file, const int uid, const int gid)
 {
-    ctx.helper_obj->ash_chmod(*ctx.helper_ctx, file, mode, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_chown(*ctx.helperCTX, file, uid, gid,
+        [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM chown(NifCTX ctx, const std::string file, const int uid, const int gid)
+ERL_NIF_TERM truncate(NifCTX ctx, const std::string file, const off_t size)
 {
-    ctx.helper_obj->ash_chown(*ctx.helper_ctx, file, uid, gid, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_truncate(
+        *ctx.helperCTX, file, size, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM truncate(NifCTX ctx, const std::string file, const off_t size)
+ERL_NIF_TERM open(NifCTX ctx, const std::string file)
 {
-    ctx.helper_obj->ash_truncate(*ctx.helper_ctx, file, size, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_open(*ctx.helperCTX, file,
+        [=](int fh, ErrorRef e) { handle_result(ctx, e, fh); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM open(NifCTX ctx, const std::string file)
-{
-    ctx.helper_obj->ash_open(*ctx.helper_ctx, file, [=](int fh, ErrorRef e) {
-        handle_result(ctx, e, fh);
-    });
-
-    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
-}
-
-static ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
+ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
 {
     auto buf = std::make_shared<std::vector<char>>(size);
-    ctx.helper_obj->ash_read(*ctx.helper_ctx, file, asio::mutable_buffer(buf->data(), size), offset,
-                               [=](asio::mutable_buffer buf, ErrorRef e) {
-                                    handle_result(ctx, e, buf);
-                                });
+    ctx.helperObj->ash_read(*ctx.helperCTX, file,
+        asio::mutable_buffer(buf->data(), size), offset,
+        [=](asio::mutable_buffer buf, ErrorRef e) {
+            handle_result(ctx, e, buf);
+        });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM write(NifCTX ctx, const std::string file, const off_t offset, std::string data)
+ERL_NIF_TERM write(
+    NifCTX ctx, const std::string file, const off_t offset, std::string data)
 {
-    ctx.helper_obj->ash_write(*ctx.helper_ctx, file, asio::const_buffer(data.data(), data.size()), offset, [=](int size, ErrorRef e) {
-        handle_result(ctx, e, size);
-    });
+    ctx.helperObj->ash_write(*ctx.helperCTX, file,
+        asio::const_buffer(data.data(), data.size()), offset,
+        [=](int size, ErrorRef e) { handle_result(ctx, e, size); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM release(NifCTX ctx, const std::string file)
+ERL_NIF_TERM release(NifCTX ctx, const std::string file)
 {
-    ctx.helper_obj->ash_release(*ctx.helper_ctx, file, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_release(
+        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM flush(NifCTX ctx, const std::string file)
+ERL_NIF_TERM flush(NifCTX ctx, const std::string file)
 {
-    ctx.helper_obj->ash_flush(*ctx.helper_ctx, file, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_flush(
+        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-static ERL_NIF_TERM fsync(NifCTX ctx, const std::string file, const int isdatasync)
+ERL_NIF_TERM fsync(NifCTX ctx, const std::string file, const int isdatasync)
 {
-    ctx.helper_obj->ash_fsync(*ctx.helper_ctx, file, isdatasync, [=](ErrorRef e) {
-        handle_result(ctx, e);
-    });
+    ctx.helperObj->ash_fsync(*ctx.helperCTX, file, isdatasync,
+        [=](ErrorRef e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+} // namespace
 
 extern "C" {
 
-static int load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
+static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
-    for(auto i = 0; i < 100; ++i) {
-        application.workers.push_back(std::thread([]() { application.dio_service.run(); }));
+    for (auto i = 0; i < 100; ++i) {
+        application.workers.push_back(
+            std::thread([]() { application.dioService.run(); }));
     }
 
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
-             nifpp::register_resource<helper_ctx_ptr>(env, nullptr, "helper_ctx") &&
-             nifpp::register_resource<fuse_file_info>(env, nullptr, "fuse_file_info"));
+               nifpp::register_resource<helper_ctx_ptr>(
+                   env, nullptr, "helper_ctx") &&
+               nifpp::register_resource<fuse_file_info>(
+                   env, nullptr, "fuse_file_info"));
 }
 
-static ERL_NIF_TERM sh_getattr(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_set_flags(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(set_flags, env, argv);
+}
+
+static ERL_NIF_TERM sh_get_flags(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(get_flags, env, argv);
+}
+
+static ERL_NIF_TERM sh_set_fd(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(set_fd, env, argv);
+}
+
+static ERL_NIF_TERM sh_get_fd(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(get_fd, env, argv);
+}
+
+static ERL_NIF_TERM sh_new_helper_ctx(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(new_helper_ctx, env, argv);
+}
+
+static ERL_NIF_TERM sh_get_user_ctx(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(get_user_ctx, env, argv);
+}
+
+static ERL_NIF_TERM sh_get_flag_value(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(get_flag_value, env, argv);
+}
+
+static ERL_NIF_TERM sh_getattr(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(getattr, env, argv);
 }
 
-static ERL_NIF_TERM sh_access(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_access(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(access, env, argv);
 }
 
-static ERL_NIF_TERM sh_mknod(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_mknod(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(mknod, env, argv);
 }
 
-static ERL_NIF_TERM sh_mkdir(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_mkdir(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(mkdir, env, argv);
 }
 
-static ERL_NIF_TERM sh_unlink(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_unlink(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(unlink, env, argv);
 }
 
-static ERL_NIF_TERM sh_rmdir(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_rmdir(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(rmdir, env, argv);
 }
 
-static ERL_NIF_TERM sh_symlink(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_symlink(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(symlink, env, argv);
 }
 
-static ERL_NIF_TERM sh_rename(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_rename(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(rename, env, argv);
 }
 
-static ERL_NIF_TERM sh_link(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_link(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(link, env, argv);
 }
 
-static ERL_NIF_TERM sh_chmod(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_chmod(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(chmod, env, argv);
 }
 
-static ERL_NIF_TERM sh_chown(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_chown(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(chown, env, argv);
 }
 
-static ERL_NIF_TERM sh_truncate(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_truncate(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(truncate, env, argv);
 }
 
-static ERL_NIF_TERM sh_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(open, env, argv);
 }
 
-static ERL_NIF_TERM sh_read(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_read(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(read, env, argv);
 }
 
-static ERL_NIF_TERM sh_write(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_write(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(write, env, argv);
 }
 
-static ERL_NIF_TERM sh_release(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_release(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(release, env, argv);
 }
 
-static ERL_NIF_TERM sh_flush(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_flush(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(flush, env, argv);
 }
 
-static ERL_NIF_TERM sh_fsync(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM sh_fsync(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(fsync, env, argv);
 }
 
-
-static ErlNifFunc nif_funcs[] =
-{
+static ErlNifFunc nif_funcs[] = {
     {"getattr",         3, sh_getattr},
     {"access",          4, sh_access},
     {"mknod",           5, sh_mknod},
@@ -868,19 +892,18 @@ static ErlNifFunc nif_funcs[] =
     {"flush",           3, sh_flush},
     {"fsync",           4, sh_fsync},
 
-    {"set_flags",       2, set_flags},
-    {"get_flags",       1, get_flags},
-    {"set_fd",          2, set_fd},
-    {"get_fd",          1, get_fd},
+    {"set_flags",       2, sh_set_flags},
+    {"get_flags",       1, sh_get_flags},
+    {"set_fd",          2, sh_set_fd},
+    {"get_fd",          1, sh_get_fd},
     {"username_to_uid", 1, username_to_uid},
     {"groupname_to_gid",1, groupname_to_gid},
     {"new_helper_obj",  2, new_helper_obj},
-    {"new_helper_ctx",  0, new_helper_ctx},
+    {"new_helper_ctx",  0, sh_new_helper_ctx},
     {"set_user_ctx",    3, set_user_ctx},
-    {"get_user_ctx",    1, get_user_ctx},
-    {"get_flag_value",  1, get_flag_value}
+    {"get_user_ctx",    1, sh_get_user_ctx},
+    {"get_flag_value",  1, sh_get_flag_value}
 };
-
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 

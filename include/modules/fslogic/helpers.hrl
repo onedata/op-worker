@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Public definitions of records / settings used by helpers and helpers_nif modules.
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").
@@ -14,6 +14,11 @@
 -define(HELPERS_HRL, 1).
 
 %% File attributes returned by storage helpers
--record(statbuf, {st_dev, st_ino, st_mode, st_nlink, st_uid, st_gid, st_rdev, st_size, st_atime, st_mtime, st_ctime, st_blksize, st_blocks}).
+%% Eqiv of standard POSIX 'struct stat'
+-record(statbuf, {
+    st_dev, st_ino, st_mode, st_nlink, st_uid,
+    st_gid, st_rdev, st_size, st_atime, st_mtime,
+    st_ctime, st_blksize, st_blocks
+}).
 
 -endif.

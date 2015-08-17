@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Test for basic context management in helpers_nif module
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helpers_nif_test).
@@ -89,6 +89,19 @@ ctx_test_() ->
 
                         ?assertMatch(ok, helpers_nif:set_user_ctx(CTX, 432423, 8953275)),
                         ?assertMatch({ok, {432423, 8953275}}, helpers_nif:get_user_ctx(CTX)),
+
+                        ok
+                    end},
+                {"File handle is set correctly",
+                    fun() ->
+                        ?assertMatch(ok, helpers_nif:set_fd(CTX, 5)),
+                        ?assertMatch({ok, 5}, helpers_nif:get_fd(CTX)),
+
+                        ?assertMatch(ok, helpers_nif:set_fd(CTX, 104)),
+                        ?assertMatch({ok, 104}, helpers_nif:get_fd(CTX)),
+
+                        ?assertMatch(ok, helpers_nif:set_fd(CTX, 0)),
+                        ?assertMatch({ok, 0}, helpers_nif:get_fd(CTX)),
 
                         ok
                     end}
