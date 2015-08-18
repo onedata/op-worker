@@ -32,6 +32,7 @@
     no_return().
 get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceClusterProxy) ->
     {ok, #document{key = UUID}} = file_meta:get(File),
+    ?error("get_file_location for ~p ~p", [UUID, File]),
     ok = file_watcher:insert_open_watcher(UUID, SessId),
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),

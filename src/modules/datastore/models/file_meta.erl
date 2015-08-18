@@ -650,6 +650,7 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
 %%--------------------------------------------------------------------
 -spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error() | no_return().
 gen_path2(Entry, Acc) ->
+    ?error("gen_path2 ~p ~p", [Entry, Acc]),
     {ok, #document{} = Doc} = get(Entry),
     case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
         {ok, {?ROOT_DIR_UUID, _}} ->

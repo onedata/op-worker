@@ -16,7 +16,8 @@
 -include("modules/datastore/datastore.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
 -include("proto/oneclient/event_messages.hrl").
--include_lib("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 %% Functions operating on directories or files
@@ -82,6 +83,7 @@ rm(_FileKey) ->
     {ok, file_id()} | error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    ?error("lfm_files:create ~p ~p ~p", [Path, Name, ParentPath]),
     {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode}}) of
         #fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
@@ -115,7 +117,7 @@ open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             case storage_file_manager:open(Storage, FileId, OpenType) of
                 {ok, SFMHandle} ->
-                    {ok, #lfm_handle{sfm_handles = maps:from_list({default, {{StorageId, FileId}, SFMHandle}}), fslogic_ctx = CTX,
+                    {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, SFMHandle}}]), fslogic_ctx = CTX,
                                      file_uuid = UUID, open_type = OpenType}};
                 {error, Reason} ->
                     %% @todo: cleanup
@@ -190,7 +192,7 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTyp
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
             ok = event_manager:emit(#event{event = #read_event{file_uuid = UUID, blocks = [
-                #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = Written}
+                #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = size(Data)}
             ]}}, SessId),
             {ok, NewHandle, Data};
         {error, Reason2} ->
@@ -221,9 +223,7 @@ get_block_map(_FileKey) ->
 
 
 get_sfm_handle_key(UUID, Offset, Size) ->
-    {ok, Locations} = file_meta:get_locations({uuid, UUID}),
-    LProvId = oneprovider:get_provider_id(),
-    [LocalLocation] = [Location || #document{value = Location = #file_location{provider_id = ProvId}} <- Locations, ProvId =:= LProvId],
+    #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, UUID}),
     #file_location{blocks = Blocks} = LocalLocation,
     get_sfm_handle_key(UUID, Offset, Size, Blocks).
 

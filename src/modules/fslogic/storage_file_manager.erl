@@ -54,6 +54,7 @@ mkdir(Storage, Path, Mode) ->
 mkdir(Storage, Path, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
+    ?error("helper:mkdir ~p ~p ~p", [HelperHandle, Path, Mode]),
     case helpers:mkdir(HelperHandle, Path, Mode) of
         ok ->
             ok;

@@ -97,8 +97,25 @@ lfm_write_test(Config) ->
     ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test3">>, 8#755])]),
     ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test4">>, 8#755])]),
 
-    {ok, Handle1} = ?lfm_req(W, open, [SessId1, {path, <<"/test3">>}, write]),
-    {ok, Handle2} = ?lfm_req(W, open, [SessId1, {path, <<"/test4">>}, write]),
+    Host = self(),
+
+    spawn_link(W,
+        fun() ->
+            {ok, Handle10} = file_manager:open(SessId1, {path, <<"/test3">>}, write),
+            {ok, Handle20} = file_manager:open(SessId1, {path, <<"/test4">>}, write),
+
+            {ok, Handle11, 4} = file_manager:write(Handle10, 0, <<"data">>),
+            {ok, Handle12, 3} = file_manager:write(Handle11, 3, <<"omg">>),
+
+            {ok, Handle13, <<"omg">>} = file_manager:read(Handle12, 3, 5),
+
+            Host ! done
+
+        end),
+
+    receive
+        done -> ok
+    end,
 
     ok.
 
