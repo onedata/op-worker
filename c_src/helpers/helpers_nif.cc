@@ -94,7 +94,7 @@ std::map<nifpp::str_atom, int> atom_to_file_type = {
 
 template <class T> std::error_code make_error_code(T code)
 {
-    return make_error_code(code);
+    return std::error_code(static_cast<int>(code), std::system_category());
 }
 
 /**
