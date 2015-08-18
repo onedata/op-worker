@@ -19,7 +19,7 @@
 -export([verify_file_path/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, is_space_dir/1, basename_and_parent/1]).
 -export([ensure_path_begins_with_slash/1]).
--export([spaces_uuid/1]).
+-export([spaces_uuid/1, to_uuid/2]).
 
 %%%===================================================================
 %%% API functions
@@ -171,3 +171,9 @@ is_space_dir(Path) ->
 ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) ->
     Path;
 ensure_path_begins_with_slash(Path) -> <<?DIRECTORY_SEPARATOR, Path/binary>>.
+
+to_uuid(CTX, Path) ->
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    {ok, #document{key = UUID}} = file_meta:get(Entry),
+    UUID.

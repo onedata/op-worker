@@ -165,14 +165,14 @@ truncate(#helper_handle{} = HelperHandle, File, Size) ->
 %%      First argument shall be #helper_handle{} from new_handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec open(handle(), File :: file(), OpenMode :: w | r | rw) -> {ok, FD :: non_neg_integer()} | {error, term()}.
-open(#helper_handle{} = HelperHandle, File, w) ->
+-spec open(handle(), File :: file(), OpenMode :: write | read | rdwr) -> {ok, FD :: non_neg_integer()} | {error, term()}.
+open(#helper_handle{} = HelperHandle, File, write) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_WRONLY']),
     apply_helper_nif(HelperHandle, open, [File]);
-open(#helper_handle{} = HelperHandle, File, r) ->
+open(#helper_handle{} = HelperHandle, File, read) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDONLY']),
     apply_helper_nif(HelperHandle, open, [File]);
-open(#helper_handle{} = HelperHandle, File, rw) ->
+open(#helper_handle{} = HelperHandle, File, rdwr) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDWR']),
     apply_helper_nif(HelperHandle, open, [File]).
 

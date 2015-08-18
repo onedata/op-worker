@@ -76,8 +76,8 @@ aggregate_blocks(Blocks1, [#file_block{} = Block2 | Blocks2], AggBlocks) ->
     AggBlocks :: [file_block()].
 aggregate_block(Block, []) ->
     [Block];
-aggregate_block(#file_block{offset = Offset1, size = Size1},
-    [#file_block{offset = Offset2, size = Size2} | Blocks])
+aggregate_block(#file_block{offset = Offset1, size = Size1, file_id = FID, storage_id = SID},
+    [#file_block{offset = Offset2, size = Size2, file_id = FID, storage_id = SID} | Blocks])
     when Offset1 =< Offset2 + Size2 ->
     [#file_block{
         offset = Offset2,

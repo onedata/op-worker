@@ -42,14 +42,14 @@ translate_from_protobuf(#'Event'{event = {_, Record}}) ->
 translate_from_protobuf(#'ReadEvent'{} = Record) ->
     #read_event{
         counter = Record#'ReadEvent'.counter,
-        file_id = Record#'ReadEvent'.file_id,
+        file_uuid = Record#'ReadEvent'.file_id,
         size = Record#'ReadEvent'.size,
         blocks = [translate_from_protobuf(B) || B <- Record#'ReadEvent'.blocks]
     };
 translate_from_protobuf(#'WriteEvent'{} = Record) ->
     #write_event{
         counter = Record#'WriteEvent'.counter,
-        file_id = Record#'WriteEvent'.file_id,
+        file_uuid = Record#'WriteEvent'.file_id,
         size = Record#'WriteEvent'.size,
         file_size = Record#'WriteEvent'.file_size,
         blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]

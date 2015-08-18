@@ -76,7 +76,7 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
-handle(#write_event{blocks = Blocks, file_id = FileUUID} = Evts) ->
+handle(#write_event{blocks = Blocks, file_uuid = FileUUID} = Evts) ->
     fslogic_blocks:update(FileUUID, Blocks),
     ?info("WRITE: ~p", [Evts]),
     ok;

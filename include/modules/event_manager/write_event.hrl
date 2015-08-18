@@ -16,7 +16,7 @@
 
 -record(write_event, {
     counter :: non_neg_integer(),
-    file_id :: binary(),
+    file_uuid :: binary(),
     file_size :: non_neg_integer(),
     size :: non_neg_integer(),
     blocks = [] :: [event_utils:file_block()]
@@ -27,9 +27,9 @@
     metadata = 0,
     admission_rule = fun(#write_event{}) -> true; (_) -> false end,
     aggregation_rule = fun
-        (#write_event{file_id = Id} = Evt1, #write_event{file_id = Id} = Evt2) ->
+        (#write_event{file_uuid = Id} = Evt1, #write_event{file_uuid = Id} = Evt2) ->
             {ok, #write_event{
-                file_id = Evt1#write_event.file_id,
+                file_uuid = Evt1#write_event.file_uuid,
                 counter = Evt1#write_event.counter + Evt2#write_event.counter,
                 size = Evt1#write_event.size + Evt2#write_event.size,
                 file_size = Evt2#write_event.file_size,

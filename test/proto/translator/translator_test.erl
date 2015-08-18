@@ -250,14 +250,14 @@ get_file_block_list(Num, MaxS) ->
 get_read_event(Counter, File_id, Size, Num, MaxS) ->
   {InternalBlocks, ProtobufBlocks} = get_file_block_list(Num, MaxS),
   {
-    #read_event{counter = Counter, file_id = File_id, size = Size,blocks = InternalBlocks },
+    #read_event{counter = Counter, file_uuid = File_id, size = Size,blocks = InternalBlocks },
     #'ReadEvent'{counter = Counter, file_id = File_id, size = Size,blocks = ProtobufBlocks }
   }.
 
 get_write_event(Counter, File_id, Size, FileSize, Num, MaxS) ->
   {InternalBlocks, ProtobufBlocks} = get_file_block_list(Num, MaxS),
   {
-    #write_event{counter = Counter, file_id = File_id, size = Size, file_size = FileSize, blocks = InternalBlocks },
+    #write_event{counter = Counter, file_uuid = File_id, size = Size, file_size = FileSize, blocks = InternalBlocks },
     #'WriteEvent'{counter = Counter, file_id = File_id, size = Size, file_size = FileSize, blocks = ProtobufBlocks }
   }.
 

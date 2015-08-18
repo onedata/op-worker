@@ -161,7 +161,7 @@ get_session_supervisor_and_node(SessId) ->
 get_event_manager(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{event_manager = undefined}}} ->
-            {error, {not_found, missing}};
+            {error, {not_found, event_manager}};
         {ok, #document{value = #session{event_manager = EvtMan}}} ->
             {ok, EvtMan};
         {error, Reason} ->

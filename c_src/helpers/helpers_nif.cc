@@ -94,7 +94,7 @@ std::map<nifpp::str_atom, int> atom_to_file_type = {
 
 template <class T> std::error_code make_error_code(T code)
 {
-    return make_error_code(code);
+    return std::error_code(static_cast<int>(code), std::system_category());
 }
 
 /**
@@ -222,6 +222,12 @@ struct NifCTX {
         , helperObj(helperObj)
         , helperCTX(helperCTX)
     {
+    }
+
+    ~NifCTX()
+    {
+        // @todo: get valid file_id instead of empty one (its still works though since we are closing descriptor from CTX)
+        helperObj->ash_release(*helperCTX, "", [=](ErrorRef e) {  });
     }
 
     ErlNifEnv *env;

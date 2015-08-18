@@ -126,7 +126,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
-            emit(Worker, #write_event{file_id = FileId, size = EvtSize,
+            emit(Worker, #write_event{file_uuid = FileId, size = EvtSize,
                 counter = 1, file_size = N * EvtSize, blocks = [#file_block{
                     offset = (N - 1) * EvtSize, size = EvtSize
                 }]}, SessId)
@@ -137,7 +137,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
             ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
-                file_id = FileId, counter = CtrThr, size = CtrThr * EvtSize,
+                file_uuid = FileId, counter = CtrThr, size = CtrThr * EvtSize,
                 file_size = N * CtrThr * EvtSize, blocks = [#file_block{
                     offset = (N - 1) * CtrThr * EvtSize, size = CtrThr * EvtSize}]
             }]}, ?TIMEOUT))
@@ -184,7 +184,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
     ),
 
     Evts = lists:map(fun(Id) ->
-        #write_event{file_id = ?FILE_ID(Id), size = EvtSize, counter = 1,
+        #write_event{file_uuid = ?FILE_ID(Id), size = EvtSize, counter = 1,
             file_size = EvtSize, blocks = [#file_block{
                 offset = 0, size = EvtSize
             }]}
@@ -258,7 +258,7 @@ event_stream_counter_emission_rule_test(Config) ->
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             emit(Worker, #write_event{
-                file_id = FileId, counter = 1, size = 0, file_size = 0
+                file_uuid = FileId, counter = 1, size = 0, file_size = 0
             }, SessId)
         end, lists:seq(1, EvtNum))
     end),
@@ -317,7 +317,7 @@ event_stream_size_emission_rule_test(Config) ->
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             emit(Worker, #write_event{
-                counter = 1, file_id = FileId, size = EvtSize, file_size = 0
+                counter = 1, file_uuid = FileId, size = EvtSize, file_size = 0
             }, SessId)
         end, lists:seq(1, EvtNum))
     end),
@@ -493,7 +493,7 @@ event_manager_multiple_subscription_test(Config) ->
         FileId = <<"file_id_", (integer_to_binary(N))/binary>>,
         {ok, SubId} = subscribe(Worker,
             gui,
-            fun(#write_event{file_id = Id}) -> Id =:= FileId; (_) -> false end,
+            fun(#write_event{file_uuid = Id}) -> Id =:= FileId; (_) -> false end,
             fun(Meta) -> Meta >= EvtsNum end,
             [fun(Evts) -> Self ! {handler, Evts} end]
         ),
@@ -503,7 +503,7 @@ event_manager_multiple_subscription_test(Config) ->
     % Emit events.
     utils:pforeach(fun(FileId) ->
         lists:foreach(fun(N) ->
-            emit(Worker, #write_event{file_id = FileId, size = 1, counter = 1,
+            emit(Worker, #write_event{file_uuid = FileId, size = 1, counter = 1,
                 file_size = N + 1, blocks = [#file_block{offset = N, size = 1}]},
                 SessId)
         end, lists:seq(0, EvtsNum - 1))
@@ -512,7 +512,7 @@ event_manager_multiple_subscription_test(Config) ->
     % Check whether event handlers have been executed.
     lists:foreach(fun(FileId) ->
         ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
-            file_id = FileId, size = EvtsNum, counter = EvtsNum,
+            file_uuid = FileId, size = EvtsNum, counter = EvtsNum,
             file_size = EvtsNum, blocks = [#file_block{
                 offset = 0, size = EvtsNum
             }]
@@ -550,14 +550,14 @@ event_manager_multiple_handlers_test(Config) ->
 
     % Emit events.
     lists:foreach(fun(N) ->
-        emit(Worker, #write_event{file_id = FileId, size = 1, counter = 1,
+        emit(Worker, #write_event{file_uuid = FileId, size = 1, counter = 1,
             file_size = N + 1, blocks = [#file_block{offset = N, size = 1}]}, SessId)
     end, lists:seq(0, 9)),
 
     % Check whether events have been aggregated and each handler has been executed.
     lists:foreach(fun(Handler) ->
         ?assertMatch({ok, _}, test_utils:receive_msg({Handler, [#write_event{
-            file_id = FileId, counter = 10, size = 10, file_size = 10,
+            file_uuid = FileId, counter = 10, size = 10, file_size = 10,
             blocks = [#file_block{offset = 0, size = 10}]
         }]}, ?TIMEOUT))
     end, [handler1, handler2, handler3]),
@@ -611,7 +611,7 @@ event_manager_multiple_clients_test(Config) ->
         utils:pforeach(fun(SessId) ->
             lists:foreach(fun(_) ->
                 emit(Worker, #write_event{
-                    file_id = FileId, counter = 1, size = 0, file_size = 0
+                    file_uuid = FileId, counter = 1, size = 0, file_size = 0
                 }, SessId)
             end, lists:seq(1, EvtNum))
         end, SessIds)

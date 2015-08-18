@@ -28,13 +28,15 @@
 %% tests
 -export([
     fslogic_new_file_test/1,
-    lfm_create_test/1
+    lfm_create_test/1,
+    lfm_write_test/1
 ]).
 
 -performance({test_cases, []}).
 all() -> [
     fslogic_new_file_test,
-    lfm_create_test
+    lfm_create_test,
+    lfm_write_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -76,6 +78,27 @@ lfm_create_test(Config) ->
     ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test1">>, 8#755])]),
     ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test2">>, 8#755])]),
     ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test1">>, 8#755])]),
+
+    ok.
+
+
+lfm_write_test(Config) ->
+    [W, _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+
+    RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
+    RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
+
+    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId1, <<"/test3">>, 8#755])]),
+    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId1, <<"/test4">>, 8#755])]),
+
+    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test3">>, 8#755])]),
+    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test4">>, 8#755])]),
+
+    {ok, Handle1} = ?lfm_req(W, open, [SessId1, {path, <<"/test3">>}, write]),
+    {ok, Handle2} = ?lfm_req(W, open, [SessId1, {path, <<"/test4">>}, write]),
 
     ok.
 

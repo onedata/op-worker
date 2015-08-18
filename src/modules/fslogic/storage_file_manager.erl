@@ -16,12 +16,31 @@
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([mkdir/4, mv/2, chmod/2, chown/3, link/2]).
--export([stat/1, read/3, write/3, create/4, truncate/2, rm/1]).
+-record(sfm_handle, {
+    helper_handle :: helpers:handle(),
+    file :: helpers:file()
+}).
+
+-export([mkdir/3, mkdir/4, mv/2, chmod/2, chown/3, link/2]).
+-export([stat/1, read/3, write/3, create/4, open/3, truncate/2, rm/1]).
+
+-type handle() :: #sfm_handle{}.
+
+-export_type([handle/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+open(Storage, Path, OpenMode) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    case helpers:open(HelperHandle, Path, OpenMode) of
+        {ok, _} ->
+            {ok, #sfm_handle{helper_handle = HelperHandle, file = Path}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,8 +129,8 @@ stat(_FileHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
-write(_FileHandle, _Offset, _Buffer) ->
-    {ok, 0}.
+write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
+    helpers:write(HelperHandle, File, Offset, Buffer).
 
 
 %%--------------------------------------------------------------------
@@ -121,8 +140,8 @@ write(_FileHandle, _Offset, _Buffer) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
-read(_FileHandle, _Offset, _MaxSize) ->
-    {ok, <<"">>}.
+read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
+    helpers:read(HelperHandle, File, Offset, MaxSize).
 
 
 %%--------------------------------------------------------------------
@@ -158,8 +177,8 @@ create(Storage, Path, Mode, Recursive) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(FileHandle :: file_handle(), Size :: integer()) -> ok | error_reply().
-truncate(_FileHandle, _Size) ->
-    ok.
+truncate(#sfm_handle{helper_handle = HelperHandle, file = File}, Size) ->
+    helpers:truncate(HelperHandle, File, Size).
 
 
 %%--------------------------------------------------------------------

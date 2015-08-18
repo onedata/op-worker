@@ -36,6 +36,7 @@
 
 -include("types.hrl").
 -include("errors.hrl").
+-include("modules/fslogic/lfm_internal.hrl").
 
 %% User context
 -export([set_user_context/1]).
@@ -44,7 +45,7 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2, rm/1]).
 %% Functions operating on files
--export([create/3, open/2, write/3, read/3, truncate/2, get_block_map/1]).
+-export([create/3, open/3, write/3, read/3, truncate/2, get_block_map/1]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
@@ -158,7 +159,11 @@ rm(FileKey) ->
 -spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
     {ok, file_id()} | error_reply().
 create(SessId, Path, Mode) ->
-    lfm_files:create(SessId, Path, Mode).
+    CTX = fslogic_context:new(SessId),
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    {ok, CanonicalPath} = file_meta:gen_path(Entry),
+    lfm_files:create(CTX, CanonicalPath, Mode).
 
 
 %%--------------------------------------------------------------------
@@ -167,9 +172,10 @@ create(SessId, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec open(FileKey :: file_id_or_path(), OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
-open(FileKey, OpenType) ->
-    lfm_files:open(FileKey, OpenType).
+-spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
+open(SessId, FileKey, OpenType) ->
+    CTX = fslogic_context:new(SessId),
+    lfm_files:open(CTX, ensure_uuid(CTX, FileKey), OpenType).
 
 
 %%--------------------------------------------------------------------
@@ -382,4 +388,8 @@ get_share(ShareID) ->
 remove_share(ShareID) ->
     lfm_shares:remove_share(ShareID).
 
+ensure_uuid(_CTX, {uuid, UUID}) ->
+    {uuid, UUID};
+ensure_uuid(CTX, {path, Path}) ->
+    {uuid, fslogic_path:to_uuid(CTX, Path)}.
 
