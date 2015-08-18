@@ -27,7 +27,7 @@ nifpp::str_atom error{"error"};
 using helper_ptr = std::shared_ptr<one::helpers::IStorageHelper>;
 using helper_ctx_ptr = std::shared_ptr<one::helpers::StorageHelperCTX>;
 using reqid_t = std::tuple<int, int, int>;
-using one::helpers::ErrorRef;
+using one::helpers::error_t;
 
 /**
  * Static resource holder.
@@ -395,14 +395,14 @@ void handle_value(const NifCTX &ctx)
  * Handles result from helpers callback either process return value or error.
  */
 template <class... T>
-void handle_result(const NifCTX ctx, ErrorRef e, T... value)
+void handle_result(const NifCTX ctx, error_t e, T... value)
 {
-    if (!e.code()) {
+    if (!e) {
         handle_value(ctx, value...);
     }
     else {
-        auto it = error_to_atom.find(e.code());
-        nifpp::str_atom reason{e.code().message()};
+        auto it = error_to_atom.find(e);
+        nifpp::str_atom reason{e.message()};
         if (it != error_to_atom.end())
             reason = it->second;
 
@@ -562,7 +562,7 @@ ERL_NIF_TERM set_fd(ErlNifEnv *env, helper_ctx_ptr ctx, int fh)
 ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_getattr(
-        *ctx.helperCTX, file, [=](struct stat statbuf, ErrorRef e) {
+        *ctx.helperCTX, file, [=](struct stat statbuf, error_t e) {
             handle_result(ctx, e, statbuf);
         });
 
@@ -572,7 +572,7 @@ ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
 ERL_NIF_TERM access(NifCTX ctx, const std::string file, const int mask)
 {
     ctx.helperObj->ash_access(
-        *ctx.helperCTX, file, mask, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, mask, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -581,7 +581,7 @@ ERL_NIF_TERM mknod(
     NifCTX ctx, const std::string file, const mode_t mode, const dev_t dev)
 {
     ctx.helperObj->ash_mknod(*ctx.helperCTX, file, mode, dev,
-        [=](ErrorRef e) { handle_result(ctx, e); });
+        [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -589,7 +589,7 @@ ERL_NIF_TERM mknod(
 ERL_NIF_TERM mkdir(NifCTX ctx, const std::string file, const mode_t mode)
 {
     ctx.helperObj->ash_mkdir(
-        *ctx.helperCTX, file, mode, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, mode, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -597,7 +597,7 @@ ERL_NIF_TERM mkdir(NifCTX ctx, const std::string file, const mode_t mode)
 ERL_NIF_TERM unlink(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_unlink(
-        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -605,7 +605,7 @@ ERL_NIF_TERM unlink(NifCTX ctx, const std::string file)
 ERL_NIF_TERM rmdir(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_rmdir(
-        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -613,7 +613,7 @@ ERL_NIF_TERM rmdir(NifCTX ctx, const std::string file)
 ERL_NIF_TERM symlink(NifCTX ctx, const std::string from, const std::string to)
 {
     ctx.helperObj->ash_symlink(
-        *ctx.helperCTX, from, to, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -621,7 +621,7 @@ ERL_NIF_TERM symlink(NifCTX ctx, const std::string from, const std::string to)
 ERL_NIF_TERM rename(NifCTX ctx, const std::string from, const std::string to)
 {
     ctx.helperObj->ash_rename(
-        *ctx.helperCTX, from, to, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -629,7 +629,7 @@ ERL_NIF_TERM rename(NifCTX ctx, const std::string from, const std::string to)
 ERL_NIF_TERM link(NifCTX ctx, const std::string from, const std::string to)
 {
     ctx.helperObj->ash_link(
-        *ctx.helperCTX, from, to, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -637,7 +637,7 @@ ERL_NIF_TERM link(NifCTX ctx, const std::string from, const std::string to)
 ERL_NIF_TERM chmod(NifCTX ctx, const std::string file, const mode_t mode)
 {
     ctx.helperObj->ash_chmod(
-        *ctx.helperCTX, file, mode, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, mode, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -646,7 +646,7 @@ ERL_NIF_TERM chown(
     NifCTX ctx, const std::string file, const int uid, const int gid)
 {
     ctx.helperObj->ash_chown(*ctx.helperCTX, file, uid, gid,
-        [=](ErrorRef e) { handle_result(ctx, e); });
+        [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -654,7 +654,7 @@ ERL_NIF_TERM chown(
 ERL_NIF_TERM truncate(NifCTX ctx, const std::string file, const off_t size)
 {
     ctx.helperObj->ash_truncate(
-        *ctx.helperCTX, file, size, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, size, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -662,7 +662,7 @@ ERL_NIF_TERM truncate(NifCTX ctx, const std::string file, const off_t size)
 ERL_NIF_TERM open(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_open(*ctx.helperCTX, file,
-        [=](int fh, ErrorRef e) { handle_result(ctx, e, fh); });
+        [=](int fh, error_t e) { handle_result(ctx, e, fh); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -672,7 +672,7 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
     auto buf = std::make_shared<std::vector<char>>(size);
     ctx.helperObj->ash_read(*ctx.helperCTX, file,
         asio::mutable_buffer(buf->data(), size), offset,
-        [=](asio::mutable_buffer buf, ErrorRef e) {
+        [=](asio::mutable_buffer buf, error_t e) {
             handle_result(ctx, e, buf);
         });
 
@@ -684,7 +684,7 @@ ERL_NIF_TERM write(
 {
     ctx.helperObj->ash_write(*ctx.helperCTX, file,
         asio::const_buffer(data.data(), data.size()), offset,
-        [=](int size, ErrorRef e) { handle_result(ctx, e, size); });
+        [=](int size, error_t e) { handle_result(ctx, e, size); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -692,7 +692,7 @@ ERL_NIF_TERM write(
 ERL_NIF_TERM release(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_release(
-        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -700,7 +700,7 @@ ERL_NIF_TERM release(NifCTX ctx, const std::string file)
 ERL_NIF_TERM flush(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_flush(
-        *ctx.helperCTX, file, [=](ErrorRef e) { handle_result(ctx, e); });
+        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -708,7 +708,7 @@ ERL_NIF_TERM flush(NifCTX ctx, const std::string file)
 ERL_NIF_TERM fsync(NifCTX ctx, const std::string file, const int isdatasync)
 {
     ctx.helperObj->ash_fsync(*ctx.helperCTX, file, isdatasync,
-        [=](ErrorRef e) { handle_result(ctx, e); });
+        [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
