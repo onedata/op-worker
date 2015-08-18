@@ -22,4 +22,5 @@ init(State, Ctx) ->
     {ok, State, Ctx#cx{path = Path, module = route(Path)}}.
 
 route(<<"/openid/login">>) -> page_openid_login;
+route(<<"/ember">>) -> page_ember;
 route(_) -> page_404.
