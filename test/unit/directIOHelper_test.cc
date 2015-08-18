@@ -256,7 +256,7 @@ TEST_F(DirectIOHelperTest, shouldMakeSymlink)
 TEST_F(DirectIOHelperTest, shouldReadSymlink)
 {
     auto sres = ::symlink((boost::filesystem::path(DIO_TEST_ROOT) / "from").c_str(), (boost::filesystem::path(DIO_TEST_ROOT) / "to").c_str());
-    assert(0 == sres);
+    ASSERT_TRUE(sres == 0);
 
     auto p = make_promise<std::string>();
     proxy->ash_readlink(ctx, "to", std::bind(&DirectIOHelperTest::set_promise<std::string>, this, p, _1, _2));
