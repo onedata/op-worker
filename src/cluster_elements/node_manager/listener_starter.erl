@@ -29,7 +29,7 @@
 -define(GUI_ROUTING_MODULE, gui_routes).
 
 % Paths in gui static directory
--define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+-define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/", "/html/"]).
 
 % Cowboy listener references
 -define(HTTPS_LISTENER, https).
@@ -115,13 +115,7 @@ start_gui_listener() ->
             {"/ws/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
-                    {handler_module, opn_bullet_handler},
-                    {handler_opts, [{handler, n2o_bullet}]}
-                ]},
-            {'_', opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, n2o_handler},
+                    {handler_module, ember_ws_handler},
                     {handler_opts, []}
                 ]}
         ]}

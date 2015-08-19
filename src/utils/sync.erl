@@ -158,13 +158,19 @@ copy_static_files(ProjectDir) ->
                     false ->
                         Success;
                     true ->
-                        case shell_cmd(["cp -f", FileInSrc, FileTarget]) of
+                        case shell_cmd(["mkdir -p", filename:dirname(FileTarget)]) of
                             [] ->
-                                ?INFO_MSG("Updated:     ~s", [filename:join([RelaseStaticFilesDir, File])]),
-                                update_file_md5(FileInSrc, CurrentMD5),
-                                true;
-                            Other ->
-                                ?INFO_MSG("Cannot copy ~s: ~s", [File, Other]),
+                                case shell_cmd(["cp -f", FileInSrc, FileTarget]) of
+                                    [] ->
+                                        ?INFO_MSG("Updated:     ~s", [filename:join([RelaseStaticFilesDir, File])]),
+                                        update_file_md5(FileInSrc, CurrentMD5),
+                                        true;
+                                    Other1 ->
+                                        ?INFO_MSG("Cannot copy ~s: ~s", [File, Other1]),
+                                        false
+                                end;
+                            Other2 ->
+                                ?INFO_MSG("Cannot create dir ~s: ~s", [filename:dirname(FileTarget), Other2]),
                                 false
                         end
                 end
@@ -234,8 +240,6 @@ compile_templates(ProjectDir) ->
                 end
         end
     end, true, FilesToCheck).
-
-
 
 
 %%--------------------------------------------------------------------
