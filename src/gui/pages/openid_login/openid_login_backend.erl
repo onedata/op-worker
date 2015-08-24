@@ -10,7 +10,7 @@
 %% from the Global Registry.
 %% @end
 %% ===================================================================
--module(page_openid_login).
+-module(openid_login_backend).
 -compile(export_all).
 -include("modules/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").

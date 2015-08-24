@@ -112,11 +112,17 @@ start_gui_listener() ->
                     {handler_module, nagios_handler},
                     {handler_opts, []}
                 ]},
-            {"/ws/[...]", opn_cowboy_bridge,
+            {"/ws/:page/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, ember_ws_handler},
                     {handler_opts, []}
+                ]},
+            {"/[...]", opn_cowboy_bridge,
+                [
+                    {delegation, true},
+                    {handler_module, opn_static_handler},
+                    {handler_opts, {dir, DocRoot}}
                 ]}
         ]}
     ],
