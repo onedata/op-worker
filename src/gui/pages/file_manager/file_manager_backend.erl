@@ -11,24 +11,34 @@
 
 -compile([export_all]).
 
+-include_lib("ctool/include/logging.hrl").
+
 %% API
--export([websocket_init/0, find/2, find_all/1, find_query/2, create_record/2, update_record/3, delete_record/2]).
+-export([page_init/0, websocket_init/0]).
+-export([find/2, find_all/1, find_query/2, create_record/2, update_record/3, delete_record/2]).
 
 
 -define(FILE_FIXTURES, [
-    [{<<"id">>, <<"f1">>, {<<"name">>, <<"File 1">>}, {<<"attribute">>, 82364234}}],
-    [{<<"id">>, <<"f2">>, {<<"name">>, <<"Plik 2">>}, {<<"attribute">>, 451345134}}],
-    [{<<"id">>, <<"f3">>, {<<"name">>, <<"Notatki 3">>}, {<<"attribute">>, 56892}}],
-    [{<<"id">>, <<"f4">>, {<<"name">>, <<"Readme 4">>}, {<<"attribute">>, 124123567}}],
-    [{<<"id">>, <<"d1">>, {<<"name">>, <<"Dir 1">>}, {<<"attribute">>, 567833}}],
-    [{<<"id">>, <<"d2">>, {<<"name">>, <<"Folder 2">>}, {<<"attribute">>, 12475323}}],
-    [{<<"id">>, <<"d3">>, {<<"name">>, <<"Katalog 3">>}, {<<"attribute">>, 34554444}}],
-    [{<<"id">>, <<"dyna">>, {<<"name">>, <<"Dynamitrzny">>}, {<<"attribute">>, 145}}]
+    [{<<"id">>, <<"f1">>}, {<<"name">>, <<"File 1">>}, {<<"attribute">>, 82364234}],
+    [{<<"id">>, <<"f2">>}, {<<"name">>, <<"Plik 2">>}, {<<"attribute">>, 451345134}],
+    [{<<"id">>, <<"f3">>}, {<<"name">>, <<"Notatki 3">>}, {<<"attribute">>, 56892}],
+    [{<<"id">>, <<"f4">>}, {<<"name">>, <<"Readme 4">>}, {<<"attribute">>, 124123567}],
+    [{<<"id">>, <<"d1">>}, {<<"name">>, <<"Dir 1">>}, {<<"attribute">>, 567833}],
+    [{<<"id">>, <<"d2">>}, {<<"name">>, <<"Folder 2">>}, {<<"attribute">>, 12475323}],
+    [{<<"id">>, <<"d3">>}, {<<"name">>, <<"Katalog 3">>}, {<<"attribute">>, 34554444}],
+    [{<<"id">>, <<"dyna">>}, {<<"name">>, <<"Dynamitrzny">>}, {<<"attribute">>, 145}]
 ]).
 
 
+page_init() ->
+    ?dump(page_init),
+    ok.
+
+
 websocket_init() ->
-    save_files(?FILE_FIXTURES).
+    ?dump(websocket_init),
+    save_files(?FILE_FIXTURES),
+    ok.
 
 
 find(<<"file">>, [Id]) ->

@@ -1,0 +1,1 @@
+window.Login = Ember.Application.create();

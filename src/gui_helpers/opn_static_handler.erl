@@ -41,15 +41,7 @@
 -type state() :: {binary(), {ok, #file_info{}} | {error, atom()}, extra()}.
 
 -spec init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-init(_, Req, _) ->
-    case opn_page_handler:is_html_req(Req) of
-        true ->
-            % Initialize context, run page's init code, serve the html
-            opn_page_handler:handle_html_req(Req);
-        false ->
-            % Just serve a static file
-            ok
-    end,
+init(_, _, _) ->
     {upgrade, protocol, cowboy_rest}.
 
 %% Resolve the file that will be sent and get its file information.
@@ -59,12 +51,16 @@ init(_, Req, _) ->
 -spec rest_init(Req, opts())
         -> {ok, Req, error | state()}
     when Req :: cowboy_req:req().
-rest_init(Req, {Name, Path}) ->
+rest_init(Req, Opts) ->
+    {ok, NewReq} = opn_html_handler:maybe_handle_html_req(Req),
+    rest_init_cowboy(NewReq, Opts).
+
+rest_init_cowboy(Req, {Name, Path}) ->
     rest_init_opts(Req, {Name, Path, []});
-rest_init(Req, {Name, App, Path})
+rest_init_cowboy(Req, {Name, App, Path})
     when Name =:= priv_file; Name =:= priv_dir ->
     rest_init_opts(Req, {Name, App, Path, []});
-rest_init(Req, Opts) ->
+rest_init_cowboy(Req, Opts) ->
     rest_init_opts(Req, Opts).
 
 rest_init_opts(Req, {priv_file, App, Path, Extra}) ->

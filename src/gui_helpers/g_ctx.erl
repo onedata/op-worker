@@ -10,12 +10,14 @@
 -author("lopiola").
 
 
+-include("gui.hrl").
 -include_lib("ctool/include/logging.hrl").
+
 
 -record(context, {
     req = undefined :: cowboy_req:req() | undefined,
-    path = <<"">> :: binary(),
-    page_module = undefined :: module(),
+    path = undefined :: binary() | undefined,
+    gui_route = undefined :: #gui_route{} | undefined,
     session = <<"">> :: binary()
 }).
 
@@ -23,7 +25,9 @@
 -define(CTX_KEY, ctx).
 
 %% API
--export([init_context/1, req/0, path/0, page_module/0]).
+-export([init_context/1]).
+-export([req/0, path/0, html_file/0, page_module/0]).
+-export([session_requirements/0, user_logged_in/0]).
 
 
 init_context(Req) ->
@@ -31,7 +35,7 @@ init_context(Req) ->
     NewCtx = #context{
         req = Req,
         path = Path,
-        page_module = get_page_module(Path)
+        gui_route = gui_routes:route(Path)
     },
     put(?CTX_KEY, NewCtx).
 
@@ -46,21 +50,21 @@ path() ->
     Path.
 
 
+html_file() ->
+    #context{gui_route = #gui_route{html_file = File}} = get(?CTX_KEY),
+    File.
+
+
 page_module() ->
-    #context{page_module = PageModule} = get(?CTX_KEY),
-    PageModule.
+    #context{gui_route = #gui_route{handler_module = Mod}} = get(?CTX_KEY),
+    Mod.
 
 
+session_requirements() ->
+    #context{gui_route = #gui_route{requires_session = Reqs}} = get(?CTX_KEY),
+    Reqs.
 
-get_page_module(<<"/ws/", Path/binary>>) ->
-    get_page_module(Path);
-get_page_module(<<"/", Path/binary>>) ->
-    get_page_module(Path);
-get_page_module(Path) ->
-    case binary:split(Path, <<"/">>) of
-        [Path] ->
-            PathNoExt = filename:rootname(Path),
-            binary_to_atom(<<PathNoExt/binary, "_backend">>, latin1);
-        _ ->
-            undefined
-    end.
+
+user_logged_in() ->
+    #context{session = _Session} = get(?CTX_KEY),
+    true.

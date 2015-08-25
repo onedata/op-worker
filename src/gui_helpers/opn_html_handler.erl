@@ -1,9 +1,6 @@
--module(opn_page_handler).
+-module(opn_html_handler).
 
 -include_lib("ctool/include/logging.hrl").
-
--export([is_html_req/1, handle_html_req/1, handle_ws_req/1]).
-
 
 -define(WEBSOCKET_PREFIX_PATH, "/ws/").
 
@@ -34,7 +31,7 @@
 -define(INTERNAL_SERVER_ERROR_VAL, <<"Internal Server Error">>).
 
 
-
+-export([is_html_req/1, maybe_handle_html_req/1, handle_ws_req/1]).
 
 
 is_html_req(Req) ->
@@ -58,9 +55,50 @@ is_html_req(Req) ->
     end.
 
 
+maybe_handle_html_req(Req) ->
+    case is_html_req(Req) of
+        true ->
+            % Initialize context, run page's init code,
+            % let cowboy static handler server the html
+            NewReq = handle_html_req(Req),
+            {ok, NewReq};
+        false ->
+            % Just let the cowboy static handler serve a static file
+            {ok, Req}
+    end.
+
+
 handle_html_req(Req) ->
     g_ctx:init_context(Req),
-    ok.
+    InitResult = case call_page_handler(page_init) of
+                     serve_html -> {serve_html, []};
+                     {serve_body, Body} -> {reply, 200, Body, []};
+                     {serve_body, Body, Headers} -> {reply, 200, Body, Headers};
+                     {redirect, URL} -> ok
+                 end,
+    NewReq = case call_page_handler(page_init) of
+                 {serve_html, Headers} ->
+                     case g_ctx:html_file() of
+                         undefined ->
+                             ?error("HTML file for page ~p is not defined.",
+                                 [g_ctx:path()]),
+                             {ok, Req2} = cowboy_req:reply(500, [], <<"">>, Req),
+                             Req2;
+                         Path ->
+                             HtmlFileToServe = <<"/", (Path)/binary>>,
+                             cowboy_req:set([{path, HtmlFileToServe}], Req)
+                     end;
+                 {reply, Code, Body, Headers} -> ok
+             end,
+    NewReq = case g_ctx:html_file() of
+                 undefined ->
+                     {ok, Req2} = cowboy_req:reply(200, [], <<"">>, Req),
+                     Req2;
+                 Path ->
+                     HtmlFileToServe = <<"/", (Path)/binary>>,
+                     cowboy_req:set([{path, HtmlFileToServe}], Req)
+             end,
+    {ok, NewReq}.
 
 
 handle_ws_req(Props) ->
@@ -132,6 +170,9 @@ handle_delete_record_req(EntityType, Id) ->
         ok -> {ok, null};
         {error, Data} -> {error, Data}
     end.
+
+call_page_handler(Fun) ->
+    call_page_handler(Fun, []).
 
 call_page_handler(Fun, Args) ->
     Module = g_ctx:page_module(),

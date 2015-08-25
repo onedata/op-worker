@@ -16,21 +16,7 @@ init({_, http}, _Req, _Opts) ->
 
 websocket_init(_TransportName, Req, _Opts) ->
 %%     erlang:start_timer(1000, opn_cowboy_bridge:get_socket_pid(), roz),
-    opn_cowboy_bridge:get_socket_pid() ! post_init,
-    {ok, Req, undefined_state}.
-
-websocket_handle({text, MsgJSON}, Req, State) ->
-    Msg = g_str:decode_from_json(MsgJSON),
-    ?dump(Msg),
-    Resp = opn_page_handler:handle_ws_req(Msg),
-    ?dump(Resp),
-    RespJSON = g_str:encode_to_json(Resp),
-    {reply, {text, RespJSON}, Req, State};
-websocket_handle(_Data, Req, State) ->
-    {ok, Req, State}.
-
-websocket_info({timeout, _Ref, post_init}, Req, State) ->
-    case opn_page_handler:is_html_req(Req) of
+    case opn_html_handler:is_html_req(Req) of
         true ->
             % Initialize context
             g_ctx:init_context(Req),
@@ -39,6 +25,16 @@ websocket_info({timeout, _Ref, post_init}, Req, State) ->
             % Skip
             ok
     end,
+    {ok, Req, undefined_state}.
+
+websocket_handle({text, MsgJSON}, Req, State) ->
+    Msg = g_str:decode_from_json(MsgJSON),
+    ?dump(Msg),
+    Resp = opn_html_handler:handle_ws_req(Msg),
+    ?dump(Resp),
+    RespJSON = g_str:encode_to_json(Resp),
+    {reply, {text, RespJSON}, Req, State};
+websocket_handle(_Data, Req, State) ->
     {ok, Req, State}.
 
 websocket_info({timeout, _Ref, roz}, Req, State) ->
