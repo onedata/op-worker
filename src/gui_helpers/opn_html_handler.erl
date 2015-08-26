@@ -1,8 +1,7 @@
 -module(opn_html_handler).
 
+-include("gui.hrl").
 -include_lib("ctool/include/logging.hrl").
-
--define(WEBSOCKET_PREFIX_PATH, "/ws/").
 
 -define(MSG_TYPE_KEY, <<"msgType">>).
 -define(PULL_REQ_VAL, <<"pullReq">>).
@@ -34,14 +33,13 @@
 -export([is_html_req/1, maybe_handle_html_req/1, handle_ws_req/1]).
 
 
-is_html_req(Req) ->
-    {FullPath, _} = cowboy_req:path(Req),
-    Path = case FullPath of
-               <<?WEBSOCKET_PREFIX_PATH, P/binary>> ->
-                   P;
-               <<"/", P/binary>> ->
-                   P
-           end,
+is_html_req(<<?WEBSOCKET_PREFIX_PATH, Path/binary>>) ->
+    is_html_req(Path);
+
+is_html_req(<<"/", Path/binary>>) ->
+    is_html_req(Path);
+
+is_html_req(Path) ->
     case byte_size(Path) >= 5 andalso binary:split(Path, <<"/">>) =:= [Path] of
         false ->
             false;
@@ -60,45 +58,55 @@ maybe_handle_html_req(Req) ->
         true ->
             % Initialize context, run page's init code,
             % let cowboy static handler server the html
-            NewReq = handle_html_req(Req),
-            {ok, NewReq};
+            handle_html_req(Req);
         false ->
             % Just let the cowboy static handler serve a static file
-            {ok, Req}
+            {continue, Req}
     end.
 
 
 handle_html_req(Req) ->
-    g_ctx:init_context(Req),
-    InitResult = case call_page_handler(page_init) of
-                     serve_html -> {serve_html, []};
-                     {serve_body, Body} -> {reply, 200, Body, []};
-                     {serve_body, Body, Headers} -> {reply, 200, Body, Headers};
-                     {redirect, URL} -> ok
-                 end,
-    NewReq = case call_page_handler(page_init) of
-                 {serve_html, Headers} ->
-                     case g_ctx:html_file() of
-                         undefined ->
-                             ?error("HTML file for page ~p is not defined.",
-                                 [g_ctx:path()]),
-                             {ok, Req2} = cowboy_req:reply(500, [], <<"">>, Req),
-                             Req2;
-                         Path ->
-                             HtmlFileToServe = <<"/", (Path)/binary>>,
-                             cowboy_req:set([{path, HtmlFileToServe}], Req)
-                     end;
-                 {reply, Code, Body, Headers} -> ok
-             end,
-    NewReq = case g_ctx:html_file() of
-                 undefined ->
-                     {ok, Req2} = cowboy_req:reply(200, [], <<"">>, Req),
-                     Req2;
-                 Path ->
-                     HtmlFileToServe = <<"/", (Path)/binary>>,
-                     cowboy_req:set([{path, HtmlFileToServe}], Req)
-             end,
-    {ok, NewReq}.
+    g_ctx:init(Req),
+    % Coalesce possible results from page_init.
+    InitResult =
+        case call_page_handler(page_init) of
+            serve_html ->
+                {serve_html, []};
+            {serve_body, Bd} ->
+                {reply, 200, Bd, [{<<"content-type">>, <<"text/plain">>}]};
+            {serve_body, Bd, Hdrs} ->
+                {reply, 200, Bd, Hdrs};
+            {redirect, URL} ->
+                Hdrs = [
+                    {<<"location">>, URL},
+                    {<<"content-type">>, <<"text/html">>}
+                ],
+                {reply, 307, <<"">>, Hdrs};
+            Other ->
+                Other
+        end,
+    % Process the page_init results.
+    Result =
+        case InitResult of
+            {serve_html, Headers} ->
+                case g_ctx:html_file() of
+                    undefined ->
+                        ?error("HTML file for page ~p is not defined.",
+                            [g_ctx:get_path()]),
+                        g_ctx:reply(500, [], <<"">>),
+                        finish;
+                    Path ->
+                        HtmlFileToServe = <<"/", (Path)/binary>>,
+                        g_ctx:set_path(HtmlFileToServe),
+                        g_ctx:set_resp_headers(Headers),
+                        continue
+                end;
+            {reply, Code, Body, Headers} ->
+                g_ctx:reply(Code, Headers, Body),
+                finish
+        end,
+    NewReq = g_ctx:finish(),
+    {Result, NewReq}.
 
 
 handle_ws_req(Props) ->

@@ -19,7 +19,7 @@ websocket_init(_TransportName, Req, _Opts) ->
     case opn_html_handler:is_html_req(Req) of
         true ->
             % Initialize context
-            g_ctx:init_context(Req),
+            g_ctx:init(Req),
             (g_ctx:page_module()):websocket_init();
         false ->
             % Skip

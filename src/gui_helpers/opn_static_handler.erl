@@ -16,6 +16,7 @@
 -module(opn_static_handler).
 
 -export([init/3]).
+-export([terminate/3]).
 -export([rest_init/2]).
 -export([malformed_request/2]).
 -export([forbidden/2]).
@@ -41,8 +42,25 @@
 -type state() :: {binary(), {ok, #file_info{}} | {error, atom()}, extra()}.
 
 -spec init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-init(_, _, _) ->
-    {upgrade, protocol, cowboy_rest}.
+init(_, Req, Opts) ->
+    try
+        {FullPath, _} = cowboy_req:path(Req),
+        case opn_html_handler:maybe_handle_html_req(FullPath) of
+            {finish, NewReq} ->
+                {shutdown, NewReq, no_state};
+            {continue, NewReq} ->
+                {upgrade, protocol, cowboy_rest, NewReq, Opts}
+        end
+    catch T:M ->
+        ?error_stacktrace("Error while handling a HTTP request - ~p:~p",
+            [T, M]),
+        {ok, Req2} = cowboy_req:reply(500, [], <<"">>, Req),
+        {shutdown, Req2, no_state}
+    end.
+
+-spec terminate(_, _, _) -> ok.
+terminate(_, _, _) ->
+    ok.
 
 %% Resolve the file that will be sent and get its file information.
 %% If the handler is configured to manage a directory, check that the
@@ -51,16 +69,12 @@ init(_, _, _) ->
 -spec rest_init(Req, opts())
         -> {ok, Req, error | state()}
     when Req :: cowboy_req:req().
-rest_init(Req, Opts) ->
-    {ok, NewReq} = opn_html_handler:maybe_handle_html_req(Req),
-    rest_init_cowboy(NewReq, Opts).
-
-rest_init_cowboy(Req, {Name, Path}) ->
+rest_init(Req, {Name, Path}) ->
     rest_init_opts(Req, {Name, Path, []});
-rest_init_cowboy(Req, {Name, App, Path})
+rest_init(Req, {Name, App, Path})
     when Name =:= priv_file; Name =:= priv_dir ->
     rest_init_opts(Req, {Name, App, Path, []});
-rest_init_cowboy(Req, Opts) ->
+rest_init(Req, Opts) ->
     rest_init_opts(Req, Opts).
 
 rest_init_opts(Req, {priv_file, App, Path, Extra}) ->

@@ -12,3 +12,6 @@
 -compile([export_all]).
 
 -include_lib("ctool/include/logging.hrl").
+
+page_init() ->
+    {serve_body, <<"">>}.

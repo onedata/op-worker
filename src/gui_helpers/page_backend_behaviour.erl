@@ -18,7 +18,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback page_init() ->
-    % Will serve the HTML file defined in gui_routes
+    % Will serve the HTML file defined in ?GUI_ROUTE_PLUGIN
     serve_html |
     % Same as above, adding given headers to default ones
     {serve_html, Headers} |
@@ -30,7 +30,8 @@
     {reply, Code, Body, Headers} |
     % Will send a 307 redirect back to the client
     {redirect, URL} when
-    Headers :: [{binary(), binary()}],
+    Code :: integer(),
     Body :: binary(),
+    Headers :: [{binary(), binary()}],
     URL :: binary().
 

@@ -19,8 +19,7 @@
 
 
 page_init() ->
-    ?dump(login_dsfasdf),
-    ok.
+    serve_html.
 
 
 websocket_init() ->

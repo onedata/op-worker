@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("gui.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
@@ -112,7 +113,7 @@ start_gui_listener() ->
                     {handler_module, nagios_handler},
                     {handler_opts, []}
                 ]},
-            {"/ws/:page/[...]", opn_cowboy_bridge,
+            {?WEBSOCKET_PREFIX_PATH ++ ":page/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, ember_ws_handler},

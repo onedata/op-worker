@@ -1,4 +1,4 @@
--module(gui_routes).
+-module(gui_session_plugin).
 -author("Lukasz Opiola").
 
 -include("gui.hrl").
@@ -16,7 +16,7 @@
 -define(VERIFY_LOGIN, #gui_route{
     requires_session = ?LOGGED_IN,
     html_file = undefined,
-    handler_module = login_backend
+    handler_module = verify_login_backend
 }).
 
 -define(FILE_MANAGER, #gui_route{
@@ -39,7 +39,7 @@ default_page() ->
     <<"/">>.
 
 
-route(<<"/login.html">>) -> ?LOGIN;
+route(<<"/logintest.html">>) -> ?LOGIN;
 route(<<"/verify_login.html">>) -> ?VERIFY_LOGIN;
 route(<<"/">>) -> ?FILE_MANAGER;
 route(<<"/file_manager.html">>) -> ?FILE_MANAGER;
