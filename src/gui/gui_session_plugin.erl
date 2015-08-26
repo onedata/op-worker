@@ -1,7 +1,7 @@
 -module(gui_session_plugin).
 -author("Lukasz Opiola").
 
--include("gui.hrl").
+-include_lib("gui/include/gui.hrl").
 
 
 -export([route/1, login_page/0, default_page/0]).
