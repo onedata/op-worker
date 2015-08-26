@@ -63,6 +63,12 @@
 }).
 
 %% sample model with example fields
+-record(task_pool, {
+    task :: task_manager:task(),
+    owner :: pid()
+}).
+
+%% sample model with example fields
 -record(some_record, {
     field1 :: term(),
     field2 :: term(),
