@@ -85,7 +85,7 @@ void DirectIOHelper::ash_readlink(CTXRef, const boost::filesystem::path &p,
 
 void DirectIOHelper::ash_readdir(CTXRef ctx, const boost::filesystem::path &p,
     off_t offset, size_t count,
-    GeneralCallback<std::vector<std::string> &> callback)
+    GeneralCallback<const std::vector<std::string> &> callback)
 {
     std::vector<std::string> ret;
     callback(ret, makePosixError(ENOTSUP));
@@ -257,7 +257,7 @@ void DirectIOHelper::ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
     m_workerService.post([=, callback = std::move(callback)]() { callback(SuccessCode); });
 }
 
-int DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &p,
+std::size_t DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &p,
     asio::const_buffer buf, off_t offset)
 {
     int fd = ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_WRONLY);

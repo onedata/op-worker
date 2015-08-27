@@ -77,7 +77,7 @@ public:
         GeneralCallback<std::string>) = 0;
     virtual void ash_readdir(CTXRef ctx, const boost::filesystem::path &p,
         off_t offset, size_t count,
-        GeneralCallback<std::vector<std::string> &>) = 0;
+        GeneralCallback<const std::vector<std::string> &>) = 0;
     virtual void ash_mknod(CTXRef ctx, const boost::filesystem::path &p,
         mode_t mode, dev_t rdev, VoidCallback) = 0;
     virtual void ash_mkdir(CTXRef ctx, const boost::filesystem::path &p,
@@ -116,7 +116,7 @@ public:
     virtual asio::mutable_buffer sh_read(CTXRef ctx,
         const boost::filesystem::path &p, asio::mutable_buffer buf,
         off_t offset) = 0;
-    virtual int sh_write(CTXRef ctx, const boost::filesystem::path &p,
+    virtual std::size_t sh_write(CTXRef ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset) = 0;
 
 protected:
