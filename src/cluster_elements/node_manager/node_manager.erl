@@ -32,12 +32,13 @@
     node_ip = {127, 0, 0, 1} :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()},
     ccm_con_status = not_connected :: not_connected | connected | registered,
     monitoring_state = undefined :: monitoring:node_monitoring_state(),
-    cache_clearing = true
+    cache_control = true,
+    last_cache_cleaning = {0,0,0}
 }).
 
 
 %% API
--export([start_link/0, stop/0, refresh_ip_address/0]).
+-export([start_link/0, stop/0, get_ip_address/0, refresh_ip_address/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -72,6 +73,15 @@ stop() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns node's IP address.
+%% @end
+%%--------------------------------------------------------------------
+get_ip_address() ->
+    gen_server:call(?NODE_MANAGER_NAME, get_ip_address).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Tries to contact GR and refresh node's IP Address.
 %% @end
 %%--------------------------------------------------------------------
@@ -99,6 +109,7 @@ refresh_ip_address() ->
 init([]) ->
     process_flag(trap_exit,true),
     try
+        ensure_correct_hostname(),
         listener_starter:start_protocol_listener(),
         listener_starter:start_gui_listener(),
         listener_starter:start_rest_listener(),
@@ -113,8 +124,8 @@ init([]) ->
             monitoring_state = MonitoringState}}
     catch
         _:Error ->
-            ?error_stacktrace("Cannot initialize listeners: ~p", [Error]),
-            {stop, cannot_initialize_listeners}
+            ?error_stacktrace("Cannot start node_manager: ~p", [Error]),
+            {stop, cannot_start_node_manager}
     end.
 
 %%--------------------------------------------------------------------
@@ -144,6 +155,9 @@ handle_call(healthcheck, _From, State = #state{ccm_con_status = ConnStatus}) ->
             end,
     {reply, Reply, State};
 
+handle_call(get_ip_address, _From, State = #state{node_ip = IPAddress}) ->
+    {reply, IPAddress, State};
+
 % only for tests
 handle_call(check_mem_synch, _From, State) ->
     Ans = case monitoring:get_memory_stats() of
@@ -165,11 +179,11 @@ handle_call(clear_mem_synch, _From, State) ->
     caches_controller:delete_old_keys(globally_cached, 0),
     {reply, ok, State};
 
-handle_call(disable_cache_clearing, _From, State) ->
-    {reply, ok, State#state{cache_clearing = false}};
+handle_call(disable_cache_control, _From, State) ->
+    {reply, ok, State#state{cache_control = false}};
 
-handle_call(enable_cache_clearing, _From, State) ->
-    {reply, ok, State#state{cache_clearing = true}};
+handle_call(enable_cache_control, _From, State) ->
+    {reply, ok, State#state{cache_control = true}};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -196,21 +210,30 @@ handle_cast(ccm_conn_ack, State) ->
     NewState = ccm_conn_ack(State),
     {noreply, NewState};
 
-handle_cast(check_mem, #state{monitoring_state = MonState, cache_clearing = CacheClearing} = State) ->
-    case CacheClearing of
-        true ->
-            MemUsage = monitoring:mem_usage(MonState),
-            % Check if memory cleaning of oldest docs should be started
-            % even when memory utilization is low (e.g. once a day)
-            case caches_controller:should_clear_cache(MemUsage) of
-                true ->
-                    spawn(fun() -> free_memory(MemUsage) end);
-                _ ->
-                    ok
-            end;
-        false ->
-            ok
-    end,
+handle_cast(check_mem, #state{monitoring_state = MonState, cache_control = CacheControl,
+    last_cache_cleaning = Last} = State) when CacheControl =:= true ->
+    MemUsage = monitoring:mem_usage(MonState),
+    % Check if memory cleaning of oldest docs should be started
+    % even when memory utilization is low (e.g. once a day)
+    NewState = case caches_controller:should_clear_cache(MemUsage) of
+                   true ->
+                       spawn(fun() -> free_memory(MemUsage) end),
+                       State#state{last_cache_cleaning = os:timestamp()};
+                   _ ->
+                       Now = os:timestamp(),
+                       {ok, CleaningPeriod} = application:get_env(?APP_NAME, clear_cache_max_period_ms),
+                       case timer:now_diff(Now, Last) >= 1000000*CleaningPeriod of
+                           true ->
+                               spawn(fun() -> free_memory() end),
+                               State#state{last_cache_cleaning = Now};
+                           _ ->
+                               State
+                       end
+               end,
+    next_mem_check(),
+    {noreply, NewState};
+
+handle_cast(check_mem, State) ->
     next_mem_check(),
     {noreply, State};
 
@@ -513,6 +536,7 @@ free_memory(NodeMem) ->
             _ ->
                 [{false, globally_cached}, {false, locally_cached}, {true, globally_cached}, {true, locally_cached}]
         end,
+        ?info("Clearing memory in order: ~p", [ClearingOrder]),
         lists:foldl(fun
             ({_Aggressive, _StoreType}, ok) ->
                 ok;
@@ -532,6 +556,19 @@ free_memory(NodeMem) ->
             {error, E2}
     end.
 
+free_memory() ->
+    try
+        ClearingOrder = [{false, globally_cached}, {false, locally_cached}],
+        lists:foreach(fun
+            ({Aggressive, StoreType}) ->
+                caches_controller:clear_cache(100, Aggressive, StoreType)
+        end, ClearingOrder)
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error during caches cleaning ~p:~p", [E1, E2]),
+            {error, E2}
+    end.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -544,3 +581,25 @@ next_mem_check() ->
     Interval = timer:minutes(IntervalMin),
     % random to reduce probability that two nodes clear memory simultanosly
     erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Makes sure node hostname belongs to provider domain.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_correct_hostname() -> ok | no_return().
+ensure_correct_hostname() ->
+    Hostname = oneprovider:get_node_hostname(),
+    Domain = oneprovider:get_provider_domain(),
+    case string:join(tl(string:tokens(Hostname, ".")), ".") of
+        Domain ->
+            ok;
+        _ ->
+            ?error("Node hostname must be in provider domain. Check env conf. "
+            "Current configuration:~nHostname: ~p~nDomain: ~p",
+                [Hostname, Domain]),
+            throw(wrong_hostname)
+    end.
+

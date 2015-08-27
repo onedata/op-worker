@@ -27,10 +27,10 @@
     create_delete_local_store_test/1, save_local_store_test/1, update_local_store_test/1,
     get_local_store_test/1, exists_local_store_test/1,
     create_delete_global_cache_test/1, save_global_cache_test/1, update_global_cache_test/1,
-    create_async_delete_global_cache_test/1, save_async_global_cache_test/1, update_async_global_cache_test/1,
+    create_sync_delete_global_cache_test/1, save_sync_global_cache_test/1, update_sync_global_cache_test/1,
     get_global_cache_test/1, exists_global_cache_test/1,
     create_delete_local_cache_test/1, save_local_cache_test/1, update_local_cache_test/1,
-    create_async_delete_local_cache_test/1, save_async_local_cache_test/1, update_async_local_cache_test/1,
+    create_sync_delete_local_cache_test/1, save_sync_local_cache_test/1, update_sync_local_cache_test/1,
     get_local_cache_test/1, exists_local_cache_test/1,
     mixed_db_test/1, mixed_global_store_test/1, mixed_local_store_test/1,
     mixed_global_cache_test/1, mixed_local_cache_test/1
@@ -44,10 +44,10 @@
         create_delete_local_store_test, save_local_store_test, update_local_store_test,
         get_local_store_test, exists_local_store_test,
         create_delete_global_cache_test, save_global_cache_test, update_global_cache_test,
-        create_async_delete_global_cache_test, save_async_global_cache_test, update_async_global_cache_test,
+        create_sync_delete_global_cache_test, save_sync_global_cache_test, update_sync_global_cache_test,
         get_global_cache_test, exists_global_cache_test,
         create_delete_local_cache_test, save_local_cache_test, update_local_cache_test,
-        create_async_delete_local_cache_test, save_async_local_cache_test, update_async_local_cache_test,
+        create_sync_delete_local_cache_test, save_sync_local_cache_test, update_sync_local_cache_test,
         get_local_cache_test, exists_local_cache_test,
         mixed_db_test, mixed_global_store_test, mixed_local_store_test,
         mixed_global_cache_test, mixed_local_cache_test
@@ -61,10 +61,10 @@ all() ->
         create_delete_local_store_test, save_local_store_test, update_local_store_test,
         get_local_store_test, exists_local_store_test,
         create_delete_global_cache_test, save_global_cache_test, update_global_cache_test,
-        create_async_delete_global_cache_test, save_async_global_cache_test, update_async_global_cache_test,
+        create_sync_delete_global_cache_test, save_sync_global_cache_test, update_sync_global_cache_test,
         get_global_cache_test, exists_global_cache_test,
         create_delete_local_cache_test, save_local_cache_test, update_local_cache_test,
-        create_async_delete_local_cache_test, save_async_local_cache_test, update_async_local_cache_test,
+        create_sync_delete_local_cache_test, save_sync_local_cache_test, update_sync_local_cache_test,
         get_local_cache_test, exists_local_cache_test
     ].
 
@@ -162,17 +162,17 @@ save_global_cache_test(Config) ->
 update_global_cache_test(Config) ->
     datastore_basic_ops_utils:update_test(Config, globally_cached).
 
--performance(?create_async_delete_test_def).
-create_async_delete_global_cache_test(Config) ->
-    datastore_basic_ops_utils:create_async_delete_test(Config, globally_cached).
+-performance(?create_sync_delete_test_def).
+create_sync_delete_global_cache_test(Config) ->
+    datastore_basic_ops_utils:create_sync_delete_test(Config, globally_cached).
 
--performance(?save_async_test_def).
-save_async_global_cache_test(Config) ->
-    datastore_basic_ops_utils:save_async_test(Config, globally_cached).
+-performance(?save_sync_test_def).
+save_sync_global_cache_test(Config) ->
+    datastore_basic_ops_utils:save_sync_test(Config, globally_cached).
 
--performance(?update_async_test_def).
-update_async_global_cache_test(Config) ->
-    datastore_basic_ops_utils:update_async_test(Config, globally_cached).
+-performance(?update_sync_test_def).
+update_sync_global_cache_test(Config) ->
+    datastore_basic_ops_utils:update_sync_test(Config, globally_cached).
 
 -performance(?get_test_def).
 get_global_cache_test(Config) ->
@@ -196,17 +196,17 @@ save_local_cache_test(Config) ->
 update_local_cache_test(Config) ->
     datastore_basic_ops_utils:update_test(Config, locally_cached).
 
--performance(?create_async_delete_test_def).
-create_async_delete_local_cache_test(Config) ->
-    datastore_basic_ops_utils:create_async_delete_test(Config, locally_cached).
+-performance(?create_sync_delete_test_def).
+create_sync_delete_local_cache_test(Config) ->
+    datastore_basic_ops_utils:create_sync_delete_test(Config, locally_cached).
 
--performance(?save_async_test_def).
-save_async_local_cache_test(Config) ->
-    datastore_basic_ops_utils:save_async_test(Config, locally_cached).
+-performance(?save_sync_test_def).
+save_sync_local_cache_test(Config) ->
+    datastore_basic_ops_utils:save_sync_test(Config, locally_cached).
 
--performance(?update_async_test_def).
-update_async_local_cache_test(Config) ->
-    datastore_basic_ops_utils:update_async_test(Config, locally_cached).
+-performance(?update_sync_test_def).
+update_sync_local_cache_test(Config) ->
+    datastore_basic_ops_utils:update_sync_test(Config, locally_cached).
 
 -performance(?get_test_def).
 get_local_cache_test(Config) ->
@@ -266,17 +266,18 @@ init_per_testcase(Case, Config) when
             transactional_global_cache = false
         }
     end),
-    Config;
+    datastore_basic_ops_utils:set_hooks(Case, Config);
 
-init_per_testcase(_, Config) ->
-    Config.
+init_per_testcase(Case, Config) ->
+    datastore_basic_ops_utils:set_hooks(Case, Config).
 
 end_per_testcase(Case, Config) when
     Case =:= no_transactions_create_delete_global_store_test;
     Case =:= no_transactions_save_global_store_test;
     Case =:= no_transactions_update_global_store_test  ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [some_record]);
+    test_utils:mock_unload(Workers, [some_record]),
+    datastore_basic_ops_utils:unset_hooks(Case, Config);
 
-end_per_testcase(_, Config) ->
-    ok.
+end_per_testcase(Case, Config) ->
+    datastore_basic_ops_utils:unset_hooks(Case, Config).

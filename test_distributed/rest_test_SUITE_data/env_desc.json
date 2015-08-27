@@ -1,72 +1,73 @@
 {
-    "providers": {
+    "dirs_config": {
+        "op_ccm": {
+            "input_dir": "rel/op_ccm",
+            "target_dir": "rel/test_cluster"
+        },
+        "op_worker": {
+            "input_dir": "rel/op_worker",
+            "target_dir": "rel/test_cluster"
+        },
+        "appmock": {
+            "input_dir": "rel/appmock",
+            "target_dir": "rel/test_cluster"
+        }
+    },
+    "provider_domains": {
         "p1": {
             "op_ccm": {
-                "config": {
-                    "input_dir": "rel/op_ccm",
-                    "target_dir": "rel/test_cluster"
-                },
-                "nodes": {
-                    "ccm": {
-                        "vm.args": {
-                            "setcookie": "test_cookie"
-                        },
-                        "sys.config": {
-                            "ccm_nodes": [
-                                "ccm@"
-                            ],
-                            "worker_num": 2
-                        }
+                "ccm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "ccm_nodes": [
+                            "ccm"
+                        ],
+                        "worker_num": 2
                     }
                 }
             },
             "op_worker": {
-                "config": {
-                    "input_dir": "rel/op_worker",
-                    "target_dir": "rel/test_cluster"
-                },
-                "nodes": {
-                    "worker1": {
-                        "vm.args": {
-                            "setcookie": "test_cookie"
-                        },
-                        "sys.config": {
-                            "ccm_nodes": [
-                                "ccm@"
-                            ],
-                            "db_nodes": [
-                                "127.0.0.1:49161"
-                            ],
-                            "global_registry_node": "gr@"
-                        }
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
                     },
-                    "worker2": {
-                        "vm.args": {
-                            "setcookie": "test_cookie"
-                        },
-                        "sys.config": {
-                            "ccm_nodes": [
-                                "ccm@"
-                            ],
-                            "db_nodes": [
-                                "127.0.0.1:49161"
-                            ],
-                            "global_registry_node": "gr@"
-                        }
+                    "sys.config": {
+                        "ccm_nodes": [
+                            "ccm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "global_registry_domain": "gr"
+                    }
+                },
+                "worker2": {
+                    "vm.args": {
+                        "setcookie": "test_cookie"
+                    },
+                    "sys.config": {
+                        "ccm_nodes": [
+                            "ccm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "global_registry_domain": "gr"
                     }
                 }
             }
         }
     },
-    "appmock": {
-        "config": {
-            "input_dir": "rel/appmock",
-            "target_dir": "rel/test_cluster"
-        },
-        "nodes": {
-            "gr": {
-                "sys.config": {
-                    "app_description_file": "./gr_mock_description.erl.cfg"
+    "appmock_domains": {
+        "gr": {
+            "appmock": {
+                "node1": {
+                    "mocked_app": "globalregistry",
+                    "sys.config": {
+                        "app_description_file": "./gr_mock_description.erl.cfg"
+                    }
                 }
             }
         }
