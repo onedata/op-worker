@@ -10,19 +10,19 @@
 -define(LOGIN, #gui_route{
     requires_session = ?NOT_LOGGED_IN,
     html_file = <<"login.html">>,
-    handler_module = login_backend
+    page_backend = login_backend
 }).
 
 -define(VERIFY_LOGIN, #gui_route{
     requires_session = ?LOGGED_IN,
     html_file = undefined,
-    handler_module = verify_login_backend
+    page_backend = verify_login_backend
 }).
 
 -define(FILE_MANAGER, #gui_route{
     requires_session = ?LOGGED_IN,
     html_file = <<"file_manager.html">>,
-    handler_module = file_manager_backend
+    page_backend = file_manager_backend
 }).
 
 -define(PAGE_404, #gui_route{
