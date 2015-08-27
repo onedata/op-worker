@@ -81,7 +81,7 @@ public:
 protected:
     template <class Result, typename... Args1, typename... Args2>
     static void setResult(
-        VoidCallback callback, Result (*fun)(Args2...), Args1 &&... args)
+        const VoidCallback &callback, Result (*fun)(Args2...), Args1 &&... args)
     {
         auto posixStatus = fun(std::forward<Args1>(args)...);
 
