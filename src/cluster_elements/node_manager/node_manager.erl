@@ -237,6 +237,13 @@ handle_cast(check_mem, State) ->
     next_mem_check(),
     {noreply, State};
 
+handle_cast(check_tasks, State) ->
+    spawn(task_manager, check_and_rerun_all, []),
+    {ok, IntervalMin} = application:get_env(?APP_NAME, task_checking_period_minutes),
+    Interval = timer:minutes(IntervalMin),
+    erlang:send_after(Interval, self(), {timer, check_tasks}),
+    {noreply, State};
+
 handle_cast(do_heartbeat, State) ->
     NewState = do_heartbeat(State),
     {noreply, NewState};

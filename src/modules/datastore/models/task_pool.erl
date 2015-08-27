@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, update/3,
+-export([save/1, get/1, list/0, list/1, exists/1, delete/1, delete/2, update/2, update/3,
     create/1, create/2, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
@@ -42,9 +42,6 @@ save(Document) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
-
-update(?NON_LEVEL, _Key, _Diff) ->
-    ok;
 
 update(Level, Key, Diff) ->
     datastore:update(task_to_db_level(Level), ?MODULE, Key, Diff).
@@ -81,7 +78,10 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(global_only, ?MODEL_NAME, ?GET_ALL, []).
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+
+list(Level) ->
+    datastore:list(task_to_db_level(Level), ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,6 +91,9 @@ list() ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+
+delete(Level, Key) ->
+    datastore:delete(task_to_db_level(Level), ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
