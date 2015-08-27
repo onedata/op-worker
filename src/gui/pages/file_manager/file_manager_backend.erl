@@ -31,8 +31,7 @@
 
 
 page_init() ->
-    ?dump(page_init),
-    ok.
+    serve_html.
 
 
 websocket_init() ->

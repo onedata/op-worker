@@ -106,7 +106,7 @@ start_gui_listener() ->
             ]}
         ]},
         % Proper requests are routed to handler modules
-        {'_', static_dispatches(DocRoot, ?STATIC_PATHS) ++ [
+        {'_', [
             {"/nagios/[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
