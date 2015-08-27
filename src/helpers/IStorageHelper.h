@@ -30,25 +30,21 @@ namespace helpers {
 struct StorageHelperCTX {
 
     fuse_file_info &m_ffi;
-    uid_t uid;
-    gid_t gid;
+    uid_t uid = 0;
+    gid_t gid = 0;
 
     StorageHelperCTX(fuse_file_info &ffi)
         : m_ffi(ffi)
-        , uid(0)
-        , gid(0)
     {
     }
 
     StorageHelperCTX()
-        : m_ffi(local_ffi)
-        , uid(0)
-        , gid(0)
+        : m_ffi(m_localFFI)
     {
     }
 
 private:
-    fuse_file_info local_ffi = {0};
+    fuse_file_info m_localFFI = {0};
 };
 
 using CTXRef = StorageHelperCTX &;
