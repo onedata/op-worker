@@ -128,17 +128,16 @@ def _riak_up(cluster_name, db_nodes, dns_servers, uid):
 
     return db_node_mappings, riak_output
 
+
 def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
     db_node_mappings = {}
     for node in db_nodes:
         db_node_mappings[node] = ''
 
-    i = 0
-    for node in iter(db_node_mappings.keys()):
+    for i, node in enumerate(db_node_mappings):
         db_node_mappings[node] = couchbase.config_entry(cluster_name, i, uid)
-        i += 1
 
-    if i == 0:
+    if not db_node_mappings:
         return db_node_mappings, {}
 
     [dns] = dns_servers
@@ -150,8 +149,10 @@ def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
 def _db_driver(config):
     return config['db_driver'] if 'db_driver' in config else 'couchbase'
 
+
 def _db_driver_module(db_driver):
     return db_driver + "_datastore_driver"
+
 
 def up(image, bindir, dns_server, uid, config_path, logdir=None):
     config = common.parse_json_file(config_path)
