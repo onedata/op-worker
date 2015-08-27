@@ -30,25 +30,21 @@ namespace helpers {
 struct StorageHelperCTX {
 
     fuse_file_info &m_ffi;
-    uid_t uid;
-    gid_t gid;
+    uid_t uid = 0;
+    gid_t gid = 0;
 
     StorageHelperCTX(fuse_file_info &ffi)
         : m_ffi(ffi)
-        , uid(0)
-        , gid(0)
     {
     }
 
     StorageHelperCTX()
-        : m_ffi(local_ffi)
-        , uid(0)
-        , gid(0)
+        : m_ffi(m_localFFI)
     {
     }
 
 private:
-    fuse_file_info local_ffi = {0};
+    fuse_file_info m_localFFI = {0};
 };
 
 using CTXRef = StorageHelperCTX &;
@@ -81,7 +77,7 @@ public:
         GeneralCallback<std::string>) = 0;
     virtual void ash_readdir(CTXRef ctx, const boost::filesystem::path &p,
         off_t offset, size_t count,
-        GeneralCallback<std::vector<std::string> &>) = 0;
+        GeneralCallback<const std::vector<std::string> &>) = 0;
     virtual void ash_mknod(CTXRef ctx, const boost::filesystem::path &p,
         mode_t mode, dev_t rdev, VoidCallback) = 0;
     virtual void ash_mkdir(CTXRef ctx, const boost::filesystem::path &p,
@@ -115,12 +111,12 @@ public:
     virtual void ash_flush(
         CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
     virtual void ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
-        int isdatasync, VoidCallback) = 0;
+        bool isDataSync, VoidCallback) = 0;
 
     virtual asio::mutable_buffer sh_read(CTXRef ctx,
         const boost::filesystem::path &p, asio::mutable_buffer buf,
         off_t offset) = 0;
-    virtual int sh_write(CTXRef ctx, const boost::filesystem::path &p,
+    virtual std::size_t sh_write(CTXRef ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset) = 0;
 
 protected:
