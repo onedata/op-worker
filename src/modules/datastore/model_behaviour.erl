@@ -13,7 +13,8 @@
 
 -include("modules/datastore/datastore_common_internal.hrl").
 
--type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links | fetch_link | foreach_link.
+-type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links |
+                        fetch_link | foreach_link | run_synchronized.
 -type model_type() :: atom().
 -type model_config() :: #model_config{}.
 
@@ -84,14 +85,16 @@
 %%--------------------------------------------------------------------
 -callback 'after'(ModelName :: model_type(), Method :: model_action(),
                     Level :: datastore:store_level(), Context :: term(),
-                    ReturnValue :: term()) -> ok.
+                    ReturnValue :: term()) -> ok | datastore:generic_error().
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback executed as pre-hook registered with model_init/0. Context is the executed method's list of arguments.
 %% This callback can interrupt execution of the operation by returning {error, Reason} tuple.
+%% In case of async driver execution, this method may change create/update method execution to save method execution.
 %% @end
 %%--------------------------------------------------------------------
 -callback before(ModelName :: model_type(), Method :: model_action(),
-                    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+                    Level :: datastore:store_level(), Context :: term()) ->
+                    ok | {ok, save, [datastore:document()]} | datastore:generic_error().

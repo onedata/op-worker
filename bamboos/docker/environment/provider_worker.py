@@ -169,7 +169,7 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
             'db_driver': _db_driver(config['provider_domains'][op_instance])
         }
 
-        # Tweak configs, retrieve lis of riak nodes to start
+        # Tweak configs, retrieve list of db nodes to start
         configs = []
         all_db_nodes = []
         for worker_node in gen_dev_cfg['nodes']:

@@ -23,8 +23,8 @@
 
 -define(REQUEST_TIMEOUT, timer:seconds(30)).
 
--export([create_delete_test/2, create_async_delete_test/2, save_test/2, save_async_test/2,
-    update_test/2, update_async_test/2, get_test/2, exists_test/2, mixed_test/2]).
+-export([create_delete_test/2, create_sync_delete_test/2, save_test/2, save_sync_test/2, update_test/2,
+    update_sync_test/2, get_test/2, exists_test/2, mixed_test/2, set_hooks/2, unset_hooks/2]).
 
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
 
@@ -33,19 +33,19 @@
 %% ====================================================================
 
 create_delete_test(Config, Level) ->
-    create_delete_test_base(Config, Level, create).
+    create_delete_test_base(Config, Level, create, delete).
 
-create_async_delete_test(Config, Level) ->
-    create_delete_test_base(Config, Level, create_async).
+create_sync_delete_test(Config, Level) ->
+    create_delete_test_base(Config, Level, create_sync, delete_sync).
 
-create_delete_test_base(Config, Level, Fun) ->
+create_delete_test_base(Config, Level, Fun, Fun2) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -81,7 +81,7 @@ create_delete_test_base(Config, Level, Fun) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
-                Ans = ?call_store(delete, Level, [
+                Ans = ?call_store(Fun2, Level, [
                     some_record, list_to_binary(DocsSet++integer_to_list(I))]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -113,19 +113,19 @@ create_delete_test_base(Config, Level, Fun) ->
     ].
 
 save_test(Config, Level) ->
-    save_test_base(Config, Level, save).
+    save_test_base(Config, Level, save, delete).
 
-save_async_test(Config, Level) ->
-    save_test_base(Config, Level, save_async).
+save_sync_test(Config, Level) ->
+    save_test_base(Config, Level, save_sync, delete_sync).
 
-save_test_base(Config, Level, Fun) ->
+save_test_base(Config, Level, Fun, Fun2) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -154,7 +154,7 @@ save_test_base(Config, Level, Fun) ->
     DelMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(delete, Level, [
+            Ans = ?call_store(Fun2, Level, [
                 some_record, list_to_binary(DocsSet++integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -171,19 +171,19 @@ save_test_base(Config, Level, Fun) ->
         description = "Average time of save operation"}.
 
 update_test(Config, Level) ->
-    update_test_base(Config, Level, update).
+    update_test_base(Config, Level, update, save, delete).
 
-update_async_test(Config, Level) ->
-    update_test_base(Config, Level, update_async).
+update_sync_test(Config, Level) ->
+    update_test_base(Config, Level, update_sync, save_sync, delete_sync).
 
-update_test_base(Config, Level, Fun) ->
+update_test_base(Config, Level, Fun, Fun2, Fun3) ->
     Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     DocsPerThead = ?config(docs_per_thead, Config),
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -214,7 +214,7 @@ update_test_base(Config, Level, Fun) ->
     SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(save, Level, [
+            Ans = ?call_store(Fun2, Level, [
                 #document{
                     key = list_to_binary(DocsSet++integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
@@ -238,7 +238,7 @@ update_test_base(Config, Level, Fun) ->
     ClearFun = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
-            Ans = ?call_store(delete, Level, [
+            Ans = ?call_store(Fun3, Level, [
                 some_record, list_to_binary(DocsSet++integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -273,7 +273,7 @@ get_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -362,7 +362,7 @@ exists_test(Config, Level) ->
     OpsPerDoc = ?config(ops_per_doc, Config),
     ConflictedThreads = ?config(conflicted_threads, Config),
 
-    disable_cache_clearing(Workers),
+    disable_cache_control(Workers),
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
@@ -443,7 +443,7 @@ mixed_test(Config, Level) ->
         true ->
             put(file_beg, binary_to_list(term_to_binary(os:timestamp())));
         _ ->
-            disable_cache_clearing(Workers)
+            disable_cache_control(Workers)
     end,
 
     ok = test_node_starter:load_modules(Workers, [?MODULE]),
@@ -600,6 +600,7 @@ spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, Conflicted
     end,
     spawn(N, fun() ->
         try
+            timer:sleep(timer:seconds(1)), % sleep to allow all threads start
             Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
             E1:E2 ->
@@ -638,9 +639,79 @@ count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
             count_answers(Num - 1, NewAns)
     end.
 
-disable_cache_clearing(Workers) ->
+disable_cache_control(Workers) ->
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_clearing))
-    end, Workers),
+        ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control))
+    end, Workers).
+
+set_hooks(Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
+    ModelConfig = lists:map(fun(Method) ->
+        {some_record, Method}
+    end, Methods),
+
+    case check_config_name(Case) of
+        global ->
+            ok;
+        local ->
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}])),
+                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, local_cache_controller}]))
+                end, ModelConfig)
+            end, Workers);
+        _ ->
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}]))
+                end, ModelConfig)
+            end, Workers)
+    end,
+    Config.
+
+unset_hooks(Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     [W | _] = Workers,
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)).
+
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
+    ModelConfig = lists:map(fun(Method) ->
+        {some_record, Method}
+    end, Methods),
+
+    case check_config_name(Case) of
+        global ->
+            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
+            ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
+        local ->
+            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
+            ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)),
+
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, local_cache_controller}])),
+                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
+                end, ModelConfig)
+            end, Workers);
+        _ ->
+            lists:foreach(fun(W) ->
+                lists:foreach(fun(MC) ->
+                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
+                end, ModelConfig)
+            end, Workers)
+    end.
+
+check_config_name(Case) ->
+    CStr = atom_to_list(Case),
+    case (string:str(CStr, "cache") > 0) and (string:str(CStr, "sync") == 0) of
+        true ->
+            case string:str(CStr, "global") > 0 of
+                true ->
+                    global;
+                _ ->
+                    local
+            end;
+        _ ->
+            no_hooks
+    end.

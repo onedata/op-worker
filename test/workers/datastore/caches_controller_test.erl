@@ -99,7 +99,7 @@ mem_clearing_test_() ->
         end}.
 
 get_hooks_config_test() ->
-    Methods = [save, get, exists, delete, update, create],
+    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
     XConfig = lists:map(fun(Method) ->
         {x, Method}
     end, Methods),

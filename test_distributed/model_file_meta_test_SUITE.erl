@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -94,31 +95,31 @@ rename_test(Config) ->
     {A8, U8} = ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}]),
     ?assertMatch({ok, _}, {A8, U8}),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [U8, {name, <<"d2">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [U8, {name, <<"d2">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d2">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {name, <<"d3">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {name, <<"d3">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d3">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3">>}])),
 
     ?assertMatch({ok, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3/f1">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d3">>}, {path, <<"/spaces/Space 1/d2">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d3">>}, {path, <<"/spaces/Space 1/d2">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d3">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d2">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {path, <<"/spaces/Space 1/d1">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d2">>}, {path, <<"/spaces/Space 1/d1">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d2">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d1">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
 
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d1">>}, {name, <<"d4">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d1">>}, {name, <<"d4">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d1">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d4">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d4">>}])),
 
     %% Inter-space rename
     ?assertMatch({ok, #document{key = U2}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 1/d4">>}])),
-    ?assertMatch({ok, _}, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d4">>}, {path, <<"/spaces/Space 2/d1">>}])),
+    ?assertMatch(ok, ?call(Worker2, rename, [{path, <<"/spaces/Space 1/d4">>}, {path, <<"/spaces/Space 2/d1">>}])),
     ?assertMatch({error, _}, ?call(Worker2, get, [{path, <<"/spaces/Space 1/d4">>}])),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"d1">>}}}, ?call(Worker2, get, [{path, <<"/spaces/Space 2/d1">>}])),
     ?assertMatch({ok, #document{key = U3}}, ?call(Worker2, get_scope, [{path, <<"/spaces/Space 2/d1">>}])),
@@ -218,15 +219,15 @@ basic_operations_test_core(Config) ->
     {{AL20_3, UL20_3}, GetScopeLevel20} = ?call_with_time(Worker2, get_scope, [UL20]),
     ?assertMatch({ok, #document{key = U2}},             {AL20_3, UL20_3}),
 
-    ?assertMatch({ok, [U2]}, ?call(Worker1, list_uuids, [{path, <<"/spaces">>}, 0, 10])),
-    ?assertMatch({ok, []}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2/file3">>}, 0, 10])),
+    ?assertMatch({ok, [#child_link{uuid = U2}]}, ?call(Worker1, list_children, [{path, <<"/spaces">>}, 0, 10])),
+    ?assertMatch({ok, []}, ?call(Worker1, list_children, [{path, <<"/spaces/Space 1/dir2/file3">>}, 0, 10])),
 
-    {{A15, U15}, ListUuids20_100} = ?call_with_time(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 0, 20]),
-    {{A15_2, U15_2}, ListUuids100_100} = ?call_with_time(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 0, 100]),
-    {{A15_3, U15_3}, ListUuids1000_100} = ?call_with_time(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 0, 1000]),
-    {{A15_4, U15_4}, ListUuids1_100} = ?call_with_time(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 0, 1]),
-    {{A16, U16}, ListUuids50_60_100} = ?call_with_time(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir1">>}, 50, 10]),
-    {{AL20_4, UL20_4}, ListUuidsLevel20} = ?call_with_time(Worker1, list_uuids, [{path, Level20Path}, 0, 1]),
+    {{A15, U15}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 0, 20]),
+    {{A15_2, U15_2}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 0, 100]),
+    {{A15_3, U15_3}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 0, 1000]),
+    {{A15_4, U15_4}, ListUuids1_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 0, 1]),
+    {{A16, U16}, ListUuids50_60_100} = ?call_with_time(Worker1, list_children, [{path, <<"/spaces/Space 1/dir1">>}, 50, 10]),
+    {{AL20_4, UL20_4}, ListUuidsLevel20} = ?call_with_time(Worker1, list_children, [{path, Level20Path}, 0, 1]),
 
     ?assertMatch({ok, _}, {A15, U15}),
     ?assertMatch({ok, _}, {A15_2, U15_2}),
@@ -251,7 +252,7 @@ basic_operations_test_core(Config) ->
     ?assertMatch(true, AE3),
     {AE4, ExistsTrueLevel20} = ?call_with_time(Worker1, exists, [{path, Level20Path}]),
     ?assertMatch(true, AE4),
-    ?assertMatch({ok, [_, _, _]}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [_, _, _]}, ?call(Worker1, list_children, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
 
     {AD1, DeleteOkPathLevel4} = ?call_with_time(Worker1, delete, [{path, <<"/spaces/Space 1/dir2/file1">>}]),
     ?assertMatch(ok, AD1),
@@ -265,7 +266,7 @@ basic_operations_test_core(Config) ->
     ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/spaces/Space 1/dir2/file1">>}])),
     ?assertMatch(false, ?call(Worker1, exists, [{path, <<"/spaces/Space 1/dir2/file2">>}])),
 
-    ?assertMatch({ok, [U23]}, ?call(Worker1, list_uuids, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
+    ?assertMatch({ok, [#child_link{uuid = U23}]}, ?call(Worker1, list_children, [{path, <<"/spaces/Space 1/dir2">>}, 0, 10])),
 
     BigDirDel =
         fun Loop(File) when File < 99 ->

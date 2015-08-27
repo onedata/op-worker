@@ -13,6 +13,7 @@
 
 -include("modules/http_worker/http_common.hrl").
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_openid.hrl").
 
@@ -47,6 +48,7 @@ validate_login() ->
             provider,
             [{<<"code">>, AuthorizationCode}, {<<"grant_type">>, <<"authorization_code">>}]
         ),
+        {ok, _} = onedata_user:fetch(#token{value = AccessToken}),
         [
             {access_token, AccessToken},
             {refresh_token, RefreshToken},
