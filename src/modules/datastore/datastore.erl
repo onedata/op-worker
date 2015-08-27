@@ -719,7 +719,6 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                 {error, Reason}
         end,
     run_posthooks_sync(ModelConfig, Method, driver_to_level(Driver), Args, Return).
-    end.
 
 
 %%--------------------------------------------------------------------
