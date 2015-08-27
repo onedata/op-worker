@@ -50,13 +50,13 @@ uid = common.generate_uid()
 common.merge(output, dns_output)
 
 # Start ccms
-ccm_output = provider_ccm.up(args.image, args.bin_op_ccm, args.logdir,
-                             dns_server, uid, args.config_path)
+ccm_output = provider_ccm.up(args.image, args.bin_op_ccm,
+                             dns_server, uid, args.config_path, args.logdir)
 common.merge(output, ccm_output)
 
 # Start workers
-worker_output = provider_worker.up(args.image, args.bin_op_worker, args.logdir,
-                                   dns_server, uid, args.config_path)
+worker_output = provider_worker.up(args.image, args.bin_op_worker, dns_server,
+                                   uid, args.config_path, args.logdir)
 common.merge(output, worker_output)
 
 # Make sure domain are added to the dns server

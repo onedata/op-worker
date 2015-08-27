@@ -8,6 +8,7 @@
 %%% @doc
 %%% This module provides functions used by node manager to coordinate
 %%% clearing of not used values cached in memory.
+%%% TODO - merge caches controller and sort cache documents by timestamp.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(caches_controller).
@@ -19,7 +20,7 @@
 
 %% API
 -export([clear_local_cache/1, clear_global_cache/1, clear_local_cache/2, clear_global_cache/2]).
--export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1]).
+-export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1, wait_for_cache_dump/0]).
 -export([delete_old_keys/2, get_cache_uuid/2, decode_uuid/1]).
 
 %%%===================================================================
@@ -137,7 +138,7 @@ clear_cache(_MemUsage, TargetMemUse, StoreType, [TimeWindow | Windows]) ->
 %%--------------------------------------------------------------------
 -spec get_hooks_config(Models :: list()) -> list().
 get_hooks_config(Models) ->
-  Methods = [save, get, exists, delete, update, create],
+  Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
   lists:foldl(fun(Model, Ans) ->
     ModelConfig = lists:map(fun(Method) ->
       {Model, Method}
@@ -175,6 +176,34 @@ delete_old_keys(globally_cached, TimeWindow) ->
 delete_old_keys(locally_cached, TimeWindow) ->
   delete_old_keys(local_cache_controller, local_only, ?LOCAL_CACHES, TimeWindow).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Waits for dumping cache to disk
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_cache_dump() ->
+  ok | dump_error.
+wait_for_cache_dump() ->
+  wait_for_cache_dump(60).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waits for dumping cache to disk
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_cache_dump(N :: integer()) ->
+  ok | dump_error.
+wait_for_cache_dump(0) ->
+  dump_error;
+wait_for_cache_dump(N) ->
+  case {global_cache_controller:list_docs_to_be_dumped(), local_cache_controller:list_docs_to_be_dumped()} of
+    {{ok, []}, {ok, []}} ->
+      ok;
+    _ ->
+      timer:sleep(timer:seconds(1)),
+      wait_for_cache_dump(N-1)
+  end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -187,21 +216,55 @@ delete_old_keys(locally_cached, TimeWindow) ->
 %%--------------------------------------------------------------------
 -spec delete_old_keys(Model :: global_cache_controller | local_cache_controller,
     Level :: global_only | local_only, Caches :: list(), TimeWindow :: integer()) -> ok.
+% TODO Add dumping cache to disk in case of recent faliures
 delete_old_keys(Model, Level, Caches, TimeWindow) ->
   {ok, Uuids} = apply(Model, list, [TimeWindow]),
   lists:foreach(fun(Uuid) ->
     {ModelName, Key} = decode_uuid(Uuid),
-    datastore:delete(Level, ModelName, Key)
+    safe_delete(Level, ModelName, Key),
+    apply(Model, delete, [Uuid])
   end, Uuids),
   case TimeWindow of
     0 ->
       lists:foreach(fun(Cache) ->
         {ok, Docs} = datastore:list(Level, Cache, ?GET_ALL, []),
         lists:foreach(fun(Doc) ->
-          datastore:delete(Level, Cache, Doc#document.key)
+          safe_delete(Level, Cache, Doc#document.key)
         end, Docs)
       end, Caches);
     _ ->
       ok
   end,
   ok.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes info from memory when it is dumped to disk.
+%% @end
+%%--------------------------------------------------------------------
+-spec safe_delete(Level :: datastore:store_level(), ModelName :: model_behaviour:model_type(), Key :: datastore:key()) ->
+  ok | datastore:generic_error().
+safe_delete(Level, ModelName, Key) ->
+  try
+    ModelConfig = ModelName:model_init(),
+    FullArgs = [ModelConfig, Key],
+    {ok, Doc} = worker_proxy:call(datastore_worker,
+      {driver_call, datastore:level_to_driver(Level), get, FullArgs}),
+
+    Value = Doc#document.value,
+    Pred = fun() ->
+      case datastore:get(Level, ModelName, Key) of
+        {ok, Doc2} ->
+          Doc2#document.value =:= Value;
+        _ ->
+          false
+      end
+    end,
+    datastore:delete(Level, ModelName, Key, Pred)
+  catch
+    E1:E2 ->
+      ?error_stacktrace("Error in cache controller safe_delete. "
+        ++"Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
+      {error, safe_delete_failed}
+  end.

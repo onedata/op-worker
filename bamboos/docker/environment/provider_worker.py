@@ -11,7 +11,7 @@ import os
 
 from . import common, docker, riak, dns, globalregistry, provider_ccm
 
-PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60
+PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 
 
 def provider_domain(op_instance, uid):
@@ -56,7 +56,7 @@ def _tweak_config(config, name, op_instance, uid):
     return cfg, sys_config['db_nodes']
 
 
-def _node_up(image, bindir, logdir, config, dns_servers, db_node_mappings):
+def _node_up(image, bindir, config, dns_servers, db_node_mappings, logdir):
     node_name = config['nodes']['node']['vm.args']['name']
     db_nodes = config['nodes']['node']['sys.config']['db_nodes']
     for i in range(len(db_nodes)):
@@ -81,7 +81,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     volumes = [(bindir, '/root/build', 'ro')]
 
     if logdir:
-        logdir = os.path.join(os.path.abspath(logdir), name)
+        logdir = os.path.join(os.path.abspath(logdir), hostname)
         volumes.extend([(logdir, '/root/bin/node/log', 'rw')])
 
     container = docker.run(
@@ -127,7 +127,7 @@ def _riak_up(cluster_name, riak_nodes, dns_servers, uid):
     return db_node_mappings, riak_output
 
 
-def up(image, bindir, logdir, dns_server, uid, config_path):
+def up(image, bindir, dns_server, uid, config_path, logdir=None):
     config = common.parse_json_file(config_path)
     input_dir = config['dirs_config']['op_worker']['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
@@ -160,8 +160,8 @@ def up(image, bindir, logdir, dns_server, uid, config_path):
         workers = []
         worker_ips = []
         for cfg in configs:
-            worker, node_out = _node_up(image, bindir, logdir, cfg,
-                                        dns_servers, db_node_mappings)
+            worker, node_out = _node_up(image, bindir, cfg,
+                                        dns_servers, db_node_mappings, logdir)
             workers.append(worker)
             worker_ips.append(common.get_docker_ip(worker))
             common.merge(output, node_out)
