@@ -252,7 +252,7 @@ void DirectIOHelper::ash_flush(
 }
 
 void DirectIOHelper::ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
-    int isdatasync, VoidCallback callback)
+    bool isDataSync, VoidCallback callback)
 {
     m_workerService.post([=, callback = std::move(callback)]() { callback(SuccessCode); });
 }

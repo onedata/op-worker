@@ -115,7 +115,7 @@ public:
     virtual void ash_flush(
         CTXRef ctx, const boost::filesystem::path &p, VoidCallback) = 0;
     virtual void ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
-        int isdatasync, VoidCallback) = 0;
+        bool isDataSync, VoidCallback) = 0;
 
     virtual asio::mutable_buffer sh_read(CTXRef ctx,
         const boost::filesystem::path &p, asio::mutable_buffer buf,

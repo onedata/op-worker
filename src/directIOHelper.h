@@ -70,7 +70,7 @@ public:
     void ash_release(
         CTXRef ctx, const boost::filesystem::path &p, VoidCallback);
     void ash_flush(CTXRef ctx, const boost::filesystem::path &p, VoidCallback);
-    void ash_fsync(CTXRef ctx, const boost::filesystem::path &p, int isdatasync,
+    void ash_fsync(CTXRef ctx, const boost::filesystem::path &p, bool isDataSync,
         VoidCallback);
 
     asio::mutable_buffer sh_read(CTXRef ctx, const boost::filesystem::path &p,
