@@ -35,7 +35,7 @@
 init(_Args) ->
 
     %% Get Riak nodes
-    RiakNodes =
+    DBNodes =
         case application:get_env(?APP_NAME, db_nodes) of
             {ok, Nodes} ->
                 lists:map(
@@ -53,7 +53,7 @@ init(_Args) ->
             maps:put(RecordName, ModelConfig, StateAcc)
         end, #{}, ?MODELS),
 
-    {ok, State#{db_nodes => RiakNodes}}.
+    {ok, State#{db_nodes => DBNodes}}.
 
 %%--------------------------------------------------------------------
 %% @doc
