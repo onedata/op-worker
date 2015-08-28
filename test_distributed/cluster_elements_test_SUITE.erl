@@ -22,10 +22,10 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([ccm_and_worker_test/1, task_pool_test/1, task_manager_test/1]).
+-export([ccm_and_worker_test/1, task_pool_test/1, task_manager_repeats_test/1]).
 
 -performance({test_cases, []}).
-all() -> [ccm_and_worker_test, task_pool_test, task_manager_test].
+all() -> [ccm_and_worker_test, task_pool_test, task_manager_repeats_test].
 
 %%%===================================================================
 %%% Test function
@@ -51,6 +51,7 @@ task_pool_test(Config) ->
         {#task_pool{task = t7}, ?PERSISTENT_LEVEL, W1}
     ],
 
+    % then
     CreateAns = lists:foldl(fun({Task, Level, Worker}, Acc) ->
         {A1, A2} = rpc:call(Worker, task_pool, create, [Level, #document{value = Task#task_pool{owner = self()}}]),
         ?assertMatch({ok, _}, {A1, A2}),
@@ -77,13 +78,63 @@ task_pool_test(Config) ->
             V = T#document.value,
             ?assert(lists:member(V#task_pool.task, Names))
         end, ListedTasks)
-    end, ListTest).
+    end, ListTest),
 
-task_manager_test(Config) ->
-    % given
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    lists:foreach(fun({{Key, Level}, _}) ->
+        ?assertMatch(ok, rpc:call(W1, task_pool, delete, [Level, Key]))
+    end, ToUpdate).
 
-    ok.
+task_manager_repeats_test(Config) ->
+    task_manager_repeats_test_base(Config, ?NON_LEVEL, 0),
+    task_manager_repeats_test_base(Config, ?NODE_LEVEL, 3),
+    task_manager_repeats_test_base(Config, ?CLUSTER_LEVEL, 5).
+    % TODO Uncomment hen list on db will be added
+%%     task_manager_repeats_test_base(Config, ?PERSISTENT_LEVEL, 5).
+
+task_manager_repeats_test_base(Config, Level, FirstCheckNum) ->
+    [W1, W2] = ?config(op_worker_nodes, Config),
+    Workers = [W1, W2, W1, W2, W1],
+
+    ControllerPid = start_tasks(Level, Workers, 5),
+    {A1, A2} = rpc:call(W1, task_pool, list, [Level]),
+    ?assertMatch({ok, _}, {A1, A2}),
+    ?assertEqual(FirstCheckNum, length(A2)),
+    ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level])),
+
+    timer:sleep(timer:seconds(1)),
+    ?assertEqual(0, count_answers()),
+    timer:sleep(timer:seconds(6)),
+    ?assertEqual(5, count_answers()),
+    ?assertEqual({ok, []}, rpc:call(W1, task_pool, list, [Level])),
+    ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level])),
+
+    ControllerPid ! kill.
+
+start_tasks(Level, Workers, Num) ->
+    ControllerPid = spawn(fun() -> task_controller([]) end),
+    Master = self(),
+    {Funs, _} = lists:foldl(fun(_W, {Acc, Counter}) ->
+        NewAcc = [fun() ->
+            ControllerPid ! {get_num, Counter, self()},
+            receive
+                {value, MyNum} ->
+                    case MyNum of
+                        Num ->
+                            Master ! task_done,
+                            ok;
+                        _ ->
+                            error
+                    end
+            end
+        end | Acc],
+        {NewAcc, Counter + 1}
+    end, {[], 1}, Workers),
+
+    lists:foreach(fun({Fun, W}) ->
+        ?assertMatch(ok, rpc:call(W, task_manager, start_task, [Fun, Level]))
+    end, lists:zip(Funs, Workers)),
+
+    ControllerPid.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -94,3 +145,27 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+task_controller(State) ->
+    receive
+        kill ->
+            ok;
+        {get_num, Sender, AnsPid} ->
+            Num = proplists:get_value(Sender, State, 0),
+            State2 = [{Sender, Num + 1} | State -- [{Sender, Num}]],
+            AnsPid ! {value, Num + 1},
+            task_controller(State2)
+    end.
+
+count_answers() ->
+    receive
+        task_done ->
+            count_answers() + 1
+    after
+        0 ->
+            0
+    end.

@@ -13,6 +13,7 @@
 -module(task_manager).
 -author("Michal Wrzeszcz").
 
+-include("global_definitions.hrl").
 -include("cluster_elements/node_manager/task_manager.hrl").
 -include("modules/datastore/datastore_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -42,7 +43,7 @@ start_task(Task, Level, PersistFun) ->
       {start, Uuid} ->
         case do_task(Task, ?TASK_REPEATS) of
           ok ->
-            delete_task(Uuid, Task, Level);
+            ok = delete_task(Uuid, Task, Level);
           _ ->
             ?error_stacktrace("~p fails of a task ~p", [?TASK_REPEATS, Task])
         end
@@ -53,7 +54,8 @@ start_task(Task, Level, PersistFun) ->
     end
   end),
   {ok, Uuid} = apply(?MODULE, PersistFun, [Task, Pid, Level]),
-  Pid ! {start, Uuid}.
+  Pid ! {start, Uuid},
+  ok.
 
 check_and_rerun_all() ->
   check_and_rerun_all(?NODE_LEVEL),
@@ -100,6 +102,8 @@ do_task(Task, Num) ->
   catch
     E1:E2 ->
       ?error_stacktrace("Task ~p error: ~p:~p", [Task, E1, E2]),
+      {ok, Interval} = application:get_env(?APP_NAME, task_fail_sleep_time_ms),
+      timer:sleep(Interval),
       do_task(Task, Num - 1)
   end.
 

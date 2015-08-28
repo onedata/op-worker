@@ -43,6 +43,9 @@ save(Document) ->
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
+update(?NON_LEVEL, _Key, _Diff) ->
+    {ok, non};
+
 update(Level, Key, Diff) ->
     datastore:update(task_to_db_level(Level), ?MODULE, Key, Diff).
 
@@ -80,8 +83,14 @@ get(Key) ->
 list() ->
     datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
+list(?NON_LEVEL) ->
+    {ok, []};
+
 list(Level) ->
     datastore:list(task_to_db_level(Level), ?MODEL_NAME, ?GET_ALL, []).
+
+list_failed(?NON_LEVEL) ->
+    {ok, []};
 
 list_failed(Level) ->
     Filter = fun
@@ -106,6 +115,9 @@ list_failed(Level) ->
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+
+delete(?NON_LEVEL, _Key) ->
+    ok;
 
 delete(Level, Key) ->
     datastore:delete(task_to_db_level(Level), ?MODULE, Key).
