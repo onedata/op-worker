@@ -117,15 +117,15 @@ init([]) ->
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
         next_mem_check(),
+
+        %% Load NIFs
+        ok = helpers_nif:init(),
+
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
             ccm_con_status = not_connected,
-            monitoring_state = MonitoringState}},
-
-
-        %% Load NIFs
-        ok = helpers_nif:init()
+            monitoring_state = MonitoringState}}
     catch
         _:Error ->
             ?error_stacktrace("Cannot start node_manager: ~p", [Error]),
