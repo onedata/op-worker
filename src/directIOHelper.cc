@@ -37,7 +37,7 @@ inline boost::filesystem::path extractPath(const IStorageHelper::ArgsMap &args)
 }
 }
 
-const std::system_error DirectIOHelper::SuccessCode = std::system_error(std::error_code());
+const error_t DirectIOHelper::SuccessCode = error_t();
 
 inline boost::filesystem::path DirectIOHelper::root(
     const boost::filesystem::path &path)
@@ -45,10 +45,10 @@ inline boost::filesystem::path DirectIOHelper::root(
     return m_rootPath / path;
 }
 
-void DirectIOHelper::ash_getattr(CTXRef,
-    const boost::filesystem::path &p, GeneralCallback<struct stat> callback)
+void DirectIOHelper::ash_getattr(CTXRef, const boost::filesystem::path &p,
+    GeneralCallback<struct stat> callback)
 {
-    m_workerService.post([=]() {
+    m_workerService.post([=, callback = std::move(callback)]() {
         struct stat stbuf;
         if (lstat(root(p).c_str(), &stbuf) == -1) {
             callback(std::move(stbuf), makePosixError(errno));
@@ -59,17 +59,17 @@ void DirectIOHelper::ash_getattr(CTXRef,
     });
 }
 
-void DirectIOHelper::ash_access(CTXRef,
-    const boost::filesystem::path &p, int mask, VoidCallback callback)
+void DirectIOHelper::ash_access(
+    CTXRef, const boost::filesystem::path &p, int mask, VoidCallback callback)
 {
     m_workerService.post(
-        [=]() { setResult(callback, access, root(p).c_str(), mask); });
+        [=, callback = std::move(callback)]() { setResult(callback, access, root(p).c_str(), mask); });
 }
 
-void DirectIOHelper::ash_readlink(CTXRef,
-    const boost::filesystem::path &p, GeneralCallback<std::string> callback)
+void DirectIOHelper::ash_readlink(CTXRef, const boost::filesystem::path &p,
+    GeneralCallback<std::string> callback)
 {
-    m_workerService.post([=]() {
+    m_workerService.post([=, callback = std::move(callback)]() {
         std::array<char, 1024> buf;
         const int res = readlink(root(p).c_str(), buf.data(), buf.size() - 1);
 
@@ -83,17 +83,18 @@ void DirectIOHelper::ash_readlink(CTXRef,
     });
 }
 
-void DirectIOHelper::ash_readdir(CTXRef ctx,
-    const boost::filesystem::path &p, off_t offset, size_t count, GeneralCallback<std::vector<std::string>&> callback)
+void DirectIOHelper::ash_readdir(CTXRef ctx, const boost::filesystem::path &p,
+    off_t offset, size_t count,
+    GeneralCallback<const std::vector<std::string> &> callback)
 {
     std::vector<std::string> ret;
     callback(ret, makePosixError(ENOTSUP));
 }
 
-void DirectIOHelper::ash_mknod(CTXRef,
-    const boost::filesystem::path &p, mode_t mode, dev_t rdev, VoidCallback callback)
+void DirectIOHelper::ash_mknod(CTXRef, const boost::filesystem::path &p,
+    mode_t mode, dev_t rdev, VoidCallback callback)
 {
-    m_workerService.post([=]() {
+    m_workerService.post([=, callback = std::move(callback)]() {
         int res;
         const auto fullPath = root(p);
 
@@ -120,73 +121,76 @@ void DirectIOHelper::ash_mknod(CTXRef,
     });
 }
 
-void DirectIOHelper::ash_mkdir(CTXRef,
-    const boost::filesystem::path &p, mode_t mode, VoidCallback callback)
+void DirectIOHelper::ash_mkdir(CTXRef, const boost::filesystem::path &p,
+    mode_t mode, VoidCallback callback)
 {
     m_workerService.post(
-        [=]() { setResult(callback, mkdir, root(p).c_str(), mode); });
+        [=, callback = std::move(callback)]() { setResult(callback, mkdir, root(p).c_str(), mode); });
 }
 
-void DirectIOHelper::ash_unlink(CTXRef, const boost::filesystem::path &p, VoidCallback callback)
+void DirectIOHelper::ash_unlink(
+    CTXRef, const boost::filesystem::path &p, VoidCallback callback)
 {
     m_workerService.post(
-        [=]() { setResult(callback, unlink, root(p).c_str()); });
+        [=, callback = std::move(callback)]() { setResult(callback, unlink, root(p).c_str()); });
 }
 
-void DirectIOHelper::ash_rmdir(CTXRef, const boost::filesystem::path &p, VoidCallback callback)
+void DirectIOHelper::ash_rmdir(
+    CTXRef, const boost::filesystem::path &p, VoidCallback callback)
 {
-    m_workerService.post([=]() { setResult(callback, rmdir, root(p).c_str()); });
+    m_workerService.post(
+        [=, callback = std::move(callback)]() { setResult(callback, rmdir, root(p).c_str()); });
 }
 
-void DirectIOHelper::ash_symlink(CTXRef,
-    const boost::filesystem::path &from, const boost::filesystem::path &to, VoidCallback callback)
+void DirectIOHelper::ash_symlink(CTXRef, const boost::filesystem::path &from,
+    const boost::filesystem::path &to, VoidCallback callback)
 {
-    m_workerService.post([=]() {
+    m_workerService.post([=, callback = std::move(callback)]() {
         setResult(callback, symlink, root(from).c_str(), root(to).c_str());
     });
 }
 
-void DirectIOHelper::ash_rename(CTXRef,
-    const boost::filesystem::path &from, const boost::filesystem::path &to, VoidCallback callback)
+void DirectIOHelper::ash_rename(CTXRef, const boost::filesystem::path &from,
+    const boost::filesystem::path &to, VoidCallback callback)
 {
-    m_workerService.post([=]() {
+    m_workerService.post([=, callback = std::move(callback)]() {
         setResult(callback, rename, root(from).c_str(), root(to).c_str());
     });
 }
 
-void DirectIOHelper::ash_link(CTXRef,
-    const boost::filesystem::path &from, const boost::filesystem::path &to, VoidCallback callback)
+void DirectIOHelper::ash_link(CTXRef, const boost::filesystem::path &from,
+    const boost::filesystem::path &to, VoidCallback callback)
 {
-    m_workerService.post([=]() {
+    m_workerService.post([=, callback = std::move(callback)]() {
         setResult(callback, link, root(from).c_str(), root(to).c_str());
     });
 }
 
-void DirectIOHelper::ash_chmod(CTXRef,
-    const boost::filesystem::path &p, mode_t mode, VoidCallback callback)
+void DirectIOHelper::ash_chmod(CTXRef, const boost::filesystem::path &p,
+    mode_t mode, VoidCallback callback)
 {
     m_workerService.post(
-        [=]() { setResult(callback, chmod, root(p).c_str(), mode); });
+        [=, callback = std::move(callback)]() { setResult(callback, chmod, root(p).c_str(), mode); });
 }
 
-void DirectIOHelper::ash_chown(CTXRef,
-    const boost::filesystem::path &p, uid_t uid, gid_t gid, VoidCallback callback)
+void DirectIOHelper::ash_chown(CTXRef, const boost::filesystem::path &p,
+    uid_t uid, gid_t gid, VoidCallback callback)
 {
     m_workerService.post(
-        [=]() { setResult(callback, lchown, root(p).c_str(), uid, gid); });
+        [=, callback = std::move(callback)]() { setResult(callback, lchown, root(p).c_str(), uid, gid); });
 }
 
-void DirectIOHelper::ash_truncate(CTXRef,
-    const boost::filesystem::path &p, off_t size, VoidCallback callback)
+void DirectIOHelper::ash_truncate(
+    CTXRef, const boost::filesystem::path &p, off_t size, VoidCallback callback)
 {
     m_workerService.post(
-        [=]() { setResult(callback, truncate, root(p).c_str(), size); });
+        [=, callback = std::move(callback)]() { setResult(callback, truncate, root(p).c_str(), size); });
 }
 
-void DirectIOHelper::ash_open(CTXRef ctx,
-    const boost::filesystem::path &p, GeneralCallback<int> callback)
+void DirectIOHelper::ash_open(
+    CTXRef ctx, const boost::filesystem::path &p, GeneralCallback<int> callback)
 {
-    m_workerService.post([=, &ctx]() {
+    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
         int res = open(root(p).c_str(), ctx.m_ffi.flags);
         if (res == -1) {
             callback(-1, makePosixError(errno));
@@ -198,16 +202,17 @@ void DirectIOHelper::ash_open(CTXRef ctx,
     });
 }
 
-void DirectIOHelper::ash_read(CTXRef ctx,
-    const boost::filesystem::path &p, asio::mutable_buffer buf, off_t offset, GeneralCallback<asio::mutable_buffer> callback)
+void DirectIOHelper::ash_read(CTXRef ctx, const boost::filesystem::path &p,
+    asio::mutable_buffer buf, off_t offset,
+    GeneralCallback<asio::mutable_buffer> callback)
 {
-    m_workerService.post([=, &ctx]() {
+    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
         try {
             auto res = sh_read(ctx, p, buf, offset);
             callback(res, SuccessCode);
         }
         catch (std::system_error &e) {
-            callback(asio::mutable_buffer(), e);
+            callback(asio::mutable_buffer(), e.code());
         }
     });
 }
@@ -215,21 +220,21 @@ void DirectIOHelper::ash_read(CTXRef ctx,
 void DirectIOHelper::ash_write(CTXRef ctx, const boost::filesystem::path &p,
     asio::const_buffer buf, off_t offset, GeneralCallback<int> callback)
 {
-    m_workerService.post([=, &ctx]() {
+    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
         try {
             auto res = sh_write(ctx, p, buf, offset);
             callback(res, SuccessCode);
         }
         catch (std::system_error &e) {
-            callback(0, e);
+            callback(0, e.code());
         }
     });
 }
 
-void DirectIOHelper::ash_release(CTXRef ctx,
-    const boost::filesystem::path &p, VoidCallback callback)
+void DirectIOHelper::ash_release(
+    CTXRef ctx, const boost::filesystem::path &p, VoidCallback callback)
 {
-    m_workerService.post([=, &ctx]() {
+    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
         if (ctx.m_ffi.fh && close(ctx.m_ffi.fh) == -1) {
             callback(makePosixError(errno));
         }
@@ -240,28 +245,24 @@ void DirectIOHelper::ash_release(CTXRef ctx,
     });
 }
 
-void DirectIOHelper::ash_flush(CTXRef ctx,
-    const boost::filesystem::path &p, VoidCallback callback)
+void DirectIOHelper::ash_flush(
+    CTXRef ctx, const boost::filesystem::path &p, VoidCallback callback)
 {
-    m_workerService.post([=]() {
-        callback(SuccessCode);
-    });
+    m_workerService.post([=, callback = std::move(callback)]() { callback(SuccessCode); });
 }
 
-void DirectIOHelper::ash_fsync(CTXRef ctx,
-    const boost::filesystem::path &p, int isdatasync, VoidCallback callback)
+void DirectIOHelper::ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
+    bool isDataSync, VoidCallback callback)
 {
-    m_workerService.post([=]() {
-        callback(SuccessCode);
-    });
+    m_workerService.post([=, callback = std::move(callback)]() { callback(SuccessCode); });
 }
 
-int DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &p,
+std::size_t DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &p,
     asio::const_buffer buf, off_t offset)
 {
     int fd = ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_WRONLY);
     if (fd == -1) {
-        throw makePosixError(errno);
+        throw std::system_error(makePosixError(errno));
     }
 
     auto res = pwrite(fd, asio::buffer_cast<const char *>(buf),
@@ -272,18 +273,18 @@ int DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &p,
     }
 
     if (res == -1) {
-        throw makePosixError(errno);
+        throw std::system_error(makePosixError(errno));
     }
 
     return res;
 }
 
-asio::mutable_buffer DirectIOHelper::sh_read(CTXRef ctx, const boost::filesystem::path &p,
-    asio::mutable_buffer buf, off_t offset)
+asio::mutable_buffer DirectIOHelper::sh_read(CTXRef ctx,
+    const boost::filesystem::path &p, asio::mutable_buffer buf, off_t offset)
 {
     int fd = ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_RDONLY);
     if (fd == -1) {
-        throw makePosixError(errno);
+        throw std::system_error(makePosixError(errno));
     }
 
     auto res = pread(
@@ -294,7 +295,7 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXRef ctx, const boost::filesystem
     }
 
     if (res == -1) {
-        throw makePosixError(errno);
+        throw std::system_error(makePosixError(errno));
     }
 
     return std::move(asio::buffer(buf, res));
