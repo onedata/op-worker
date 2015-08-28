@@ -132,6 +132,8 @@ start_gui_listener() ->
     gui_utils:init_n2o_ets_and_envs(GuiPort, ?GUI_ROUTING_MODULE,
         ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
 
+    %% TODO LOOLOL
+    gui:init(),
     % Start the listener for web gui and nagios handler
     {ok, _} = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
         ranch_ssl2, [

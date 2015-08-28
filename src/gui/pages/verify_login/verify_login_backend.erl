@@ -14,4 +14,5 @@
 -include_lib("ctool/include/logging.hrl").
 
 page_init() ->
+    g_session:log_in(),
     {serve_body, <<"">>}.

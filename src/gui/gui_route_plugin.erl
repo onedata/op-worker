@@ -11,19 +11,19 @@
 
 
 -define(LOGIN, #gui_route{
-    requires_session = ?NOT_LOGGED_IN,
+    requires_session = ?SESSION_NOT_LOGGED_IN,
     html_file = <<"login.html">>,
     page_backend = login_backend
 }).
 
 -define(VERIFY_LOGIN, #gui_route{
-    requires_session = ?LOGGED_IN,
+    requires_session = ?SESSION_LOGGED_IN,
     html_file = undefined,
     page_backend = verify_login_backend
 }).
 
 -define(FILE_MANAGER, #gui_route{
-    requires_session = ?LOGGED_IN,
+    requires_session = ?SESSION_LOGGED_IN,
     html_file = <<"file_manager.html">>,
     page_backend = file_manager_backend
 }).
@@ -45,7 +45,7 @@ error_500_html_file() ->
     <<"page500.html">>.
 
 
-route(<<"/logintest.html">>) -> ?LOGIN;
+route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/verify_login.html">>) -> ?VERIFY_LOGIN;
 route(<<"/">>) -> ?FILE_MANAGER;
 route(<<"/file_manager.html">>) -> ?FILE_MANAGER.
