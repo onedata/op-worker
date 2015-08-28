@@ -121,7 +121,11 @@ init([]) ->
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
             ccm_con_status = not_connected,
-            monitoring_state = MonitoringState}}
+            monitoring_state = MonitoringState}},
+
+
+        %% Load NIFs
+        ok = helpers_nif:init()
     catch
         _:Error ->
             ?error_stacktrace("Cannot start node_manager: ~p", [Error]),
