@@ -31,7 +31,8 @@
     identity,
     file_meta,
     global_cache_controller,
-    local_cache_controller
+    local_cache_controller,
+    task_pool
 ]).
 
 %% List of all global caches
@@ -65,7 +66,8 @@
 %% sample model with example fields
 -record(task_pool, {
     task :: task_manager:task(),
-    owner :: pid()
+    owner :: pid(),
+    node :: node()
 }).
 
 %% sample model with example fields

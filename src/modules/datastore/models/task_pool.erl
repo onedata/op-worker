@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, list/1, exists/1, delete/1, delete/2, update/2, update/3,
+-export([save/1, get/1, list/0, list/1, list_failed/1, exists/1, delete/1, delete/2, update/2, update/3,
     create/1, create/2, model_init/0, 'after'/5, before/4]).
 
 %%%===================================================================
@@ -82,6 +82,21 @@ list() ->
 
 list(Level) ->
     datastore:list(task_to_db_level(Level), ?MODEL_NAME, ?GET_ALL, []).
+
+list_failed(Level) ->
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (#document{value = V} = Doc, Acc) ->
+            N = node(),
+            case (V#task_pool.node =/= N) orelse is_process_alive(V#task_pool.owner) of
+                false ->
+                    {next, [Doc | Acc]};
+                _ ->
+                    {next, Acc}
+            end
+    end,
+    datastore:list(task_to_db_level(Level), ?MODEL_NAME, Filter, []).
 
 %%--------------------------------------------------------------------
 %% @doc

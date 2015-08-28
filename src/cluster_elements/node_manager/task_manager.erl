@@ -61,7 +61,7 @@ check_and_rerun_all() ->
   check_and_rerun_all(?PERSISTENT_LEVEL).
 
 save_pid(Task, Pid, Level) ->
-  task_pool:create(Level, #task_pool{task = Task, owner = Pid}).
+  task_pool:create(Level, #document{value = #task_pool{task = Task, owner = Pid, node = node()}}).
 
 update_pid(Task, Pid, Level) ->
   task_pool:update(Level, Task#document.key, #{owner => Pid}).
@@ -103,24 +103,8 @@ do_task(Task, Num) ->
       do_task(Task, Num - 1)
   end.
 
-check_and_rerun_all(?NODE_LEVEL) ->
-  {ok, Tasks} = task_pool:list(?NODE_LEVEL),
-  lists:foreach(fun(Task) ->
-    start_task(Task, ?NODE_LEVEL, update_pid)
-  end, Tasks);
-
 check_and_rerun_all(Level) ->
-  {ok, Tasks} = task_pool:list(Level),
-  {ok, Nodes} = gen_server:call({global, ?CCM}, get_nodes),
-  lists:foreach(fun({Task, Node}) ->
-    rpc:call(Node, ?MODULE, start_task, [Task, Level, update_pid])
-  end, zip(Tasks, Nodes)).
-
-zip([], _L12, [], _L22) ->
-  [];
-zip([], L12, L12, L22) ->
-  zip(L12, [], L12, L22);
-zip(L11, L12, [], L22) ->
-  zip(L11,L12, L22, []);
-zip([H1 | L11], L12, [H2 | L21], L22) ->
-  [{H1, H2} | zip(L11, [H1 | L12], L21, [H2 | L22])].
+  {ok, Tasks} = task_pool:list_failed(Level),
+  lists:foreach(fun(Task) ->
+    start_task(Task, Level, update_pid)
+  end, Tasks).
