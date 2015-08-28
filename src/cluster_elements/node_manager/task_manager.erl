@@ -93,6 +93,10 @@ do_task(Task) ->
   ?error_stacktrace("Not a task ~p", [Task]),
   ok.
 
+do_task(Task, Num) when is_record(Task, document) ->
+  V = Task#document.value,
+  do_task(V#task_pool.task, Num);
+
 do_task(_Task, 0) ->
   task_failed;
 

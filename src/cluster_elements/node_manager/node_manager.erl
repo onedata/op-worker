@@ -117,6 +117,7 @@ init([]) ->
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
         next_mem_check(),
+        next_task_check(),
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
@@ -239,9 +240,7 @@ handle_cast(check_mem, State) ->
 
 handle_cast(check_tasks, State) ->
     spawn(task_manager, check_and_rerun_all, []),
-    {ok, IntervalMin} = application:get_env(?APP_NAME, task_checking_period_minutes),
-    Interval = timer:minutes(IntervalMin),
-    erlang:send_after(Interval, self(), {timer, check_tasks}),
+    next_task_check(),
     {noreply, State};
 
 handle_cast(do_heartbeat, State) ->
@@ -589,6 +588,10 @@ next_mem_check() ->
     % random to reduce probability that two nodes clear memory simultanosly
     erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).
 
+next_task_check() ->
+    {ok, IntervalMin} = application:get_env(?APP_NAME, task_checking_period_minutes),
+    Interval = timer:minutes(IntervalMin),
+    erlang:send_after(Interval, self(), {timer, check_tasks}).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -18,14 +18,15 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([ccm_and_worker_test/1, task_pool_test/1, task_manager_repeats_test/1]).
+-export([ccm_and_worker_test/1, task_pool_test/1, task_manager_repeats_test/1, task_manager_rerun_test/1]).
 
 -performance({test_cases, []}).
-all() -> [ccm_and_worker_test, task_pool_test, task_manager_repeats_test].
+all() -> [ccm_and_worker_test, task_pool_test, task_manager_repeats_test, task_manager_rerun_test].
 
 %%%===================================================================
 %%% Test function
@@ -107,6 +108,45 @@ task_manager_repeats_test_base(Config, Level, FirstCheckNum) ->
     ?assertEqual(5, count_answers()),
     ?assertEqual({ok, []}, rpc:call(W1, task_pool, list, [Level])),
     ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level])),
+
+    ControllerPid ! kill.
+
+task_manager_rerun_test(Config) ->
+    task_manager_rerun_test_base(Config, ?NON_LEVEL, 0),
+    task_manager_rerun_test_base(Config, ?NODE_LEVEL, 3),
+    task_manager_rerun_test_base(Config, ?CLUSTER_LEVEL, 5).
+% TODO Uncomment hen list on db will be added
+%%     task_manager_rerun_test_base(Config, ?PERSISTENT_LEVEL, 5).
+
+task_manager_rerun_test_base(Config, Level, FirstCheckNum) ->
+    [W1, W2] = WorkersList = ?config(op_worker_nodes, Config),
+    Workers = [W1, W2, W1, W2, W1],
+
+    lists:foreach(fun(W) ->
+        ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, task_fail_sleep_time_ms, 100]))
+    end, WorkersList),
+
+    ControllerPid = start_tasks(Level, Workers, 25),
+    {A1, A2} = rpc:call(W1, task_pool, list, [Level]),
+    ?assertMatch({ok, _}, {A1, A2}),
+    ?assertEqual(FirstCheckNum, length(A2)),
+    ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level])),
+
+    timer:sleep(timer:seconds(5)),
+    ?assertEqual(0, count_answers()),
+
+    case Level of
+        ?NON_LEVEL ->
+            ok;
+        _ ->
+            lists:foreach(fun(W) ->
+                gen_server:cast({?NODE_MANAGER_NAME, W}, check_tasks)
+            end, WorkersList),
+            timer:sleep(timer:seconds(2)),
+            ?assertEqual(5, count_answers()),
+            ?assertEqual({ok, []}, rpc:call(W1, task_pool, list, [Level])),
+            ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level]))
+    end,
 
     ControllerPid ! kill.
 
