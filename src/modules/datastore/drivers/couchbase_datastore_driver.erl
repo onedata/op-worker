@@ -55,7 +55,7 @@ init_bucket(_Bucket, _Models, _NodeToSync) ->
 -spec save(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:generic_error().
 save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = Rev, value = Value}) ->
-    case byte_size(term_to_binary(Value)) > 100 * 1024 of
+    case byte_size(term_to_binary(Value)) > 8 * 1024 * 1024 of
         true -> error(term_to_big);
         false -> ok
     end,
@@ -94,7 +94,7 @@ update(#model_config{bucket = _Bucket} = ModelConfig, Key, Diff) when is_map(Dif
 -spec create(model_behaviour:model_config(), datastore:document()) ->
     {ok, datastore:ext_key()} | datastore:create_error().
 create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value = Value}) ->
-    case byte_size(term_to_binary(Value)) > 100 * 1024 of
+    case byte_size(term_to_binary(Value)) > 8 * 1024 * 1024 of
         true -> error(term_to_big);
         false -> ok
     end,
@@ -295,7 +295,12 @@ foreach_link(#model_config{bucket = _Bucket} = ModelConfig, Key, Fun, AccIn) ->
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
     try
-        ensure_mc_text_connected()
+        case ensure_mc_text_connected() of
+            ok -> ok;
+            {ok, _} -> ok;
+            {error, Reason} ->
+                {error, Reason}
+        end
     catch
         _:R -> {error, R}
     end.
