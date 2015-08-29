@@ -40,7 +40,7 @@ public:
     void ash_readlink(CTXRef ctx, const boost::filesystem::path &p,
         GeneralCallback<std::string>);
     void ash_readdir(CTXRef ctx, const boost::filesystem::path &p, off_t offset,
-        size_t count, GeneralCallback<std::vector<std::string> &>);
+        size_t count, GeneralCallback<const std::vector<std::string> &>);
     void ash_mknod(CTXRef ctx, const boost::filesystem::path &p, mode_t mode,
         dev_t rdev, VoidCallback);
     void ash_mkdir(CTXRef ctx, const boost::filesystem::path &p, mode_t mode,
@@ -70,18 +70,18 @@ public:
     void ash_release(
         CTXRef ctx, const boost::filesystem::path &p, VoidCallback);
     void ash_flush(CTXRef ctx, const boost::filesystem::path &p, VoidCallback);
-    void ash_fsync(CTXRef ctx, const boost::filesystem::path &p, int isdatasync,
+    void ash_fsync(CTXRef ctx, const boost::filesystem::path &p, bool isDataSync,
         VoidCallback);
 
     asio::mutable_buffer sh_read(CTXRef ctx, const boost::filesystem::path &p,
         asio::mutable_buffer buf, off_t offset);
-    int sh_write(CTXRef ctx, const boost::filesystem::path &p,
+    std::size_t sh_write(CTXRef ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset);
 
 protected:
     template <class Result, typename... Args1, typename... Args2>
     static void setResult(
-        VoidCallback callback, Result (*fun)(Args2...), Args1 &&... args)
+        const VoidCallback &callback, Result (*fun)(Args2...), Args1 &&... args)
     {
         auto posixStatus = fun(std::forward<Args1>(args)...);
 
