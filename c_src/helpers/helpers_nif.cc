@@ -666,8 +666,8 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
     auto buf = std::make_shared<std::vector<char>>(size);
     ctx.helperObj->ash_read(*ctx.helperCTX, file,
         asio::mutable_buffer(buf->data(), size), offset,
-        [=, buf](asio::mutable_buffer buf, error_t e) {
-            handle_result(ctx, e, buf);
+        [=, buf](asio::mutable_buffer mbuf, error_t e) {
+            handle_result(ctx, e, mbuf);
         });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -678,7 +678,7 @@ ERL_NIF_TERM write(
 {
     auto sData = std::make_shared<std::string>(std::move(data));
     ctx.helperObj->ash_write(*ctx.helperCTX, file,
-        asio::const_buffer(data.data(), data.size()), offset,
+        asio::const_buffer(sData->data(), sData->size()), offset,
         [ctx, file, offset, sData](int size, error_t e) { handle_result(ctx, e, size); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
