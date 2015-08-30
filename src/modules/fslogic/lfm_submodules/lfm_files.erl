@@ -152,12 +152,17 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTy
             {{SID, FID}, CachedHandle} ->
                 {{SID, FID}, CachedHandle}
         end,
-    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, SFMHandle, Handle#lfm_handle.sfm_handles)},
+    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, {{StorageId, FileId}, SFMHandle}, Handle#lfm_handle.sfm_handles)},
+    ?info("WRITE: ~p: ~p", [Offset, binary:part(Buffer, 0, NewSize)]),
+
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
-            ok = event_manager:emit(#event{event = #write_event{file_uuid = UUID, blocks = [
+            {ok, #document{value = Storage2}} = storage:get(StorageId),
+            {ok, NewSFMHandle2} = storage_file_manager:open(Storage2, FileId, OpenType),
+            ?info("AFTER WRITE: ~p sess: ~p", [storage_file_manager:read(NewSFMHandle2, Offset, NewSize), SessId]),
+            ok = event_manager:emit(#write_event{file_uuid = UUID, blocks = [
                 #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = Written}
-            ]}}, SessId),
+            ]}, SessId),
             {ok, NewHandle, Written};
         {error, Reason2} ->
             {error, Reason2}
@@ -188,12 +193,13 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTyp
             {{SID, FID}, CachedHandle} ->
                 {{SID, FID}, CachedHandle}
         end,
-    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, SFMHandle, Handle#lfm_handle.sfm_handles)},
+    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, {{StorageId, FileId}, SFMHandle}, Handle#lfm_handle.sfm_handles)},
+    %FileSize = fslogic_blocks:get_file_size({uuid, UUID}),
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
-            ok = event_manager:emit(#event{event = #read_event{file_uuid = UUID, blocks = [
+            ok = event_manager:emit(#read_event{file_uuid = UUID, blocks = [
                 #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = size(Data)}
-            ]}}, SessId),
+            ]}, SessId),
             {ok, NewHandle, Data};
         {error, Reason2} ->
             {error, Reason2}
@@ -218,8 +224,12 @@ truncate(_FileKey, _Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_block_map(FileKey :: file_key()) -> {ok, [block_range()]} | error_reply().
-get_block_map(_FileKey) ->
-    {ok, []}.
+get_block_map(#lfm_handle{file_uuid = UUID}) ->
+    get_block_map({uuid, UUID});
+get_block_map(File) ->
+    #document{value = LocalLocation} = fslogic_utils:get_local_file_location(File),
+    #file_location{blocks = Blocks} = LocalLocation,
+    {ok, Blocks}.
 
 
 get_sfm_handle_key(UUID, Offset, Size) ->
@@ -234,6 +244,8 @@ get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, stora
     {{SID, FID}, Size};
 get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _]) when Offset >= O, Offset + Size > O + S ->
     {{SID, FID}, S - (Offset - O)};
-get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S} | _]) when Offset >= O + S ->
+get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S} | _]) when Offset + Size =< O ->
+    {default, Size};
+get_sfm_handle_key(_UUID, Offset, Size, []) ->
     {default, Size}.
 

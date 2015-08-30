@@ -37,6 +37,7 @@
 -include("types.hrl").
 -include("errors.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% User context
 -export([set_user_context/1]).
@@ -186,7 +187,26 @@ open(SessId, FileKey, OpenType) ->
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
 write(FileHandle, Offset, Buffer) ->
-    lfm_files:write(FileHandle, Offset, Buffer).
+    Size = size(Buffer),
+    try lfm_files:write(FileHandle, Offset, Buffer) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, _, Size} = Ret1 ->
+            Ret1;
+        {ok, _, 0} = Ret2 ->
+            Ret2;
+        {ok, NewHandle, Written} ->
+            case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written)) of
+                {ok, NewHandle1, Written1} ->
+                    {ok, NewHandle1, Written + Written1};
+                {error, Reason1} ->
+                    {error, Reason1}
+            end
+    catch
+        _:Error ->
+            ?error_stacktrace("Write error for file ~p: ~p", [FileHandle, Error]),
+            {error, Error}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -197,7 +217,28 @@ write(FileHandle, Offset, Buffer) ->
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
-    lfm_files:read(FileHandle, Offset, MaxSize).
+    try lfm_files:read(FileHandle, Offset, MaxSize) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, NewHandle, Bytes} = Ret1 ->
+            case size(Bytes) of
+                MaxSize ->
+                    Ret1;
+                0 ->
+                    Ret1;
+                Size ->
+                    case lfm_files:read(NewHandle, Offset + Size, MaxSize - Size) of
+                        {ok, NewHandle1, Bytes1} ->
+                            {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
+            end
+    catch
+        _:Error ->
+            ?error_stacktrace("Read error for file ~p: ~p", [FileHandle, Error]),
+            {error, Error}
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -52,9 +52,11 @@ init(_Args) ->
         event_stream = ?WRITE_EVENT_STREAM#event_stream{
             metadata = 0,
             emission_time = 500,
-            handlers = [fun(Evts) -> worker_proxy:cast(fslogic_worker, {write_event, Evts}) end]
+            emission_rule = fun(_) -> true end,
+            handlers = [fun(Evts) -> worker_proxy:cast(fslogic_worker, {event, Evts}) end]
         }
     },
+    ?info("FSLogic subscribe"),
     {ok, SubId} = event_manager:subscribe(Sub),
     {ok, #{sub_id => SubId}}.
 
@@ -76,9 +78,12 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
-handle(#write_event{blocks = Blocks, file_uuid = FileUUID} = Evts) ->
-    fslogic_blocks:update(FileUUID, Blocks),
-    ?info("WRITE: ~p", [Evts]),
+handle({event, Evts}) ->
+    ?info("WRITE EVENT: ~p", [Evts]),
+    lists:foreach(
+        fun(#write_event{blocks = Blocks, file_uuid = FileUUID}) ->
+            fslogic_blocks:update(FileUUID, Blocks)
+        end, Evts),
     ok;
 handle(_Request) ->
     ?log_bad_request(_Request),

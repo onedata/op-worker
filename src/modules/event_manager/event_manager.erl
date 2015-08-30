@@ -73,8 +73,10 @@ start_link(EvtManSup, SessId) ->
 -spec emit(Evt :: event(), SessId :: session:id()) ->
     ok | {error, Reason :: event_manager_not_found | term()}.
 emit(Evt, SessId) ->
+    ?info("emit event_1 ~p ~p", [Evt, SessId]),
     case session:get_event_manager(SessId) of
         {ok, EvtMan} ->
+            ?info("emit event_2 ~p ~p ~p", [Evt, SessId, EvtMan]),
             gen_server:cast(EvtMan, #client_message{message_body = Evt});
         {error, Reason} ->
             {error, Reason}
@@ -132,6 +134,13 @@ init([EvtManSup, SessId]) ->
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{event_manager => self()}),
     gen_server:cast(self(), {initialize, EvtManSup}),
+    {ok, Subscriptions} = subscription:list(),
+    lists:foreach(
+        fun(#document{value = #subscription{value = Sub}}) ->
+            ?info("Reregister sub ~p for session ~p", [Sub, SessId]),
+            ok = gen_server:cast(self(), {subscribe, Sub})
+        end, Subscriptions),
+
     {ok, #state{session_id = SessId}}.
 
 %%--------------------------------------------------------------------
@@ -194,6 +203,7 @@ handle_cast({event_stream_terminated, SubId, _, EvtStmState},
 
 handle_cast({subscribe, Sub}, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms} = State) ->
+    ?info("do_subscribe ~p ~p", [SessId, Sub]),
     {ok, EvtStm} = create_event_stream(EvtStmSup, SessId, Sub),
     {noreply, State#state{event_streams = [EvtStm | EvtStms]}};
 
@@ -209,6 +219,7 @@ handle_cast(#client_message{message_body = Evt}, #state{
     event_streams = EvtStms} = State) ->
     NewEvtStms = lists:map(fun
         ({_, {running, Pid, AdmRule}} = EvtStm) ->
+            ?info("cast event ~p ~p", [Evt, AdmRule(Evt)]),
             case AdmRule(Evt) of
                 true -> gen_server:cast(Pid, {event, Evt}), EvtStm;
                 false -> EvtStm

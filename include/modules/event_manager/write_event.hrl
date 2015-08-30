@@ -15,10 +15,10 @@
 -include("event_stream.hrl").
 
 -record(write_event, {
-    counter :: non_neg_integer(),
+    counter = 0 :: non_neg_integer(),
     file_uuid :: binary(),
     file_size :: non_neg_integer(),
-    size :: non_neg_integer(),
+    size = 0 :: non_neg_integer(),
     blocks = [] :: [event_utils:file_block()]
 }).
 

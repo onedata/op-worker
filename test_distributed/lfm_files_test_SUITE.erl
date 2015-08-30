@@ -101,21 +101,71 @@ lfm_write_test(Config) ->
 
     spawn_link(W,
         fun() ->
-            {ok, Handle10} = file_manager:open(SessId1, {path, <<"/test3">>}, write),
-            {ok, Handle20} = file_manager:open(SessId1, {path, <<"/test4">>}, write),
+            Res =
+                try
+                    {ok, Handle10} = file_manager:open(SessId1, {path, <<"/test3">>}, rdwr),
+                    {ok, Handle20} = file_manager:open(SessId1, {path, <<"/test4">>}, rdwr),
 
-            {ok, Handle11, 4} = file_manager:write(Handle10, 0, <<"data">>),
-            {ok, Handle12, 3} = file_manager:write(Handle11, 3, <<"omg">>),
+                    Go0 =
+                        fun(Go1, C) ->
+                            case C > 1000 of
+                                true ->
+                                    ok;
+                                false ->
+                                    {ok, _, W0} = file_manager:write(Handle10, C, <<"x">>),
+                                    Host ! {msg, {C, W0}},
+                                    Go1(Go1, C + 1)
+                            end
+                        end,
 
-            {ok, Handle13, <<"omg">>} = file_manager:read(Handle12, 3, 5),
+                    %Go0(Go0, 0),
 
-            Host ! done
+                    {ok, Handle11, W1} = file_manager:write(Handle10, 0, <<"abcd">>),
+                    Host ! {msg, W1},
+                    timer:sleep(1500),
+                    {ok, [#file_block{offset = 0, size = 4}]} = file_manager:get_block_map(Handle10),
+                    {ok, _, <<"abcd">>} = file_manager:read(Handle10, 0, 4),
+                    {ok, Handle12, W2} = file_manager:write(Handle11, 3, <<"efg">>),
+                    timer:sleep(1500),
+                    {ok, [#file_block{offset = 0, size = 6}]} = file_manager:get_block_map(Handle10),
+                    Host ! {msg, W2},
+                    {ok, _, <<"efg">>} = file_manager:read(Handle10, 3, 3),
+                    {ok, _, W3} = file_manager:write(Handle12, 6, <<"hijl">>),
+                    Host ! {msg, W3},
+                    timer:sleep(1500),
+                    {ok, [#file_block{offset = 0, size = 10}]} = file_manager:get_block_map(Handle10),
+                    {ok, _, <<"hijl">>} = file_manager:read(Handle10, 6, 4),
+                    {ok, _, 3} = file_manager:write(Handle12, 10, <<"mno">>),
+                    {ok, _, 4} = file_manager:write(Handle12, 13, <<"prst">>),
+                    {ok, _, 3} = file_manager:write(Handle12, 17, <<"uwx">>),
+
+                    {ok, _, <<"abcefg">>} = file_manager:read(Handle10, 0, 6),
+                    {ok, _, <<"mnoprst">>} = file_manager:read(Handle12, 10, 7),
+                    timer:sleep(1500),
+                    {ok, [#file_block{offset = 0, size = 20}]} = file_manager:get_block_map(Handle10),
+
+                    {ok, Handle13, <<"efghijl">>} = file_manager:read(Handle12, 3, 7)
+                catch
+                    Type:Reason ->
+                        {Type, Reason, erlang:get_stacktrace()}
+                end,
+
+            Host ! {done, Res}
 
         end),
 
-    receive
-        done -> ok
-    end,
+    Fun =
+        fun(Rec) ->
+            receive
+                {msg, Msg} ->
+                    ct:print("Msg: ~p", [Msg]),
+                    Rec(Rec);
+                {done, Result} -> ct:print("Done: ~p", [Result])
+            end
+        end,
+
+    Fun(Fun),
+    timer:sleep(5),
 
     ok.
 
