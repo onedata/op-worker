@@ -10,7 +10,6 @@
 %%%-------------------------------------------------------------------
 -module(helpers_nif).
 -author("Rafal Slota").
--on_load(init/0).
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/helpers.hrl").
@@ -27,6 +26,7 @@
 -export_type([nif_string/0, resource_handle/0, file_type/0]).
 
 %% API
+-export([init/0]).
 -export([new_helper_obj/2, new_helper_ctx/0, set_user_ctx/3, get_user_ctx/1]).
 -export([username_to_uid/1, groupname_to_gid/1]).
 -export([set_flags/2, get_flags/1, get_flag_value/1]).
@@ -339,4 +339,10 @@ init() ->
                 filename:join(Dir, LibName)
         end,
 
-    erlang:load_nif(LibPath, 0).
+    case erlang:load_nif(LibPath, 0) of
+        ok -> ok;
+        {error, {reload, "Reload not supported by this NIF library."}} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end .

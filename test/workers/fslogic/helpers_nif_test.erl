@@ -20,16 +20,19 @@
 %%%===================================================================
 
 new_ctx_test() ->
+    ok = helpers_nif:init(),
     ?assertMatch({ok, _}, helpers_nif:new_helper_ctx()),
     ok.
 
 new_obj_test() ->
+    ok = helpers_nif:init(),
     ?assertMatch({ok, _}, helpers_nif:new_helper_obj(<<"DirectIO">>, [<<"/tmp">>])),
     ok.
 
 ctx_test_() ->
     {setup,
         fun() ->
+            ok = helpers_nif:init(),
             {ok, CTX} = helpers_nif:new_helper_ctx(),
             CTX
         end,
@@ -110,11 +113,13 @@ ctx_test_() ->
     }.
 
 username_to_uid_test() ->
+    ok = helpers_nif:init(),
     ?assertMatch({ok, 0}, helpers_nif:username_to_uid(<<"root">>)),
     ?assertMatch({error, einval}, helpers_nif:username_to_uid(<<"sadmlknfqlwknd">>)),
     ok.
 
 groupname_to_gid_test() ->
+    ok = helpers_nif:init(),
     ?assertMatch({ok, 0}, helpers_nif:groupname_to_gid(<<"root">>)),
     ?assertMatch({error, einval}, helpers_nif:groupname_to_gid(<<"sadmlknfqlwknd">>)),
     ok.

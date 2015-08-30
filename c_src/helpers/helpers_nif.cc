@@ -349,54 +349,54 @@ gid_t gNameToGID(const std::string &gname, const std::string &uname = "")
  * Handle asio::mutable_buffer value from helpers and send it to requesting
  * process.
  */
-void handle_value(const NifCTX &ctx, asio::mutable_buffer buffer)
+void handle_value(NifCTX &ctx, asio::mutable_buffer buffer)
 {
     nifpp::binary bin(asio::buffer_size(buffer));
     asio::buffer_copy(asio::mutable_buffer{bin.data, bin.size}, buffer);
-    enif_send(ctx.env, &ctx.reqPid, ctx.env,
-        nifpp::make(ctx.env,
+    enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
+        nifpp::make(ctx.localEnv,
                   std::make_tuple(ctx.reqId,
-                        std::make_tuple(ok, nifpp::make(ctx.env, bin)))));
+                        std::make_tuple(ok, nifpp::make(ctx.localEnv, bin)))));
 }
 
 /**
  * Handle struct stat value from helpers and send it to requesting process.
  */
-void handle_value(const NifCTX &ctx, struct stat &s)
+void handle_value(NifCTX &ctx, struct stat &s)
 {
     auto record =
         std::make_tuple(nifpp::str_atom("statbuf"), s.st_dev, s.st_ino,
             s.st_mode, s.st_nlink, s.st_uid, s.st_gid, s.st_rdev, s.st_size,
             s.st_atime, s.st_mtime, s.st_ctime, s.st_blksize, s.st_blocks);
-    enif_send(ctx.env, &ctx.reqPid, ctx.env,
-        nifpp::make(ctx.env,
+    enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
+        nifpp::make(ctx.localEnv,
                   std::make_tuple(ctx.reqId, std::make_tuple(ok, record))));
 }
 
 /**
  * Handle generic result from helpers and send it to requesting process.
  */
-template <class T> void handle_value(const NifCTX &ctx, T &response)
+template <class T> void handle_value(NifCTX &ctx, T &response)
 {
-    enif_send(ctx.env, &ctx.reqPid, ctx.env,
-        nifpp::make(ctx.env,
+    enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
+        nifpp::make(ctx.localEnv,
                   std::make_tuple(ctx.reqId, std::make_tuple(ok, response))));
 }
 
 /**
  * Handle void value from helpers and send it to requesting process.
  */
-void handle_value(const NifCTX &ctx)
+void handle_value(NifCTX &ctx)
 {
-    enif_send(ctx.env, &ctx.reqPid, ctx.env,
-        nifpp::make(ctx.env, std::make_tuple(ctx.reqId, ok)));
+    enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
+        nifpp::make(ctx.localEnv, std::make_tuple(ctx.reqId, ok)));
 }
 
 /**
  * Handles result from helpers callback either process return value or error.
  */
 template <class... T>
-void handle_result(const NifCTX ctx, error_t e, T... value)
+void handle_result(NifCTX ctx, error_t e, T... value)
 {
     if (!e) {
         handle_value(ctx, value...);
@@ -407,8 +407,8 @@ void handle_result(const NifCTX ctx, error_t e, T... value)
         if (it != error_to_atom.end())
             reason = it->second;
 
-        enif_send(ctx.env, &ctx.reqPid, ctx.env,
-            nifpp::make(ctx.env, std::make_tuple(ctx.reqId,
+        enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
+            nifpp::make(ctx.localEnv, std::make_tuple(ctx.reqId,
                                      std::make_tuple(error, reason))));
     }
 }
@@ -673,8 +673,8 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
     auto buf = std::make_shared<std::vector<char>>(size);
     ctx.helperObj->ash_read(*ctx.helperCTX, file,
         asio::mutable_buffer(buf->data(), size), offset,
-        [=](asio::mutable_buffer buf, error_t e) {
-            handle_result(ctx, e, buf);
+        [=, buf](asio::mutable_buffer mbuf, error_t e) {
+            handle_result(ctx, e, mbuf);
         });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -683,9 +683,10 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
 ERL_NIF_TERM write(
     NifCTX ctx, const std::string file, const off_t offset, std::string data)
 {
+    auto sData = std::make_shared<std::string>(std::move(data));
     ctx.helperObj->ash_write(*ctx.helperCTX, file,
-        asio::const_buffer(data.data(), data.size()), offset,
-        [=](int size, error_t e) { handle_result(ctx, e, size); });
+        asio::const_buffer(sData->data(), sData->size()), offset,
+        [ctx, file, offset, sData](int size, error_t e) { handle_result(ctx, e, size); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
