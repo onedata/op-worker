@@ -160,11 +160,17 @@ rm(FileKey) ->
 -spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
     {ok, file_id()} | error_reply().
 create(SessId, Path, Mode) ->
-    CTX = fslogic_context:new(SessId),
-    {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalPath} = file_meta:gen_path(Entry),
-    lfm_files:create(CTX, CanonicalPath, Mode).
+    try
+        CTX = fslogic_context:new(SessId),
+        {ok, Tokens} = fslogic_path:verify_file_path(Path),
+        Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+        {ok, CanonicalPath} = file_meta:gen_path(Entry),
+        lfm_files:create(CTX, CanonicalPath, Mode)
+    catch
+        _:Reason ->
+            ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
+            {error, Reason}
+    end .
 
 
 %%--------------------------------------------------------------------

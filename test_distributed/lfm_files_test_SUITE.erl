@@ -10,7 +10,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files_test_SUITE).
--author("Krzysztof Trzepla").
 -author("Rafal Slota").
 
 -include("modules/datastore/datastore.hrl").
@@ -50,10 +49,14 @@ all() -> [
 
 
 fslogic_new_file_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+
+    ct:print("OMG ~p", [rpc:call(Worker, ets, info, [lfm_handles])]),
+    [S] = ?config(servers, Config),
+    ct:print("OMG ~p ~p", [S, S]),
 
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
@@ -63,7 +66,7 @@ fslogic_new_file_test(Config) ->
     ok.
 
 lfm_create_test(Config) ->
-    [W, _] = ?config(op_worker_nodes, Config),
+    [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
@@ -71,19 +74,19 @@ lfm_create_test(Config) ->
     RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
 
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId1, <<"/test1">>, 8#755])]),
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId1, <<"/test2">>, 8#755])]),
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId1, <<"/test1">>, 8#755])]),
+    ?assertMatch({ok, _}, create(W, SessId1, <<"/test1">>, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId1, <<"/test2">>, 8#755)),
+    ?assertMatch({error, ?EEXIST}, create(W, SessId1, <<"/test1">>, 8#755)),
 
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test1">>, 8#755])]),
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test2">>, 8#755])]),
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test1">>, 8#755])]),
+    ?assertMatch({ok, _}, create(W, SessId2, <<"/test1">>, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId2, <<"/test2">>, 8#755)),
+    ?assertMatch({error, ?EEXIST}, create(W, SessId2, <<"/test1">>, 8#755)),
 
     ok.
 
 
 lfm_write_test(Config) ->
-    [W, _] = ?config(op_worker_nodes, Config),
+    [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
@@ -91,81 +94,57 @@ lfm_write_test(Config) ->
     RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
 
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId1, <<"/test3">>, 8#755])]),
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId1, <<"/test4">>, 8#755])]),
+    ?assertMatch({ok, _}, create(W, SessId1, <<"/test3">>, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId1, <<"/test4">>, 8#755)),
 
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test3">>, 8#755])]),
-    ct:print("New loc: ~p", [?lfm_req(W, create, [SessId2, <<"/test4">>, 8#755])]),
+    ?assertMatch({ok, _}, create(W, SessId2, <<"/test3">>, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId2, <<"/test4">>, 8#755)),
 
-    Host = self(),
+    O11 = open(W, SessId1, {path, <<"/test3">>}, rdwr),
+    O12 = open(W, SessId1, {path, <<"/test4">>}, rdwr),
 
-    spawn_link(W,
-        fun() ->
-            Res =
-                try
-                    {ok, Handle10} = file_manager:open(SessId1, {path, <<"/test3">>}, rdwr),
-                    {ok, Handle20} = file_manager:open(SessId1, {path, <<"/test4">>}, rdwr),
+    ?assertMatch({ok, _}, O11),
+    ?assertMatch({ok, _}, O12),
 
-                    Go0 =
-                        fun(Go1, C) ->
-                            case C > 1000 of
-                                true ->
-                                    ok;
-                                false ->
-                                    {ok, _, W0} = file_manager:write(Handle10, C, <<"x">>),
-                                    Host ! {msg, {C, W0}},
-                                    Go1(Go1, C + 1)
-                            end
-                        end,
+    {ok, Handle11} = O11,
+    {ok, Handle12} = O12,
 
-                    %Go0(Go0, 0),
+    WriteAndTest =
+        fun(Worker, Handle, Offset, Bytes) ->
+            ct:print("Testing lfm write with offset ~p and binary ~p", [Offset, Bytes]),
+            Size = size(Bytes),
+            ?assertMatch({ok, Size}, write(Worker, Handle, Offset, Bytes)),
+            for(Offset, Offset + Size - 1,
+                fun(I) ->
+                    for(1, Offset + Size - I,
+                        fun(J) ->
+                            SubBytes = binary:part(Bytes, I - Offset, J),
+                            ct:print("===== Offset ~p Size ~p Expected ~p", [I, J, SubBytes]),
+                            ?assertMatch({ok, SubBytes}, read(Worker, Handle, I, J))
+                        end)
+                end)
 
-                    {ok, Handle11, W1} = file_manager:write(Handle10, 0, <<"abcd">>),
-                    Host ! {msg, W1},
-                    timer:sleep(1500),
-                    {ok, [#file_block{offset = 0, size = 4}]} = file_manager:get_block_map(Handle10),
-                    {ok, _, <<"abcd">>} = file_manager:read(Handle10, 0, 4),
-                    {ok, Handle12, W2} = file_manager:write(Handle11, 3, <<"efg">>),
-                    timer:sleep(1500),
-                    {ok, [#file_block{offset = 0, size = 6}]} = file_manager:get_block_map(Handle10),
-                    Host ! {msg, W2},
-                    {ok, _, <<"efg">>} = file_manager:read(Handle10, 3, 3),
-                    {ok, _, W3} = file_manager:write(Handle12, 6, <<"hijl">>),
-                    Host ! {msg, W3},
-                    timer:sleep(1500),
-                    {ok, [#file_block{offset = 0, size = 10}]} = file_manager:get_block_map(Handle10),
-                    {ok, _, <<"hijl">>} = file_manager:read(Handle10, 6, 4),
-                    {ok, _, 3} = file_manager:write(Handle12, 10, <<"mno">>),
-                    {ok, _, 4} = file_manager:write(Handle12, 13, <<"prst">>),
-                    {ok, _, 3} = file_manager:write(Handle12, 17, <<"uwx">>),
 
-                    {ok, _, <<"abcefg">>} = file_manager:read(Handle10, 0, 6),
-                    {ok, _, <<"mnoprst">>} = file_manager:read(Handle12, 10, 7),
-                    timer:sleep(1500),
-                    {ok, [#file_block{offset = 0, size = 20}]} = file_manager:get_block_map(Handle10),
 
-                    {ok, Handle13, <<"efghijl">>} = file_manager:read(Handle12, 3, 7)
-                catch
-                    Type:Reason ->
-                        {Type, Reason, erlang:get_stacktrace()}
-                end,
-
-            Host ! {done, Res}
-
-        end),
-
-    Fun =
-        fun(Rec) ->
-            receive
-                {msg, Msg} ->
-                    ct:print("Msg: ~p", [Msg]),
-                    Rec(Rec);
-                {done, Result} -> ct:print("Done: ~p", [Result])
-            end
         end,
 
-    Fun(Fun),
-    timer:sleep(5),
+    WriteAndTest(W, Handle11, 0, <<"abc">>),
+    WriteAndTest(W, Handle12, 0, <<"abc">>),
+
+    WriteAndTest(W, Handle11, 3, <<"def">>),
+    WriteAndTest(W, Handle12, 3, <<"def">>),
+
+    WriteAndTest(W, Handle11, 2, <<"qwerty">>),
+    WriteAndTest(W, Handle12, 2, <<"qwerty">>),
+
+    WriteAndTest(W, Handle11, 8, <<"zxcvbnm">>),
+    WriteAndTest(W, Handle12, 8, <<"zxcvbnm">>),
+
+    WriteAndTest(W, Handle11, 6, <<"qwerty">>),
+    WriteAndTest(W, Handle12, 6, <<"qwerty">>),
+
+    WriteAndTest(W, Handle11, 10, crypto:rand_bytes(20)),
+    WriteAndTest(W, Handle12, 10, crypto:rand_bytes(20)),
 
     ok.
 
@@ -217,10 +196,40 @@ init_per_testcase(_, Config) ->
     User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
     User4 = {4, [<<"space_id4">>]},
 
-    session_setup(Worker, [User1, User2, User3, User4], Config).
+    Host = self(),
+    Servers = lists:map(
+        fun(W) ->
+            spawn_link(W,
+                fun() ->
+                    lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
+                    Host ! {self(), done},
+                    receive
+                        exit -> ok
+                    end
+                end)
+        end, ?config(op_worker_nodes, Config)),
+
+    lists:foreach(
+        fun(Server) ->
+            receive
+                {Server, done} -> ok
+            after timer:seconds(5) ->
+                error("Cannot setup lfm_handles ETS")
+            end
+        end, Servers),
+
+
+    Config1 = session_setup(Worker, [User1, User2, User3, User4], Config),
+    [{servers, Servers} | Config1].
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
+    lists:foreach(
+        fun(Pid) ->
+            Pid ! exit
+        end, ?config(servers, Config)),
+
     session_teardown(Worker, Config),
     mocks_teardown(Workers, [file_meta, gr_spaces]).
 
@@ -340,3 +349,70 @@ mocks_teardown(Workers, Modules) ->
 
 name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
+
+
+create(Worker, SessId, FilePath, Mode) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                file_manager:create(SessId, FilePath, Mode),
+            Host ! {self(), Result}
+        end).
+
+
+open(Worker, SessId, FileKey, OpenMode) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                case file_manager:open(SessId, FileKey, OpenMode) of
+                    {ok, Handle} ->
+                        TestHandle = crypto:rand_bytes(10),
+                        ets:insert(lfm_handles, {TestHandle, Handle}),
+                        {ok, TestHandle};
+                    Other -> Other
+                end,
+            Host ! {self(), Result}
+        end).
+
+read(Worker, TestHandle, Offset, Size) ->
+    exec(Worker,
+        fun(Host) ->
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            Result =
+                case file_manager:read(Handle, Offset, Size) of
+                    {ok, NewHandle, Res}  ->
+                        ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                        {ok, Res};
+                    Other -> Other
+                end,
+            Host ! {self(), Result}
+        end).
+
+write(Worker, TestHandle, Offset, Bytes) ->
+    exec(Worker,
+        fun(Host) ->
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            Result =
+                case file_manager:write(Handle, Offset, Bytes) of
+                    {ok, NewHandle, Res}  ->
+                        ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                        {ok, Res};
+                    Other -> Other
+                end,
+            Host ! {self(), Result}
+        end).
+
+
+exec(Worker, Fun) ->
+    Host = self(),
+    Pid = spawn_link(Worker, fun() -> Fun(Host) end),
+    receive
+        {Pid, Result} -> Result
+    after timer:seconds(5) ->
+        {error, test_timeout}
+    end.
+
+for(From, To, Fun) ->
+    for(From, To, 1, Fun).
+for(From, To, Step, Fun) ->
+    [Fun(I) || I <- lists:seq(From, To, Step)].
