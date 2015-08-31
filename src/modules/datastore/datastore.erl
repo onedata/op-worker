@@ -13,6 +13,7 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_engine.hrl").
+-include("cluster_elements/node_manager/task_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -465,9 +466,7 @@ model_name(Record) when is_tuple(Record) ->
 %%--------------------------------------------------------------------
 -spec run_prehooks(Config :: model_behaviour:model_config(),
     Method :: model_behaviour:model_action(), Level :: store_level(),
-    Context :: term()) -> ok | {ok, NewMethod, NewArgs} | {error, Reason :: term()} when
-    NewMethod :: atom(),
-    NewArgs :: list().
+    Context :: term()) -> ok | {task, task_manager:task()}| {error, Reason :: term()}.
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
@@ -704,15 +703,18 @@ exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
             Result
     end;
 exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
-    ModelConfig = ModelName:model_init(),
     Return =
+        ModelConfig = ModelName:model_init(),
         case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Args) of
-            {ok, NewMethod, NewArgs} ->
-                FullArgs = [ModelConfig | NewArgs],
-                worker_proxy:call(datastore_worker, {driver_call, Driver, NewMethod, FullArgs}, timer:minutes(5));
             ok ->
                 FullArgs = [ModelConfig | Args],
                 worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs}, timer:minutes(5));
+            {task, Task} ->
+                Level = case lists:member(ModelName, ?GLOBAL_CACHES) of
+                             true -> ?CLUSTER_LEVEL;
+                             _ -> ?NODE_LEVEL
+                         end,
+                ok = task_manager:start_task(Task, Level);
             {error, Reason} ->
                 {error, Reason}
         end,

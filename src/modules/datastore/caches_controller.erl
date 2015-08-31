@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module provides functions used by node manager to coordinate
 %%% clearing of not used values cached in memory.
-%%% TODO - merge caches controller and sort cache documents by timestamp.
+%%% TODO - sort cache documents by timestamp.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(caches_controller).
