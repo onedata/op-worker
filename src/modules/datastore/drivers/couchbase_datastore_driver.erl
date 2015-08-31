@@ -448,8 +448,8 @@ ensure_mc_text_connected() ->
                 datastore_worker:state_put(mc_text_connected, Res),
                 case Res of
                     {ok, _} -> ok;
-                    {error, Reason} ->
-                        {error, Reason}
+                    {error, Reason0} ->
+                        {error, Reason0}
                 end
             catch
                 _:Reason ->
