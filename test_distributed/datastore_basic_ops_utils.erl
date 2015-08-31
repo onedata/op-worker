@@ -656,16 +656,11 @@ set_hooks(Case, Config) ->
         global ->
             ok;
         local ->
-            lists:foreach(fun(W) ->
-                lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}])),
-                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, local_cache_controller}]))
-                end, ModelConfig)
-            end, Workers);
+            ok;
         _ ->
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}]))
+                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, cache_controller}]))
                 end, ModelConfig)
             end, Workers)
     end,
@@ -686,18 +681,11 @@ unset_hooks(Case, Config) ->
             ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
         local ->
             ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
-            ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000)),
-
-            lists:foreach(fun(W) ->
-                lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, local_cache_controller}])),
-                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
-                end, ModelConfig)
-            end, Workers);
+            ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
         _ ->
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
+                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, cache_controller}]))
                 end, ModelConfig)
             end, Workers)
     end.

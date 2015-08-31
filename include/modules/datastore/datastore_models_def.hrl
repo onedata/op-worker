@@ -30,8 +30,7 @@
     onedata_user,
     identity,
     file_meta,
-    global_cache_controller,
-    local_cache_controller,
+    cache_controller,
     task_pool
 ]).
 
@@ -56,6 +55,15 @@
 
 %% Model that controls utilization of local cache
 -record(local_cache_controller, {
+    timestamp :: tuple(),
+    action = non :: atom(),
+    last_user = non :: pid() | non,
+    last_action_time :: tuple(),
+    deleted_links = [] :: list()
+}).
+
+%% Model that controls utilization of cache
+-record(cache_controller, {
     timestamp :: tuple(),
     action = non :: atom(),
     last_user = non :: pid() | non,

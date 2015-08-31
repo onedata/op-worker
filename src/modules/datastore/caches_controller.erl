@@ -16,6 +16,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -171,10 +172,10 @@ decode_uuid(Uuid) ->
 %%--------------------------------------------------------------------
 -spec delete_old_keys(StoreType :: globally_cached | locally_cached, TimeWindow :: integer()) -> ok.
 delete_old_keys(globally_cached, TimeWindow) ->
-  delete_old_keys(global_cache_controller, global_only, ?GLOBAL_CACHES, TimeWindow);
+  delete_old_keys(global_only, ?GLOBAL_CACHES, TimeWindow);
 
 delete_old_keys(locally_cached, TimeWindow) ->
-  delete_old_keys(local_cache_controller, local_only, ?LOCAL_CACHES, TimeWindow).
+  delete_old_keys(local_only, ?LOCAL_CACHES, TimeWindow).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -196,7 +197,8 @@ wait_for_cache_dump() ->
 wait_for_cache_dump(0) ->
   dump_error;
 wait_for_cache_dump(N) ->
-  case {global_cache_controller:list_docs_to_be_dumped(), local_cache_controller:list_docs_to_be_dumped()} of
+  case {cache_controller:list_docs_to_be_dumped(?GLOBAL_ONLY_LEVEL),
+    cache_controller:list_docs_to_be_dumped(?LOCAL_ONLY_LEVEL)} of
     {{ok, []}, {ok, []}} ->
       ok;
     _ ->
@@ -214,15 +216,14 @@ wait_for_cache_dump(N) ->
 %% Clears old documents from memory.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_old_keys(Model :: global_cache_controller | local_cache_controller,
-    Level :: global_only | local_only, Caches :: list(), TimeWindow :: integer()) -> ok.
+-spec delete_old_keys(Level :: global_only | local_only, Caches :: list(), TimeWindow :: integer()) -> ok.
 % TODO Add dumping cache to disk in case of recent faliures
-delete_old_keys(Model, Level, Caches, TimeWindow) ->
-  {ok, Uuids} = apply(Model, list, [TimeWindow]),
+delete_old_keys(Level, Caches, TimeWindow) ->
+  {ok, Uuids} = cache_controller:list(Level, TimeWindow),
   lists:foreach(fun(Uuid) ->
     {ModelName, Key} = decode_uuid(Uuid),
     safe_delete(Level, ModelName, Key),
-    apply(Model, delete, [Uuid])
+    cache_controller:delete(Uuid)
   end, Uuids),
   case TimeWindow of
     0 ->
