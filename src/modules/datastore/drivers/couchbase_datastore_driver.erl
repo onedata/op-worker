@@ -297,7 +297,6 @@ healthcheck(_) ->
     try
         case ensure_mc_text_connected() of
             ok -> ok;
-            {ok, _} -> ok;
             {error, Reason} ->
                 {error, Reason}
         end
@@ -447,7 +446,11 @@ ensure_mc_text_connected() ->
                 Res = mcd_cluster:start_link('MCDCluster', Servers),
                 ?info("Starting mcd_cluster ~p", [Res]),
                 datastore_worker:state_put(mc_text_connected, Res),
-                Res
+                case Res of
+                    {ok, _} -> ok;
+                    {error, Reason} ->
+                        {error, Reason}
+                end
             catch
                 _:Reason ->
                     ?error("Could start mcd_cluster (couchbase connection) due to: ~p", [Reason]),	
