@@ -1,4 +1,4 @@
-%%%-------------------------------------------------------------------
+ %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -60,7 +60,7 @@ save(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
 %%--------------------------------------------------------------------
 -spec update(model_behaviour:model_config(), datastore:ext_key(),
     Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
-update(#model_config{bucket = ModelName} = ModelConfig, Key, Diff) when is_function(Diff) ->
+update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_function(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [] ->
             {error, {not_found, ModelName}};

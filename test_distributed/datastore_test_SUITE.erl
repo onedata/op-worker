@@ -199,13 +199,13 @@ cache_clearing_test(Config) ->
 utilize_memory(MemUsage, MemTarget) ->
     application:set_env(?APP_NAME, mem_to_clear_cache, MemTarget),
 
-    OneKB = list_to_binary(prepare_list(1024)),
+    OneDoc = list_to_binary(prepare_list(256 * 1024)),
 
     Add100MB = fun(_KeyBeg) ->
-        for(1, 100 * 1024, fun(_I) ->
+        for(1, 100 * 4, fun(I) ->
             some_record:create(
                 #document{
-                    value = #some_record{field1 = 1, field2 = binary:copy(OneKB), field3 = {test, tuple}}
+                    value = #some_record{field1 = I, field2 = binary:copy(OneDoc), field3 = {test, tuple}}
                 })
         end)
     end,
