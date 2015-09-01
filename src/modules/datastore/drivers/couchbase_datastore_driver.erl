@@ -445,12 +445,8 @@ ensure_mc_text_connected() ->
                 end, L),
                 Res = mcd_cluster:start_link('MCDCluster', Servers),
                 ?info("Starting mcd_cluster ~p", [Res]),
-                datastore_worker:state_put(mc_text_connected, Res),
-                case Res of
-                    {ok, _} -> ok;
-                    {error, Reason0} ->
-                        {error, Reason0}
-                end
+                {ok, _} = datastore_worker:state_put(mc_text_connected, Res),
+                ok
             catch
                 _:Reason ->
                     ?error("Could start mcd_cluster (couchbase connection) due to: ~p", [Reason]),	
