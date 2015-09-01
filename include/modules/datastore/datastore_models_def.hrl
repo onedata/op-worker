@@ -84,11 +84,14 @@
 %% identity - user identity
 -record(session, {
     identity :: #identity{},
-    node :: node(),
-    session_sup :: pid(),
-    event_manager :: pid(),
-    sequencer_manager :: pid(),
-    communicator :: pid()
+    type = fuse :: fuse | gui,
+    macaroon = <<"">> :: binary(),
+    disch_macaroons = [] :: [binary()],
+    node = node() :: node(),
+    session_sup = undefined :: pid() | undefined,
+    event_manager = undefined :: pid() | undefined,
+    sequencer_manager = undefined :: pid() | undefined,
+    communicator = undefined :: pid() | undefined
 }).
 
 %% Local, cached version of globalregistry user

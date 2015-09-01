@@ -17,12 +17,24 @@
 
 % For now, just print the information that came from GR.
 main() ->
-    case openid_utils:validate_login() of
-        {error, ErrorID} ->
-            gui_str:format("Error: ~p~n", [ErrorID]);
-        Props ->
-            gui_str:format_bin("~p", [Props])
-    end.
+    SerializedMacaroon = gui_ctx:url_param(<<"code">>),
+    ?dump(SerializedMacaroon),
+    {ok, Macaroon} = macaroon:deserialize(SerializedMacaroon),
+    ?dump(Macaroon),
+    {ok, InspectData4} = macaroon:inspect(Macaroon),
+    io:format([InspectData4, "\n"]),
+    {ok, Caveats} = macaroon:third_party_caveats(Macaroon),
+    ?dump(Caveats),
+    [{_, CaveatId}] = Caveats,
+    application:set_env(ctool, verify_server_cert, false),
+    ?dump(jiffy:encode({[{<<"identifier">>, CaveatId}]})),
+    {ok, SDM} = gui_utils:https_post(<<"https://172.17.0.29:8443/user/authorize">>,
+        [{<<"content-type">>, <<"application/json">>}],
+        jiffy:encode({[{<<"identifier">>, CaveatId}]})),
+    {ok, DM} = macaroon:deserialize(SDM),
+    {ok, InspectData5} = macaroon:inspect(DM),
+    io:format([InspectData5, "\n"]),
+    <<"hehe3">>.
 
 
 event(init) -> ok;

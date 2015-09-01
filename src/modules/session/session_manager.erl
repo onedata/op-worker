@@ -13,8 +13,12 @@
 -module(session_manager).
 -author("Krzysztof Trzepla").
 
+-include("modules/datastore/datastore.hrl").
+
 %% API
 -export([reuse_or_create_session/3, remove_session/1]).
+
+-export([create_gui_session/3]).
 
 -define(TIMEOUT, timer:seconds(20)).
 -define(SESSION_WORKER, session_manager_worker).
@@ -50,6 +54,26 @@ remove_session(SessId) ->
         ?TIMEOUT
     ).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+
+% @todo Below functions must be integrated with current session logic.
+% For now, they are only stubs.
+
+-spec create_gui_session(Iden :: session:identity(),
+    Macaroon :: macaroon:macaroon(), DischMacaroons :: macaroon:macaroon()) ->
+    {ok, session:id()} | {error, Reason :: term()}.
+create_gui_session(Iden, Macaroon, DischMacaroons) ->
+    SessionId = datastore_utils:gen_uuid(),
+    SessionRec = #session{
+        identity = Iden,
+        type = gui,
+        macaroon = Macaroon,
+        disch_macaroons = DischMacaroons
+    },
+    SessionDoc = #document{
+        key = SessionId,
+        value = SessionRec
+    },
+    case session:save(SessionDoc) of
+        {ok, _} -> {ok, SessionId};
+        {error, _} = Error -> Error
+    end.
