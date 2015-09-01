@@ -132,7 +132,7 @@ update_erl_files(ProjectDir, DirsToRecompile, UserIncludes) ->
         fun(DirPath, Acc) ->
             Files = find_all_files(filename:join(ProjectDir, DirPath), "*.erl", false),
             Files ++ Acc
-        end, [], [DirsToRecompile]),
+        end, [], DirsToRecompile),
 
     _Result = lists:foldl(fun(File, Success) ->
         case Success of
