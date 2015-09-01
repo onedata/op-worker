@@ -33,14 +33,11 @@
 -export([utilize_memory/2]).
 
 -performance({test_cases, []}).
-%% all() ->
-%%     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-%%      global_cache_list_test, persistance_test, local_cache_list_test,
-%%      disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
-%%      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 all() ->
-    [
-        cache_clearing_test].
+    [local_cache_test, global_cache_test, global_cache_atomic_update_test,
+     global_cache_list_test, persistance_test, local_cache_list_test,
+     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
+     cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test function
