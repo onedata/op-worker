@@ -28,12 +28,26 @@ main() ->
     [{_, CaveatId}] = Caveats,
     application:set_env(ctool, verify_server_cert, false),
     ?dump(jiffy:encode({[{<<"identifier">>, CaveatId}]})),
-    {ok, SDM} = gui_utils:https_post(<<"https://172.17.0.29:8443/user/authorize">>,
+    {ok, SDM} = gui_utils:https_post(<<"https://172.17.0.37:8443/user/authorize">>,
         [{<<"content-type">>, <<"application/json">>}],
         jiffy:encode({[{<<"identifier">>, CaveatId}]})),
     {ok, DM} = macaroon:deserialize(SDM),
     {ok, InspectData5} = macaroon:inspect(DM),
-    io:format([InspectData5, "\n"]),
+    {ok, DoublePenetration} = macaroon:prepare_for_request(Macaroon, DM),
+    {ok, SDP} = macaroon:serialize(DoublePenetration),
+    Res = gr_endpoint:auth_request(
+        provider,
+        "/user/",
+        get,
+        [
+            {"macaroon", binary_to_list(SerializedMacaroon)},
+            {"discharge-macaroons", binary_to_list(SDP)}
+        ],
+        "",
+        []
+    ),
+
+    ?dump(Res),
     <<"hehe3">>.
 
 
