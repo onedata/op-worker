@@ -131,12 +131,12 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Token :: #token{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#token{value = Token}) ->
+fetch(#token{value = SrlzdMacaroon}) ->
     try
         {ok, #user_details{id = Id, name = Name}} =
-            gr_users:get_details({user, Token}),
+            gr_users:get_details({user, {SrlzdMacaroon, []}}),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            gr_users:get_spaces({user, Token}),
+            gr_users:get_spaces({user, {SrlzdMacaroon, []}}),
         OnedataUser = #onedata_user{
             name = Name, space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
         },
