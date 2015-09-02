@@ -204,7 +204,7 @@ get_communicator(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns macaroons associated with session.
+%% Returns #auth{] record associated with session.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(SessId :: id()) -> {ok, #auth{}} |{error, Reason :: term()}.

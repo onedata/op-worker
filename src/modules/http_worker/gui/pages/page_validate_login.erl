@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains n2o website code.
+%% @doc
 %% This page performs authentication of users that are redirected
 %% from the Global Registry.
 %% @end
@@ -16,8 +16,10 @@
 -include("modules/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% For now, create a new session based on macaroons and
+% @todo
+% Create a new session based on macaroons and
 % just print the information used in the process of logging in.
+% This will be integrated with the new GUI when it is implemented.
 main() ->
     SrlzdMacaroon = gui_ctx:url_param(<<"code">>),
     {ok, Auth = #auth{
