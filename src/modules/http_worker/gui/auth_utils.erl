@@ -22,9 +22,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Authorizes a user via Global Registry. Upon success, returns the root
-%% macaroon and discharge macaroons that can be used to perform operations
-%% on behalf of the user.
+%% Authorizes a user via Global Registry. Upon success, returns the #auth{}
+%% record that can be used to perform operations on behalf of the user.
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(SrlzdMacaroon :: binary()) -> {ok, #auth{}} | {error, term()}.

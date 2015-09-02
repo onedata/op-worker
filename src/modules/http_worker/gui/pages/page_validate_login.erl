@@ -12,49 +12,44 @@
 %% ===================================================================
 -module(page_validate_login).
 -compile(export_all).
+
 -include("modules/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% For now, just print the information that came from GR.
+% For now, create a new session based on macaroons and
+% just print the information used in the process of logging in.
 main() ->
     SrlzdMacaroon = gui_ctx:url_param(<<"code">>),
-    {ok, #auth{} = Auth} = auth_utils:authorize(SrlzdMacaroon),
-
-%%     ?dump(SerializedMacaroon),
-%%     {ok, Macaroon} = macaroon:deserialize(SerializedMacaroon),
-%%     ?dump(Macaroon),
-%%     {ok, InspectData4} = macaroon:inspect(Macaroon),
-%%     io:format([InspectData4, "\n"]),
-%%     {ok, Caveats} = macaroon:third_party_caveats(Macaroon),
-%%     ?dump(Caveats),
-%%     [{_, CaveatId}] = Caveats,
-%%     application:set_env(ctool, verify_server_cert, false),
-%%     ?dump(jiffy:encode({[{<<"identifier">>, CaveatId}]})),
-%%     {ok, SDM} = gui_utils:https_post(<<"https://172.17.0.72:8443/user/authorize">>,
-%%         [{<<"content-type">>, <<"application/json">>}],
-%%         jiffy:encode({[{<<"identifier">>, CaveatId}]})),
-%%     {ok, DM} = macaroon:deserialize(SDM),
-%%     {ok, InspectData5} = macaroon:inspect(DM),
-%%     {ok, Macaroon} = macaroon:deserialize(SrlzdMacaroon),
-%%     {ok, DM} = macaroon:deserialize(hd(SrlzdDischMacaroons)),
-%%     {ok, DoublePenetration} = macaroon:prepare_for_request(Macaroon, DM),
-%%     {ok, SDP} = macaroon:serialize(DoublePenetration),
-%%     Res = gr_endpoint:auth_request(
-%%         provider,
-%%         "/user/",
-%%         get,
-%%         [
-%%             {"macaroon", binary_to_list(SrlzdMacaroon)},
-%%             {"discharge-macaroons", binary_to_list(SDP)}
-%%         ],
-%%         "",
-%%         []
-%%     ),
+    {ok, Auth = #auth{
+        disch_macaroons = DMacaroons}} = auth_utils:authorize(SrlzdMacaroon),
     {ok, SessionId} = session_manager:create_gui_session(Auth),
-    ?dump(SessionId),
-    ?dump(session:get_auth(SessionId)),
+    {ok, #document{
+        value = #session{
+            identity = #identity{user_id = UserId}}}} = session:get(SessionId),
 
-    <<"hehe3">>.
+    % Print retrieved info
+    % Fun to cut too long strings
+    Trim = fun(Binary) ->
+        case byte_size(Binary) > 80 of
+            true ->
+                <<(binary:part(Binary, {0, 80}))/binary, "...">>;
+            false ->
+                Binary
+        end
+    end,
+
+    DMacsString = lists:foldl(
+        fun(DM, Acc) ->
+            % Padding for pretty print
+            gui_str:format_bin("~s~s~n                     ",
+                [Acc, binary_to_list(Trim(DM))])
+        end, "", DMacaroons),
+    gui_str:format_bin(
+        "Macaroon: ~s~n~n"
+        "Discharge macaroons: ~s~n"
+        "SessionId: ~s~n~n"
+        "UserId: ~s~n",
+        [Trim(SrlzdMacaroon), DMacsString, SessionId, UserId]).
 
 
 event(init) -> ok;
