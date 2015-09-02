@@ -12,6 +12,7 @@
 -module(auth_utils).
 
 -include_lib("ctool/include/logging.hrl").
+-include("proto/common/credentials.hrl").
 
 
 %% ====================================================================
@@ -26,22 +27,22 @@
 %% on behalf of the user.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(RootMacaroon) ->
-    {ok, RootMacaroon, DischargeMacaroons} | {error, term()} when
-    RootMacaroon :: binary(), DischargeMacaroons :: [binary()].
-authorize(SerializedMacaroon) ->
+-spec authorize(SrlzdMacaroon :: binary()) -> {ok, #auth{}} | {error, term()}.
+authorize(SrlzdMacaroon) ->
     try
-        {ok, Macaroon} = macaroon:deserialize(SerializedMacaroon),
+        {ok, Macaroon} = macaroon:deserialize(SrlzdMacaroon),
         {ok, Caveats} = macaroon:third_party_caveats(Macaroon),
         DischMacaroons = lists:map(
             fun({_, CaveatId}) ->
                 {ok, DM} = gr_users:authorize(CaveatId),
                 DM
             end, Caveats),
-        {ok, SerializedMacaroon, DischMacaroons}
+        {ok, #auth{
+            macaroon = SrlzdMacaroon,
+            disch_macaroons = DischMacaroons}}
     catch
         T:M ->
             ?error_stacktrace("Cannot authorize user with macaroon ~p - ~p:~p",
-                [SerializedMacaroon, T, M]),
+                [SrlzdMacaroon, T, M]),
             {error, M}
     end.

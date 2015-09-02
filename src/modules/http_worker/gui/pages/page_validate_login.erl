@@ -18,8 +18,7 @@
 % For now, just print the information that came from GR.
 main() ->
     SrlzdMacaroon = gui_ctx:url_param(<<"code">>),
-    {ok, SrlzdMacaroon, SrlzdDischMacaroons} = auth_utils:authorize(SrlzdMacaroon),
-    ?dump( {ok, SrlzdMacaroon, SrlzdDischMacaroons}),
+    {ok, #auth{} = Auth} = auth_utils:authorize(SrlzdMacaroon),
 
 %%     ?dump(SerializedMacaroon),
 %%     {ok, Macaroon} = macaroon:deserialize(SerializedMacaroon),
@@ -51,10 +50,10 @@ main() ->
 %%         "",
 %%         []
 %%     ),
+    {ok, SessionId} = session_manager:create_gui_session(Auth),
+    ?dump(SessionId),
+    ?dump(session:get_auth(SessionId)),
 
-    Res = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDischMacaroons}}),
-
-    ?dump(Res),
     <<"hehe3">>.
 
 

@@ -262,12 +262,12 @@ get_write_event(Counter, File_id, Size, FileSize, Num, MaxS) ->
   }.
 
 get_token(Val)->
-  {#token{value = Val}, #'Token'{value = Val}}.
+  {#auth{value = Val}, #'Token'{value = Val}}.
 
 get_handshake_request(TokenVal, SessionId) ->
   {IntToken, PBToken} = get_token(TokenVal),
   {
-    #handshake_request{token = IntToken, session_id = SessionId},
+    #handshake_request{auth = IntToken, session_id = SessionId},
     #'HandshakeRequest'{token = PBToken, session_id = SessionId}
   }.
 

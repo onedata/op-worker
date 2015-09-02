@@ -23,7 +23,7 @@
 
 %% API
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
-    get_sequencer_manager/1, get_communicator/1]).
+    get_sequencer_manager/1, get_communicator/1, get_auth/1]).
 
 -export_type([id/0, identity/0]).
 
@@ -201,3 +201,20 @@ get_communicator(SessId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns macaroons associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_auth(SessId :: id()) -> {ok, #auth{}} |{error, Reason :: term()}.
+get_auth(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{auth = Auth}}} ->
+            {ok, Auth};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+

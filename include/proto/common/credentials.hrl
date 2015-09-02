@@ -15,8 +15,9 @@
 
 -include_lib("public_key/include/public_key.hrl").
 
--record(token, {
-    value :: binary()
+-record(auth, {
+    macaroon :: binary(),
+    disch_macaroons = [] :: [binary()]
 }).
 
 -record(certificate, {

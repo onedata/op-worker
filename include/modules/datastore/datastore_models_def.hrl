@@ -12,6 +12,8 @@
 -ifndef(DATASTORE_MODELS_HRL).
 -define(DATASTORE_MODELS_HRL, 1).
 
+-include("proto/common/credentials.hrl").
+
 %% Wrapper for all models' records
 -record(document, {
     key :: datastore:ext_key(),
@@ -85,8 +87,7 @@
 -record(session, {
     identity :: #identity{},
     type = fuse :: fuse | gui,
-    macaroon = <<"">> :: binary(),
-    disch_macaroons = [] :: [binary()],
+    auth :: #auth{},
     node = node() :: node(),
     session_sup = undefined :: pid() | undefined,
     event_manager = undefined :: pid() | undefined,

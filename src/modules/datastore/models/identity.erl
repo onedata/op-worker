@@ -29,7 +29,7 @@
 %% todo split this model to:
 %% todo globally cached - #certificate{} -> #identity{},
 %% todo and locally cached - #token{} | #certificate_info{} -> #identity{}
--type credentials() :: #token{} | #'OTPCertificate'{}.
+-type credentials() :: #auth{} | #'OTPCertificate'{}.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -138,10 +138,10 @@ fetch(OtpCert = #'OTPCertificate'{}) ->
             {ok, Doc};
         Error_ -> Error_
     end;
-fetch(Token = #token{}) ->
-    case onedata_user:fetch(Token) of
+fetch(Auth = #auth{}) ->
+    case onedata_user:fetch(Auth) of
         {ok, #document{key = Id}} ->
-            NewDoc = #document{key = Token, value = #identity{user_id = Id}},
+            NewDoc = #document{key = Auth, value = #identity{user_id = Id}},
             case identity:save(NewDoc) of
                 {ok, _} -> {ok, NewDoc};
                 Error_ -> Error_

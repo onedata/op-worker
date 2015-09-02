@@ -18,7 +18,7 @@
 %% API
 -export([reuse_or_create_session/3, remove_session/1]).
 
--export([create_gui_session/3]).
+-export([create_gui_session/1]).
 
 -define(TIMEOUT, timer:seconds(20)).
 -define(SESSION_WORKER, session_manager_worker).
@@ -55,19 +55,18 @@ remove_session(SessId) ->
     ).
 
 
-% @todo Below functions must be integrated with current session logic.
-% For now, they are only stubs.
+% @todo Below function must be integrated with current session logic.
+% For now, this is only a stub used in GUI.
 
--spec create_gui_session(Iden :: session:identity(),
-    Macaroon :: macaroon:macaroon(), DischMacaroons :: macaroon:macaroon()) ->
+-spec create_gui_session(Auth :: #auth{}) ->
     {ok, session:id()} | {error, Reason :: term()}.
-create_gui_session(Iden, Macaroon, DischMacaroons) ->
+create_gui_session(Auth) ->
     SessionId = datastore_utils:gen_uuid(),
+    Iden = identity:get_or_fetch(Auth),
     SessionRec = #session{
         identity = Iden,
         type = gui,
-        macaroon = Macaroon,
-        disch_macaroons = DischMacaroons
+        auth = Auth
     },
     SessionDoc = #document{
         key = SessionId,
