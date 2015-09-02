@@ -57,7 +57,7 @@ token_authentication(Config) ->
     ),
     ?assertMatch(
         {ok, #document{value = #identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, identity, get, [#auth{value = ?TOKEN}])
+        rpc:call(Worker1, identity, get, [#auth{macaroon = ?TOKEN}])
     ),
     unmock_gr_certificates(Config),
     ok = ssl:close(Sock).
