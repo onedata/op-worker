@@ -256,7 +256,7 @@ model_init() ->
 -spec before(ModelName :: model_behaviour:model_type(),
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term()) ->
-    ok | {ok, save, [datastore:document()]} | datastore:generic_error().
+    ok | {task, task_manager:task()} | datastore:generic_error().
 before(ModelName, Method, Level, Context) ->
     Level2 = caches_controller:cache_to_datastore_level(ModelName),
     before(ModelName, Method, Level, Context, Level2).
@@ -535,7 +535,8 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
 %%--------------------------------------------------------------------
 -spec log_link_del(Key :: datastore:key(), ModelName :: model_behaviour:model_type(),
     LinkNames :: list() | all, Phase :: start | stop, Args :: list(), Level :: datastore:store_level()) ->
-    ok | {error, preparing_disk_op_failed} | {error, ending_disk_op_failed}.
+    {task, task_manager:task()} | {ok, datastore:key()} | datastore:update_error()
+    | {error, preparing_disk_op_failed} | {error, ending_disk_op_failed}.
 log_link_del(Key, ModelName, LinkNames, start, Args, Level) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
@@ -591,5 +592,5 @@ log_link_del(Key, ModelName, LinkNames, stop, _Args, Level) ->
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller log_link_del. Args: ~p. Error: ~p:~p.",
                 [{Key, ModelName, LinkNames, stop}, E1, E2]),
-            {error, preparing_disk_op_failed}
+            {error, ending_disk_op_failed}
     end.

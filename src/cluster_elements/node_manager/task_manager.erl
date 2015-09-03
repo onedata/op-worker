@@ -19,7 +19,8 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
--type task() :: fun(() -> term()) | {fun((list()) -> term()), Args :: list()} | {M :: atom(), F :: atom, Args :: list()}.
+-type task() :: fun(() -> term()) | {fun((list()) -> term()), Args :: list()}
+  | {M :: atom(), F :: atom, Args :: list()} | atom(). % atom() for tests
 -type level() :: ?NON_LEVEL | ?NODE_LEVEL | ?CLUSTER_LEVEL | ?PERSISTENT_LEVEL.
 -export_type([task/0, level/0]).
 

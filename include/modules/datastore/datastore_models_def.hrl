@@ -48,7 +48,7 @@
 -record(cache_controller, {
     timestamp :: tuple(),
     action = non :: atom(),
-    last_user = non :: pid() | non,
+    last_user = non :: list() | non,
     last_action_time :: tuple(),
     deleted_links = [] :: list()
 }).
