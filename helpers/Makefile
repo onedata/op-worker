@@ -1,7 +1,7 @@
 .PHONY: cmake release debug clean test cunit install coverage all
-all: release test
+all: test
 
-INSTALL_PREFIX ?= /usr/local
+INSTALL_PREFIX ?= ${HOME}/.local/helpers
 
 cmake: BUILD_DIR = $$(echo $(BUILD_TYPE) | tr '[:upper:]' '[:lower:]')
 cmake:
