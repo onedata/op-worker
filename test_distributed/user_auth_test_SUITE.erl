@@ -26,7 +26,7 @@
 
 -export([token_authentication/1]).
 
--define(TOKEN, <<"TOKEN">>).
+-define(MACAROON, <<"TOKEN">>).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
@@ -44,7 +44,7 @@ token_authentication(Config) ->
     SessionId = <<"SessionId">>,
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?TOKEN, SessionId),
+    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
 
     % then
     ?assertMatch(
@@ -57,7 +57,7 @@ token_authentication(Config) ->
     ),
     ?assertMatch(
         {ok, #document{value = #identity{user_id = ?USER_ID}}},
-        rpc:call(Worker1, identity, get, [#auth{macaroon = ?TOKEN}])
+        rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
     ),
     unmock_gr_certificates(Config),
     ok = ssl:close(Sock).
@@ -146,8 +146,9 @@ mock_gr_certificates(Config) ->
                 ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
                 ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
-            ({_, AccessToken}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {"authorization", "Bearer " ++ binary_to_list(AccessToken)},
+            % @todo for now, in rest we only use the root macaroon
+            ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
+                AuthorizationHeader = {"macaroon", binary_to_list(Macaroon)},
                 ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
         end
     ).

@@ -46,7 +46,7 @@ all() ->
         sequential_ping_pong_test, multi_connection_test, bandwidth_test,
         python_client_test, proto_version_test].
 
--define(TOKEN, <<"TOKEN_VALUE">>).
+-define(MACAROON, <<"TOKEN_VALUE">>).
 
 %%%===================================================================
 %%% Test function
@@ -492,7 +492,7 @@ python_client_test(Config) ->
 
     HandshakeMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
-        token = #'Token'{value = ?TOKEN}}}},
+        token = #'Token'{value = ?MACAROON}}}},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
     Self = self(),
@@ -651,7 +651,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
     % given
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{session_id = SessId,
-        token = #'Token'{value = ?TOKEN}}}},
+        token = #'Token'{value = ?MACAROON}}}},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     ActiveOpt =
         case proplists:get_value(active, SocketOpts) of
@@ -714,7 +714,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, identity),
     test_utils:mock_expect(Workers, identity, get_or_fetch,
-        fun(#auth{macaroon = ?TOKEN}) ->
+        fun(#auth{macaroon = ?MACAROON}) ->
             {ok, #document{value = #identity{}}}
         end
     ).

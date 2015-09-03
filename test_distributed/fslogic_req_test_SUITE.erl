@@ -63,7 +63,7 @@ fslogic_get_file_attr_test(Config) ->
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path} = Conf) ->
-        io:format(user, "Testing: ~p~n", [Conf]),
+%%         io:format(user, "Testing: ~p~n", [Conf]),
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
                 name = Name, type = ?DIRECTORY_TYPE, mode = Mode,

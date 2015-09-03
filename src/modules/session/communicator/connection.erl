@@ -205,6 +205,7 @@ handle_info(_Info, State) ->
 terminate(Reason, #sock_state{session_id = Id} = State) ->
     ?log_terminate(Reason, State),
     catch communicator:remove_connection(Id, self()),
+    ssl2:close(State#sock_state.socket),
     ok.
 
 %%--------------------------------------------------------------------
