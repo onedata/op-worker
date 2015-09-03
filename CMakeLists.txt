@@ -19,6 +19,7 @@ set(CLPROTO_LIBRARIES
 
 set(PROJECT_SOURCES
     $<TARGET_OBJECTS:clproto>
+    ${PROJECT_SOURCES}
     PARENT_SCOPE)
 
 add_library(messages.nif SHARED EXCLUDE_FROM_ALL build/messages.nif.cc $<TARGET_OBJECTS:clproto>)
