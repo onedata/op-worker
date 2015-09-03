@@ -18,6 +18,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -70,7 +71,13 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 -spec route_and_ignore_answer(#client_message{}) -> ok.
 route_and_ignore_answer(#client_message{session_id = SessionId,
     message_body = #event{event = Evt}}) ->
-    event_manager:emit(Evt, SessionId).
+    event_manager:emit(Evt, SessionId);
+% Message that updates the #auth{} record in given session (originates from
+% #'Token' client message).
+route_and_ignore_answer(#client_message{session_id = SessionId,
+    message_body = #auth{} = Auth}) ->
+    % This function performs an async call to session manager worker.
+    ok = session_manager:update_session_auth(SessionId, Auth).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore.hrl").
 
 %% API
--export([reuse_or_create_session/3, remove_session/1]).
+-export([reuse_or_create_session/3, update_session_auth/2, remove_session/1]).
 
 -export([create_gui_session/1]).
 
@@ -40,6 +40,20 @@ reuse_or_create_session(SessId, Iden, Con) ->
         {reuse_or_create_session, SessId, Iden, Con},
         ?TIMEOUT
     ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates the #auth{} record in given session (asynchronous).
+%% @end
+%%--------------------------------------------------------------------
+-spec update_session_auth(SessId :: session:id(), Auth :: #auth{}) -> ok.
+update_session_auth(SessId, #auth{} = Auth) ->
+    worker_proxy:cast(
+        ?SESSION_WORKER,
+        {update_session_auth, SessId, Auth}
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @doc
