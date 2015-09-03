@@ -28,7 +28,7 @@
 -performance({test_cases, []}).
 all() -> [rest_token_auth].
 
--define(TOKEN, "TOKEN").
+-define(MACAROON, "macaroon").
 
 %%%===================================================================
 %%% API
@@ -41,7 +41,7 @@ rest_token_auth(Config) ->
 
     % when
     AuthFail = ibrowse:send_req(Endpoint ++ "random_path", [{"X-Auth-Token", "invalid"}], get),
-    AuthSuccess = ibrowse:send_req(Endpoint ++ "random_path", [{"X-Auth-Token", ?TOKEN}], get),
+    AuthSuccess = ibrowse:send_req(Endpoint ++ "random_path", [{"X-Auth-Token", ?MACAROON}], get),
 
     % then
     ?assertMatch({ok, "401", _, _}, AuthFail),
@@ -130,10 +130,10 @@ mock_gr_certificates(Config) ->
                 ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
                 ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
-            ({_, AccessToken}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {"authorization", "Bearer " ++ binary_to_list(AccessToken)},
+            % @todo for now, in rest we only use the root macaroon
+            ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
+                AuthorizationHeader = {"macaroon", binary_to_list(Macaroon)},
                 ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
-
         end
     ).
 

@@ -117,6 +117,10 @@ init([]) ->
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
         next_mem_check(),
+
+        %% Load NIFs
+        ok = helpers_nif:init(),
+
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
@@ -510,9 +514,7 @@ start_worker(Module, Args) ->
 -spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
 check_node_ip_address() ->
     try
-        IPCheckPath = "/provider/test/check_my_ip",
-        {ok, "200", _ResponseHeaders, JSON} = gr_endpoint:noauth_request(provider, IPCheckPath, get),
-        IPBin = mochijson2:decode(JSON),
+        {ok, IPBin} = gr_providers:check_ip_address(provider),
         {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
         IP
     catch T:M ->

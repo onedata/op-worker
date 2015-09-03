@@ -53,7 +53,7 @@ authenticate(Req) ->
 %%--------------------------------------------------------------------
 -spec authenticate_using_token(req(), Token :: binary()) -> {{ok, #identity{}} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
-    case identity:get_or_fetch(#token{value = Token}) of
+    case identity:get_or_fetch(#auth{macaroon = Token}) of
         {ok, #document{value = Iden}} ->
             {{ok, Iden}, Req};
         Error ->

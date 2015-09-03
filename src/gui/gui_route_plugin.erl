@@ -16,10 +16,10 @@
     page_backend = login_backend
 }).
 
--define(VERIFY_LOGIN, #gui_route{
+-define(VALIDATE_LOGIN, #gui_route{
     requires_session = ?SESSION_LOGGED_IN,
     html_file = undefined,
-    page_backend = verify_login_backend
+    page_backend = validate_login_backend
 }).
 
 -define(FILE_MANAGER, #gui_route{
@@ -46,6 +46,6 @@ error_500_html_file() ->
 
 
 route(<<"/login.html">>) -> ?LOGIN;
-route(<<"/verify_login.html">>) -> ?VERIFY_LOGIN;
+route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?FILE_MANAGER;
 route(<<"/file_manager.html">>) -> ?FILE_MANAGER.

@@ -4,7 +4,7 @@ Login.LoginFormController = Ember.ObjectController.extend({
 
     actions: {
         login: function () {
-            $.post("/verify_login.html", {
+            $.post("/validate_login.html", {
                 username: this.get("username")
             }).then(function () {
                 document.location = "/file_manager.html";

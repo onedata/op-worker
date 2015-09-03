@@ -13,8 +13,12 @@
 -module(session_manager).
 -author("Krzysztof Trzepla").
 
+-include("modules/datastore/datastore.hrl").
+
 %% API
--export([reuse_or_create_session/3, remove_session/1]).
+-export([reuse_or_create_session/3, update_session_auth/2, remove_session/1]).
+
+-export([create_gui_session/1]).
 
 -define(TIMEOUT, timer:seconds(20)).
 -define(SESSION_WORKER, session_manager_worker).
@@ -37,6 +41,20 @@ reuse_or_create_session(SessId, Iden, Con) ->
         ?TIMEOUT
     ).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates the #auth{} record in given session (asynchronous).
+%% @end
+%%--------------------------------------------------------------------
+-spec update_session_auth(SessId :: session:id(), Auth :: #auth{}) -> ok.
+update_session_auth(SessId, #auth{} = Auth) ->
+    worker_proxy:cast(
+        ?SESSION_WORKER,
+        {update_session_auth, SessId, Auth}
+    ).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes session identified by session ID.
@@ -50,6 +68,25 @@ remove_session(SessId) ->
         ?TIMEOUT
     ).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+
+% @todo Below function must be integrated with current session logic.
+% For now, this is only a stub used in GUI.
+
+-spec create_gui_session(Auth :: #auth{}) ->
+    {ok, session:id()} | {error, Reason :: term()}.
+create_gui_session(Auth) ->
+    SessionId = datastore_utils:gen_uuid(),
+    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
+    SessionRec = #session{
+        identity = Iden,
+        type = gui,
+        auth = Auth
+    },
+    SessionDoc = #document{
+        key = SessionId,
+        value = SessionRec
+    },
+    case session:save(SessionDoc) of
+        {ok, _} -> {ok, SessionId};
+        {error, _} = Error -> Error
+    end.
