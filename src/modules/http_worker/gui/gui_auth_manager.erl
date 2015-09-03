@@ -9,7 +9,7 @@
 %% from global registry.
 %% @end
 %% ===================================================================
--module(auth_utils).
+-module(gui_auth_manager).
 
 -include_lib("ctool/include/logging.hrl").
 -include("proto/common/credentials.hrl").

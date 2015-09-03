@@ -256,7 +256,7 @@ handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_handshake(State = #sock_state{certificate = Cert, socket = Sock,
     transport = Transp}, Msg) ->
-    try auth_manager:handle_handshake(Msg, Cert) of
+    try fuse_auth_manager:handle_handshake(Msg, Cert) of
         {ok, Response = #server_message{message_body =
         #handshake_response{session_id = NewSessId}}} ->
             send_server_message(Sock, Transp, Response),

@@ -23,7 +23,7 @@
 main() ->
     SrlzdMacaroon = gui_ctx:url_param(<<"code">>),
     {ok, Auth = #auth{
-        disch_macaroons = DMacaroons}} = auth_utils:authorize(SrlzdMacaroon),
+        disch_macaroons = DMacaroons}} = gui_auth_manager:authorize(SrlzdMacaroon),
     {ok, SessionId} = session_manager:create_gui_session(Auth),
     {ok, #document{
         value = #session{

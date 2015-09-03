@@ -9,7 +9,7 @@
 %%% Client authentication library.
 %%% @end
 %%%-------------------------------------------------------------------
--module(auth_manager).
+-module(fuse_auth_manager).
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore.hrl").
