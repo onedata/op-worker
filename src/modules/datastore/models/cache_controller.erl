@@ -186,10 +186,7 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok | datastore:generic_error().
 'after'(ModelName, get, disk_only, [Key], {ok, Doc}) ->
-    Level2 = case lists:member(ModelName, ?GLOBAL_CACHES) of
-                 true -> ?GLOBAL_ONLY_LEVEL;
-                 _ -> ?LOCAL_ONLY_LEVEL
-             end,
+    Level2 = caches_controller:cache_to_datastore_level(ModelName),
     update_usage_info(Key, ModelName, Doc, Level2);
 'after'(ModelName, get, Level, [Key], {ok, _}) ->
     update_usage_info(Key, ModelName, Level);
@@ -208,10 +205,7 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term()) ->
     ok | {ok, save, [datastore:document()]} | datastore:generic_error().
 before(ModelName, Method, Level, Context) ->
-    Level2 = case lists:member(ModelName, ?GLOBAL_CACHES) of
-                true -> ?GLOBAL_ONLY_LEVEL;
-                _ -> ?LOCAL_ONLY_LEVEL
-            end,
+    Level2 = caches_controller:cache_to_datastore_level(ModelName),
     before(ModelName, Method, Level, Context, Level2).
 before(ModelName, save, disk_only, [Doc] = Args, Level2) ->
     start_disk_op(Doc#document.key, ModelName, save, Args, Level2);

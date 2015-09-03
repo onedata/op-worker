@@ -46,8 +46,6 @@ create_delete_test_base(Config, Level, Fun, Fun2) ->
     ConflictedThreads = ?config(conflicted_threads, Config),
 
     disable_cache_control(Workers),
-
-    ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     TestFun = fun(DocsSet) ->
@@ -126,8 +124,6 @@ save_test_base(Config, Level, Fun, Fun2) ->
     ConflictedThreads = ?config(conflicted_threads, Config),
 
     disable_cache_control(Workers),
-
-    ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     SaveMany = fun(DocsSet) ->
@@ -184,8 +180,6 @@ update_test_base(Config, Level, Fun, Fun2, Fun3) ->
     ConflictedThreads = ?config(conflicted_threads, Config),
 
     disable_cache_control(Workers),
-
-    ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     UpdateMany = fun(DocsSet) ->
@@ -274,8 +268,6 @@ get_test(Config, Level) ->
     ConflictedThreads = ?config(conflicted_threads, Config),
 
     disable_cache_control(Workers),
-
-    ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     GetMany = fun(DocsSet) ->
@@ -363,8 +355,6 @@ exists_test(Config, Level) ->
     ConflictedThreads = ?config(conflicted_threads, Config),
 
     disable_cache_control(Workers),
-
-    ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     ExistMultiCheck = fun(DocsSet) ->
@@ -445,8 +435,6 @@ mixed_test(Config, Level) ->
         _ ->
             disable_cache_control(Workers)
     end,
-
-    ok = test_node_starter:load_modules(Workers, [?MODULE]),
     Master = self(),
 
     CreateMany = fun(DocsSet) ->
@@ -646,6 +634,7 @@ disable_cache_control(Workers) ->
 
 set_hooks(Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    ok = test_node_starter:load_modules(Workers, [?MODULE]),
 
     Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
     ModelConfig = lists:map(fun(Method) ->
@@ -656,7 +645,19 @@ set_hooks(Case, Config) ->
         global ->
             ok;
         local ->
-            ok;
+            test_utils:mock_new(Workers, caches_controller),
+            test_utils:mock_expect(Workers, caches_controller, cache_to_datastore_level, fun(ModelName) ->
+                case lists:member(ModelName, ?GLOBAL_CACHES -- [some_record]) of
+                    true -> global_only;
+                    _ -> local_only
+                end
+            end),
+            test_utils:mock_expect(Workers, caches_controller, cache_to_task_level, fun(ModelName) ->
+                case lists:member(ModelName, ?GLOBAL_CACHES -- [some_record]) of
+                    true -> cluster;
+                    _ -> node
+                end
+            end);
         _ ->
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
@@ -683,7 +684,8 @@ unset_hooks(Case, Config) ->
             lists:foreach(fun(Wr) ->
                 ?assertMatch(ok, rpc:call(Wr, caches_controller, wait_for_cache_dump, [])),
                 ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Wr}, clear_mem_synch, 60000))
-            end, Workers);
+            end, Workers),
+            test_utils:mock_unload(Workers, [caches_controller]);
         _ ->
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
