@@ -906,6 +906,6 @@ static ErlNifFunc nif_funcs[] = {
     {"get_flag_value",  1, sh_get_flag_value}
 };
 
-ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
+ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL)
 
 } // extern C
