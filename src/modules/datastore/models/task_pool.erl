@@ -43,6 +43,14 @@ save(Document) ->
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback update/2 but allows
+%% choice of task level.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(Level :: task_manager:level(), datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(?NON_LEVEL, _Key, _Diff) ->
     {ok, non};
 
@@ -59,6 +67,14 @@ update(Level, Key, Diff) ->
 create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback create/1 but allows
+%% choice of task level.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(Level :: task_manager:level(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(?NON_LEVEL, _Document) ->
     {ok, non};
 
@@ -83,12 +99,26 @@ get(Key) ->
 list() ->
     datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list(Level :: task_manager:level()) ->
+    {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list(?NON_LEVEL) ->
     {ok, []};
 
 list(Level) ->
     datastore:list(task_to_db_level(Level), ?MODEL_NAME, ?GET_ALL, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of tasks that failed.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_failed(Level :: task_manager:level()) ->
+    {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list_failed(?NON_LEVEL) ->
     {ok, []};
 
@@ -116,6 +146,13 @@ list_failed(Level) ->
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback delete/1 but allows
+%% choice of task level.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(Level :: task_manager:level(), datastore:key()) -> ok | datastore:generic_error().
 delete(?NON_LEVEL, _Key) ->
     ok;
 
@@ -168,6 +205,12 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates task level to store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec task_to_db_level(Level :: task_manager:level()) -> datastore:store_level().
 task_to_db_level(?NODE_LEVEL) ->
     ?LOCAL_ONLY_LEVEL;
 

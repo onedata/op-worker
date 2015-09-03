@@ -37,6 +37,14 @@
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback save/1 but allows
+%% choice of store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec save(Level :: datastore:store_level(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:generic_error().
 save(Level, Document) ->
     datastore:save(Level, Document).
 
@@ -50,6 +58,14 @@ save(Level, Document) ->
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback update/2 but allows
+%% choice of store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(Level :: datastore:store_level(), datastore:key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:key()} | datastore:update_error().
 update(Level, Key, Diff) ->
     datastore:update(Level, ?MODULE, Key, Diff).
 
@@ -63,6 +79,14 @@ update(Level, Key, Diff) ->
 create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback create/1 but allows
+%% choice of store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(Level :: datastore:store_level(), datastore:document()) ->
+    {ok, datastore:key()} | datastore:create_error().
 create(Level, Document) ->
     datastore:create(Level, Document).
 
@@ -75,6 +99,13 @@ create(Level, Document) ->
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback get/1 but allows
+%% choice of store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(Level :: datastore:store_level(), datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Level, Key) ->
     datastore:get(Level, ?MODULE, Key).
 
@@ -87,6 +118,12 @@ get(Level, Key) ->
 list() ->
     datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records at chosen store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec list(Level :: datastore:store_level()) -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list(Level) ->
     datastore:list(Level, ?MODEL_NAME, ?GET_ALL, []).
 
@@ -142,6 +179,14 @@ list_docs_to_be_dumped(Level) ->
 delete(Key) ->
     datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback delete/1 but allows
+%% choice of store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(Level :: datastore:store_level(), datastore:key()) ->
+    ok | datastore:generic_error().
 delete(Level, Key) ->
     datastore:delete(Level, ?MODULE, Key).
 
@@ -150,7 +195,8 @@ delete(Level, Key) ->
 %% Deletes #document with given key.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(datastore:store_level(), datastore:key(), datastore:delete_predicate()) -> ok | datastore:generic_error().
+-spec delete(datastore:store_level(), datastore:key(), datastore:delete_predicate()) ->
+    ok | datastore:generic_error().
 delete(Level, Key, Pred) ->
     datastore:delete(Level, ?MODULE, Key, Pred).
 
@@ -163,6 +209,13 @@ delete(Level, Key, Pred) ->
 exists(Key) ->
     ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Same as {@link model_behaviour} callback exists/1 but allows
+%% choice of store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(Level :: datastore:store_level(), datastore:key()) -> datastore:exists_return().
 exists(Level, Key) ->
     ?RESPONSE(datastore:exists(Level, ?MODULE, Key)).
 

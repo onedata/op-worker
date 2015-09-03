@@ -80,9 +80,23 @@ check_and_rerun_all() ->
   check_and_rerun_all(?CLUSTER_LEVEL),
   check_and_rerun_all(?PERSISTENT_LEVEL).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves information about the task.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_pid(Task :: task(), Pid :: pid(), Level :: level()) ->
+  {ok, datastore:key()} | datastore:create_error().
 save_pid(Task, Pid, Level) ->
   task_pool:create(Level, #document{value = #task_pool{task = Task, owner = Pid, node = node()}}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates information about the task.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_pid(Task :: #document{value :: #task_pool{}}, Pid :: pid(), Level :: level()) ->
+  {ok, datastore:key()} | datastore:create_error().
 update_pid(Task, Pid, Level) ->
   task_pool:update(Level, Task#document.key, #{owner => Pid}).
 
@@ -90,14 +104,28 @@ update_pid(Task, Pid, Level) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes information about the task.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_task(Uuid :: datastore:key(), Task :: task() | #document{value :: #task_pool{}},
+    Level :: level()) -> ok.
 delete_task(Uuid, Task, Level) ->
   case task_pool:delete(Level, Uuid) of
     ok ->
       ok;
     E ->
-      ?error_stacktrace("Error ~p while deleting task ~p", [E, Task])
+      ?error_stacktrace("Error ~p while deleting task ~p", [E, Task]),
+      ok
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes task.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_task(Task :: task()) -> term().
 do_task(Fun) when is_function(Fun) ->
   Fun();
 
@@ -111,6 +139,12 @@ do_task(Task) ->
   ?error_stacktrace("Not a task ~p", [Task]),
   ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes task.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_task(Task :: task(), Repeats :: integer()) -> term().
 do_task(Task, Num) when is_record(Task, document) ->
   V = Task#document.value,
   do_task(V#task_pool.task, Num);
@@ -129,6 +163,12 @@ do_task(Task, Num) ->
       do_task(Task, Num - 1)
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks tasks and reruns failed.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_and_rerun_all(Level :: level()) -> ok.
 check_and_rerun_all(Level) ->
   {ok, Tasks} = task_pool:list_failed(Level),
   lists:foreach(fun(Task) ->

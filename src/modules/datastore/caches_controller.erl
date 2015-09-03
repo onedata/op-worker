@@ -207,12 +207,24 @@ wait_for_cache_dump(N) ->
       wait_for_cache_dump(N-1)
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates cache name to store level.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_to_datastore_level(ModelName :: atom()) -> datastore:store_level().
 cache_to_datastore_level(ModelName) ->
   case lists:member(ModelName, ?GLOBAL_CACHES) of
     true -> ?GLOBAL_ONLY_LEVEL;
     _ -> ?LOCAL_ONLY_LEVEL
   end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates cache name to task level.
+%% @end
+%%--------------------------------------------------------------------
+-spec cache_to_task_level(ModelName :: atom()) -> task_manager:level().
 cache_to_task_level(ModelName) ->
   case lists:member(ModelName, ?GLOBAL_CACHES) of
     true -> ?CLUSTER_LEVEL;

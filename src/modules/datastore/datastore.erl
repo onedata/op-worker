@@ -13,7 +13,7 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_engine.hrl").
-
+-include("cluster_elements/node_manager/task_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -662,7 +662,7 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                     _ ->
                         erlang:apply(Driver, Method, FullArgs)
                 end;
-            {ok, _NewMethod, _NewArgs} ->
+            {task, _Task} ->
                 {error, prehook_ans_not_supported};
             {error, Reason} ->
                 {error, Reason}
@@ -703,8 +703,8 @@ exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
             Result
     end;
 exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
+    ModelConfig = ModelName:model_init(),
     Return =
-        ModelConfig = ModelName:model_init(),
         case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Args) of
             ok ->
                 FullArgs = [ModelConfig | Args],
