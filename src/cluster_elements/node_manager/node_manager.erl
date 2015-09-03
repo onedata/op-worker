@@ -117,6 +117,10 @@ init([]) ->
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
         next_mem_check(),
+
+        %% Load NIFs
+        ok = helpers_nif:init(),
+
         NodeIP = check_node_ip_address(),
         MonitoringState = monitoring:start(NodeIP),
         {ok, #state{node_ip = NodeIP,
