@@ -26,7 +26,7 @@
 
 -export([token_authentication/1]).
 
--define(MACAROON, <<"TOKEN">>).
+-define(MACAROON, <<"macaroon">>).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
