@@ -60,8 +60,8 @@ cache_monitoring_test(Config) ->
 
     timer:sleep(1000), % Posthook is async
     Uuid = caches_controller:get_cache_uuid(Key, some_record),
-    ?assertMatch(true, ?call_store(Worker1, global_cache_controller, exists, [Uuid])),
-    ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
+    ?assertMatch(true, ?call_store(Worker1, cache_controller, exists, [Uuid])),
+    ?assertMatch(true, ?call_store(Worker2, cache_controller, exists, [Uuid])),
 
     ?assertMatch({ok, false}, ?call_store(Worker2, exists, [disk_only, some_record, Key])),
     timer:sleep(5000),
@@ -126,7 +126,7 @@ old_keys_cleaning_test(Config) ->
     timer:sleep(1000), % Posthook is async
     ?assertMatch(ok, rpc:call(Worker1, caches_controller, wait_for_cache_dump, [])),
     CorruptedUuid = caches_controller:get_cache_uuid(CorruptedKey, some_record),
-    ?assertMatch(ok, ?call_store(Worker2, global_cache_controller, delete, [CorruptedUuid])),
+    ?assertMatch(ok, ?call_store(Worker2, cache_controller, delete, [CorruptedUuid])),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, 1])),
     timer:sleep(1000), % Posthook is async
@@ -147,16 +147,16 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
         Uuid = caches_controller:get_cache_uuid(K2, some_record),
         UpdateFun = fun
             (Record) ->
-                Record#global_cache_controller{timestamp = to_timestamp(from_timestamp(os:timestamp()) - T - timer:minutes(5))}
+                Record#cache_controller{timestamp = to_timestamp(from_timestamp(os:timestamp()) - T - timer:minutes(5))}
         end,
-        ?assertMatch({ok, _}, ?call_store(Worker1, global_cache_controller, update, [Uuid, UpdateFun]))
+        ?assertMatch({ok, _}, ?call_store(Worker1, cache_controller, update, [Uuid, UpdateFun]))
     end, KeysWithTimes),
 
     ?assertMatch(ok, ?call_store(Worker1, caches_controller, delete_old_keys, [globally_cached, TimeWindow])),
     timer:sleep(1000), % Posthook is async
 
     Uuid = caches_controller:get_cache_uuid(K, some_record),
-    ?assertMatch(false, ?call_store(Worker2, global_cache_controller, exists, [Uuid])),
+    ?assertMatch(false, ?call_store(Worker2, cache_controller, exists, [Uuid])),
     ?assertMatch({ok, false}, ?call_store(Worker2, exists, [global_only, some_record, K])),
     ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K])),
     ?assertMatch({ok, _}, ?call_store(Worker1, some_record, get, [K])),
@@ -164,7 +164,7 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
 
     lists:foreach(fun({K2, _}) ->
         Uuid2 = caches_controller:get_cache_uuid(K2, some_record),
-        ?assertMatch(true, ?call_store(Worker2, global_cache_controller, exists, [Uuid2])),
+        ?assertMatch(true, ?call_store(Worker2, cache_controller, exists, [Uuid2])),
         ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, K2])),
         ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K2]))
     end, R),
@@ -424,25 +424,7 @@ init_per_testcase(Case, Config) when
 
     lists:foreach(fun(W) ->
         lists:foreach(fun(MC) ->
-            ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}]))
-        end, ModelConfig)
-    end, Workers),
-    Config;
-
-init_per_testcase(Case, Config) when
-    Case =:= local_cache_test;
-    Case =:= local_cache_list_test ->
-    Workers = ?config(op_worker_nodes, Config),
-
-    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
-    ModelConfig = lists:map(fun(Method) ->
-        {some_record, Method}
-    end, Methods),
-
-    lists:foreach(fun(W) ->
-        lists:foreach(fun(MC) ->
-            ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, global_cache_controller}])),
-            ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, local_cache_controller}]))
+            ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, cache_controller}]))
         end, ModelConfig)
     end, Workers),
     Config;
@@ -464,30 +446,9 @@ end_per_testcase(Case, Config) when
 
     lists:foreach(fun(W) ->
         lists:foreach(fun(MC) ->
-            ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
+            ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, cache_controller}]))
         end, ModelConfig)
     end, Workers);
-
-end_per_testcase(Case, Config) when
-    Case =:= local_cache_test;
-    Case =:= local_cache_list_test ->
-    Workers = ?config(op_worker_nodes, Config),
-    [W | _] = Workers,
-
-    Methods = [save, get, exists, delete, update, create, fetch_link, delete_links],
-    ModelConfig = lists:map(fun(Method) ->
-        {some_record, Method}
-    end, Methods),
-
-    lists:foreach(fun(W) ->
-        lists:foreach(fun(MC) ->
-            ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, local_cache_controller}])),
-            ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, global_cache_controller}]))
-        end, ModelConfig)
-    end, Workers),
-
-    ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),

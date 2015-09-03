@@ -30,8 +30,8 @@
     onedata_user,
     identity,
     file_meta,
-    global_cache_controller,
-    local_cache_controller
+    cache_controller,
+    task_pool
 ]).
 
 %% List of all global caches
@@ -44,8 +44,8 @@
 -define(LOCAL_CACHES, [
 ]).
 
-%% Model that controls utilization of global cache
--record(global_cache_controller, {
+%% Model that controls utilization of cache
+-record(cache_controller, {
     timestamp :: tuple(),
     action = non :: atom(),
     last_user = non :: pid() | non,
@@ -53,13 +53,11 @@
     deleted_links = [] :: list()
 }).
 
-%% Model that controls utilization of local cache
--record(local_cache_controller, {
-    timestamp :: tuple(),
-    action = non :: atom(),
-    last_user = non :: pid() | non,
-    last_action_time :: tuple(),
-    deleted_links = [] :: list()
+%% sample model with example fields
+-record(task_pool, {
+    task :: task_manager:task(),
+    owner :: pid(),
+    node :: node()
 }).
 
 %% sample model with example fields
