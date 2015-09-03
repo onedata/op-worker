@@ -112,6 +112,7 @@ get_canonical_file_entry(Ctx, Tokens) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
         onedata_user:get(UserId),
+    ?info("Get space ~p", [DefaultSpaceId]),
     {ok, #document{value = #file_meta{name = DefaultSpaceName}}} = file_meta:get(DefaultSpaceId),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME,
         DefaultSpaceName | Tokens]),

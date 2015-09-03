@@ -28,14 +28,18 @@
 -export([
     fslogic_new_file_test/1,
     lfm_create_test/1,
-    lfm_write_test/1
+    lfm_write_test/1,
+    lfm_stat_test/1,
+    lfm_truncate_test/1
 ]).
 
 -performance({test_cases, []}).
 all() -> [
     fslogic_new_file_test,
     lfm_create_test,
-    lfm_write_test
+    lfm_write_test,
+    lfm_stat_test,
+    lfm_truncate_test
 ].
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -54,18 +58,40 @@ fslogic_new_file_test(Config) ->
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    ct:print("OMG ~p", [rpc:call(Worker, ets, info, [lfm_handles])]),
-    [S] = ?config(servers, Config),
-    ct:print("OMG ~p ~p", [S, S]),
-
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
 
-    ct:print("New loc: ~p", [?req(Worker, SessId1, #get_new_file_location{parent_uuid = RootUUID1, name = <<"test">>})]),
+    Resp11 = ?req(Worker, SessId1, #get_new_file_location{parent_uuid = RootUUID1, name = <<"test">>}),
+    Resp21 = ?req(Worker, SessId2, #get_new_file_location{parent_uuid = RootUUID2, name = <<"test">>}),
+
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp11),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp21),
+
+    #fuse_response{fuse_response = #file_location{
+        file_id = FileId11,
+        storage_id = StorageId11,
+        provider_id = ProviderId11}} = Resp11,
+
+    #fuse_response{fuse_response = #file_location{
+        file_id = FileId21,
+        storage_id = StorageId21,
+        provider_id = ProviderId21}} = Resp21,
+
+    ?assertNotMatch(undefined, FileId11),
+    ?assertNotMatch(undefined, FileId21),
+
+    TestStorageId = ?config(storage_id, Config),
+    ?assertMatch(TestStorageId, StorageId11),
+    ?assertMatch(TestStorageId, StorageId21),
+
+
+    TestProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ?assertMatch(TestProviderId, ProviderId11),
+    ?assertMatch(TestProviderId, ProviderId21),
 
     ok.
 
-lfm_create_test(Config) ->
+lfm_create_and_unlink_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
@@ -74,13 +100,25 @@ lfm_create_test(Config) ->
     RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
 
-    ?assertMatch({ok, _}, create(W, SessId1, <<"/test1">>, 8#755)),
-    ?assertMatch({ok, _}, create(W, SessId1, <<"/test2">>, 8#755)),
-    ?assertMatch({error, ?EEXIST}, create(W, SessId1, <<"/test1">>, 8#755)),
+    FilePath1 = <<"/", (gen_name())/binary>>,
+    FilePath2 = <<"/", (gen_name())/binary>>,
 
-    ?assertMatch({ok, _}, create(W, SessId2, <<"/test1">>, 8#755)),
-    ?assertMatch({ok, _}, create(W, SessId2, <<"/test2">>, 8#755)),
-    ?assertMatch({error, ?EEXIST}, create(W, SessId2, <<"/test1">>, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId1, FilePath1, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId1, FilePath2, 8#755)),
+    ?assertMatch({error, ?EEXIST}, create(W, SessId1, FilePath1, 8#755)),
+
+    ?assertMatch({ok, _}, create(W, SessId2, FilePath1, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId2, FilePath2, 8#755)),
+    ?assertMatch({error, ?EEXIST}, create(W, SessId2, FilePath1, 8#755)),
+
+    ?assertMatch(ok, unlink(W, SessId1, {path, FilePath1})),
+    ?assertMatch(ok, unlink(W, SessId2, {path, FilePath2})),
+
+    ?assertMatch({error, ?ENOENT}, unlink(W, SessId1, {path, FilePath1})),
+    ?assertMatch({error, ?ENOENT}, unlink(W, SessId2, {path, FilePath2})),
+
+    ?assertMatch({ok, _}, create(W, SessId1, FilePath1, 8#755)),
+    ?assertMatch({ok, _}, create(W, SessId2, FilePath2, 8#755)),
 
     ok.
 
@@ -143,10 +181,88 @@ lfm_write_test(Config) ->
     WriteAndTest(W, Handle11, 6, <<"qwerty">>),
     WriteAndTest(W, Handle12, 6, <<"qwerty">>),
 
-    WriteAndTest(W, Handle11, 10, crypto:rand_bytes(20)),
-    WriteAndTest(W, Handle12, 10, crypto:rand_bytes(20)),
+%%     WriteAndTest(W, Handle11, 10, crypto:rand_bytes(100)),
+%%     WriteAndTest(W, Handle12, 10, crypto:rand_bytes(100)),
 
     ok.
+
+
+lfm_stat_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+
+    ?assertMatch({ok, _}, create(W, SessId1, <<"/test5">>, 8#755)),
+
+    O11 = open(W, SessId1, {path, <<"/test5">>}, rdwr),
+
+    ?assertMatch({ok, _}, O11),
+    {ok, Handle11} = O11,
+
+    ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test5">>})),
+
+    ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test5">>})),
+
+    ?assertMatch({ok, 3}, write(W, Handle11, 3, <<"abc">>)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>})),
+
+    ?assertMatch({ok, 3}, write(W, Handle11, 2, <<"abc">>)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>})),
+
+    ?assertMatch({ok, 9}, write(W, Handle11, 1, <<"123456789">>)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test5">>})),
+
+    ok.
+
+
+lfm_truncate_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+
+    ?assertMatch({ok, _}, create(W, SessId1, <<"/test6">>, 8#755)),
+
+    O11 = open(W, SessId1, {path, <<"/test6">>}, rdwr),
+
+    ?assertMatch({ok, _}, O11),
+    {ok, Handle11} = O11,
+
+    ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test6">>})),
+
+    ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test6">>})),
+
+    ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 1)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 1}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 10)),
+
+    ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 10)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 1)),
+
+    ?assertMatch({ok, 3}, write(W, Handle11, 1, <<"abc">>)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
+
+    ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 5)),
+    wait_for_events(),
+    ?assertMatch({ok, #file_attr{size = 5}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, <<"aabc">>}, read(W, Handle11, 0, 4)),
+
+    ok.
+
+
+
 
 %% Get uuid of given by path file. Possible as root to bypass permissions checks.
 get_uuid_privileged(Worker, SessId, Path) ->
@@ -174,9 +290,9 @@ get_uuid(Worker, SessId, Path) ->
 init_per_suite(Config) ->
     Config1 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, Config1),
-    {ok, _} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
+    {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
         [fslogic_storage:new_helper_init(<<"DirectIO">>, [<<?TEMP_DIR>>])])}]),
-    Config1.
+    [{storage_id, StorageId} | Config1].
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -231,7 +347,8 @@ end_per_testcase(_, Config) ->
         end, ?config(servers, Config)),
 
     session_teardown(Worker, Config),
-    mocks_teardown(Workers, [file_meta, gr_spaces]).
+    mocks_teardown(Workers, [file_meta, gr_spaces]),
+    timer:sleep(timer:seconds(10)).
 
 %%%===================================================================
 %%% Internal functions
@@ -350,12 +467,41 @@ mocks_teardown(Workers, Modules) ->
 name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
 
+gen_name() ->
+    binary:replace(base64:encode(crypto:rand_bytes(10)), <<"/">>, <<"">>, [global]).
+
+
+stat(Worker, SessId, FileKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                file_manager:stat(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+
+truncate(Worker, SessId, FileKey, Size) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                file_manager:truncate(SessId, FileKey, Size),
+            Host ! {self(), Result}
+        end).
+
 
 create(Worker, SessId, FilePath, Mode) ->
     exec(Worker,
         fun(Host) ->
             Result =
                 file_manager:create(SessId, FilePath, Mode),
+            Host ! {self(), Result}
+        end).
+
+unlink(Worker, SessId, File) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                file_manager:unlink(SessId, File),
             Host ! {self(), Result}
         end).
 
@@ -416,3 +562,7 @@ for(From, To, Fun) ->
     for(From, To, 1, Fun).
 for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
+
+
+wait_for_events() ->
+    timer:sleep(timer:seconds(2)).

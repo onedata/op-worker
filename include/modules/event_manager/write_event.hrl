@@ -27,12 +27,28 @@
     metadata = 0,
     admission_rule = fun(#write_event{}) -> true; (_) -> false end,
     aggregation_rule = fun
-        (#write_event{file_uuid = Id} = Evt1, #write_event{file_uuid = Id} = Evt2) ->
+        (#write_event{file_uuid = Id, file_size = FSize1} = Evt1,
+         #write_event{file_uuid = Id, file_size = FSize2, blocks = Blocks2} = Evt2) ->
+            BlockCount2 = length(Blocks2),
+            NewFileSize =
+                case FSize2 of
+                    _ when is_integer(FSize2) ->
+                        FSize2;
+                    _ ->
+                        FSize1
+                end,
+            NewFileSize1 =
+                case {NewFileSize, Blocks2} of
+                    {undefined, _} -> undefined;
+                    {_, [_ | _]} when is_integer(NewFileSize) ->
+                        Upper = fslogic_blocks:upper(Blocks2),
+                        max(Upper, NewFileSize)
+                end,
             {ok, #write_event{
                 file_uuid = Evt1#write_event.file_uuid,
                 counter = Evt1#write_event.counter + Evt2#write_event.counter,
                 size = Evt1#write_event.size + Evt2#write_event.size,
-                file_size = Evt2#write_event.file_size,
+                file_size = NewFileSize1,
                 blocks = event_utils:aggregate_blocks(
                     Evt1#write_event.blocks,
                     Evt2#write_event.blocks

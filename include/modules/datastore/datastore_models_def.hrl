@@ -127,7 +127,8 @@
     provider_id :: binary(),
     storage_id :: binary(),
     file_id :: binary(),
-    blocks :: []
+    blocks :: [],
+    size = 0 :: non_neg_integer()
 }).
 
 

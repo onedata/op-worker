@@ -79,12 +79,8 @@ handle(healthcheck) ->
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
 handle({event, Evts}) ->
-    ?info("WRITE EVENT: ~p", [Evts]),
-    lists:foreach(
-        fun(#write_event{blocks = Blocks, file_uuid = FileUUID}) ->
-            fslogic_blocks:update(FileUUID, Blocks)
-        end, Evts),
-    ok;
+    ?info("FSLOGIC EVENT: ~p", [Evts]),
+    handle_events(Evts);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -185,6 +181,17 @@ handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = Paren
     fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags, ForceClusterProxy);
 handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags, force_cluster_proxy = ForceClusterProxy}) ->
     fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags, ForceClusterProxy);
+handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
+    fslogic_req_regular:unlink(Ctx, {uuid, UUID});
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
+
+handle_events([]) ->
+    [];
+handle_events([Event | T]) ->
+    [handle_event(Event) | handle_events(T)].
+
+
+handle_event(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize}) ->
+    fslogic_blocks:update(FileUUID, Blocks, FileSize).

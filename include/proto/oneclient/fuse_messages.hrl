@@ -88,6 +88,10 @@
     force_cluster_proxy = false :: boolean()
 }).
 
+-record(unlink, {
+    uuid :: file_meta:uuid()
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{}.
 

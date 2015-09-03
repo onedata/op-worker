@@ -72,11 +72,12 @@ chown(_, _File, _UserId) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions({none, 2}).
 get_file_attr(_CTX, File) ->
-    ?debug("Get attr for file entry: ~p", [File]),
+    ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = UID, size = Size, name = Name}}} ->
+            ctime = CTime, uid = UID, name = Name}}} ->
+            Size = fslogic_blocks:get_file_size(File),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                             #file_attr{
                                 uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,

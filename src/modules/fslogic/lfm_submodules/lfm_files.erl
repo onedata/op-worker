@@ -21,9 +21,11 @@
 
 %% API
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, rm/1]).
+-export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, get_block_map/1]).
+-export([create/3, open/3, write/3, read/3, truncate/3, get_block_map/2, unlink/2]).
+
+-compile({no_auto_import, [unlink/1]}).
 
 %%%===================================================================
 %%% API
@@ -68,9 +70,14 @@ cp(_PathFrom, _PathTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec rm(FileKey :: file_key()) -> ok | error_reply().
-rm(_FileKey) ->
-    ok.
+-spec unlink(FileKey :: file_key()) -> ok | error_reply().
+unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #unlink{uuid = UUID}}) of
+        #fuse_response{status = #status{code = ?OK}} ->
+            ok;
+        #fuse_response{status = #status{code = Code}} ->
+            {error, Code}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -157,9 +164,6 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTy
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
-            {ok, #document{value = Storage2}} = storage:get(StorageId),
-            {ok, NewSFMHandle2} = storage_file_manager:open(Storage2, FileId, OpenType),
-            ?info("AFTER WRITE: ~p sess: ~p", [storage_file_manager:read(NewSFMHandle2, Offset, NewSize), SessId]),
             ok = event_manager:emit(#write_event{file_uuid = UUID, blocks = [
                 #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = Written}
             ]}, SessId),
@@ -212,9 +216,46 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTyp
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(FileKey :: file_key(), Size :: integer()) -> ok | error_reply().
-truncate(_FileKey, _Size) ->
-    ok.
+-spec truncate(fslogic_worker:ctx(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
+truncate(#fslogic_ctx{session_id = SessId}, FileKey, Size) ->
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_file_attr{entry = FileKey}}) of
+        #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{uuid = FileUUID}} ->
+            #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
+            #file_location{blocks = Blocks, file_id = DFID, storage_id = DSID} = LocalLocation,
+            ?info("==============> OMG2 ~p", [LocalLocation]),
+            Locations = lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{file_id = FID, storage_id = SID} <- Blocks]]),
+            Results = lists:map(
+                fun({SID, FID}) ->
+                    ?info("==============> OMG1 ~p", [{SID, FID}]),
+                    {ok, #document{value = Storage}} = storage:get(SID),
+                    case storage_file_manager:truncate(Storage, FID, Size) of
+                        ok -> ok;
+                        {error, Reason} ->
+                            ?error("Cannot truncate file ~p on storage ~p due to: ~p", [FID, SID, Reason]),
+                            {error, Reason}
+                    end
+                end, Locations),
+
+            Failures = Results -- [ok],
+            OKs = Results -- Failures,
+
+            EmitTruncate =
+                fun() ->
+                    event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId)
+                end,
+
+            case {OKs, Failures} of
+                {_, []} ->      %% Full success
+                    EmitTruncate();
+                {[_ | _], _} -> %% Partial success
+                    EmitTruncate();
+                {[], Errors} ->
+                    Reasons = [Reason0 || {error, Reason0} <- Errors],
+                    {error, Reasons}
+            end;
+        #fuse_response{status = #status{code = Code}} ->
+            {error, Code}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -223,10 +264,8 @@ truncate(_FileKey, _Size) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_block_map(FileKey :: file_key()) -> {ok, [block_range()]} | error_reply().
-get_block_map(#lfm_handle{file_uuid = UUID}) ->
-    get_block_map({uuid, UUID});
-get_block_map(File) ->
+-spec get_block_map(fslogic_worker:ctx(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+get_block_map(_CTX, File) ->
     #document{value = LocalLocation} = fslogic_utils:get_local_file_location(File),
     #file_location{blocks = Blocks} = LocalLocation,
     {ok, Blocks}.

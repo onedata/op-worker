@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/4, get_new_file_location/6]).
+-export([get_file_location/4, get_new_file_location/6, unlink/2]).
 
 %%%===================================================================
 %%% API functions
@@ -69,7 +69,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
-        provider_id = oneprovider:get_provider_id()},
+        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId},
     {ok, LocId} = file_location:create(#document{value = Location}),
 
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
@@ -78,3 +78,33 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
 
     #fuse_response{status = #status{code = ?OK}, fuse_response =
         #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.
+
+
+unlink(#fslogic_ctx{session_id = SessId} = CTX, File) ->
+    #document{value = #file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}} = fslogic_utils:get_local_file_location(File),
+    ToDelete = lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{storage_id = SID, file_id = FID} <- Blocks]]),
+    Results = lists:map( %% @todo: run this via task manager
+        fun({StorageId, FileId}) ->
+            case storage:get(StorageId) of
+                {ok, Storage} ->
+                    case storage_file_manager:unlink(Storage, FileId) of
+                        ok -> ok;
+                        {error, Reason1} ->
+                            {{StorageId, FileId}, {error, Reason1}}
+                    end ;
+                {error, Reason2} ->
+                    {{StorageId, FileId}, {error, Reason2}}
+            end
+        end, ToDelete),
+
+    case Results of
+        [] -> ok;
+        _ ->
+            lists:foreach(
+                fun({{SID0, FID0}, {error, Reason0}}) ->
+                    ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
+                end, Results)
+    end,
+
+    #fuse_response{status = #status{code = ?OK}}.
+

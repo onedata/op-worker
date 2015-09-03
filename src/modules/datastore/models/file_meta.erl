@@ -314,6 +314,7 @@ list_children(Entry, Offset, Count) ->
 
 
 get_locations(Entry) ->
+    ?info("Get locations for entry: ~p", [Entry]),
     ?run(begin
     {ok, #document{} = File} = get(Entry),
     datastore:foreach_link(?LINK_STORE_LEVEL, File,

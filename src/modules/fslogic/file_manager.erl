@@ -37,20 +37,21 @@
 -include("types.hrl").
 -include("errors.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% User context
 -export([set_user_context/1]).
 %% Functions operating on directories
--export([mkdir/1, ls/3, get_children_count/1]).
+-export([mkdir/2, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, rm/1]).
+-export([exists/1, mv/2, cp/2, unlink/1]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, get_block_map/1]).
+-export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, get_block_map/1]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
--export([stat/1, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+-export([stat/1, stat/2, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -79,8 +80,9 @@ set_user_context(_UserID) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(Path :: file_path()) -> {ok, file_id()} | error_reply().
-mkdir(Path) ->
+-spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_id()} | error_reply().
+mkdir(SessId, Path) ->
+    CTX = fslogic_context:new(SessId),
     lfm_dirs:mkdir(Path).
 
 
@@ -91,8 +93,9 @@ mkdir(Path) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_id(), file_name()}]} | error_reply().
-ls(FileKey, Limit, Offset) ->
+-spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_id(), file_name()}]} | error_reply().
+ls(SessId, FileKey, Limit, Offset) ->
+    CTX = fslogic_context:new(SessId),
     lfm_dirs:ls(FileKey, Limit, Offset).
 
 
@@ -102,8 +105,9 @@ ls(FileKey, Limit, Offset) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
-get_children_count(FileKey) ->
+-spec get_children_count(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
+get_children_count(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
     lfm_dirs:get_children_count(FileKey).
 
 
@@ -146,9 +150,12 @@ cp(PathFrom, PathTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec rm(FileKey :: file_key()) -> ok | error_reply().
-rm(FileKey) ->
-    lfm_files:rm(FileKey).
+-spec unlink(FileKey :: file_key()) -> ok | error_reply().
+unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_uuid = UUID}) ->
+    unlink(SessId, {uuid, UUID}).
+unlink(SessId, FileEntry) ->
+    CTX = fslogic_context:new(SessId),
+    lfm_files:unlink(CTX, ensure_uuid(CTX, FileEntry)).
 
 
 %%--------------------------------------------------------------------
@@ -253,9 +260,20 @@ read(FileHandle, Offset, MaxSize) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(FileKey :: file_key(), Size :: integer()) -> ok | error_reply().
-truncate(FileKey, Size) ->
-    lfm_files:truncate(FileKey, Size).
+-spec truncate(FileHandle :: file_handle(), Size :: integer()) -> ok | error_reply().
+truncate(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Size) ->
+    truncate(SessId, {uuid, FileUUID}, Size).
+
+-spec truncate(SessId :: session:id(), FileKey :: file_id_or_path(), Size :: integer()) -> ok | error_reply().
+truncate(SessId, FileKey, Size) ->
+    try
+        CTX = fslogic_context:new(SessId),
+        lfm_files:truncate(CTX, FileKey, Size)
+    catch
+        _:Reason ->
+            ?error_stacktrace("truncate error for file ~p: ~p", [FileKey, Reason]),
+            {error, Reason}
+    end .
 
 
 %%--------------------------------------------------------------------
@@ -264,9 +282,15 @@ truncate(FileKey, Size) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_block_map(FileKey :: file_key()) -> {ok, [block_range()]} | error_reply().
-get_block_map(FileKey) ->
-    lfm_files:get_block_map(FileKey).
+
+-spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
+get_block_map(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    get_block_map(SessId, {uuid, FileUUID}).
+
+-spec get_block_map(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+get_block_map(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    lfm_files:get_block_map(CTX, ensure_uuid(CTX, FileKey)).
 
 
 %%--------------------------------------------------------------------
@@ -320,8 +344,11 @@ set_acl(Path, EntityList) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(FileKey :: file_key()) -> {ok, file_attributes()} | error_reply().
-stat(Path) ->
-    lfm_attrs:stat(Path).
+stat(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    stat(SessId, {uuid, UUID}).
+stat(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    lfm_attrs:stat(CTX, FileKey).
 
 
 %%--------------------------------------------------------------------

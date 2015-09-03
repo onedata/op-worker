@@ -22,7 +22,7 @@
 }).
 
 -export([mkdir/3, mkdir/4, mv/2, chmod/2, chown/3, link/2]).
--export([stat/1, read/3, write/3, create/4, open/3, truncate/2, rm/1]).
+-export([stat/1, read/3, write/3, create/4, open/3, truncate/3, unlink/2]).
 
 -type handle() :: #sfm_handle{}.
 
@@ -177,9 +177,11 @@ create(Storage, Path, Mode, Recursive) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(FileHandle :: file_handle(), Size :: integer()) -> ok | error_reply().
-truncate(#sfm_handle{helper_handle = HelperHandle, file = File}, Size) ->
-    helpers:truncate(HelperHandle, File, Size).
+-spec truncate(Storage :: #document{}, Path :: file_handle(), Size :: integer()) -> ok | error_reply().
+truncate(Storage, Path, Size) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:truncate(HelperHandle, Path, Size).
 
 
 %%--------------------------------------------------------------------
@@ -188,6 +190,8 @@ truncate(#sfm_handle{helper_handle = HelperHandle, file = File}, Size) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec rm(Path :: file_path()) -> ok | error_reply().
-rm(_Path) ->
-    ok.
+-spec unlink(Path :: file_path()) -> ok | error_reply().
+unlink(Storage, Path) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:unlink(HelperHandle, Path).
