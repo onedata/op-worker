@@ -680,8 +680,10 @@ unset_hooks(Case, Config) ->
             ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
             ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
         local ->
-            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
-            ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
+            lists:foreach(fun(Wr) ->
+                ?assertMatch(ok, rpc:call(Wr, caches_controller, wait_for_cache_dump, [])),
+                ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Wr}, clear_mem_synch, 60000))
+            end, Workers);
         _ ->
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->

@@ -34,9 +34,21 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts task.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_task(Task :: task() | #document{value :: #task_pool{}}, Level :: level()) -> ok.
 start_task(Task, Level) ->
   start_task(Task, Level, save_pid).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts task.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_task(Task :: task() | #document{value :: #task_pool{}}, Level :: level(), PersistFun :: save_pid | update_pid) -> ok.
 start_task(Task, Level, PersistFun) ->
   Pid = spawn(fun() ->
     receive
@@ -57,6 +69,12 @@ start_task(Task, Level, PersistFun) ->
   Pid ! {start, Uuid},
   ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks all tasks and reruns failed.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_and_rerun_all() -> ok.
 check_and_rerun_all() ->
   check_and_rerun_all(?NODE_LEVEL),
   check_and_rerun_all(?CLUSTER_LEVEL),

@@ -333,10 +333,9 @@ check_get(Key, ModelName, LinkName, Level) ->
 %% Delates info about dumping of cache to disk.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_dump_info(Uuid :: binary(), Level :: datastore:store_level()) ->
+-spec delete_dump_info(Uuid :: binary(), Owner :: list(), Level :: datastore:store_level()) ->
     ok | datastore:generic_error().
-delete_dump_info(Uuid, Level) ->
-    Pid = self(),
+delete_dump_info(Uuid, Owner, Level) ->
     Pred = fun() ->
         LastUser = case get(Level, Uuid) of
                        {ok, Doc} ->
@@ -346,7 +345,7 @@ delete_dump_info(Uuid, Level) ->
                            non
                    end,
         case LastUser of
-            Pid ->
+            Owner ->
                 true;
             _ ->
                 false
@@ -366,7 +365,7 @@ end_disk_op(Uuid, Owner, ModelName, Op, Level) ->
     try
         case Op of
             delete ->
-                delete_dump_info(Uuid, Level);
+                delete_dump_info(Uuid, Owner, Level);
             _ ->
                 UpdateFun = fun
                     (#cache_controller{last_user = LastUser} = Record) ->
@@ -406,6 +405,7 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
             Record#cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
+        % TODO - create/delete possible race
         case update(Level, Uuid, UpdateFun) of
             {ok, _Ok} ->
                 ok;
@@ -465,19 +465,9 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
 
             ok = case Ans of
                      ok ->
-                         case Op of
-                             delete ->
-                                 delete_dump_info(Uuid, Level);
-                             _ ->
-                                 end_disk_op(Uuid, Pid, ModelName, Op, Level)
-                         end;
+                         end_disk_op(Uuid, Pid, ModelName, Op, Level);
                      {ok, _} ->
-                         case Op of
-                             delete ->
-                                 delete_dump_info(Uuid, Level);
-                             _ ->
-                                 end_disk_op(Uuid, Pid, ModelName, Op, Level)
-                         end;
+                         end_disk_op(Uuid, Pid, ModelName, Op, Level);
                      {error, not_last_user} -> ok;
                      WrongAns -> WrongAns
                  end

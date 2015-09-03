@@ -588,6 +588,13 @@ next_mem_check() ->
     % random to reduce probability that two nodes clear memory simultanosly
     erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Plans next tasks list checking.
+%% @end
+%%--------------------------------------------------------------------
+-spec next_task_check() -> TimerRef :: reference().
 next_task_check() ->
     {ok, IntervalMin} = application:get_env(?APP_NAME, task_checking_period_minutes),
     Interval = timer:minutes(IntervalMin),

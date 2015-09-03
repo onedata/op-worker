@@ -44,24 +44,6 @@
 -define(LOCAL_CACHES, [
 ]).
 
-%% Model that controls utilization of global cache
--record(global_cache_controller, {
-    timestamp :: tuple(),
-    action = non :: atom(),
-    last_user = non :: pid() | non,
-    last_action_time :: tuple(),
-    deleted_links = [] :: list()
-}).
-
-%% Model that controls utilization of local cache
--record(local_cache_controller, {
-    timestamp :: tuple(),
-    action = non :: atom(),
-    last_user = non :: pid() | non,
-    last_action_time :: tuple(),
-    deleted_links = [] :: list()
-}).
-
 %% Model that controls utilization of cache
 -record(cache_controller, {
     timestamp :: tuple(),
