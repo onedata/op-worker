@@ -62,7 +62,7 @@ remove_session(SessId) ->
     {ok, session:id()} | {error, Reason :: term()}.
 create_gui_session(Auth) ->
     SessionId = datastore_utils:gen_uuid(),
-    {ok, #document{value = Iden}} = identity:get_or_fetch(Auth),
+    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
     SessionRec = #session{
         identity = Iden,
         type = gui,

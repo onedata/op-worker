@@ -41,7 +41,7 @@ handle_handshake(#client_message{message_body = #handshake_request{
     % Set macaroon for communication with GR
     {ok, Doc = #document{
         value = #session{} = Session}} = session:get(IdToReuse),
-    ok = session:save(Doc#document{
+    {ok, _} = session:save(Doc#document{
         value = Session#session{auth = Auth}}),
     % @todo end_todo
     {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}};
