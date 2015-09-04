@@ -34,6 +34,17 @@
 % 6) Blocks related functions should go to another module (synchronize, mark_as_truncated etc).
 
 
+-define(run(F),
+    try
+        F()
+    catch
+        _:{badmatch, {error, {not_found, file_meta}}} ->
+            {error, ?ENOENT};
+        _:___Reason ->
+            {error, ___Reason}
+    end).
+
+
 -include("types.hrl").
 -include("errors.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
@@ -45,9 +56,9 @@
 %% Functions operating on directories
 -export([mkdir/2, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, unlink/1]).
+-export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, get_block_map/1]).
+-export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, get_block_map/1, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
@@ -154,8 +165,10 @@ cp(PathFrom, PathTo) ->
 unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_uuid = UUID}) ->
     unlink(SessId, {uuid, UUID}).
 unlink(SessId, FileEntry) ->
-    CTX = fslogic_context:new(SessId),
-    lfm_files:unlink(CTX, ensure_uuid(CTX, FileEntry)).
+    ?run(fun() ->
+        CTX = fslogic_context:new(SessId),
+        lfm_files:unlink(CTX, ensure_uuid(CTX, FileEntry))
+    end).
 
 
 %%--------------------------------------------------------------------

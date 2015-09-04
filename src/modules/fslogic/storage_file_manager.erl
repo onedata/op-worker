@@ -190,7 +190,7 @@ truncate(Storage, Path, Size) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(Path :: file_path()) -> ok | error_reply().
+-spec unlink(Storage :: #document{}, Path :: file_path()) -> ok | error_reply().
 unlink(Storage, Path) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),

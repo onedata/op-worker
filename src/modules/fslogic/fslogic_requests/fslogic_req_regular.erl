@@ -82,6 +82,9 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
 
 unlink(#fslogic_ctx{session_id = SessId} = CTX, File) ->
     #document{value = #file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}} = fslogic_utils:get_local_file_location(File),
+
+    ok = file_meta:delete(File),
+
     ToDelete = lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{storage_id = SID, file_id = FID} <- Blocks]]),
     Results = lists:map( %% @todo: run this via task manager
         fun({StorageId, FileId}) ->
@@ -96,14 +99,13 @@ unlink(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                     {{StorageId, FileId}, {error, Reason2}}
             end
         end, ToDelete),
-
-    case Results of
+    case Results -- [ok] of
         [] -> ok;
-        _ ->
+        Errors ->
             lists:foreach(
                 fun({{SID0, FID0}, {error, Reason0}}) ->
                     ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
-                end, Results)
+                end, Errors)
     end,
 
     #fuse_response{status = #status{code = ?OK}}.

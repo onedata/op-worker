@@ -21,6 +21,8 @@
 %%% API
 %%%===================================================================
 
+select_helper(#document{value = Storage}) ->
+    select_helper(Storage);
 select_helper(Storage) ->
     #storage{helpers = [Helper | _]} = Storage,
     {ok, Helper}.

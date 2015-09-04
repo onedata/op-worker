@@ -27,7 +27,7 @@
 %% tests
 -export([
     fslogic_new_file_test/1,
-    lfm_create_test/1,
+    lfm_create_and_unlink_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
     lfm_truncate_test/1
@@ -36,7 +36,7 @@
 -performance({test_cases, []}).
 all() -> [
     fslogic_new_file_test,
-    lfm_create_test,
+    lfm_create_and_unlink_test,
     lfm_write_test,
     lfm_stat_test,
     lfm_truncate_test

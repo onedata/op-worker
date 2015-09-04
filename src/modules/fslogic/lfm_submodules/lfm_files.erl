@@ -70,7 +70,7 @@ cp(_PathFrom, _PathTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(FileKey :: file_key()) -> ok | error_reply().
+-spec unlink(fslogic_worker:ctx(), FileKey :: file_key()) -> ok | error_reply().
 unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #unlink{uuid = UUID}}) of
         #fuse_response{status = #status{code = ?OK}} ->
