@@ -26,17 +26,18 @@
     [{<<"id">>, <<"d1">>}, {<<"name">>, <<"Dir 1">>}, {<<"attribute">>, 567833}],
     [{<<"id">>, <<"d2">>}, {<<"name">>, <<"Folder 2">>}, {<<"attribute">>, 12475323}],
     [{<<"id">>, <<"d3">>}, {<<"name">>, <<"Katalog 3">>}, {<<"attribute">>, 34554444}],
-    [{<<"id">>, <<"dyna">>}, {<<"name">>, <<"Dynamitrzny">>}, {<<"attribute">>, 145}]
+    [{<<"id">>, <<"dyna">>}, {<<"name">>, <<"Dynamiczny">>}, {<<"attribute">>, 145}]
 ]).
 
 
 page_init() ->
-    serve_html.
+    {serve_body, <<"ewrwdddddder">>}.
 
 
 websocket_init() ->
     ?dump(websocket_init),
     save_files(?FILE_FIXTURES),
+    ?dump(opn_cowboy_bridge:get_socket_pid()),
     ok.
 
 
@@ -113,6 +114,11 @@ delete_record(<<"file">>, Id) ->
     ok.
 
 
+handle_info(update) ->
+    Rand = (begin random:seed(now()), random:uniform(9999999) end),
+    update_record(<<"file">>, <<"dyna">>, [{<<"attribute">>, Rand}]),
+    get_files().
+
 % ------------------------------------------------------------
 %
 % ------------------------------------------------------------
@@ -137,3 +143,4 @@ update_file(File, Data) ->
         fun({Attr, Val}, CurrFile) ->
             lists:keyreplace(Attr, 1, CurrFile, {Attr, Val})
         end, File, Data).
+

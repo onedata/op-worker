@@ -15,7 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 page_init() ->
-    SrlzdMacaroon = gui_ctx:url_param(<<"code">>),
+    SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
     {ok, Auth = #auth{
         disch_macaroons = DMacaroons}} = gui_auth_manager:authorize(SrlzdMacaroon),
     {ok, SessionId} = session_manager:create_gui_session(Auth),
