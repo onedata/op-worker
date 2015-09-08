@@ -502,10 +502,10 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
             Ans = case ToDo of
                 {ok, NewMethod, NewArgs} ->
                     FullArgs = [ModelConfig | NewArgs],
-                    worker_proxy:call(datastore_worker, {driver_call, ?PERSISTENCE_DRIVER, NewMethod, FullArgs}, timer:minutes(5));
+                    worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, timer:minutes(5));
                 ok ->
                     FullArgs = [ModelConfig | Args],
-                    worker_proxy:call(datastore_worker, {driver_call, ?PERSISTENCE_DRIVER, Op, FullArgs}, timer:minutes(5));
+                    worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), Op, FullArgs}, timer:minutes(5));
                 Other ->
                     Other
             end,
@@ -565,7 +565,7 @@ log_link_del(Key, ModelName, LinkNames, start, Args, Level) ->
                 Task = fun() ->
                     ModelConfig = ModelName:model_init(),
                     FullArgs = [ModelConfig | Args],
-                    ok = worker_proxy:call(datastore_worker, {driver_call, ?PERSISTENCE_DRIVER, delete_links, FullArgs}, timer:minutes(5)),
+                    ok = worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), delete_links, FullArgs}, timer:minutes(5)),
                     {ok, _} = log_link_del(Key, ModelName, LinkNames, stop, Args, Level)
                 end,
                 {task, Task}

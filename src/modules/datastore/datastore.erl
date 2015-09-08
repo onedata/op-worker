@@ -402,6 +402,18 @@ healthcheck() ->
         _ -> ok
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates datasotre's driver name to handler module.
+%% @end
+%%--------------------------------------------------------------------
+-spec driver_to_module(atom()) -> atom().
+driver_to_module(?PERSISTENCE_DRIVER) ->
+    {ok, DriverModule} = application:get_env(?APP_NAME, ?PERSISTENCE_DRIVER),
+    DriverModule;
+driver_to_module(Driver) ->
+    Driver.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -722,15 +734,3 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
         end,
     run_posthooks_sync(ModelConfig, Method, driver_to_level(Driver), Args, Return).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Translates datasotre's driver name to handler module.
-%% @end
-%%--------------------------------------------------------------------
--spec driver_to_module(atom()) -> atom().
-driver_to_module(?PERSISTENCE_DRIVER) ->
-    {ok, DriverModule} = application:get_env(?APP_NAME, ?PERSISTENCE_DRIVER),
-    DriverModule;
-driver_to_module(Driver) ->
-    Driver.
