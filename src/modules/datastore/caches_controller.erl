@@ -276,7 +276,7 @@ safe_delete(Level, ModelName, Key) ->
     ModelConfig = ModelName:model_init(),
     FullArgs = [ModelConfig, Key],
     {ok, Doc} = worker_proxy:call(datastore_worker,
-      {driver_call, datastore:level_to_driver(Level), get, FullArgs}),
+      {driver_call, datastore:driver_to_module(datastore:level_to_driver(Level)), get, FullArgs}),
 
     Value = Doc#document.value,
     Pred = fun() ->

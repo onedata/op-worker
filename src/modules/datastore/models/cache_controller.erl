@@ -480,8 +480,14 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                         delete ->
                             ok;
                         _ ->
-                            {ok, SavedValue} = datastore:get(Level, ModelName, Key),
-                            {ok, save, [SavedValue]}
+                            case datastore:get(Level, ModelName, Key) of
+                                {ok, SavedValue} ->
+                                    {ok, save, [SavedValue]};
+                                {error, {not_found, _}} ->
+                                    {error, deleted};
+                                GetError ->
+                                    {get_error, GetError}
+                            end
                     end;
                 _ ->
                     {ok, ForceTime} = application:get_env(?APP_NAME, cache_to_disk_force_delay_ms),
@@ -502,10 +508,12 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
             Ans = case ToDo of
                 {ok, NewMethod, NewArgs} ->
                     FullArgs = [ModelConfig | NewArgs],
-                    worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, timer:minutes(5));
+                    worker_proxy:call(datastore_worker, {driver_call,
+                        datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, timer:minutes(5));
                 ok ->
                     FullArgs = [ModelConfig | Args],
-                    worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), Op, FullArgs}, timer:minutes(5));
+                    worker_proxy:call(datastore_worker, {driver_call,
+                        datastore:driver_to_module(?PERSISTENCE_DRIVER), Op, FullArgs}, timer:minutes(5));
                 Other ->
                     Other
             end,
@@ -516,6 +524,8 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                      {ok, _} ->
                          end_disk_op(Uuid, Pid, ModelName, Op, Level);
                      {error, not_last_user} -> ok;
+                     {error, deleted} ->
+                         delete_dump_info(Uuid, Pid, Level);
                      WrongAns -> WrongAns
                  end
         end,
