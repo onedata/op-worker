@@ -226,8 +226,10 @@ exists(Level, Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(cc_bucket, get_hooks_config(),
-        ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL, false).
+    % TODO - check if transactions are realy needed
+%%     ?MODEL_CONFIG(cc_bucket, get_hooks_config(),
+%%         ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL, false).
+    ?MODEL_CONFIG(cc_bucket, get_hooks_config()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -324,7 +326,7 @@ update_usage_info(Key, ModelName, Level) ->
     Doc :: datastore:document(), Level :: datastore:store_level()) -> {ok, datastore:key()} | datastore:generic_error().
 update_usage_info(Key, ModelName, Doc, Level) ->
     update_usage_info(Key, ModelName, Level),
-    datastore:create(Level, Doc),
+    create(Level, Doc),
     datastore:foreach_link(disk_only, Key, ModelName,
         fun(LinkName, LinkTarget, _) ->
             datastore:add_links(Level, Key, ModelName, {LinkName, LinkTarget})
@@ -394,12 +396,13 @@ delete_dump_info(Uuid, Owner, Level) ->
         case LastUser of
             Owner ->
                 true;
+            non ->
+                true;
             _ ->
                 false
         end
     end,
     delete(Level, Uuid, Pred).
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -452,7 +455,6 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
             Record#cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
-        % TODO - create/delete possible race
         case update(Level, Uuid, UpdateFun) of
             {ok, _Ok} ->
                 ok;
@@ -460,7 +462,7 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                 TS = os:timestamp(),
                 V = #cache_controller{last_user = Pid, timestamp = TS, action = Op, last_action_time = TS},
                 Doc = #document{key = Uuid, value = V},
-                create(Doc)
+                create(Level, Doc)
         end,
 
         {ok, SleepTime} = application:get_env(?APP_NAME, cache_to_disk_delay_ms),
@@ -475,10 +477,18 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                                       {Pid, 0}
                               end,
             ToDo = case LastUser of
-                Pid ->
+                ToUpdate when ToUpdate =:= Pid; ToUpdate =:= non ->
+                    % check for create/delete race
                     case Op of
                         delete ->
-                            ok;
+                            case datastore:get(Level, ModelName, Key) of
+                                {ok, SavedValue} ->
+                                    {ok, save, [SavedValue]};
+                                {error, {not_found, _}} ->
+                                    ok;
+                                GetError ->
+                                    {get_error, GetError}
+                            end;
                         _ ->
                             case datastore:get(Level, ModelName, Key) of
                                 {ok, SavedValue} ->
@@ -517,7 +527,6 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                 Other ->
                     Other
             end,
-
             ok = case Ans of
                      ok ->
                          end_disk_op(Uuid, Pid, ModelName, Op, Level);
