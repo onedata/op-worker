@@ -23,6 +23,7 @@
     },
     "provider_domains": {
         "p1": {
+            "db_driver": "couchbase",
             "op_ccm": {
                 "ccm1": {
                     "vm.args": {
@@ -46,8 +47,8 @@
                             "ccm1"
                         ],
                         "db_nodes": [
-                            "riaknode1",
-                            "riaknode2"
+                            "dbnode1",
+                            "dbnode2"
                         ],
                         "global_registry_domain": "gr"
                     }
@@ -55,6 +56,7 @@
             }
         },
         "p2.gr": {
+            "db_driver": "riak",
             "op_ccm": {
                 "ccm1": {
                     "vm.args": {
@@ -111,7 +113,7 @@
                         "db_nodes": [
                             "db"
                         ],
-                        "grpcert_domain": {
+                        "http_domain": {
                             "string": "127.0.0.1"
                         },
                         "dev_mode": true
