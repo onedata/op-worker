@@ -31,7 +31,7 @@
 
 
 page_init() ->
-    {serve_body, <<"ewrwdddddder">>}.
+    {serve_body, g_str:format_bin("Key: ~p~n", [g_session:get_value(key)])}.
 
 
 websocket_init() ->
