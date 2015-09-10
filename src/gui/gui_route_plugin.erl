@@ -59,7 +59,7 @@ error_500_html_file() ->
 
 route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/logout.html">>) -> ?LOGOUT;
-route(<<"/ver_login.html">>) -> io:format("adsfadsf~n"), ?VER_LOGIN;
+route(<<"/ver_login.html">>) -> ?VER_LOGIN;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?FILE_MANAGER;
 route(<<"/file_manager.html">>) -> ?FILE_MANAGER.

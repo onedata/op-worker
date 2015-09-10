@@ -16,7 +16,7 @@
 
 
 page_init() ->
-    ?dump(page_init),
+    ?dump(ver_login_backend),
     g_session:log_in(),
     g_session:put_value(key, <<"blebelbleb">>),
     {serve_body, <<"">>}.
