@@ -82,6 +82,7 @@ bash'''
         workdir='/root/bin',
         volumes=[(bindir, '/root/build', 'ro')],
         dns_list=dns_servers,
+        run_params=["--privileged"],
         command=command)
 
     return {'docker_ids': [container], 'client_nodes': [hostname]}
