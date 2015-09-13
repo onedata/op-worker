@@ -247,8 +247,10 @@ delete_old_keys(Level, Caches, TimeWindow) ->
   {ok, Uuids} = cache_controller:list(Level, TimeWindow),
   lists:foreach(fun(Uuid) ->
     {ModelName, Key} = decode_uuid(Uuid),
+    % TODO - what happens when link is deleted in parallel to memory clearing
     safe_delete(Level, ModelName, Key),
-    cache_controller:delete(Uuid)
+    FullArgs = [cache_controller:model_init(), Uuid, ?PRED_ALWAYS],
+    erlang:apply(datastore:level_to_driver(Level), delete, FullArgs)
   end, Uuids),
   case TimeWindow of
     0 ->
@@ -287,7 +289,8 @@ safe_delete(Level, ModelName, Key) ->
           false
       end
     end,
-    datastore:delete(Level, ModelName, Key, Pred)
+    FullArgs2 = [ModelConfig, Key, Pred],
+    erlang:apply(datastore:level_to_driver(Level), delete, FullArgs2)
   catch
     E1:E2 ->
       ?error_stacktrace("Error in cache controller safe_delete. "

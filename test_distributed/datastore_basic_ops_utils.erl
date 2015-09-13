@@ -687,9 +687,9 @@ unset_hooks(Case, Config) ->
             end, Workers),
             test_utils:mock_unload(Workers, [caches_controller]);
         _ ->
-            lists:foreach(fun(W) ->
+            lists:foreach(fun(Wr) ->
                 lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(W, ets, insert, [datastore_local_state, {MC, cache_controller}]))
+                    ?assert(rpc:call(Wr, ets, insert, [datastore_local_state, {MC, cache_controller}]))
                 end, ModelConfig)
             end, Workers)
     end.

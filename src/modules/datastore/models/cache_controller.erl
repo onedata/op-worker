@@ -129,7 +129,7 @@ list(Level) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of records older then DocAge (in ms).
+%% Returns list of records older then DocAge (in ms) that can be deleted from memory.
 %% @end
 %%--------------------------------------------------------------------
 -spec list(Level :: datastore:store_level(), DocAge :: integer()) ->
@@ -142,9 +142,10 @@ list(Level, MinDocAge) ->
         (#document{key = Uuid, value = V}, Acc) ->
             T = V#cache_controller.timestamp,
             U = V#cache_controller.last_user,
+            DL = V#cache_controller.deleted_links,
             Age = timer:now_diff(Now, T),
-            case U of
-                non when Age >= 1000*MinDocAge ->
+            case {U, DL} of
+                {non, []} when Age >= 1000*MinDocAge ->
                     {next, [Uuid | Acc]};
                 _ ->
                     {next, Acc}
@@ -229,7 +230,7 @@ model_init() ->
     % TODO - check if transactions are realy needed
 %%     ?MODEL_CONFIG(cc_bucket, get_hooks_config(),
 %%         ?DEFAULT_STORE_LEVEL, ?DEFAULT_STORE_LEVEL, false).
-    ?MODEL_CONFIG(cc_bucket, get_hooks_config()).
+    ?MODEL_CONFIG(cc_bucket, get_hooks_config(), ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -245,6 +246,9 @@ model_init() ->
     update_usage_info(Key, ModelName, Doc, Level2);
 'after'(ModelName, get, Level, [Key], {ok, _}) ->
     update_usage_info(Key, ModelName, Level);
+'after'(ModelName, exists, disk_only, [Key], {ok, true}) ->
+    Level2 = caches_controller:cache_to_datastore_level(ModelName),
+    update_usage_info(Key, ModelName, Level2);
 'after'(ModelName, exists, Level, [Key], {ok, true}) ->
     update_usage_info(Key, ModelName, Level);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
@@ -268,12 +272,18 @@ before(ModelName, update, disk_only, [Key, _Diff] = Args, Level2) ->
     start_disk_op(Key, ModelName, update, Args, Level2);
 before(ModelName, create, disk_only, [Doc] = Args, Level2) ->
     start_disk_op(Doc#document.key, ModelName, create, Args, Level2);
+before(ModelName, delete, Level, [Key, _Pred], Level) ->
+    before_del(Key, ModelName, Level);
 before(ModelName, delete, disk_only, [Key, _Pred] = Args, Level2) ->
     start_disk_op(Key, ModelName, delete, Args, Level2);
 before(ModelName, get, disk_only, [Key], Level2) ->
     check_get(Key, ModelName, Level2);
+before(ModelName, exists, disk_only, [Key], Level2) ->
+    check_exists(Key, ModelName, Level2);
 before(ModelName, fetch_link, disk_only, [Key, LinkName], Level2) ->
     check_get(Key, ModelName, LinkName, Level2);
+before(ModelName, delete_links, Level, [Key, LinkNames], Level) ->
+    before_link_del(Key, ModelName, LinkNames, Level);
 before(ModelName, delete_links, disk_only, [Key, LinkNames] = Args, Level2) ->
     log_link_del(Key, ModelName, LinkNames, start, Args, Level2);
 before(_ModelName, _Method, _Level, _Context, _Level2) ->
@@ -342,12 +352,18 @@ update_usage_info(Key, ModelName, Doc, Level) ->
 -spec check_get(Key :: datastore:key(), ModelName :: model_behaviour:model_type(), Level :: datastore:store_level()) ->
     ok | {error, {not_found, model_behaviour:model_type()}}.
 check_get(Key, ModelName, Level) ->
+    check_disk_read(Key, ModelName, Level, {error, {not_found, ModelName}}).
+
+check_exists(Key, ModelName, Level) ->
+    check_disk_read(Key, ModelName, Level, {ok, false}).
+
+check_disk_read(Key, ModelName, Level, ErrorAns) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     case get(Level, Uuid) of
         {ok, Doc} ->
             Value = Doc#document.value,
             case Value#cache_controller.action of
-                delete -> {error, {not_found, ModelName}};
+                delete -> ErrorAns;
                 _ -> ok
             end;
         {error, {not_found, _}} ->
@@ -433,7 +449,7 @@ end_disk_op(Uuid, Owner, ModelName, Op, Level) ->
     catch
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller end_disk_op. Args: ~p. Error: ~p:~p.",
-                [{Uuid, Owner, ModelName, Op}, E1, E2]),
+                [{Uuid, Owner, ModelName, Op, Level}, E1, E2]),
             {error, ending_disk_op_failed}
     end.
 
@@ -542,8 +558,32 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
     catch
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller start_disk_op. Args: ~p. Error: ~p:~p.",
-                [{Key, ModelName, Op}, E1, E2]),
+                [{Key, ModelName, Op, Level}, E1, E2]),
             {error, preparing_disk_op_failed}
+    end.
+
+before_del(Key, ModelName, Level) ->
+    try
+        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+
+        UpdateFun = fun(Record) ->
+            Record#cache_controller{action = delete}
+        end,
+        % TODO - not transactional updates in local store - add transactional create and update on ets
+        case update(Level, Uuid, UpdateFun) of
+            {ok, _Ok} ->
+                ok;
+            {error, {not_found, ?MODEL_NAME}} ->
+                V = #cache_controller{action = delete},
+                Doc = #document{key = Uuid, value = V},
+                {ok, _} = create(Level, Doc),
+                ok
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error in cache_controller before_del. Args: ~p. Error: ~p:~p.",
+                [{Key, ModelName, Level}, E1, E2]),
+            {error, preparing_op_failed}
     end.
 
 %%--------------------------------------------------------------------
@@ -557,44 +597,13 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
     {task, task_manager:task()} | {ok, datastore:key()} | datastore:update_error()
     | {error, preparing_disk_op_failed} | {error, ending_disk_op_failed}.
 log_link_del(Key, ModelName, LinkNames, start, Args, Level) ->
-    try
-        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
-        UpdateFun = fun(#cache_controller{deleted_links = DL} = Record) ->
-            case LinkNames of
-                LNs when is_list(LNs) ->
-                    Record#cache_controller{deleted_links = DL ++ LinkNames};
-                _ ->
-                    Record#cache_controller{deleted_links = DL ++ [LinkNames]}
-            end
-        end,
-        case update(Level, Uuid, UpdateFun) of
-            {ok, _} ->
-                ok;
-            {error, {not_found,cache_controller}} ->
-                TS = os:timestamp(),
-                V = case LinkNames of
-                        LNs when is_list(LNs) ->
-                            #cache_controller{timestamp = TS, deleted_links = LinkNames};
-                        _ ->
-                            #cache_controller{timestamp = TS, deleted_links = [LinkNames]}
-                    end,
-                Doc = #document{key = Uuid, value = V},
-                % TODO what happen if create fails?
-                create(Level, Doc),
-                Task = fun() ->
-                    ModelConfig = ModelName:model_init(),
-                    FullArgs = [ModelConfig | Args],
-                    ok = worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), delete_links, FullArgs}, timer:minutes(5)),
-                    {ok, _} = log_link_del(Key, ModelName, LinkNames, stop, Args, Level)
-                end,
-                {task, Task}
-        end
-    catch
-        E1:E2 ->
-            ?error_stacktrace("Error in cache_controller log_link_del. Args: ~p. Error: ~p:~p.",
-                [{Key, ModelName, LinkNames, start}, E1, E2]),
-            {error, preparing_disk_op_failed}
-    end;
+    Task = fun() ->
+        ModelConfig = ModelName:model_init(),
+        FullArgs = [ModelConfig | Args],
+        ok = worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), delete_links, FullArgs}, timer:minutes(5)),
+        {ok, _} = log_link_del(Key, ModelName, LinkNames, stop, Args, Level)
+    end,
+    {task, Task};
 log_link_del(Key, ModelName, LinkNames, stop, _Args, Level) ->
     try
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
@@ -610,6 +619,38 @@ log_link_del(Key, ModelName, LinkNames, stop, _Args, Level) ->
     catch
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller log_link_del. Args: ~p. Error: ~p:~p.",
-                [{Key, ModelName, LinkNames, stop}, E1, E2]),
+                [{Key, ModelName, LinkNames, stop, Level}, E1, E2]),
             {error, ending_disk_op_failed}
+    end.
+
+before_link_del(Key, ModelName, LinkNames, Level) ->
+    try
+        Uuid = caches_controller:get_cache_uuid(Key, ModelName),
+        UpdateFun = fun(#cache_controller{deleted_links = DL} = Record) ->
+            case LinkNames of
+                LNs when is_list(LNs) ->
+                    Record#cache_controller{deleted_links = DL ++ LinkNames};
+                _ ->
+                    Record#cache_controller{deleted_links = DL ++ [LinkNames]}
+            end
+        end,
+        case update(Level, Uuid, UpdateFun) of
+            {ok, _} ->
+                ok;
+            {error, {not_found,cache_controller}} ->
+                V = case LinkNames of
+                        LNs when is_list(LNs) ->
+                            #cache_controller{deleted_links = LinkNames};
+                        _ ->
+                            #cache_controller{deleted_links = [LinkNames]}
+                    end,
+                Doc = #document{key = Uuid, value = V},
+                {ok, _} = create(Level, Doc),
+                ok
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error in cache_controller before_link_del. Args: ~p. Error: ~p:~p.",
+                [{Key, ModelName, Level}, E1, E2]),
+            {error, preparing_op_failed}
     end.
