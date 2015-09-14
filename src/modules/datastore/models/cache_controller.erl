@@ -601,7 +601,8 @@ log_link_del(Key, ModelName, LinkNames, start, Args, Level) ->
         ModelConfig = ModelName:model_init(),
         FullArgs = [ModelConfig | Args],
         ok = worker_proxy:call(datastore_worker, {driver_call, datastore:driver_to_module(?PERSISTENCE_DRIVER), delete_links, FullArgs}, timer:minutes(5)),
-        {ok, _} = log_link_del(Key, ModelName, LinkNames, stop, Args, Level)
+        {ok, _} = log_link_del(Key, ModelName, LinkNames, stop, Args, Level),
+        ok
     end,
     {task, Task};
 log_link_del(Key, ModelName, LinkNames, stop, _Args, Level) ->
