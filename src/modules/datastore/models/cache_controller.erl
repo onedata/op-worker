@@ -107,7 +107,7 @@ create_or_update(Document, Diff) ->
 %% creates new one if not exists.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(Level datastore::: store_level(), Document :: datastore:document(),
+-spec create_or_update(Level :: datastore:store_level(), Document :: datastore:document(),
     Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:create_error().
 create_or_update(Level, Document, Diff) ->
     datastore:create_or_update(Level, Document, Diff).
