@@ -20,7 +20,7 @@
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
 %% TODO Add non_transactional updates (each update creates tmp ets!)
--export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
+-export([save/2, update/3, create/2, create_or_update/3, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 -export([run_synchronized/3]).
 
@@ -148,6 +148,31 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
                 {ok, Key};
             [_Record] ->
                 {error, already_exists}
+        end
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback create_or_update/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(model_behaviour:model_config(), datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create_or_update(#model_config{} = ModelConfig, #document{key = Key, value = Value}, Diff) ->
+    mnesia_run(maybe_transaction(ModelConfig, sync_transaction), fun() ->
+        case mnesia:read(table_name(ModelConfig), Key, write) of
+            [] ->
+                ok = mnesia:write(table_name(ModelConfig), inject_key(Key, Value), write),
+                {ok, Key};
+            [OldValue] when is_map(Diff) ->
+                NewValue = maps:merge(datastore_utils:shallow_to_map(strip_key(OldValue)), Diff),
+                ok = mnesia:write(table_name(ModelConfig),
+                    inject_key(Key, datastore_utils:shallow_to_record(NewValue)), write),
+                {ok, Key};
+            [OldValue] when is_function(Diff) ->
+                NewValue = Diff(strip_key(OldValue)),
+                ok = mnesia:write(table_name(ModelConfig), inject_key(Key, NewValue), write),
+                {ok, Key}
         end
     end).
 

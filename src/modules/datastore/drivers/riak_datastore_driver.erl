@@ -35,7 +35,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
--export([save/2, create/2, update/3, exists/2, get/2, list/3, delete/3]).
+-export([save/2, create/2, update/3, create_or_update/3, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
 %%%===================================================================
@@ -123,6 +123,16 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
         {error, Reason0} ->
             {error, Reason0}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback create_or_update/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(model_behaviour:model_config(), datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create_or_update(#model_config{} = _ModelConfig, #document{key = _Key, value = _Value}, _Diff) ->
+    erlang:error(not_implemented).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -21,7 +21,7 @@
 %% model_behaviour callbacks and API
 -export([save/1, get/1, list/0, list/1, exists/1, delete/1, delete/2, update/2, create/1,
     save/2, get/2, list/2, exists/2, delete/3, update/3, create/2,
-    model_init/0, 'after'/5, before/4, list_docs_to_be_dumped/1]).
+    create_or_update/2, create_or_update/3, model_init/0, 'after'/5, before/4, list_docs_to_be_dumped/1]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -89,6 +89,28 @@ create(Document) ->
     {ok, datastore:key()} | datastore:create_error().
 create(Level, Document) ->
     datastore:create(Level, Document).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates given document by replacing given fields with new values or
+%% creates new one if not exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(Document :: datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
+create_or_update(Document, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Document, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates given document by replacing given fields with new values or
+%% creates new one if not exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(Level datastore::: store_level(), Document :: datastore:document(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:create_error().
+create_or_update(Level, Document, Diff) ->
+    datastore:create_or_update(Level, Document, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -271,6 +293,7 @@ before(ModelName, save, disk_only, [Doc] = Args, Level2) ->
 before(ModelName, update, disk_only, [Key, _Diff] = Args, Level2) ->
     start_disk_op(Key, ModelName, update, Args, Level2);
 before(ModelName, create, disk_only, [Doc] = Args, Level2) ->
+    % TODO add checking if doc exists on disk
     start_disk_op(Doc#document.key, ModelName, create, Args, Level2);
 before(ModelName, delete, Level, [Key, _Pred], Level) ->
     before_del(Key, ModelName, Level);
@@ -316,15 +339,10 @@ update_usage_info(Key, ModelName, Level) ->
     UpdateFun = fun(Record) ->
         Record#cache_controller{timestamp = os:timestamp()}
     end,
-    case update(Level, Uuid, UpdateFun) of
-        {ok, Ok} ->
-            {ok, Ok};
-        {error, {not_found, ?MODEL_NAME}} ->
-            TS = os:timestamp(),
-            V = #cache_controller{timestamp = TS, last_action_time = TS},
-            Doc = #document{key = Uuid, value = V},
-            create(Level, Doc)
-    end.
+    TS = os:timestamp(),
+    V = #cache_controller{timestamp = TS, last_action_time = TS},
+    Doc = #document{key = Uuid, value = V},
+    create_or_update(Level, Doc, UpdateFun).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -336,7 +354,9 @@ update_usage_info(Key, ModelName, Level) ->
     Doc :: datastore:document(), Level :: datastore:store_level()) -> {ok, datastore:key()} | datastore:generic_error().
 update_usage_info(Key, ModelName, Doc, Level) ->
     update_usage_info(Key, ModelName, Level),
-    create(Level, Doc),
+    ModelConfig = ModelName:model_init(),
+    FullArgs = [ModelConfig, Doc],
+    erlang:apply(datastore:level_to_driver(Level), create, FullArgs),
     datastore:foreach_link(disk_only, Key, ModelName,
         fun(LinkName, LinkTarget, _) ->
             datastore:add_links(Level, Key, ModelName, {LinkName, LinkTarget})
@@ -471,15 +491,10 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
             Record#cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
-        case update(Level, Uuid, UpdateFun) of
-            {ok, _Ok} ->
-                ok;
-            {error, {not_found, ?MODEL_NAME}} ->
-                TS = os:timestamp(),
-                V = #cache_controller{last_user = Pid, timestamp = TS, action = Op, last_action_time = TS},
-                Doc = #document{key = Uuid, value = V},
-                create(Level, Doc)
-        end,
+        TS = os:timestamp(),
+        V = #cache_controller{last_user = Pid, timestamp = TS, action = Op, last_action_time = TS},
+        Doc = #document{key = Uuid, value = V},
+        create_or_update(Level, Doc, UpdateFun),
 
         {ok, SleepTime} = application:get_env(?APP_NAME, cache_to_disk_delay_ms),
         timer:sleep(SleepTime),
@@ -570,15 +585,10 @@ before_del(Key, ModelName, Level) ->
             Record#cache_controller{action = delete}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
-        case update(Level, Uuid, UpdateFun) of
-            {ok, _Ok} ->
-                ok;
-            {error, {not_found, ?MODEL_NAME}} ->
-                V = #cache_controller{action = delete},
-                Doc = #document{key = Uuid, value = V},
-                {ok, _} = create(Level, Doc),
-                ok
-        end
+        V = #cache_controller{action = delete},
+        Doc = #document{key = Uuid, value = V},
+        {ok, _} = create_or_update(Level, Doc, UpdateFun),
+        ok
     catch
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller before_del. Args: ~p. Error: ~p:~p.",
@@ -635,20 +645,15 @@ before_link_del(Key, ModelName, LinkNames, Level) ->
                     Record#cache_controller{deleted_links = DL ++ [LinkNames]}
             end
         end,
-        case update(Level, Uuid, UpdateFun) of
-            {ok, _} ->
-                ok;
-            {error, {not_found,cache_controller}} ->
-                V = case LinkNames of
-                        LNs when is_list(LNs) ->
-                            #cache_controller{deleted_links = LinkNames};
-                        _ ->
-                            #cache_controller{deleted_links = [LinkNames]}
-                    end,
-                Doc = #document{key = Uuid, value = V},
-                {ok, _} = create(Level, Doc),
-                ok
-        end
+        V = case LinkNames of
+                LNs when is_list(LNs) ->
+                    #cache_controller{deleted_links = LinkNames};
+                _ ->
+                    #cache_controller{deleted_links = [LinkNames]}
+            end,
+        Doc = #document{key = Uuid, value = V},
+        {ok, _} = create_or_update(Level, Doc, UpdateFun),
+        ok
     catch
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller before_link_del. Args: ~p. Error: ~p:~p.",

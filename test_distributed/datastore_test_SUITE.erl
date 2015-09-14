@@ -165,6 +165,7 @@ check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
         ?assertMatch({ok, true}, ?call_store(Worker2, exists, [global_only, some_record, K2])),
         ?assertMatch({ok, true}, ?call_store(Worker2, exists, [disk_only, some_record, K2]))
     end, R),
+    timer:sleep(1000), % TODO - rewrite checking to disable hooks during tests
 
     check_clearing(R, Worker1, Worker2).
 

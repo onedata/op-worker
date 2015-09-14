@@ -59,7 +59,7 @@
 -export_type([link_target/0, link_name/0, link_spec/0, normalized_link_spec/0, normalized_link_target/0]).
 
 %% API
--export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2,
+-export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2, create_or_update/3,
          get/3, list/4, delete/4, delete/3, delete_sync/4, delete_sync/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
@@ -138,6 +138,18 @@ create(Level, #document{} = Document) ->
 create_sync(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates given document by replacing given fields with new values or
+%% creates new one if not exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(Level :: store_level(), Document :: datastore:document(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:create_error().
+create_or_update(Level, #document{} = Document, Diff) ->
+    ModelName = model_name(Document),
+    exec_driver_async(ModelName, Level, create_or_update, [Document, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc

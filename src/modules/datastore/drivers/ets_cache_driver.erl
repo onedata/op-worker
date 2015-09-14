@@ -18,7 +18,7 @@
 
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1]).
--export([save/2, update/3, create/2, exists/2, get/2, list/3, delete/3]).
+-export([save/2, update/3, create/2, create_or_update/3, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
 %% Batch size for list operation
@@ -90,6 +90,38 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
     case ets:insert_new(table_name(ModelConfig), {Key, Value}) of
         false -> {error, already_exists};
         true -> {ok, Key}
+    end.
+
+ %%--------------------------------------------------------------------
+%% @doc
+%% {@link store_driver_behaviour} callback create_or_update/2.
+%% @end
+%%--------------------------------------------------------------------
+ -spec create_or_update(model_behaviour:model_config(), datastore:document(), Diff :: datastore:document_diff()) ->
+     {ok, datastore:ext_key()} | datastore:create_error().
+create_or_update(#model_config{} = ModelConfig, #document{key = Key, value = Value}, Diff) when is_function(Diff) ->
+    case ets:lookup(table_name(ModelConfig), Key) of
+        [] ->
+            case ets:insert_new(table_name(ModelConfig), {Key, Value}) of
+                false -> {error, conflict};
+                true -> {ok, Key}
+            end;
+        [{_, OldValue}] ->
+            NewValue = Diff(OldValue),
+            true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
+            {ok, Key}
+    end;
+create_or_update(#model_config{} = ModelConfig, #document{key = Key, value = Value}, Diff) when is_map(Diff) ->
+    case ets:lookup(table_name(ModelConfig), Key) of
+        [] ->
+            case ets:insert_new(table_name(ModelConfig), {Key, Value}) of
+                false -> {error, conflict};
+                true -> {ok, Key}
+            end;
+        [{_, OldValue}] ->
+            NewValue = maps:merge(datastore_utils:shallow_to_map(OldValue), Diff),
+            true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
+            {ok, Key}
     end.
 
 %%--------------------------------------------------------------------
