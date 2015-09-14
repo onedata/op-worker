@@ -17,7 +17,6 @@
 
 %% API
 -export([reuse_or_create_session/3, update_session_auth/2, remove_session/1]).
-
 -export([create_gui_session/1]).
 
 -define(TIMEOUT, timer:seconds(20)).
