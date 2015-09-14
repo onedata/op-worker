@@ -186,7 +186,7 @@ delete_old_keys(locally_cached, TimeWindow) ->
 -spec wait_for_cache_dump() ->
   ok | dump_error.
 wait_for_cache_dump() ->
-  wait_for_cache_dump(60).
+  wait_for_cache_dump(300).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -282,7 +282,7 @@ safe_delete(Level, ModelName, Key) ->
 
     Value = Doc#document.value,
     Pred = fun() ->
-      case datastore:get(Level, ModelName, Key) of
+      case erlang:apply(datastore:level_to_driver(Level), get, FullArgs) of
         {ok, Doc2} ->
           Doc2#document.value =:= Value;
         _ ->
