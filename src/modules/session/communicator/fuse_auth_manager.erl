@@ -9,7 +9,7 @@
 %%% Client authentication library.
 %%% @end
 %%%-------------------------------------------------------------------
--module(auth_manager).
+-module(fuse_auth_manager).
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore.hrl").
@@ -34,9 +34,10 @@
 -spec handle_handshake(#client_message{}, #'OTPCertificate'{}) ->
     {ok, #server_message{}} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = IdToReuse, token = Token = #token{}}}, _) when is_binary(IdToReuse) ->
-    {ok, Iden} = authenticate_using_token(Token),
+    session_id = IdToReuse, auth = Auth = #auth{}}}, _) when is_binary(IdToReuse) ->
+    {ok, Iden} = authenticate_using_token(Auth),
     {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Iden, self()),
+    ok = session_manager:update_session_auth(IdToReuse, Auth),
     {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}};
 
 handle_handshake(#client_message{message_body = #handshake_request{
@@ -54,9 +55,9 @@ handle_handshake(#client_message{message_body = #handshake_request{
 %% Authenticate client using given token, returns client identity.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(#token{}) -> {ok, #identity{}} | {error, term()}.
-authenticate_using_token(Token) ->
-    {ok, #document{value = Iden}} = identity:get_or_fetch(Token),
+-spec authenticate_using_token(#auth{}) -> {ok, #identity{}} | {error, term()}.
+authenticate_using_token(Auth) ->
+    {ok, #document{value = Iden}} = identity:get_or_fetch(Auth),
     {ok, Iden}.
 
 %%--------------------------------------------------------------------

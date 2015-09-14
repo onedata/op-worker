@@ -13,6 +13,7 @@ src/gui_static/n2o
 *.sublime*
 *.beam
 *.pyc
+*.o
 
 rel/op_worker
 rel/test_cluster
