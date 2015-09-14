@@ -65,11 +65,10 @@ authorize_test_() ->
             ?assert(meck:validate(macaroon)),
             ok = meck:unload(macaroon)
         end,
-        [
-            % Test fun
-            fun(_) ->
-                CorrectAuth = #auth{
-                    macaroon = ?SRLZD_MACAROON, disch_macaroons = ?ALL_DISCH_MACAROONS},
-                ?assertEqual({ok, CorrectAuth}, gui_auth_manager:authorize(?SRLZD_MACAROON))
-            end
-        ]}.
+        % Test funs
+        fun() ->
+            CorrectAuth = #auth{
+                macaroon = ?SRLZD_MACAROON, disch_macaroons = ?ALL_DISCH_MACAROONS},
+            ?assertEqual({ok, CorrectAuth}, gui_auth_manager:authorize(?SRLZD_MACAROON))
+        end
+    }.
