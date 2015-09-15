@@ -37,13 +37,7 @@ handle_handshake(#client_message{message_body = #handshake_request{
     session_id = IdToReuse, auth = Auth = #auth{}}}, _) when is_binary(IdToReuse) ->
     {ok, Iden} = authenticate_using_token(Auth),
     {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Iden, self()),
-    % @todo maybe move it somewhere else?
-    % Set macaroon for communication with GR
-    {ok, Doc = #document{
-        value = #session{} = Session}} = session:get(IdToReuse),
-    {ok, _} = session:save(Doc#document{
-        value = Session#session{auth = Auth}}),
-    % @todo end_todo
+    ok = session_manager:update_session_auth(IdToReuse, Auth),
     {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}};
 
 handle_handshake(#client_message{message_body = #handshake_request{
