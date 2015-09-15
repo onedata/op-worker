@@ -21,7 +21,8 @@
 
 %% session_logic_behaviour API
 -export([init/0, cleanup/0]).
--export([save_session/3, lookup_session/1, delete_session/1, clear_expired_sessions/0, get_cookie_ttl/0]).
+-export([update_session/3, lookup_session/1, delete_session/1]).
+-export([clear_expired_sessions/0, get_cookie_ttl/0]).
 
 % ETS name for cookies
 -define(SESSION_ETS, cookies).
@@ -38,8 +39,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    % Ets table needed for session storing.
-    ets:new(?SESSION_ETS, [named_table, public, set, {read_concurrency, true}]),
     ok.
 
 
@@ -49,21 +48,23 @@ init() ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
-    ets:delete(?SESSION_ETS),
     ok.
 
 
 %%--------------------------------------------------------------------
-%% @doc Saves session data under SessionID key (Props).
-%% The entry is valid up to given moment (Till).
-%% Till is expressed in number of seconds since epoch.
+%% @doc
+%% Saves session data under SessionID key. Updates the session memory(Props),
+%% the entry is valid up to given moment (ValidTill).
+%% If there is no record of session
+%% with id SessionID, error atom should be returned.
+%% ValidTill is expressed in number of seconds since epoch.
 %% @end
 %%--------------------------------------------------------------------
--spec save_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
-save_session(SessionID, Props, TillArg) ->
-    case ets:insert(?SESSION_ETS, {SessionID, Props, TillArg}) of
-        true -> ok;
-        false -> error
+-spec update_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
+update_session(SessionID, Props, TillArg) ->
+    case session:update(SessionID, #{memory => Props, expires => TillArg}) of
+        {ok, _} -> ok;
+        _ -> error
     end.
 
 
