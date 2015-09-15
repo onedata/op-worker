@@ -130,13 +130,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetch user from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Token :: #token{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#token{value = Token}) ->
+-spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}) ->
     try
         {ok, #user_details{id = Id, name = Name}} =
-            gr_users:get_details({user, Token}),
+            gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            gr_users:get_spaces({user, Token}),
+            gr_users:get_spaces({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
         OnedataUser = #onedata_user{
             name = Name, space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
         },
@@ -153,7 +153,7 @@ fetch(#token{value = Token}) ->
 %% Get user from cache or fetch from globalregistry and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(datastore:key(), #token{}) ->
+-spec get_or_fetch(datastore:key(), #auth{}) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Key, Token) ->
     case onedata_user:get(Key) of

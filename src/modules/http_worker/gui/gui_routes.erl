@@ -21,5 +21,5 @@ init(State, Ctx) ->
     Path = wf:path(Ctx#context.req),
     {ok, State, Ctx#context{path = Path, module = route(Path)}}.
 
-route(<<"/openid/login">>) -> page_openid_login;
+route(<<"/validate_login">>) -> page_validate_login;
 route(_) -> page_404.

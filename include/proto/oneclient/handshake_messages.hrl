@@ -16,7 +16,7 @@
 -include("proto/common/credentials.hrl").
 
 -record(handshake_request, {
-    token :: #token{},
+    auth :: #auth{},
     session_id :: session:id()
 }).
 
