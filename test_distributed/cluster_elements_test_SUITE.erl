@@ -89,7 +89,7 @@ task_manager_repeats_test(Config) ->
     task_manager_repeats_test_base(Config, ?NON_LEVEL, 0),
     task_manager_repeats_test_base(Config, ?NODE_LEVEL, 3),
     task_manager_repeats_test_base(Config, ?CLUSTER_LEVEL, 5).
-    % TODO Uncomment hen list on db will be added
+% TODO Uncomment when list on db will be added (without list, task cannot be repeted)
 %%     task_manager_repeats_test_base(Config, ?PERSISTENT_LEVEL, 5).
 
 task_manager_repeats_test_base(Config, Level, FirstCheckNum) ->
@@ -115,7 +115,7 @@ task_manager_rerun_test(Config) ->
     task_manager_rerun_test_base(Config, ?NON_LEVEL, 0),
     task_manager_rerun_test_base(Config, ?NODE_LEVEL, 3),
     task_manager_rerun_test_base(Config, ?CLUSTER_LEVEL, 5).
-% TODO Uncomment hen list on db will be added
+% TODO Uncomment when list on db will be added (without list, task cannot be repeted)
 %%     task_manager_rerun_test_base(Config, ?PERSISTENT_LEVEL, 5).
 
 task_manager_rerun_test_base(Config, Level, FirstCheckNum) ->

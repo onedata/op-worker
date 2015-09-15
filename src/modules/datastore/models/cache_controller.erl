@@ -23,6 +23,8 @@
     save/2, get/2, list/2, exists/2, delete/3, update/3, create/2,
     create_or_update/2, create_or_update/3, model_init/0, 'after'/5, before/4, list_docs_to_be_dumped/1]).
 
+-define(DISK_OP_TIMEOUT, timer:minutes(1)).
+
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
@@ -167,7 +169,7 @@ list(Level, MinDocAge) ->
             DL = V#cache_controller.deleted_links,
             Age = timer:now_diff(Now, T),
             case {U, DL} of
-                {non, []} when Age >= 1000*MinDocAge ->
+                {non, []} when Age >= 1000 * MinDocAge ->
                     {next, [Uuid | Acc]};
                 _ ->
                     {next, Acc}
@@ -508,56 +510,56 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                                       {Pid, 0}
                               end,
             ToDo = case LastUser of
-                ToUpdate when ToUpdate =:= Pid; ToUpdate =:= non ->
-                    % check for create/delete race
-                    case Op of
-                        delete ->
-                            case datastore:get(Level, ModelName, Key) of
-                                {ok, SavedValue} ->
-                                    {ok, save, [SavedValue]};
-                                {error, {not_found, _}} ->
-                                    ok;
-                                GetError ->
-                                    {get_error, GetError}
-                            end;
-                        _ ->
-                            case datastore:get(Level, ModelName, Key) of
-                                {ok, SavedValue} ->
-                                    {ok, save, [SavedValue]};
-                                {error, {not_found, _}} ->
-                                    {error, deleted};
-                                GetError ->
-                                    {get_error, GetError}
-                            end
-                    end;
-                _ ->
-                    {ok, ForceTime} = application:get_env(?APP_NAME, cache_to_disk_force_delay_ms),
-                    case timer:now_diff(os:timestamp(), LAT) >= 1000*ForceTime of
-                        true ->
-                            UpdateFun2 = fun(Record) ->
-                                Record#cache_controller{last_action_time = os:timestamp()}
-                            end,
-                            update(Level, Uuid, UpdateFun2),
-                            {ok, SavedValue} = datastore:get(Level, ModelName, Key),
-                            {ok, save, [SavedValue]};
-                        _ ->
-                            {error, not_last_user}
-                    end
-            end,
+                       ToUpdate when ToUpdate =:= Pid; ToUpdate =:= non ->
+                           % check for create/delete race
+                           case Op of
+                               delete ->
+                                   case datastore:get(Level, ModelName, Key) of
+                                       {ok, SavedValue} ->
+                                           {ok, save, [SavedValue]};
+                                       {error, {not_found, _}} ->
+                                           ok;
+                                       GetError ->
+                                           {get_error, GetError}
+                                   end;
+                               _ ->
+                                   case datastore:get(Level, ModelName, Key) of
+                                       {ok, SavedValue} ->
+                                           {ok, save, [SavedValue]};
+                                       {error, {not_found, _}} ->
+                                           {error, deleted};
+                                       GetError ->
+                                           {get_error, GetError}
+                                   end
+                           end;
+                       _ ->
+                           {ok, ForceTime} = application:get_env(?APP_NAME, cache_to_disk_force_delay_ms),
+                           case timer:now_diff(os:timestamp(), LAT) >= 1000 * ForceTime of
+                               true ->
+                                   UpdateFun2 = fun(Record) ->
+                                       Record#cache_controller{last_action_time = os:timestamp()}
+                                   end,
+                                   update(Level, Uuid, UpdateFun2),
+                                   {ok, SavedValue} = datastore:get(Level, ModelName, Key),
+                                   {ok, save, [SavedValue]};
+                               _ ->
+                                   {error, not_last_user}
+                           end
+                   end,
 
             ModelConfig = ModelName:model_init(),
             Ans = case ToDo of
-                {ok, NewMethod, NewArgs} ->
-                    FullArgs = [ModelConfig | NewArgs],
-                    worker_proxy:call(datastore_worker, {driver_call,
-                        datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, timer:minutes(5));
-                ok ->
-                    FullArgs = [ModelConfig | Args],
-                    worker_proxy:call(datastore_worker, {driver_call,
-                        datastore:driver_to_module(?PERSISTENCE_DRIVER), Op, FullArgs}, timer:minutes(5));
-                Other ->
-                    Other
-            end,
+                      {ok, NewMethod, NewArgs} ->
+                          FullArgs = [ModelConfig | NewArgs],
+                          worker_proxy:call(datastore_worker, {driver_call,
+                              datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, ?DISK_OP_TIMEOUT);
+                      ok ->
+                          FullArgs = [ModelConfig | Args],
+                          worker_proxy:call(datastore_worker, {driver_call,
+                              datastore:driver_to_module(?PERSISTENCE_DRIVER), Op, FullArgs}, ?DISK_OP_TIMEOUT);
+                      Other ->
+                          Other
+                  end,
             ok = case Ans of
                      ok ->
                          end_disk_op(Uuid, Pid, ModelName, Op, Level);
