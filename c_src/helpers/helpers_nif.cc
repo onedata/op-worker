@@ -673,7 +673,7 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
     auto buf = std::make_shared<std::vector<char>>(size);
     ctx.helperObj->ash_read(*ctx.helperCTX, file,
         asio::mutable_buffer(buf->data(), size), offset,
-        [=, buf](asio::mutable_buffer mbuf, error_t e) {
+        [ctx, buf](asio::mutable_buffer mbuf, error_t e) {
             handle_result(ctx, e, mbuf);
         });
 
