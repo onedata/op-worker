@@ -92,10 +92,41 @@
     uuid :: file_meta:uuid()
 }).
 
--type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
-                        #delete_file{} | #update_times{} | #change_mode{} | #rename{}.
 
--type fuse_response() :: #file_attr{} | #file_children{}.
+-record(get_helper_params, {
+    storage_id :: storage:id(),
+    force_cluster_proxy = false :: boolean()
+}).
+
+-record(truncate, {
+    uuid :: file_meta:uuid(),
+    size :: non_neg_integer()
+}).
+
+
+-record(close, {
+    uuid :: file_meta:uuid()
+}).
+
+
+-record(helper_arg, {
+    key :: binary(),
+    value :: binary()
+}).
+
+
+-record(helper_params, {
+    helper_name :: binary(),
+    helper_args :: [#helper_arg{}]
+}).
+
+
+-type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
+                        #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
+                        #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
+                        #get_file_location{}.
+
+-type fuse_response() :: #file_attr{} | #file_children{} | #file.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
