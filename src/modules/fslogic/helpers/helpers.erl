@@ -47,6 +47,8 @@ new_handle(#helper_init{name = Name, args = Args}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()]) -> handle().
+new_handle(HelperName, HelperArgs) when is_map(HelperArgs) ->
+    new_handle(HelperName, [V || {_K, V} <- maps:to_list(HelperArgs)]);
 new_handle(HelperName, HelperArgs) ->
     {ok, Instance} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
     {ok, CTX} = helpers_nif:new_helper_ctx(),
@@ -182,10 +184,10 @@ open(#helper_handle{} = HelperHandle, File, rdwr) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read(handle(), File :: file(),  Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, Data :: binary()} | {error, term()}.
+                  {ok, Data :: binary()} | {error, term()}.
 read(#helper_handle{instance = Instance, ctx = CTX} = HelperHandle, File, Offset, Size) ->
-%%     helpers_nif:read(Instance, CTX, File, Offset, Size),
-%%     {ok, crypto:rand_bytes(Size)}.
+    %%     helpers_nif:read(Instance, CTX, File, Offset, Size),
+    %%     {ok, crypto:rand_bytes(Size)}.
     case apply_helper_nif(HelperHandle, read, [File, Offset, Size]) of
         {ok, Target} when is_integer(Target) ->
             {ok, crypto:rand_bytes(Target)};
@@ -199,10 +201,10 @@ read(#helper_handle{instance = Instance, ctx = CTX} = HelperHandle, File, Offset
 %% @end
 %%--------------------------------------------------------------------
 -spec write(handle(), File :: file(), Offset :: non_neg_integer(), Data :: binary()) ->
-    {ok, Size :: non_neg_integer()} | {error, term()}.
+                   {ok, Size :: non_neg_integer()} | {error, term()}.
 write(#helper_handle{instance = Instance, ctx = CTX} = HelperHandle, File, Offset, Data) ->
-%%     helpers_nif:write(Instance, CTX, File, Offset, Data),
-%%     {ok, size(Data)}.
+    %%     helpers_nif:write(Instance, CTX, File, Offset, Data),
+    %%     {ok, size(Data)}.
     apply_helper_nif(HelperHandle, write, [File, Offset, Data]).
 
 %%--------------------------------------------------------------------
@@ -253,7 +255,7 @@ apply_helper_nif(#helper_handle{instance = Instance, ctx = CTX, timeout = Timeou
         {Guard, Result} ->
             Result
     after Timeout ->
-        {error, nif_timeout}
+            {error, nif_timeout}
     end.
 
 

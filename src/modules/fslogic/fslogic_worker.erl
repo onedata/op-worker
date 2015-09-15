@@ -181,6 +181,10 @@ handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = Paren
     fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags, ForceClusterProxy);
 handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags, force_cluster_proxy = ForceClusterProxy}) ->
     fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags, ForceClusterProxy);
+handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
+    fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
+handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->
+    fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
 handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
     fslogic_req_regular:unlink(Ctx, {uuid, UUID});
 handle_fuse_request(_Ctx, Req) ->

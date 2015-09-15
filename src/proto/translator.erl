@@ -195,7 +195,7 @@ translate_to_protobuf(#file_location{} = Record) ->
                        provider_id = Record#file_location.provider_id,
                        storage_id = Record#file_location.storage_id,
                        file_id = Record#file_location.file_id,
-                       uuid = lists:map(fun(Block) ->
+                       blocks = lists:map(fun(Block) ->
                                                 translate_to_protobuf(Block)
                                         end, Record#file_location.blocks)
                       }};

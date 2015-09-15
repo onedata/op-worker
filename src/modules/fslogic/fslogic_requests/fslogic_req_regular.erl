@@ -16,12 +16,25 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/4, get_new_file_location/6, unlink/2]).
+-export([get_file_location/4, get_new_file_location/6, unlink/2, truncate/3, get_helper_params/3]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
+
+truncate(Ctx, Entry, Size) ->
+    #fuse_response{status = #status{code = ?OK}}.
+
+get_helper_params(_Ctx, SID, _ForceCL) ->
+
+    {ok, #document{value = #storage{}} = StorageDoc} = storage:get(SID),
+    {ok, #helper_init{name = Name, args = HelperArgsMap}} = fslogic_storage:select_helper(StorageDoc),
+
+    HelperArgs = [#helper_arg{key = K, value = V} || {K, V} <- maps:to_list(HelperArgsMap)],
+
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #helper_params{helper_name = Name, helper_args = HelperArgs}}.
 
 %%--------------------------------------------------------------------
 %% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.

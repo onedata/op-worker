@@ -126,7 +126,7 @@
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{}.
 
--type fuse_response() :: #file_attr{} | #file_children{} | #file.
+-type fuse_response() :: #file_attr{} | #file_children{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
