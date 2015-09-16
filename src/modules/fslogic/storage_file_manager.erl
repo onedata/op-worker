@@ -22,7 +22,7 @@
 }).
 
 -export([mkdir/3, mkdir/4, mv/2, chmod/2, chown/3, link/2]).
--export([stat/1, read/3, write/3, create/4, open/3, truncate/3, unlink/2]).
+-export([stat/1, read/3, write/3, create/3, create/4, open/3, truncate/3, unlink/2]).
 
 -type handle() :: #sfm_handle{}.
 

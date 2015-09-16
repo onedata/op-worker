@@ -63,9 +63,13 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceC
 -spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(),
     ForceClusterProxy :: boolean()) -> no_return().
+get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
+    UUID, Name, Mode, _Flags, _ForceClusterProxy) ->
+    {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
+    get_new_file_location(CTX, DefaultSpaceUUID, Name, Mode, _Flags, _ForceClusterProxy);
 get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name, Mode, _Flags, _ForceClusterProxy) ->
 
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(CTX),
+    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
         name = Name,
@@ -86,6 +90,18 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     {ok, LocId} = file_location:create(#document{value = Location}),
 
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
+
+    Tokens = fslogic_path:split(FileId),
+    LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
+    case storage_file_manager:mkdir(Storage, LeafLess, 8#333, true) of
+        ok -> ok;
+        {error, eexist} ->
+            ok
+    end,
+
+    %% @todo: remove this when this logic will be transferred to oneclient
+    storage_file_manager:unlink(Storage, FileId),
+    ok = storage_file_manager:create(Storage, FileId, Mode),
 
     ok = file_watcher:insert_open_watcher(UUID, SessId),
 

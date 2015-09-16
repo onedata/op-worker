@@ -35,8 +35,10 @@
 -spec preroute_message(Msg :: #client_message{}, SessId :: session:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
+    ?info("Fuse msg ~p", [Msg]),
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
+    ?info("Fuse msg ~p", [Msg]),
     sequencer_manager:route_message(Msg, SessId).
 
 %%--------------------------------------------------------------------
@@ -89,8 +91,10 @@ route_and_send_answer(#client_message{message_id = Id,
     communicator:send(ProtoV, SessId);
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{fuse_request = FuseRequest}}) ->
+    ?info("Fuse request ~p", [FuseRequest]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, SessId, FuseRequest}),
+        ?info("Fuse response ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, SessId)

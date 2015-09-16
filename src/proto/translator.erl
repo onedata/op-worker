@@ -184,11 +184,11 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
                                                             end, FileEntries)}};
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
-                                    helper_args = lists:map(fun(HelpersArg) ->
-                                                                    translate_to_protobuf(HelpersArg)
-                                                            end, HelpersArgs)}};
+                    helper_args = lists:map(fun(HelpersArg) ->
+                                                    translate_to_protobuf(HelpersArg)
+                                            end, HelpersArgs)}};
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
-    {helper_arg, #'HelperArg'{key = utils:ensure_list(Key), value = utils:ensure_list(Value)}};
+    #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
                        uuid = Record#file_location.uuid,
@@ -196,11 +196,11 @@ translate_to_protobuf(#file_location{} = Record) ->
                        storage_id = Record#file_location.storage_id,
                        file_id = Record#file_location.file_id,
                        blocks = lists:map(fun(Block) ->
-                                                translate_to_protobuf(Block)
-                                        end, Record#file_location.blocks)
+                                                  translate_to_protobuf(Block)
+                                          end, Record#file_location.blocks)
                       }};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
-    {file_block, #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}};
+    #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_to_protobuf(undefined) ->
     undefined.
 

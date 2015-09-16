@@ -49,6 +49,9 @@
 init(_Args) ->
     Sub = #write_event_subscription{
         producer = all,
+        producer_counter_threshold = 100,
+        producer_time_threshold = 500,
+        producer_size_threshold = 1024 * 1024,
         event_stream = ?WRITE_EVENT_STREAM#event_stream{
             metadata = 0,
             emission_time = 500,
@@ -121,7 +124,7 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
             report_error(FuseRequest, Reason, debug);
         error:{badmatch, Reason} ->
             %% Bad Match assertion - something went wrong, but it could be expected.
-            report_error(FuseRequest, Reason, warning);
+            report_error(FuseRequest, Reason, info);
         error:{case_clause, Reason} ->
             %% Case Clause assertion - something went seriously wrong and we should know about it.
             report_error(FuseRequest, Reason, error);
@@ -142,9 +145,10 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
 report_error(FuseRequest, Error, LogLevel) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
-    MsgFormat = "Cannot process request ~p due to unknown error: ~p (code: ~p)",
+    MsgFormat = "Cannot process request ~p due to error: ~p (code: ~p)",
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
+        info -> ?info(MsgFormat, [FuseRequest, Description, Code]);
         warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
         error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,

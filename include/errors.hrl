@@ -20,7 +20,7 @@
 -define(EIO, 'VEIO').
 -define(ENOTSUP, 'VENOTSUP').
 -define(ENOTEMPTY, 'VENOTEMPTY').
--define(EREMOTEIO, 'VEREMOTEIO').
+-define(EREMOTEIO, 'VEAGAIN').
 -define(EPERM, 'VEPERM').
 -define(EINVAL, 'VEINVAL').
 -define(EDQUOT, 'VEDQUOT').

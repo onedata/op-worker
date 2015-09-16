@@ -78,7 +78,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         uid=os.geteuid(),
         gid=os.getegid())
 
-    volumes = [(bindir, '/root/build', 'ro')]
+    volumes = [(bindir, '/root/build', 'rw')]
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)

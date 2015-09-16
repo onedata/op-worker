@@ -14,7 +14,7 @@
 
 -include("modules/datastore/datastore_model.hrl").
 
--define(ROOT_STORAGE, <<"">>).
+-define(ROOT_STORAGE, <<"root_storage">>).
 -define(STORAGE_LOCK_ID, <<"storage_res_id">>).
 
 

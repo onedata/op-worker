@@ -264,12 +264,12 @@ try_send(Msg, Connections) ->
             try connection:send(RandomConnection, Msg) of
                 ok -> ok;
                 Error ->
-                    ?warning("Could not send message ~p, due to error: ~p, retrying in ~p seconds.",
+                    ?debug("Could not send message ~p, due to error: ~p, retrying in ~p seconds.",
                         [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
                     erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
             catch
                 _:Error ->
-                    ?warning_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
+                    ?debug_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
                         [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
                     erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
             end
