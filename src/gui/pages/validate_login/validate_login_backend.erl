@@ -18,7 +18,7 @@ page_init() ->
     SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
     {ok, Auth = #auth{
         disch_macaroons = DMacaroons}} = gui_auth_manager:authorize(SrlzdMacaroon),
-    {ok, SessionId} = session_manager:create_gui_session(Auth),
+    {ok, SessionId} = g_session:log_in([Auth]),
     {ok, #document{
         value = #session{
             identity = #identity{user_id = UserId}}}} = session:get(SessionId),

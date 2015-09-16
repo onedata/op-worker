@@ -90,7 +90,7 @@
     auth :: #auth{},
     % Timestamp when this session expires
     expires = 0 :: integer(),
-    % Key-value in session memory
+    % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}],
     node = node() :: node(),
     session_sup = undefined :: pid() | undefined,

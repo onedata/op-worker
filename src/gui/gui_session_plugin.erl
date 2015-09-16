@@ -21,7 +21,7 @@
 
 %% session_logic_behaviour API
 -export([init/0, cleanup/0]).
--export([update_session/3, lookup_session/1, delete_session/1]).
+-export([create_session/2, update_session/3, lookup_session/1, delete_session/1]).
 -export([clear_expired_sessions/0, get_cookie_ttl/0]).
 
 % ETS name for cookies
@@ -53,14 +53,38 @@ cleanup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves session data under SessionID key. Updates the session memory(Props),
-%% the entry is valid up to given moment (ValidTill).
-%% If there is no record of session
-%% with id SessionID, error atom should be returned.
-%% ValidTill is expressed in number of seconds since epoch.
+%% Creates a new session under SessionID key.
+%% The session is valid up to given moment (Expires).
+%% Expires is expressed in number of seconds since epoch.
+%% CustomArgs are the args that are passed to g_session:log_in/1 function,
+%% they are application specific arguments that are needed to create a session.
 %% @end
 %%--------------------------------------------------------------------
--spec update_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
+-spec create_session(Expires, CustomArgs) -> {ok, SessionId} | error when
+    Expires :: integer(), CustomArgs :: [term()], SessionId :: binary().
+create_session(Expires, [#auth{} = Auth]) ->
+    case session_manager:create_gui_session(random_id(), Auth, Expires) of
+        {ok, SessionId} ->
+            {ok, SessionId};
+        {error, Error} ->
+            ?error("Cannot create GUI session: ~p", [Error]),
+            error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Saves session data under SessionID key. Updates the session memory(Props),
+%% the entry is valid up to given moment (Expires).
+%% If there is no record of session
+%% with id SessionID, error atom should be returned.
+%% Expires is expressed in number of seconds since epoch.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_session(SessionID, Props, Expires) -> ok | no_return() when
+    SessionID :: binary(),
+    Props :: [{Key :: binary(), Value :: binary}],
+    Expires :: integer().
 update_session(SessionID, Props, TillArg) ->
     case session:update(SessionID, #{memory => Props, expires => TillArg}) of
         {ok, _} -> ok;
@@ -116,7 +140,7 @@ delete_session(SessionID) ->
 
 %%--------------------------------------------------------------------
 %% @doc Deletes all sessions that have expired. Every session is saved
-%% with a ValidTill arg, that marks a point in time when it expires (in secs since epoch).
+%% with a Expires arg, that marks a point in time when it expires (in secs since epoch).
 %% The clearing should be performed based on this.
 %% @end
 %%--------------------------------------------------------------------
@@ -144,3 +168,14 @@ get_cookie_ttl() ->
         _ ->
             throw("No cookie TTL specified in env")
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc Generates a random, 44 chars long, base64 encoded session id.
+%% @end
+%%--------------------------------------------------------------------
+-spec random_id() -> binary().
+random_id() ->
+    base64:encode(
+        <<(erlang:md5(term_to_binary(now())))/binary,
+        (erlang:md5(term_to_binary(make_ref())))/binary>>).

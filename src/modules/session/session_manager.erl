@@ -17,7 +17,7 @@
 
 %% API
 -export([reuse_or_create_session/3, update_session_auth/2, remove_session/1]).
--export([create_gui_session/1]).
+-export([create_gui_session/3]).
 
 -define(TIMEOUT, timer:seconds(20)).
 -define(SESSION_WORKER, session_manager_worker).
@@ -71,15 +71,16 @@ remove_session(SessId) ->
 % @todo Below function must be integrated with current session logic.
 % For now, this is only a stub used in GUI.
 
--spec create_gui_session(Auth :: #auth{}) ->
-    {ok, session:id()} | {error, Reason :: term()}.
-create_gui_session(Auth) ->
-    SessionId = datastore_utils:gen_uuid(),
+-spec create_gui_session(SessionId, Auth, Expires) ->
+    {ok, session:id()} | {error, Reason :: term()} when
+    SessionId :: binary(), Auth :: #auth{}, Expires :: integer().
+create_gui_session(SessionId, Auth, Expires) ->
     {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
     SessionRec = #session{
         identity = Iden,
         type = gui,
-        auth = Auth
+        auth = Auth,
+        expires = Expires
     },
     SessionDoc = #document{
         key = SessionId,
