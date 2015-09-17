@@ -3,49 +3,61 @@
 <head>
     <meta charset="utf-8">
     <title>File manager</title>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+
     <link rel="stylesheet" href="/file_manager/css/style.css">
 </head>
 <body>
 
-<h3>File manager</h3>
+<script type="text/x-handlebars" data-template-name="main">
+    {{top-menu user=global.user}}
+    <div class="container" style="margin-top: 100px;">
+        <h3>File manager</h3>
+        {{outlet file}}
+    </div>
+</script>
 
-<script type="text/x-handlebars" data-template-name="file_list">
-<table>
-    <thead>
-    <tr>
-        <td>
-            ID
-        </td>
-        <td>
-            File name
-        </td>
-        <td>
-            Some attribute
-        </td>
-        <td>
-            Actions
-        </td>
-    </tr>
-    </thead>
-    <tbody>
-    {{#each f in model}}
+
+<script type="text/x-handlebars" data-template-name="file">
+    <table class="table table-hover">
+        <thead>
         <tr>
             <td>
-                {{f.id}}
+                {{input type="checkbox" id="toggle-all" checked=allAreSelected}}
             </td>
             <td>
-                {{f.name}}
+                File name
             </td>
             <td>
-                {{f.attribute}}
+                Some attribute
             </td>
             <td>
-                ---
+                Actions
             </td>
         </tr>
-    {{/each}}
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+        {{#each f in model}}
+            <tr>
+                <td>
+                    {{input type="checkbox" checked=f.selected class="toggle"}}
+                </td>
+                <td>
+                    {{f.name}}
+                </td>
+                <td>
+                    {{f.attribute}}
+                </td>
+                <td>
+                    ---
+                </td>
+            </tr>
+        {{/each}}
+        </tbody>
+    </table>
 </script>
 
 <script src="/common/js/jquery-1.11.2.min.js"></script>
@@ -56,5 +68,11 @@
 <script src="/file_manager/js/application.js"></script>
 <script src="/file_manager/js/router.js"></script>
 <script src="/file_manager/js/models/file.js"></script>
+<script src="/file_manager/js/controllers/files_controller.js"></script>
+<script src="/file_manager/components/components.top-menu.js"></script>
+<script src="/file_manager/components/top_menu_component.js"></script>
+<!-- Bootstrap JS -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js">
+</script>
 </body>
 </html>

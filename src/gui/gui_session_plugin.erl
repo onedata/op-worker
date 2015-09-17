@@ -24,9 +24,6 @@
 -export([create_session/2, update_session/3, lookup_session/1, delete_session/1]).
 -export([clear_expired_sessions/0, get_cookie_ttl/0]).
 
-% ETS name for cookies
--define(SESSION_ETS, cookies).
-
 
 %%%===================================================================
 %%% API functions
@@ -53,70 +50,65 @@ cleanup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a new session under SessionID key.
+%% Creates a new session under SessionId key.
 %% The session is valid up to given moment (Expires).
 %% Expires is expressed in number of seconds since epoch.
 %% CustomArgs are the args that are passed to g_session:log_in/1 function,
 %% they are application specific arguments that are needed to create a session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Expires, CustomArgs) -> {ok, SessionId} | error when
+-spec create_session(Expires, CustomArgs) ->
+    {ok, SessionId} | {error, term()} when
     Expires :: integer(), CustomArgs :: [term()], SessionId :: binary().
 create_session(Expires, [#auth{} = Auth]) ->
     case session_manager:create_gui_session(random_id(), Auth, Expires) of
         {ok, SessionId} ->
             {ok, SessionId};
         {error, Error} ->
-            ?error("Cannot create GUI session: ~p", [Error]),
-            error
+            {error, Error}
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves session data under SessionID key. Updates the session memory(Props),
+%% Saves session data under SessionID key. Updates the session memory,
 %% the entry is valid up to given moment (Expires).
 %% If there is no record of session
 %% with id SessionID, error atom should be returned.
 %% Expires is expressed in number of seconds since epoch.
 %% @end
 %%--------------------------------------------------------------------
--spec update_session(SessionID, Props, Expires) -> ok | no_return() when
-    SessionID :: binary(),
-    Props :: [{Key :: binary(), Value :: binary}],
+-spec update_session(SessionID, Memory, Expires) -> ok | {error, term()}
+    when SessionID :: binary(),
+    Memory :: [{Key :: binary(), Value :: binary}],
     Expires :: integer().
-update_session(SessionID, Props, TillArg) ->
-    case session:update(SessionID, #{memory => Props, expires => TillArg}) of
-        {ok, _} -> ok;
-        _ -> error
+update_session(SessionId, Expires, Memory) ->
+    case session:update(SessionId, #{memory => Memory, expires => Expires}) of
+        {ok, _} ->
+            ok;
+        {error, Error} ->
+            {error, Error}
     end.
 
 
 %%--------------------------------------------------------------------
-%% @doc Lookups a session by given SessionID key. On success, returns a proplist -
-%% session data, or undefined if given session does not exist.
-%% NOTE! If SessionID exists, but has expired, it should be automatically
-%% removed and undefined should be returned.
+%% @doc
+%% Lookups a session by given SessionID key.
+%% On success, returns a tuple - expiration time and session memory,
+%% or undefined if given session does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec lookup_session(SessionID :: binary()) -> Props :: [tuple()] | undefined.
-lookup_session(SessionID) ->
-    case SessionID of
+-spec lookup_session(SessionId :: binary()) -> {Expires, Memory} | undefined
+    when Expires :: integer(), Memory :: [{Key :: binary(), Value :: binary}].
+lookup_session(SessionId) ->
+    case SessionId of
         undefined ->
             undefined;
         _ ->
-            case ets:lookup(?SESSION_ETS, SessionID) of
-                [{SessionID, Props, Till}] ->
-                    % Check if the session isn't outdated
-                    {Megaseconds, Seconds, _} = now(),
-                    Now = Megaseconds * 1000000 + Seconds,
-                    case Till > Now of
-                        true ->
-                            Props;
-                        false ->
-                            delete_session(SessionID),
-                            undefined
-                    end;
+            case session:get(SessionId) of
+                {ok, #document{value = #session{
+                    expires = Expires, memory = Memory}}} ->
+                    {Expires, Memory};
                 _ ->
                     undefined
             end
@@ -124,36 +116,42 @@ lookup_session(SessionID) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Deletes a session by SessionID key.
+%% @doc Deletes a session by SessionId key.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_session(SessionID :: binary()) -> ok.
-delete_session(SessionID) ->
-    case SessionID of
+-spec delete_session(SessionID :: binary()) -> ok | {error, term()}.
+delete_session(SessionId) ->
+    case SessionId of
         undefined ->
             ok;
         _ ->
-            ets:delete(?SESSION_ETS, SessionID),
-            ok
+            case session:delete(SessionId) of
+                ok -> ok;
+                {error, _} = Error -> Error
+            end
     end.
 
 
 %%--------------------------------------------------------------------
-%% @doc Deletes all sessions that have expired. Every session is saved
-%% with a Expires arg, that marks a point in time when it expires (in secs since epoch).
+%% @doc Deletes all sessions that have expired. Every session is saved with a
+%% Expires arg, that marks when it expires (in secs since epoch).
 %% The clearing should be performed based on this.
+%% Returns number of expired sessions.
 %% @end
 %%--------------------------------------------------------------------
--spec clear_expired_sessions() -> non_neg_integer().
+-spec clear_expired_sessions() -> integer().
 clear_expired_sessions() ->
-    {Megaseconds, Seconds, _} = now(),
-    Now = Megaseconds * 1000000 + Seconds,
-    ExpiredSessions = ets:select(?SESSION_ETS, [{{'$1', '$2', '$3'}, [{'<', '$3', Now}], ['$_']}]),
-    lists:foreach(
-        fun({SessionID, _, _}) ->
-            delete_session(SessionID)
-        end, ExpiredSessions),
-    length(ExpiredSessions).
+    AllSessions = session:list(),
+    _DeletedSessions = lists:foldl(
+        fun(#document{key = Key, value = #session{expires = Expires}}, Acc) ->
+            case Expires > now_seconds() of
+                true ->
+                    session:delete(Key),
+                    Acc + 1;
+                false ->
+                    Acc
+            end
+        end, 0, AllSessions).
 
 
 %%--------------------------------------------------------------------
@@ -179,3 +177,8 @@ random_id() ->
     base64:encode(
         <<(erlang:md5(term_to_binary(now())))/binary,
         (erlang:md5(term_to_binary(make_ref())))/binary>>).
+
+
+now_seconds() ->
+    {Megaseconds, Seconds, _} = now(),
+    Megaseconds * 1000000 + Seconds.

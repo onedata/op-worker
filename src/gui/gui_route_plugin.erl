@@ -12,14 +12,10 @@
 
 -define(LOGIN, #gui_route{
     requires_session = ?SESSION_NOT_LOGGED_IN,
-    html_file = <<"login.html">>,
+    html_file = undefined,
     page_backend = login_backend
 }).
--define(VER_LOGIN, #gui_route{
-    requires_session = ?SESSION_NOT_LOGGED_IN,
-    html_file = undefined,
-    page_backend = ver_login_backend
-}).
+
 -define(LOGOUT, #gui_route{
     requires_session = ?SESSION_LOGGED_IN,
     html_file = undefined,
@@ -37,8 +33,6 @@
     html_file = <<"file_manager.html">>,
     page_backend = file_manager_backend
 }).
-
-
 
 
 login_page_path() ->
@@ -59,7 +53,6 @@ error_500_html_file() ->
 
 route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/logout.html">>) -> ?LOGOUT;
-route(<<"/ver_login.html">>) -> ?VER_LOGIN;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?FILE_MANAGER;
 route(<<"/file_manager.html">>) -> ?FILE_MANAGER.

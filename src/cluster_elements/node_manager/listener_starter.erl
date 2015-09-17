@@ -113,7 +113,7 @@ start_gui_listener() ->
                     {handler_module, nagios_handler},
                     {handler_opts, []}
                 ]},
-            {?WEBSOCKET_PREFIX_PATH ++ ":page/[...]", opn_cowboy_bridge,
+            {?WEBSOCKET_PREFIX_PATH ++ "[...]", opn_cowboy_bridge,
                 [
                     {delegation, true},
                     {handler_module, gui_ws_handler},

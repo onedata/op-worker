@@ -1,9 +1,23 @@
 FileManager.Router.map(function() {
-    this.resource('file_list', { path: '/' });
+    this.route('main', { path: '/' });
+    //this.route('global', { path: '/*' });
 });
 
-FileManager.FileListRoute = Ember.Route.extend({
-    model: function() {
+FileManager.MainRoute = Ember.Route.extend({
+    model: function () {
         return this.store.find('file');
+    },
+    renderTemplate: function () {
+        this.render();
+
+        //this.render('top_menu', {
+        //    into: 'main',
+        //    outlet: 'top_menu'
+        //});
+
+        this.render('file', {
+            into: 'main',
+            outlet: 'file'
+        });
     }
 });

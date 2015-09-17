@@ -16,6 +16,5 @@
 
 
 page_init() ->
-    ?dump(logout),
     g_session:log_out(),
-    {serve_body, <<"ierozki">>}.
+    {redirect, g_str:to_binary(oneprovider:get_gr_logout_page())}.

@@ -19,6 +19,5 @@
 
 
 page_init() ->
-    ?dump(login),
-    serve_html.
+    {redirect, g_str:to_binary(oneprovider:get_gr_login_page())}.
 

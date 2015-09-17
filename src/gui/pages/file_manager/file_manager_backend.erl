@@ -19,20 +19,19 @@
 
 
 -define(FILE_FIXTURES, [
-    [{<<"id">>, <<"f1">>}, {<<"name">>, <<"File 1">>}, {<<"attribute">>, 82364234}],
-    [{<<"id">>, <<"f2">>}, {<<"name">>, <<"Plik 2">>}, {<<"attribute">>, 451345134}],
-    [{<<"id">>, <<"f3">>}, {<<"name">>, <<"Notatki 3">>}, {<<"attribute">>, 56892}],
-    [{<<"id">>, <<"f4">>}, {<<"name">>, <<"Readme 4">>}, {<<"attribute">>, 124123567}],
-    [{<<"id">>, <<"d1">>}, {<<"name">>, <<"Dir 1">>}, {<<"attribute">>, 567833}],
-    [{<<"id">>, <<"d2">>}, {<<"name">>, <<"Folder 2">>}, {<<"attribute">>, 12475323}],
-    [{<<"id">>, <<"d3">>}, {<<"name">>, <<"Katalog 3">>}, {<<"attribute">>, 34554444}],
-    [{<<"id">>, <<"dyna">>}, {<<"name">>, <<"Dynamiczny">>}, {<<"attribute">>, 145}]
+    [{<<"id">>, <<"f1">>}, {<<"name">>, <<"File 1">>}, {<<"attribute">>, 82364234}, {<<"selected">>, false}],
+    [{<<"id">>, <<"f2">>}, {<<"name">>, <<"Plik 2">>}, {<<"attribute">>, 451345134}, {<<"selected">>, false}],
+    [{<<"id">>, <<"f3">>}, {<<"name">>, <<"Notatki 3">>}, {<<"attribute">>, 56892}, {<<"selected">>, false}],
+    [{<<"id">>, <<"f4">>}, {<<"name">>, <<"Readme 4">>}, {<<"attribute">>, 124123567}, {<<"selected">>, false}],
+    [{<<"id">>, <<"d1">>}, {<<"name">>, <<"Dir 1">>}, {<<"attribute">>, 567833}, {<<"selected">>, false}],
+    [{<<"id">>, <<"d2">>}, {<<"name">>, <<"Folder 2">>}, {<<"attribute">>, 12475323}, {<<"selected">>, false}],
+    [{<<"id">>, <<"d3">>}, {<<"name">>, <<"Katalog 3">>}, {<<"attribute">>, 34554444}, {<<"selected">>, false}],
+    [{<<"id">>, <<"dyna">>}, {<<"name">>, <<"Dynamiczny">>}, {<<"attribute">>, 145}, {<<"selected">>, false}]
 ]).
 
 
 page_init() ->
-    {serve_body, g_str:format_bin("Key: ~p~n", [g_session:get_value(key)])}.
-
+    serve_html.
 
 websocket_init() ->
     ?dump(websocket_init),

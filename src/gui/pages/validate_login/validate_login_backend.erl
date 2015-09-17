@@ -16,34 +16,6 @@
 
 page_init() ->
     SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
-    {ok, Auth = #auth{
-        disch_macaroons = DMacaroons}} = gui_auth_manager:authorize(SrlzdMacaroon),
-    {ok, SessionId} = g_session:log_in([Auth]),
-    {ok, #document{
-        value = #session{
-            identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-
-    % Print retrieved info
-    % Fun to cut too long strings
-    Trim = fun(Binary) ->
-        case byte_size(Binary) > 80 of
-            true ->
-                <<(binary:part(Binary, {0, 80}))/binary, "...">>;
-            false ->
-                Binary
-        end
-    end,
-
-    DMacsString = lists:foldl(
-        fun(DM, Acc) ->
-            % Padding for pretty print
-            gui_str:format_bin("~s~s~n                     ",
-                [Acc, binary_to_list(Trim(DM))])
-        end, "", DMacaroons),
-    Body = gui_str:format_bin(
-        "Macaroon: ~s~n~n"
-        "Discharge macaroons: ~s~n"
-        "SessionId: ~s~n~n"
-        "UserId: ~s~n",
-        [Trim(SrlzdMacaroon), DMacsString, SessionId, UserId]),
-    {serve_body, Body}.
+    {ok, Auth = #auth{}} = gui_auth_manager:authorize(SrlzdMacaroon),
+    {ok, _} = g_session:log_in([Auth]),
+    {redirect, "/"}.
