@@ -50,6 +50,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates given document by replacing given fields with new values or creates new one if not exists.
+%% @end
+%%--------------------------------------------------------------------
+-callback create_or_update(model_behaviour:model_config(), datastore:document(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:update_error().
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Gets #document with given key.
 %% @end
 %%--------------------------------------------------------------------

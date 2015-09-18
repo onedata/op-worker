@@ -203,7 +203,7 @@ client_send_test(Config) ->
     },
 
     % when
-    rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId]),
+    ?assertEqual(ok, rpc:call(Worker1, communicator, send, [ServerMsgInternal, SessionId])),
 
     % then
     ?assertEqual(ServerMessageProtobuf, receive_server_message()),
