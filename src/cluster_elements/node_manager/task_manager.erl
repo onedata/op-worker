@@ -78,8 +78,9 @@ start_task(Task, Level, PersistFun) ->
 -spec check_and_rerun_all() -> ok.
 check_and_rerun_all() ->
     check_and_rerun_all(?NODE_LEVEL),
-    check_and_rerun_all(?CLUSTER_LEVEL),
-    check_and_rerun_all(?PERSISTENT_LEVEL).
+    check_and_rerun_all(?CLUSTER_LEVEL).
+% TODO - list at persistent driver needed
+%%     check_and_rerun_all(?PERSISTENT_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
