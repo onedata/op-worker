@@ -96,18 +96,21 @@ update(FileUUID, Blocks, FileSize) ->
             [LocalLocation] = [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations1, LProviderId =:= ProviderId],
             RemoteLocations = Locations1 -- [LocalLocation],
 
-            BlocksSorted = lists:usort(Blocks),
+            BlocksSorted = consolidate(lists:usort(Blocks)),
 
             ok = invalidate(RemoteLocations, BlocksSorted),
             ok = append([LocalLocation], BlocksSorted),
 
             case FileSize of
-                undefined -> ok;
+                undefined ->
+                    case upper(BlocksSorted) > calculate_file_size(Locations1) of
+                        true -> {ok, size_changed};
+                        false -> {ok, size_not_changed}
+                    end;
                 _ ->
-                    do_truncate(FileSize, LocalLocation, RemoteLocations)
-            end,
-
-            ok
+                    do_truncate(FileSize, LocalLocation, RemoteLocations),
+                    {ok, size_changed}
+            end
         catch
             _:Reason ->
                 ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),

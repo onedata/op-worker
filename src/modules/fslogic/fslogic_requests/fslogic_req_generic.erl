@@ -71,13 +71,16 @@ chown(_, _File, _UserId) ->
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions({none, 2}).
-get_file_attr(_CTX, File) ->
+get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
     ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
             ctime = CTime, uid = UID, name = Name}}} ->
             Size = fslogic_blocks:get_file_size(File),
+
+            ok = file_watcher:insert_attr_watcher(UUID, SessId),
+
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                             #file_attr{
                                 uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,

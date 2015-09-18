@@ -17,7 +17,8 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4, list/0]).
--export([insert_open_watcher/2]).
+-export([insert_open_watcher/2, insert_attr_watcher/2]).
+-export([get_open_watchers/1, get_attr_watchers/1]).
 
 insert_open_watcher(Key, SessionId) ->
     datastore:run_synchronized(?MODEL_NAME, res_id(Key),
@@ -31,6 +32,35 @@ insert_open_watcher(Key, SessionId) ->
                     ok
             end
         end).
+
+insert_attr_watcher(Key, SessionId) ->
+    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
+        fun() ->
+            case get(Key) of
+                {ok, #document{value = #file_watcher{attr_sessions = OpenSess} = Value} = Doc} ->
+                    {ok, _} = save(Doc#document{value = Value#file_watcher{attr_sessions = lists:usort([SessionId | OpenSess])}}),
+                    ok;
+                {error, {not_found, _}} ->
+                    {ok, _} = create(#document{key = Key, value = #file_watcher{attr_sessions = [SessionId]}}),
+                    ok
+            end
+        end).
+
+get_open_watchers(Key) ->
+    case get(Key) of
+        {ok, #document{value = #file_watcher{open_sessions = OpenSess}}} ->
+            OpenSess;
+        {error, {not_found, _}} ->
+            []
+    end.
+
+get_attr_watchers(Key) ->
+    case get(Key) of
+        {ok, #document{value = #file_watcher{attr_sessions = OpenSess}}} ->
+            OpenSess;
+        {error, {not_found, _}} ->
+            []
+    end.
 
 %%%===================================================================
 %%% model_behaviour callbacks

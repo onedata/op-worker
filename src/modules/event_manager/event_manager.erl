@@ -216,18 +216,19 @@ handle_cast(#client_message{message_body = #end_of_message_stream{}}, State) ->
     {stop, shutdown, State};
 
 handle_cast(#client_message{message_body = Evt}, #state{
-    event_streams = EvtStms} = State) ->
+    event_streams = EvtStms, session_id = SessId} = State) ->
+    EnrichedEvt = source_enricher({session, SessId}, Evt),
     NewEvtStms = lists:map(fun
         ({_, {running, Pid, AdmRule}} = EvtStm) ->
-            ?info("cast event ~p ~p", [Evt, AdmRule(Evt)]),
-            case AdmRule(Evt) of
-                true -> gen_server:cast(Pid, {event, Evt}), EvtStm;
+            ?info("cast event ~p ~p", [EnrichedEvt, AdmRule(EnrichedEvt)]),
+            case AdmRule(EnrichedEvt) of
+                true -> gen_server:cast(Pid, {event, EnrichedEvt}), EvtStm;
                 false -> EvtStm
             end;
         ({_, {terminated, EvtStmState, AdmRule, PendingMsgs}} = EvtStm) ->
-            case AdmRule(Evt) of
+            case AdmRule(EnrichedEvt) of
                 true ->
-                    {terminated, EvtStmState, AdmRule, [{event, Evt} | PendingMsgs]};
+                    {terminated, EvtStmState, AdmRule, [{event, EnrichedEvt} | PendingMsgs]};
                 false ->
                     EvtStm
             end
@@ -412,3 +413,16 @@ remove_event_stream(EvtStmSup, SessId, SubId, EvtStms) ->
         _ ->
             {ok, EvtStms}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Attaches source to given event if supported.
+%% @end
+%%--------------------------------------------------------------------
+-spec source_enricher({session, session:id()}, term()) -> term().
+source_enricher(Source, #write_event{} = Evt) ->
+    Evt#write_event{source = Source};
+source_enricher(_, Evt) ->
+    Evt.

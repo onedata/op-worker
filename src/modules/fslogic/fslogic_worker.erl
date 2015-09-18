@@ -84,6 +84,9 @@ handle({fuse_request, SessId, FuseRequest}) ->
 handle({event, Evts}) ->
     ?info("FSLOGIC EVENT: ~p", [Evts]),
     handle_events(Evts);
+handle({file_size_changed, Entry}) ->
+
+    ok;
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -204,5 +207,19 @@ handle_events([Event | T]) ->
     [handle_event(Event) | handle_events(T)].
 
 
-handle_event(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize}) ->
-    fslogic_blocks:update(FileUUID, Blocks, FileSize).
+handle_event(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize, source = Source}) ->
+    ExcludedSessions =
+        case Source of
+            {session, SessionId} ->
+                [SessionId]
+        end,
+
+    case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
+        {ok, size_changed} ->
+            fslogic_notify:attributes({uuid, FileUUID}, ExcludedSessions),
+            fslogic_notify:blocks({uuid, FileUUID}, Blocks, ExcludedSessions);
+        {ok, size_not_changed} ->
+            fslogic_notify:blocks({uuid, FileUUID}, Blocks, ExcludedSessions);
+        {error, Reason} ->
+            {error, Reason}
+    end.
