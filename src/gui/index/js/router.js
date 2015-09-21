@@ -1,5 +1,6 @@
 FileManager.Router.map(function() {
-    this.route('main', { path: '/' });
+    //this.route('main', { path: '/' });
+    this.route('main', { path: '/upeczka' });
     //this.route('global', { path: '/*' });
 });
 

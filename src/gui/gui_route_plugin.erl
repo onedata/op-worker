@@ -28,7 +28,7 @@
     page_backend = validate_login_backend
 }).
 
--define(FILE_MANAGER, #gui_route{
+-define(INDEX, #gui_route{
     requires_session = ?SESSION_LOGGED_IN,
     html_file = <<"file_manager.html">>,
     page_backend = file_manager_backend
@@ -54,5 +54,5 @@ error_500_html_file() ->
 route(<<"/login.html">>) -> ?LOGIN;
 route(<<"/logout.html">>) -> ?LOGOUT;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
-route(<<"/">>) -> ?FILE_MANAGER;
-route(<<"/file_manager.html">>) -> ?FILE_MANAGER.
+route(<<"/">>) -> ?INDEX;
+route(<<"/index.html">>) -> ?INDEX.
