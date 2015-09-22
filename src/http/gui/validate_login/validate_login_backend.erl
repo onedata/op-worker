@@ -11,6 +11,7 @@
 
 -compile([export_all]).
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 page_init() ->
