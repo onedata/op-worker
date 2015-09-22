@@ -1,10 +1,10 @@
-FileManager.Router.map(function() {
+App.Router.map(function() {
     //this.route('main', { path: '/' });
-    this.route('main', { path: '/upeczka' });
+    this.route('main', { path: '/' });
     //this.route('global', { path: '/*' });
 });
 
-FileManager.MainRoute = Ember.Route.extend({
+App.MainRoute = Ember.Route.extend({
     model: function () {
         return this.store.find('file');
     },

@@ -1,10 +1,10 @@
-FileManager.File = DS.Model.extend({
+App.File = DS.Model.extend({
     name: DS.attr('string'),
     attribute: DS.attr(),
     selected: DS.attr('boolean')
 });
 
-FileManager.File.FIXTURES = [
+App.File.FIXTURES = [
     {
         id: 1,
         name: 'File 1',

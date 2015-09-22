@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 20. Aug 2015 15:25
 %%%-------------------------------------------------------------------
--module(file_manager_backend).
+-module(index_backend).
 -author("lopiola").
 
 -compile([export_all]).

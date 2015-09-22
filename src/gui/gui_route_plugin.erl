@@ -5,7 +5,7 @@
 -include_lib("gui/include/gui.hrl").
 
 
--export([route/1]).
+-export([route/1, data_backend/1]).
 -export([login_page_path/0, default_page_path/0]).
 -export([error_404_html_file/0, error_500_html_file/0]).
 
@@ -30,8 +30,8 @@
 
 -define(INDEX, #gui_route{
     requires_session = ?SESSION_LOGGED_IN,
-    html_file = <<"file_manager.html">>,
-    page_backend = file_manager_backend
+    html_file = <<"index.html">>,
+    page_backend = index_backend
 }).
 
 
@@ -56,3 +56,7 @@ route(<<"/logout.html">>) -> ?LOGOUT;
 route(<<"/validate_login.html">>) -> ?VALIDATE_LOGIN;
 route(<<"/">>) -> ?INDEX;
 route(<<"/index.html">>) -> ?INDEX.
+
+
+data_backend(<<"file">>) -> <<"file_backend.erl">>;
+data_backend(<<"user">>) -> <<"user_backend.erl">>.
