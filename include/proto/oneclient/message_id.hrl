@@ -14,8 +14,8 @@
 -define(MESSAGE_ID_HRL, 1).
 
 -record(message_id, {
-    issuer :: client | server,
-    id :: binary(),
+    issuer = server :: client | server,
+    id = <<"">> :: binary(),
     recipient :: pid() | undefined
 }).
 

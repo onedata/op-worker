@@ -56,11 +56,20 @@ init(_Args) ->
             metadata = 0,
             emission_time = 500,
             emission_rule = fun(_) -> true end,
-            handlers = [fun(Evts) -> worker_proxy:cast(fslogic_worker, {event, Evts}) end]
+            handlers = [fun(Evts) -> handle_events(Evts) end]
         }
     },
     ?info("FSLogic subscribe"),
-    {ok, SubId} = event_manager:subscribe(Sub),
+    SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
+
+    case event_manager:subscribe(Sub) of
+        ok ->
+            ok;
+        {ok, _} ->
+            ok;
+        {error, already_exists} ->
+            ok
+    end,
     {ok, #{sub_id => SubId}}.
 
 %%--------------------------------------------------------------------
@@ -204,16 +213,17 @@ handle_fuse_request(_Ctx, Req) ->
 handle_events([]) ->
     [];
 handle_events([Event | T]) ->
-    [handle_event(Event) | handle_events(T)].
-
-
-handle_event(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize, source = Source}) ->
+    [handle_events(Event) | handle_events(T)];
+handle_events(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize, source = Source} = T) ->
     ExcludedSessions =
         case Source of
             {session, SessionId} ->
                 [SessionId]
         end,
-
+    case FileSize of
+        undefined -> ok;
+        _ -> ?info("TRUNCATE WUT ~p", [T])
+    end,
     case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
         {ok, size_changed} ->
             fslogic_notify:attributes({uuid, FileUUID}, ExcludedSessions),

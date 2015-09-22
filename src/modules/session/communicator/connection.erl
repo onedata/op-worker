@@ -202,8 +202,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
-terminate(Reason, #sock_state{session_id = Id} = State) ->
+terminate(Reason, #sock_state{session_id = Id, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
+    ssl2:close(Socket),
     catch communicator:remove_connection(Id, self()),
     ok.
 
@@ -233,13 +234,13 @@ code_change(_OldVsn, State, _Extra) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
-    ?info("Data: ~p", [Data]),
+%%     ?info("Data: ~p", [Data]),
     try serializator:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined ->
-            ?info("Fuse handle_handshake ~p ~p", [Msg, Data]),
+%%             ?info("Fuse handle_handshake ~p ~p", [Msg, Data]),
             handle_handshake(State, Msg);
         {ok, Msg} ->
-            ?info("Fuse handle_normal_message ~p ~p", [Msg, Data]),
+%%             ?info("Fuse handle_normal_message ~p ~p", [Msg, Data]),
             handle_normal_message(State, Msg)
     catch
         _:Error ->

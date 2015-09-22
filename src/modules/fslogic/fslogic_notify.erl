@@ -25,7 +25,7 @@
 
 
 attributes(FileEntry, ExcludedSessions) ->
-    case file_manager:stat(fslogic_context:new(?ROOT_SESS_ID), FileEntry) of
+    case file_manager:stat(?ROOT_SESS_ID, FileEntry) of
         {ok, #file_attr{uuid = FileUUID} = Attrs} ->
             try
                 SessionIds = file_watcher:get_attr_watchers(FileUUID) -- ExcludedSessions,
@@ -36,7 +36,7 @@ attributes(FileEntry, ExcludedSessions) ->
                                   case session:get(SessionId) of
                                       {ok, _} ->
                                           ?info("Sending new attributes for file ~p to session ~p", [FileEntry, SessionId]),
-                                          communicator:send(SessionId, #fuse_response{status = #status{code = ?OK}, fuse_response = Attrs});
+                                          communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Attrs}, SessionId);
                                       {error, {not_found, _}} ->
                                           [SessionId | AccIn];
                                       {error, Reason3} ->
@@ -74,7 +74,7 @@ blocks(FileEntry, Blocks, ExcludedSessions) ->
                           case session:get(SessionId) of
                               {ok, _} ->
                                   ?info("Sending new location for file ~p to session ~p", [FileEntry, SessionId]),
-                                  communicator:send(SessionId, #fuse_response{status = #status{code = ?OK}, fuse_response = Location});
+                                  communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Location}, SessionId);
                               {error, {not_found, _}} ->
                                   [SessionId | AccIn];
                               {error, Reason3} ->

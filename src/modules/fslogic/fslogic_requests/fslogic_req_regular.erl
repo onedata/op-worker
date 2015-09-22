@@ -86,7 +86,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
-        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId},
+        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = UUID},
     {ok, LocId} = file_location:create(#document{value = Location}),
 
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),

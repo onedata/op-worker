@@ -376,11 +376,17 @@ run_synchronized(#model_config{name = ModelName}, ResourceID, Fun) ->
             Nodes = lists:usort(mnesia:table_info(table_name(ModelName), where_to_write)),
             case mnesia:lock({global, ResourceID, Nodes}, write) of
                 ok ->
-                    Fun();
+                    ?info("=========================== ENTER SYNC1 ~p", [ResourceID]),
+                    R = Fun(),
+                    ?info("=========================== EXIT SYNC1 ~p", [ResourceID]),
+                    R;
                 Nodes0 ->
                     case lists:usort(Nodes0) of
                         Nodes ->
-                            Fun();
+                            ?info("=========================== ENTER SYNC2 ~p", [ResourceID]),
+                            R = Fun(),
+                            ?info("=========================== EXIT SYNC2 ~p", [ResourceID]),
+                            R;
                         LessNodes ->
                             {error, {lock_error, Nodes -- LessNodes}}
                     end

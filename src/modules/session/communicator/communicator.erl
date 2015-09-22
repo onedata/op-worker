@@ -265,13 +265,13 @@ try_send(Msg, Connections) ->
                 ok -> ok;
                 Error ->
                     ?debug("Could not send message ~p, due to error: ~p, retrying in ~p seconds.",
-                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
-                    erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
+                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL])
+                    %erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
             catch
                 _:Error ->
                     ?debug_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
-                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
-                    erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
+                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL])
+                    %erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
             end
         end),
     ok.

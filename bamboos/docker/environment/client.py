@@ -71,8 +71,9 @@ bash'''
         envs=envs,
         interactive=True,
         tty=True,
+        run_params=['--privileged=true'],
         workdir='/root/bin',
-        volumes=[(bindir, '/root/build', 'ro')],
+        volumes=[(bindir, '/root/build', 'ro'), ('/mnt/dio', '/root/dio', 'rw')],
         dns_list=dns_servers,
         command=command)
 

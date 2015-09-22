@@ -27,6 +27,7 @@
 %% API
 -export([calculate_file_size/1, update/3, get_file_size/1]).
 -export([upper/1, lower/1]).
+-export([consolidate/1]).
 
 %%%===================================================================
 %%% API

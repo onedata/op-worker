@@ -13,6 +13,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -34,6 +35,7 @@ run_synchronized(ResId, Fun) ->
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
+    ?info("SAVE Bloks: ~p", [Document#document.value#file_location.blocks]),
     datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -63,7 +65,12 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
+        {ok, #document{value = #file_location{blocks = Blocks}}} = Res ->
+            ?info("GET Bloks: ~p", [Blocks]),
+            Res;
+        Res0 -> Res0
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

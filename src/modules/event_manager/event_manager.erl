@@ -20,10 +20,11 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, emit/2, subscribe/1, unsubscribe/1]).
+-export([start_link/2, emit/2, subscribe/1, subscribe/2, unsubscribe/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -74,11 +75,19 @@ start_link(EvtManSup, SessId) ->
     ok | {error, Reason :: event_manager_not_found | term()}.
 emit(Evt, SessId) ->
     ?info("emit event_1 ~p ~p", [Evt, SessId]),
+    case Evt of
+        #write_event{blocks = Blocks} ->
+            lists:foreach(fun(#file_block{offset = Offset, size = Size}) ->
+                ?info("EMIT ~p ~p", [Offset, Size]) end, Blocks),
+            ok;
+        _ -> ok
+    end,
     case session:get_event_manager(SessId) of
         {ok, EvtMan} ->
             ?info("emit event_2 ~p ~p ~p", [Evt, SessId, EvtMan]),
             gen_server:cast(EvtMan, #client_message{message_body = Evt});
         {error, Reason} ->
+            ?error("emit error event_2 ~p ~p ~p", [Evt, SessId, Reason]),
             {error, Reason}
     end.
 
@@ -90,8 +99,7 @@ emit(Evt, SessId) ->
 -spec subscribe(Sub :: subscription()) -> {ok, SubId :: subscription_id()}.
 subscribe(Sub) ->
     SubId = crypto:rand_uniform(0, 16#FFFFFFFFFFFFFFFF),
-    NewSub = set_id(SubId, Sub),
-    case subscribe(SubId, NewSub) of
+    case subscribe(SubId, Sub) of
         ok -> {ok, SubId};
         {error, already_exists} -> subscribe(Sub);
         {error, Reason} -> {error, Reason}
@@ -131,16 +139,20 @@ unsubscribe(SubId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([EvtManSup, SessId]) ->
+
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{event_manager => self()}),
+    ?info("INIT EM ~p ~p ~p", [SessId, self(), session:get_event_manager(SessId)]),
     gen_server:cast(self(), {initialize, EvtManSup}),
     {ok, Subscriptions} = subscription:list(),
-    lists:foreach(
-        fun(#document{value = #subscription{value = Sub}}) ->
-            ?info("Reregister sub ~p for session ~p", [Sub, SessId]),
-            ok = gen_server:cast(self(), {subscribe, Sub})
-        end, Subscriptions),
-
+    spawn(fun() ->
+        timer:sleep(timer:seconds(3)),
+        lists:foreach(
+            fun(#document{value = #subscription{value = Sub}}) ->
+                ?info("Reregister sub ~p for session ~p", [Sub, SessId]),
+                ok = gen_server:cast(self(), {subscribe, Sub})
+            end, Subscriptions)
+        end),
     {ok, #state{session_id = SessId}}.
 
 %%--------------------------------------------------------------------
@@ -265,6 +277,7 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
+    ?info("TERMINATE EM ~p ~p", [SessId, Reason]),
     ?log_terminate(Reason, State),
     session:update(SessId, #{event_manager => undefined}).
 
@@ -308,14 +321,15 @@ get_event_stream_sup(EvtManSup) ->
 -spec subscribe(SubId :: subscription_id(), Sub :: subscription()) ->
     ok | {error, Reason :: term()}.
 subscribe(SubId, Sub) ->
+    NewSub = set_id(SubId, Sub),
     case subscription:create(#document{key = SubId,
-        value = #subscription{value = Sub}}) of
+        value = #subscription{value = NewSub}}) of
         {ok, SubId} ->
             case session:list() of
                 {ok, Docs} ->
                     lists:foreach(fun
                         (#document{value = #session{event_manager = EvtMan}}) ->
-                            gen_server:cast(EvtMan, {subscribe, Sub})
+                            gen_server:cast(EvtMan, {subscribe, NewSub})
                     end, Docs);
                 {error, Reason} -> {error, Reason}
             end;
