@@ -99,7 +99,7 @@ start_gui_listener() ->
         % This will match hostnames with up to 6 segments
         % e. g. www.seg2.seg3.seg4.seg5.com
         {"www.:_[.:_[.:_[.:_[.:_]]]]", [
-            {'_', https_redirect_handler, []}
+            {'_', gui_https_redirect_handler, []}
         ]},
         % Proper requests are routed to handler modules
         {'_', [
@@ -108,10 +108,6 @@ start_gui_listener() ->
             {"/[...]", gui_static_handler, {dir, DocRoot}}
         ]}
     ],
-
-    % Create ets tables and set envs needed by n2o
-    gui_utils:init_n2o_ets_and_envs(GuiPort, ?GUI_ROUTING_MODULE,
-        ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
 
     %% TODO LOOLOL
     gui:init(),
@@ -217,11 +213,10 @@ start_dns_listeners() ->
 -spec stop_listeners() -> ok.
 stop_listeners() ->
     Listeners =
-        [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER, ?SESSION_LOGIC_MODULE],
+        [?HTTP_REDIRECTOR_LISTENER, ?REST_LISTENER, ?HTTPS_LISTENER],
     Results = lists:map(
-        fun(?SESSION_LOGIC_MODULE) ->
-            catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE);
-            (X) -> {X, catch cowboy:stop_listener(X)}
+        fun(Listener) ->
+            {Listener, catch cowboy:stop_listener(Listener)}
         end, Listeners),
     lists:foreach(
         fun({_, ok}) -> ok;

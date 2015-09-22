@@ -47,7 +47,7 @@ async_loop() ->
         {<<"name">>, <<"Dynamiczny">>},
         {<<"attribute">>, begin random:seed(now()), random:uniform(9999999) end},
         {<<"selected">>, false}]),
-    throw(dupa),
+%%     throw(dupa),
     async_loop().
 
 
