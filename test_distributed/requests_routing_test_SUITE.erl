@@ -46,11 +46,11 @@ simple_call_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     T1 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping, ?REQUEST_TIMEOUT])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [fslogic_worker, ping, ?REQUEST_TIMEOUT])),
     T2 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker1}, ping, ?REQUEST_TIMEOUT])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{fslogic_worker, Worker1}, ping, ?REQUEST_TIMEOUT])),
     T3 = os:timestamp(),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{http_worker, Worker2}, ping, ?REQUEST_TIMEOUT])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [{fslogic_worker, Worker2}, ping, ?REQUEST_TIMEOUT])),
     T4 = os:timestamp(),
 
     [
@@ -87,7 +87,7 @@ direct_cast_test(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [http_worker, ping, {proc, Self}, MsgId]))
+            ?assertEqual(ok, rpc:call(Worker, worker_proxy, cast, [fslogic_worker, ping, {proc, Self}, MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),
@@ -128,7 +128,7 @@ redirect_cast_test(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker2}, ping, {proc, Self}, MsgId]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{fslogic_worker, Worker2}, ping, {proc, Self}, MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),
@@ -190,8 +190,8 @@ mixed_cast_test_core(Config) ->
     TestProc = fun() ->
         Self = self(),
         SendReq = fun(MsgId) ->
-            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker1}, ping, {proc, Self}, 2 * MsgId - 1])),
-            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{http_worker, Worker2}, ping, {proc, Self}, 2 * MsgId]))
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{fslogic_worker, Worker1}, ping, {proc, Self}, 2 * MsgId - 1])),
+            ?assertEqual(ok, rpc:call(Worker1, worker_proxy, cast, [{fslogic_worker, Worker2}, ping, {proc, Self}, 2 * MsgId]))
         end,
 
         BeforeProcessing = os:timestamp(),

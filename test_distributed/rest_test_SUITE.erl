@@ -96,7 +96,7 @@ rest_endpoint(Node) ->
     Port =
         case get(port) of
             undefined ->
-                {ok, P} = rpc:call(Node, application, get_env, [?APP_NAME, http_worker_rest_port]),
+                {ok, P} = rpc:call(Node, application, get_env, [?APP_NAME, rest_port]),
                 PStr = integer_to_list(P),
                 put(port, PStr),
                 PStr;

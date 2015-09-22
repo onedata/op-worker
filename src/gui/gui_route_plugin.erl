@@ -31,7 +31,7 @@
 -define(INDEX, #gui_route{
     requires_session = ?SESSION_LOGGED_IN,
     html_file = <<"index.html">>,
-    page_backend = index_backend
+    page_backend = undefined
 }).
 
 
@@ -58,5 +58,5 @@ route(<<"/">>) -> ?INDEX;
 route(<<"/index.html">>) -> ?INDEX.
 
 
-data_backend(<<"file">>) -> <<"file_backend.erl">>;
-data_backend(<<"user">>) -> <<"user_backend.erl">>.
+data_backend(<<"file">>) -> file_data_backend;
+data_backend(<<"user">>) -> user_data_backend.

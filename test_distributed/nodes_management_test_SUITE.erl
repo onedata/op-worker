@@ -34,9 +34,9 @@ ccm_and_worker_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     % then
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [fslogic_worker, ping])),
     ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [http_worker, ping])),
+    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [fslogic_worker, ping])),
     ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
 
 %%%===================================================================

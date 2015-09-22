@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 20. Aug 2015 15:25
 %%%-------------------------------------------------------------------
--module(index_backend).
+-module(file_data_backend).
 -author("lopiola").
 
 -compile([export_all]).
@@ -14,8 +14,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([page_init/0, websocket_init/0]).
--export([find/2, find_all/1, find_query/2, create_record/2, update_record/3, delete_record/2]).
+-export([init/0]).
+-export([find/1, find_all/0, find_query/1]).
+-export([create_record/1, update_record/2, delete_record/1]).
 
 
 -define(FILE_FIXTURES, [
@@ -30,24 +31,34 @@
 ]).
 
 
-page_init() ->
-    serve_html.
-
-websocket_init() ->
+init() ->
     ?dump(websocket_init),
     save_files(?FILE_FIXTURES),
-    ?dump(opn_cowboy_bridge:get_socket_pid()),
+    data_backend:aync_process(fun() -> async_loop() end),
     ok.
 
 
-find(<<"file">>, [Id]) ->
+async_loop() ->
+    ?dump({async_loop_push_in_5, self()}),
+    timer:sleep(5000),
+    ?dump({async_loop_push, self()}),
+    data_backend:push([
+        {<<"id">>, <<"dyna">>},
+        {<<"name">>, <<"Dynamiczny">>},
+        {<<"attribute">>, begin random:seed(now()), random:uniform(9999999) end},
+        {<<"selected">>, false}]),
+    throw(dupa),
+    async_loop().
+
+
+find([Id]) ->
     case get_files_by(<<"id">>, Id) of
         [File] -> {ok, [File]};
         _ -> {error, <<"File not found">>}
     end;
 
 
-find(<<"file">>, Ids) ->
+find(Ids) ->
     Files = lists:foldl(
         fun(Id, Acc) ->
             case Acc of
@@ -66,11 +77,11 @@ find(<<"file">>, Ids) ->
     end.
 
 
-find_all(<<"file">>) ->
+find_all() ->
     {ok, get_files()}.
 
 
-find_query(<<"file">>, Data) ->
+find_query(Data) ->
     Result = lists:foldl(
         fun({Attr, Val}, Acc) ->
             get_files_by(Attr, Val, Acc)
@@ -78,14 +89,14 @@ find_query(<<"file">>, Data) ->
     {ok, Result}.
 
 
-create_record(<<"file">>, Data) ->
+create_record(Data) ->
     Id = integer_to_list(begin random:seed(now()), random:uniform(9999999) end),
     DataWithId = [{<<"id">>, Id} | Data],
     save_files(get_files() ++ [DataWithId]),
     {ok, DataWithId}.
 
 
-update_record(<<"file">>, Id, Data) ->
+update_record(Id, Data) ->
     case get_files_by(<<"id">>, Id) of
         [] ->
             {error, <<"File not found">>};
@@ -104,7 +115,7 @@ update_record(<<"file">>, Id, Data) ->
             ok
     end.
 
-delete_record(<<"file">>, Id) ->
+delete_record(Id) ->
     lists:filter(
         fun(File) ->
             not lists:member({<<"id">>, Id}, File)
@@ -115,7 +126,7 @@ delete_record(<<"file">>, Id) ->
 
 handle_info(update) ->
     Rand = (begin random:seed(now()), random:uniform(9999999) end),
-    update_record(<<"file">>, <<"dyna">>, [{<<"attribute">>, Rand}]),
+    update_record(<<"dyna">>, [{<<"attribute">>, Rand}]),
     get_files().
 
 % ------------------------------------------------------------

@@ -82,15 +82,15 @@ start_protocol_listener() ->
 start_gui_listener() ->
     % Get params from env for gui
     {ok, DocRoot} =
-        application:get_env(?APP_NAME, http_worker_static_files_root),
-    {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
-    {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
+        application:get_env(?APP_NAME, gui_static_files_root),
+    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
     {ok, GuiNbAcceptors} =
-        application:get_env(?APP_NAME, http_worker_number_of_acceptors),
+        application:get_env(?APP_NAME, gui_number_of_acceptors),
     {ok, MaxKeepAlive} =
-        application:get_env(?APP_NAME, http_worker_max_keepalive),
+        application:get_env(?APP_NAME, gui_max_keepalive),
     {ok, Timeout} =
-        application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+        application:get_env(?APP_NAME, gui_socket_timeout_seconds),
+    {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
@@ -98,33 +98,14 @@ start_gui_listener() ->
         % Cowboy does not have a mechanism to match every hostname starting with 'www.'
         % This will match hostnames with up to 6 segments
         % e. g. www.seg2.seg3.seg4.seg5.com
-        {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
-            [
-                {delegation, false},
-                {handler_module, https_redirect_handler},
-                {handler_opts, []}
-            ]}
+        {"www.:_[.:_[.:_[.:_[.:_]]]]", [
+            {'_', https_redirect_handler, []}
         ]},
         % Proper requests are routed to handler modules
         {'_', [
-            {"/nagios/[...]", opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, nagios_handler},
-                    {handler_opts, []}
-                ]},
-            {?WEBSOCKET_PREFIX_PATH ++ "[...]", opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, gui_ws_handler},
-                    {handler_opts, []}
-                ]},
-            {"/[...]", opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, gui_static_handler},
-                    {handler_opts, {dir, DocRoot}}
-                ]}
+            {"/nagios/[...]", nagios_handler, []},
+            {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
+            {"/[...]", gui_static_handler, {dir, DocRoot}}
         ]}
     ],
 
@@ -157,19 +138,14 @@ start_gui_listener() ->
 -spec start_redirector_listener() -> {ok, pid()} | no_return().
 start_redirector_listener() ->
     {ok, RedirectPort} =
-        application:get_env(?APP_NAME, http_worker_redirect_port),
+        application:get_env(?APP_NAME, gui_redirect_port),
     {ok, RedirectNbAcceptors} =
-        application:get_env(?APP_NAME, http_worker_number_of_http_acceptors),
+        application:get_env(?APP_NAME, gui_number_of_http_acceptors),
     {ok, Timeout} =
-        application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+        application:get_env(?APP_NAME, gui_socket_timeout_seconds),
     RedirectDispatch = [
         {'_', [
-            {'_', opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, opn_redirect_handler},
-                    {handler_opts, []}
-                ]}
+            {'_', opn_redirect_handler, []}
         ]}
     ],
     {ok, _} = cowboy:start_http(?HTTP_REDIRECTOR_LISTENER, RedirectNbAcceptors,
@@ -190,26 +166,16 @@ start_redirector_listener() ->
 -spec start_rest_listener() -> {ok, pid()} | no_return().
 start_rest_listener() ->
     {ok, NbAcceptors} =
-        application:get_env(?APP_NAME, http_worker_number_of_acceptors),
+        application:get_env(?APP_NAME, rest_number_of_acceptors),
     {ok, Timeout} =
-        application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+        application:get_env(?APP_NAME, rest_socket_timeout_seconds),
+    {ok, RestPort} = application:get_env(?APP_NAME, rest_port),
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
-    {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
 
     RestDispatch = [
         {'_', [
-            {"/rest/:version/[...]", opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, rest_handler},
-                    {handler_opts, []}
-                ]},
-            {"/cdmi/[...]", opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, cdmi_handler},
-                    {handler_opts, []}
-                ]}
+            {"/rest/:version/[...]", rest_handler, []},
+            {"/cdmi/[...]", cdmi_handler, []}
         ]}
     ],
 
@@ -277,10 +243,5 @@ stop_listeners() ->
 -spec static_dispatches(DocRoot :: string(), StaticPaths :: [string()]) -> [term()].
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        {Dir ++ "[...]", opn_cowboy_bridge,
-            [
-                {delegation, true},
-                {handler_module, cowboy_static},
-                {handler_opts, {dir, DocRoot ++ Dir}}
-            ]}
+        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
     end, StaticPaths).

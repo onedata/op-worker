@@ -246,8 +246,8 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
             }
             delete adapter.callbacks[json.uuid];
         } else if (json.msgType = PUSH_REQ) {
-            Todos.Todo.store.pushPayload('todo', {
-                todo: json.data
+            App.File.store.pushPayload('file', {
+                file: json.data
             })
         }
     },

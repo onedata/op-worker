@@ -11,7 +11,6 @@
 
 -compile([export_all]).
 
--include("modules/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 page_init() ->

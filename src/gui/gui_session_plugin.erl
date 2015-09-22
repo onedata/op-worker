@@ -160,7 +160,7 @@ clear_expired_sessions() ->
 %%--------------------------------------------------------------------
 -spec get_cookie_ttl() -> integer() | no_return().
 get_cookie_ttl() ->
-    case application:get_env(?APP_NAME, http_cookie_ttl) of
+    case application:get_env(?APP_NAME, gui_cookie_ttl) of
         {ok, Val} when is_integer(Val) ->
             Val;
         _ ->

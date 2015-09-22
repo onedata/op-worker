@@ -22,7 +22,7 @@
 -define(NODE_4, 'worker4@host.com').
 
 -define(WORKER_1, dns_worker).
--define(WORKER_2, http_worker).
+-define(WORKER_2, fslogic_worker).
 -define(WORKER_3, other_worker).
 -define(WORKER_4, another_worker).
 
