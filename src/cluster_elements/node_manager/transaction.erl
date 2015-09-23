@@ -15,35 +15,82 @@
 -include("cluster_elements/node_manager/task_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% Fun -> {ok, Context}, {ok, stop}, {retry, Context, Reason}, {error, Reason}
--record(tranaction, {rollback_funs = [] :: [fun((term()) -> term())]}).
+%% Rollback function gets Context as only argument.
+%% It should return {ok, Context}, {ok, stop}, {retry, Context, Reason} or {error, Reason}.
+-type rollback_fun() :: fun((term()) -> term()).
+
+-record(tranaction, {rollback_funs = [] :: [rollback_fun()]}).
 -define(DICT_KEY, transactions_list).
 
 %% API
--export([]).
+-export([start/0, commit/0, rollback_point/1, rollback/0, rollback/1, rollback/2,
+    rollback_asynch/0, rollback_asynch/1, rollback_asynch/2]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts transaction.
+%% @end
+%%--------------------------------------------------------------------
+-spec start() -> ok.
 start() ->
     CurrentList = case get(?DICT_KEY) of
                       undefined -> [];
                       List -> List
                   end,
-    put(?DICT_KEY, [#tranaction{} | CurrentList]).
+    put(?DICT_KEY, [#tranaction{} | CurrentList]),
+    ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Ends transaction.
+%% @end
+%%--------------------------------------------------------------------
+-spec commit() -> ok.
 commit() ->
     [_ | Tail] = get(?DICT_KEY),
-    put(?DICT_KEY, Tail).
+    put(?DICT_KEY, Tail),
+    ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets rollback point for transaction (function to be used during rollback).
+%% @end
+%%--------------------------------------------------------------------
+-spec rollback_point(Fun :: rollback_fun()) -> ok.
 rollback_point(Fun) ->
     [Current | Tail] = get(?DICT_KEY),
     Funs = Current#tranaction.rollback_funs,
     put(?DICT_KEY, [Current#tranaction{rollback_funs = [Fun | Funs]} | Tail]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Rollbacks transaction - if rollback fails starts rollback task.
+%% @end
+%%--------------------------------------------------------------------
+-spec rollback() -> ok | {rollback_fun_error, term()}.
 rollback() ->
     rollback(undefined).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Rollbacks transaction - if rollback fails starts rollback task.
+%% @end
+%%--------------------------------------------------------------------
+-spec rollback(Context :: term()) -> ok | {rollback_fun_error, term()}.
 rollback(Context) ->
     rollback(Context, ?NODE_LEVEL).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Rollbacks transaction - if rollback fails starts rollback task.
+%% @end
+%%--------------------------------------------------------------------
+-spec rollback(Context :: term(), Level :: task_manager:level()) ->
+    ok | {rollback_fun_error, term()}.
 rollback(Context, Level) ->
     [Current | _] = get(?DICT_KEY),
     Funs = Current#tranaction.rollback_funs,
@@ -58,22 +105,47 @@ rollback(Context, Level) ->
     commit(),
     Ans.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Rollbacks transaction in asynch task.
+%% @end
+%%--------------------------------------------------------------------
+-spec rollback_asynch() -> ok.
 rollback_asynch() ->
     rollback_asynch(undefined).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Rollbacks transaction in asynch task.
+%% @end
+%%--------------------------------------------------------------------
+-spec rollback_asynch(Context :: term()) -> ok.
 rollback_asynch(Context) ->
     rollback_asynch(Context, ?NODE_LEVEL).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Rollbacks transaction in asynch task.
+%% @end
+%%--------------------------------------------------------------------
+-spec rollback_asynch(Context :: term(), Level :: task_manager:level()) -> ok.
 rollback_asynch(Context, Level) ->
     [Current | _] = get(?DICT_KEY),
     Funs = Current#tranaction.rollback_funs,
-    Ans = start_rollback_task(Funs, Context, Level),
-    commit(),
-    Ans.
+    start_rollback_task(Funs, Context, Level),
+    commit().
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
-
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes list of rollback functions.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_rollback_funs(Funs :: [rollback_fun()], Context :: term()) ->
+    ok | {rollback_fun_error, term()}.
 run_rollback_funs(Funs, Context) ->
     run_rollback_funs(Funs, Context, []).
 
@@ -82,18 +154,25 @@ run_rollback_funs([], Context, RepeatsList) ->
 
 run_rollback_funs([Fun | Funs], Context, RepeatsList) ->
     case Fun(Context) of
-        {ok, NewContext} ->
-            run_rollback_funs(Funs, NewContext, RepeatsList);
         {ok, stop} ->
             {ok, Context, []};
+        {ok, NewContext} ->
+            run_rollback_funs(Funs, NewContext, RepeatsList);
         {retry, NewContext, Reason} ->
             ?warning("Rollback function to be retried: ~p", [Reason]),
             run_rollback_funs(Funs, NewContext, [Fun | RepeatsList]);
         Other ->
             ?error("Rollback function failed: ~p", [Other]),
-            error
+            {rollback_fun_error, Other}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Executes list of rollback functions in asynch task.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_rollback_task(Funs :: [rollback_fun()], Context :: term(),
+    Level :: task_manager:level()) -> ok.
 start_rollback_task(Funs, Context, Level) ->
     Task = fun() ->
         case run_rollback_funs(Funs, Context) of
