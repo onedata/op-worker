@@ -27,7 +27,7 @@
 %% API
 -export([calculate_file_size/1, update/3, get_file_size/1]).
 -export([upper/1, lower/1]).
--export([consolidate/1]).
+-export([consolidate/1, invalidate/3]).
 
 %%%===================================================================
 %%% API
@@ -129,8 +129,11 @@ invalidate([Location | T], Blocks) ->
     [invalidate(Location, Blocks) | invalidate(T, Blocks)],
     ok;
 invalidate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks) ->
+%%     ?info("OldBlocks invalidate ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = invalidate(Doc, OldBlocks, Blocks),
+%%     ?info("NewBlocks invalidate ~p", [NewBlocks]),
     NewBlocks1 = consolidate(lists:sort(NewBlocks)),
+%%     ?info("NewBlocks1 invalidate ~p", [NewBlocks1]),
     {ok, _} = file_location:save(Doc#document{value = Loc#file_location{blocks = NewBlocks1}}),
     ok;
 invalidate([], _) ->
@@ -163,12 +166,12 @@ append([Location | T], Blocks) ->
     [append(Location, Blocks) | append(T, Blocks)],
     ok;
 append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks) ->
-    ?info("OldBlocks ~p, NewBlocks ~p", [OldBlocks, Blocks]),
+%%     ?info("OldBlocks ~p, NewBlocks ~p", [OldBlocks, Blocks]),
     NewBlocks = invalidate(Doc, OldBlocks, Blocks) ++ Blocks,
     NewSize = upper(Blocks),
-    ?info("NewBlocks ~p", [NewBlocks]),
+%%     ?info("NewBlocks ~p", [NewBlocks]),
     NewBlocks1 = consolidate(lists:sort(NewBlocks)),
-    ?info("NewBlocks1 ~p", [NewBlocks1]),
+%%     ?info("NewBlocks1 ~p", [NewBlocks1]),
     {ok, _} = file_location:save(Doc#document{value = Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}}),
     ok.
 
@@ -176,6 +179,9 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 consolidate([]) ->
     [];
 consolidate([#file_block{size = 0} | T]) ->
+    consolidate(T);
+consolidate([#file_block{size = Size} = B | T]) when Size < 0 ->
+    ?error("Invalid block: ~p", [B]),
     consolidate(T);
 consolidate([B]) ->
     [B];

@@ -71,6 +71,6 @@ get_local_file_location(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),
     Locations = [file_location:get(LocId) || LocId <- LocIds],
-    ?error("Locations: ~p ~p", [LProviderId, Locations]),
+%%     ?error("Locations: ~p ~p", [LProviderId, Locations]),
     [LocalLocation] = [Location || {ok, #document{value = #file_location{provider_id = ProviderId}} = Location} <- Locations, LProviderId =:= ProviderId],
     LocalLocation.

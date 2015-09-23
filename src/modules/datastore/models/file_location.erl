@@ -35,7 +35,7 @@ run_synchronized(ResId, Fun) ->
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-    ?info("SAVE Bloks: ~p", [Document#document.value#file_location.blocks]),
+%%     ?info("SAVE Bloks: ~p", [Document#document.value#file_location.blocks]),
     datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -67,7 +67,7 @@ create(Document) ->
 get(Key) ->
     case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
         {ok, #document{value = #file_location{blocks = Blocks}}} = Res ->
-            ?info("GET Bloks: ~p", [Blocks]),
+%%             ?info("GET Bloks: ~p", [Blocks]),
             Res;
         Res0 -> Res0
     end.

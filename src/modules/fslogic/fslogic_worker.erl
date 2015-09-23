@@ -215,6 +215,7 @@ handle_events([]) ->
 handle_events([Event | T]) ->
     [handle_events(Event) | handle_events(T)];
 handle_events(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize, source = Source} = T) ->
+    ?info("FSLOGIC EVENT: ~p", [T]),
     ExcludedSessions =
         case Source of
             {session, SessionId} ->
