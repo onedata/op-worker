@@ -117,6 +117,7 @@ init([]) ->
         listener_starter:start_dns_listeners(),
         gen_server:cast(self(), connect_to_ccm),
         next_mem_check(),
+        next_task_check(),
 
         %% Load NIFs
         ok = helpers_nif:init(),
@@ -239,6 +240,11 @@ handle_cast(check_mem, #state{monitoring_state = MonState, cache_control = Cache
 
 handle_cast(check_mem, State) ->
     next_mem_check(),
+    {noreply, State};
+
+handle_cast(check_tasks, State) ->
+    spawn(task_manager, check_and_rerun_all, []),
+    next_task_check(),
     {noreply, State};
 
 handle_cast(do_heartbeat, State) ->
@@ -514,9 +520,7 @@ start_worker(Module, Args) ->
 -spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
 check_node_ip_address() ->
     try
-        IPCheckPath = "/provider/test/check_my_ip",
-        {ok, "200", _ResponseHeaders, JSON} = gr_endpoint:noauth_request(provider, IPCheckPath, get),
-        IPBin = mochijson2:decode(JSON),
+        {ok, IPBin} = gr_providers:check_ip_address(provider),
         {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
         IP
     catch T:M ->
@@ -586,6 +590,17 @@ next_mem_check() ->
     % random to reduce probability that two nodes clear memory simultanosly
     erlang:send_after(crypto:rand_uniform(round(0.8 * Interval), round(1.2 * Interval)), self(), {timer, check_mem}).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Plans next tasks list checking.
+%% @end
+%%--------------------------------------------------------------------
+-spec next_task_check() -> TimerRef :: reference().
+next_task_check() ->
+    {ok, IntervalMin} = application:get_env(?APP_NAME, task_checking_period_minutes),
+    Interval = timer:minutes(IntervalMin),
+    erlang:send_after(Interval, self(), {timer, check_tasks}).
 
 %%--------------------------------------------------------------------
 %% @private

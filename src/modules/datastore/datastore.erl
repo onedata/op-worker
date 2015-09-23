@@ -13,6 +13,7 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_engine.hrl").
+-include("cluster_elements/node_manager/task_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -59,12 +60,12 @@
 -export_type([link_target/0, link_name/0, link_spec/0, normalized_link_spec/0, normalized_link_target/0]).
 
 %% API
--export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2,
+-export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2, create_or_update/3,
          get/3, list/4, delete/4, delete/3, delete_sync/4, delete_sync/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
          foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
          link_walk/4, link_walk/5]).
--export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, level_to_driver/1]).
+-export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, level_to_driver/1, driver_to_module/1]).
 -export([run_synchronized/3]).
 
 %%%===================================================================
@@ -138,6 +139,18 @@ create(Level, #document{} = Document) ->
 create_sync(Level, #document{} = Document) ->
     ModelName = model_name(Document),
     exec_driver(ModelName, level_to_driver(Level), create, [maybe_gen_uuid(Document)]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates given document by replacing given fields with new values or
+%% creates new one if not exists.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(Level :: store_level(), Document :: datastore:document(),
+    Diff :: datastore:document_diff()) -> {ok, datastore:ext_key()} | datastore:create_error().
+create_or_update(Level, #document{} = Document, Diff) ->
+    ModelName = model_name(Document),
+    exec_driver_async(ModelName, Level, create_or_update, [Document, Diff]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -402,6 +415,18 @@ healthcheck() ->
         _ -> ok
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates datasotre's driver name to handler module.
+%% @end
+%%--------------------------------------------------------------------
+-spec driver_to_module(atom()) -> atom().
+driver_to_module(?PERSISTENCE_DRIVER) ->
+    {ok, DriverModule} = application:get_env(?APP_NAME, ?PERSISTENCE_DRIVER),
+    DriverModule;
+driver_to_module(Driver) ->
+    Driver.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -466,9 +491,7 @@ model_name(Record) when is_tuple(Record) ->
 %%--------------------------------------------------------------------
 -spec run_prehooks(Config :: model_behaviour:model_config(),
     Method :: model_behaviour:model_action(), Level :: store_level(),
-    Context :: term()) -> ok | {ok, NewMethod, NewArgs} | {error, Reason :: term()} when
-    NewMethod :: atom(),
-    NewArgs :: list().
+    Context :: term()) -> ok | {task, task_manager:task()}| {error, Reason :: term()}.
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
@@ -565,9 +588,11 @@ configs_per_bucket(Configs) ->
 init_drivers(Configs, NodeToSync) ->
     lists:foreach(
         fun({Bucket, Models}) ->
-            ok = ?PERSISTENCE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
-            ok = ?LOCAL_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync),
-            ok = ?DISTRIBUTED_CACHE_DRIVER:init_bucket(Bucket, Models, NodeToSync)
+            lists:foreach(
+                fun(Driver) ->
+                    DriverModule = driver_to_module(Driver),
+                    ok = DriverModule:init_bucket(Bucket, Models, NodeToSync)
+                end, [?PERSISTENCE_DRIVER, ?LOCAL_CACHE_DRIVER, ?DISTRIBUTED_CACHE_DRIVER])
         end, maps:to_list(configs_per_bucket(Configs))).
 
 %%--------------------------------------------------------------------
@@ -660,11 +685,11 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                 FullArgs = [ModelConfig | Args],
                 case Driver of
                     ?PERSISTENCE_DRIVER ->
-                        worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs});
+                        worker_proxy:call(datastore_worker, {driver_call, driver_to_module(Driver), Method, FullArgs});
                     _ ->
                         erlang:apply(Driver, Method, FullArgs)
                 end;
-            {ok, _NewMethod, _NewArgs} ->
+            {task, _Task} ->
                 {error, prehook_ans_not_supported};
             {error, Reason} ->
                 {error, Reason}
@@ -708,13 +733,17 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
     ModelConfig = ModelName:model_init(),
     Return =
         case run_prehooks(ModelConfig, Method, driver_to_level(Driver), Args) of
-            {ok, NewMethod, NewArgs} ->
-                FullArgs = [ModelConfig | NewArgs],
-                worker_proxy:call(datastore_worker, {driver_call, Driver, NewMethod, FullArgs}, timer:minutes(5));
             ok ->
                 FullArgs = [ModelConfig | Args],
-                worker_proxy:call(datastore_worker, {driver_call, Driver, Method, FullArgs}, timer:minutes(5));
+                worker_proxy:call(datastore_worker, {driver_call, driver_to_module(Driver), Method, FullArgs}, timer:minutes(5));
+            {task, Task} ->
+                Level = case lists:member(ModelName, ?GLOBAL_CACHES) of
+                             true -> ?CLUSTER_LEVEL;
+                             _ -> ?NODE_LEVEL
+                         end,
+                ok = task_manager:start_task(Task, Level);
             {error, Reason} ->
                 {error, Reason}
         end,
     run_posthooks_sync(ModelConfig, Method, driver_to_level(Driver), Args, Return).
+

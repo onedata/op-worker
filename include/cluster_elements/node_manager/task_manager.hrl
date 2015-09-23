@@ -1,27 +1,21 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal version of protocol handshake messages.
+%%% Definition of tasks' levels.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(HANDSHAKE_MESSAGES_HRL).
--define(HANDSHAKE_MESSAGES_HRL, 1).
+-ifndef(TASK_MANAGER_HRL).
+-define(TASK_MANAGER_HRL, 1).
 
--include("proto/common/credentials.hrl").
-
--record(handshake_request, {
-    auth :: #auth{},
-    session_id :: session:id()
-}).
-
--record(handshake_response, {
-    session_id :: session:id()
-}).
+-define(NON_LEVEL, non).
+-define(NODE_LEVEL, node).
+-define(CLUSTER_LEVEL, cluster).
+-define(PERSISTENT_LEVEL, persistent).
 
 -endif.

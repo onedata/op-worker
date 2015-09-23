@@ -12,6 +12,8 @@
 -ifndef(DATASTORE_MODELS_HRL).
 -define(DATASTORE_MODELS_HRL, 1).
 
+-include("proto/common/credentials.hrl").
+
 %% Wrapper for all models' records
 -record(document, {
     key :: datastore:ext_key(),
@@ -30,8 +32,8 @@
     onedata_user,
     identity,
     file_meta,
-    global_cache_controller,
-    local_cache_controller,
+    cache_controller,
+    task_pool,
     storage,
     file_location,
     file_watcher
@@ -47,22 +49,20 @@
 -define(LOCAL_CACHES, [
 ]).
 
-%% Model that controls utilization of global cache
--record(global_cache_controller, {
-    timestamp :: tuple(),
+%% Model that controls utilization of cache
+-record(cache_controller, {
+    timestamp = {0,0,0} :: tuple(),
     action = non :: atom(),
-    last_user = non :: pid() | non,
-    last_action_time :: tuple(),
+    last_user = non :: string() | non,
+    last_action_time = {0,0,0} :: tuple(),
     deleted_links = [] :: list()
 }).
 
-%% Model that controls utilization of local cache
--record(local_cache_controller, {
-    timestamp :: tuple(),
-    action = non :: atom(),
-    last_user = non :: pid() | non,
-    last_action_time :: tuple(),
-    deleted_links = [] :: list()
+%% sample model with example fields
+-record(task_pool, {
+    task :: task_manager:task(),
+    owner :: pid(),
+    node :: node()
 }).
 
 %% sample model with example fields
@@ -87,11 +87,13 @@
 %% identity - user identity
 -record(session, {
     identity :: #identity{},
-    node :: node(),
-    session_sup :: pid(),
-    event_manager :: pid(),
-    sequencer_manager :: pid(),
-    communicator :: pid()
+    type = fuse :: fuse | gui,
+    auth :: #auth{},
+    node = node() :: node(),
+    session_sup = undefined :: pid() | undefined,
+    event_manager = undefined :: pid() | undefined,
+    sequencer_manager = undefined :: pid() | undefined,
+    communicator = undefined :: pid() | undefined
 }).
 
 %% Local, cached version of globalregistry user

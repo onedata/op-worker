@@ -196,7 +196,7 @@ handle_json_data(Req, State = #state{identity = ?GLOBALREGISTRY_IDENTITY}) ->
     case cowboy_req:path_info(Req) of
         {[<<"auth">>], _}  ->
             {ok, Body, Req2} = cowboy_req:body(Req),
-            Json = mochijson2:decode(Body, [{format, proplist}]),
+            Json = jiffy:decode(Body),
             User = proplists:get_value(<<"user">>, Json),
             Cert = proplists:get_value(<<"cert">>, Json),
 

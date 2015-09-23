@@ -63,6 +63,9 @@ handle(healthcheck) ->
 handle({reuse_or_create_session, SessId, Iden, Con}) ->
     reuse_or_create_session(SessId, Iden, Con);
 
+handle({update_session_auth, SessId, Auth}) ->
+    update_session_auth(SessId, Auth);
+
 handle({remove_session, SessId}) ->
     remove_session(SessId);
 
@@ -169,6 +172,18 @@ create_session(SessId, Iden, Con) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates the #auth{} record in given session.
+%% @end
+%%--------------------------------------------------------------------
+update_session_auth(SessId, #auth{} = Auth) ->
+    {ok, Doc = #document{
+        value = #session{} = Session}} = session:get(SessId),
+    {ok, _} = session:save(Doc#document{
+        value = Session#session{auth = Auth}}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private

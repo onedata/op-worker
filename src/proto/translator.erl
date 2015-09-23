@@ -58,13 +58,13 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #file_block{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
-    #handshake_request{token = translate_from_protobuf(Token), session_id = SessionId};
+    #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
 translate_from_protobuf(#'MessageStream'{stream_id = StmId, sequence_number = SeqNum}) ->
     #message_stream{stream_id = StmId, sequence_number = SeqNum};
 translate_from_protobuf(#'EndOfMessageStream'{}) ->
     #end_of_message_stream{};
 translate_from_protobuf(#'Token'{value = Val}) ->
-    #token{value = Val};
+    #auth{macaroon = Val};
 translate_from_protobuf(#'Ping'{data = Data}) ->
     #ping{data = Data};
 translate_from_protobuf(#'GetProtocolVersion'{}) ->
