@@ -13,7 +13,8 @@ var PULL_REQ = 'pullReq';
 var STATIC_DATA_REQ = 'staticDataReq';
 var STATIC_DATA_RESP = 'staticDataResp';
 var PULL_RESULT = "result";
-var PUSH_REQ = "pushReq";
+var MSG_TYPE_PUSH_UPDATED = "pushUpdated";
+var MSG_TYPE_PUSH_DELETED = "pushDeleted";
 
 DS.WebsocketAdapter = DS.RESTAdapter.extend({
     callbacks: {},
@@ -247,10 +248,14 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
                 adapter.callbacks[json.uuid].error(json.data);
             }
             delete adapter.callbacks[json.uuid];
-        } else if (json.msgType == PUSH_REQ) {
+        } else if (json.msgType == MSG_TYPE_PUSH_UPDATED) {
             App.File.store.pushPayload('file', {
                 file: json.data
             })
+        } else if (json.msgType == MSG_TYPE_PUSH_DELETED) {
+            App.File.store.find('file', json.data).then(function(post) {
+                App.File.store.unloadRecord(post);
+            });
         } else if (json.msgType == STATIC_DATA_RESP) {
             var callback = adapter.callbacks[json.uuid];
             callback.success(json.data);

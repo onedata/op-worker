@@ -1,82 +1,54 @@
 <h3>File manager</h3>
 <div class="btn-group" role="group" aria-label="...">
     <button type="button" class="btn btn-default" id="create-new"
-            data-toggle="modal" data-target="#newFileDialog">
+        {{action 'showModal' 'create_file_modal' controller model}}>
         Create
     </button>
+    <button type="button" class="btn btn-default" id="rename-file"
+        {{action 'showModal' 'rename_file_modal' controller model}}
+        {{bind-attr disabled="inNotOneSelected"}}>
+        Rename
+    </button>
+    <button type="button" class="btn btn-default" id="rename-file"
+        {{action 'showModal' 'change_attr_modal' controller model}}
+        {{bind-attr disabled="isNoneSelected"}}>
+        Change attribute
+    </button>
     <button type="button" class="btn btn-default" id="remove"
-            {{action "remove"}} {{bindAttr disabled="inNoneSelected"}}>
-    Remove
+        {{action 'remove'}} {{bind-attr disabled='inNoneSelected'}}>
+        Remove
     </button>
 </div>
+{{outlet 'modal'}}
+
 
 <table class="table table-hover">
     <thead>
     <tr>
         <td>
-            {{input type="checkbox" id="toggle-all" checked=allAreSelected}}
+            {{input type='checkbox' id='toggle-all' checked=areAllSelected}}
         </td>
         <td>
-            File name
+            <b>File name</b>
         </td>
         <td>
-            Some attribute
+            <b>Attribute</b>
         </td>
     </tr>
     </thead>
     <tbody>
     {{#each f in model}}
-    <tr>
-        <td>
-            {{input type="checkbox" checked=f.selected class="toggle"}}
-        </td>
-        <td>
-            {{f.name}}
-        </td>
-        <td>
-            {{f.attribute}}
-        </td>
-    </tr>
+        <tr>
+            <td>
+                {{input type='checkbox' checked=f.selected class='toggle' bubbles=false}}
+            </td>
+            <td  {{action 'selectRow' f}}>
+                {{f.name}}
+            </td>
+            <td  {{action 'selectRow' f}}>
+                {{f.attribute}}
+            </td>
+        </tr>
     {{/each}}
     </tbody>
 </table>
-
-
-<div id="newFileDialog" class="modal fade" role="dialog">
-    <div class="modal-dialog">
-        <!--{{action "createNew"}}-->
-        <!-- Modal content-->
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close"
-                        data-dismiss="modal">&times;</button>
-                <h4 class="modal-title">Create new file</h4>
-            </div>
-            <div class="modal-body">
-                {{input
-                type="text"
-                id="new-file-name"
-                placeholder="File name"
-                value=newFileName}}
-                {{input
-                type="text"
-                id="new-file-attr"
-                placeholder="File attribute"
-                value=newFileAttr
-                action="createNew" }}
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-default"
-                        data-dismiss="modal" {{action
-                "createNew"}}>
-                Ok
-                </button>
-                <button type="button" class="btn btn-default"
-                        data-dismiss="modal">
-                    Close
-                </button>
-            </div>
-        </div>
-
-    </div>
-</div>

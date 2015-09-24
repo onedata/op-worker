@@ -15,7 +15,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 page_init() ->
-    SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
-    {ok, Auth = #auth{}} = gui_auth_manager:authorize(SrlzdMacaroon),
-    {ok, _} = g_session:log_in([Auth]),
+    case g_session:is_logged_in() of
+        true ->
+            ok;
+        false ->
+            SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
+            {ok, Auth = #auth{}} = gui_auth_manager:authorize(SrlzdMacaroon),
+            {ok, _} = g_session:log_in([Auth])
+    end,
     {redirect, "/"}.

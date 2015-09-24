@@ -8,20 +8,19 @@ App.MainRoute = Ember.Route.extend({
     model: function () {
         return this.store.find('file');
     },
-    renderTemplate: function () {
-        this.render();
-
-        //this.render('file_list', {
-        //    into: 'main',
-        //    outlet: 'file_list',
-        //    controller: 'fileList'
-        //});
-    },
     actions: {
-        openModal: function(modalName) {
-            return this.render(modalName, {
+        showModal: function(name, controller, model) {
+            this.render(name, {
                 into: 'main',
-                outlet: 'modal'
+                outlet: 'modal',
+                controller: controller,
+                model: model
+            });
+        },
+        hideModal: function() {
+            this.disconnectOutlet({
+                outlet: 'modal',
+                parentView: 'main'
             });
         }
     }

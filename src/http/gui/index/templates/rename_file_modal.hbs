@@ -1,0 +1,12 @@
+{{#modal-dialog title='Rename file' ok='renameFile' close='hideModal'}}
+    <form {{action 'ok' on='submit' target=view}}>
+        <div class="form-group">
+            {{input
+            type='text'
+            id='file-name'
+            placeholder='New file name'
+            value=currentFileName
+            autofocus='autofocus'}}
+        </div>
+    </form>
+{{/modal-dialog}}

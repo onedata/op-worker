@@ -36,8 +36,10 @@ init() ->
 
 async_loop() ->
     receive
-        {push, Data} ->
-            data_backend:push(Data);
+        {push_updated, Data} ->
+            data_backend:push_updated(Data);
+        {push_deleted, Data} ->
+            data_backend:push_deleted(Data);
         Other ->
             ?dump({async_loop, Other})
     end,
@@ -95,10 +97,11 @@ find_query(Data) ->
 
 
 create_record(Data) ->
-    Id = integer_to_list(begin random:seed(now()), random:uniform(9999999) end),
+    Id = integer_to_binary(begin random:seed(now()), random:uniform(9999999) end),
     DataWithId = [{<<"id">>, Id} | Data],
     save_files(get_files() ++ [DataWithId]),
-    push_to_all(DataWithId),
+    ?dump(get_files()),
+    push_updated(DataWithId),
     {ok, DataWithId}.
 
 
@@ -118,16 +121,18 @@ update_record(Id, Data) ->
                     end
                 end, get_files()),
             save_files(NewFileList),
-            push_to_all(NewFile),
+            push_updated(NewFile),
             ok
     end.
 
 delete_record(Id) ->
-    lists:filter(
+    NewFiles = lists:filter(
         fun(File) ->
             not lists:member({<<"id">>, Id}, File)
         end, get_files()),
+    save_files(NewFiles),
     % TODO A co jak nie OK?
+    push_deleted(Id),
     ok.
 
 
@@ -139,9 +144,19 @@ delete_record(Id) ->
 
 ensure_ets(WSPid, AsyncPid) ->
     UserId = op_gui_utils:get_user_id(),
+    Self = self(),
     case ets:info(?FILE_ETS) of
         undefined ->
-            ets:new(?FILE_ETS, [named_table, public, set, {read_concurrency, true}]);
+            spawn(
+                fun() ->
+                    ets:new(?FILE_ETS, [named_table, public, set, {read_concurrency, true}]),
+                    Self ! created,
+                    receive
+                        die ->
+                            ok
+                    end
+                end),
+            receive created -> ok end;
         _ ->
             ok
     end,
@@ -159,7 +174,15 @@ ensure_ets(WSPid, AsyncPid) ->
     end.
 
 
-push_to_all(Data) ->
+push_updated(Data) ->
+    push_to_all(push_updated, Data).
+
+
+push_deleted(Data) ->
+    push_to_all(push_deleted, Data).
+
+
+push_to_all(Type, Data) ->
     Self = self(),
     UserId = op_gui_utils:get_user_id(),
     [{{clients, UserId}, Clients}] = ets:lookup(?FILE_ETS, {clients, UserId}),
@@ -169,7 +192,7 @@ push_to_all(Data) ->
                 Self ->
                     ok;
                 _ ->
-                    AsyncPid ! {push, Data}
+                    AsyncPid ! {Type, Data}
             end
         end, Clients).
 

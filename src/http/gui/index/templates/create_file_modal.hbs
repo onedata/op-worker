@@ -1,0 +1,17 @@
+{{#modal-dialog title='Create new file' ok='createNewFile' close='hideModal'}}
+    <form {{action 'ok' on='submit' target=view}}>
+        <div class="form-group">
+            {{input
+            type='text'
+            id='new-file-name'
+            placeholder='File name'
+            value=newFileName
+            autofocus='autofocus'}}
+            {{input
+            type='text'
+            id='new-file-attr'
+            placeholder='File attribute'
+            value=newFileAttr}}
+        </div>
+    </form>
+{{/modal-dialog}}
