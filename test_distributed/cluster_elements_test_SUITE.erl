@@ -21,12 +21,19 @@
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
+-define(DICT_KEY, transactions_list).
+
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([ccm_and_worker_test/1, task_pool_test/1, task_manager_repeats_test/1, task_manager_rerun_test/1]).
+-export([ccm_and_worker_test/1, task_pool_test/1, task_manager_repeats_test/1, task_manager_rerun_test/1,
+    transaction_test/1, transaction_rollback_test/1, transaction_rollback_stop_test/1,
+    multi_transaction_test/1, transaction_retry_test/1, transaction_error_test/1]).
+-export([transaction_retry_test_base/0, transaction_error_test_base/0]).
 
 -performance({test_cases, []}).
-all() -> [ccm_and_worker_test, task_pool_test, task_manager_repeats_test, task_manager_rerun_test].
+all() -> [ccm_and_worker_test, task_pool_test, task_manager_repeats_test, task_manager_rerun_test,
+    transaction_test, transaction_rollback_test, transaction_rollback_stop_test,
+    multi_transaction_test, transaction_retry_test, transaction_error_test].
 
 %%%===================================================================
 %%% Test function
@@ -175,6 +182,211 @@ start_tasks(Level, Workers, Num) ->
     end, lists:zip(Funs, Workers)),
 
     ControllerPid.
+
+transaction_test(_Config) ->
+    ?assertEqual(undefined, get(?DICT_KEY)),
+    ?assertEqual(ok, transaction:start()),
+    ?assertEqual(1, length(get(?DICT_KEY))),
+
+    ?assertEqual(ok, transaction:commit()),
+    ?assertEqual(0, length(get(?DICT_KEY))),
+    ok.
+
+transaction_rollback_test(_Config) ->
+    ?assertEqual(ok, transaction:start()),
+
+    Self = self(),
+    Rollback1 = fun(Num) ->
+        Self ! {rollback, Num},
+        {ok, Num + 1}
+    end,
+
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+
+    ?assertEqual(ok, transaction:rollback(1)),
+    ?assertEqual(0, length(get(?DICT_KEY))),
+
+    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual(ok, get_rollback_ans(2)),
+    ?assertEqual(ok, get_rollback_ans(3)),
+    ?assertEqual(non, get_rollback_ans()),
+
+    ok.
+
+transaction_rollback_stop_test(_Config) ->
+    ?assertEqual(ok, transaction:start()),
+
+    Self = self(),
+    Rollback1 = fun(Num) ->
+        Self ! {rollback, Num},
+        {ok, Num + 1}
+    end,
+
+    Rollback2 = fun(_Num) ->
+        {ok, stop}
+    end,
+
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback2)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+
+    ?assertEqual(ok, transaction:rollback(1)),
+    ?assertEqual(0, length(get(?DICT_KEY))),
+
+    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual(ok, get_rollback_ans(2)),
+    ?assertEqual(ok, get_rollback_ans(3)),
+    ?assertEqual(non, get_rollback_ans()),
+
+    ok.
+
+multi_transaction_test(_Config) ->
+    ?assertEqual(ok, transaction:start()),
+
+    Self = self(),
+    Rollback1 = fun(Num) ->
+        Self ! {rollback, Num},
+        {ok, Num + 1}
+    end,
+
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+
+    ?assertEqual(ok, transaction:start()),
+    ?assertEqual(2, length(get(?DICT_KEY))),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+
+    ?assertEqual(ok, transaction:rollback(1)),
+    ?assertEqual(1, length(get(?DICT_KEY))),
+
+    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual(non, get_rollback_ans()),
+
+    ?assertEqual(ok, transaction:rollback(11)),
+    ?assertEqual(0, length(get(?DICT_KEY))),
+
+    ?assertEqual(ok, get_rollback_ans(11)),
+    ?assertEqual(ok, get_rollback_ans(12)),
+    ?assertEqual(non, get_rollback_ans()),
+
+    ok.
+
+transaction_retry_test(Config) ->
+    [Worker1, _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker1, ?MODULE, transaction_retry_test_base, [])),
+    ok.
+
+transaction_retry_test_base() ->
+    ?assertEqual(ok, transaction:start()),
+
+    Self = self(),
+
+    Rollback1 = fun(Num) ->
+        Self ! {rollback, Num},
+        {ok, Num + 1}
+    end,
+
+    Rollback2 = fun(Num) ->
+        Pid = self(),
+        case Pid of
+            Self ->
+                {retry, Num + 100, some_reason};
+            _ ->
+                Self ! {rollback, Num},
+                {ok, Num + 1}
+        end
+    end,
+
+    Rollback3 = fun(Num) ->
+        Pid = self(),
+        case Pid of
+            Self ->
+                {retry, Num + 100, some_reason};
+            _ when Num < 1000 ->
+                {retry, Num + 1000, some_reason};
+            _ ->
+                Self ! {rollback, Num},
+                {ok, Num + 1}
+        end
+    end,
+
+    ?assertEqual(ok, transaction:rollback_point(Rollback2)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback3)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback2)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+
+    ?assertEqual(task_sheduled, transaction:rollback(1)),
+    timer:sleep(1000), % task is asynch
+    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual(ok, get_rollback_ans(102)),
+    ?assertEqual(ok, get_rollback_ans(303)),
+    ?assertEqual(ok, get_rollback_ans(1304)),
+    ?assertEqual(ok, get_rollback_ans(1305)),
+    ?assertEqual(non, get_rollback_ans()),
+
+    ok.
+
+transaction_error_test(Config) ->
+    [Worker1, _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker1, ?MODULE, transaction_error_test_base, [])),
+    ok.
+
+transaction_error_test_base() ->
+    ?assertEqual(ok, transaction:start()),
+
+    Self = self(),
+
+    Rollback1 = fun(Num) ->
+        Self ! {rollback, Num},
+        {ok, Num + 1}
+    end,
+
+    Rollback2 = fun(Num) ->
+        Pid = self(),
+        case Pid of
+            Self ->
+                {error, some_error};
+            _ ->
+                Self ! {rollback, Num},
+                {ok, Num + 10}
+        end
+    end,
+
+    ?assertEqual(ok, transaction:rollback_point(Rollback2)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback2)),
+    ?assertEqual(ok, transaction:rollback_point(Rollback1)),
+
+    ?assertEqual({rollback_fun_error,  {error, some_error}}, transaction:rollback(1)),
+    timer:sleep(1000), % task is asynch
+    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual(ok, get_rollback_ans(2)),
+    ?assertEqual(ok, get_rollback_ans(12)),
+    ?assertEqual(ok, get_rollback_ans(13)),
+    ?assertEqual(non, get_rollback_ans()),
+
+    ok.
+
+get_rollback_ans() ->
+    receive
+        Other -> {error, Other}
+    after
+        0 -> non
+    end.
+
+get_rollback_ans(Num) ->
+    receive
+        {rollback, Num} -> ok;
+        Other -> {error, Other}
+    after
+        0 -> non
+    end.
 
 %%%===================================================================
 %%% SetUp and TearDown functions

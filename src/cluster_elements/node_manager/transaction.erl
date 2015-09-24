@@ -64,14 +64,15 @@ commit() ->
 rollback_point(Fun) ->
     [Current | Tail] = get(?DICT_KEY),
     Funs = Current#tranaction.rollback_funs,
-    put(?DICT_KEY, [Current#tranaction{rollback_funs = [Fun | Funs]} | Tail]).
+    put(?DICT_KEY, [Current#tranaction{rollback_funs = [Fun | Funs]} | Tail]),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Rollbacks transaction - if rollback fails starts rollback task.
 %% @end
 %%--------------------------------------------------------------------
--spec rollback() -> ok | {rollback_fun_error, term()}.
+-spec rollback() -> ok | task_sheduled | {rollback_fun_error, term()}.
 rollback() ->
     rollback(undefined).
 
@@ -80,7 +81,7 @@ rollback() ->
 %% Rollbacks transaction - if rollback fails starts rollback task.
 %% @end
 %%--------------------------------------------------------------------
--spec rollback(Context :: term()) -> ok | {rollback_fun_error, term()}.
+-spec rollback(Context :: term()) -> ok | task_sheduled | {rollback_fun_error, term()}.
 rollback(Context) ->
     rollback(Context, ?NODE_LEVEL).
 
@@ -90,7 +91,7 @@ rollback(Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rollback(Context :: term(), Level :: task_manager:level()) ->
-    ok | {rollback_fun_error, term()}.
+    ok | task_sheduled | {rollback_fun_error, term()}.
 rollback(Context, Level) ->
     [Current | _] = get(?DICT_KEY),
     Funs = Current#tranaction.rollback_funs,
@@ -98,8 +99,10 @@ rollback(Context, Level) ->
         {ok, _, []} ->
             ok;
         {ok, NewContext, RepeatsList} ->
-            start_rollback_task(RepeatsList, NewContext, Level);
+            ok = start_rollback_task(RepeatsList, NewContext, Level),
+            task_sheduled;
         Error ->
+            ok = start_rollback_task(Funs, Context, Level),
             Error
     end,
     commit(),
@@ -159,10 +162,10 @@ run_rollback_funs([Fun | Funs], Context, RepeatsList) ->
         {ok, NewContext} ->
             run_rollback_funs(Funs, NewContext, RepeatsList);
         {retry, NewContext, Reason} ->
-            ?warning("Rollback function to be retried: ~p", [Reason]),
+            ?warning_stacktrace("Rollback function to be retried: ~p", [Reason]),
             run_rollback_funs(Funs, NewContext, [Fun | RepeatsList]);
         Other ->
-            ?error("Rollback function failed: ~p", [Other]),
+            ?error_stacktrace("Rollback function failed: ~p", [Other]),
             {rollback_fun_error, Other}
     end.
 
@@ -184,4 +187,5 @@ start_rollback_task(Funs, Context, Level) ->
                 Error
         end
     end,
+    ?warning_stacktrace("Starting rollback task"),
     task_manager:start_task(Task, Level).
