@@ -16,14 +16,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/4, get_new_file_location/6, unlink/2, truncate/3, get_helper_params/3]).
+-export([get_file_location/3, get_new_file_location/6, unlink/2, truncate/3, get_helper_params/3]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-
-truncate(Ctx, Entry, Size) ->
+truncate(_Ctx, Entry, Size) ->
     Results = lists:map(
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),
@@ -40,6 +39,7 @@ truncate(Ctx, Entry, Size) ->
 
     #fuse_response{status = #status{code = ?OK}}.
 
+
 get_helper_params(_Ctx, SID, _ForceCL) ->
 
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(SID),
@@ -55,11 +55,11 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags(), ForceClusterProxy :: boolean()) ->
-                               no_return().
-get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceClusterProxy) ->
+-spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags()) ->
+                               no_return() | #fuse_response{}.
+get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, Flags) ->
+    ?debug("get_file_location for ~p ~p", [File, Flags]),
     {ok, #document{key = UUID}} = file_meta:get(File),
-    ?error("get_file_location for ~p ~p", [UUID, File]),
     ok = file_watcher:insert_open_watcher(UUID, SessId),
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
@@ -76,7 +76,7 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceC
 %%--------------------------------------------------------------------
 -spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(),
                             Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(),
-                            ForceClusterProxy :: boolean()) -> no_return().
+                            ForceClusterProxy :: boolean()) -> no_return() | #fuse_response{}.
 get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
                       UUID, Name, Mode, _Flags, _ForceClusterProxy) ->
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
@@ -122,9 +122,8 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
                        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.
 
 
-unlink(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    #document{value = #file_location{blocks = Blocks, storage_id = DSID, file_id = DFID} = Location}
-        = fslogic_utils:get_local_file_location(File),
+unlink(#fslogic_ctx{session_id = SessId} = _CTX, File) ->
+    #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
 
     ok = file_meta:delete(File),
 

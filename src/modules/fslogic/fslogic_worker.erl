@@ -51,7 +51,7 @@ init(_Args) ->
         producer = all,
         producer_counter_threshold = 100,
         producer_time_threshold = 500,
-        producer_size_threshold = 1024 * 1024,
+        producer_size_threshold = 1024 * 1024 * 10, %% 10MB
         event_stream = ?WRITE_EVENT_STREAM#event_stream{
             metadata = 0,
             emission_time = 500,
@@ -90,12 +90,6 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
-handle({event, Evts}) ->
-    ?info("FSLOGIC EVENT: ~p", [Evts]),
-    handle_events(Evts);
-handle({file_size_changed, Entry}) ->
-
-    ok;
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -198,8 +192,8 @@ handle_fuse_request(Ctx, #update_times{uuid = UUID, atime = ATime, mtime = MTime
 handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = ParentUUID, flags = Flags,
                                                 force_cluster_proxy = ForceClusterProxy, mode = Mode}) ->
     fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags, ForceClusterProxy);
-handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags, force_cluster_proxy = ForceClusterProxy}) ->
-    fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags, ForceClusterProxy);
+handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
+    fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
 handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->

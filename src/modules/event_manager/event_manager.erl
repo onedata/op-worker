@@ -146,7 +146,7 @@ init([EvtManSup, SessId]) ->
     gen_server:cast(self(), {initialize, EvtManSup}),
     {ok, Subscriptions} = subscription:list(),
     spawn(fun() ->
-        timer:sleep(timer:seconds(3)),
+        timer:sleep(timer:seconds(5)),
         lists:foreach(
             fun(#document{value = #subscription{value = Sub}}) ->
                 ?info("Reregister sub ~p for session ~p", [Sub, SessId]),
@@ -277,7 +277,6 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
-    ?info("TERMINATE EM ~p ~p", [SessId, Reason]),
     ?log_terminate(Reason, State),
     session:update(SessId, #{event_manager => undefined}).
 

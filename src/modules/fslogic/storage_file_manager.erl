@@ -21,7 +21,7 @@
     file :: helpers:file()
 }).
 
--export([mkdir/3, mkdir/4, mv/2, chmod/2, chown/3, link/2]).
+-export([mkdir/3, mkdir/4, mv/2, chmod/3, chown/3, link/2]).
 -export([stat/1, read/3, write/3, create/3, create/4, open/3, truncate/3, unlink/2]).
 
 -type handle() :: #sfm_handle{}.
@@ -85,9 +85,11 @@ mv(_FileHandleFrom, _PathOnStorageTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(FileHandle :: file_handle(), NewPerms :: perms_octal()) -> ok | error_reply().
-chmod(_FileHandle, _NewPerms) ->
-    ok.
+-spec chmod(Storage :: datastore:document(), File :: helpers:file(), NewMode :: perms_octal()) -> ok | error_reply().
+chmod(Storage, File, Mode) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:chmod(HelperHandle, File, Mode).
 
 
 %%--------------------------------------------------------------------

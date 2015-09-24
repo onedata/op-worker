@@ -46,8 +46,27 @@ update_times(_CTX, File, ATime, MTime, CTime) ->
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
     #fuse_response{} | no_return().
 -check_permissions({owner, 2}).
-chmod(_CTX, File, Mode) ->
-    {ok, _} = file_meta:update(File, #{mode => Mode}),
+chmod(_CTX, FileEntry, Mode) ->
+
+    case file_meta:get(FileEntry) of
+        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}}} ->
+            Results = lists:map(
+                fun({SID, FID} = Loc) ->
+                    {ok, Storage} = storage:get(SID),
+                    {Loc, storage_file_manager:chmod(Storage, FID, Mode)}
+                end, fslogic_utils:get_local_storage_file_locations(FileEntry)),
+
+            case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
+                [] -> ok;
+                Errors ->
+                    [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p", [FID, SID, Mode, Reason])
+                        || {{SID, FID}, {error, Reason}} <- Errors],
+                    ok
+            end;
+        _ -> ok
+    end,
+
+    {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
     #fuse_response{status = #status{code = ?OK}}.
 
 
