@@ -13,11 +13,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
--export([get_local_file_location/1]).
+-export([get_local_file_location/1, get_local_storage_file_locations/1]).
 
 
 %%%===================================================================
@@ -74,3 +75,11 @@ get_local_file_location(Entry) ->
 %%     ?error("Locations: ~p ~p", [LProviderId, Locations]),
     [LocalLocation] = [Location || {ok, #document{value = #file_location{provider_id = ProviderId}} = Location} <- Locations, LProviderId =:= ProviderId],
     LocalLocation.
+
+get_local_storage_file_locations(#document{value = #file_location{} = Location}) ->
+    get_local_storage_file_locations(Location);
+get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}) ->
+    lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{storage_id = SID, file_id = FID} <- Blocks]]);
+get_local_storage_file_locations(Entry) ->
+    #document{} = Doc = get_local_file_location(Entry),
+    get_local_storage_file_locations(Doc).

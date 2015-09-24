@@ -24,6 +24,20 @@
 
 
 truncate(Ctx, Entry, Size) ->
+    Results = lists:map(
+        fun({SID, FID} = Loc) ->
+            {ok, Storage} = storage:get(SID),
+            {Loc, storage_file_manager:truncate(Storage, FID, Size)}
+        end, fslogic_utils:get_local_storage_file_locations(Entry)),
+
+    case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
+        [] -> ok;
+        Errors ->
+            [?error("Unable to truncate [FileId: ~p] [StoragId: ~p] to size ~p due to: ~p", [FID, SID, Size, Reason])
+                || {{SID, FID}, {error, Reason}} <- Errors],
+            ok
+    end,
+
     #fuse_response{status = #status{code = ?OK}}.
 
 get_helper_params(_Ctx, SID, _ForceCL) ->
@@ -34,7 +48,7 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
     HelperArgs = [#helper_arg{key = K, value = V} || {K, V} <- maps:to_list(HelperArgsMap)],
 
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #helper_params{helper_name = Name, helper_args = HelperArgs}}.
+                   fuse_response = #helper_params{helper_name = Name, helper_args = HelperArgs}}.
 
 %%--------------------------------------------------------------------
 %% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.
@@ -42,7 +56,7 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags(), ForceClusterProxy :: boolean()) ->
-    no_return().
+                               no_return().
 get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceClusterProxy) ->
     {ok, #document{key = UUID}} = file_meta:get(File),
     ?error("get_file_location for ~p ~p", [UUID, File]),
@@ -53,7 +67,7 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceC
 
 
     #fuse_response{status = #status{code = ?OK}, fuse_response =
-        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = Blocks}}.
+                       #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = Blocks}}.
 
 
 %%--------------------------------------------------------------------
@@ -61,10 +75,10 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, _Flags, _ForceC
 %% @end
 %%--------------------------------------------------------------------
 -spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(),
-    Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(),
-    ForceClusterProxy :: boolean()) -> no_return().
+                            Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(),
+                            ForceClusterProxy :: boolean()) -> no_return().
 get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
-    UUID, Name, Mode, _Flags, _ForceClusterProxy) ->
+                      UUID, Name, Mode, _Flags, _ForceClusterProxy) ->
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
     get_new_file_location(CTX, DefaultSpaceUUID, Name, Mode, _Flags, _ForceClusterProxy);
 get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name, Mode, _Flags, _ForceClusterProxy) ->
@@ -72,21 +86,21 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
-        name = Name,
-        type = ?REGULAR_FILE_TYPE,
-        mode = Mode,
-        mtime = CTime,
-        atime = CTime,
-        ctime = CTime,
-        uid = fslogic_context:get_user_id(CTX)
-    }},
+                                name = Name,
+                                type = ?REGULAR_FILE_TYPE,
+                                mode = Mode,
+                                mtime = CTime,
+                                atime = CTime,
+                                ctime = CTime,
+                                uid = fslogic_context:get_user_id(CTX)
+                               }},
 
     {ok, UUID} = file_meta:create({uuid, ParentUUID}, File),
 
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
-        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = UUID},
+                              provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = UUID},
     {ok, LocId} = file_location:create(#document{value = Location}),
 
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
@@ -99,42 +113,43 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
             ok
     end,
 
-    %% @todo: remove this when this logic will be transferred to oneclient
     storage_file_manager:unlink(Storage, FileId),
     ok = storage_file_manager:create(Storage, FileId, Mode),
 
     ok = file_watcher:insert_open_watcher(UUID, SessId),
 
     #fuse_response{status = #status{code = ?OK}, fuse_response =
-        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.
+                       #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.
 
 
 unlink(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    #document{value = #file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}} = fslogic_utils:get_local_file_location(File),
+    #document{value = #file_location{blocks = Blocks, storage_id = DSID, file_id = DFID} = Location}
+        = fslogic_utils:get_local_file_location(File),
 
     ok = file_meta:delete(File),
 
-    ToDelete = lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{storage_id = SID, file_id = FID} <- Blocks]]),
-    Results = lists:map( %% @todo: run this via task manager
-        fun({StorageId, FileId}) ->
-            case storage:get(StorageId) of
-                {ok, Storage} ->
-                    case storage_file_manager:unlink(Storage, FileId) of
-                        ok -> ok;
-                        {error, Reason1} ->
-                            {{StorageId, FileId}, {error, Reason1}}
-                    end ;
-                {error, Reason2} ->
-                    {{StorageId, FileId}, {error, Reason2}}
-            end
-        end, ToDelete),
+    ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
+    Results =
+        lists:map( %% @todo: run this via task manager
+          fun({StorageId, FileId}) ->
+                  case storage:get(StorageId) of
+                      {ok, Storage} ->
+                          case storage_file_manager:unlink(Storage, FileId) of
+                              ok -> ok;
+                              {error, Reason1} ->
+                                  {{StorageId, FileId}, {error, Reason1}}
+                          end ;
+                      {error, Reason2} ->
+                          {{StorageId, FileId}, {error, Reason2}}
+                  end
+          end, ToDelete),
     case Results -- [ok] of
         [] -> ok;
         Errors ->
             lists:foreach(
-                fun({{SID0, FID0}, {error, Reason0}}) ->
-                    ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
-                end, Errors)
+              fun({{SID0, FID0}, {error, Reason0}}) ->
+                      ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
+              end, Errors)
     end,
 
     #fuse_response{status = #status{code = ?OK}}.
