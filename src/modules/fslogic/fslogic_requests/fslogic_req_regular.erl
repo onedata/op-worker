@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/3, get_new_file_location/6, unlink/2, truncate/3, get_helper_params/3]).
+-export([get_file_location/3, get_new_file_location/6, truncate/3, get_helper_params/3]).
 
 %%%===================================================================
 %%% API functions
@@ -121,35 +121,4 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     #fuse_response{status = #status{code = ?OK}, fuse_response =
                        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.
 
-
-unlink(#fslogic_ctx{session_id = SessId} = _CTX, File) ->
-    #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
-
-    ok = file_meta:delete(File),
-
-    ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
-    Results =
-        lists:map( %% @todo: run this via task manager
-          fun({StorageId, FileId}) ->
-                  case storage:get(StorageId) of
-                      {ok, Storage} ->
-                          case storage_file_manager:unlink(Storage, FileId) of
-                              ok -> ok;
-                              {error, Reason1} ->
-                                  {{StorageId, FileId}, {error, Reason1}}
-                          end ;
-                      {error, Reason2} ->
-                          {{StorageId, FileId}, {error, Reason2}}
-                  end
-          end, ToDelete),
-    case Results -- [ok] of
-        [] -> ok;
-        Errors ->
-            lists:foreach(
-              fun({{SID0, FID0}, {error, Reason0}}) ->
-                      ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
-              end, Errors)
-    end,
-
-    #fuse_response{status = #status{code = ?OK}}.
 

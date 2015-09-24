@@ -120,9 +120,36 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
 -check_permissions([{write, {parent, 2}}, {owner_if_parent_sticky, 2}]).
 delete_file(_, File) ->
     {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
-    {ok, FileChildren} = case Type of
+    {ok, FileChildren} =
+        case Type of
                              ?DIRECTORY_TYPE ->
                                  file_meta:list_children(FileDoc, 0, 1);
+                             ?REGULAR_FILE_TYPE ->
+                                 #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
+                                 ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
+                                 Results =
+                                     lists:map( %% @todo: run this via task manager
+                                         fun({StorageId, FileId}) ->
+                                             case storage:get(StorageId) of
+                                                 {ok, Storage} ->
+                                                     case storage_file_manager:unlink(Storage, FileId) of
+                                                         ok -> ok;
+                                                         {error, Reason1} ->
+                                                             {{StorageId, FileId}, {error, Reason1}}
+                                                     end ;
+                                                 {error, Reason2} ->
+                                                     {{StorageId, FileId}, {error, Reason2}}
+                                             end
+                                         end, ToDelete),
+                                 case Results -- [ok] of
+                                     [] -> ok;
+                                     Errors ->
+                                         lists:foreach(
+                                             fun({{SID0, FID0}, {error, Reason0}}) ->
+                                                 ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
+                                             end, Errors)
+                                 end,
+                                 {ok, []};
                              _ ->
                                  {ok, []}
                          end,

@@ -199,7 +199,7 @@ handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
 handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
 handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
-    fslogic_req_regular:unlink(Ctx, {uuid, UUID});
+    fslogic_req_generic:delete_file(Ctx, {uuid, UUID});
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
