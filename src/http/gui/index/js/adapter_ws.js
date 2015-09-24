@@ -8,8 +8,10 @@ var CREATE_RECORD = 'createRecord';
 var UPDATE_RECORD = 'updateRecord';
 var DELETE_RECORD = 'deleteRecord';
 
-var PULL_REQ = 'pullReq';
 var PULL_RESP = 'pullResp';
+var PULL_REQ = 'pullReq';
+var STATIC_DATA_REQ = 'staticDataReq';
+var STATIC_DATA_RESP = 'staticDataResp';
 var PULL_RESULT = "result";
 var PUSH_REQ = "pushReq";
 
@@ -32,22 +34,22 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
 
     find: function (store, type, id, record) {
         this.logToConsole(FIND, [store, type, id, record]);
-        return this.async_request(FIND, type.typeKey, id);
+        return this.asyncRequest(FIND, type.typeKey, id);
     },
 
     findAll: function (store, type, sinceToken) {
         this.logToConsole(FIND_ALL, [store, type, sinceToken]);
-        return this.async_request(FIND_ALL, type.typeKey, null, sinceToken);
+        return this.asyncRequest(FIND_ALL, type.typeKey, null, sinceToken);
     },
 
     findQuery: function (store, type, query) {
         this.logToConsole(FIND_QUERY, [store, type, query]);
-        return this.async_request(FIND_QUERY, type.typeKey, null, query);
+        return this.asyncRequest(FIND_QUERY, type.typeKey, null, query);
     },
 
     findMany: function (store, type, ids, records) {
         this.logToConsole(FIND_MANY, [store, type, ids, records]);
-        return this.async_request(FIND_MANY, type.typeKey, null, ids);
+        return this.asyncRequest(FIND_MANY, type.typeKey, null, ids);
     },
 
     findHasMany: function (store, record, url, relationship) {
@@ -65,7 +67,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         var data = {};
         var serializer = store.serializerFor(type.typeKey);
         serializer.serializeIntoHash(data, type, record, {includeId: true});
-        return this.async_request(CREATE_RECORD, type.typeKey, null, data);
+        return this.asyncRequest(CREATE_RECORD, type.typeKey, null, data);
     },
 
     updateRecord: function (store, type, record) {
@@ -74,13 +76,13 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         var serializer = store.serializerFor(type.typeKey);
         serializer.serializeIntoHash(data, type, record, {includeId: true});
         var id = Ember.get(record, 'id');
-        return this.async_request(UPDATE_RECORD, type.typeKey, id, data);
+        return this.asyncRequest(UPDATE_RECORD, type.typeKey, id, data);
     },
 
     deleteRecord: function (store, type, record) {
         this.logToConsole(DELETE_RECORD, [store, type, record]);
         var id = Ember.get(record, 'id');
-        return this.async_request(DELETE_RECORD, type.typeKey, id);
+        return this.asyncRequest(DELETE_RECORD, type.typeKey, id);
     },
 
     groupRecordsForFindMany: function (store, records) {
@@ -88,7 +90,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         return [records];
     },
 
-    transform_request: function (json, type, operation) {
+    transformRequest: function (json, type, operation) {
         switch (operation) {
             case UPDATE_RECORD:
                 return json[type];
@@ -103,7 +105,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
 
     // Transform response received from WebScoket to the format expected
     // by ember.
-    transform_response: function (json, type, operation) {
+    transformResponse: function (json, type, operation) {
         switch (operation) {
             case FIND:
                 var records_name = Ember.String.pluralize(
@@ -143,9 +145,9 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         }
     },
 
-    async_request: function (operation, type, ids, data) {
+    asyncRequest: function (operation, type, ids, data) {
         var adapter = this;
-        adapter.logToConsole('async_request', [operation, type, ids, data]);
+        adapter.logToConsole('asyncRequest', [operation, type, ids, data]);
         var uuid = adapter.generateUuid();
         if (!ids) ids = null;
         if (!data) data = null;
@@ -170,7 +172,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
                 operation: operation,
                 entityType: type,
                 entityIds: ids,
-                data: adapter.transform_request(data, type, operation)
+                data: adapter.transformRequest(data, type, operation)
             };
 
             console.log('JSON payload: ' + JSON.stringify(payload));
@@ -237,7 +239,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
             if (json.result == 'ok') {
                 var callback = adapter.callbacks[json.uuid];
                 console.log('success: ' + json.data);
-                var transformed_data = adapter.transform_response(json.data,
+                var transformed_data = adapter.transformResponse(json.data,
                     callback.type, callback.operation);
                 callback.success(transformed_data);
             } else {
@@ -245,14 +247,54 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
                 adapter.callbacks[json.uuid].error(json.data);
             }
             delete adapter.callbacks[json.uuid];
-        } else if (json.msgType = PUSH_REQ) {
+        } else if (json.msgType == PUSH_REQ) {
             App.File.store.pushPayload('file', {
                 file: json.data
             })
+        } else if (json.msgType == STATIC_DATA_RESP) {
+            var callback = adapter.callbacks[json.uuid];
+            callback.success(json.data);
         }
     },
 
     error: function (event) {
         alert(event.data);
+    },
+
+    // Static (read-only) data handling. Useful for getting information like
+    // user name etc. from the server.
+    getStaticData: function (type) {
+        var adapter = this;
+        adapter.logToConsole('getStaticData', [type]);
+        var uuid = adapter.generateUuid();
+
+        return new Ember.RSVP.Promise(function (resolve, reject) {
+            var success = function (json) {
+                Ember.run(null, resolve, json);
+            };
+            var error = function (json) {
+                Ember.run(null, reject, json);
+            };
+            adapter.callbacks[uuid] = {
+                success: success,
+                error: error,
+                type: type
+            };
+
+            var payload = {
+                msgType: STATIC_DATA_REQ,
+                uuid: uuid,
+                entityType: type
+            };
+
+            console.log('JSON payload: ' + JSON.stringify(payload));
+            if (adapter.socket.readyState === 1) {
+                adapter.socket.send(JSON.stringify(payload));
+            }
+            else {
+                adapter.beforeOpenQueue.push(payload);
+            }
+        });
     }
+
 });

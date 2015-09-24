@@ -11,14 +11,18 @@ App.MainRoute = Ember.Route.extend({
     renderTemplate: function () {
         this.render();
 
-        //this.render('top_menu', {
+        //this.render('file_list', {
         //    into: 'main',
-        //    outlet: 'top_menu'
+        //    outlet: 'file_list',
+        //    controller: 'fileList'
         //});
-
-        this.render('file', {
-            into: 'main',
-            outlet: 'file'
-        });
+    },
+    actions: {
+        openModal: function(modalName) {
+            return this.render(modalName, {
+                into: 'main',
+                outlet: 'modal'
+            });
+        }
     }
 });

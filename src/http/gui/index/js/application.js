@@ -5,12 +5,6 @@ window.App = Ember.Application.create({
 });
 
 
-App.ApplicationController = Ember.Controller.extend({
-    global: {
-        user: 'user lol global'
-    }
-    
-});
 
 
 //App.ApplicationAdapter = DS.FixtureAdapter.extend();

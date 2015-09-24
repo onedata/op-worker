@@ -13,51 +13,10 @@
 <body>
 
 <script type="text/x-handlebars" data-template-name="main">
-    {{top-menu user=global.user}}
+    {{top-menu user=global.user_name}}
     <div class="container" style="margin-top: 100px;">
-        <h3>File manager</h3>
-        {{outlet file}}
+        {{render 'file_list' model}}
     </div>
-</script>
-
-
-<script type="text/x-handlebars" data-template-name="file">
-    <table class="table table-hover">
-        <thead>
-        <tr>
-            <td>
-                {{input type="checkbox" id="toggle-all" checked=allAreSelected}}
-            </td>
-            <td>
-                File name
-            </td>
-            <td>
-                Some attribute
-            </td>
-            <td>
-                Actions
-            </td>
-        </tr>
-        </thead>
-        <tbody>
-        {{#each f in model}}
-            <tr>
-                <td>
-                    {{input type="checkbox" checked=f.selected class="toggle"}}
-                </td>
-                <td>
-                    {{f.name}}
-                </td>
-                <td>
-                    {{f.attribute}}
-                </td>
-                <td>
-                    ---
-                </td>
-            </tr>
-        {{/each}}
-        </tbody>
-    </table>
 </script>
 
 <script src="/common/js/jquery-1.11.2.min.js"></script>
@@ -66,10 +25,14 @@
 <script src="/common/js/ember-data.js"></script>
 <script src="/index/js/adapter_ws.js"></script>
 <script src="/index/js/application.js"></script>
+<script src="/index/js/controllers/global_controller.js"></script>
 <script src="/index/js/router.js"></script>
 <script src="/index/js/models/file.js"></script>
-<script src="/index/js/controllers/files_controller.js"></script>
+<script src="/index/js/controllers/file_list_controller.js"></script>
+<script src="/index/js/controllers/main_controller.js"></script>
 <script src="/index/components/components.top-menu.js"></script>
+<script src="/index/templates/file_list.js"></script>
+<script src="/index/templates/create_file_modal.js"></script>
 <!-- Bootstrap JS -->
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js">
 </script>
