@@ -23,4 +23,4 @@ page_init() ->
             {ok, Auth = #auth{}} = gui_auth_manager:authorize(SrlzdMacaroon),
             {ok, _} = g_session:log_in([Auth])
     end,
-    {redirect, "/"}.
+    {redirect_relative, <<"/">>}.
