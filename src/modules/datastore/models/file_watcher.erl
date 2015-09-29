@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Model for holding list of sessions that are registered for
+%%%      attributes and file blocks changes. Key of the model shall match
+%%%      correspnding file_meta entry.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_watcher).

@@ -22,6 +22,14 @@
 %%% API functions
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc Truncates file.
+%% For best performance use following arg types: document -> uuid -> path
+%% @end
+%%--------------------------------------------------------------------
+-spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
+    FuseResponse :: #fuse_response{} | no_return().
 truncate(_Ctx, Entry, Size) ->
     Results = lists:map(
         fun({SID, FID} = Loc) ->
@@ -40,6 +48,13 @@ truncate(_Ctx, Entry, Size) ->
     #fuse_response{status = #status{code = ?OK}}.
 
 
+%%--------------------------------------------------------------------
+%% @doc Truncates file.
+%% For best performance use following arg types: document -> uuid -> path
+%% @end
+%%--------------------------------------------------------------------
+-spec get_helper_params(fslogic_worker:ctx(), StorageId :: storage:id(), ForceCL :: boolean()) ->
+    FuseResponse :: #fuse_response{} | no_return().
 get_helper_params(_Ctx, SID, _ForceCL) ->
 
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(SID),
@@ -49,6 +64,7 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
 
     #fuse_response{status = #status{code = ?OK},
                    fuse_response = #helper_params{helper_name = Name, helper_args = HelperArgs}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.

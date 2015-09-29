@@ -160,7 +160,6 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTy
                 {{SID, FID}, CachedHandle}
         end,
     NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, {{StorageId, FileId}, SFMHandle}, Handle#lfm_handle.sfm_handles)},
-    ?info("WRITE: ~p: ~p", [Offset, binary:part(Buffer, 0, NewSize)]),
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->

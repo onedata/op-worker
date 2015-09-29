@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Model for holding storage configuration.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage).

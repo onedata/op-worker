@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% File handle used by the module
 -record(sfm_handle, {
     helper_handle :: helpers:handle(),
     file :: helpers:file()
@@ -32,12 +33,20 @@
 %%% API
 %%%===================================================================
 
-open(Storage, Path, OpenMode) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens the file. To used opened descriptor, pass returned handle to other functions.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec open(Storage :: datastore:document(), FileId :: helpers:file(), OpenMode :: write | read | rdwr) ->
+    {ok, handle()} | error_reply().
+open(Storage, FileId, OpenMode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    case helpers:open(HelperHandle, Path, OpenMode) of
+    case helpers:open(HelperHandle, FileId, OpenMode) of
         {ok, _} ->
-            {ok, #sfm_handle{helper_handle = HelperHandle, file = Path}};
+            {ok, #sfm_handle{helper_handle = HelperHandle, file = FileId}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -48,21 +57,30 @@ open(Storage, Path, OpenMode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-mkdir(Storage, Path, Mode) ->
-    create(Storage, Path, Mode, false).
+-spec mkdir(Storage :: datastore:document(), FileId :: helpers:file(), Mode :: non_neg_integer()) ->
+    ok | error_reply().
+mkdir(Storage, FileId, Mode) ->
+    create(Storage, FileId, Mode, false).
 
-mkdir(Storage, Path, Mode, Recursive) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a directory on storage. Recursive states whether parent directories shall be also created.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec mkdir(Storage :: datastore:document(), FileId :: helpers:file(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
+    ok | error_reply().
+mkdir(Storage, FileId, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    ?error("helper:mkdir ~p ~p ~p", [HelperHandle, Path, Mode]),
-    case helpers:mkdir(HelperHandle, Path, Mode) of
+    case helpers:mkdir(HelperHandle, FileId, Mode) of
         ok ->
             ok;
         {error, enoent} when Recursive ->
-            Tokens = fslogic_path:split(Path),
+            Tokens = fslogic_path:split(FileId),
             LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
             ok = mkdir(Storage, LeafLess, 8#755, true),
-            mkdir(Storage, Path, Mode, false);
+            mkdir(Storage, FileId, Mode, false);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -159,7 +177,6 @@ create(Storage, Path, Mode) ->
 create(Storage, Path, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    ?error("helper:create ~p ~p ~p", [HelperHandle, Path, Mode]),
     case helpers:mknod(HelperHandle, Path, Mode, reg) of
         ok ->
             ok;

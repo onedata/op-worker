@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Model for holding files' location data.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_location).
@@ -20,12 +20,21 @@
     'after'/5, before/4]).
 -export([run_synchronized/2]).
 
-run_synchronized(ResId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResId, Fun).
 
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
+%% run at the same time.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_synchronized(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
+run_synchronized(ResourceId, Fun) ->
+    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
+
 
 %%--------------------------------------------------------------------
 %% @doc
