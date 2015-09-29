@@ -71,6 +71,12 @@ bash'''
         cert_file=open(cert_file_path, 'r').read(),
         key_file=open(key_file_path, 'r').read())
 
+    volumes = [(bindir, '/root/build', 'ro')]
+    storages = node['storage']
+    for name in storages:
+        s = storages[name]
+        volumes.append((s['host_path'], s['volume_path'], 'rw'))
+
     container = docker.run(
         image=image,
         name=hostname,
@@ -80,7 +86,7 @@ bash'''
         interactive=True,
         tty=True,
         workdir='/root/bin',
-        volumes=[(bindir, '/root/build', 'ro')],
+        volumes=volumes,
         dns_list=dns_servers,
         run_params=["--privileged"],
         command=command)
