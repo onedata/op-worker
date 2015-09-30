@@ -9,6 +9,8 @@ to start.
 
 import copy
 import os
+import sys
+import subprocess
 
 from . import common, docker, dns, globalregistry, provider_worker
 
@@ -90,6 +92,11 @@ bash'''
         dns_list=dns_servers,
         run_params=["--privileged"],
         command=command)
+
+    for user in node['docker_users']:
+        command = "docker exec %s adduser --disabled-password --gecos '' %s" % (container, user)
+        # print command
+        subprocess.check_call(command, stdout=sys.stdout, shell=True)
 
     return {'docker_ids': [container], 'client_nodes': [hostname]}
 
