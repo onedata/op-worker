@@ -112,18 +112,22 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
-    version = 1,
+    version = 1,    %% Snaphot version
     is_scope = false :: boolean()
 }).
 
 
--record(helper_init, {name :: binary(), args :: [binary()]}).
+%% Helper name and its arguments
+-record(helper_init, {name :: binary(), args :: #{binary() => binary()}}).
 
+%% Model for storign file's location data
 -record(storage, {
     name :: binary(),
     helpers :: [#helper_init{}]
 }).
 
+
+%% Model for storign file's location data
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: binary(),
@@ -133,9 +137,9 @@
     size = 0 :: non_neg_integer()
 }).
 
-
+%% Model for tracking open files and watched attributes
 -record(file_watcher, {
-    open_sessions = [],
-    attr_sessions = []
+    open_sessions = [session:id()],
+    attr_sessions = [session:id()]
 }).
 -endif.

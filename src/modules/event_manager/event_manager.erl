@@ -28,29 +28,29 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
+         code_change/3]).
 
 -export_type([event/0, subscription/0, subscription_id/0, producer/0]).
 
 -type event() :: #read_event{} | #write_event{}.
 -type subscription() :: #read_event_subscription{} |
-#write_event_subscription{}.
+                        #write_event_subscription{}.
 -type subscription_id() :: non_neg_integer().
 -type producer() :: gui | all.
 -type event_stream_status() :: {running, EvtStm :: pid(),
-    AdmRule :: event_stream:admission_rule()} | {terminated, EvtStmState :: term(),
-    AddRule :: event_stream:admission_rule(),
-    PendingMsgs :: [{event, event()} | terminate]}.
+                                AdmRule :: event_stream:admission_rule()} | {terminated, EvtStmState :: term(),
+                                                                             AddRule :: event_stream:admission_rule(),
+                                                                             PendingMsgs :: [{event, event()} | terminate]}.
 
 %% event manager state:
 %% session_id       - ID of session associated with event manager
 %% event_stream_sup - pid of event stream supervisor
 %% event_streams    - mapping from subscription ID to event stream status
 -record(state, {
-    session_id :: session:id(),
-    event_stream_sup :: pid(),
-    event_streams = [] :: [{SubId :: subscription_id(), event_stream_status()}]
-}).
+          session_id :: session:id(),
+          event_stream_sup :: pid(),
+          event_streams = [] :: [{SubId :: subscription_id(), event_stream_status()}]
+         }).
 
 %%%===================================================================
 %%% API
@@ -62,7 +62,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(EvtManSup :: pid(), SessId :: session:id()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+                        {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(EvtManSup, SessId) ->
     gen_server:start_link(?MODULE, [EvtManSup, SessId], []).
 
@@ -72,22 +72,12 @@ start_link(EvtManSup, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec emit(Evt :: event(), SessId :: session:id()) ->
-    ok | {error, Reason :: event_manager_not_found | term()}.
+                  ok | {error, Reason :: event_manager_not_found | term()}.
 emit(Evt, SessId) ->
-    ?info("emit event_1 ~p ~p", [Evt, SessId]),
-    case Evt of
-        #write_event{blocks = Blocks} ->
-            lists:foreach(fun(#file_block{offset = Offset, size = Size}) ->
-                ?info("EMIT ~p ~p", [Offset, Size]) end, Blocks),
-            ok;
-        _ -> ok
-    end,
     case session:get_event_manager(SessId) of
         {ok, EvtMan} ->
-            ?info("emit event_2 ~p ~p ~p", [Evt, SessId, EvtMan]),
             gen_server:cast(EvtMan, #client_message{message_body = Evt});
         {error, Reason} ->
-            ?error("emit error event_2 ~p ~p ~p", [Evt, SessId, Reason]),
             {error, Reason}
     end.
 
@@ -117,9 +107,9 @@ unsubscribe(SubId) ->
             case session:list() of
                 {ok, Docs} ->
                     lists:foreach(fun
-                        (#document{value = #session{event_manager = EvtMan}}) ->
-                            gen_server:cast(EvtMan, {unsubscribe, SubId})
-                    end, Docs);
+                                      (#document{value = #session{event_manager = EvtMan}}) ->
+                                         gen_server:cast(EvtMan, {unsubscribe, SubId})
+                                 end, Docs);
                 {error, Reason} -> {error, Reason}
             end;
         {error, Reason} -> {error, Reason}
@@ -136,23 +126,18 @@ unsubscribe(SubId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore.
+                  {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+                  {stop, Reason :: term()} | ignore.
 init([EvtManSup, SessId]) ->
-
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{event_manager => self()}),
-    ?info("INIT EM ~p ~p ~p", [SessId, self(), session:get_event_manager(SessId)]),
     gen_server:cast(self(), {initialize, EvtManSup}),
     {ok, Subscriptions} = subscription:list(),
-    spawn(fun() ->
-        timer:sleep(timer:seconds(5)),
-        lists:foreach(
-            fun(#document{value = #subscription{value = Sub}}) ->
-                ?info("Reregister sub ~p for session ~p", [Sub, SessId]),
-                ok = gen_server:cast(self(), {subscribe, Sub})
-            end, Subscriptions)
-        end),
+    lists:foreach(
+      fun(#document{value = #subscription{value = Sub}}) ->
+              ?info("Reregister sub ~p for session ~p", [Sub, SessId]),
+              ok = gen_server:cast(self(), {subscribe, Sub})
+      end, Subscriptions),
     {ok, #state{session_id = SessId}}.
 
 %%--------------------------------------------------------------------
@@ -162,23 +147,23 @@ init([EvtManSup, SessId]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+                  State :: #state{}) ->
+                         {reply, Reply :: term(), NewState :: #state{}} |
+                         {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
+                         {noreply, NewState :: #state{}} |
+                         {noreply, NewState :: #state{}, timeout() | hibernate} |
+                         {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
+                         {stop, Reason :: term(), NewState :: #state{}}.
 handle_call({event_stream_initialized, SubId}, {EvtStm, _}, #state{
-    event_streams = EvtStms} = State) ->
+                                                               event_streams = EvtStms} = State) ->
     case lists:keyfind(SubId, 1, EvtStms) of
         {SubId, {terminated, EvtStmState, AdmRule, PendingMsgs}} ->
             lists:foreach(fun(Msg) ->
-                gen_server:cast(EvtStm, Msg)
-            end, lists:reverse(PendingMsgs)),
+                                  gen_server:cast(EvtStm, Msg)
+                          end, lists:reverse(PendingMsgs)),
             {reply, {ok, EvtStmState}, State#state{event_streams =
-            lists:keyreplace(SubId, 1, EvtStms, {SubId, {running, EvtStm, AdmRule}})
-            }};
+                                                       lists:keyreplace(SubId, 1, EvtStms, {SubId, {running, EvtStm, AdmRule}})
+                                                  }};
         _ ->
             {reply, undefined, State}
     end;
@@ -194,33 +179,33 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+                         {noreply, NewState :: #state{}} |
+                         {noreply, NewState :: #state{}, timeout() | hibernate} |
+                         {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast({initialize, EvtManSup}, #state{session_id = SessId} = State) ->
     {ok, EvtStmSup} = get_event_stream_sup(EvtManSup),
     {ok, EvtStms} = create_event_streams(EvtStmSup, SessId),
     {noreply, State#state{event_stream_sup = EvtStmSup, event_streams = EvtStms}};
 
 handle_cast({event_stream_terminated, SubId, shutdown, _},
-    #state{event_streams = EvtStms} = State) ->
+            #state{event_streams = EvtStms} = State) ->
     {noreply, State#state{event_streams = lists:keydelete(SubId, 1, EvtStms)}};
 
 handle_cast({event_stream_terminated, SubId, _, EvtStmState},
-    #state{event_streams = EvtStms} = State) ->
+            #state{event_streams = EvtStms} = State) ->
     {SubId, {running, _, AdmRule}} = lists:keyfind(SubId, 1, EvtStms),
     {noreply, State#state{event_streams = lists:keyreplace(SubId, 1, EvtStms,
-        {SubId, {terminated, EvtStmState, AdmRule, []}})
-    }};
+                                                           {SubId, {terminated, EvtStmState, AdmRule, []}})
+                         }};
 
 handle_cast({subscribe, Sub}, #state{event_stream_sup = EvtStmSup,
-    session_id = SessId, event_streams = EvtStms} = State) ->
+                                     session_id = SessId, event_streams = EvtStms} = State) ->
     ?info("do_subscribe ~p ~p", [SessId, Sub]),
     {ok, EvtStm} = create_event_stream(EvtStmSup, SessId, Sub),
     {noreply, State#state{event_streams = [EvtStm | EvtStms]}};
 
 handle_cast({unsubscribe, SubId}, #state{event_stream_sup = EvtStmSup,
-    event_streams = EvtStms, session_id = SessId} = State) ->
+                                         event_streams = EvtStms, session_id = SessId} = State) ->
     {ok, NewEvtStms} = remove_event_stream(EvtStmSup, SessId, SubId, EvtStms),
     {noreply, State#state{event_streams = NewEvtStms}};
 
@@ -228,23 +213,23 @@ handle_cast(#client_message{message_body = #end_of_message_stream{}}, State) ->
     {stop, shutdown, State};
 
 handle_cast(#client_message{message_body = Evt}, #state{
-    event_streams = EvtStms, session_id = SessId} = State) ->
+                                                    event_streams = EvtStms, session_id = SessId} = State) ->
     EnrichedEvt = source_enricher({session, SessId}, Evt),
     NewEvtStms = lists:map(fun
-        ({_, {running, Pid, AdmRule}} = EvtStm) ->
-            ?info("cast event ~p ~p", [EnrichedEvt, AdmRule(EnrichedEvt)]),
-            case AdmRule(EnrichedEvt) of
-                true -> gen_server:cast(Pid, {event, EnrichedEvt}), EvtStm;
-                false -> EvtStm
-            end;
-        ({_, {terminated, EvtStmState, AdmRule, PendingMsgs}} = EvtStm) ->
-            case AdmRule(EnrichedEvt) of
-                true ->
-                    {terminated, EvtStmState, AdmRule, [{event, EnrichedEvt} | PendingMsgs]};
-                false ->
-                    EvtStm
-            end
-    end, EvtStms),
+                               ({_, {running, Pid, AdmRule}} = EvtStm) ->
+                                  ?info("cast event ~p ~p", [EnrichedEvt, AdmRule(EnrichedEvt)]),
+                                  case AdmRule(EnrichedEvt) of
+                                      true -> gen_server:cast(Pid, {event, EnrichedEvt}), EvtStm;
+                                      false -> EvtStm
+                                  end;
+                               ({_, {terminated, EvtStmState, AdmRule, PendingMsgs}} = EvtStm) ->
+                                  case AdmRule(EnrichedEvt) of
+                                      true ->
+                                          {terminated, EvtStmState, AdmRule, [{event, EnrichedEvt} | PendingMsgs]};
+                                      false ->
+                                          EvtStm
+                                  end
+                          end, EvtStms),
     {noreply, State#state{event_streams = NewEvtStms}};
 
 handle_cast(_Request, State) ->
@@ -258,9 +243,9 @@ handle_cast(_Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+                         {noreply, NewState :: #state{}} |
+                         {noreply, NewState :: #state{}, timeout() | hibernate} |
+                         {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {noreply, State}.
@@ -275,7 +260,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term().
+                State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
     session:update(SessId, #{event_manager => undefined}).
@@ -287,7 +272,7 @@ terminate(Reason, #state{session_id = SessId} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
+                  Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -302,7 +287,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_event_stream_sup(EvtManSup :: pid()) ->
-    {ok, EvtStmSup :: pid()} | {error, not_found}.
+                                  {ok, EvtStmSup :: pid()} | {error, not_found}.
 get_event_stream_sup(EvtManSup) ->
     Id = event_stream_sup,
     Children = supervisor:which_children(EvtManSup),
@@ -318,18 +303,18 @@ get_event_stream_sup(EvtManSup) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec subscribe(SubId :: subscription_id(), Sub :: subscription()) ->
-    ok | {error, Reason :: term()}.
+                       ok | {error, Reason :: term()}.
 subscribe(SubId, Sub) ->
     NewSub = set_id(SubId, Sub),
     case subscription:create(#document{key = SubId,
-        value = #subscription{value = NewSub}}) of
+                                       value = #subscription{value = NewSub}}) of
         {ok, SubId} ->
             case session:list() of
                 {ok, Docs} ->
                     lists:foreach(fun
-                        (#document{value = #session{event_manager = EvtMan}}) ->
-                            gen_server:cast(EvtMan, {subscribe, NewSub})
-                    end, Docs);
+                                      (#document{value = #session{event_manager = EvtMan}}) ->
+                                         gen_server:cast(EvtMan, {subscribe, NewSub})
+                                 end, Docs);
                 {error, Reason} -> {error, Reason}
             end;
         {error, Reason} -> {error, Reason}
@@ -342,7 +327,7 @@ subscribe(SubId, Sub) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_id(SubId :: subscription_id(), Sub :: subscription()) ->
-    NewSub :: subscription().
+                    NewSub :: subscription().
 set_id(SubId, #read_event_subscription{} = Sub) ->
     Sub#read_event_subscription{id = SubId};
 set_id(SubId, #write_event_subscription{} = Sub) ->
@@ -355,14 +340,14 @@ set_id(SubId, #write_event_subscription{} = Sub) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_event_streams(EvtStmSup :: pid(), SessId :: session:id()) ->
-    {ok, [{SubId :: subscription_id(), {running, EvtStm :: pid(),
-        AddRule :: event_stream:admission_rule()}}]}.
+                                  {ok, [{SubId :: subscription_id(), {running, EvtStm :: pid(),
+                                                                      AddRule :: event_stream:admission_rule()}}]}.
 create_event_streams(EvtStmSup, SessId) ->
     {ok, Docs} = subscription:list(),
     EvtStms = lists:map(fun(#document{value = #subscription{value = Sub}}) ->
-        {ok, EvtStm} = create_event_stream(EvtStmSup, SessId, Sub),
-        EvtStm
-    end, Docs),
+                                {ok, EvtStm} = create_event_stream(EvtStmSup, SessId, Sub),
+                                EvtStm
+                        end, Docs),
     {ok, EvtStms}.
 
 %%--------------------------------------------------------------------
@@ -373,15 +358,15 @@ create_event_streams(EvtStmSup, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_event_stream(EvtStmSup :: pid(),
-    SessId :: session:id(), Sub :: subscription()) ->
-    {ok, {SubId :: subscription_id(), event_stream_status()}}.
+                          SessId :: session:id(), Sub :: subscription()) ->
+                                 {ok, {SubId :: subscription_id(), event_stream_status()}}.
 create_event_stream(EvtStmSup, SessId, #read_event_subscription{id = SubId,
-    producer = Prod, event_stream = #event_stream{admission_rule =
-    AdmRule} = EvtStmSpec} = Sub) ->
+                                                                producer = Prod, event_stream = #event_stream{admission_rule =
+                                                                                                                  AdmRule} = EvtStmSpec} = Sub) ->
     create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub);
 create_event_stream(EvtStmSup, SessId, #write_event_subscription{id = SubId,
-    producer = Prod, event_stream = #event_stream{admission_rule =
-    AdmRule} = EvtStmSpec} = Sub) ->
+                                                                 producer = Prod, event_stream = #event_stream{admission_rule =
+                                                                                                                   AdmRule} = EvtStmSpec} = Sub) ->
     create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub).
 
 %%--------------------------------------------------------------------
@@ -391,17 +376,17 @@ create_event_stream(EvtStmSup, SessId, #write_event_subscription{id = SubId,
 %% @end
 %%--------------------------------------------------------------------
 -spec create_event_stream(EvtStmSup :: pid(), SessId :: session:id(),
-    SubId :: subscription_id(), Prod :: producer(),
-    AdmRule :: event_stream:admission_rule(),
-    EvtStmSpec :: event_stream:event_stream(), Sub :: subscription()) ->
-    {ok, {SubId :: subscription_id(), event_stream_status()}}.
+                          SubId :: subscription_id(), Prod :: producer(),
+                          AdmRule :: event_stream:admission_rule(),
+                          EvtStmSpec :: event_stream:event_stream(), Sub :: subscription()) ->
+                                 {ok, {SubId :: subscription_id(), event_stream_status()}}.
 create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub) ->
     case Prod of
         gui -> ok;
         _ -> ok = communicator:send(Sub, SessId)
     end,
     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), SubId,
-        EvtStmSpec),
+                                                       EvtStmSpec),
     {ok, {SubId, {running, EvtStm, AdmRule}}}.
 
 %%--------------------------------------------------------------------
@@ -411,8 +396,8 @@ create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_event_stream(EvtStmSup :: pid(), SessId :: session:id(),
-    SubId :: subscription_id(), EvtStms :: [event_stream_status()]) ->
-    {ok, NewEvtStms :: [event_stream_status()]}.
+                          SubId :: subscription_id(), EvtStms :: [event_stream_status()]) ->
+                                 {ok, NewEvtStms :: [event_stream_status()]}.
 remove_event_stream(EvtStmSup, SessId, SubId, EvtStms) ->
     case lists:keyfind(SubId, 1, EvtStms) of
         {SubId, {running, EvtStm, _}} ->
@@ -422,7 +407,7 @@ remove_event_stream(EvtStmSup, SessId, SubId, EvtStms) ->
         {SubId, {terminated, EvtStmState, AdmRule, PendingMsgs}} ->
             ok = communicator:send(#event_subscription_cancellation{id = SubId}, SessId),
             {ok, lists:keyreplace(SubId, 1, EvtStms, {SubId, {terminated,
-                EvtStmState, AdmRule, [terminate | PendingMsgs]}})};
+                                                              EvtStmState, AdmRule, [terminate | PendingMsgs]}})};
         _ ->
             {ok, EvtStms}
     end.

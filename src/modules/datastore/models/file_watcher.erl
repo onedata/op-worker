@@ -22,6 +22,13 @@
 -export([insert_open_watcher/2, insert_attr_watcher/2]).
 -export([get_open_watchers/1, get_attr_watchers/1]).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Save given session as one that has opened given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec insert_open_watcher(Key :: datastore:key(), SessionId :: session:id()) -> ok | {error, term()}.
 insert_open_watcher(Key, SessionId) ->
     datastore:run_synchronized(?MODEL_NAME, res_id(Key),
         fun() ->
@@ -35,6 +42,13 @@ insert_open_watcher(Key, SessionId) ->
             end
         end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Save given session as one that is watching changes on file's attributes.
+%% @end
+%%--------------------------------------------------------------------
+-spec insert_attr_watcher(Key :: datastore:key(), SessionId :: session:id()) -> ok | {error, term()}.
 insert_attr_watcher(Key, SessionId) ->
     datastore:run_synchronized(?MODEL_NAME, res_id(Key),
         fun() ->
@@ -48,6 +62,13 @@ insert_attr_watcher(Key, SessionId) ->
             end
         end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get all sessions that was previousely registered with insert_open_watcher/2
+%% @end
+%%--------------------------------------------------------------------
+-spec get_open_watchers(Key :: datastore:key()) -> [session:id()].
 get_open_watchers(Key) ->
     case get(Key) of
         {ok, #document{value = #file_watcher{open_sessions = OpenSess}}} ->
@@ -56,6 +77,13 @@ get_open_watchers(Key) ->
             []
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get all sessions that was previousely registered with get_attr_watchers/2
+%% @end
+%%--------------------------------------------------------------------
+-spec get_attr_watchers(Key :: datastore:key()) -> [session:id()].
 get_attr_watchers(Key) ->
     case get(Key) of
         {ok, #document{value = #file_watcher{attr_sessions = OpenSess}}} ->
@@ -179,6 +207,6 @@ before(_ModelName, _Method, _Level, _Context) ->
 list() ->
     datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
-
+-spec res_id(datastore:key()) -> binary().
 res_id(Key) ->
     <<"watcher_", Key/binary>>.

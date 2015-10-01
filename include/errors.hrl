@@ -20,7 +20,7 @@
 -define(EIO, 'VEIO').
 -define(ENOTSUP, 'VENOTSUP').
 -define(ENOTEMPTY, 'VENOTEMPTY').
--define(EREMOTEIO, 'VEAGAIN').
+-define(EAGAIN, 'VEAGAIN').
 -define(EPERM, 'VEPERM').
 -define(EINVAL, 'VEINVAL').
 -define(EDQUOT, 'VEDQUOT').
@@ -34,7 +34,7 @@
                 ?EIO |
                 ?ENOTSUP |
                 ?ENOTEMPTY |
-                ?EREMOTEIO |
+                ?EAGAIN |
                 ?EPERM |
                 ?EINVAL |
                 ?EDQUOT |
@@ -43,7 +43,7 @@
 
 %% This macro shall return all errors from above.
 -define(ERROR_CODES, [
-    ?ENOENT, ?EACCES, ?EEXIST, ?EIO, ?ENOTSUP, ?ENOTEMPTY, ?EREMOTEIO,
+    ?ENOENT, ?EACCES, ?EEXIST, ?EIO, ?ENOTSUP, ?ENOTEMPTY, ?EAGAIN,
     ?EPERM, ?EINVAL, ?EDQUOT, ?ENOATTR, ?ECOMM
 ]).
 

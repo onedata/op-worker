@@ -14,6 +14,7 @@
 -define(FUSE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
+-include("modules/datastore/datastore.hrl").
 
 -record(child_link, {
     uuid :: binary(),
@@ -126,7 +127,7 @@
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{}.
 
--type fuse_response() :: #file_attr{} | #file_children{}.
+-type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} | #file_location{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
