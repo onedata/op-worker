@@ -623,7 +623,7 @@ ensure_state_loaded(NodeToSync) ->
 %% Translates store level into list of drivers.
 %% @end
 %%--------------------------------------------------------------------
--spec level_to_driver(Level :: store_level()) -> [Driver :: atom()].
+-spec level_to_driver(Level :: store_level()) -> Driver :: atom() | [atom()].
 level_to_driver(?DISK_ONLY_LEVEL) ->
     ?PERSISTENCE_DRIVER;
 level_to_driver(?LOCAL_ONLY_LEVEL) ->
