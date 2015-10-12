@@ -16,8 +16,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% Rollback function gets Context as only argument.
-%% It should return {ok, Context}, {ok, stop}, {retry, Context, Reason} or {error, Reason}.
--type rollback_fun() :: fun((term()) -> term()).
+%% It should return {ok, NewContext}, {ok, stop}, {retry, Context, Reason} or {error, Reason}.
+-type rollback_fun() :: fun((term()) ->
+    {ok, NewContext :: term()} |
+    {ok, stop} |
+    {retry, NewContext:: term(), Reason :: string()} |
+    {error, Reason :: string()}).
 
 -record(tranaction, {rollback_funs = [] :: [rollback_fun()]}).
 -define(DICT_KEY, transactions_list).
