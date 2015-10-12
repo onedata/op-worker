@@ -117,7 +117,8 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(model_behaviour:model_config(), datastore:document(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:create_error().
+%%     {ok, datastore:ext_key()} | datastore:create_error().
+    no_return().
 create_or_update(#model_config{} = _ModelConfig, #document{key = _Key, value = _Value}, _Diff) ->
     erlang:error(not_implemented).
 
