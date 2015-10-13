@@ -43,9 +43,13 @@ distclean:
 
 rel: generate
 
-test_rel: generate
-	make -C appmock/ rel
+test_rel: generate ccm_rel appmock_rel
+
+ccm_rel:
 	make -C op_ccm/ rel
+
+appmock_rel:
+	make -C appmock/ rel
 
 relclean:
 	rm -rf rel/test_cluster
