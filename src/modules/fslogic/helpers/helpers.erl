@@ -51,7 +51,7 @@ new_handle(#helper_init{name = Name, args = Args}) ->
 new_handle(HelperName, HelperArgs) when is_map(HelperArgs) ->
     new_handle(HelperName, [V || {_K, V} <- maps:to_list(HelperArgs)]);
 new_handle(HelperName, HelperArgs) ->
-    ?info("new_handle ~p ~p", [HelperName, HelperArgs]),
+    ?debug("helpers:new_handle ~p ~p", [HelperName, HelperArgs]),
     {ok, Instance} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
     {ok, CTX} = helpers_nif:new_helper_ctx(),
     #helper_handle{instance = Instance, ctx = CTX}.

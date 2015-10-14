@@ -132,12 +132,6 @@ init([EvtManSup, SessId]) ->
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{event_manager => self()}),
     gen_server:cast(self(), {initialize, EvtManSup}),
-    {ok, Subscriptions} = subscription:list(),
-    lists:foreach(
-      fun(#document{value = #subscription{value = Sub}}) ->
-              ?info("Reregister sub ~p for session ~p", [Sub, SessId]),
-              ok = gen_server:cast(self(), {subscribe, Sub})
-      end, Subscriptions),
     {ok, #state{session_id = SessId}}.
 
 %%--------------------------------------------------------------------

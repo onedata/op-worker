@@ -70,7 +70,7 @@ cp(_PathFrom, _PathTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(fslogic_worker:ctx(), FileKey :: file_key()) -> ok | error_reply().
+-spec unlink(fslogic_worker:ctx(), {uuid, file_uuid()}) -> ok | error_reply().
 unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #unlink{uuid = UUID}}) of
         #fuse_response{status = #status{code = ?OK}} ->
@@ -87,7 +87,7 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(fslogic_worker:ctx(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    {ok, file_id()} | error_reply().
+    {ok, file_uuid()} | error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     ?error("lfm_files:create ~p ~p ~p", [Path, Name, ParentPath]),
@@ -116,7 +116,7 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec open(fslogic_worker:ctx(), FileKey :: file_id_or_path(), OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
+-spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_file_location{uuid = UUID}}) of
         #fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
@@ -221,11 +221,9 @@ truncate(#fslogic_ctx{session_id = SessId}, FileKey, Size) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{uuid = FileUUID}} ->
             #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
             #file_location{blocks = Blocks, file_id = DFID, storage_id = DSID} = LocalLocation,
-            ?info("==============> OMG2 ~p", [LocalLocation]),
             Locations = lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{file_id = FID, storage_id = SID} <- Blocks]]),
             Results = lists:map(
                 fun({SID, FID}) ->
-                    ?info("==============> OMG1 ~p", [{SID, FID}]),
                     {ok, #document{value = Storage}} = storage:get(SID),
                     case storage_file_manager:truncate(Storage, FID, Size) of
                         ok -> ok;
@@ -284,6 +282,6 @@ get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, stora
     {{SID, FID}, S - (Offset - O)};
 get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S} | _]) when Offset + Size =< O ->
     {default, Size};
-get_sfm_handle_key(_UUID, Offset, Size, []) ->
+get_sfm_handle_key(_UUID, _Offset, Size, []) ->
     {default, Size}.
 

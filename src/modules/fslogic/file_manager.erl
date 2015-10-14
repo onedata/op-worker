@@ -51,8 +51,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% User context
--export([set_user_context/1]).
+
 %% Functions operating on directories
 -export([mkdir/2, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
@@ -72,18 +71,6 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets the user context for current process. All logical_files_manager functions
-%% will be evaluated on behalf of the user.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec set_user_context(UserID :: user_id() | root) -> ok | error_reply().
-set_user_context(_UserID) ->
-    % TODO this should call user context lib (or whatever it is called)
-    ok.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -91,9 +78,9 @@ set_user_context(_UserID) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_id()} | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
 mkdir(SessId, Path) ->
-    CTX = fslogic_context:new(SessId),
+    _CTX = fslogic_context:new(SessId),
     lfm_dirs:mkdir(Path).
 
 
@@ -104,7 +91,7 @@ mkdir(SessId, Path) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_id(), file_name()}]} | error_reply().
+-spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, FileKey, Limit, Offset) ->
     CTX = fslogic_context:new(SessId),
     lfm_dirs:ls(FileKey, Limit, Offset).
@@ -178,7 +165,7 @@ unlink(SessId, FileEntry) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    {ok, file_id()} | error_reply().
+    {ok, file_uuid()} | error_reply().
 create(SessId, Path, Mode) ->
     try
         CTX = fslogic_context:new(SessId),
@@ -414,7 +401,7 @@ list_xattr(Path) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_id()} | error_reply().
+-spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_uuid()} | error_reply().
 create_symlink(Path, TargetFileKey) ->
     lfm_links:create_symlink(Path, TargetFileKey).
 
@@ -425,7 +412,7 @@ create_symlink(Path, TargetFileKey) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read_symlink(FileKey :: file_key()) -> {ok, {file_id(), file_name()}} | error_reply().
+-spec read_symlink(FileKey :: file_key()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 read_symlink(FileKey) ->
     lfm_links:read_symlink(FileKey).
 
@@ -460,7 +447,7 @@ create_share(Path, ShareWith) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) -> {ok, {file_id(), file_name()}} | error_reply().
+-spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 get_share(ShareID) ->
     lfm_shares:get_share(ShareID).
 
@@ -475,7 +462,16 @@ get_share(ShareID) ->
 remove_share(ShareID) ->
     lfm_shares:remove_share(ShareID).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given file entry to UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:file()) -> {uuid, file_uuid()}.
 ensure_uuid(_CTX, {uuid, UUID}) ->
+    {uuid, UUID};
+ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
     {uuid, fslogic_path:to_uuid(CTX, Path)}.

@@ -127,7 +127,7 @@ chown(_FileHandle, _User, _Group) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec link(Path :: binary(), TargetFileHandle :: file_handle()) -> {ok, file_id()} | error_reply().
+-spec link(Path :: binary(), TargetFileHandle :: file_handle()) -> {ok, file_uuid()} | error_reply().
 link(_Path, _TargetFileHandle) ->
     {ok, <<"">>}.
 
