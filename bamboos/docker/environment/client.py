@@ -60,8 +60,16 @@ def _node_up(image, bindir, config, config_path, dns_servers):
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
 [ -d /root/build/relwithdebinfo ] && cp /root/build/relwithdebinfo/oneclient /root/bin/oneclient
 [ -d /root/build/debug ] && cp /root/build/debug/oneclient /root/bin/oneclient
-mkdir /root/vfs
+cat <<"EOF" > /tmp/cert
+{cert_file}
+EOF
+cat <<"EOF" > /tmp/key
+{key_file}
+EOF
 bash'''
+    command = command.format(
+        cert_file=open(cert_file_path, 'r').read(),
+        key_file=open(key_file_path, 'r').read())
 
     container = docker.run(
         image=image,
@@ -71,9 +79,8 @@ bash'''
         envs=envs,
         interactive=True,
         tty=True,
-        run_params=['--privileged=true'],
         workdir='/root/bin',
-        volumes=[(bindir, '/root/build', 'ro'), ('/mnt/dio', '/root/dio', 'rw')],
+        volumes=[(bindir, '/root/build', 'ro')],
         dns_list=dns_servers,
         command=command)
 
