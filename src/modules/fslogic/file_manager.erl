@@ -148,9 +148,11 @@ cp(PathFrom, PathTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(FileKey :: file_key()) -> ok | error_reply().
+-spec unlink(file_handle()) -> ok | error_reply().
 unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_uuid = UUID}) ->
     unlink(SessId, {uuid, UUID}).
+
+-spec unlink(session:id(), fslogic_worker:file()) -> ok | error_reply().
 unlink(SessId, FileEntry) ->
     ?run(fun() ->
         CTX = fslogic_context:new(SessId),

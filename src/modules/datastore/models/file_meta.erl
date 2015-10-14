@@ -752,7 +752,7 @@ snapshot_name(FileName, Version) ->
 %% Checks if given filename explicity points at specific version of snaphot.
 %% @end
 %%--------------------------------------------------------------------
--spec is_snapshot(FileName :: name()) -> binary().
+-spec is_snapshot(FileName :: name()) -> boolean().
 is_snapshot(FileName) ->
     try
         [FN, VR] = binary:split(FileName, <<?SNAPSHOT_SEPARATOR>>),
