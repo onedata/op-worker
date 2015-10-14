@@ -134,12 +134,12 @@
     storage_id :: binary(),
     file_id :: binary(),
     blocks :: [],
-    size = 0 :: non_neg_integer()
+    size = 0 :: non_neg_integer() | undefined
 }).
 
 %% Model for tracking open files and watched attributes
 -record(file_watcher, {
-    open_sessions = [session:id()],
-    attr_sessions = [session:id()]
+    open_sessions = [] :: [session:id()],
+    attr_sessions = [] :: [session:id()]
 }).
 -endif.

@@ -158,8 +158,8 @@ update(FileUUID, Blocks, FileSize) ->
 -spec invalidate(datastore:document() | [datastore:document()], Blocks :: blocks()) ->
     ok | no_return().
 invalidate([Location | T], Blocks) ->
-    [invalidate(Location, Blocks) | invalidate(T, Blocks)],
-    ok;
+    ok = invalidate(Location, Blocks),
+    ok = invalidate(T, Blocks);
 invalidate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks) ->
 %%     ?info("OldBlocks invalidate ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = invalidate(Doc, OldBlocks, Blocks),
@@ -177,7 +177,7 @@ invalidate([], _) ->
 %%  Internal impl. of invalidate/2
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate(datastore:document(), blocks(), blocks()) -> blocks().
+-spec invalidate(datastore:document(), blocks(), blocks() | block()) -> blocks().
 invalidate(_Doc, OldBlocks, []) ->
     OldBlocks;
 invalidate(Doc, OldBlocks, [#file_block{} = B | T]) ->
@@ -237,8 +237,8 @@ consolidate([B | T]) ->
 append([], _Blocks) ->
     ok;
 append([Location | T], Blocks) ->
-    [append(Location, Blocks) | append(T, Blocks)],
-    ok;
+    ok = append(Location, Blocks),
+    ok = append(T, Blocks);
 append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks) ->
 %%     ?info("OldBlocks ~p, NewBlocks ~p", [OldBlocks, Blocks]),
     NewBlocks = invalidate(Doc, OldBlocks, Blocks) ++ Blocks,
@@ -281,7 +281,7 @@ do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} 
 %%  Truncates blocks from given location. Works only for shrinking file. Growing is ignored.
 %% @end
 %%--------------------------------------------------------------------
--spec do_remote_truncate(FileSize :: non_neg_integer(), [datastore:document()]) ->
+-spec do_remote_truncate(FileSize :: non_neg_integer(), [datastore:document()] | datastore:document()) ->
     [{ProviderId :: oneprovider:id(), ok}] | no_return().
 do_remote_truncate(_FileSize, []) ->
     [];
