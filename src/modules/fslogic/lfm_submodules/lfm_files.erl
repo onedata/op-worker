@@ -268,12 +268,29 @@ get_block_map(_CTX, File) ->
     {ok, Blocks}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  For given file and byte range, returns storage's ID and file's ID (on storage)
+%%  that shall be used to store this byte range. Also returns maximum byte count that can be
+%%  used for this location. Atom 'default' is returned when location of specific block cannnot be found
+%%  and default locations shall be used instead.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size) ->
     #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, UUID}),
     #file_location{blocks = Blocks} = LocalLocation,
     get_sfm_handle_key(UUID, Offset, Size, Blocks).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Internal impl. of get_sfm_handle_key/3
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer(), fslogic_blocks:blocks() | fslogic_blocks:block()) ->
+    {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size, [#file_block{offset = O, size = S} | T]) when O + S =< Offset ->
     get_sfm_handle_key(UUID, Offset, Size, T);
 get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _]) when Offset >= O, Offset + Size =< O + S ->

@@ -130,10 +130,10 @@
 %% Model for storign file's location data
 -record(file_location, {
     uuid :: file_meta:uuid(),
-    provider_id :: binary(),
-    storage_id :: binary(),
-    file_id :: binary(),
-    blocks :: [],
+    provider_id :: oneprovider:id(),
+    storage_id :: storage:id(),
+    file_id :: helpers:file(),
+    blocks = [] :: [fslogic_blocks:block()],
     size = 0 :: non_neg_integer() | undefined
 }).
 
