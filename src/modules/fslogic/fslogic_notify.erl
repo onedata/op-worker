@@ -24,6 +24,12 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Sends current attributes for given file to all sessions that are watching this file.
+%% @end
+%%--------------------------------------------------------------------
+-spec attributes(fslogic_worker:file(), [session:id()]) -> ok | {error, Reason :: term()}.
 attributes(FileEntry, ExcludedSessions) ->
     case file_manager:stat(?ROOT_SESS_ID, FileEntry) of
         {ok, #file_attr{uuid = FileUUID} = Attrs} ->
@@ -62,12 +68,18 @@ attributes(FileEntry, ExcludedSessions) ->
     end.
 
 
-blocks(FileEntry, Blocks, ExcludedSessions) ->
+%%--------------------------------------------------------------------
+%% @doc
+%%  Sends current locally available blocks for given file to all sessions that are watching this file.
+%% @end
+%%--------------------------------------------------------------------
+-spec blocks(fslogic_worker:file(), fslogic_blocks:blocks(), [session:id()]) -> ok | {error, Reason :: term()}.
+blocks(FileEntry, _Blocks, ExcludedSessions) ->
     try
         {ok, #document{key = FileUUID} = File} = file_meta:get(FileEntry),
         #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
         SessionIds = file_watcher:get_open_watchers(FileUUID) -- ExcludedSessions,
-        ToRemove =
+        _ToRemove =
             lists:foldl(
               fun(SessionId, AccIn) ->
                       try

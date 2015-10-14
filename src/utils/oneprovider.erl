@@ -23,6 +23,11 @@
 -define(GRPCSR_ENV, grpcsr_path).
 -define(GRPCERT_ENV, grpcert_path).
 
+
+-type id() :: binary().
+
+-export_type([id/0]).
+
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
 -export([get_provider_domain/0, get_gr_domain/0]).

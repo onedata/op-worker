@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc This module provides tools for blocks management.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_blocks).
@@ -15,14 +15,11 @@
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type snapshot_id() :: integer().
 
--export_type([snapshot_id/0]).
+-type block() :: #file_block{}.
+-type blocks() :: [block()].
 
--record(byte_range, {
-    offset = 0,
-    size = 0
-}).
+-export_type([block/0, blocks/0]).
 
 %% API
 -export([calculate_file_size/1, update/3, get_file_size/1]).
@@ -33,6 +30,11 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  For given blocks, returns last byte number + 1.
+%% @end
+%%--------------------------------------------------------------------
 -spec upper(#file_block{} | [#file_block{}]) -> non_neg_integer().
 upper(#file_block{offset = Offset, size = Size}) ->
     Offset + Size;
@@ -42,6 +44,11 @@ upper([]) ->
     0.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  For given blocks, returns first block number.
+%% @end
+%%--------------------------------------------------------------------
 -spec lower(#file_block{} | [#file_block{}]) -> non_neg_integer().
 lower(#file_block{offset = Offset}) ->
     Offset;
@@ -51,7 +58,13 @@ lower([]) ->
     0.
 
 
--spec calculate_file_size(File :: fslogic_worker:file()) -> Size :: non_neg_integer() | no_return().
+%%--------------------------------------------------------------------
+%% @doc
+%%  For given file / location or multiple locations, calculates file size based on blocks assigned to those locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec calculate_file_size(datastore:document() | #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
+    Size :: non_neg_integer() | no_return().
 calculate_file_size(#document{value = #file_location{} = Value}) ->
     calculate_file_size(Value);
 calculate_file_size(#file_location{blocks = []}) ->
@@ -70,6 +83,13 @@ calculate_file_size(Entry) ->
 
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file / location or multiple locations, reads file size assigned to those locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_size(datastore:document() | #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
+    Size :: non_neg_integer() | no_return().
 get_file_size(#document{value = #file_location{} = Value}) ->
     get_file_size(Value);
 get_file_size(#file_location{size = undefined} = Location) ->
@@ -87,6 +107,16 @@ get_file_size(Entry) ->
     get_file_size(Locations1).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Appends given blocks to the file's local location and invalidates those blocks in its remote locations.
+%%  This function in synchronized on the file.
+%%  FileSize argument may be used to truncate file's blocks if needed.
+%%  Return value tells whether file size has been changed by this call.
+%% @end
+%%--------------------------------------------------------------------
+-spec update(FileUUID :: file_meta:uuid(), Blocks :: blocks(), FileSize :: non_neg_integer() | undefined) ->
+    {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
 update(FileUUID, Blocks, FileSize) ->
     file_location:run_synchronized(FileUUID, fun() ->
         try
@@ -119,12 +149,14 @@ update(FileUUID, Blocks, FileSize) ->
         end
     end).
 
-invalidate_and_truncate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks) ->
-    NewBlocks = invalidate(Doc, OldBlocks, Blocks),
-    NewBlocks1 = consolidate(lists:sort(NewBlocks)),
-    {ok, _} = file_location:save(Doc#document{value = Loc#file_location{blocks = NewBlocks1, size = upper(NewBlocks1)}}),
-    ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Inavlidates given blocks in given locations. File size is also updated.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate(datastore:document() | [datastore:document()], Blocks :: blocks()) ->
+    ok | no_return().
 invalidate([Location | T], Blocks) ->
     [invalidate(Location, Blocks) | invalidate(T, Blocks)],
     ok;
@@ -134,11 +166,18 @@ invalidate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Bl
 %%     ?info("NewBlocks invalidate ~p", [NewBlocks]),
     NewBlocks1 = consolidate(lists:sort(NewBlocks)),
 %%     ?info("NewBlocks1 invalidate ~p", [NewBlocks1]),
-    {ok, _} = file_location:save(Doc#document{value = Loc#file_location{blocks = NewBlocks1}}),
+    {ok, _} = file_location:save(Doc#document{value = Loc#file_location{blocks = NewBlocks1, size = upper(NewBlocks1)}}),
     ok;
 invalidate([], _) ->
     ok.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%%  Internal impl. of invalidate/2
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate(datastore:document(), blocks(), blocks()) -> blocks().
 invalidate(_Doc, OldBlocks, []) ->
     OldBlocks;
 invalidate(Doc, OldBlocks, [#file_block{} = B | T]) ->
@@ -159,7 +198,42 @@ invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offse
     [C#file_block{size = DO - CO}, C#file_block{offset = DO + DS, size = CO + CS - (DO + DS)} | invalidate(Doc, T, D)].
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Removes empty and invalid blocks and merges them whenever it is possible.
+%% @end
+%%--------------------------------------------------------------------
+-spec consolidate(blocks()) -> blocks().
+consolidate([]) ->
+    [];
+consolidate([#file_block{size = 0} | T]) ->
+    consolidate(T);
+consolidate([#file_block{size = Size} = B | T]) when Size < 0 ->
+    ?warning("Skipping invalid block: ~p", [B]),
+    consolidate(T);
+consolidate([B]) ->
+    [B];
+consolidate([#file_block{offset = LO, size = LS, file_id = FID, storage_id = SID} = B,
+    #file_block{offset = RO, size = RS, file_id = FID, storage_id = SID} | T]) when LO + LS >= RO + RS ->
+    consolidate([B | T]);
+consolidate([#file_block{offset = LO, size = LS, file_id = FID, storage_id = SID} = B,
+    #file_block{offset = RO, size = RS, file_id = FID, storage_id = SID} | T]) when LO + LS >= RO ->
+    consolidate([B#file_block{size = RO + RS - LO} | T]);
+consolidate([B | T]) ->
+    [B | consolidate(T)].
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%%  Appends given blocks to given locations and updates file size for those locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec append(datastore:document() | [datastore:document()], blocks()) -> ok | no_return().
 append([], _Blocks) ->
     ok;
 append([Location | T], Blocks) ->
@@ -176,41 +250,39 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
     ok.
 
 
-consolidate([]) ->
-    [];
-consolidate([#file_block{size = 0} | T]) ->
-    consolidate(T);
-consolidate([#file_block{size = Size} = B | T]) when Size < 0 ->
-    ?error("Invalid block: ~p", [B]),
-    consolidate(T);
-consolidate([B]) ->
-    [B];
-consolidate([#file_block{offset = LO, size = LS, file_id = FID, storage_id = SID} = B,
-             #file_block{offset = RO, size = RS, file_id = FID, storage_id = SID} | T]) when LO + LS >= RO + RS ->
-    consolidate([B | T]);
-consolidate([#file_block{offset = LO, size = LS, file_id = FID, storage_id = SID} = B,
-    #file_block{offset = RO, size = RS, file_id = FID, storage_id = SID} | T]) when LO + LS >= RO ->
-    consolidate([B#file_block{size = RO + RS - LO} | T]);
-consolidate([B | T]) ->
-    [B | consolidate(T)].
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
+%%--------------------------------------------------------------------
+%% @doc
+%%  Performs truncate operation on given locations. Nota that on remote locations only shrinking will be done.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_truncate(FileSize :: non_neg_integer(), LocalLocation :: datastore:document(), RemoteLocations :: [datastore:document()]) ->
+    {LocalResult :: ok, RemoteResults :: [{ProviderId :: oneprovider:id(), ok}]} | no_return().
 do_truncate(FileSize, #document{value = #file_location{}} = LocalLocation, RemoteLocations) ->
     {do_local_truncate(FileSize, LocalLocation), do_remote_truncate(FileSize, RemoteLocations)}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Truncates blocks from given location. Works for both shrinking and growing file.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_local_truncate(FileSize :: non_neg_integer(), datastore:document()) -> ok | no_return().
 do_local_truncate(FileSize, #document{value = #file_location{size = FileSize}}) ->
     ok;
 do_local_truncate(FileSize, #document{value =
                     #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
     append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}]);
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} = LocalLocation) when LocalSize > FileSize ->
-    invalidate_and_truncate(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}]).
+    invalidate(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Truncates blocks from given location. Works only for shrinking file. Growing is ignored.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_remote_truncate(FileSize :: non_neg_integer(), [datastore:document()]) ->
+    [{ProviderId :: oneprovider:id(), ok}] | no_return().
 do_remote_truncate(_FileSize, []) ->
     [];
 do_remote_truncate(FileSize, [Location | T]) ->
@@ -219,5 +291,5 @@ do_remote_truncate(FileSize, #document{value = #file_location{provider_id = Prov
     {ProviderId, ok};
 do_remote_truncate(FileSize, #document{value = #file_location{provider_id = ProviderId, size = RemoteSize}}) when RemoteSize < FileSize ->
     {ProviderId, ok};
-do_remote_truncate(FileSize, #document{key = LocId, value = #file_location{provider_id = ProviderId, size = RemoteSize}} = Loc) when RemoteSize > FileSize ->
-    {ProviderId, invalidate_and_truncate(Loc, [#file_block{offset = FileSize, size = RemoteSize - FileSize}])}.
+do_remote_truncate(FileSize, #document{key = _LocId, value = #file_location{provider_id = ProviderId, size = RemoteSize}} = Loc) when RemoteSize > FileSize ->
+    {ProviderId, invalidate(Loc, [#file_block{offset = FileSize, size = RemoteSize - FileSize}])}.
