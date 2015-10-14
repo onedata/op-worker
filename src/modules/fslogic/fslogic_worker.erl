@@ -62,10 +62,8 @@ init(_Args) ->
     ?info("FSLogic subscribe"),
     SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
 
-    case event_manager:subscribe(Sub) of
+    case event_manager:subscribe(SubId, Sub) of
         ok ->
-            ok;
-        {ok, _} ->
             ok;
         {error, already_exists} ->
             ok

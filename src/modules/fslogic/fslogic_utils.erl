@@ -62,12 +62,16 @@ get_parent(File) ->
     {ok, Doc} = file_meta:get_parent(File),
     Doc.
 
+-spec gen_storage_file_id(Entry :: fslogic_worker:file()) ->
+    helpers:file() | no_return().
 gen_storage_file_id(Entry) ->
     {ok, Path} = file_meta:gen_path(Entry),
     {ok, #document{value = #file_meta{version = Version}}} = file_meta:get(Entry),
     file_meta:snapshot_name(Path, Version).
 
 
+-spec get_local_file_location(fslogic_worker:file()) ->
+    datastore:document() | no_return().
 get_local_file_location(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),
@@ -76,6 +80,8 @@ get_local_file_location(Entry) ->
     [LocalLocation] = [Location || {ok, #document{value = #file_location{provider_id = ProviderId}} = Location} <- Locations, LProviderId =:= ProviderId],
     LocalLocation.
 
+-spec get_local_storage_file_locations(datastore:document() | #file_location{} | fslogic_worker:file()) ->
+    [{storage:id(), helpers:file()}] | no_return().
 get_local_storage_file_locations(#document{value = #file_location{} = Location}) ->
     get_local_storage_file_locations(Location);
 get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}) ->

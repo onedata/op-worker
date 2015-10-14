@@ -196,7 +196,7 @@ create(Storage, Path, Mode, Recursive) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(Storage :: #document{}, Path :: file_handle(), Size :: integer()) -> ok | error_reply().
+-spec truncate(Storage :: #document{}, Path :: helpers:file(), Size :: integer()) -> ok | error_reply().
 truncate(Storage, Path, Size) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),

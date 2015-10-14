@@ -67,7 +67,7 @@ new_helper_init(HelperName, HelperArgs) ->
 %%  Creates new storage structure.
 %% @end
 %%--------------------------------------------------------------------
--spec new_storage(Name :: storage:name(), #helper_init{}) -> #storage{}.
+-spec new_storage(Name :: storage:name(), [#helper_init{}]) -> #storage{}.
 new_storage(Name, Helpers) ->
     #storage{name = Name, helpers = Helpers}.
 

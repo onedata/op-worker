@@ -13,7 +13,7 @@
 
 %% Internal opaque file-handle used by logical_file_manager
 -record(lfm_handle, {
-    sfm_handles :: storage_file_manager:handle(),
+    sfm_handles = #{} :: #{term() => {term(), storage_file_manager:handle()}},
     fslogic_ctx :: fslogic_worker:ctx(),
     file_uuid :: file_meta:uuid(),
     open_type :: rw | rd | rdwr
