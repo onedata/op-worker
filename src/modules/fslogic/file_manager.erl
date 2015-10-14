@@ -200,7 +200,8 @@ open(SessId, FileKey, OpenType) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
+-spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) ->
+    {ok, NewHandle :: file_handle(), integer()} | error_reply().
 write(FileHandle, Offset, Buffer) ->
     Size = size(Buffer),
     try lfm_files:write(FileHandle, Offset, Buffer) of
@@ -230,7 +231,8 @@ write(FileHandle, Offset, Buffer) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
+-spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: file_handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
     try lfm_files:read(FileHandle, Offset, MaxSize) of
         {error, Reason} ->
