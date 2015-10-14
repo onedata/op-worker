@@ -15,6 +15,8 @@
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+
+
 %% API
 -export([new_handle/1, new_handle/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
@@ -26,8 +28,10 @@
 -type file() :: binary().
 -type error_code() :: atom().
 -type handle() :: #helper_handle{}.
+-type name() :: binary().
+-type args() :: #{binary() => binary()}.
 
--export_type([file/0, error_code/0, handle/0]).
+-export_type([file/0, error_code/0, handle/0, name/0, args/0]).
 
 %%%===================================================================
 %%% API

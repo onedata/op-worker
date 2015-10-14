@@ -19,8 +19,9 @@
 
 
 -type id() :: datastore:uuid().
+-type name() :: binary().
 
--export_type([id/0]).
+-export_type([id/0, name/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Module for storage management.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_storage).
@@ -21,21 +21,53 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Returns any available storage for given fslogic ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec select_helper(datastore:document() | #storage{}) -> {ok, #helper_init{}} | {error, Reason :: term()}.
 select_helper(#document{value = Storage}) ->
     select_helper(Storage);
-select_helper(Storage) ->
-    #storage{helpers = [Helper | _]} = Storage,
+select_helper(#storage{helpers = []} = Storage) ->
+    {error, {no_helper_available, Storage}};
+select_helper(#storage{helpers = [Helper | _]}) ->
     {ok, Helper}.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%%  Returns any available storage for given fslogic ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec select_storage(fslogic_worker:ctx()) -> {ok, datastore:document()} | {error, Reason :: term()}.
 select_storage(#fslogic_ctx{}) ->
-    {ok, [#document{} = Storage | _]} = storage:list(),
-    {ok, Storage}.
+    %% For now just return any available storage.
+    case storage:list() of
+        {ok, [#document{} = Storage | _]} ->
+            {ok, Storage};
+        {ok, []} ->
+            {error, {not_found, storage}};
+        E -> E
+    end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Creates new helper_init structure.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_helper_init(HelperName :: helpers:name(), HelperArgs :: helpers:args()) -> #helper_init{}.
 new_helper_init(HelperName, HelperArgs) ->
     #helper_init{name = HelperName, args = HelperArgs}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%%  Creates new storage structure.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_storage(Name :: storage:name(), #helper_init{}) -> #storage{}.
 new_storage(Name, Helpers) ->
     #storage{name = Name, helpers = Helpers}.
 

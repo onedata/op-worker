@@ -118,11 +118,11 @@
 
 
 %% Helper name and its arguments
--record(helper_init, {name :: binary(), args :: #{binary() => binary()}}).
+-record(helper_init, {name :: helpers:name(), args :: helpers:args()}).
 
 %% Model for storign file's location data
 -record(storage, {
-    name :: binary(),
+    name :: storage:name(),
     helpers :: [#helper_init{}]
 }).
 
