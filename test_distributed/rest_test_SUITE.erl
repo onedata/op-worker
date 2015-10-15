@@ -22,11 +22,11 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([rest_token_auth/1, rest_cert_auth/1]).
+-export([token_auth/1, cert_auth/1, internal_error_when_handler_crashes/1]).
 
 %todo reenable rest_cert_auth after appmock repair
 -performance({test_cases, []}).
-all() -> [rest_token_auth].
+all() -> [token_auth, internal_error_when_handler_crashes].
 
 -define(MACAROON, "macaroon").
 
@@ -34,7 +34,7 @@ all() -> [rest_token_auth].
 %%% API
 %%%===================================================================
 
-rest_token_auth(Config) ->
+token_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
@@ -47,7 +47,7 @@ rest_token_auth(Config) ->
     ?assertMatch({ok, "401", _, _}, AuthFail),
     ?assertMatch({ok, "404", _, _}, AuthSuccess).
 
-rest_cert_auth(Config) ->
+cert_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
@@ -68,6 +68,20 @@ rest_cert_auth(Config) ->
     Loc3 = proplists:get_value("location", Headers3),
     ?assertMatch({ok, "404", _, _}, ibrowse:send_req(Loc3, [], get, [], [KnownCertOpt])).
 
+internal_error_when_handler_crashes(Config) ->
+    % given
+    Workers = [Worker | _] = ?config(op_worker_nodes, Config),
+    Endpoint = rest_endpoint(Worker),
+    test_utils:mock_expect(Workers, rest_handler, is_authorized,
+        fun(_, _) -> throw(test_crash) end),
+
+    % when
+    {ok, Status, _, _} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+
+    % then
+    ?assertEqual("500", Status).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -77,12 +91,23 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
+init_per_testcase(internal_error_when_handler_crashes, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ssl:start(),
+    ibrowse:start(),
+    test_utils:mock_new(Workers, rest_handler),
+    Config;
 init_per_testcase(_, Config) ->
     ssl:start(),
     ibrowse:start(),
     mock_gr_certificates(Config),
     Config.
 
+end_per_testcase(internal_error_when_handler_crashes, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, rest_handler),
+    ibrowse:stop(),
+    ssl:stop();
 end_per_testcase(_, Config) ->
     unmock_gr_certificates(Config),
     ibrowse:stop(),
