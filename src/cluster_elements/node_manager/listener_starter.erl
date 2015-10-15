@@ -188,7 +188,7 @@ start_rest_listener() ->
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
 
     RestDispatch = [
-        {'_', rest_routes:top_level_routing()}
+        {'_', rest_router:top_level_routing()}
     ],
 
     % Start the listener for REST handler
