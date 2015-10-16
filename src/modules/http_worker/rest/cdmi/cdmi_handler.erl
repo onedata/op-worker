@@ -19,7 +19,7 @@
 -record(state, {}).
 
 %% API
--export([init/3, terminate/3, rest_init/2, resource_exists/2, malformed_request/2,
+-export([terminate/3, rest_init/2, resource_exists/2, malformed_request/2,
     allowed_methods/2, content_types_provided/2, content_types_accepted/2,
     delete_resource/2]).
 
@@ -29,17 +29,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Imposes a cowboy upgrade protocol to cowboy_rest - this module is
-%% now treated as REST module by cowboy.
-%% @end
-%%--------------------------------------------------------------------
--spec init(term(), term(), term()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
-init(_, Req, Opts) ->
-    {upgrade, protocol, cowboy_rest, Req, Opts}.
 
 %%--------------------------------------------------------------------
 %% @doc

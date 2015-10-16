@@ -12,6 +12,8 @@
 -module(rest_router).
 -author("Tomasz Lichon").
 
+-include("modules/http_worker/rest/handler_description.hrl").
+
 %% API
 -export([top_level_routing/0]).
 
@@ -40,7 +42,11 @@ top_level_routing() ->
 -spec custom_api_routes() -> list().
 custom_api_routes() ->
     [
-        {"/rest/:version/[...]", rest_handler, []}
+        {"/rest/:version/[...]", pre_handler, #handler_description{
+            handler = rest_handler,
+            exception_handler = fun request_exception_handler:handle/4,
+            handler_initial_opts = []
+        }}
     ].
 
 %%--------------------------------------------------------------------
@@ -51,7 +57,19 @@ custom_api_routes() ->
 -spec cdmi_routes() -> list().
 cdmi_routes() ->
     [
-        {"/cdmi/cdmi_capabilities/[...]", cdmi_handler, []},
-        {"/cdmi/cdmi_objectid/:id/[...]", cdmi_handler, []},
-        {"/cdmi/[...]", cdmi_handler,[]}
+        {"/cdmi/cdmi_capabilities/[...]", pre_handler, #handler_description{
+            handler = cdmi_handler,
+            exception_handler = fun request_exception_handler:handle/4,
+            handler_initial_opts = []
+        }},
+        {"/cdmi/cdmi_objectid/:id/[...]", pre_handler, #handler_description{
+            handler = cdmi_handler,
+            exception_handler = fun request_exception_handler:handle/4,
+            handler_initial_opts = []
+        }},
+        {"/cdmi/[...]", pre_handler,#handler_description{
+            handler = cdmi_handler,
+            exception_handler = fun request_exception_handler:handle/4,
+            handler_initial_opts = []
+        }}
     ].
