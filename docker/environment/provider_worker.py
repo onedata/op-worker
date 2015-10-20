@@ -81,10 +81,10 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         gid=os.getegid())
 
     volumes = [(bindir, '/root/build', 'ro')]
-    storages = config['nodes']['node']['storage']
-    for name in storages:
-        s = storages[name]
-        volumes.append((s['host_path'], s['volume_path'], 'rw'))
+    # storages = config['nodes']['node']['storage']
+    # for name in storages:
+    #     s = storages[name]
+    #     volumes.append((s['host_path'], s['volume_path'], 'rw'))
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
