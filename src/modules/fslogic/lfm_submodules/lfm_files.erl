@@ -34,7 +34,6 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if a file or directory exists.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
@@ -45,7 +44,6 @@ exists(_FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Moves a file or directory to a new location.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
@@ -56,7 +54,6 @@ mv(_FileKeyFrom, _PathTo) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Copies a file or directory to given location.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
@@ -67,7 +64,6 @@ cp(_PathFrom, _PathTo) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file or an empty directory.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(fslogic_worker:ctx(), {uuid, file_uuid()}) -> ok | error_reply().
@@ -83,18 +79,18 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec create(fslogic_worker:ctx(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    {ok, file_uuid()} | error_reply().
+                    {ok, file_uuid()} | error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    ?error("lfm_files:create ~p ~p ~p", [Path, Name, ParentPath]),
+    ?debug("lfm_files:create ~p ~p ~p", [Path, Name, ParentPath]),
     {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode}}) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
-            %% @todo: handle different cluster_ids (via cluster proxy)
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
+                                            #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode}}) of
+        #fuse_response{status = #status{code = ?OK},
+                       fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             case storage_file_manager:create(Storage, FileId, Mode, true) of
                 ok ->
@@ -102,7 +98,6 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
                     {ok, UUID};
                 {error, Reason} ->
                     file_meta:delete({uuid, UUID}),
-                    %% @todo: cleanup
                     {error, Reason}
             end;
         #fuse_response{status = #status{code = Code}} ->
@@ -113,21 +108,19 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Opens a file in selected mode and returns a file handle used to read or write.
-%%
 %% @end
 %%--------------------------------------------------------------------
--spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
+-spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_file_location{uuid = UUID}}) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
-            %% @todo: handle different cluster_ids (via cluster proxy)
+        #fuse_response{status = #status{code = ?OK},
+                       fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             case storage_file_manager:open(Storage, FileId, OpenType) of
                 {ok, SFMHandle} ->
-                    {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, SFMHandle}}]), fslogic_ctx = CTX,
-                                     file_uuid = UUID, open_type = OpenType}};
+                    {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, SFMHandle}}]),
+                                     fslogic_ctx = CTX, file_uuid = UUID, open_mode = OpenType}};
                 {error, Reason} ->
-                    %% @todo: cleanup
                     {error, Reason}
             end;
         #fuse_response{status = #status{code = Code}} ->
@@ -138,34 +131,23 @@ open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Writes data to a file. Returns number of written bytes.
-%%
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, file_handle(), integer()} | error_reply().
-write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenType,
+-spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) ->
+                   {ok, file_handle(), integer()} | error_reply().
+write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
                   fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer) ->
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, byte_size(Buffer)),
-    {{StorageId, FileId}, SFMHandle} =
-        case maps:get(Key, SFMHandles, undefined) of
-            undefined ->
-                {SID, FID} = Key,
-                {ok, #document{value = Storage}} = storage:get(SID),
-                case storage_file_manager:open(Storage, FID, OpenType) of
-                    {ok, NewSFMHandle} ->
-                        {{SID, FID}, NewSFMHandle};
-                    {error, Reason1} ->
-                        {error, Reason1}
-                end;
-            {{SID, FID}, CachedHandle} ->
-                {{SID, FID}, CachedHandle}
-        end,
-    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, {{StorageId, FileId}, SFMHandle}, Handle#lfm_handle.sfm_handles)},
+    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
-            ok = event_manager:emit(#write_event{file_uuid = UUID, blocks = [
-                #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = Written}
-            ]}, SessId),
+            ok = event_manager:emit(
+                   #write_event{
+                      file_uuid = UUID,
+                      blocks = [
+                                #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = Written}
+                               ]}, SessId),
             {ok, NewHandle, Written};
         {error, Reason2} ->
             {error, Reason2}
@@ -175,34 +157,25 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTy
 %%--------------------------------------------------------------------
 %% @doc
 %% Reads requested part of a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, file_handle(), binary()} | error_reply().
-read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenType,
+-spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
+                  {ok, file_handle(), binary()} | error_reply().
+read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
                  fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize) ->
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, MaxSize),
-    {{StorageId, FileId}, SFMHandle} =
-        case maps:get(Key, SFMHandles, undefined) of
-            undefined ->
-                {SID, FID} = Key,
-                {ok, #document{value = Storage}} = storage:get(SID),
-                case storage_file_manager:open(Storage, FID, OpenType) of
-                    {ok, NewSFMHandle} ->
-                        {{SID, FID}, NewSFMHandle};
-                    {error, Reason1} ->
-                        {error, Reason1}
-                end;
-            {{SID, FID}, CachedHandle} ->
-                {{SID, FID}, CachedHandle}
-        end,
-    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, {{StorageId, FileId}, SFMHandle}, Handle#lfm_handle.sfm_handles)},
-    %FileSize = fslogic_blocks:get_file_size({uuid, UUID}),
+    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
+
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
-            ok = event_manager:emit(#read_event{file_uuid = UUID, blocks = [
-                #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = size(Data)}
-            ]}, SessId),
+            ok = event_manager:emit(
+                   #read_event{
+                      file_uuid = UUID,
+                      blocks = [
+                                #file_block{
+                                   file_id = FileId, storage_id = StorageId,
+                                   offset = Offset, size = size(Data)}
+                               ]}, SessId),
             {ok, NewHandle, Data};
         {error, Reason2} ->
             {error, Reason2}
@@ -212,44 +185,13 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_type = OpenTyp
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(fslogic_worker:ctx(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
-truncate(#fslogic_ctx{session_id = SessId}, FileKey, Size) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_file_attr{entry = FileKey}}) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{uuid = FileUUID}} ->
-            #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
-            #file_location{blocks = Blocks, file_id = DFID, storage_id = DSID} = LocalLocation,
-            Locations = lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{file_id = FID, storage_id = SID} <- Blocks]]),
-            Results = lists:map(
-                fun({SID, FID}) ->
-                    {ok, #document{value = Storage}} = storage:get(SID),
-                    case storage_file_manager:truncate(Storage, FID, Size) of
-                        ok -> ok;
-                        {error, Reason} ->
-                            ?error("Cannot truncate file ~p on storage ~p due to: ~p", [FID, SID, Reason]),
-                            {error, Reason}
-                    end
-                end, Locations),
-
-            Failures = Results -- [ok],
-            OKs = Results -- Failures,
-
-            EmitTruncate =
-                fun() ->
-                    event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId)
-                end,
-
-            case {OKs, Failures} of
-                {_, []} ->      %% Full success
-                    EmitTruncate();
-                {[_ | _], _} -> %% Partial success
-                    EmitTruncate();
-                {[], Errors} ->
-                    Reasons = [Reason0 || {error, Reason0} <- Errors],
-                    {error, Reasons}
-            end;
+-spec truncate(fslogic_worker:ctx(), FileUUID :: file_uuid(), Size :: non_neg_integer()) -> ok | error_reply().
+truncate(#fslogic_ctx{session_id = SessId}, FileUUID, Size) ->
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #truncate{uuid = FileUUID}}) of
+        #fuse_response{status = #status{code = ?OK}} ->
+            event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId);
         #fuse_response{status = #status{code = Code}} ->
             {error, Code}
     end.
@@ -258,7 +200,6 @@ truncate(#fslogic_ctx{session_id = SessId}, FileKey, Size) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns block map for a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec get_block_map(fslogic_worker:ctx(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
@@ -270,14 +211,14 @@ get_block_map(_CTX, File) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%%  For given file and byte range, returns storage's ID and file's ID (on storage)
-%%  that shall be used to store this byte range. Also returns maximum byte count that can be
-%%  used for this location. Atom 'default' is returned when location of specific block cannnot be found
-%%  and default locations shall be used instead.
+%% For given file and byte range, returns storage's ID and file's ID (on storage)
+%% that shall be used to store this byte range. Also returns maximum byte count that can be
+%% used for this location. Atom 'default' is returned when location of specific block cannnot be found
+%% and default locations shall be used instead.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {default | {storage:id(), helpers:file()}, non_neg_integer()}.
+                                {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size) ->
     #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, UUID}),
     #file_location{blocks = Blocks} = LocalLocation,
@@ -286,19 +227,50 @@ get_sfm_handle_key(UUID, Offset, Size) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%%  Internal impl. of get_sfm_handle_key/3
+%% Internal impl. of get_sfm_handle_key/3
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer(), fslogic_blocks:blocks() | fslogic_blocks:block()) ->
-    {default | {storage:id(), helpers:file()}, non_neg_integer()}.
+                                {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size, [#file_block{offset = O, size = S} | T]) when O + S =< Offset ->
     get_sfm_handle_key(UUID, Offset, Size, T);
-get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _]) when Offset >= O, Offset + Size =< O + S ->
+get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _])
+  when Offset >= O, Offset + Size =< O + S ->
     {{SID, FID}, Size};
-get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _]) when Offset >= O, Offset + Size > O + S ->
+get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _])
+  when Offset >= O, Offset + Size > O + S ->
     {{SID, FID}, S - (Offset - O)};
 get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S} | _]) when Offset + Size =< O ->
     {default, Size};
 get_sfm_handle_key(_UUID, _Offset, Size, []) ->
     {default, Size}.
 
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Helper function for read/write handles caching. Returns given handle or creates new and updates master handle.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sfm_handle_n_update_handle(Handle :: file_handle(), Key :: term(), SFMHandles :: sfm_handles_map(),
+                                     OpenType :: helpers:open_mode()) ->
+                                            {{StorageId :: storage:id(), FileId :: file_uuid()},
+                                             SFMHandle :: storage_file_manager:handle(),
+                                             NewHandle :: file_handle()} |  no_return().
+get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType) ->
+    {{StorageId, FileId}, SFMHandle} =
+        case maps:get(Key, SFMHandles, undefined) of
+            undefined ->
+                {SID, FID} = Key,
+                {ok, #document{value = Storage}} = storage:get(SID),
+                case storage_file_manager:open(Storage, FID, OpenType) of
+                    {ok, NewSFMHandle} ->
+                        {{SID, FID}, NewSFMHandle};
+                    {error, Reason1} ->
+                        {error, Reason1}
+                end;
+            {{SID, FID}, CachedHandle} ->
+                {{SID, FID}, CachedHandle}
+        end,
+    NewHandle = Handle#lfm_handle{sfm_handles = maps:put(Key, {{StorageId, FileId}, SFMHandle}, Handle#lfm_handle.sfm_handles)},
+    {{StorageId, FileId}, SFMHandle, NewHandle}.

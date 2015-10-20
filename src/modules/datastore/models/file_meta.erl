@@ -39,7 +39,10 @@
 -define(ROOT_DIR_UUID, <<"">>).
 -define(ROOT_DIR_NAME, <<"">>).
 
+%% Separator used in filename for specifying snapshot version.
 -define(SNAPSHOT_SEPARATOR, "::").
+
+%% Prefix for link name for #file_location link
 -define(LOCATION_PREFIX, "location_").
 
 %% model_behaviour callbacks

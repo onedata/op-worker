@@ -10,11 +10,12 @@
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").
 
+-type sfm_handles_map() :: #{term() => {term(), storage_file_manager:handle()}}.
 
 %% Internal opaque file-handle used by logical_file_manager
 -record(lfm_handle, {
-    sfm_handles = #{} :: #{term() => {term(), storage_file_manager:handle()}},
+    sfm_handles = #{} :: sfm_handles_map(),
     fslogic_ctx :: fslogic_worker:ctx(),
     file_uuid :: file_meta:uuid(),
-    open_type :: rw | rd | rdwr
+    open_mode :: helpers:open_mode()
 }).

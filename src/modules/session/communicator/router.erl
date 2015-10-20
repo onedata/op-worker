@@ -36,10 +36,10 @@
 -spec preroute_message(Msg :: #client_message{}, SessId :: session:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
-    ?info("Fuse msg ~p", [Msg]),
+    ?debug("preroute_message fuse msg ~p", [Msg]),
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    ?info("Fuse msg ~p", [Msg]),
+    ?debug("preroute_message fuse msg ~p", [Msg]),
     sequencer_manager:route_message(Msg, SessId).
 
 %%--------------------------------------------------------------------

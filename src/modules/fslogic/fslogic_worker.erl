@@ -59,7 +59,6 @@ init(_Args) ->
             handlers = [fun(Evts) -> handle_events(Evts) end]
         }
     },
-    ?info("FSLogic subscribe"),
     SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
 
     case event_manager:subscribe(SubId, Sub) of
@@ -120,7 +119,7 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
     try
         ?debug("Processing request: ~p", [FuseRequest]),
         Resp = handle_fuse_request(fslogic_context:new(SessId), FuseRequest),
-        ?info("Fuse request ~p from user ~p: ~p", [FuseRequest, SessId, Resp]),
+        ?debug("Fuse request ~p from user ~p: ~p", [FuseRequest, SessId, Resp]),
         Resp
     catch
         Reason ->
@@ -207,16 +206,13 @@ handle_events([]) ->
 handle_events([Event | T]) ->
     [handle_events(Event) | handle_events(T)];
 handle_events(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize, source = Source} = T) ->
-    ?info("FSLOGIC EVENT: ~p", [T]),
+    ?debug("fslogic handle_events: ~p", [T]),
     ExcludedSessions =
         case Source of
             {session, SessionId} ->
                 [SessionId]
         end,
-    case FileSize of
-        undefined -> ok;
-        _ -> ?info("TRUNCATE WUT ~p", [T])
-    end,
+
     case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
         {ok, size_changed} ->
             fslogic_notify:attributes({uuid, FileUUID}, ExcludedSessions),

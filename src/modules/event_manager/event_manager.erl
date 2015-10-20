@@ -194,7 +194,7 @@ handle_cast({event_stream_terminated, SubId, _, EvtStmState},
 
 handle_cast({subscribe, Sub}, #state{event_stream_sup = EvtStmSup,
                                      session_id = SessId, event_streams = EvtStms} = State) ->
-    ?info("do_subscribe ~p ~p", [SessId, Sub]),
+    ?debug("handle_cast({subscribe, ~p} for session ~p", [Sub, SessId]),
     {ok, EvtStm} = create_event_stream(EvtStmSup, SessId, Sub),
     {noreply, State#state{event_streams = [EvtStm | EvtStms]}};
 
@@ -211,7 +211,7 @@ handle_cast(#client_message{message_body = Evt}, #state{
     EnrichedEvt = source_enricher({session, SessId}, Evt),
     NewEvtStms = lists:map(fun
                                ({_, {running, Pid, AdmRule}} = EvtStm) ->
-                                  ?info("cast event ~p ~p", [EnrichedEvt, AdmRule(EnrichedEvt)]),
+                                  ?debug("cast event ~p, AdmRule: ~p", [EnrichedEvt, AdmRule(EnrichedEvt)]),
                                   case AdmRule(EnrichedEvt) of
                                       true -> gen_server:cast(Pid, {event, EnrichedEvt}), EvtStm;
                                       false -> EvtStm

@@ -71,7 +71,7 @@ chmod(_CTX, FileEntry, Mode) ->
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
-    spawn(fun() -> catch fslogic_notify:attributes(FileEntry, []) end),
+    spawn(fun() -> fslogic_notify:attributes(FileEntry, []) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 

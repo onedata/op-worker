@@ -24,6 +24,7 @@
 -define(GRPCERT_ENV, grpcert_path).
 
 
+%% ID of this provider (assigned by global registry)
 -type id() :: binary().
 
 -export_type([id/0]).

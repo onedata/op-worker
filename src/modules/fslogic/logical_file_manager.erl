@@ -14,7 +14,7 @@
 %%% This module is merely a convenient wrapper that calls functions from lfm_xxx modules.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_manager).
+-module(logical_file_manager).
 
 
 % TODO Issues connected with logical_files_manager
@@ -41,6 +41,7 @@
         _:{badmatch, {error, {not_found, file_meta}}} ->
             {error, ?ENOENT};
         _:___Reason ->
+            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason]),
             {error, ___Reason}
     end).
 
@@ -188,7 +189,7 @@ create(SessId, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_type()) -> {ok, file_handle()} | error_reply().
+-spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:open(CTX, ensure_uuid(CTX, FileKey), OpenType).

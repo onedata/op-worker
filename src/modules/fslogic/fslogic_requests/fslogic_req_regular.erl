@@ -24,24 +24,26 @@
 
 
 %%--------------------------------------------------------------------
-%% @doc Truncates file.
+%% @doc Truncates file on storage and returns only if operation is complete. Does not change file size in
+%%      #file_meta model. Model's size should be changed by write events.
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
-    FuseResponse :: #fuse_response{} | no_return().
+                      FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{write, 2}]).
 truncate(_Ctx, Entry, Size) ->
     Results = lists:map(
-        fun({SID, FID} = Loc) ->
-            {ok, Storage} = storage:get(SID),
-            {Loc, storage_file_manager:truncate(Storage, FID, Size)}
-        end, fslogic_utils:get_local_storage_file_locations(Entry)),
+                fun({SID, FID} = Loc) ->
+                        {ok, Storage} = storage:get(SID),
+                        {Loc, storage_file_manager:truncate(Storage, FID, Size)}
+                end, fslogic_utils:get_local_storage_file_locations(Entry)),
 
     case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
         [] -> ok;
         Errors ->
             [?error("Unable to truncate [FileId: ~p] [StoragId: ~p] to size ~p due to: ~p", [FID, SID, Size, Reason])
-                || {{SID, FID}, {error, Reason}} <- Errors],
+             || {{SID, FID}, {error, Reason}} <- Errors],
             ok
     end,
 
@@ -49,12 +51,11 @@ truncate(_Ctx, Entry, Size) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Truncates file.
-%% For best performance use following arg types: document -> uuid -> path
+%% @doc Gets helper params based on given session and storage ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_helper_params(fslogic_worker:ctx(), StorageId :: storage:id(), ForceCL :: boolean()) ->
-    FuseResponse :: #fuse_response{} | no_return().
+                               FuseResponse :: #fuse_response{} | no_return().
 get_helper_params(_Ctx, SID, _ForceCL) ->
 
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(SID),
@@ -73,6 +74,7 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags()) ->
                                no_return() | #fuse_response{}.
+-check_permissions([{read, 2}]).
 get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, Flags) ->
     ?debug("get_file_location for ~p ~p", [File, Flags]),
     {ok, #document{key = UUID}} = file_meta:get(File),
@@ -93,6 +95,7 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, Flags) ->
 -spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(),
                             Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(),
                             ForceClusterProxy :: boolean()) -> no_return() | #fuse_response{}.
+-check_permissions([{write, {parent, 2}}]).
 get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
                       UUID, Name, Mode, _Flags, _ForceClusterProxy) ->
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),

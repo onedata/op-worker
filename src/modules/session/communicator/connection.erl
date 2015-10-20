@@ -235,13 +235,10 @@ code_change(_OldVsn, State, _Extra) ->
     {noreply, NewState :: #sock_state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #sock_state{}}.
 handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
-%%     ?info("Data: ~p", [Data]),
     try serializator:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined ->
-%%             ?info("Fuse handle_handshake ~p ~p", [Msg, Data]),
             handle_handshake(State, Msg);
         {ok, Msg} ->
-%%             ?info("Fuse handle_normal_message ~p ~p", [Msg, Data]),
             handle_normal_message(State, Msg)
     catch
         _:Error ->

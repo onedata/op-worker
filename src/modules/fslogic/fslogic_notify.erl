@@ -32,30 +32,15 @@
 %%--------------------------------------------------------------------
 -spec attributes(fslogic_worker:file(), [session:id()]) -> ok | {error, Reason :: term()}.
 attributes(FileEntry, ExcludedSessions) ->
-    case file_manager:stat(?ROOT_SESS_ID, FileEntry) of
+    case logical_file_manager:stat(?ROOT_SESS_ID, FileEntry) of
         {ok, #file_attr{uuid = FileUUID} = Attrs} ->
             try
                 SessionIds = file_watcher:get_attr_watchers(FileUUID) -- ExcludedSessions,
-                ToRemove =
-                    lists:foldl(
-                      fun(SessionId, AccIn) ->
-                              try
-                                  case session:get(SessionId) of
-                                      {ok, _} ->
-                                          ?info("Sending new attributes for file ~p to session ~p", [FileEntry, SessionId]),
-                                          communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Attrs}, SessionId);
-                                      {error, {not_found, _}} ->
-                                          [SessionId | AccIn];
-                                      {error, Reason3} ->
-                                          ?error("Unable to notify session ~p due to: ~p", [SessionId, Reason3]),
-                                          AccIn
-                                  end
-                              catch
-                                  _:Reason2 ->
-                                      ?error("Unable to notify session ~p due to: ~p", [SessionId, Reason2]),
-                                      AccIn
-                              end
-                      end, [], SessionIds),
+                _ToRemove = for_each_session(SessionIds,
+                    fun(SessionId) ->
+                        ?info("Sending new attributes for file ~p to session ~p", [FileEntry, SessionId]),
+                        communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Attrs}, SessionId);
+                    end),
                 %% @todo: remove ToRemove sessions from watchers
                 ok
             catch
@@ -80,26 +65,11 @@ blocks(FileEntry, _Blocks, ExcludedSessions) ->
         {ok, #document{key = FileUUID} = File} = file_meta:get(FileEntry),
         #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
         SessionIds = file_watcher:get_open_watchers(FileUUID) -- ExcludedSessions,
-        _ToRemove =
-            lists:foldl(
-              fun(SessionId, AccIn) ->
-                      try
-                          case session:get(SessionId) of
-                              {ok, _} ->
-                                  ?info("Sending new location for file ~p to session ~p", [FileEntry, SessionId]),
-                                  communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Location}, SessionId);
-                              {error, {not_found, _}} ->
-                                  [SessionId | AccIn];
-                              {error, Reason3} ->
-                                  ?error("Unable to notify session ~p due to: ~p", [SessionId, Reason3]),
-                                  AccIn
-                          end
-                      catch
-                          _:Reason2 ->
-                              ?error("Unable to notify session ~p due to: ~p", [SessionId, Reason2]),
-                              AccIn
-                      end
-              end, [], SessionIds),
+        _ToRemove = for_each_session(SessionIds,
+            fun(SessionId) ->
+                ?info("Sending new location for file ~p to session ~p", [FileEntry, SessionId]),
+                communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Location}, SessionId);
+            end),
         %% @todo: remove ToRemove sessions from watchers
         ok
     catch
@@ -111,3 +81,31 @@ blocks(FileEntry, _Blocks, ExcludedSessions) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Applys given function for each given session id. Returns list of invalid sessions ids.
+%% @end
+%%--------------------------------------------------------------------
+-spec for_each_session(SessionIds :: [session:id()], fun((session:id()) -> any()) ->
+    InvalidSessions :: [session:id()].
+for_each_session(SessionIds, Fun) ->
+    lists:foldl(
+        fun(SessionId, AccIn) ->
+            try
+                case session:get(SessionId) of
+                    {ok, _} ->
+                        Fun(SessionId),
+                        AccIn;
+                    {error, {not_found, _}} ->
+                        [SessionId | AccIn];
+                    {error, Reason3} ->
+                        ?error("Unable to notify session ~p due to: ~p", [SessionId, Reason3]),
+                        AccIn
+                end
+            catch
+                _:Reason2 ->
+                    ?error("Unable to notify session ~p due to: ~p", [SessionId, Reason2]),
+                    AccIn
+            end
+        end, [], SessionIds).

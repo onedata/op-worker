@@ -168,7 +168,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(system, [{file_meta, create}, {file_meta, delete}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(system, [{file_meta, create}, {file_meta, save}, {file_meta, delete}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -180,6 +180,8 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(file_meta, create, _Level, _Context, {ok, Key}) ->
+    create(#document{key = Key, value = #file_watcher{}});
+'after'(file_meta, save, _Level, _Context, {ok, Key}) ->
     create(#document{key = Key, value = #file_watcher{}});
 'after'(file_meta, delete, _Level, _Context, {ok, Key}) ->
     delete(Key);

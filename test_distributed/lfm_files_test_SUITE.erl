@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests of sequencer manager API.
+%%% This file contains tests of logical_file_manager API.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm_files_test_SUITE).
@@ -181,8 +181,8 @@ lfm_write_test(Config) ->
     WriteAndTest(W, Handle11, 6, <<"qwerty">>),
     WriteAndTest(W, Handle12, 6, <<"qwerty">>),
 
-%%     WriteAndTest(W, Handle11, 10, crypto:rand_bytes(100)),
-%%     WriteAndTest(W, Handle12, 10, crypto:rand_bytes(100)),
+    WriteAndTest(W, Handle11, 10, crypto:rand_bytes(100)),
+    WriteAndTest(W, Handle12, 10, crypto:rand_bytes(100)),
 
     ok.
 
@@ -475,7 +475,7 @@ stat(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                file_manager:stat(SessId, FileKey),
+                logical_file_manager:stat(SessId, FileKey),
             Host ! {self(), Result}
         end).
 
@@ -484,7 +484,7 @@ truncate(Worker, SessId, FileKey, Size) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                file_manager:truncate(SessId, FileKey, Size),
+                logical_file_manager:truncate(SessId, FileKey, Size),
             Host ! {self(), Result}
         end).
 
@@ -493,7 +493,7 @@ create(Worker, SessId, FilePath, Mode) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                file_manager:create(SessId, FilePath, Mode),
+                logical_file_manager:create(SessId, FilePath, Mode),
             Host ! {self(), Result}
         end).
 
@@ -501,7 +501,7 @@ unlink(Worker, SessId, File) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                file_manager:unlink(SessId, File),
+                logical_file_manager:unlink(SessId, File),
             Host ! {self(), Result}
         end).
 
@@ -510,7 +510,7 @@ open(Worker, SessId, FileKey, OpenMode) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                case file_manager:open(SessId, FileKey, OpenMode) of
+                case logical_file_manager:open(SessId, FileKey, OpenMode) of
                     {ok, Handle} ->
                         TestHandle = crypto:rand_bytes(10),
                         ets:insert(lfm_handles, {TestHandle, Handle}),
@@ -525,7 +525,7 @@ read(Worker, TestHandle, Offset, Size) ->
         fun(Host) ->
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
             Result =
-                case file_manager:read(Handle, Offset, Size) of
+                case logical_file_manager:read(Handle, Offset, Size) of
                     {ok, NewHandle, Res}  ->
                         ets:insert(lfm_handles, {TestHandle, NewHandle}),
                         {ok, Res};
@@ -539,7 +539,7 @@ write(Worker, TestHandle, Offset, Bytes) ->
         fun(Host) ->
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
             Result =
-                case file_manager:write(Handle, Offset, Bytes) of
+                case logical_file_manager:write(Handle, Offset, Bytes) of
                     {ok, NewHandle, Res}  ->
                         ets:insert(lfm_handles, {TestHandle, NewHandle}),
                         {ok, Res};

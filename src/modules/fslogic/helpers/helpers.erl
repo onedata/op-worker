@@ -26,12 +26,13 @@
 -record(helper_handle, {instance, ctx, timeout = timer:seconds(30)}).
 
 -type file() :: binary().
+-type open_mode() :: write | read | rdwr.
 -type error_code() :: atom().
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
 -type args() :: #{binary() => binary()}.
 
--export_type([file/0, error_code/0, handle/0, name/0, args/0]).
+-export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0]).
 
 %%%===================================================================
 %%% API
@@ -173,7 +174,7 @@ truncate(#helper_handle{} = HelperHandle, File, Size) ->
 %%      First argument shall be #helper_handle{} from new_handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec open(handle(), File :: file(), OpenMode :: write | read | rdwr) -> {ok, FD :: non_neg_integer()} | {error, term()}.
+-spec open(handle(), File :: file(), OpenMode :: open_mode()) -> {ok, FD :: non_neg_integer()} | {error, term()}.
 open(#helper_handle{} = HelperHandle, File, write) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_WRONLY']),
     apply_helper_nif(HelperHandle, open, [File]);

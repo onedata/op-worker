@@ -74,12 +74,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
-        {ok, #document{value = #file_location{blocks = Blocks}}} = Res ->
-%%             ?info("GET Bloks: ~p", [Blocks]),
-            Res;
-        Res0 -> Res0
-    end.
+    datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,7 +101,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations, [{file_location, save}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

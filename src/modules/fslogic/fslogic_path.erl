@@ -112,7 +112,6 @@ get_canonical_file_entry(Ctx, Tokens) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
         onedata_user:get(UserId),
-    ?info("Get space ~p", [DefaultSpaceId]),
     {ok, #document{value = #file_meta{name = DefaultSpaceName}}} = file_meta:get(DefaultSpaceId),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME,
         DefaultSpaceName | Tokens]),
@@ -173,6 +172,13 @@ ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) ->
     Path;
 ensure_path_begins_with_slash(Path) -> <<?DIRECTORY_SEPARATOR, Path/binary>>.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given file path to UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_uuid(fslogic_worker:ctx(), file_meta:path()) -> file_meta:uuid().
 to_uuid(CTX, Path) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),

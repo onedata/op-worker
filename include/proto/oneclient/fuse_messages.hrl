@@ -85,8 +85,7 @@
 
 -record(get_file_location, {
     uuid :: file_meta:uuid(),
-    flags :: atom(),
-    force_cluster_proxy = false :: boolean()
+    flags :: atom()
 }).
 
 -record(unlink, {

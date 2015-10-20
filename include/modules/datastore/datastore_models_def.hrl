@@ -42,7 +42,10 @@
 %% List of all global caches
 -define(GLOBAL_CACHES, [
     some_record,
-    file_meta
+    file_meta,
+    storage,
+    file_location,
+    file_watcher
 ]).
 
 %% List of all local caches
@@ -118,16 +121,19 @@
 
 
 %% Helper name and its arguments
--record(helper_init, {name :: helpers:name(), args :: helpers:args()}).
+-record(helper_init, {
+    name :: helpers:name(),
+    args :: helpers:args()
+}).
 
-%% Model for storign file's location data
+%% Model for storing storage information
 -record(storage, {
     name :: storage:name(),
     helpers :: [#helper_init{}]
 }).
 
 
-%% Model for storign file's location data
+%% Model for storing file's location data
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: oneprovider:id(),
@@ -139,7 +145,7 @@
 
 %% Model for tracking open files and watched attributes
 -record(file_watcher, {
-    open_sessions = [] :: [session:id()],
-    attr_sessions = [] :: [session:id()]
+    open_sessions = [] :: [session:id()], %% Sessions that opened th file
+    attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
 }).
 -endif.

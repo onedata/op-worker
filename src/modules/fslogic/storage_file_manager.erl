@@ -39,7 +39,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec open(Storage :: datastore:document(), FileId :: helpers:file(), OpenMode :: write | read | rdwr) ->
+-spec open(Storage :: datastore:document(), FileId :: helpers:file(), OpenMode :: helpers:open_mode()) ->
     {ok, handle()} | error_reply().
 open(Storage, FileId, OpenMode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
@@ -54,18 +54,16 @@ open(Storage, FileId, OpenMode) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a directory on storage.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(Storage :: datastore:document(), FileId :: helpers:file(), Mode :: non_neg_integer()) ->
     ok | error_reply().
 mkdir(Storage, FileId, Mode) ->
-    create(Storage, FileId, Mode, false).
+    mkdir(Storage, FileId, Mode, false).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a directory on storage. Recursive states whether parent directories shall be also created.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(Storage :: datastore:document(), FileId :: helpers:file(), Mode :: non_neg_integer(), Recursive :: boolean()) ->

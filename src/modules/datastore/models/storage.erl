@@ -14,7 +14,10 @@
 
 -include("modules/datastore/datastore_model.hrl").
 
+%% ID of root storage which links to all registered storage to simplify list/1 operation
 -define(ROOT_STORAGE, <<"root_storage">>).
+
+%% Resource ID used to sync all operations on this model
 -define(STORAGE_LOCK_ID, <<"storage_res_id">>).
 
 
@@ -109,7 +112,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(system, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(system_config_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
