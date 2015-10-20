@@ -39,7 +39,7 @@ attributes(FileEntry, ExcludedSessions) ->
                 _ToRemove = for_each_session(SessionIds,
                     fun(SessionId) ->
                         ?info("Sending new attributes for file ~p to session ~p", [FileEntry, SessionId]),
-                        communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Attrs}, SessionId);
+                        communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Attrs}, SessionId)
                     end),
                 %% @todo: remove ToRemove sessions from watchers
                 ok
@@ -68,7 +68,7 @@ blocks(FileEntry, _Blocks, ExcludedSessions) ->
         _ToRemove = for_each_session(SessionIds,
             fun(SessionId) ->
                 ?info("Sending new location for file ~p to session ~p", [FileEntry, SessionId]),
-                communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Location}, SessionId);
+                communicator:send(#fuse_response{status = #status{code = ?OK}, fuse_response = Location}, SessionId)
             end),
         %% @todo: remove ToRemove sessions from watchers
         ok
