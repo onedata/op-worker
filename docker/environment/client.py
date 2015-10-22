@@ -23,7 +23,6 @@ def client_hostname(node_name, uid):
 
 
 def _tweak_config(config, sys_config, name, uid):
-    # print(config)
     cfg = copy.deepcopy(config)
     cfg = {'node': cfg[name]}
     node = cfg['node']
@@ -45,44 +44,14 @@ def _tweak_config(config, sys_config, name, uid):
         if 'token' in client.keys():
             client_config['token'] = client['token']
 
-        # print "############## CLIENT #################"
-        # print client_config
         node['clients'].append(client_config)
-    # print "############# CFG ##############"
-    # print cfg
     return cfg
 
 
 def _node_up(image, bindir, config, config_path, dns_servers):
-    print("### CONFIG ###")
-    print(config)
     node = config['node']
     hostname = node['name']
     sys_config = config['sys_config']
-    print hostname
-
-    # @doc obsolete way of defining clients in env.json
-    #
-    # cert_file_path = node['user_cert']
-    # key_file_path = node['user_key']
-    # # cert_file_path and key_file_path can both be an absolute path
-    # # or relative to gen_dev_args.json
-    # cert_file_path = os.path.join(common.get_file_dir(config_path),
-    #                               cert_file_path)
-    # key_file_path = os.path.join(common.get_file_dir(config_path),
-    #                              key_file_path)
-    #
-    # node['user_cert'] = '/tmp/cert'
-    # node['user_key'] = '/tmp/key'
-    #
-    # envs = {'X509_USER_CERT': node['user_cert'],
-    #         'X509_USER_KEY': node['user_key'],
-    #         'PROVIDER_HOSTNAME': node['op_domain'],
-    #         'GLOBAL_REGISTRY_URL': node['gr_domain']}
-
-    # We want the binary from debug more than relwithdebinfo, and any of these
-    # more than from release (ifs are in reverse order so it works when
-    # there are multiple dirs).
 
     command = '''set -e
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
@@ -91,8 +60,8 @@ def _node_up(image, bindir, config, config_path, dns_servers):
 bash'''
 
     volumes = [(bindir, '/root/build', 'ro')]
+    # create shared storages
     for s in sys_config['storages']:
-        # print s
         volumes.append(('/tmp/onedata/storage/'+s, s, 'rw'))
 
     container = docker.run(
@@ -108,11 +77,13 @@ bash'''
         run_params=["--privileged"],
         command=command)
 
+    # create system users
     for user in sys_config['users']:
         uid = str(hash(user) % 50000 + 10000)
         command = "docker exec %s adduser --disabled-password --gecos '' --uid %s %s" % (container, uid, user)
         subprocess.check_call(command, stdout=sys.stdout, shell=True)
 
+    # create system groups
     for group in sys_config['groups']:
         gid = str(hash(group) % 50000 + 10000)
         command = "docker exec %s groupadd -g %s %s" % (container, gid, group)
@@ -137,7 +108,6 @@ EOF
 chmod 600 /tmp/{user}_key'''
         command = command.format(
             user=name,
-            # cert_file=open(cert_file_path, 'r').read(),
             key_file=open(key_file_path, 'r').read())
         assert 0 is docker.exec_(container, command)
 
@@ -146,49 +116,34 @@ chmod 600 /tmp/{user}_key'''
 
         if 'token' in client:
             user = client['token']
-            print("##### PWD #####")
-            print(subprocess.check_output(['pwd']))
-            print(gr)
             command = '''echo \"#!/usr/bin/env escript
 %%! -name gettoken@test -setcookie cookie3
 
 main([GR_Node, UID]) ->
   try
-    Token = rpc:call(list_to_atom(GR_Node), auth_logic, gen_auth_code, [list_to_binary(UID)]),
+    Token = rpc:call(list_to_atom(GR_Node), auth_logic, gen_token, [list_to_binary(UID)]),
     {ok, File} = file:open("token", [write]),
     ok = file:write(File, Token),
     ok = file:close(File)
   catch
       _T:M -> io:format(\\\"ERROR: ~p~n\\\", [M])
   end.\" > get_token.escript && chmod u+x get_token.escript'''
-            # command = ['./bamboos/docker/environment/get_token.escript', "gr@node1"+gr, user]
-            print(command)
             assert 0 is docker.exec_(container, command)
             gr_node = "gr@node1." + gr
             command = "docker exec %s bash -c './get_token.escript %s %s'" % (container, gr_node, user)
-            print(command)
-            subprocess.call([command], shell=True)
-            #
-            # print("### TOKEN ###")
-            # print(token)
-
-            # command = 'echo %s > token' % token
-            # print(command)
-            # assert 0 is docker.exec_(container, command)
+            assert 0 is subprocess.call([command], shell=True)
 
             gr = "node1." + gr
             op = "worker1." + op
-
-# " GLOBAL_REGISTRY_URL=" + gr + \
-# " PROVIDER_HOSTNAME=" + op + \
-# " USER_KEY=/tmp/" + user + "_key" + \
-#  \
-            command = './oneclient --authentication token --no_check_certificate ' + mounting_point + \
+            command = "GLOBAL_REGISTRY_URL=" + gr + \
+                      " PROVIDER_HOSTNAME=" + op + \
+                      ' ./oneclient --authentication token --no_check_certificate ' + mounting_point + \
                   ' < token'
-            print(command)
+            # TODO: uncomment when mounting will succeed
             # assert 0 is docker.exec_(container, command)
         elif 'user_cert' in client:
-            cert = client["user_cert"]
+            # TODO: uncomment when we'll respect certificates
+            # cert = client["user_cert"]
             # cert_file_path = os.path.join(common.get_file_dir(config_path), cert)
             # command = '''cat <<"EOF" > /tmp/{user}_cert
             # {cert_file}
@@ -208,13 +163,8 @@ main([GR_Node, UID]) ->
 
 def up(image, bindir, dns_server, uid, config_path):
     config = common.parse_json_file(config_path)['oneclient']
-    # print "########## CONFIG ################"
-    # print config
     sys_config = common.parse_json_file(config_path)['os_configs']
     configs = [_tweak_config(config, sys_config, node, uid) for node in config]
-    # print "########## CONFIGs ################"
-    # print configs
-
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
     for cfg in configs:
