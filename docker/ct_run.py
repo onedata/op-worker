@@ -85,7 +85,7 @@ parser.add_argument(
     dest='stress_time')
 
 parser.add_argument(
-    '--auto_compile',
+    '--auto-compile',
     action='store_true',
     default=False,
     help='compile test suites before run',
