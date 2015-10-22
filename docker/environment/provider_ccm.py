@@ -10,6 +10,7 @@ from __future__ import print_function
 import copy
 import json
 import os
+import subprocess
 
 from . import common, docker, dns
 
@@ -41,6 +42,8 @@ def _tweak_config(config, ccm_node, op_instance, uid):
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = ccm_erl_node_name(ccm_node, op_instance, uid)
 
+    print("### CCM ###")
+    print(cfg)
     return cfg
 
 
@@ -65,6 +68,9 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         gid=os.getegid())
 
     volumes = [(bindir, '/root/build', 'ro')]
+    # create shared storages
+    for s in config['os_config']['storages']:
+        volumes.append(('/tmp/onedata/storage/'+s, s, 'rw'))
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -81,6 +87,21 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         volumes=volumes,
         dns_list=dns_servers,
         command=command)
+
+    # create system users
+    for user in config['os_config']['users']:
+        uid = str(hash(user) % 50000 + 10000)
+        command = "docker exec %s adduser --disabled-password --gecos '' --uid %s %s" % (container, uid, user)
+        subprocess.check_call(command, shell=True)
+
+    # create system groups
+    for group in config['os_config']['groups']:
+        gid = str(hash(group) % 50000 + 10000)
+        command = "docker exec %s groupadd -g %s %s" % (container, gid, group)
+        subprocess.check_call(command, shell=True)
+        for user in config['os_config']['groups'][group]:
+            command = "docker exec %s usermod -a -G %s %s" % (container, group, user)
+            subprocess.check_call(command, shell=True)
 
     return {
         'docker_ids': [container],
@@ -99,12 +120,14 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
 
     # CCMs of every provider are started together
     for op_instance in config['provider_domains']:
+        os_config = config['provider_domains'][op_instance]['os_config']
         gen_dev_cfg = {
             'config': {
                 'input_dir': input_dir,
                 'target_dir': '/root/bin'
             },
-            'nodes': config['provider_domains'][op_instance]['op_ccm']
+            'nodes': config['provider_domains'][op_instance]['op_ccm'],
+            'os_config': config['os_configs'][os_config]
         }
 
         tweaked_configs = [

@@ -8,6 +8,7 @@ Brings up a set of oneprovider worker nodes. They can create separate clusters.
 import copy
 import json
 import os
+import subprocess
 
 from . import common, docker, riak, couchbase, dns, globalregistry, provider_ccm
 
@@ -81,10 +82,9 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         gid=os.getegid())
 
     volumes = [(bindir, '/root/build', 'ro')]
-    # storages = config['nodes']['node']['storage']
-    # for name in storages:
-    #     s = storages[name]
-    #     volumes.append((s['host_path'], s['volume_path'], 'rw'))
+    # create shared storages
+    for s in config['os_config']['storages']:
+        volumes.append(('/tmp/onedata/storage/'+s, s, 'rw'))
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -101,6 +101,21 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         volumes=volumes,
         dns_list=dns_servers,
         command=command)
+
+    # create system users
+    for user in config['os_config']['users']:
+        uid = str(hash(user) % 50000 + 10000)
+        command = "docker exec %s adduser --disabled-password --gecos '' --uid %s %s" % (container, uid, user)
+        subprocess.check_call(command, shell=True)
+
+    # create system groups
+    for group in config['os_config']['groups']:
+        gid = str(hash(group) % 50000 + 10000)
+        command = "docker exec %s groupadd -g %s %s" % (container, gid, group)
+        subprocess.check_call(command, shell=True)
+        for user in config['os_config']['groups'][group]:
+            command = "docker exec %s usermod -a -G %s %s" % (container, group, user)
+            subprocess.check_call(command, shell=True)
 
     return container, {
         'docker_ids': [container],
@@ -165,16 +180,18 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
 
     # Workers of every provider are started together
     for op_instance in config['provider_domains']:
+        os_config = config['provider_domains'][op_instance]['os_config']
         gen_dev_cfg = {
             'config': {
                 'input_dir': input_dir,
                 'target_dir': '/root/bin'
             },
             'nodes': config['provider_domains'][op_instance]['op_worker'],
-            'db_driver': _db_driver(config['provider_domains'][op_instance])
+            'db_driver': _db_driver(config['provider_domains'][op_instance]),
+            'os_config': config['os_configs'][os_config]
         }
 
-        # Tweak configs, retrieve lis of riak nodes to start
+        # Tweak configs, retrieve list of riak nodes to start
         configs = []
         all_db_nodes = []
         for worker_node in gen_dev_cfg['nodes']:

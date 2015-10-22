@@ -9,7 +9,6 @@ to start.
 
 import copy
 import os
-import sys
 import subprocess
 
 from . import common, docker, dns, globalregistry, provider_worker
@@ -81,16 +80,16 @@ bash'''
     for user in sys_config['users']:
         uid = str(hash(user) % 50000 + 10000)
         command = "docker exec %s adduser --disabled-password --gecos '' --uid %s %s" % (container, uid, user)
-        subprocess.check_call(command, stdout=sys.stdout, shell=True)
+        subprocess.check_call(command, shell=True)
 
     # create system groups
     for group in sys_config['groups']:
         gid = str(hash(group) % 50000 + 10000)
         command = "docker exec %s groupadd -g %s %s" % (container, gid, group)
-        subprocess.check_call(command, stdout=sys.stdout, shell=True)
+        subprocess.check_call(command, shell=True)
         for user in sys_config['groups'][group]:
             command = "docker exec %s usermod -a -G %s %s" % (container, group, user)
-            subprocess.check_call(command, stdout=sys.stdout, shell=True)
+            subprocess.check_call(command, shell=True)
 
 
     # mount oneclients
@@ -116,12 +115,13 @@ chmod 600 /tmp/{user}_key'''
 
         if 'token' in client:
             user = client['token']
+            # TODO: gen_token
             command = '''echo \"#!/usr/bin/env escript
 %%! -name gettoken@test -setcookie cookie3
 
 main([GR_Node, UID]) ->
   try
-    Token = rpc:call(list_to_atom(GR_Node), auth_logic, gen_token, [list_to_binary(UID)]),
+    Token = rpc:call(list_to_atom(GR_Node), auth_logic, gen_auth_code, [list_to_binary(UID)]),
     {ok, File} = file:open("token", [write]),
     ok = file:write(File, Token),
     ok = file:close(File)
