@@ -19,7 +19,7 @@
 -record(state, {}).
 
 %% API
--export([terminate/3, rest_init/2, resource_exists/2, malformed_request/2,
+-export([rest_init/2, terminate/3, resource_exists/2, malformed_request/2,
     allowed_methods/2, content_types_provided/2, content_types_accepted/2,
     delete_resource/2]).
 
@@ -31,18 +31,18 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:terminate/3
-%%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #state{}) -> ok.
-terminate(_, _, _) ->
-    ok.
-
-%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
     {ok, Req, #state{}}.
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:terminate/3
+%%--------------------------------------------------------------------
+-spec terminate(Reason :: term(), req(), #state{}) -> ok.
+terminate(_, _, _) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
@@ -93,13 +93,8 @@ delete_resource(Req, State) ->
     {true, Req, State}.
 
 %%%===================================================================
-%%% Content type routing functions
+%%% Content type handler functions
 %%%===================================================================
-%%--------------------------------------------------------------------
-%% This functions are needed by cowboy for registration in
-%% content_types_accepted/content_types_provided methods and simply delegates
-%% their responsibility to adequate handler modules
-%%-------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
 %% @doc
