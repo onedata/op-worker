@@ -42,11 +42,8 @@ top_level_routing() ->
 -spec custom_api_routes() -> list().
 custom_api_routes() ->
     [
-        {"/rest/:version/[...]", pre_handler, #handler_description{
-            handler = rest_handler,
-            exception_handler = fun request_exception_handler:handle/4,
-            handler_initial_opts = []
-        }}
+        {"/rest/:version/[...]", pre_handler,
+            #handler_description{handler = rest_handler}}
     ].
 
 %%--------------------------------------------------------------------
@@ -57,19 +54,10 @@ custom_api_routes() ->
 -spec cdmi_routes() -> list().
 cdmi_routes() ->
     [
-        {"/cdmi/cdmi_capabilities/[...]", pre_handler, #handler_description{
-            handler = cdmi_handler,
-            exception_handler = fun request_exception_handler:handle/4,
-            handler_initial_opts = []
-        }},
-        {"/cdmi/cdmi_objectid/:id/[...]", pre_handler, #handler_description{
-            handler = cdmi_handler,
-            exception_handler = fun request_exception_handler:handle/4,
-            handler_initial_opts = []
-        }},
-        {"/cdmi/[...]", pre_handler,#handler_description{
-            handler = cdmi_handler,
-            exception_handler = fun request_exception_handler:handle/4,
-            handler_initial_opts = []
-        }}
+        {"/cdmi/cdmi_capabilities/[...]", pre_handler,
+            #handler_description{handler = cdmi_capabilities_handler}},
+        {"/cdmi/cdmi_objectid/:id/[...]", pre_handler,
+            #handler_description{handler = cdmi_objectid_handler}},
+        {"/cdmi/[...]", pre_handler,
+            fun cdmi_handler_selector:choose_object_or_container_handler/1}
     ].

@@ -35,7 +35,11 @@
 %% Cowboy handler callback, called to initialize request handling flow.
 %% @end
 %%--------------------------------------------------------------------
--spec init(term(), term(), term()) -> {upgrade, protocol, cowboy_rest, cowboy_req:req(), term()}.
+-spec init(term(), cowboy_req:req(), function() | #handler_description{}) ->
+    {upgrade, protocol, cowboy_rest, cowboy_req:req(), term()}.
+init(Arg, Req, Description) when is_function(Description) ->
+    {ok, HandlerDesc} = Description(Req),
+    init(Arg, Req, HandlerDesc);
 init(_, Req, #handler_description{
     handler = Handler,
     handler_initial_opts = HandlerInitialOpts,
@@ -52,7 +56,7 @@ init(_, Req, #handler_description{
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), Req :: cowboy_req:req(), State :: term()) -> ok.
 terminate(Reason, Req, State) ->
-    request_delegation:delegate(Req, State, terminate, [Reason, Req, State], 3).
+    request_delegator:delegate_terminate(Reason, Req, State).
 
 %%%===================================================================
 %%% Cowboy REST handler API
@@ -65,7 +69,7 @@ terminate(Reason, Req, State) ->
 %%--------------------------------------------------------------------
 -spec rest_init(Req :: cowboy_req:req(), Opts :: term()) -> {ok, NewReq :: cowboy_req:req(), State :: term()} | {shutdown, NewReq :: cowboy_req:req()}.
 rest_init(Req, HandlerInitialOpts) ->
-    request_delegation:delegate(Req, HandlerInitialOpts, rest_init, [Req, HandlerInitialOpts], 2).
+    request_delegator:delegate_rest_init(Req, HandlerInitialOpts).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,7 +79,7 @@ rest_init(Req, HandlerInitialOpts) ->
 %%--------------------------------------------------------------------
 -spec malformed_request(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 malformed_request(Req, State) ->
-    request_delegation:delegate(Req, State, malformed_request, [Req, State], 2).
+    request_delegator:delegate(Req, State, malformed_request, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,7 +89,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec known_methods(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 known_methods(Req, State) ->
-    request_delegation:delegate(Req, State, known_methods, [Req, State], 2).
+    request_delegator:delegate(Req, State, known_methods, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,7 +99,7 @@ known_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec allowed_methods(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 allowed_methods(Req, State) ->
-    request_delegation:delegate(Req, State, allowed_methods, [Req, State], 2).
+    request_delegator:delegate(Req, State, allowed_methods, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,7 +109,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 is_authorized(Req, State) ->
-    request_delegation:delegate(Req, State, is_authorized, [Req, State], 2).
+    request_delegator:delegate(Req, State, is_authorized, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,7 +119,7 @@ is_authorized(Req, State) ->
 %%--------------------------------------------------------------------
 -spec options(Req :: cowboy_req:req(), State :: term()) -> {Result :: [term()], NewReq :: cowboy_req:req(), NewState :: term()}.
 options(Req, State) ->
-    request_delegation:delegate(Req, State, options, [Req, State], 2).
+    request_delegator:delegate(Req, State, options, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,7 +130,7 @@ options(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 content_types_provided(Req, State) ->
-    request_delegation:delegate(Req, State, content_types_provided, [Req, State], 2).
+    request_delegator:delegate(Req, State, content_types_provided, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -136,7 +140,7 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec languages_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 languages_provided(Req, State) ->
-    request_delegation:delegate(Req, State, languages_provided, [Req, State], 2).
+    request_delegator:delegate(Req, State, languages_provided, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -146,7 +150,7 @@ languages_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec charsets_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 charsets_provided(Req, State) ->
-    request_delegation:delegate(Req, State, charsets_provided, [Req, State], 2).
+    request_delegator:delegate(Req, State, charsets_provided, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -156,7 +160,7 @@ charsets_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec moved_permanently(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 moved_permanently(Req, State) ->
-    request_delegation:delegate(Req, State, moved_permanently, [Req, State], 2).
+    request_delegator:delegate(Req, State, moved_permanently, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -166,7 +170,7 @@ moved_permanently(Req, State) ->
 %%--------------------------------------------------------------------
 -spec moved_temporarily(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 moved_temporarily(Req, State) ->
-    request_delegation:delegate(Req, State, moved_temporarily, [Req, State], 2).
+    request_delegator:delegate(Req, State, moved_temporarily, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -176,7 +180,7 @@ moved_temporarily(Req, State) ->
 %%--------------------------------------------------------------------
 -spec resource_exists(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 resource_exists(Req, State) ->
-    request_delegation:delegate(Req, State, resource_exists, [Req, State], 2).
+    request_delegator:delegate(Req, State, resource_exists, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -186,7 +190,7 @@ resource_exists(Req, State) ->
 %%--------------------------------------------------------------------
 -spec generate_etag(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 generate_etag(Req, State) ->
-    request_delegation:delegate(Req, State, generate_etag, [Req, State], 2).
+    request_delegator:delegate(Req, State, generate_etag, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -196,7 +200,7 @@ generate_etag(Req, State) ->
 %%--------------------------------------------------------------------
 -spec last_modified(Req :: cowboy_req:req(), State :: term()) -> {Result :: integer(), NewReq :: cowboy_req:req(), NewState :: term()}.
 last_modified(Req, State) ->
-    request_delegation:delegate(Req, State, last_modified, [Req, State], 2).
+    request_delegator:delegate(Req, State, last_modified, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -206,7 +210,7 @@ last_modified(Req, State) ->
 %%--------------------------------------------------------------------
 -spec expires(Req :: cowboy_req:req(), State :: term()) -> {Result :: integer(), NewReq :: cowboy_req:req(), NewState :: term()}.
 expires(Req, State) ->
-    request_delegation:delegate(Req, State, expires, [Req, State], 2).
+    request_delegator:delegate(Req, State, expires, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -216,7 +220,7 @@ expires(Req, State) ->
 %%--------------------------------------------------------------------
 -spec forbidden(Req :: cowboy_req:req(), State :: term()) -> {Result :: boolean(), NewReq :: cowboy_req:req(), NewState :: term()}.
 forbidden(Req, State) ->
-    request_delegation:delegate(Req, State, forbidden, [Req, State], 2).
+    request_delegator:delegate(Req, State, forbidden, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -227,7 +231,7 @@ forbidden(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 content_types_accepted(Req, State) ->
-    request_delegation:delegate(Req, State, content_types_accepted, [Req, State], 2).
+    request_delegator:delegate(Req, State, content_types_accepted, [Req, State], 2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -237,7 +241,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 delete_resource(Req, State) ->
-    request_delegation:delegate(Req, State, delete_resource, [Req, State], 2).
+    request_delegator:delegate(Req, State, delete_resource, [Req, State], 2).
 
 %%%===================================================================
 %%% Internal functions

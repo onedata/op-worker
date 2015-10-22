@@ -9,13 +9,13 @@
 %%% Functions delegating request to appripriate handlers.
 %%% @end
 %%%--------------------------------------------------------------------
--module(request_delegation).
+-module(request_delegator).
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delegate/5]).
+-export([delegate/5, delegate_rest_init/2, delegate_terminate/3]).
 
 %%%===================================================================
 %%% API
@@ -31,7 +31,6 @@
 -spec delegate(cowboy_req:req(), term(), atom(), [term()],
   integer()) -> term().
 delegate(Req, State, Fun, Args, Arity) ->
-    ?info("~p", [rest_handler:module_info()]),
     case erlang:function_exported(request_context:get_handler(), Fun, Arity) of
         false ->
             no_call;
@@ -39,6 +38,23 @@ delegate(Req, State, Fun, Args, Arity) ->
             call_and_handle_exception(Req, State, Fun, Args)
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Delegates rest_init function
+%% @end
+%%--------------------------------------------------------------------
+-spec delegate_rest_init(cowboy_req:req(), term()) -> term().
+delegate_rest_init(Req, Opts) ->
+    call_and_handle_exception(Req, Opts, rest_init, [Req, Opts]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Delegates terminate function
+%% @end
+%%--------------------------------------------------------------------
+-spec delegate_terminate(term(), cowboy_req:req(), term()) -> term().
+delegate_terminate(Reason, Req, State) ->
+    call_and_handle_exception(Req, State, terminate, [Reason, Req, State]).
 
 %%%===================================================================
 %%% Internal functions

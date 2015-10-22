@@ -13,6 +13,7 @@
 
 -record(handler_description, {
     handler :: module(),
-    handler_initial_opts :: list(),
-    exception_handler :: request_exception_handler:exception_handler()
+    handler_initial_opts = [] :: list(),
+    exception_handler = fun request_exception_handler:handle/4
+        :: request_exception_handler:exception_handler()
 }).
