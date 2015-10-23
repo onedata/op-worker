@@ -292,7 +292,7 @@ init_per_suite(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config1),
     "" = os:cmd("mkdir -p " ++ ?TEMP_DIR),
     {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
-        [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => <<?TEMP_DIR>>})])}]),
+        [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(?TEMP_DIR)})])}]),
     [{storage_id, StorageId} | Config1].
 
 end_per_suite(Config) ->
