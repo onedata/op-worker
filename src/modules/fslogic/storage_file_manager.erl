@@ -147,7 +147,7 @@ stat(_FileHandle) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) -> {ok, integer()} | error_reply().
+-spec write(FileHandle :: file_handle(), Offset :: non_neg_integer(), Buffer :: binary()) -> {ok, non_neg_integer()} | error_reply().
 write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
     helpers:write(HelperHandle, File, Offset, Buffer).
 
@@ -158,7 +158,7 @@ write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) -> {ok, binary()} | error_reply().
+-spec read(FileHandle :: file_handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) -> {ok, binary()} | error_reply().
 read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
     helpers:read(HelperHandle, File, Offset, MaxSize).
 

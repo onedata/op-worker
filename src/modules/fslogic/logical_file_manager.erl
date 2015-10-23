@@ -348,9 +348,11 @@ set_acl(Path, EntityList) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(FileKey :: file_key()) -> {ok, file_attributes()} | error_reply().
+-spec stat(file_handle()) -> {ok, file_attributes()} | error_reply().
 stat(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     stat(SessId, {uuid, UUID}).
+
+-spec stat(session:id(), file_key()) -> {ok, file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_attrs:stat(CTX, FileKey).

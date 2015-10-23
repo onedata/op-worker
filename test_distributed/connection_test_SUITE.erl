@@ -724,7 +724,7 @@ unmock_identity(Workers) ->
     test_utils:mock_unload(Workers, identity).
 
 receive_server_message() ->
-    receive_server_message([message_stream_reset]).
+    receive_server_message([message_stream_reset, event_subscription]).
 
 receive_server_message(IgnoredMsgList) ->
     receive

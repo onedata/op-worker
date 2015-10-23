@@ -87,7 +87,7 @@ blocks(FileEntry, _Blocks, ExcludedSessions) ->
 %% Applys given function for each given session id. Returns list of invalid sessions ids.
 %% @end
 %%--------------------------------------------------------------------
--spec for_each_session(SessionIds :: [session:id()], fun((session:id()) -> any()) ->
+-spec for_each_session(SessionIds :: [session:id()], fun((session:id()) -> any())) ->
     InvalidSessions :: [session:id()].
 for_each_session(SessionIds, Fun) ->
     lists:foldl(

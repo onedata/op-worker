@@ -145,7 +145,7 @@
 
 %% Model for tracking open files and watched attributes
 -record(file_watcher, {
-    open_sessions = [] :: [session:id()], %% Sessions that opened th file
+    open_sessions = [] :: [session:id()], %% Sessions that opened the file
     attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
 }).
 -endif.

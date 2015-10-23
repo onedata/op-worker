@@ -133,8 +133,8 @@ open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
 %% Writes data to a file. Returns number of written bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) ->
-                   {ok, file_handle(), integer()} | error_reply().
+-spec write(FileHandle :: file_handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
+                   {ok, file_handle(), non_neg_integer()} | error_reply().
 write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
                   fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer) ->
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, byte_size(Buffer)),
