@@ -192,9 +192,8 @@ open(#helper_handle{} = HelperHandle, File, rdwr) ->
 %%--------------------------------------------------------------------
 -spec read(handle(), File :: file(),  Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
                   {ok, Data :: binary()} | {error, term()}.
-read(#helper_handle{instance = Instance, ctx = CTX} = HelperHandle, File, Offset, Size) ->
-    helpers_nif:read(Instance, CTX, File, Offset, Size),
-    {ok, crypto:rand_bytes(Size)}.
+read(#helper_handle{instance = Instance, ctx = CTX} = _HelperHandle, File, Offset, Size) ->
+    helpers_nif:read(Instance, CTX, File, Offset, Size).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
@@ -203,9 +202,9 @@ read(#helper_handle{instance = Instance, ctx = CTX} = HelperHandle, File, Offset
 %%--------------------------------------------------------------------
 -spec write(handle(), File :: file(), Offset :: non_neg_integer(), Data :: binary()) ->
                    {ok, Size :: non_neg_integer()} | {error, term()}.
-write(#helper_handle{instance = Instance, ctx = CTX} = HelperHandle, File, Offset, Data) ->
-    helpers_nif:write(Instance, CTX, File, Offset, Data),
-    {ok, size(Data)}.
+write(#helper_handle{instance = Instance, ctx = CTX} = _HelperHandle, File, Offset, Data) ->
+    helpers_nif:write(Instance, CTX, File, Offset, Data).
+%%     {ok, size(Data)}.
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.

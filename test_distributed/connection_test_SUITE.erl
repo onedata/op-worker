@@ -696,6 +696,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                     % respond with the same data to the server (excluding stream_reset)
                     case Body of
                         {message_stream_reset, _} -> ok;
+                        {event_subscription, _} -> ok;
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
                             ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),

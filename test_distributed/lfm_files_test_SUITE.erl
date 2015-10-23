@@ -290,11 +290,13 @@ get_uuid(Worker, SessId, Path) ->
 init_per_suite(Config) ->
     Config1 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, Config1),
+    "" = os:cmd("mkdir -p " ++ ?TEMP_DIR),
     {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
         [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => <<?TEMP_DIR>>})])}]),
     [{storage_id, StorageId} | Config1].
 
 end_per_suite(Config) ->
+    "" = os:cmd("rm -rf " ++ ?TEMP_DIR),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
