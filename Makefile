@@ -1,4 +1,4 @@
-REPO            ?= op-worker
+REPO	    ?= op-worker
 
 # distro for package building
 DISTRIBUTION    ?= none
@@ -6,11 +6,11 @@ export DISTRIBUTION
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
 PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
-PKG_ID           = op-worker-$(PKG_VERSION)
-PKG_BUILD        = 1
-BASE_DIR         = $(shell pwd)
+PKG_ID	   = op-worker-$(PKG_VERSION)
+PKG_BUILD	= 1
+BASE_DIR	 = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
-REBAR           ?= $(BASE_DIR)/rebar
+REBAR	   ?= $(BASE_DIR)/rebar
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
 
@@ -81,8 +81,8 @@ plt:
 	dialyzer --check_plt --plt ${PLT}; \
 	if [ $$? != 0 ]; then \
 	    dialyzer --build_plt --output_plt ${PLT} --apps kernel stdlib sasl erts \
-	        ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
-	        mnesia edoc common_test test_server syntax_tools compiler ./deps/*/ebin; \
+		ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
+		mnesia edoc common_test test_server syntax_tools compiler ./deps/*/ebin; \
 	fi; exit 0
 
 
@@ -99,15 +99,15 @@ export PKG_VERSION PKG_ID PKG_BUILD BASE_DIR ERLANG_BIN REBAR OVERLAY_VARS RELEA
 package/$(PKG_ID).tar.gz: deps
 	mkdir -p package
 	rm -rf package/$(PKG_ID)
-	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION)| (cd package && tar -xf -)
+	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION) | (cd package && tar -xf -)
 	${MAKE} -C package/$(PKG_ID) deps
-	mkdir -p package/$(PKG_ID)/priv
-	git --git-dir=.git describe --tags --always >package/$(PKG_ID)/priv/vsn.git
-	for dep in package/$(PKG_ID)/deps/*; do \
-             echo "Processing dep: $${dep}"; \
-             mkdir -p $${dep}/priv; \
-             git --git-dir=$${dep}/.git describe --tags >$${dep}/priv/vsn.git; \
-        done
+	for dep in package/$(PKG_ID) package/$(PKG_ID)/deps/*; do \
+	     echo "Processing dependency: `basename $${dep}`"; \
+	     vsn=`git --git-dir=$${dep}/.git describe --tags 2>/dev/null`; \
+	     mkdir -p $${dep}/priv; \
+	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
+	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
+	done
 	find package/$(PKG_ID) -depth -name ".git" -exec rm -rf {} \;
 	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
 
