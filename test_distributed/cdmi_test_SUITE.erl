@@ -23,7 +23,8 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([choose_adequate_handler/1, list_basic_dir_test/1]).
+-export([choose_adequate_handler/1, list_basic_dir_test/1, list_root_dir_test/1,
+    list_nonexisting_dir_test/1, get_selective_params_of_dir_test/1]).
 
 -performance({test_cases, []}).
 all() -> [choose_adequate_handler].

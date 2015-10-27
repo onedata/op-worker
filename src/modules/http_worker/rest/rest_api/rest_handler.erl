@@ -24,7 +24,7 @@
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
-    content_types_accepted/2, delete_resource/2]).
+    content_types_accepted/2, delete_resource/2, resource_exists/2]).
 
 %% Content type routing functions
 -export([handle_json_data/2]).
@@ -94,6 +94,13 @@ content_types_accepted(Req, State) ->
     ], Req, State}.
 
 
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:resource_exists/2
+%%--------------------------------------------------------------------
+-spec resource_exists(req(), #state{}) -> {term(), req(), #state{}}.
+resource_exists(Req, State) ->
+    {false, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:delete_resource/2

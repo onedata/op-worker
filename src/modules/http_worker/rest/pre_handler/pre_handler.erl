@@ -25,6 +25,9 @@
 -export([moved_permanently/2, moved_temporarily/2, content_types_accepted/2, delete_resource/2]).
 -export([generate_etag/2, last_modified/2, expires/2, forbidden/2]).
 
+%% Cowboy user defined callbacks
+-export([accept_resource/2, provide_resource/2, to_html/2]).
+
 
 %%%===================================================================
 %%% Cowboy handler API
@@ -130,7 +133,7 @@ options(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_provided(Req :: cowboy_req:req(), State :: term()) -> {Result :: [binary()], NewReq :: cowboy_req:req(), NewState :: term()}.
 content_types_provided(Req, State) ->
-    request_delegator:delegate(Req, State, content_types_provided, [Req, State], 2).
+    request_delegator:delegate_content_types_provided(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -231,7 +234,7 @@ forbidden(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 content_types_accepted(Req, State) ->
-    request_delegator:delegate(Req, State, content_types_accepted, [Req, State], 2).
+    request_delegator:delegate_content_types_accepted(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -242,6 +245,41 @@ content_types_accepted(Req, State) ->
 -spec delete_resource(Req :: cowboy_req:req(), State :: term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
 delete_resource(Req, State) ->
     request_delegator:delegate(Req, State, delete_resource, [Req, State], 2).
+
+%%%===================================================================
+%%% Cowboy user defined callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles incomming resources. Defined in content_types_accepted/2.
+%% pre_handler stores user defined callbacks in its context, and this
+%% function delegates request to them.
+%% @end
+%%--------------------------------------------------------------------
+-spec accept_resource(cowboy_req:req(), term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
+accept_resource(Req, State) ->
+    request_delegator:delegate_accept_resource(Req, State).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provides resources to clients. Defined in content_types_provided/2.
+%% pre_handler stores user defined callbacks in its context, and this
+%% function delegates request to them.
+%% @end
+%%--------------------------------------------------------------------
+-spec provide_resource(cowboy_req:req(), term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
+provide_resource(Req, State) ->
+    request_delegator:delegate_provide_resource(Req, State).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Default provided content type callback.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_html(cowboy_req:req(), term()) -> {Result :: term(), NewReq :: cowboy_req:req(), NewState :: term()}.
+to_html(Req, State) ->
+    request_delegator:delegate(Req, State, to_html, [Req, State], 2).
 
 %%%===================================================================
 %%% Internal functions

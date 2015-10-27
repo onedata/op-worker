@@ -14,12 +14,11 @@
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/logging.hrl").
+-include("modules/http_worker/rest/http_status.hrl").
 
 %% Function that translates handler exception to cowboy format
 -type exception_handler() ::
 fun((Req :: cowboy_req:req(), State :: term(), Type :: atom(), Error :: term()) -> term()).
-
--define(INTERNAL_SERVER_ERROR, 500).
 
 %% API
 -export([handle/4]).
@@ -30,11 +29,14 @@ fun((Req :: cowboy_req:req(), State :: term(), Type :: atom(), Error :: term()) 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Exception handler for rest modules. I should return appropriate cowboy
+%% Exception handler for rest modules. It should return appropriate cowboy
 %% status.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(cowboy_req:req(), term, atom(), term()) -> no_return().
+handle(Req, State, _Type, Status) when is_integer(Status) ->
+    {ok, Req2} = cowboy_req:reply(?UNSUPPORTED_MEDIA_TYPE, [], [], Req),
+    {halt, Req2, State};
 handle(Req, State, Type, Error) ->
     ?error_stacktrace("Unhandled exception in rest request ~p:~p", [Type, Error]),
     {ok, Req2} = cowboy_req:reply(?INTERNAL_SERVER_ERROR, [], [], Req),

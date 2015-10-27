@@ -72,8 +72,7 @@ internal_error_when_handler_crashes(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, rest_handler, is_authorized,
-        fun(_, _) -> throw(test_crash) end),
+    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_crash/2),
 
     % when
     {ok, Status, _, _} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
@@ -168,3 +167,7 @@ unmock_gr_certificates(Config) ->
     test_utils:mock_unload(Workers, [gr_endpoint]),
     test_utils:mock_validate(Workers, [oneprovider]),
     test_utils:mock_unload(Workers, [oneprovider]).
+
+-spec test_crash(term(), term()) -> no_return().
+test_crash(_, _) ->
+    throw(test_crash).

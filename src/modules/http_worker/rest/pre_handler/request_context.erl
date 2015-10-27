@@ -13,7 +13,10 @@
 -author("Tomasz Lichon").
 
 %% API
--export([set_handler/1, get_handler/0, set_exception_handler/1, get_exception_handler/0]).
+-export([set_handler/1, get_handler/0,
+    set_exception_handler/1, get_exception_handler/0,
+    set_content_types_accepted/1, get_content_types_accepted/0,
+    set_content_types_provided/1, get_content_types_provided/0]).
 
 %%%===================================================================
 %%% API
@@ -57,6 +60,48 @@ set_exception_handler(Delegation) ->
 -spec get_exception_handler() -> request_exception_handler:exception_handler().
 get_exception_handler() ->
     erlang:get(exception_handler).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convenience function that stores the list of callbacks accepting different
+%% content type in process dict.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_content_types_accepted([cowboy_callback_selector:content_type_callback()]) -> term().
+set_content_types_accepted(AcceptedContent) ->
+    erlang:put(content_types_accepted, AcceptedContent).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convenience function that retrieves the list of callbacks accepting different
+%% content type in process dict.
+%% dict.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_content_types_accepted() -> [cowboy_callback_selector:content_type_callback()].
+get_content_types_accepted() ->
+    erlang:get(content_types_accepted).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convenience function that stores the list of callbacks accepting different
+%% content type in process dict.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_content_types_provided([cowboy_callback_selector:content_type_callback()]) -> term().
+set_content_types_provided(ProvidedContent) ->
+    erlang:put(content_types_provided, ProvidedContent).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convenience function that retrieves the list of callbacks accepting different
+%% content type in process dict.
+%% dict.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_content_types_provided() -> [cowboy_callback_selector:content_type_callback()].
+get_content_types_provided() ->
+    erlang:get(content_types_provided).
 
 %%%===================================================================
 %%% Internal functions
