@@ -66,7 +66,6 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         gid=os.getegid())
 
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes = common.add_shared_storages(volumes, config['os_config']['storages'])
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -83,10 +82,6 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         volumes=volumes,
         dns_list=dns_servers,
         command=command)
-
-    # create system users and grous
-    common.create_users(container, config['os_config'])
-    common.create_groups(container, config['os_config'])
 
     return {
         'docker_ids': [container],
