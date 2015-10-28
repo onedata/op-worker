@@ -21,12 +21,12 @@ def client_hostname(node_name, uid):
     return common.format_hostname(node_name, uid)
 
 
-def _tweak_config(config, sys_config, name, uid):
+def _tweak_config(config, os_config, name, uid):
     cfg = copy.deepcopy(config)
     cfg = {'node': cfg[name]}
     node = cfg['node']
-    sys_config_name = cfg['node']['os_config']
-    cfg['sys_config'] = sys_config[sys_config_name]
+    os_config_name = cfg['node']['os_config']
+    cfg['os_config'] = os_config[os_config_name]
     node['name'] = client_hostname(name, uid)
     node['clients'] = []
     clients = config[name]['clients']
@@ -50,7 +50,7 @@ def _tweak_config(config, sys_config, name, uid):
 def _node_up(image, bindir, config, config_path, dns_servers):
     node = config['node']
     hostname = node['name']
-    sys_config = config['sys_config']
+    os_config = config['os_config']
 
     command = '''set -e
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
@@ -59,9 +59,7 @@ def _node_up(image, bindir, config, config_path, dns_servers):
 bash'''
 
     volumes = [(bindir, '/root/build', 'ro')]
-    # create shared storages
-    for s in sys_config['storages']:
-        volumes.append(('/tmp/onedata/storage/'+s, s, 'rw'))
+    volumes = common.add_shared_storages(volumes, os_config['storages'])
 
     container = docker.run(
         image=image,
@@ -76,21 +74,9 @@ bash'''
         run_params=["--privileged"],
         command=command)
 
-    # create system users
-    for user in sys_config['users']:
-        uid = str(hash(user) % 50000 + 10000)
-        command = "docker exec %s adduser --disabled-password --gecos '' --uid %s %s" % (container, uid, user)
-        subprocess.check_call(command, shell=True)
-
-    # create system groups
-    for group in sys_config['groups']:
-        gid = str(hash(group) % 50000 + 10000)
-        command = "docker exec %s groupadd -g %s %s" % (container, gid, group)
-        subprocess.check_call(command, shell=True)
-        for user in sys_config['groups'][group]:
-            command = "docker exec %s usermod -a -G %s %s" % (container, group, user)
-            subprocess.check_call(command, shell=True)
-
+    # create system users and groups
+    common.create_users(container, os_config)
+    common.create_groups(container, os_config)
 
     # mount oneclients
     for client in node["clients"]:
@@ -163,8 +149,8 @@ main([GR_Node, UID]) ->
 
 def up(image, bindir, dns_server, uid, config_path):
     config = common.parse_json_file(config_path)['oneclient']
-    sys_config = common.parse_json_file(config_path)['os_configs']
-    configs = [_tweak_config(config, sys_config, node, uid) for node in config]
+    os_config = common.parse_json_file(config_path)['os_configs']
+    configs = [_tweak_config(config, os_config, node, uid) for node in config]
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
     for cfg in configs:

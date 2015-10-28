@@ -42,8 +42,6 @@ def _tweak_config(config, ccm_node, op_instance, uid):
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = ccm_erl_node_name(ccm_node, op_instance, uid)
 
-    print("### CCM ###")
-    print(cfg)
     return cfg
 
 
@@ -68,9 +66,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         gid=os.getegid())
 
     volumes = [(bindir, '/root/build', 'ro')]
-    # create shared storages
-    for s in config['os_config']['storages']:
-        volumes.append(('/tmp/onedata/storage/'+s, s, 'rw'))
+    volumes = common.add_shared_storages(volumes, config['os_config']['storages'])
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -88,20 +84,9 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         dns_list=dns_servers,
         command=command)
 
-    # create system users
-    for user in config['os_config']['users']:
-        uid = str(hash(user) % 50000 + 10000)
-        command = "docker exec %s adduser --disabled-password --gecos '' --uid %s %s" % (container, uid, user)
-        subprocess.check_call(command, shell=True)
-
-    # create system groups
-    for group in config['os_config']['groups']:
-        gid = str(hash(group) % 50000 + 10000)
-        command = "docker exec %s groupadd -g %s %s" % (container, gid, group)
-        subprocess.check_call(command, shell=True)
-        for user in config['os_config']['groups'][group]:
-            command = "docker exec %s usermod -a -G %s %s" % (container, group, user)
-            subprocess.check_call(command, shell=True)
+    # create system users and grous
+    common.create_users(container, config['os_config'])
+    common.create_groups(container, config['os_config'])
 
     return {
         'docker_ids': [container],
