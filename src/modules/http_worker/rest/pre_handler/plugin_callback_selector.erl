@@ -10,7 +10,7 @@
 %%% content_types_provided and content_types_accepted functions.
 %%% @end
 %%%--------------------------------------------------------------------
--module(cowboy_callback_selector).
+-module(plugin_callback_selector).
 -author("Tomasz Lichon").
 
 -type content_type_callback() ::

@@ -13,8 +13,6 @@
 -module(pre_handler).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/rest/handler_description.hrl").
-
 %% Cowboy handler API
 -export([init/3, terminate/3]).
 
@@ -38,15 +36,17 @@
 %% Cowboy handler callback, called to initialize request handling flow.
 %% @end
 %%--------------------------------------------------------------------
--spec init(term(), cowboy_req:req(), function() | #handler_description{}) ->
+-spec init(term(), cowboy_req:req(), protocol_plugin_behaviour:handler()) ->
     {upgrade, protocol, cowboy_rest, cowboy_req:req(), term()}.
 init(Arg, Req, Description) when is_function(Description) ->
-    {ok, HandlerDesc} = Description(Req),
-    init(Arg, Req, HandlerDesc);
-init(_, Req, #handler_description{
-    handler = Handler,
-    handler_initial_opts = HandlerInitialOpts,
-    exception_handler = ExceptionHandler
+    {HandlerDesc, Req2} = Description(Req),
+    init(Arg, Req2, HandlerDesc);
+init(Arg, Req, Description) when map_size(Description) < 3 ->
+    init(Arg, Req, plugin_properties:fill_with_default(Description));
+init(_, Req, #{
+    handler := Handler,
+    handler_initial_opts := HandlerInitialOpts,
+    exception_handler := ExceptionHandler
 }) ->
     request_context:set_handler(Handler),
     request_context:set_exception_handler(ExceptionHandler),

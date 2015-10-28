@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/http_worker/rest/handler_description.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

@@ -6,18 +6,16 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Default exception handler for rest operations. Returns internal server
-%%% error on each fail.
+%%% This mudule provides information about cdmi protocol plugin and it's used
+%%% by onedata during plugin registration process.
 %%% @end
 %%%--------------------------------------------------------------------
--module(request_exception_handler).
+-module(cdmi_protocol_plugin).
+-behaviour(protocol_plugin_behaviour).
 -author("Tomasz Lichon").
 
--include_lib("ctool/include/logging.hrl").
--include("modules/http_worker/rest/http_status.hrl").
-
 %% API
--export([handle/4]).
+-export([routes/0]).
 
 %%%===================================================================
 %%% API
@@ -25,18 +23,17 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Exception handler for rest modules. It should return appropriate cowboy
-%% status.
+%% Returns routes to cdmi protocol.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(cowboy_req:req(), term, atom(), term()) -> no_return().
-handle(Req, State, _Type, Status) when is_integer(Status) ->
-    {ok, Req2} = cowboy_req:reply(?UNSUPPORTED_MEDIA_TYPE, [], [], Req),
-    {halt, Req2, State};
-handle(Req, State, Type, Error) ->
-    ?error_stacktrace("Unhandled exception in rest request ~p:~p", [Type, Error]),
-    {ok, Req2} = cowboy_req:reply(?INTERNAL_SERVER_ERROR, [], [], Req),
-    {halt, Req2, State}.
+-spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
+routes() ->
+    [
+        {"/cdmi/cdmi_capabilities/[...]", #{handler => cdmi_capabilities_handler}},
+        {"/cdmi/cdmi_objectid/:id/[...]", #{handler => cdmi_objectid_handler}},
+        {"/cdmi/[...]", fun cdmi_handler_selector:choose_object_or_container_handler/1}
+    ].
+
 
 %%%===================================================================
 %%% Internal functions
