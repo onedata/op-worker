@@ -40,8 +40,8 @@ all() ->
      cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
-%%% Test function
-%% ====================================================================
+%%% Test functions
+%%%===================================================================
 
 % checks if cache is monitored
 cache_monitoring_test(Config) ->

@@ -36,8 +36,8 @@ all() -> [ccm_and_worker_test, task_pool_test, task_manager_repeats_test, task_m
     multi_transaction_test, transaction_retry_test, transaction_error_test].
 
 %%%===================================================================
-%%% Test function
-%% ====================================================================
+%%% Test functions
+%%%===================================================================
 
 ccm_and_worker_test(Config) ->
     % given
@@ -399,7 +399,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 %%%===================================================================
-%%% API
+%%% Internal functions
 %%%===================================================================
 
 task_controller(State) ->

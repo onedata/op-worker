@@ -44,8 +44,8 @@
 all() -> [].
 
 %%%===================================================================
-%%% Test function
-%% ====================================================================
+%%% Test functions
+%%%===================================================================
 
 -performance(?create_delete_test_def).
 create_delete_db_test(Config) ->
@@ -154,10 +154,6 @@ get_local_cache_test(Config) ->
 -performance(?exists_test_def).
 exists_local_cache_test(Config) ->
     datastore_basic_ops_utils:exists_test(Config, locally_cached).
-
-%% ====================================================================
-
-
 
 %%%===================================================================
 %%% SetUp and TearDown functions
