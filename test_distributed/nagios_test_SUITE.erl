@@ -35,8 +35,9 @@ all() -> [nagios_test].
 -define(HEALTHCHECK_RETRY_PERIOD, 500).
 
 %%%===================================================================
-%%% Test function
+%%% Test functions
 %%%===================================================================
+
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
@@ -80,10 +81,6 @@ nagios_test(Config) ->
         end, NodeStatuses).
 
 %%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
@@ -91,3 +88,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

@@ -30,8 +30,9 @@ all() -> [choose_adequate_handler].
 
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
+
 %%%===================================================================
-%%% API
+%%% Test functions
 %%%===================================================================
 
 choose_adequate_handler(Config) ->
@@ -121,6 +122,7 @@ get_selective_params_of_dir_test(Config) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
 init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
