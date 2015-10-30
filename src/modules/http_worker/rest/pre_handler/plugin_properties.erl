@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module operates on handler_descriptions provided by protocol plugins
+%%% This module contains functions that modify handler_description maps,
+%%% provided by protocol plugins.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(plugin_properties).

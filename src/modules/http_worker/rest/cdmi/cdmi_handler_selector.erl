@@ -27,7 +27,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec choose_object_or_container_handler(cowboy_req:req()) ->
-    {#{}, cowboy_req:req()}.
+    {#{handler => module()}, cowboy_req:req()}.
 choose_object_or_container_handler(Req) ->
     {Path, Req2} = cowboy_req:path(Req),
     Handler = choose_object_or_container_handler_module(Path),

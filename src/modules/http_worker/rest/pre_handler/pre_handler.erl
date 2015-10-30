@@ -26,6 +26,7 @@
 %% Cowboy user defined callbacks
 -export([accept_resource/2, provide_resource/2, to_html/2]).
 
+-define(HANDLER_DESCRIPTION_REQUIRED_PROPERTIES, 3).
 
 %%%===================================================================
 %%% Cowboy handler API
@@ -41,7 +42,8 @@
 init(Arg, Req, Description) when is_function(Description) ->
     {HandlerDesc, Req2} = Description(Req),
     init(Arg, Req2, HandlerDesc);
-init(Arg, Req, Description) when map_size(Description) < 3 ->
+init(Arg, Req, Description)
+    when map_size(Description) < ?HANDLER_DESCRIPTION_REQUIRED_PROPERTIES ->
     init(Arg, Req, plugin_properties:fill_with_default(Description));
 init(_, Req, #{
     handler := Handler,
