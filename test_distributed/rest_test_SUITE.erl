@@ -22,19 +22,21 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([rest_token_auth/1, rest_cert_auth/1]).
+-export([token_auth/1, cert_auth/1, internal_error_when_handler_crashes/1,
+    custom_code_when_handler_throws_code/1, custom_error_when_handler_throws_error/1]).
 
 %todo reenable rest_cert_auth after appmock repair
 -performance({test_cases, []}).
-all() -> [rest_token_auth].
+all() -> [token_auth, internal_error_when_handler_crashes,
+    custom_code_when_handler_throws_code, custom_error_when_handler_throws_error].
 
 -define(MACAROON, "macaroon").
 
 %%%===================================================================
-%%% API
+%%% Test functions
 %%%===================================================================
 
-rest_token_auth(Config) ->
+token_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
@@ -47,7 +49,7 @@ rest_token_auth(Config) ->
     ?assertMatch({ok, "401", _, _}, AuthFail),
     ?assertMatch({ok, "404", _, _}, AuthSuccess).
 
-rest_cert_auth(Config) ->
+cert_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
@@ -68,21 +70,77 @@ rest_cert_auth(Config) ->
     Loc3 = proplists:get_value("location", Headers3),
     ?assertMatch({ok, "404", _, _}, ibrowse:send_req(Loc3, [], get, [], [KnownCertOpt])).
 
+internal_error_when_handler_crashes(Config) ->
+    % given
+    Workers = [Worker | _] = ?config(op_worker_nodes, Config),
+    Endpoint = rest_endpoint(Worker),
+    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_crash/2),
+
+    % when
+    {ok, Status, _, _} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+
+    % then
+    ?assertEqual("500", Status).
+
+custom_code_when_handler_throws_code(Config) ->
+    % given
+    Workers = [Worker | _] = ?config(op_worker_nodes, Config),
+    Endpoint = rest_endpoint(Worker),
+    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400/2),
+
+    % when
+    {ok, Status, _, _} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+
+    % then
+    ?assertEqual("400", Status).
+
+custom_error_when_handler_throws_error(Config) ->
+    % given
+    Workers = [Worker | _] = ?config(op_worker_nodes, Config),
+    Endpoint = rest_endpoint(Worker),
+    test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400_with_description/2),
+
+    % when
+    {ok, Status, _, Body} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+
+    % then
+    ?assertEqual("400", Status),
+    ?assertEqual("{\"error\":\"badrequest\"}", Body).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
 init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
+init_per_testcase(Module, Config)
+    when Module =:= internal_error_when_handler_crashes
+    orelse Module =:= custom_code_when_handler_throws_code
+    orelse Module =:= custom_error_when_handler_throws_error ->
+    Workers = ?config(op_worker_nodes, Config),
+    ssl:start(),
+    ibrowse:start(),
+    test_utils:mock_new(Workers, rest_handler),
+    Config;
 init_per_testcase(_, Config) ->
     ssl:start(),
     ibrowse:start(),
     mock_gr_certificates(Config),
     Config.
 
+end_per_testcase(Module, Config)
+    when Module =:= internal_error_when_handler_crashes
+    orelse Module =:= custom_code_when_handler_throws_code
+    orelse Module =:= custom_error_when_handler_throws_error ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, rest_handler),
+    ibrowse:stop(),
+    ssl:stop();
 end_per_testcase(_, Config) ->
     unmock_gr_certificates(Config),
     ibrowse:stop(),
@@ -143,3 +201,15 @@ unmock_gr_certificates(Config) ->
     test_utils:mock_unload(Workers, [gr_endpoint]),
     test_utils:mock_validate(Workers, [oneprovider]),
     test_utils:mock_unload(Workers, [oneprovider]).
+
+-spec test_crash(term(), term()) -> no_return().
+test_crash(_, _) ->
+    throw(test_crash).
+
+-spec test_throw_400(term(), term()) -> no_return().
+test_throw_400(_, _) ->
+    throw(400).
+
+-spec test_throw_400_with_description(term(), term()) -> no_return().
+test_throw_400_with_description(_, _) ->
+    throw({400, [{<<"error">>, <<"badrequest">>}]}).

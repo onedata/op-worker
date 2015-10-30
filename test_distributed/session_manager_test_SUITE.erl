@@ -43,9 +43,9 @@ all() -> [
 
 -define(TIMEOUT, timer:seconds(5)).
 
-%%%====================================================================
-%%% Test function
-%%%====================================================================
+%%%===================================================================
+%%% Test functions
+%%%===================================================================
 
 %% Check whether session manager creates session for the first time and then
 %% reuses it despite of node on which request is processed.
