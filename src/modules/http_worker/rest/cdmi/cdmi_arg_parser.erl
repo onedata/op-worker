@@ -25,7 +25,7 @@
 malformed_request(Req, State) ->
   {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
   Version = get_supported_version(RawVersion),
-  {Req3, Qs} = cowboy_req:qs(Req),
+  {Req3, Qs} = cowboy_req:qs(Req2),
   Opts = parse_opts(Qs),
   State2 = dict:store(cdmi_version, Version, State),
   NewState = dict:store(options, Opts, State2),
