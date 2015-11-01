@@ -23,7 +23,7 @@
 
 %% API
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
-    get_sequencer_manager/1, get_communicator/1, get_auth/1]).
+    get_event_managers/0, get_sequencer_manager/1, get_communicator/1, get_auth/1]).
 
 -export_type([id/0, identity/0]).
 
@@ -170,6 +170,26 @@ get_event_manager(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns list of all event managers associated with any session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_managers() -> {ok, [{ok, EvtMan :: pid()} | {error, {not_found,
+    SessId :: session:id()}}]} | {error, Reason :: term()}.
+get_event_managers() ->
+    case session:list() of
+        {ok, Docs} ->
+            {ok, lists:map(fun
+                (#document{key = SessId, value = #session{event_manager = undefined}}) ->
+                    {error, {not_found, SessId}};
+                (#document{value = #session{event_manager = EvtMan}}) ->
+                    {ok, EvtMan}
+            end, Docs)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns sequencer manager associated with session.
 %% @end
 %%--------------------------------------------------------------------
@@ -178,7 +198,7 @@ get_event_manager(SessId) ->
 get_sequencer_manager(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{sequencer_manager = undefined}}} ->
-            {error, {not_found, missing}};
+            {error, not_found};
         {ok, #document{value = #session{sequencer_manager = SeqMan}}} ->
             {ok, SeqMan};
         {error, Reason} ->
@@ -204,10 +224,10 @@ get_communicator(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns #auth{] record associated with session.
+%% Returns #auth{} record associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(SessId :: id()) -> {ok, #auth{}} |{error, Reason :: term()}.
+-spec get_auth(SessId :: id()) -> {ok, Auth :: #auth{}} |{error, Reason :: term()}.
 get_auth(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} ->

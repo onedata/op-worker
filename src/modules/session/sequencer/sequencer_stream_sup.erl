@@ -7,16 +7,16 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements supervisor behaviour and is responsible
-%%% for supervising and restarting event streams.
+%%% for supervising and restarting sequencer streams.
 %%% @end
 %%%-------------------------------------------------------------------
--module(event_stream_sup).
+-module(sequencer_stream_sup).
 -author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_event_stream/4, stop_event_stream/2]).
+-export([start_link/1, start_sequencer_stream/4]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -30,30 +30,21 @@
 %% Starts the supervisor
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link() ->
-    supervisor:start_link(?MODULE, []).
+-spec start_link(Child :: atom()) ->
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+start_link(Child) ->
+    supervisor:start_link(?MODULE, [Child]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts event stream supervised by event stream supervisor.
+%% Starts sequencer stream supervised by sequencer stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_event_stream(EvtStmSup :: pid(), EvtMan :: pid(),
-    SubId :: event_manager:subscription_id(),
-    EvtStmSpec :: event_stream:event_stream()) -> ok | {error, Reason :: term()}.
-start_event_stream(EvtStmSup, EvtMan, SubId, EvtStmSpec) ->
-    supervisor:start_child(EvtStmSup, [EvtMan, SubId, EvtStmSpec]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Stops event stream supervised by event stream supervisor.
-%% @end
-%%--------------------------------------------------------------------
--spec stop_event_stream(EvtStmSup :: pid(), EvtStm :: pid()) ->
-    ok | {error, Reason :: term()}.
-stop_event_stream(EvtStmSup, EvtStm) ->
-    supervisor:terminate_child(EvtStmSup, EvtStm).
+-spec start_sequencer_stream(SeqStmSup :: pid(), SeqMan :: pid(),
+    StmId :: sequencer:stream_id(), SessId :: session:id()) ->
+    supervisor:startchild_ret().
+start_sequencer_stream(SeqStmSup, SeqMan, StmId, SessId) ->
+    supervisor:start_child(SeqStmSup, [SeqMan, StmId, SessId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -69,17 +60,11 @@ stop_event_stream(EvtStmSup, EvtStm) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-        [ChildSpec :: supervisor:child_spec()]
-    }} |
-    ignore.
-init([]) ->
-    RestartStrategy = simple_one_for_one,
-    MaxRestarts = 3,
-    RestartTimeWindowSecs = 1,
-    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
-        event_stream_spec()
+    {ok, {SupFlags :: supervisor:sup_flags(),
+        [ChildSpec :: supervisor:child_spec()]}} | ignore.
+init([Child]) ->
+    {ok, {#{strategy => simple_one_for_one, intensity => 3, period => 1}, [
+        sequencer_stream_spec(Child)
     ]}}.
 
 %%%===================================================================
@@ -89,13 +74,20 @@ init([]) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a supervisor child_spec for a event stream.
+%% Returns a supervisor child_spec for a sequencer stream.
 %% @end
 %%--------------------------------------------------------------------
--spec event_stream_spec() -> supervisor:child_spec().
-event_stream_spec() ->
-    Id = Module = event_stream,
-    Restart = transient,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+-spec sequencer_stream_spec(Module :: atom()) -> supervisor:child_spec().
+sequencer_stream_spec(Module) ->
+    Restart = case Module of
+                  sequencer_in_stream -> temporary;
+                  sequencer_out_stream -> transient
+              end,
+    #{
+        id => Module,
+        start => {Module, start_link, []},
+        restart => Restart,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [Module]
+    }.

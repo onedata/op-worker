@@ -16,7 +16,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/1, get_sequencer_stream_sup/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -35,6 +35,20 @@
 start_link(SessId) ->
     supervisor:start_link(?MODULE, [SessId]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns event stream supervisor associated with event manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_sequencer_stream_sup(SeqManSup :: pid(), Id :: atom()) ->
+    {ok, SeqStmSup :: pid()} | {error, not_found}.
+get_sequencer_stream_sup(SeqManSup, Id) ->
+    Children = supervisor:which_children(SeqManSup),
+    case lists:keyfind(Id, 1, Children) of
+        {Id, SeqStmSup, _, _} when is_pid(SeqStmSup) -> {ok, SeqStmSup};
+        _ -> {error, not_found}
+    end.
+
 %%%===================================================================
 %%% Supervisor callbacks
 %%%===================================================================
@@ -49,17 +63,12 @@ start_link(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-        [ChildSpec :: supervisor:child_spec()]
-    }} |
-    ignore.
+    {ok, {SupFlags :: supervisor:sup_flags(),
+        [ChildSpec :: supervisor:child_spec()]}} | ignore.
 init([SessId]) ->
-    RestartStrategy = one_for_all,
-    MaxRestarts = 3,
-    RestartTimeWindowSecs = 1,
-    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
-        sequencer_stream_sup_spec(),
+    {ok, {#{strategy => one_for_all, intensity => 3, period => 1}, [
+        sequencer_stream_sup_spec(sequencer_in_stream_sup, sequencer_in_stream),
+        sequencer_stream_sup_spec(sequencer_out_stream_sup, sequencer_out_stream),
         sequencer_manager_spec(self(), SessId)
     ]}}.
 
@@ -73,13 +82,18 @@ init([SessId]) ->
 %% Returns a supervisor child_spec for a sequencer stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_stream_sup_spec() -> supervisor:child_spec().
-sequencer_stream_sup_spec() ->
-    Id = Module = sequencer_stream_sup,
-    Restart = permanent,
-    Shutdown = infinity,
-    Type = supervisor,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+-spec sequencer_stream_sup_spec(Id :: atom(), Child :: atom()) ->
+    supervisor:child_spec().
+sequencer_stream_sup_spec(Id, Child) ->
+    Module = sequencer_stream_sup,
+    #{
+        id => Id,
+        start => {Module, start_link, [Child]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [Module]
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -90,8 +104,12 @@ sequencer_stream_sup_spec() ->
 -spec sequencer_manager_spec(SeqManSup :: pid(), SessId :: session:id()) ->
     supervisor:child_spec().
 sequencer_manager_spec(SeqManSup, SessId) ->
-    Id = Module = sequencer_manager,
-    Restart = permanent,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, [SeqManSup, SessId]}, Restart, Shutdown, Type, [Module]}.
+    Module = sequencer_manager,
+    #{
+        id => Module,
+        start => {Module, start_link, [SeqManSup, SessId]},
+        restart => transient,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [Module]
+    }.

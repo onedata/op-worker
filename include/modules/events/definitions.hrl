@@ -6,13 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file includes all definitions concerning events.
+%%% This file contains all definitions associated with event processing.
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(EVENTS_HRL).
--define(EVENTS_HRL, 1).
+-ifndef(OP_WORKER_MODULES_EVENTS_DEFINITIONS_HRL).
+-define(OP_WORKER_MODULES_EVENTS_DEFINITIONS_HRL, 1).
 
--include("read_event.hrl").
--include("write_event.hrl").
+-include("streams.hrl").
+-include("subscriptions.hrl").
+-include("types.hrl").
 
 -endif.

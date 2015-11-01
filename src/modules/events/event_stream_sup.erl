@@ -7,19 +7,19 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements supervisor behaviour and is responsible
-%%% for supervising and restarting sequencer streams.
+%%% for supervising and restarting event streams.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sequencer_stream_sup).
+-module(event_stream_sup).
 -author("Krzysztof Trzepla").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_sequencer_stream/4]).
+-export([start_link/0]).
 
 %% Supervisor callbacks
--export([init/1]).
+-export([init/1, start_event_stream/4]).
 
 %%%===================================================================
 %%% API functions
@@ -27,23 +27,24 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the supervisor
+%% Starts the event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+-spec start_link() ->
+    {ok, EvtStmSup :: pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
     supervisor:start_link(?MODULE, []).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts sequencer stream supervised by sequencer stream supervisor.
+%% Starts the event stream supervised by event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_sequencer_stream(SeqStmSup :: pid(), SeqMan :: pid(),
-    SessId :: session:id(), StmId :: non_neg_integer()) ->
+-spec start_event_stream(EvtStmSup :: pid(), EvtMan :: pid(),
+    Sub :: event:subscription(), SessId :: session:id()) ->
     supervisor:startchild_ret().
-start_sequencer_stream(SeqStmSup, SeqMan, SessId, StmId) ->
-    supervisor:start_child(SeqStmSup, [SeqMan, SessId, StmId]).
+start_event_stream(EvtStmSup, EvtMan, Sub, SessId) ->
+    supervisor:start_child(EvtStmSup, [EvtMan, Sub, SessId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -59,17 +60,11 @@ start_sequencer_stream(SeqStmSup, SeqMan, SessId, StmId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-        [ChildSpec :: supervisor:child_spec()]
-    }} |
-    ignore.
+    {ok, {SupFlags :: supervisor:sup_flags(),
+        [ChildSpec :: supervisor:child_spec()]}} | ignore.
 init([]) ->
-    RestartStrategy = simple_one_for_one,
-    MaxRestarts = 3,
-    RestartTimeWindowSecs = 1,
-    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
-        sequencer_stream_spec()
+    {ok, {#{strategy => simple_one_for_one, intensity => 3, period => 1}, [
+        event_stream_spec()
     ]}}.
 
 %%%===================================================================
@@ -79,13 +74,17 @@ init([]) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a supervisor child_spec for a sequencer stream.
+%% Returns a supervisor child_spec for a event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec sequencer_stream_spec() -> supervisor:child_spec().
-sequencer_stream_spec() ->
-    Id = Module = sequencer_stream,
-    Restart = transient,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+-spec event_stream_spec() -> supervisor:child_spec().
+event_stream_spec() ->
+    Module = event_stream,
+    #{
+        id => Module,
+        start => {Module, start_link, []},
+        restart => transient,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [Module]
+    }.

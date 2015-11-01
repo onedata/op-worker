@@ -37,23 +37,40 @@
 -spec translate_from_protobuf(tuple() | undefined) -> tuple() | undefined.
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
-translate_from_protobuf(#'Event'{event = {_, Record}}) ->
-    #event{event = translate_from_protobuf(Record)};
+translate_from_protobuf(#'Event'{counter = Counter, type = {_, Record}}) ->
+    #event{counter = Counter, type = translate_from_protobuf(Record)};
 translate_from_protobuf(#'ReadEvent'{} = Record) ->
     #read_event{
-        counter = Record#'ReadEvent'.counter,
-        file_id = Record#'ReadEvent'.file_id,
+        file_uuid = Record#'ReadEvent'.file_uuid,
         size = Record#'ReadEvent'.size,
         blocks = [translate_from_protobuf(B) || B <- Record#'ReadEvent'.blocks]
     };
 translate_from_protobuf(#'WriteEvent'{} = Record) ->
     #write_event{
-        counter = Record#'WriteEvent'.counter,
-        file_id = Record#'WriteEvent'.file_id,
+        file_uuid = Record#'WriteEvent'.file_uuid,
         size = Record#'WriteEvent'.size,
         file_size = Record#'WriteEvent'.file_size,
         blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]
     };
+translate_from_protobuf(#'Subscription'{} = Record) ->
+    #subscription{
+        id = Record#'Subscription'.id,
+        type = translate_from_protobuf(Record#'Subscription'.type)
+    };
+translate_from_protobuf(#'FileAttrSubscription'{} = Record) ->
+    #file_attr_subscription{
+        file_uuid = Record#'FileAttrSubscription'.file_uuid,
+        counter_threshold = Record#'FileAttrSubscription'.counter_threshold,
+        time_threshold = Record#'FileAttrSubscription'.time_threshold
+    };
+translate_from_protobuf(#'FileLocationSubscription'{} = Record) ->
+    #file_location_subscription{
+        file_uuid = Record#'FileLocationSubscription'.file_uuid,
+        counter_threshold = Record#'FileLocationSubscription'.counter_threshold,
+        time_threshold = Record#'FileLocationSubscription'.time_threshold
+    };
+translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
+    #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
     #file_block{offset = Off, size = S};
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
@@ -98,35 +115,26 @@ translate_from_protobuf(undefined) ->
 -spec translate_to_protobuf(tuple() | undefined) -> tuple() | undefined.
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
-translate_to_protobuf(#event_subscription_cancellation{id = Id}) ->
-    {event_subscription, #'EventSubscription'{
-        event_subscription = {event_subscription_cancellation,
-            #'EventSubscriptionCancellation'{
-                id = Id
-            }
-        }
+translate_to_protobuf(#event{counter = Counter, type = Type}) ->
+    {event, #'Event'{counter = Counter, type = translate_to_protobuf(Type)}};
+translate_to_protobuf(#update_event{type = Type}) ->
+    {update_event, #'UpdateEvent'{type = translate_to_protobuf(Type)}};
+translate_to_protobuf(#subscription{id = Id, type = Type}) ->
+    {subscription, #'Subscription'{id = Id, type = translate_to_protobuf(Type)}};
+translate_to_protobuf(#read_subscription{} = Sub) ->
+    {read_subscription, #'ReadSubscription'{
+        counter_threshold = Sub#read_subscription.counter_threshold,
+        time_threshold = Sub#read_subscription.time_threshold,
+        size_threshold = Sub#read_subscription.size_threshold
     }};
-translate_to_protobuf(#read_event_subscription{} = Sub) ->
-    {event_subscription, #'EventSubscription'{
-        event_subscription = {read_event_subscription,
-            #'ReadEventSubscription'{
-                id = Sub#read_event_subscription.id,
-                counter_threshold = Sub#read_event_subscription.producer_counter_threshold,
-                time_threshold = Sub#read_event_subscription.producer_time_threshold,
-                size_threshold = Sub#read_event_subscription.producer_size_threshold
-            }
-        }
+translate_to_protobuf(#write_subscription{} = Sub) ->
+    {write_subscription, #'ReadSubscription'{
+        counter_threshold = Sub#write_subscription.counter_threshold,
+        time_threshold = Sub#write_subscription.time_threshold,
+        size_threshold = Sub#write_subscription.size_threshold
     }};
-translate_to_protobuf(#write_event_subscription{} = Sub) ->
-    {event_subscription, #'EventSubscription'{
-        event_subscription = {write_event_subscription,
-            #'WriteEventSubscription'{
-                id = Sub#write_event_subscription.id,
-                counter_threshold = Sub#write_event_subscription.producer_counter_threshold,
-                time_threshold = Sub#write_event_subscription.producer_time_threshold,
-                size_threshold = Sub#write_event_subscription.producer_size_threshold
-            }
-        }}};
+translate_to_protobuf(#subscription_cancellation{id = Id}) ->
+    {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
 translate_to_protobuf(#handshake_response{session_id = Id}) ->
     {handshake_response, #'HandshakeResponse'{session_id = Id}};
 translate_to_protobuf(#message_stream{stream_id = StmId, sequence_number = SeqNum}) ->
@@ -154,6 +162,8 @@ translate_to_protobuf(#fuse_response{status = Status, fuse_response = FuseRespon
     }};
 translate_to_protobuf(#child_link{uuid = UUID, name = Name}) ->
     #'ChildLink'{uuid = UUID, name = Name};
+translate_to_protobuf(#file_block{offset = Offset, size = Size}) ->
+    #'FileBlock'{offset = Offset, size = Size};
 translate_to_protobuf(#file_attr{} = FileAttr) ->
     {file_attr, #'FileAttr'{
         uuid = FileAttr#file_attr.uuid,
@@ -166,6 +176,14 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         ctime = FileAttr#file_attr.ctime,
         type = FileAttr#file_attr.type,
         size = FileAttr#file_attr.size
+    }};
+translate_to_protobuf(#file_location{} = FileLocation) ->
+    {file_attr, #'FileLocation'{
+        uuid = FileLocation#file_location.uuid,
+        provider_id = FileLocation#file_location.provider_id,
+        storage_id = FileLocation#file_location.storage_id,
+        file_id = FileLocation#file_location.file_id,
+        blocks = [translate_to_protobuf(B) || B <- FileLocation#file_location.blocks]
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->

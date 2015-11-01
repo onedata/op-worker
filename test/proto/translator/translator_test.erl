@@ -93,49 +93,49 @@ translate_status_to_protobuf_test() ->
     {status, #'Status'{code = 'VEIO'}},
     translator:translate_to_protobuf(#status{code = 'VEIO'})).
 
-%% tests #event_subscription_cancellation{} translation
-translate_event_subscription_cancellation_to_protobuf_test() ->
+%% tests #subscription_cancellation{} translation
+translate_subscription_cancellation_to_protobuf_test() ->
   ?assertEqual(
     {event_subscription,
-      #'EventSubscription'{event_subscription = {event_subscription_cancellation,
+      #'EventSubscription'{event_subscription = {subscription_cancellation,
         #'EventSubscriptionCancellation'{id = 42}}}},
-    translator:translate_to_protobuf(#event_subscription_cancellation{id = 42})).
+    translator:translate_to_protobuf(#subscription_cancellation{id = 42})).
 
-%% tests #read_event_subscription{} translation
-translate_read_event_subscription_to_protobuf_test() ->
+%% tests #read_subscription{} translation
+translate_read_subscription_to_protobuf_test() ->
   ?assertEqual(
     {event_subscription, #'EventSubscription'{
-      event_subscription = {read_event_subscription, #'ReadEventSubscription'{
+      event_subscription = {read_subscription, #'ReadEventSubscription'{
         id = 123}}}},
-    translator:translate_to_protobuf(#read_event_subscription{id = 123})),
+    translator:translate_to_protobuf(#read_subscription{id = 123})),
   ?assertEqual(
     {event_subscription, #'EventSubscription'{
-      event_subscription = {read_event_subscription, #'ReadEventSubscription'{
+      event_subscription = {read_subscription, #'ReadEventSubscription'{
         id = 123,
         counter_threshold = 12,
         time_threshold = 500,
         size_threshold = 1024}}}},
-    translator:translate_to_protobuf(#read_event_subscription{
+    translator:translate_to_protobuf(#read_subscription{
       id = 123,
       producer_counter_threshold = 12,
       producer_time_threshold = 500,
       producer_size_threshold = 1024})).
 
-%% tests write_event_subscription{} translation
-translate_write_event_subscription_to_protobuf_test() ->
+%% tests write_subscription{} translation
+translate_write_subscription_to_protobuf_test() ->
   ?assertEqual(
     {event_subscription, #'EventSubscription'{
-      event_subscription = {write_event_subscription, #'WriteEventSubscription'{
+      event_subscription = {write_subscription, #'WriteEventSubscription'{
         id = 123}}}},
-    translator:translate_to_protobuf(#write_event_subscription{id = 123})),
+    translator:translate_to_protobuf(#write_subscription{id = 123})),
   ?assertEqual(
     {event_subscription, #'EventSubscription'{
-      event_subscription = {write_event_subscription, #'WriteEventSubscription'{
+      event_subscription = {write_subscription, #'WriteEventSubscription'{
         id = 123,
         counter_threshold = 12,
         time_threshold = 500,
         size_threshold = 1024}}}},
-    translator:translate_to_protobuf(#write_event_subscription{
+    translator:translate_to_protobuf(#write_subscription{
       id = 123,
       producer_counter_threshold = 12,
       producer_time_threshold = 500,

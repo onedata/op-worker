@@ -70,6 +70,14 @@
     size = 0 :: file_meta:size()
 }).
 
+-record(file_location, {
+    uuid :: file_meta:uuid(),
+    provider_id :: binary(),
+    storage_id :: binary(),
+    file_id :: binary(),
+    blocks :: [#file_block{}]
+}).
+
 -record(file_children, {
     child_links :: [#child_link{}]
 }).
@@ -77,7 +85,7 @@
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{}.
 
--type fuse_response() :: #file_attr{} | #file_children{}.
+-type fuse_response() :: #file_attr{} | #file_location{} | #file_children{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

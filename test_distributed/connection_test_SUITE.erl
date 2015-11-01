@@ -108,13 +108,13 @@ protobuf_msg_test(Config) ->
     remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
-        fun(#client_message{message_body = #event{event = #read_event{}}}, _) ->
+        fun(#client_message{message_body = #event{type = #read_event{}}}, _) ->
             ok
         end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
-        message_body = {event, #'Event'{event =
-        {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size = 1, blocks = []}}
+        message_body = {event, #'Event'{counter = 1, type =
+        {read_event, #'ReadEvent'{file_uuid = <<"id">>, size = 1, blocks = []}}
         }}
     },
     RawMsg = messages:encode_msg(Msg),
@@ -147,17 +147,20 @@ multi_message_test(Config) ->
     MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(
         fun(N) ->
-            #'ClientMessage'{message_body = {event, #'Event'{event =
-            {read_event, #'ReadEvent'{
+            #'ClientMessage'{message_body = {event, #'Event'{
                 counter = N,
-                file_id = <<"id">>,
-                size = 1,
-                blocks = []
-            }}}}}
+                type = {read_event, #'ReadEvent'{
+                    file_uuid = <<"id">>,
+                    size = 1,
+                    blocks = []
+                }}}}}
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
     test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #event{event = #read_event{counter = Counter}}}) ->
+        fun(#client_message{message_body = #event{
+            counter = Counter,
+            type = #read_event{}}
+        }) ->
             Self ! Counter,
             ok
         end),

@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Sequencer model.
+%%% @doc Event stream definition model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(subscription).
@@ -13,12 +13,37 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(BATCH_SIZE, 100).
+
+%% API
+-export([generate_id/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
+
+-export_type([id/0, type/0, cancellaton/0]).
+
+-type id() :: integer().
+-type type() :: #file_attr_subscription{} | #file_location_subscription{} |
+                #read_subscription{} | #write_subscription{}.
+-type cancellaton() :: #subscription_cancellation{}.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns increasing subscription IDs based on the timestamp.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_id() -> SubId :: id().
+generate_id() ->
+    {MegaSecs, Secs, MicroSecs} = erlang:now(),
+    MegaSecs * 1000000000000 + Secs * 1000000 + MicroSecs.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -70,8 +95,14 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
-
+    case datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []) of
+        {ok, Docs} ->
+            {ok, lists:map(fun(#document{value = Sub}) ->
+                Sub
+            end, Docs)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,7 +129,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(event_manager_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(event_stream_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
