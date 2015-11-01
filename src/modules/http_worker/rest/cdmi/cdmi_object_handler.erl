@@ -1,15 +1,15 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2013 ACK CYFRONET AGH
+%%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This is a cowboy handler module, implementing cowboy_rest interface.
-%%% It handles cdmi object/container PUT, GET and DELETE requests
+%%% It handles cdmi object PUT, GET and DELETE requests
 %%% @end
 %%%--------------------------------------------------------------------
--module(cdmi_handler).
+-module(cdmi_object_handler).
 -author("Tomasz Lichon").
 
 -include("modules/http_worker/http_common.hrl").
@@ -19,140 +19,97 @@
 -record(state, {}).
 
 %% API
--export([init/3, terminate/3, rest_init/2, resource_exists/2, malformed_request/2,
+-export([rest_init/2, terminate/3, resource_exists/2, malformed_request/2,
     allowed_methods/2, content_types_provided/2, content_types_accepted/2,
     delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi_container/2, put_cdmi_container/2]).
+-export([get/2, put/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Imposes a cowboy upgrade protocol to cowboy_rest - this module is
-%% now treated as REST module by cowboy.
-%% @end
-%%--------------------------------------------------------------------
--spec init(term(), term(), term()) -> {upgrade, protocol, cowboy_rest, req(), term()}.
-init(_, Req, Opts) ->
-    {upgrade, protocol, cowboy_rest, Req, Opts}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Handles cleanup
-%% @end
-%%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #state{}) -> ok.
-terminate(_, _, _) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Called right after protocol upgrade to init the request context.
-%% Will shut down the connection if the peer doesn't provide a valid
-%% proxy certificate.
-%% @end
+%% @doc @equiv pre_handler:rest_init/2
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
     {ok, Req, #state{}}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Returns methods that are allowed.
-%% @end
+%% @doc @equiv pre_handler:terminate/3
+%%--------------------------------------------------------------------
+-spec terminate(Reason :: term(), req(), #state{}) -> ok.
+terminate(_, _, _) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
 -spec allowed_methods(req(), #state{} | {error, term()}) -> {[binary()], req(), #state{}}.
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Checks if request contains all mandatory fields and their values are set properly
-%% depending on requested operation
-%% @end
+%% @doc @equiv pre_handler:malformed_request/2
 %%--------------------------------------------------------------------
 -spec malformed_request(req(), #state{}) -> {boolean(), req(), #state{}}.
 malformed_request(Req, State) ->
     {false, Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Determines if resource identified by Filepath exists.
-%% @end
+%% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 resource_exists(Req, State) ->
     {false, Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Returns content types that can be provided.
-%% @end
+%% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), #state{}) ->
     {[{binary(), atom()}], req(), #state{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, get_cdmi_container}
+        {<<"application/cdmi-object">>, get}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc Cowboy callback function
-%% Returns content-types that are accepted by REST handler and what
-%% functions should be used to process the requests.
-%% @end
+%% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #state{}) ->
     {[{binary(), atom()}], req(), #state{}}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put_cdmi_container}
+        {<<"application/cdmi-object">>, put}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Cowboy callback function
-%% Handles DELETE requests.
-%% @end
+%% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 delete_resource(Req, State) ->
     {true, Req, State}.
 
 %%%===================================================================
-%%% Content type routing functions
+%%% Content type handler functions
 %%%===================================================================
-%%--------------------------------------------------------------------
-%% This functions are needed by cowboy for registration in
-%% content_types_accepted/content_types_provided methods and simply delegates
-%% their responsibility to adequate handler modules
-%%-------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles GET with "application/cdmi-container" content-type
+%% Handles GET with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
-get_cdmi_container(Req, State) ->
+-spec get(req(), #state{}) -> {term(), req(), #state{}}.
+get(Req, State) ->
     {<<"ok">>, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles PUT with "application/cdmi-container" content-type
+%% Handles PUT with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put_cdmi_container(req(), #state{}) -> {term(), req(), #state{}}.
-put_cdmi_container(Req, State) ->
+-spec put(req(), #state{}) -> {term(), req(), #state{}}.
+put(Req, State) ->
     {true, Req, State}.

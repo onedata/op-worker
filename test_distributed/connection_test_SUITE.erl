@@ -49,7 +49,7 @@ all() ->
 -define(MACAROON, <<"TOKEN_VALUE">>).
 
 %%%===================================================================
-%%% Test function
+%%% Test functions
 %%%===================================================================
 
 token_connection_test(Config) ->
@@ -568,6 +568,7 @@ proto_version_test(Config) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
 init_per_suite(Config) ->
     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 

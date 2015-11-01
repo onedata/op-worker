@@ -49,8 +49,8 @@ all() ->
     [].
 
 %%%===================================================================
-%%% Test function
-%% ====================================================================
+%%% Test functions
+%%%===================================================================
 
 -performance([
     {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
