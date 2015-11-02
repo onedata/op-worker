@@ -12,6 +12,9 @@
 -module(cdmi_arg_parser).
 -author("Piotr Ociepka").
 
+-include("modules/http_worker/http_common.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+
 -export([get_supported_version/1, parse_opts/1, malformed_request/2]).
 
 %%%===================================================================
@@ -21,15 +24,18 @@
 %%--------------------------------------------------------------------
 %% @doc Extract the CDMI version and options and put it in State.
 %%--------------------------------------------------------------------
--spec malformed_request(req(), dict()) -> {req(), dict()}.
+-spec malformed_request(req(), dict()) -> {true|false, req(), dict()}.
 malformed_request(Req, State) ->
   {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
-  Version = get_supported_version(RawVersion),
-  {Req3, Qs} = cowboy_req:qs(Req2),
-  Opts = parse_opts(Qs),
-  State2 = dict:store(cdmi_version, Version, State),
-  NewState = dict:store(options, Opts, State2),
-  {Req3, NewState}.
+  case get_supported_version(RawVersion) of
+    undefined -> {false, Req2, State};
+    Version ->
+      {Req3, Qs} = cowboy_req:qs(Req2),
+      Opts = parse_opts(Qs),
+      State2 = dict:store(cdmi_version, Version, State),
+      NewState = dict:store(options, Opts, State2),
+      {true, Req3, NewState}
+end.
 
 %%%===================================================================
 %%% Internal functions
@@ -39,23 +45,15 @@ malformed_request(Req, State) ->
 %% @doc Extract the CDMI version from request arguments string.
 %%--------------------------------------------------------------------
 -spec get_supported_version(list() | binary()) ->
-  binary() | {error, unsupported_version, binary()} | {error, unknown_version}.
-get_supported_version(<<"">>) ->
-  throw({error, unknown_version});
-get_supported_version(BinaryString) when is_binary(BinaryString) ->
-  BinaryList = [trim(X)  || X <- binary:split(BinaryString, <<",">>, [global])],
-  get_supported_version(BinaryList);
-get_supported_version([MaybeVersion | Tail]) ->
-  case MaybeVersion of
-    <<"1.1.1">> -> <<"1.1.1">>;
-    _ -> case binary:split(MaybeVersion, <<".">>, [global]) of
-      [X, Y, Z] when X =/= <<>>, Y =/= <<>>, Z =/= <<>> ->
-        throw({error, unsupported_version, MaybeVersion});
-      _ -> get_supported_version(Tail)
-    end
-  end;
-get_supported_version([]) ->
-  throw({error, unknown_version}).
+  binary() | undefined.
+get_supported_version(undefined) -> undefined;
+get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
+  VersionList = lists:map(fun utils:trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
+  get_supported_version(VersionList);
+get_supported_version([]) -> throw(?unsupported_version);
+get_supported_version([<<"1.1.1">> | _Rest]) -> <<"1.1.1">>;
+get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
+
 
 %%--------------------------------------------------------------------
 %% @doc Parses given cowboy 'qs' opts (all that appears after '?' in url), splitting

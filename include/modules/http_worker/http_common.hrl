@@ -17,5 +17,6 @@
 
 %% Includes from cowboy
 -type req() :: cowboy_req:req().
+-type dict() :: dict:dict().
 
 -endif.

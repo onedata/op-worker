@@ -14,6 +14,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 
 -define(version, cdmi_arg_parser:get_supported_version).
 
@@ -38,28 +39,28 @@ get_supported_version_test() ->
   Binary41 = <<"aaa,aa,">>,
   Binary42 = <<"aaa,aa ">>,
 
-  ?assertThrow({error, unknown_version}, ?version(Binary00)),
-  ?assertThrow({error, unknown_version}, ?version(Binary01)),
-  ?assertThrow({error, unknown_version}, ?version(Binary02)),
+  ?assertThrow(?unsupported_version, ?version(Binary00)),
+  ?assertThrow(?unsupported_version, ?version(Binary01)),
+  ?assertThrow(?unsupported_version, ?version(Binary02)),
 
   ?assertEqual(?version(Binary10), <<"1.1.1">>),
   ?assertEqual(?version(Binary11), <<"1.1.1">>),
 
-  ?assertThrow({error, unsupported_version, <<"1.0.2">>}, ?version(Binary20)),
-  ?assertThrow({error, unsupported_version, <<"2.3.4">>}, ?version(Binary21)),
-  ?assertThrow({error, unsupported_version, <<"42.0.0">>}, ?version(Binary22)),
-  ?assertThrow({error, unsupported_version, <<"1.0.1">>}, ?version(Binary23)),
+  ?assertThrow(?unsupported_version, ?version(Binary20)),
+  ?assertThrow(?unsupported_version, ?version(Binary21)),
+  ?assertThrow(?unsupported_version, ?version(Binary22)),
+  ?assertThrow(?unsupported_version, ?version(Binary23)),
 
 
-  ?assertThrow({error, unknown_version}, ?version(Binary30)),
-  ?assertThrow({error, unknown_version}, ?version(Binary31)),
-  ?assertThrow({error, unknown_version}, ?version(Binary32)),
-  ?assertThrow({error, unknown_version}, ?version(Binary33)),
-  ?assertThrow({error, unknown_version}, ?version(Binary34)),
-  ?assertThrow({error, unknown_version}, ?version(Binary35)),
+  ?assertThrow(?unsupported_version, ?version(Binary30)),
+  ?assertThrow(?unsupported_version, ?version(Binary31)),
+  ?assertThrow(?unsupported_version, ?version(Binary32)),
+  ?assertThrow(?unsupported_version, ?version(Binary33)),
+  ?assertThrow(?unsupported_version, ?version(Binary34)),
+  ?assertThrow(?unsupported_version, ?version(Binary35)),
 
-  ?assertThrow({error, unknown_version}, ?version(Binary40)),
-  ?assertThrow({error, unknown_version}, ?version(Binary41)),
-  ?assertThrow({error, unknown_version}, ?version(Binary42)).
+  ?assertThrow(?unsupported_version, ?version(Binary40)),
+  ?assertThrow(?unsupported_version, ?version(Binary41)),
+  ?assertThrow(?unsupported_version, ?version(Binary42)).
 
 -endif.
