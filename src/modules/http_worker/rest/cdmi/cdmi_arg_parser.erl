@@ -27,15 +27,12 @@
 -spec malformed_request(req(), dict()) -> {true|false, req(), dict()}.
 malformed_request(Req, State) ->
   {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
-  case get_supported_version(RawVersion) of
-    undefined -> {false, Req2, State};
-    Version ->
-      {Req3, Qs} = cowboy_req:qs(Req2),
-      Opts = parse_opts(Qs),
-      State2 = dict:store(cdmi_version, Version, State),
-      NewState = dict:store(options, Opts, State2),
-      {true, Req3, NewState}
-end.
+  Version = get_supported_version(RawVersion),
+  {Req3, Qs} = cowboy_req:qs(Req2),
+  Opts = parse_opts(Qs),
+  State2 = dict:store(cdmi_version, Version, State),
+  NewState = dict:store(options, Opts, State2),
+  {false, Req3, NewState}.
 
 %%%===================================================================
 %%% Internal functions
