@@ -133,18 +133,19 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
         end, lists:seq(1, EvtNum))
     end),
 
-    #document{value = #file_location{file_id = FID, storage_id = SID}} = fslogic_utils:get_local_file_location({uuid, FileId}),
+%%     #document{value = #file_location{file_id = FID, storage_id = SID}} = fslogic_utils:get_local_file_location({uuid, FileId}),
 
     % Check whether events have been aggregated and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
-            RMsg = {handler, [#write_event{
-                file_uuid = FileId, counter = CtrThr, size = CtrThr * EvtSize,
-                file_size = N * CtrThr * EvtSize, blocks = [#file_block{
-                    file_id = FID, storage_id = SID,
-                    offset = (N - 1) * CtrThr * EvtSize, size = CtrThr * EvtSize}]
-            }]},
-            ?assertReceived(RMsg, ?TIMEOUT)
+            Size = CtrThr * EvtSize,
+            Offset = (N - 1) * Size,
+            FileSize = N * CtrThr * EvtSize,
+            ?assertReceived({handler, [#write_event{
+                file_uuid = FileId, counter = CtrThr, size = Size,
+                file_size = FileSize, blocks = [#file_block{
+                    offset = Offset, size = Size}]
+            }]}, ?TIMEOUT)
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 

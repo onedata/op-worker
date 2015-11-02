@@ -177,7 +177,6 @@ handle_call(_Request, _From, State) ->
                          {noreply, NewState :: #state{}, timeout() | hibernate} |
                          {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast({initialize, EvtManSup}, #state{session_id = SessId} = State) ->
-    ?info("INIT ~p", [SessId]),
     {ok, EvtStmSup} = get_event_stream_sup(EvtManSup),
     {ok, EvtStms} = create_event_streams(EvtStmSup, SessId),
     {noreply, State#state{event_stream_sup = EvtStmSup, event_streams = EvtStms}};
@@ -339,7 +338,6 @@ set_id(SubId, #write_event_subscription{} = Sub) ->
                                                                       AddRule :: event_stream:admission_rule()}}]}.
 create_event_streams(EvtStmSup, SessId) ->
     {ok, Docs} = subscription:list(),
-    ?info("INIT 2 ~p", [Docs]),
     EvtStms = lists:map(fun(#document{value = #subscription{value = Sub}}) ->
                                 {ok, EvtStm} = create_event_stream(EvtStmSup, SessId, Sub),
                                 EvtStm
@@ -356,13 +354,13 @@ create_event_streams(EvtStmSup, SessId) ->
 -spec create_event_stream(EvtStmSup :: pid(),
                           SessId :: session:id(), Sub :: subscription()) ->
                                  {ok, {SubId :: subscription_id(), event_stream_status()}}.
-create_event_stream(EvtStmSup, SessId,
-    #read_event_subscription{id = SubId,
-        producer = Prod, event_stream = #event_stream{admission_rule = AdmRule} = EvtStmSpec} = Sub) ->
+create_event_stream(EvtStmSup, SessId, #read_event_subscription{id = SubId,
+                                                                producer = Prod, event_stream = #event_stream{admission_rule =
+                                                                                                                  AdmRule} = EvtStmSpec} = Sub) ->
     create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub);
-create_event_stream(EvtStmSup, SessId,
-    #write_event_subscription{id = SubId,
-        producer = Prod, event_stream = #event_stream{admission_rule = AdmRule} = EvtStmSpec} = Sub) ->
+create_event_stream(EvtStmSup, SessId, #write_event_subscription{id = SubId,
+                                                                 producer = Prod, event_stream = #event_stream{admission_rule =
+                                                                                                                   AdmRule} = EvtStmSpec} = Sub) ->
     create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub).
 
 %%--------------------------------------------------------------------
@@ -377,7 +375,6 @@ create_event_stream(EvtStmSup, SessId,
                           EvtStmSpec :: event_stream:event_stream(), Sub :: subscription()) ->
                                  {ok, {SubId :: subscription_id(), event_stream_status()}}.
 create_event_stream(EvtStmSup, SessId, SubId, Prod, AdmRule, EvtStmSpec, Sub) ->
-    ?info("INIT 3 ~p ~p ~p", [SessId, Sub, Prod]),
     case Prod of
         gui -> ok;
         _ -> ok = communicator:send(Sub, SessId)
