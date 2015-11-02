@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec rest_init(cowboy_req:req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
-    {ok, Req, dict:new()}.
+    {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
