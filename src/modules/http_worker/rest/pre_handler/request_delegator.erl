@@ -83,7 +83,7 @@ delegate_content_types_accepted(Req, State) ->
 -spec delegate_provide_resource(cowboy_req:req(), term()) -> term().
 delegate_provide_resource(Req, State) ->
     try
-        {ok, {Req2, Callback}} = cowboy_callback_selector:select_provide_callback(Req),
+        {ok, {Req2, Callback}} = plugin_callback_selector:select_provide_callback(Req),
         delegate(Req2, State, Callback, [Req, State], 2)
     catch
         T:E ->
@@ -99,7 +99,7 @@ delegate_provide_resource(Req, State) ->
 -spec delegate_accept_resource(cowboy_req:req(), term()) -> term().
 delegate_accept_resource(Req, State) ->
     try
-        {ok, {Req2, Callback}} = cowboy_callback_selector:select_accept_callback(Req),
+        {ok, {Req2, Callback}} = plugin_callback_selector:select_accept_callback(Req),
         delegate(Req2, State, Callback, [Req, State], 2)
     catch
         T:E ->
@@ -144,8 +144,8 @@ call_and_handle_exception(Req, State, Fun, Args) ->
 %% Changes all handlers to given one.
 %% @end
 %%--------------------------------------------------------------------
--spec change_callbacks([cowboy_callback_selector:content_type_callback()], atom()) ->
-    [cowboy_callback_selector:content_type_callback()].
+-spec change_callbacks([plugin_callback_selector:content_type_callback()], atom()) ->
+    [plugin_callback_selector:content_type_callback()].
 change_callbacks([], _Callback) ->
     [];
 change_callbacks([{Type, _Handler} | Rest], Callback) ->

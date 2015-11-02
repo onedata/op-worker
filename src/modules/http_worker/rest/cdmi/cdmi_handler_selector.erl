@@ -6,16 +6,16 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Routes used by cowboy to route requests to adequate handlers.
+%%% Some rest handlers must be selected in runtime basing on request type.
+%%% This module contains implementation of selectors that can do it during
+%%% pre-handling request.
 %%% @end
 %%%--------------------------------------------------------------------
--module(rest_router).
+-module(cdmi_handler_selector).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/rest/handler_description.hrl").
-
 %% API
--export([top_level_routing/0]).
+-export([choose_object_or_container_handler/1]).
 
 %%%===================================================================
 %%% API
@@ -23,12 +23,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns top level routes of rest endpoint.
+%% Chooses handler basing on request, and returns handler description
 %% @end
 %%--------------------------------------------------------------------
--spec top_level_routing() -> list().
-top_level_routing() ->
-    custom_api_routes() ++ cdmi_routes().
+-spec choose_object_or_container_handler(cowboy_req:req()) ->
+    {#{handler => module()}, cowboy_req:req()}.
+choose_object_or_container_handler(Req) ->
+    {Path, Req2} = cowboy_req:path(Req),
+    Handler = choose_object_or_container_handler_module(Path),
+    {#{handler => Handler}, Req2}.
 
 %%%===================================================================
 %%% Internal functions
@@ -36,28 +39,21 @@ top_level_routing() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns routes to onedata's custom rest api.
+%% Chooses handler basing on presence of '/' at the end of request path
 %% @end
 %%--------------------------------------------------------------------
--spec custom_api_routes() -> list().
-custom_api_routes() ->
-    [
-        {"/rest/:version/[...]", pre_handler,
-            #handler_description{handler = rest_handler}}
-    ].
+-spec choose_object_or_container_handler_module(binary()) ->
+    cdmi_container_handler | cdmi_object_handler.
+choose_object_or_container_handler_module(Path) ->
+    case ends_with_slash(Path) of
+        true -> cdmi_container_handler;
+        false -> cdmi_object_handler
+    end.
+
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns routes to cdmi protocol.
-%% @end
+%% @equiv binary:last(Path) =:= $/
 %%--------------------------------------------------------------------
--spec cdmi_routes() -> list().
-cdmi_routes() ->
-    [
-        {"/cdmi/cdmi_capabilities/[...]", pre_handler,
-            #handler_description{handler = cdmi_capabilities_handler}},
-        {"/cdmi/cdmi_objectid/:id/[...]", pre_handler,
-            #handler_description{handler = cdmi_objectid_handler}},
-        {"/cdmi/[...]", pre_handler,
-            fun cdmi_handler_selector:choose_object_or_container_handler/1}
-    ].
+-spec ends_with_slash(binary()) -> boolean().
+ends_with_slash(Path) ->
+    binary:last(Path) =:= $/.
