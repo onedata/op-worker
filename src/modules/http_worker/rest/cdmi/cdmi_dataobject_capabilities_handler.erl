@@ -10,7 +10,6 @@
 %% @end
 %% ===================================================================
 -module(cdmi_dataobject_capabilities_handler).
--author("Piotr Ociepka").
 
 -include("modules/http_worker/http_common.hrl").
 
