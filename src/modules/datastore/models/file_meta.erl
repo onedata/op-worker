@@ -758,9 +758,14 @@ snapshot_name(FileName, Version) ->
 -spec is_snapshot(FileName :: name()) -> boolean().
 is_snapshot(FileName) ->
     try
-        [FN, VR] = binary:split(FileName, <<?SNAPSHOT_SEPARATOR>>),
-        _ = binary_to_integer(VR),
-        is_valid_filename(FN)
+        case binary:matches(FileName, <<?SNAPSHOT_SEPARATOR>>) of
+            true ->
+                [FN, VR] = binary:split(FileName, <<?SNAPSHOT_SEPARATOR>>),
+                _ = binary_to_integer(VR),
+                is_valid_filename(FN);
+            false ->
+                false
+        end
     catch
         _:_ ->
             false

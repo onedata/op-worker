@@ -253,7 +253,7 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Performs truncate operation on given locations. Nota that on remote locations only shrinking will be done.
+%% Performs truncate operation on given locations. Note that on remote locations only shrinking will be done.
 %% @end
 %%--------------------------------------------------------------------
 -spec do_truncate(FileSize :: non_neg_integer(), LocalLocation :: datastore:document(), RemoteLocations :: [datastore:document()]) ->

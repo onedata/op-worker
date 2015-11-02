@@ -257,7 +257,7 @@ sequencer_stream_periodic_ack_test(Config) ->
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message,
             [Msg, SessId]
         )),
-        ?assertEqual({ok, Msg}, test_utils:receive_any(?TIMEOUT)),
+        ?assertReceived(Msg, (?TIMEOUT)),
         ?assertEqual({ok, #message_acknowledgement{
             stream_id = 1, sequence_number = SeqNum
         }}, test_utils:receive_any(?TIMEOUT + SecsAckWin))

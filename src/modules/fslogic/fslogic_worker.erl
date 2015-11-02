@@ -126,7 +126,7 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
             %% Manually thrown error, normal interrupt case.
             report_error(FuseRequest, Reason, debug);
         error:{badmatch, Reason} ->
-            %% Bad Match assertion - something went wrong, but it could be expected.
+            %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
             report_error(FuseRequest, Reason, info);
         error:{case_clause, Reason} ->
             %% Case Clause assertion - something went seriously wrong and we should know about it.

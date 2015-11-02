@@ -30,7 +30,6 @@
     aggregation_rule = fun
         (#write_event{source = Source, file_uuid = Id, file_size = FSize1} = Evt1,
          #write_event{source = Source, file_uuid = Id, file_size = FSize2, blocks = Blocks2} = Evt2) ->
-            BlockCount2 = length(Blocks2),
             NewFileSize =   %% Get maximum file size but only if defined
                 case FSize2 of
                     _ when is_integer(FSize2) ->
@@ -38,18 +37,19 @@
                     _ ->
                         FSize1
                 end,
-            NewFileSize1 =  %% make sure that file_size in not less then maximum bloks' size
-                case {NewFileSize, Blocks2} of
-                    {undefined, _} -> undefined;
-                    {_, [_ | _]} when is_integer(NewFileSize) ->
-                        Upper = fslogic_blocks:upper(Blocks2),
-                        max(Upper, NewFileSize)
-                end,
+%%             NewFileSize1 =  %% make sure that file_size in not less then maximum bloks' size
+%%                 case {NewFileSize, Blocks2} of
+%%                     {undefined, _} -> undefined;
+%%                     {_, [_ | _]} when is_integer(NewFileSize) ->
+%%                         Upper = fslogic_blocks:upper(Blocks2),
+%%                         max(Upper, NewFileSize)
+%%                 end,
             {ok, #write_event{
+                source = Source,
                 file_uuid = Evt1#write_event.file_uuid,
                 counter = Evt1#write_event.counter + Evt2#write_event.counter,
                 size = Evt1#write_event.size + Evt2#write_event.size,
-                file_size = NewFileSize1,
+                file_size = NewFileSize,
                 blocks = event_utils:aggregate_blocks(
                     Evt1#write_event.blocks,
                     Evt2#write_event.blocks

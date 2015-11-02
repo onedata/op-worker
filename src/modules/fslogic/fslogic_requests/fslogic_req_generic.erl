@@ -64,13 +64,14 @@ chmod(_CTX, FileEntry, Mode) ->
                 Errors ->
                     [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p", [FID, SID, Mode, Reason])
                      || {{SID, FID}, {error, Reason}} <- Errors],
-                    ok
+                    throw(?EAGAIN)
             end;
         _ -> ok
     end,
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
+    %% @todo: replace with events
     spawn(fun() -> fslogic_notify:attributes(FileEntry, []) end),
 
     #fuse_response{status = #status{code = ?OK}}.

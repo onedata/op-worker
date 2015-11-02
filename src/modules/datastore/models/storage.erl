@@ -6,6 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Model for holding storage configuration.
+%%%      @todo: rewrite without "ROOT_STORAGE" when implementation of persistent_store:list will be ready
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage).

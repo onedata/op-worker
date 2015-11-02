@@ -24,6 +24,10 @@
 -define(GRPCERT_ENV, grpcert_path).
 
 
+%% ID of provider that is not currently registered in Global Registry
+-define(NON_GLOBAL_PROVIDER_ID, <<"non_global_provider">>).
+
+
 %% ID of this provider (assigned by global registry)
 -type id() :: binary().
 
@@ -182,7 +186,7 @@ get_provider_id() ->
                     application:set_env(?APP_NAME, provider_id, ProviderId),
                     ProviderId;
                 {error, _} ->
-                    <<"non_global_provider">>
+                    ?NON_GLOBAL_PROVIDER_ID
             end
     end.
 

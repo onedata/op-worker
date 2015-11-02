@@ -142,7 +142,7 @@ open_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch({ok, _}, call(Config, open, [File, r])),
+    ?assertMatch({ok, _}, call(Config, open, [File, read])),
 
     ok.
 

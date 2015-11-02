@@ -133,14 +133,18 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
         end, lists:seq(1, EvtNum))
     end),
 
+    #document{value = #file_location{file_id = FID, storage_id = SID}} = fslogic_utils:get_local_file_location({uuid, FileId}),
+
     % Check whether events have been aggregated and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
-            ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+            RMsg = {handler, [#write_event{
                 file_uuid = FileId, counter = CtrThr, size = CtrThr * EvtSize,
                 file_size = N * CtrThr * EvtSize, blocks = [#file_block{
+                    file_id = FID, storage_id = SID,
                     offset = (N - 1) * CtrThr * EvtSize, size = CtrThr * EvtSize}]
-            }]}, ?TIMEOUT))
+            }]},
+            ?assertReceived(RMsg, ?TIMEOUT)
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
@@ -184,7 +188,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
     ),
 
     Evts = lists:map(fun(Id) ->
-        #write_event{file_uuid = ?FILE_ID(Id), size = EvtSize, counter = 1,
+        #write_event{source = {session,<<"session_id">>}, file_uuid = ?FILE_ID(Id), size = EvtSize, counter = 1,
             file_size = EvtSize, blocks = [#file_block{
                 offset = 0, size = EvtSize
             }]}
@@ -267,7 +271,7 @@ event_stream_counter_emission_rule_test(Config) ->
     % when emission rule has been satisfied.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
+            ?assertReceived(handler, ?TIMEOUT)
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
@@ -326,7 +330,7 @@ event_stream_size_emission_rule_test(Config) ->
     % when emission rule has been satisfied.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
+            ?assertReceived(handler, ?TIMEOUT)
         end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
     end),
 
@@ -359,9 +363,10 @@ event_stream_time_emission_rule_test(Config) ->
     end, lists:seq(0, EvtsCount - 1)),
 
     % Check whether event handlers have been executed.
-    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+    RMsg = {handler, [#write_event{
         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
-        blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT + EmTime)),
+        blocks = [#file_block{offset = 0, size = EvtsCount}]}]},
+    ?assertReceived(RMsg, ?TIMEOUT + EmTime),
     ?assertEqual({error, timeout}, test_utils:receive_any(EmTime)),
 
     unsubscribe(Worker, SubId),
@@ -407,9 +412,9 @@ event_stream_crash_test(Config) ->
     end, lists:seq(HalfEvtsCount, EvtsCount - 1)),
 
     % Check whether event handlers have been executed.
-    ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+    ?assertReceived({handler, [#write_event{
         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
-        blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT)),
+        blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     unsubscribe(Worker, SubId),
@@ -439,6 +444,10 @@ event_manager_subscription_creation_and_cancellation_test(Config) ->
     % Check whether subscription message has been sent to clients.
     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+
+    %% FSLogic's subscription
+    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     % Check subscription has been added to distributed cache.
@@ -511,12 +520,12 @@ event_manager_multiple_subscription_test(Config) ->
 
     % Check whether event handlers have been executed.
     lists:foreach(fun(FileId) ->
-        ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
+        ?assertReceived({handler, [#write_event{
             file_uuid = FileId, size = EvtsNum, counter = EvtsNum,
             file_size = EvtsNum, blocks = [#file_block{
                 offset = 0, size = EvtsNum
             }]
-        }]}, ?TIMEOUT))
+        }]}, ?TIMEOUT)
     end, FileIds),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
@@ -556,10 +565,10 @@ event_manager_multiple_handlers_test(Config) ->
 
     % Check whether events have been aggregated and each handler has been executed.
     lists:foreach(fun(Handler) ->
-        ?assertMatch({ok, _}, test_utils:receive_msg({Handler, [#write_event{
+        ?assertReceived({Handler, [#write_event{
             file_uuid = FileId, counter = 10, size = 10, file_size = 10,
             blocks = [#file_block{offset = 0, size = 10}]
-        }]}, ?TIMEOUT))
+        }]}, ?TIMEOUT)
     end, [handler1, handler2, handler3]),
 
     unsubscribe(Worker, SubId),
@@ -622,7 +631,7 @@ event_manager_multiple_clients_test(Config) ->
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             lists:foreach(fun(_) ->
-                ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
+                ?assertReceived(handler, ?TIMEOUT)
             end, lists:seq(1, EvtNum div CtrThr))
         end, SessIds)
     end),

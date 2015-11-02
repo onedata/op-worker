@@ -168,7 +168,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(system, [{file_meta, create}, {file_meta, save}, {file_meta, delete}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(system, [{file_meta, create}, {file_meta, save}, {file_meta, delete}], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
