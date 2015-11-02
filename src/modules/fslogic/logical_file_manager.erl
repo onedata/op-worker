@@ -52,6 +52,9 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-type handle() :: #lfm_handle{}.
+
+-export_type([handle/0]).
 
 %% Functions operating on directories
 -export([mkdir/2, ls/4, get_children_count/2]).
@@ -149,7 +152,7 @@ cp(PathFrom, PathTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(file_handle()) -> ok | error_reply().
+-spec unlink(handle()) -> ok | error_reply().
 unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_uuid = UUID}) ->
     unlink(SessId, {uuid, UUID}).
 
@@ -189,7 +192,7 @@ create(SessId, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
+-spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:open(CTX, ensure_uuid(CTX, FileKey), OpenType).
@@ -201,8 +204,8 @@ open(SessId, FileKey, OpenType) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) ->
-    {ok, NewHandle :: file_handle(), integer()} | error_reply().
+-spec write(FileHandle :: handle(), Offset :: integer(), Buffer :: binary()) ->
+    {ok, NewHandle :: handle(), integer()} | error_reply().
 write(FileHandle, Offset, Buffer) ->
     Size = size(Buffer),
     try lfm_files:write(FileHandle, Offset, Buffer) of
@@ -233,8 +236,8 @@ write(FileHandle, Offset, Buffer) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
-    {ok, NewHandle :: file_handle(), binary()} | error_reply().
+-spec read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
     try lfm_files:read(FileHandle, Offset, MaxSize) of
         {error, Reason} ->
@@ -266,15 +269,16 @@ read(FileHandle, Offset, MaxSize) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(FileHandle :: file_handle(), Size :: integer()) -> ok | error_reply().
+-spec truncate(FileHandle :: handle(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Size) ->
     truncate(SessId, {uuid, FileUUID}, Size).
 
--spec truncate(SessId :: session:id(), FileKey :: file_id_or_path(), Size :: integer()) -> ok | error_reply().
+-spec truncate(SessId :: session:id(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(SessId, FileKey, Size) ->
     try
         CTX = fslogic_context:new(SessId),
-        lfm_files:truncate(CTX, ensure_uuid(CTX, FileKey), Size)
+        {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+        lfm_files:truncate(CTX, FileUUID, Size)
     catch
         _:Reason ->
             ?error_stacktrace("truncate error for file ~p: ~p", [FileKey, Reason]),
@@ -289,7 +293,7 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
+-spec get_block_map(FileHandle :: handle()) -> {ok, [block_range()]} | error_reply().
 get_block_map(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     get_block_map(SessId, {uuid, FileUUID}).
 
@@ -349,7 +353,7 @@ set_acl(Path, EntityList) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(file_handle()) -> {ok, file_attributes()} | error_reply().
+-spec stat(handle()) -> {ok, file_attributes()} | error_reply().
 stat(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     stat(SessId, {uuid, UUID}).
 

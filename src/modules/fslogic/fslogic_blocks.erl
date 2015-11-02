@@ -282,7 +282,7 @@ do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} 
 %% @end
 %%--------------------------------------------------------------------
 -spec do_remote_truncate(FileSize :: non_neg_integer(), [datastore:document()] | datastore:document()) ->
-    [{ProviderId :: oneprovider:id(), ok}] | no_return().
+    [{ProviderId :: oneprovider:id(), ok}] | {ProviderId :: oneprovider:id(), ok} | no_return().
 do_remote_truncate(_FileSize, []) ->
     [];
 do_remote_truncate(FileSize, [Location | T]) ->

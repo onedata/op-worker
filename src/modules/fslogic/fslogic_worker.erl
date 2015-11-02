@@ -127,7 +127,7 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
             report_error(FuseRequest, Reason, debug);
         error:{badmatch, Reason} ->
             %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
-            report_error(FuseRequest, Reason, info);
+            report_error(FuseRequest, Reason, warning);
         error:{case_clause, Reason} ->
             %% Case Clause assertion - something went seriously wrong and we should know about it.
             report_error(FuseRequest, Reason, error);
@@ -151,7 +151,7 @@ report_error(FuseRequest, Error, LogLevel) ->
     MsgFormat = "Cannot process request ~p due to error: ~p (code: ~p)",
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-        info -> ?info(MsgFormat, [FuseRequest, Description, Code]);
+%%         info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
         warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
         error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,

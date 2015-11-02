@@ -94,7 +94,7 @@ mkdir(Storage, FileId, Mode, Recursive) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileHandleFrom :: file_handle(), PathOnStorageTo :: file_path()) -> ok | error_reply().
+-spec mv(FileHandleFrom :: handle(), PathOnStorageTo :: file_path()) -> ok | error_reply().
 mv(_FileHandleFrom, _PathOnStorageTo) ->
     ok.
 
@@ -118,7 +118,7 @@ chmod(Storage, File, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec chown(FileHandle :: file_handle(), User :: user_id(), Group :: group_id()) -> ok | error_reply().
+-spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) -> ok | error_reply().
 chown(_FileHandle, _User, _Group) ->
     ok.
 
@@ -129,7 +129,7 @@ chown(_FileHandle, _User, _Group) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec link(Path :: binary(), TargetFileHandle :: file_handle()) -> {ok, file_uuid()} | error_reply().
+-spec link(Path :: binary(), TargetFileHandle :: handle()) -> {ok, file_uuid()} | error_reply().
 link(_Path, _TargetFileHandle) ->
     {ok, <<"">>}.
 
@@ -140,7 +140,7 @@ link(_Path, _TargetFileHandle) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(FileHandle :: file_handle()) -> {ok, file_attributes()} | error_reply().
+-spec stat(FileHandle :: handle()) -> {ok, undefined} | error_reply().
 stat(_FileHandle) ->
     {ok, undefined}.
 
@@ -151,7 +151,7 @@ stat(_FileHandle) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: file_handle(), Offset :: non_neg_integer(), Buffer :: binary()) -> {ok, non_neg_integer()} | error_reply().
+-spec write(FileHandle :: handle(), Offset :: non_neg_integer(), Buffer :: binary()) -> {ok, non_neg_integer()} | error_reply().
 write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
     helpers:write(HelperHandle, File, Offset, Buffer).
 
@@ -162,7 +162,7 @@ write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: file_handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) -> {ok, binary()} | error_reply().
+-spec read(FileHandle :: handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) -> {ok, binary()} | error_reply().
 read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
     helpers:read(HelperHandle, File, Offset, MaxSize).
 
@@ -173,9 +173,13 @@ read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+-spec create(Storage :: datastore:document(), Path :: helpers:file(), Mode :: non_neg_integer()) ->
+    ok | error_reply().
 create(Storage, Path, Mode) ->
     create(Storage, Path, Mode, false).
 
+-spec create(Storage :: datastore:document(), Path :: helpers:file(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
+    ok | error_reply().
 create(Storage, Path, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
