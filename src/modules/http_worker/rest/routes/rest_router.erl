@@ -54,8 +54,12 @@ custom_api_routes() ->
 -spec cdmi_routes() -> list().
 cdmi_routes() ->
     [
-        {"/cdmi/cdmi_capabilities/[...]", pre_handler,
+        {"/cdmi/cdmi_capabilities/", pre_handler,
             #handler_description{handler = cdmi_capabilities_handler}},
+        {"/cdmi/cdmi_capabilities/container/", pre_handler,
+            #handler_description{handler = cdmi_container_capabilities_handler}},
+        {"/cdmi/cdmi_capabilities/dataobject/", pre_handler,
+            #handler_description{handler = cdmi_dataobject_capabilities_handler}},
         {"/cdmi/cdmi_objectid/:id/[...]", pre_handler,
             #handler_description{handler = cdmi_objectid_handler}},
         {"/cdmi/[...]", pre_handler,
