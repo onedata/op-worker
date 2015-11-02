@@ -52,7 +52,7 @@ new_handle(#helper_init{name = Name, args = Args}) ->
 %% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()]) -> handle().
+-spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()] | args()) -> handle().
 new_handle(HelperName, HelperArgs) when is_map(HelperArgs) ->
     new_handle(HelperName, [V || {_K, V} <- maps:to_list(HelperArgs)]);
 new_handle(HelperName, HelperArgs) ->

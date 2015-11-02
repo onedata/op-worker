@@ -42,7 +42,7 @@
 %% @doc Creates new helper object. Returned handle is only valid within local Erlang-VM.
 %% @end
 %%--------------------------------------------------------------------
--spec new_helper_obj(HelperName :: string() | binary(), HelperArgs :: [string() | binary()]) ->
+-spec new_helper_obj(HelperName :: nif_string(), HelperArgs :: [nif_string()]) ->
     {ok, HelperObj :: resource_handle()} | {error, invalid_helper}.
 new_helper_obj(_HelperName, _HelperArgs) ->
     erlang:nif_error(helpers_nif_not_loaded).

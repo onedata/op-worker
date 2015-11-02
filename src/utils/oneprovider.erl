@@ -178,7 +178,7 @@ get_provider_id() ->
         {ok, ProviderId} ->
             ProviderId;
         _ ->
-            case file:read_file(gr_plugin:get_cert_path()) of
+            try file:read_file(gr_plugin:get_cert_path()) of
                 {ok, Bin} ->
                     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
                     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
@@ -186,6 +186,10 @@ get_provider_id() ->
                     application:set_env(?APP_NAME, provider_id, ProviderId),
                     ProviderId;
                 {error, _} ->
+                    ?NON_GLOBAL_PROVIDER_ID
+            catch
+                _:Reason ->
+                    ?error_stacktrace("Unable to read certificate file due to ~p", [Reason]),
                     ?NON_GLOBAL_PROVIDER_ID
             end
     end.

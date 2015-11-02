@@ -363,10 +363,10 @@ event_stream_time_emission_rule_test(Config) ->
     end, lists:seq(0, EvtsCount - 1)),
 
     % Check whether event handlers have been executed.
-    RMsg = {handler, [#write_event{
+    ?assertReceived({handler, [#write_event{
         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
-        blocks = [#file_block{offset = 0, size = EvtsCount}]}]},
-    ?assertReceived(RMsg, ?TIMEOUT + EmTime),
+        blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT + EmTime),
+
     ?assertEqual({error, timeout}, test_utils:receive_any(EmTime)),
 
     unsubscribe(Worker, SubId),
@@ -446,24 +446,23 @@ event_manager_subscription_creation_and_cancellation_test(Config) ->
     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
 
     %% FSLogic's subscription
-    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+%%     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+%%     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
 
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     % Check subscription has been added to distributed cache.
-    ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
+    ?assertMatch({ok, [_, _]}, rpc:call(Worker1, subscription, list, [])),
 
     % Unsubscribe and check subscription cancellation message has been sent to
     % clients
     unsubscribe(Worker1, SubId),
-    ?assertEqual({ok, #event_subscription_cancellation{id = SubId}},
-        test_utils:receive_any(?TIMEOUT)),
-    ?assertEqual({ok, #event_subscription_cancellation{id = SubId}},
-        test_utils:receive_any(?TIMEOUT)),
+    ?assertReceived(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
+    ?assertReceived(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     % Check subscription has been removed from distributed cache.
-    ?assertEqual({ok, []}, rpc:call(Worker1, subscription, list, [])),
+    ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
 
     session_teardown(Worker1, SessId2),
     session_teardown(Worker2, SessId1),
