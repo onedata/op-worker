@@ -213,6 +213,7 @@ write(FileHandle, Offset, Buffer) ->
         {ok, _, 0} = Ret2 ->
             Ret2;
         {ok, NewHandle, Written} ->
+            ?info("OMG ~p ~p ~p", [Buffer, Written, Size]),
             case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written)) of
                 {ok, NewHandle1, Written1} ->
                     {ok, NewHandle1, Written + Written1};
@@ -273,7 +274,7 @@ truncate(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id
 truncate(SessId, FileKey, Size) ->
     try
         CTX = fslogic_context:new(SessId),
-        lfm_files:truncate(CTX, FileKey, Size)
+        lfm_files:truncate(CTX, ensure_uuid(CTX, FileKey), Size)
     catch
         _:Reason ->
             ?error_stacktrace("truncate error for file ~p: ~p", [FileKey, Reason]),

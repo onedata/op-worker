@@ -76,8 +76,12 @@ mkdir(Storage, FileId, Mode, Recursive) ->
             ok;
         {error, enoent} when Recursive ->
             Tokens = fslogic_path:split(FileId),
-            LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
-            ok = mkdir(Storage, LeafLess, 8#755, true),
+            case Tokens of
+                [_] -> ok;
+                [_ | _]  ->
+                    LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
+                    ok = mkdir(Storage, LeafLess, 8#755, true)
+            end,
             mkdir(Storage, FileId, Mode, false);
         {error, Reason} ->
             {error, Reason}
@@ -181,7 +185,12 @@ create(Storage, Path, Mode, Recursive) ->
         {error, enoent} when Recursive ->
             Tokens = fslogic_path:split(Path),
             LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
-            ok = mkdir(Storage, LeafLess, 8#333, true),
+            ok =
+                case mkdir(Storage, LeafLess, 8#333, true) of
+                    ok -> ok;
+                    {error, eexist} -> ok;
+                    E0 -> E0
+                end,
             create(Storage, Path, Mode, false);
         {error, Reason} ->
             {error, Reason}

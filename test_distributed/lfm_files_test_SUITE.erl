@@ -222,34 +222,35 @@ lfm_stat_test(Config) ->
 
 
 lfm_truncate_test(Config) ->
+    ct:print("1"),
     [W | _] = ?config(op_worker_nodes, Config),
-
+    ct:print("2"),
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-
+    ct:print("3"),
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test6">>, 8#755)),
-
+    ct:print("4"),
     O11 = open(W, SessId1, {path, <<"/test6">>}, rdwr),
-
+    ct:print("5"),
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
-
+    ct:print("6"),
     ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test6">>})),
-
+    ct:print("7"),
     ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test6">>})),
-
+    ct:print("8"),
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 1)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 1}}, stat(W, SessId1, {path, <<"/test6">>})),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 10)),
-
+    ct:print("9"),
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 10)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 1)),
-
+    ct:print("10"),
     ?assertMatch({ok, 3}, write(W, Handle11, 1, <<"abc">>)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
@@ -290,13 +291,19 @@ get_uuid(Worker, SessId, Path) ->
 init_per_suite(Config) ->
     Config1 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, Config1),
-    "" = os:cmd("mkdir -p " ++ ?TEMP_DIR),
+
+    TmpDir = gen_storage_dir(),
+
+    %% @todo: use shared storage
+    "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
     {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
-        [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(?TEMP_DIR)})])}]),
-    [{storage_id, StorageId} | Config1].
+        [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(TmpDir)})])}]),
+    [{storage_id, StorageId}, {storage_dir, TmpDir} | Config1].
 
 end_per_suite(Config) ->
-    "" = os:cmd("rm -rf " ++ ?TEMP_DIR),
+    TmpDir = ?config(storage_dir, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    "" = rpc:call(Worker, os, cmd, ["rm -rf " ++ TmpDir]),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
@@ -470,7 +477,7 @@ name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
 
 gen_name() ->
-    binary:replace(base64:encode(crypto:rand_bytes(10)), <<"/">>, <<"">>, [global]).
+    binary:replace(base64:encode(crypto:rand_bytes(12)), <<"/">>, <<"">>, [global]).
 
 
 stat(Worker, SessId, FileKey) ->
@@ -553,7 +560,15 @@ write(Worker, TestHandle, Offset, Bytes) ->
 
 exec(Worker, Fun) ->
     Host = self(),
-    Pid = spawn_link(Worker, fun() -> Fun(Host) end),
+    Pid = spawn_link(Worker,
+        fun() ->
+            try
+                Fun(Host)
+            catch
+                _:Reason ->
+                    Host ! {self(), {error, {test_exec, Reason, erlang:get_stacktrace()}}}
+            end
+        end),
     receive
         {Pid, Result} -> Result
     after timer:seconds(5) ->
@@ -568,3 +583,7 @@ for(From, To, Step, Fun) ->
 
 wait_for_events() ->
     timer:sleep(timer:seconds(2)).
+
+
+gen_storage_dir() ->
+    ?TEMP_DIR ++ "/storage/" ++ erlang:binary_to_list(gen_name()).

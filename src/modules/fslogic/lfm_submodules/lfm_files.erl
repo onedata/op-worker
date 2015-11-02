@@ -85,21 +85,12 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
                     {ok, file_uuid()} | error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    ?debug("lfm_files:create ~p ~p ~p", [Path, Name, ParentPath]),
     {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
     case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
                                             #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode}}) of
         #fuse_response{status = #status{code = ?OK},
-                       fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
-            {ok, #document{value = Storage}} = storage:get(StorageId),
-            case storage_file_manager:create(Storage, FileId, Mode, true) of
-                ok ->
-                    %% @todo: remove file watchers
-                    {ok, UUID};
-                {error, Reason} ->
-                    file_meta:delete({uuid, UUID}),
-                    {error, Reason}
-            end;
+                       fuse_response = #file_location{uuid = UUID}} ->
+            {ok, UUID};
         #fuse_response{status = #status{code = Code}} ->
             {error, Code}
     end.
@@ -189,7 +180,7 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTyp
 %%--------------------------------------------------------------------
 -spec truncate(fslogic_worker:ctx(), FileUUID :: file_uuid(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(#fslogic_ctx{session_id = SessId}, FileUUID, Size) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #truncate{uuid = FileUUID}}) of
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #truncate{uuid = FileUUID, size = Size}}) of
         #fuse_response{status = #status{code = ?OK}} ->
             event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId);
         #fuse_response{status = #status{code = Code}} ->

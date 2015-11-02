@@ -95,7 +95,7 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, Flags) ->
 -spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(),
                             Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags(),
                             ForceClusterProxy :: boolean()) -> no_return() | #fuse_response{}.
--check_permissions([{write, {parent, 2}}]).
+-check_permissions([{write, 2}]).
 get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
                       UUID, Name, Mode, _Flags, _ForceClusterProxy) ->
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
