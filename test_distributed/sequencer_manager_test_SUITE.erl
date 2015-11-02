@@ -258,9 +258,9 @@ sequencer_stream_periodic_ack_test(Config) ->
             [Msg, SessId]
         )),
         ?assertReceived(Msg, (?TIMEOUT)),
-        ?assertEqual({ok, #message_acknowledgement{
+        ?assertReceived(#message_acknowledgement{
             stream_id = 1, sequence_number = SeqNum
-        }}, test_utils:receive_any(?TIMEOUT + SecsAckWin))
+        }, ?TIMEOUT + SecsAckWin)
     end, lists:seq(0, MsgsCount - 1)),
 
     ?assertEqual({error, timeout}, test_utils:receive_any()),

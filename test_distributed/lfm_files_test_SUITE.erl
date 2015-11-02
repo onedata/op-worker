@@ -222,35 +222,35 @@ lfm_stat_test(Config) ->
 
 
 lfm_truncate_test(Config) ->
-    ct:print("1"),
+
     [W | _] = ?config(op_worker_nodes, Config),
-    ct:print("2"),
+
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    ct:print("3"),
+
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test6">>, 8#755)),
-    ct:print("4"),
+
     O11 = open(W, SessId1, {path, <<"/test6">>}, rdwr),
-    ct:print("5"),
+
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
-    ct:print("6"),
+
     ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test6">>})),
-    ct:print("7"),
+
     ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test6">>})),
-    ct:print("8"),
+
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 1)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 1}}, stat(W, SessId1, {path, <<"/test6">>})),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 10)),
-    ct:print("9"),
+
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 10)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 1)),
-    ct:print("10"),
+
     ?assertMatch({ok, 3}, write(W, Handle11, 1, <<"abc">>)),
     wait_for_events(),
     ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
@@ -267,15 +267,7 @@ lfm_truncate_test(Config) ->
 
 %% Get uuid of given by path file. Possible as root to bypass permissions checks.
 get_uuid_privileged(Worker, SessId, Path) ->
-    SessId1 = case Path of
-                  <<"/">> ->
-                      SessId;
-                  <<"/spaces">> ->
-                      SessId;
-                  _ ->
-                      ?ROOT_SESS_ID
-              end,
-    get_uuid(Worker, SessId1, Path).
+    get_uuid(Worker, SessId, Path).
 
 
 get_uuid(Worker, SessId, Path) ->
