@@ -124,9 +124,8 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
 
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
 
-    Tokens = fslogic_path:split(FileId),
-    LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
-    case storage_file_manager:mkdir(Storage, LeafLess, 8#333, true) of
+    LeafLess = fslogic_path:dirname(FileId),
+    case storage_file_manager:mkdir(Storage, LeafLess, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok

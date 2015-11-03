@@ -530,7 +530,7 @@ setup_onedata_user(UUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec attach_location(entry(), Location :: datastore:document() | datastore:key(), ProviderId :: oneprovider:id()) ->
-    ok | no_return().
+    ok.
 attach_location(Entry, #document{key = LocId}, ProviderId) ->
     attach_location(Entry, LocId, ProviderId);
 attach_location(Entry, LocId, ProviderId) ->

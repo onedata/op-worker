@@ -80,7 +80,7 @@ get_open_watchers(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get all sessions that was previousely registered with get_attr_watchers/2
+%% Get all sessions that were previously registered with get_attr_watchers/2
 %% @end
 %%--------------------------------------------------------------------
 -spec get_attr_watchers(Key :: datastore:key()) -> [session:id()].

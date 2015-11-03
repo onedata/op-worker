@@ -213,7 +213,6 @@ write(FileHandle, Offset, Buffer) ->
         {ok, _, 0} = Ret2 ->
             Ret2;
         {ok, NewHandle, Written} ->
-            ?info("OMG ~p ~p ~p", [Buffer, Written, Size]),
             case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written)) of
                 {ok, NewHandle1, Written1} ->
                     {ok, NewHandle1, Written + Written1};

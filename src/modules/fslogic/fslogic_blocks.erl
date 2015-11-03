@@ -32,7 +32,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% For given blocks, returns last byte number + 1.
+%% For given blocks, returns last byte number + 1 (counting from 0).
 %% @end
 %%--------------------------------------------------------------------
 -spec upper(#file_block{} | [#file_block{}]) -> non_neg_integer().

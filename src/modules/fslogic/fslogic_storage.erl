@@ -23,7 +23,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%%  Returns any available storage for given fslogic ctx.
+%% Returns any available storage for given fslogic ctx.
 %% @end
 %%--------------------------------------------------------------------
 -spec select_helper(datastore:document() | #storage{}) -> {ok, #helper_init{}} | {error, Reason :: term()}.
@@ -37,7 +37,7 @@ select_helper(#storage{helpers = [Helper | _]}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%%  Returns any available storage for given fslogic ctx.
+%% Returns any available storage for given fslogic ctx.
 %% @end
 %%--------------------------------------------------------------------
 -spec select_storage(fslogic_worker:ctx()) -> {ok, datastore:document()} | {error, Reason :: term()}.
@@ -54,7 +54,7 @@ select_storage(#fslogic_ctx{}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%%  Creates new helper_init structure.
+%% Creates new helper_init structure.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_helper_init(HelperName :: helpers:name(), HelperArgs :: helpers:args()) -> #helper_init{}.
@@ -64,7 +64,7 @@ new_helper_init(HelperName, HelperArgs) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%%  Creates new storage structure.
+%% Creates new storage structure.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_storage(Name :: storage:name(), [#helper_init{}]) -> #storage{}.
