@@ -14,42 +14,43 @@
 -include("modules/http_worker/http_common.hrl").
 
 %% API
--export([allowed_methods/2, malformed_request/2, resource_exists/2, content_types_provided/2, get_cdmi_capability/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2, content_types_provided/2]).
+-export([get_cdmi_capability/2]).
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:rest_init/2
+%%--------------------------------------------------------------------
+-spec rest_init(req(), term()) -> {ok, req(), #{}} | {shutdown, req()}.
+rest_init(Req, _Opts) ->
+  {ok, Req, #{}}.
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:terminate/3
+%%--------------------------------------------------------------------
+-spec terminate(Reason :: term(), req(), #{}) -> ok.
+terminate(_, _, _) ->
+  ok.
 
 %% ====================================================================
-%% @doc Returns binary list of methods that are allowed (i.e GET, PUT, DELETE).
--spec allowed_methods(req(), dict()) -> {[binary()], req(), dict()}.
+%% @doc @equiv pre_handler:allowed_methods/2
 %% ====================================================================
+-spec allowed_methods(req(), #{}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
   {[<<"GET">>], Req, State}.
 
 %% ====================================================================
-%% @doc
-%% Checks if request contains all mandatory fields and their values are set properly
-%% depending on requested operation
-%% @end
--spec malformed_request(req(), dict()) -> {boolean(), req(), dict()} | no_return().
+%% @doc @equiv pre_handler:malformed_request/2
 %% ====================================================================
+-spec malformed_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
 malformed_request(Req, State) ->
   cdmi_arg_parser:malformed_request(Req, State).
 
 %% ====================================================================
-%% @doc Determines if resource, that can be obtained from state, exists.
--spec resource_exists(req(), dict()) -> {boolean(), req(), dict()}.
+%% @doc @equiv pre_handler:content_types_provided/2
 %% ====================================================================
-resource_exists(Req, State) ->
-  {false, Req, State}.
-
-%% ====================================================================
-%% @doc
-%% Returns content types that can be provided and what functions should be used to process the request.
-%% Before adding new content type make sure that adequate routing function
-%% exists in cdmi_handler
-%% @end
--spec content_types_provided(req(), dict()) -> {[{ContentType, Method}], req(), dict()} when
+-spec content_types_provided(req(), #{}) -> {[{ContentType, Method}], req(), #{}} when
   ContentType :: binary(),
   Method :: atom().
-%% ====================================================================
 content_types_provided(Req, State) ->
   {[
     {<<"application/cdmi-capability">>, get_cdmi_capability}
@@ -59,7 +60,7 @@ content_types_provided(Req, State) ->
 %% @doc Cowboy callback function
 %% Handles GET requests for cdmi capability.
 %% @end
--spec get_cdmi_capability(req(), dict()) -> {term(), req(), dict()}.
 %% ====================================================================
-get_cdmi_capability(Req, #{opts = Opts} = State) ->
+-spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
+get_cdmi_capability(Req, #{opts => Opts} = State) ->
   {[],Req,State}.
