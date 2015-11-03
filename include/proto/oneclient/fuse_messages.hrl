@@ -84,7 +84,7 @@
 
 -record(get_file_location, {
     uuid :: file_meta:uuid(),
-    flags :: 'READ_WRITE' | 'READ' | 'WRITE' | undefined
+    flags :: fslogic_worker:open_flags()
 }).
 
 -record(unlink, {
