@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
+-include("proto/oneclient/event_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -263,6 +264,7 @@ sequencer_stream_periodic_ack_test(Config) ->
         }, ?TIMEOUT + SecsAckWin)
     end, lists:seq(0, MsgsCount - 1)),
 
+    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     ok.
