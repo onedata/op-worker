@@ -80,10 +80,3 @@ parse_opts(RawOpts) ->
     end,
     Opts
   ).
-
-%%--------------------------------------------------------------------
-%% @doc Works like string:strip/1 but for binary().
-%%--------------------------------------------------------------------
--spec trim(binary()) -> binary().
-trim(Binary) ->
-  list_to_binary(string:strip(binary_to_list(Binary))).
