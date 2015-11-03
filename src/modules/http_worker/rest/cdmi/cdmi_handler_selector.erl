@@ -14,8 +14,6 @@
 -module(cdmi_handler_selector).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/rest/handler_description.hrl").
-
 %% API
 -export([choose_object_or_container_handler/1]).
 
@@ -29,11 +27,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec choose_object_or_container_handler(cowboy_req:req()) ->
-    {ok, #handler_description{}}.
+    {#{handler => module()}, cowboy_req:req()}.
 choose_object_or_container_handler(Req) ->
-    {Path, _} = cowboy_req:path(Req),
+    {Path, Req2} = cowboy_req:path(Req),
     Handler = choose_object_or_container_handler_module(Path),
-    {ok, #handler_description{handler = Handler}}.
+    {#{handler => Handler}, Req2}.
 
 %%%===================================================================
 %%% Internal functions

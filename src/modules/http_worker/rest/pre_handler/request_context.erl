@@ -47,7 +47,7 @@ get_handler() ->
 %% Convenience function that stores the error_translator fun in process dict.
 %% @end
 %%--------------------------------------------------------------------
--spec set_exception_handler(Delegation :: request_exception_handler:exception_handler()) -> term().
+-spec set_exception_handler(Delegation :: protocol_plugin_behaviour:exception_handler()) -> term().
 set_exception_handler(Delegation) ->
     erlang:put(exception_handler, Delegation).
 
@@ -57,7 +57,7 @@ set_exception_handler(Delegation) ->
 %% dict.
 %% @end
 %%--------------------------------------------------------------------
--spec get_exception_handler() -> request_exception_handler:exception_handler().
+-spec get_exception_handler() -> protocol_plugin_behaviour:exception_handler().
 get_exception_handler() ->
     erlang:get(exception_handler).
 
@@ -67,7 +67,7 @@ get_exception_handler() ->
 %% content type in process dict.
 %% @end
 %%--------------------------------------------------------------------
--spec set_content_types_accepted([cowboy_callback_selector:content_type_callback()]) -> term().
+-spec set_content_types_accepted([plugin_callback_selector:content_type_callback()]) -> term().
 set_content_types_accepted(AcceptedContent) ->
     erlang:put(content_types_accepted, AcceptedContent).
 
@@ -78,7 +78,7 @@ set_content_types_accepted(AcceptedContent) ->
 %% dict.
 %% @end
 %%--------------------------------------------------------------------
--spec get_content_types_accepted() -> [cowboy_callback_selector:content_type_callback()].
+-spec get_content_types_accepted() -> [plugin_callback_selector:content_type_callback()].
 get_content_types_accepted() ->
     erlang:get(content_types_accepted).
 
@@ -88,7 +88,7 @@ get_content_types_accepted() ->
 %% content type in process dict.
 %% @end
 %%--------------------------------------------------------------------
--spec set_content_types_provided([cowboy_callback_selector:content_type_callback()]) -> term().
+-spec set_content_types_provided([plugin_callback_selector:content_type_callback()]) -> term().
 set_content_types_provided(ProvidedContent) ->
     erlang:put(content_types_provided, ProvidedContent).
 
@@ -99,7 +99,7 @@ set_content_types_provided(ProvidedContent) ->
 %% dict.
 %% @end
 %%--------------------------------------------------------------------
--spec get_content_types_provided() -> [cowboy_callback_selector:content_type_callback()].
+-spec get_content_types_provided() -> [plugin_callback_selector:content_type_callback()].
 get_content_types_provided() ->
     erlang:get(content_types_provided).
 
