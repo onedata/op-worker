@@ -131,6 +131,7 @@ use_supported_cdmi_version(Config) ->
     {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
 
     % then
+    %% we are to get 404 because path "/" doesn't exist.
     ?assertEqual("404", Code).
 
 use_unsupported_cdmi_version(Config) ->

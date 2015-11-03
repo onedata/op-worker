@@ -24,7 +24,7 @@
 %%--------------------------------------------------------------------
 %% @doc Extract the CDMI version and options and put it in State.
 %%--------------------------------------------------------------------
--spec malformed_request(req(), #{}) -> {true|false, req(), #{}}.
+-spec malformed_request(req(), #{}) -> {false, req(), #{}}.
 malformed_request(Req, State) ->
   {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
   Version = get_supported_version(RawVersion),

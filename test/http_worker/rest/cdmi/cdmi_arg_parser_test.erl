@@ -43,8 +43,8 @@ get_supported_version_test() ->
   ?assertThrow(?unsupported_version, ?version(Binary01)),
   ?assertThrow(?unsupported_version, ?version(Binary02)),
 
-  ?assertEqual(?version(Binary10), <<"1.1.1">>),
-  ?assertEqual(?version(Binary11), <<"1.1.1">>),
+  ?assertEqual(<<"1.1.1">>, ?version(Binary10)),
+  ?assertEqual(<<"1.1.1">>, ?version(Binary11)),
 
   ?assertThrow(?unsupported_version, ?version(Binary20)),
   ?assertThrow(?unsupported_version, ?version(Binary21)),
