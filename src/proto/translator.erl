@@ -184,9 +184,9 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
                                                             end, FileEntries)}};
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
-                    helper_args = lists:map(fun(HelpersArg) ->
-                                                    translate_to_protobuf(HelpersArg)
-                                            end, HelpersArgs)}};
+                                    helper_args = lists:map(fun(HelpersArg) ->
+                                                                    translate_to_protobuf(HelpersArg)
+                                                            end, HelpersArgs)}};
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
     #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#file_location{} = Record) ->
