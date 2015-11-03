@@ -37,13 +37,6 @@
                     _ ->
                         FSize1
                 end,
-%%             NewFileSize1 =  %% make sure that file_size in not less then maximum bloks' size
-%%                 case {NewFileSize, Blocks2} of
-%%                     {undefined, _} -> undefined;
-%%                     {_, [_ | _]} when is_integer(NewFileSize) ->
-%%                         Upper = fslogic_blocks:upper(Blocks2),
-%%                         max(Upper, NewFileSize)
-%%                 end,
             {ok, #write_event{
                 source = Source,
                 file_uuid = Evt1#write_event.file_uuid,

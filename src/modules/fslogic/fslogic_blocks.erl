@@ -53,7 +53,7 @@ upper([]) ->
 lower(#file_block{offset = Offset}) ->
     Offset;
 lower([Block | T]) ->
-    min(upper(Block), upper(T));
+    min(lower(Block), lower(T));
 lower([]) ->
     0.
 
