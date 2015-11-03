@@ -132,11 +132,10 @@ sequencer_stream_messages_ordering_test(Config) ->
     % Check whether messages were forwarded in right order.
     {_, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
         lists:foreach(fun(SeqNum) ->
-            ?assertMatch({ok, _}, test_utils:receive_msg(#client_message{
+            ?assertReceived(#client_message{
                 message_stream = #message_stream{
                     stream_id = StmId, sequence_number = SeqNum
-                }
-            }, ?TIMEOUT))
+                }}, ?TIMEOUT)
         end, lists:seq(0, MsgNum - 1))
     end),
 
