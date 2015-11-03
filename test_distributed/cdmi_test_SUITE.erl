@@ -128,10 +128,10 @@ use_supported_cdmi_version(Config) ->
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.1.1"}],
 
     % when
-    {Code, ResponseHeaders, Response} = do_request(Worker, "/", get, RequestHeaders, []),
+    {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
 
     % then
-    ?assertEqual("200", Code).
+    ?assertEqual("404", Code).
 
 use_unsupported_cdmi_version(Config) ->
     % given
@@ -139,7 +139,7 @@ use_unsupported_cdmi_version(Config) ->
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
 
     % when
-    {Code, ResponseHeaders, Response} = do_request(Worker, "/", get, RequestHeaders, []),
+    {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
 
     % then
     ?assertEqual("400", Code).

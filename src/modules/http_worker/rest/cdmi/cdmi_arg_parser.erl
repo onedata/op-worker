@@ -30,7 +30,7 @@ malformed_request(Req, State) ->
   Version = get_supported_version(RawVersion),
   {Qs, Req3} = cowboy_req:qs(Req2),
   Opts = parse_opts(Qs),
-  NewState = State#{cdmi_version := Version, options := Opts},
+  NewState = State#{cdmi_version => Version, options => Opts},
   {false, Req3, NewState}.
 
 %%%===================================================================
