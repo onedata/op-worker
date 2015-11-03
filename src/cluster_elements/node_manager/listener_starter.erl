@@ -188,20 +188,7 @@ start_rest_listener() ->
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
 
     RestDispatch = [
-        {'_', [
-            {"/rest/:version/[...]", opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, rest_handler},
-                    {handler_opts, []}
-                ]},
-            {"/cdmi/[...]", opn_cowboy_bridge,
-                [
-                    {delegation, true},
-                    {handler_module, cdmi_handler},
-                    {handler_opts, []}
-                ]}
-        ]}
+        {'_', rest_router:top_level_routing()}
     ],
 
     % Start the listener for REST handler

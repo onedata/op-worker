@@ -29,8 +29,8 @@
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
 
 %%%===================================================================
-%%% Test function
-%% ====================================================================
+%%% API
+%%%===================================================================
 
 create_delete_test(Config, Level) ->
     create_delete_test_base(Config, Level, create, delete).

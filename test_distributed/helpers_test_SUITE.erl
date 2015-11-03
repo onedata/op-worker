@@ -43,56 +43,44 @@ all() ->
 
 
 %%%===================================================================
-%%% Tests
+%%% Test functions
 %%%===================================================================
 
 getattr_test(Config) ->
     File = gen_filename(),
 
     ok = call(Config, file, make_dir, [?path(Config, File)]),
-    ?assertMatch({ok, #statbuf{}}, call(Config, getattr, [File])),
-
-    ok.
+    ?assertMatch({ok, #statbuf{}}, call(Config, getattr, [File])).
 
 access_test(Config) ->
     File = gen_filename(),
 
     ok = call(Config, file, make_dir, [?path(Config, File)]),
-    ?assertMatch(ok, call(Config, access, [File, 0])),
-
-    ok.
+    ?assertMatch(ok, call(Config, access, [File, 0])).
 
 mknod_test(Config) ->
     File = gen_filename(),
 
     ?assertMatch(ok, call(Config, mknod, [File, 8#644, reg])),
-    ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)])),
-
-    ok.
+    ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)])).
 
 mkdir_test(Config) ->
     File = gen_filename(),
 
     ?assertMatch(ok, call(Config, mkdir, [File, 8#755])),
-    ?assertMatch(ok, call(Config, file, del_dir, [?path(Config, File)])),
-
-    ok.
+    ?assertMatch(ok, call(Config, file, del_dir, [?path(Config, File)])).
 
 unlink_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, unlink, [File])),
-
-    ok.
+    ?assertMatch(ok, call(Config, unlink, [File])).
 
 rmdir_test(Config) ->
     File = gen_filename(),
 
     ok = call(Config, file, make_dir, [?path(Config, File)]),
-    ?assertMatch(ok, call(Config, rmdir, [File])),
-
-    ok.
+    ?assertMatch(ok, call(Config, rmdir, [File])).
 
 symlink_test(Config) ->
     From = gen_filename(),
@@ -101,50 +89,38 @@ symlink_test(Config) ->
     ok = call(Config, file, make_dir, [?path(Config, From)]),
     ?assertMatch(ok, call(Config, symlink, [From, To])),
     ?assertMatch(ok, call(Config, file, delete, [?path(Config, To)])),
-    ok = call(Config, file, del_dir, [?path(Config, From)]),
-
-    ok.
+    ok = call(Config, file, del_dir, [?path(Config, From)]).
 
 rename_test(Config) ->
     From = gen_filename(),
     To = gen_filename(),
 
     ok = call(Config, file, make_dir, [?path(Config, From)]),
-    ?assertMatch(ok, call(Config, rename, [From, To])),
-
-    ok.
+    ?assertMatch(ok, call(Config, rename, [From, To])).
 
 chmod_test(Config) ->
     File = gen_filename(),
 
     ok = call(Config, file, make_dir, [?path(Config, File)]),
-    ?assertMatch(ok, call(Config, chmod, [File, 0])),
-
-    ok.
+    ?assertMatch(ok, call(Config, chmod, [File, 0])).
 
 chown_test(Config) ->
     File = gen_filename(),
 
     ok = call(Config, file, make_dir, [?path(Config, File)]),
-    ?assertMatch(ok, call(Config, chown, [File, -1, -1])),
-
-    ok.
+    ?assertMatch(ok, call(Config, chown, [File, -1, -1])).
 
 truncate_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, truncate, [File, 10])),
-
-    ok.
+    ?assertMatch(ok, call(Config, truncate, [File, 10])).
 
 open_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch({ok, _}, call(Config, open, [File, read])),
-
-    ok.
+    ?assertMatch({ok, _}, call(Config, open, [File, read])).
 
 read_test(Config) ->
     File = gen_filename(),
@@ -152,10 +128,7 @@ read_test(Config) ->
     {ok, Dev} = call(Config, file, open, [?path(Config, File), write]),
     ok = call(Config, file, write, [Dev, <<"test">>]),
     ?assertMatch({ok, <<"st">>}, call(Config, read, [File, 2, 10])),
-    ?assertMatch({ok, <<"s">>}, call(Config, read, [File, 2, 1])),
-
-
-    ok.
+    ?assertMatch({ok, <<"s">>}, call(Config, read, [File, 2, 1])).
 
 write_test(Config) ->
     File = gen_filename(),
@@ -168,32 +141,24 @@ write_test(Config) ->
 
     ?assertMatch({ok, 4}, call(Config, write, [File, 2, <<"test">>])),
     {ok, Dev2} = call(Config, file, open, [?path(Config, File), [read, binary]]),
-    {ok, <<"tetest">>} = call(Config, file, read, [Dev2, 6]),
-
-
-
-    ok.
+    {ok, <<"tetest">>} = call(Config, file, read, [Dev2, 6]).
 
 release_test(Config) ->
     File = gen_filename(),
-
+    %todo
     ok.
 
 flush_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, flush, [File])),
-
-    ok.
+    ?assertMatch(ok, call(Config, flush, [File])).
 
 fsync_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch(ok, call(Config, fsync, [File, false])),
-
-    ok.
+    ?assertMatch(ok, call(Config, fsync, [File, false])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
