@@ -30,8 +30,11 @@ malformed_request(Req, State) ->
   Version = get_supported_version(RawVersion),
   {Qs, Req3} = cowboy_req:qs(Req2),
   Opts = parse_opts(Qs),
-  NewState = State#{cdmi_version => Version, options => Opts},
-  {false, Req3, NewState}.
+  {RawPath, Req4} = cowboy_req:path(Req3),
+  <<"/cdmi/", Path/binary>> = RawPath,
+
+  NewState = State#{cdmi_version => Version, options => Opts, path => Path},
+  {false, Req4, NewState}.
 
 %%%===================================================================
 %%% Internal functions
