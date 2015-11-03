@@ -38,8 +38,8 @@
 -spec upper(#file_block{} | [#file_block{}]) -> non_neg_integer().
 upper(#file_block{offset = Offset, size = Size}) ->
     Offset + Size;
-upper([Block | T]) ->
-    max(upper(Block), upper(T));
+upper([_ | _] = Blocks) ->
+    lists:max([upper(Block) || Block <- Blocks]);
 upper([]) ->
     0.
 
@@ -52,8 +52,8 @@ upper([]) ->
 -spec lower(#file_block{} | [#file_block{}]) -> non_neg_integer().
 lower(#file_block{offset = Offset}) ->
     Offset;
-lower([Block | T]) ->
-    min(lower(Block), lower(T));
+lower([_ | _] = Blocks) ->
+    lists:min([lower(Block) || Block <- Blocks]);
 lower([]) ->
     0.
 
@@ -184,15 +184,15 @@ invalidate(Doc, OldBlocks, [#file_block{} = B | T]) ->
     invalidate(Doc, invalidate(Doc, OldBlocks, B), T);
 invalidate(_Doc, [], #file_block{}) ->
     [];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO + CS =< DO ->
+invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = _DS} = D) when CO + CS =< DO ->
     [C | invalidate(Doc, T, D)];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when DO + DS =< CO ->
+invalidate(Doc, [#file_block{offset = CO, size = _CS} = C | T], #file_block{offset = DO, size = DS} = D) when DO + DS =< CO ->
     [C | invalidate(Doc, T, D)];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO >= DO, CO + CS =< DO + DO ->
+invalidate(Doc, [#file_block{offset = CO, size = CS} = _C | T], #file_block{offset = DO, size = _DS} = D) when CO >= DO, CO + CS =< DO + DO ->
     invalidate(Doc, T, D);
 invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO >= DO, CO + CS > DO + DO ->
     [C#file_block{offset = DO + DS, size = CS - (DO + DS - CO)} | invalidate(Doc, T, D)];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO < DO, CO + CS =< DO + DO ->
+invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = _DS} = D) when CO < DO, CO + CS =< DO + DO ->
     [C#file_block{size = DO - CO} | invalidate(Doc, T, D)];
 invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO =< DO, CO + CS >= DO + DO ->
     [C#file_block{size = DO - CO}, C#file_block{offset = DO + DS, size = CO + CS - (DO + DS)} | invalidate(Doc, T, D)].
