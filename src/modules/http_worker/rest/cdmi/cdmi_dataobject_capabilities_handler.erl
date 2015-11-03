@@ -43,7 +43,8 @@ allowed_methods(Req, State) ->
 %% ====================================================================
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
 malformed_request(Req, State) ->
-  cdmi_arg_parser:malformed_request(Req, State).
+  cdmi_capabilities_handler:malformed_request(Req, State).
+
 
 %% ====================================================================
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -63,4 +64,17 @@ content_types_provided(Req, State) ->
 %% ====================================================================
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi_capability(Req, #{opts => Opts} = State) ->
-  {[],Req,State}.
+  RawCapabilities = prepare_capability_ans(Opts, State),
+  Capabilities = cdmi_utils:encode_to_json(RawCapabilities),
+  {Capabilities, Req, State}.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% ====================================================================
+%% @doc Return proplist contains CDMI answer
+%% ====================================================================
+-spec prepare_capability_ans([Opt :: binary], #{}) -> [{Capability :: binary(), Value :: term()}].
+prepare_capability_ans(_Opts, _State) ->
+  [].
