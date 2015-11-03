@@ -30,6 +30,8 @@
 routes() ->
     [
         {"/cdmi/cdmi_capabilities/[...]", #{handler => cdmi_capabilities_handler}},
+        {"/cdmi/cdmi_capabilities/container/[...]", #{handler => cdmi_container_capabilities_handler}},
+        {"/cdmi/cdmi_capabilities/dataobject/[...]", #{handler => cdmi_dataobject_capabilities_handler}},
         {"/cdmi/cdmi_objectid/:id/[...]", #{handler => cdmi_objectid_handler}},
         {"/cdmi/[...]", fun cdmi_handler_selector:choose_object_or_container_handler/1}
     ].
