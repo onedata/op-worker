@@ -148,6 +148,9 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info({'EXIT', EvtMan, shutdown}, #state{event_manager = EvtMan} = State) ->
+    {stop, shutdown, State};
+
 handle_info({periodic_emission, Ref}, #state{emission_ref = Ref} = State) ->
     {noreply, execute_event_handler(State)};
 
@@ -172,6 +175,7 @@ handle_info(_Info, State) ->
 terminate(Reason, #state{event_manager = EvtMan, subscription_id = SubId,
     definition = StmDef, init_result = InitResult} = State) ->
     ?log_terminate(Reason, State),
+    execute_event_handler(State),
     execute_terminate_handler(StmDef, InitResult),
     unregister_stream(EvtMan, SubId).
 
@@ -267,15 +271,16 @@ reset_metadata(#event_stream_definition{metadata = Meta}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec process_event(Evt :: #event{}, State :: #state{}) -> NewState :: #state{}.
-process_event(Evt, #state{events = Evts, metadata = StmState,
+process_event(Evt, #state{events = Evts, metadata = Meta,
     definition = StmDef} = State) ->
-    NewState = State#state{
-        events = apply_aggregation_rule(Evt, Evts, StmDef),
-        metadata = apply_transition_rule(Evt, StmState, StmDef)
-    },
-    case apply_emission_rule(NewState, StmDef) of
-        true -> execute_event_handler(NewState);
-        false -> NewState
+    NewEvts = apply_aggregation_rule(Evt, Evts, StmDef),
+    NewMeta = apply_transition_rule(Evt, Meta, StmDef),
+    NewState = State#state{events = NewEvts, metadata = NewMeta},
+    case apply_emission_rule(NewMeta, StmDef) of
+        true ->
+            execute_event_handler(NewState);
+        false ->
+            NewState
     end.
 
 %%--------------------------------------------------------------------
@@ -287,14 +292,14 @@ process_event(Evt, #state{events = Evts, metadata = StmState,
 %% in the state.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_emission(StmDef :: definition()) -> Ref :: reference().
+-spec schedule_emission(StmDef :: definition()) -> Ref :: undefined | reference().
 schedule_emission(#event_stream_definition{emission_time = Time}) when is_integer(Time) ->
     Ref = make_ref(),
     erlang:send_after(Time, self(), {periodic_emission, Ref}),
     Ref;
 
 schedule_emission(#event_stream_definition{}) ->
-    make_ref().
+    undefined.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -302,7 +307,7 @@ schedule_emission(#event_stream_definition{}) ->
 %% Applies admission rule.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_admission_rule(Evt :: #event{}, Sub :: #subscription{}) -> true | false.
+-spec apply_admission_rule(Evt :: #event{}, StmDef :: definition()) -> true | false.
 apply_admission_rule(Evt, #event_stream_definition{admission_rule = Rule}) ->
     Rule(Evt).
 

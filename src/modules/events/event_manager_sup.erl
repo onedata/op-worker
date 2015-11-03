@@ -64,10 +64,16 @@ get_event_stream_sup(EvtManSup) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: supervisor:sup_flags(),
-        [ChildSpec :: supervisor:child_spec()]}} | ignore.
+    {ok, {SupFlags :: {
+        RestartStrategy :: supervisor:strategy(),
+        Intensity :: non_neg_integer(),
+        Period :: non_neg_integer()
+    }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
 init([SessId]) ->
-    {ok, {#{strategy => one_for_all, intensity => 3, period => 1}, [
+    RestartStrategy = one_for_all,
+    Intensity = 3,
+    Period = 1,
+    {ok, {{RestartStrategy, Intensity, Period}, [
         event_stream_sup_spec(),
         event_manager_spec(self(), SessId)
     ]}}.
@@ -84,15 +90,11 @@ init([SessId]) ->
 %%--------------------------------------------------------------------
 -spec event_stream_sup_spec() -> supervisor:child_spec().
 event_stream_sup_spec() ->
-    Module = event_stream_sup,
-    #{
-        id => Module,
-        start => {Module, start_link, []},
-        restart => permanent,
-        shutdown => infinity,
-        type => supervisor,
-        modules => [Module]
-    }.
+    Id = Module = event_stream_sup,
+    Restart = permanent,
+    Shutdown = infinity,
+    Type = supervisor,
+    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -103,12 +105,8 @@ event_stream_sup_spec() ->
 -spec event_manager_spec(EvtManSup :: pid(), SessId :: session:id()) ->
     supervisor:child_spec().
 event_manager_spec(EvtManSup, SessId) ->
-    Module = event_manager,
-    #{
-        id => Module,
-        start => {Module, start_link, [EvtManSup, SessId]},
-        restart => transient,
-        shutdown => timer:seconds(10),
-        type => worker,
-        modules => [Module]
-    }.
+    Id = Module = event_manager,
+    Restart = transient,
+    Shutdown = timer:seconds(10),
+    Type = worker,
+    {Id, {Module, start_link, [EvtManSup, SessId]}, Restart, Shutdown, Type, [Module]}.

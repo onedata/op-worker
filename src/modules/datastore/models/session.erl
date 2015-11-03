@@ -198,7 +198,7 @@ get_event_managers() ->
 get_sequencer_manager(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{sequencer_manager = undefined}}} ->
-            {error, not_found};
+            {error, {not_found, missing}};
         {ok, #document{value = #session{sequencer_manager = SeqMan}}} ->
             {ok, SeqMan};
         {error, Reason} ->

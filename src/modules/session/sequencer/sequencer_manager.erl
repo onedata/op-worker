@@ -121,7 +121,7 @@ handle_cast({unregister_in_stream, StmId}, #state{sequencer_in_streams = Stms} =
     {noreply, State#state{sequencer_in_streams = maps:remove(StmId, Stms)}};
 
 handle_cast({unregister_out_stream, StmId}, #state{sequencer_out_streams = Stms} = State) ->
-    {noreply, State#state{sequencer_in_streams = maps:remove(StmId, Stms)}};
+    {noreply, State#state{sequencer_out_streams = maps:remove(StmId, Stms)}};
 
 handle_cast({close_stream, StmId}, State) ->
     forward_to_sequencer_out_stream(#server_message{
@@ -146,7 +146,7 @@ handle_cast(#client_message{message_body = #message_acknowledgement{
 
 handle_cast(#client_message{} = Msg, State) ->
     {ok, SeqStm, NewState} = get_or_create_sequencer_in_stream(Msg, State),
-    gen_server:cast(SeqStm, Msg),
+    gen_fsm:send_event(SeqStm, Msg),
     {noreply, NewState};
 
 handle_cast(#server_message{} = Msg, State) ->
@@ -168,6 +168,9 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info({'EXIT', SeqManSup, shutdown}, #state{sequencer_manager_sup = SeqManSup} = State) ->
+    {stop, shutdown, State};
+
 handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {ok, SeqInStmSup} = sequencer_manager_sup:get_sequencer_stream_sup(
         SeqManSup, sequencer_in_stream_sup

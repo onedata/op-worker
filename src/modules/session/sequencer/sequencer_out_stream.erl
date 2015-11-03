@@ -113,12 +113,16 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(#message_stream_reset{}, #state{messages = Msgs,
     session_id = SessId} = State) ->
-    {noreply, State#state{messages = resend_all_messages(Msgs, SessId)}};
+    {NewSeqNum, NewMsgs} = resend_all_messages(Msgs, SessId),
+    {noreply, State#state{sequence_number = NewSeqNum, messages = NewMsgs}};
 
 handle_cast(#message_request{lower_sequence_number = LowerSeqNum,
     upper_sequence_number = UpperSeqNum}, #state{messages = Msgs,
-    stream_id = StmId, session_id = SessId} = State) ->
-    resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId),
+    stream_id = StmId, sequence_number = SeqNum, session_id = SessId} = State) ->
+    case LowerSeqNum < SeqNum of
+        true -> resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId);
+        false -> ok
+    end,
     {noreply, State};
 
 handle_cast(#message_acknowledgement{sequence_number = SeqNum}, #state{
@@ -228,7 +232,7 @@ store_and_forward_message(#server_message{} = Msg, #state{
 remove_messages(SeqNum, Msgs) ->
     case queue:peek(Msgs) of
         {value, #server_message{message_body = #end_of_message_stream{}}} ->
-            exit(shutdown);
+            exit(self(), shutdown);
         {value, #server_message{message_stream = #message_stream{
             sequence_number = MsgSeqNum
         }}} when MsgSeqNum =< SeqNum ->
@@ -244,18 +248,21 @@ remove_messages(SeqNum, Msgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resend_all_messages(Msgs :: messages(), SessId :: session:id()) ->
-    NewMsgs :: messages().
+    {NewSeqNum :: sequence_number(), NewMsgs :: messages()}.
 resend_all_messages(Msgs, SessId) ->
     resend_all_messages(Msgs, SessId, 0, queue:new()).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Resends all stored messages. Sequence number of each message is recomputed starting from zero.
+%% Resends all stored messages. Sequence number of each message is recomputed
+%% starting from zero. Returns new sequence number and messages with recomputed
+%% sequence number.
 %% @end
 %%--------------------------------------------------------------------
 -spec resend_all_messages(Msgs :: messages(), SessId :: session:id(),
-    SeqNum :: sequence_number(), MsgsAcc :: messages()) -> NewMsgs :: messages().
+    SeqNum :: sequence_number(), MsgsAcc :: messages()) ->
+    {NewSeqNum :: sequence_number(), NewMsgs :: messages()}.
 resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
     case queue:out(Msgs) of
         {{value, #server_message{message_stream = MsgStm} = Msg}, NewMsgs} ->
@@ -265,7 +272,7 @@ resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
             communicator:send(NewMsg, SessId),
             resend_all_messages(NewMsgs, SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         {empty, _} ->
-            MsgsAcc
+            {SeqNum, MsgsAcc}
     end.
 
 %%--------------------------------------------------------------------
@@ -289,7 +296,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
         {{value, #server_message{message_stream = #message_stream{
             sequence_number = SeqNum}
         }}, NewMsgs} when SeqNum < LowerSeqNum ->
-            resend_messages(LowerSeqNum + 1, UpperSeqNum, NewMsgs, StmId, SessId);
+            resend_messages(LowerSeqNum, UpperSeqNum, NewMsgs, StmId, SessId);
         {_, _} ->
             ?warning("Received request for messages unavailable in sequencer stream "
             "queue. Stream ID: ~p, range: [~p,~p].", [StmId, LowerSeqNum, UpperSeqNum])

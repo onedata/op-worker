@@ -55,9 +55,9 @@
 -define(MSG_ACK_THRESHOLD, application:get_env(?APP_NAME,
     sequencer_stream_msg_ack_threshold, 100)).
 -define(RECEIVING_TIMEOUT, timer:seconds(application:get_env(?APP_NAME,
-    sequencer_stream_msg_req_short_timeout, 1))).
--define(REQUESTING_TIMEOUT, timer:seconds(application:get_env(?APP_NAME,
     sequencer_stream_msg_req_long_timeout, 10))).
+-define(REQUESTING_TIMEOUT, timer:seconds(application:get_env(?APP_NAME,
+    sequencer_stream_msg_req_short_timeout, 1))).
 
 %%%===================================================================
 %%% API
@@ -153,6 +153,7 @@ handle_sync_event(Event, From, StateName, State) ->
     {stop, Reason :: normal | term(), NewStateData :: term()}).
 handle_info({'EXIT', _, shutdown}, _, State) ->
     {stop, shutdown, State};
+
 handle_info(Info, StateName, State) ->
     ?log_bad_request({Info, StateName}),
     {next_state, StateName, State}.
@@ -405,7 +406,7 @@ remove_message(SeqNum, #state{messages = Msgs} = State) ->
     NewState :: #state{}.
 forward_message(#client_message{message_body = #end_of_message_stream{}},
     #state{sequence_number = SeqNum} = State) ->
-    exit(shutdown),
+    exit(self(), shutdown),
     State#state{sequence_number = SeqNum + 1};
 
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->

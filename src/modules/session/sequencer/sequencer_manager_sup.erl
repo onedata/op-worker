@@ -63,10 +63,16 @@ get_sequencer_stream_sup(SeqManSup, Id) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: supervisor:sup_flags(),
-        [ChildSpec :: supervisor:child_spec()]}} | ignore.
+    {ok, {SupFlags :: {
+        RestartStrategy :: supervisor:strategy(),
+        Intensity :: non_neg_integer(),
+        Period :: non_neg_integer()
+    }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
 init([SessId]) ->
-    {ok, {#{strategy => one_for_all, intensity => 3, period => 1}, [
+    RestartStrategy = one_for_all,
+    Intensity = 3,
+    Period = 1,
+    {ok, {{RestartStrategy, Intensity, Period}, [
         sequencer_stream_sup_spec(sequencer_in_stream_sup, sequencer_in_stream),
         sequencer_stream_sup_spec(sequencer_out_stream_sup, sequencer_out_stream),
         sequencer_manager_spec(self(), SessId)
@@ -86,14 +92,10 @@ init([SessId]) ->
     supervisor:child_spec().
 sequencer_stream_sup_spec(Id, Child) ->
     Module = sequencer_stream_sup,
-    #{
-        id => Id,
-        start => {Module, start_link, [Child]},
-        restart => permanent,
-        shutdown => infinity,
-        type => supervisor,
-        modules => [Module]
-    }.
+    Restart = permanent,
+    Shutdown = infinity,
+    Type = supervisor,
+    {Id, {Module, start_link, [Child]}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -104,12 +106,8 @@ sequencer_stream_sup_spec(Id, Child) ->
 -spec sequencer_manager_spec(SeqManSup :: pid(), SessId :: session:id()) ->
     supervisor:child_spec().
 sequencer_manager_spec(SeqManSup, SessId) ->
-    Module = sequencer_manager,
-    #{
-        id => Module,
-        start => {Module, start_link, [SeqManSup, SessId]},
-        restart => transient,
-        shutdown => timer:seconds(10),
-        type => worker,
-        modules => [Module]
-    }.
+    Id = Module = sequencer_manager,
+    Restart = transient,
+    Shutdown = timer:seconds(10),
+    Type = worker,
+    {Id, {Module, start_link, [SeqManSup, SessId]}, Restart, Shutdown, Type, [Module]}.

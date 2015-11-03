@@ -26,6 +26,7 @@
 -type type() :: #read_event{} | #update_event{} | #write_event{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
+-type event_manager_ref() :: pid() | session:id().
 
 %%%===================================================================
 %%% API
@@ -51,16 +52,16 @@ emit(EvtType) ->
 %% Sends an event to the event manager associated with a session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: #event{} | type(), SessId :: session:id()) ->
+-spec emit(Evt :: #event{} | type(), Ref :: event_manager_ref()) ->
     ok | {error, Reason :: term()}.
-emit(#event{key = undefined} = Evt, SessId) ->
-    emit(set_key(Evt), SessId);
+emit(#event{key = undefined} = Evt, Ref) ->
+    emit(set_key(Evt), Ref);
 
-emit(#event{} = Evt, SessId) ->
-    send_to_event_manager(Evt, SessId);
+emit(#event{} = Evt, Ref) ->
+    send_to_event_manager(Evt, Ref);
 
-emit(EvtType, SessId) ->
-    emit(#event{type = EvtType}, SessId).
+emit(EvtType, Ref) ->
+    emit(#event{type = EvtType}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -88,24 +89,10 @@ subscribe(Sub) ->
 %% event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec subscribe(Sub :: subscription(), SessId :: session:id()) ->
+-spec subscribe(Sub :: subscription(), Ref :: event_manager_ref()) ->
     {ok, SubId :: subscription:id()} | {error, Reason :: term()}.
-subscribe(Sub, SessId) ->
-    send_to_event_manager(Sub, SessId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes subscription associated with a session.
-%% @end
-%%--------------------------------------------------------------------
--spec unsubscribe(SubId :: subscription:id() | subscription:cancellaton(),
-    SessId :: session:id()) -> ok | {error, Reason :: term()}.
-unsubscribe(#subscription_cancellation{} = SubCan, SessId) ->
-    send_to_event_manager(SubCan, SessId);
-
-unsubscribe(SubId, SessId) ->
-    unsubscribe(#subscription_cancellation{id = SubId}, SessId).
+subscribe(Sub, Ref) ->
+    send_to_event_manager(Sub, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -123,6 +110,19 @@ unsubscribe(#subscription_cancellation{id = Id} = SubCan) ->
 unsubscribe(SubId) ->
     unsubscribe(#subscription_cancellation{id = SubId}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes subscription associated with a session.
+%% @end
+%%--------------------------------------------------------------------
+-spec unsubscribe(SubId :: subscription:id() | subscription:cancellaton(),
+    Ref :: event_manager_ref()) -> ok | {error, Reason :: term()}.
+unsubscribe(#subscription_cancellation{} = SubCan, Ref) ->
+    send_to_event_manager(SubCan, Ref);
+
+unsubscribe(SubId, Ref) ->
+    unsubscribe(#subscription_cancellation{id = SubId}, Ref).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -139,7 +139,13 @@ set_key(#event{type = #read_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
 
 set_key(#event{type = #write_event{file_uuid = FileUuid}} = Evt) ->
-    Evt#event{key = FileUuid}.
+    Evt#event{key = FileUuid};
+
+set_key(#event{type = #update_event{type = #file_attr{uuid = Uuid}}} = Evt) ->
+    Evt#event{key = Uuid};
+
+set_key(#event{type = #update_event{type = #file_location{uuid = Uuid}}} = Evt) ->
+    Evt#event{type = Uuid}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -147,7 +153,7 @@ set_key(#event{type = #write_event{file_uuid = FileUuid}} = Evt) ->
 %% Sends a message to the event manager referenced by pid or session ID.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_event_manager(Msg :: term(), Ref :: pid() | session:id()) ->
+-spec send_to_event_manager(Msg :: term(), Ref :: event_manager_ref()) ->
     ok | {error, Reason :: term()}.
 send_to_event_manager(Msg, Ref) when is_pid(Ref) ->
     gen_server:cast(Ref, Msg);

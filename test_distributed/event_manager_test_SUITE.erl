@@ -6,16 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests of event manager API.
+%%% This file contains event manager tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(event_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
 -include("modules/datastore/datastore.hrl").
--include("proto/oneclient/common_messages.hrl").
--include("proto/oneclient/event_messages.hrl").
--include("modules/event_manager/event_streams.hrl").
+-include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -28,617 +26,78 @@
 
 %% tests
 -export([
-    event_stream_the_same_file_uuid_aggregation_test/1
-%%     event_stream_different_file_uuid_aggregation_test/1,
-%%     event_stream_counter_emission_rule_test/1,
-%%     event_stream_size_emission_rule_test/1,
-%%     event_stream_time_emission_rule_test/1,
-%%     event_stream_crash_test/1,
-%%     event_manager_subscription_creation_and_cancellation_test/1,
-%%     event_manager_multiple_subscription_test/1,
-%%     event_manager_multiple_handlers_test/1,
-%%     event_manager_multiple_clients_test/1
+    event_manager_should_update_session_on_init/1,
+    event_manager_should_update_session_on_terminate/1,
+    event_manager_should_start_event_streams_on_init/1,
+    event_manager_should_register_event_stream/1,
+    event_manager_should_unregister_event_stream/1,
+    event_manager_should_forward_events_to_event_streams/1,
+    event_manager_should_start_event_stream_on_subscription/1,
+    event_manager_should_terminate_event_stream_on_subscription_cancellation/1
 ]).
 
--performance({test_cases, [
-    event_stream_the_same_file_uuid_aggregation_test
-%%     event_stream_different_file_uuid_aggregation_test,
-%%     event_stream_counter_emission_rule_test,
-%%     event_stream_size_emission_rule_test,
-%%     event_manager_multiple_subscription_test,
-%%     event_manager_multiple_clients_test
-]}).
+-performance({test_cases, []}).
 all() -> [
-    event_stream_the_same_file_uuid_aggregation_test
-%%     event_stream_different_file_uuid_aggregation_test,
-%%     event_stream_counter_emission_rule_test,
-%%     event_stream_size_emission_rule_test,
-%%     event_stream_time_emission_rule_test,
-%%     event_stream_crash_test,
-%%     event_manager_subscription_creation_and_cancellation_test,
-%%     event_manager_multiple_subscription_test,
-%%     event_manager_multiple_handlers_test,
-%%     event_manager_multiple_clients_test
+    event_manager_should_update_session_on_init,
+    event_manager_should_update_session_on_terminate,
+    event_manager_should_start_event_streams_on_init,
+    event_manager_should_register_event_stream,
+    event_manager_should_unregister_event_stream,
+    event_manager_should_forward_events_to_event_streams,
+    event_manager_should_start_event_stream_on_subscription,
+    event_manager_should_terminate_event_stream_on_subscription_cancellation
 ].
 
--define(TIMEOUT, timer:seconds(15)).
--define(FILE_ID(Id), <<"file_uuid_", (integer_to_binary(Id))/binary>>).
--define(CTR_THR(Value), [
-    {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}
-]).
--define(SIZE_THR(Value), [
-    {name, size_thr}, {value, Value}, {description, "Summary events size threshold."}
-]).
--define(EVT_NUM(Value), [
-    {name, evt_num}, {value, Value}, {description, "Number of emitted events."}
-]).
--define(SUB_NUM(Value), [
-    {name, sub_num}, {value, Value}, {description, "Number of subscriptions."}
-]).
--define(CLI_NUM(Value), [
-    {name, cli_num}, {value, Value}, {description, "Number of connected clients."}
-]).
--define(FILE_NUM(Value), [
-    {name, file_num}, {value, Value},
-    {description, "Number of files associated with events."}
-]).
--define(EVT_SIZE(Value), [
-    {name, evt_size}, {value, Value}, {description, "Size of each event."},
-    {unit, "B"}
-]).
+-define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
--performance([
-    {repeats, 10},
-    {parameters, [?CTR_THR(5), ?EVT_NUM(20), ?EVT_SIZE(10)]},
-    {description, "Check whether events for the same file are properly aggregated."},
-    {config, [{name, small_counter_threshold},
-        {description, "Aggregates multiple events for stream with small counter threshold."},
-        {parameters, [?CTR_THR(10), ?EVT_NUM(50000)]}
-    ]},
-    {config, [{name, medium_counter_threshold},
-        {description, "Aggregates multiple events for stream with medium counter threshold."},
-        {parameters, [?CTR_THR(100), ?EVT_NUM(50000)]}
-    ]},
-    {config, [{name, large_counter_threshold},
-        {description, "Aggregates multiple events for stream with large counter threshold."},
-        {parameters, [?CTR_THR(1000), ?EVT_NUM(50000)]}
-    ]}
-]).
-event_stream_the_same_file_uuid_aggregation_test(Config) ->
+event_manager_should_update_session_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Self = self(),
-    FileId = <<"file_uuid">>,
-    SessId = ?config(session_id, Config),
-    CtrThr = ?config(ctr_thr, Config),
-    EvtNum = ?config(evt_num, Config),
-    EvtSize = ?config(evt_size, Config),
+    ?assertMatch({ok, _}, rpc:call(Worker, session, get_event_manager,
+        [?config(session_id, Config)])).
 
-    {ok, SubId} = subscribe(Worker,
-        internal,
-        fun(#event{type = #write_event{}}) -> true; (_) -> false end,
-        fun(Meta) -> Meta >= CtrThr end,
-        [fun(Evts) -> Self ! {handler, Evts} end]
-    ),
+event_manager_should_update_session_on_terminate(Config) ->
+    stop_event_manager(?config(event_manager, Config)),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    repeat(fun() -> rpc:call(
+        Worker, session, get_event_manager, [?config(session_id, Config)]
+    ) end, {error, {not_found, missing}}, 10, 500).
 
-    % Emit events.
-    {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        lists:foreach(fun(N) ->
-            emit(Worker, #event{counter = 1, type = #write_event{
-                file_uuid = FileId, size = EvtSize,
-                file_size = N * EvtSize, blocks = [#file_block{
-                    offset = (N - 1) * EvtSize, size = EvtSize
-                }]}}, SessId)
-        end, lists:seq(1, EvtNum))
-    end),
+event_manager_should_start_event_streams_on_init(_) ->
+    ?assertReceived({start_event_stream, #subscription{id = 1}}, ?TIMEOUT),
+    ?assertReceived({start_event_stream, #subscription{id = 2}}, ?TIMEOUT).
 
-    % Check whether events have been aggregated and handler has been executed.
-    {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-        lists:foreach(fun(N) ->
-            ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#event{
-                counter = CtrThr, type = #write_event{
-                    file_uuid = FileId, size = CtrThr * EvtSize,
-                    file_size = N * CtrThr * EvtSize, blocks = [#file_block{
-                        offset = (N - 1) * CtrThr * EvtSize, size = CtrThr * EvtSize}]
-                }}]}, ?TIMEOUT))
-        end, lists:seq(1, EvtNum div CtrThr))
-    end),
+event_manager_should_register_event_stream(Config) ->
+    EvtMan = ?config(event_manager, Config),
+    gen_server:cast(EvtMan, {register_stream, 1, self()}),
+    gen_server:cast(EvtMan, #event{}),
+    ?assertReceived({'$gen_cast', #event{}}, ?TIMEOUT).
 
-    unsubscribe(Worker, SubId),
-    remove_pending_messages(),
+event_manager_should_unregister_event_stream(Config) ->
+    EvtMan = ?config(event_manager, Config),
+    gen_server:cast(EvtMan, {unregister_stream, 1}),
+    gen_server:cast(EvtMan, {unregister_stream, 2}),
+    gen_server:cast(EvtMan, #event{}),
+    ?assertNotReceived({'$gen_cast', #event{}}, ?TIMEOUT).
 
-    [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-        evt_per_sec(EvtNum, EmitUs + AggrUs)].
+event_manager_should_forward_events_to_event_streams(Config) ->
+    EvtMan = ?config(event_manager, Config),
+    gen_server:cast(EvtMan, #event{}),
+    ?assertReceived({'$gen_cast', #event{}}, ?TIMEOUT),
+    ?assertReceived({'$gen_cast', #event{}}, ?TIMEOUT).
 
-%% -performance([
-%%     {repeats, 10},
-%%     {parameters, [?CTR_THR(10), ?EVT_NUM(1000), ?EVT_SIZE(10), ?FILE_NUM(2)]},
-%%     {description, "Check whether events for different files are properly aggregated."},
-%%     {config, [{name, small_files_number},
-%%         {description, "Aggregates multiple events for small number of files."},
-%%         {parameters, [?CTR_THR(100), ?FILE_NUM(10)]}
-%%     ]},
-%%     {config, [{name, medium_files_number},
-%%         {description, "Aggregates multiple events for medium number of files."},
-%%         {parameters, [?CTR_THR(200), ?FILE_NUM(20)]}
-%%     ]},
-%%     {config, [{name, large_files_number},
-%%         {description, "Aggregates multiple events for large number of files."},
-%%         {parameters, [?CTR_THR(500), ?FILE_NUM(50)]}
-%%     ]}
-%% ]).
-%% event_stream_different_file_uuid_aggregation_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     Self = self(),
-%%     SessId = ?config(session_id, Config),
-%%     CtrThr = ?config(ctr_thr, Config),
-%%     EvtNum = ?config(evt_num, Config),
-%%     EvtSize = ?config(evt_size, Config),
-%%     FileNum = ?config(file_num, Config),
-%%
-%%     {ok, SubId} = subscribe(Worker,
-%%         all,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(Meta) -> Meta >= CtrThr end,
-%%         [fun(Evts) -> Self ! {handler, Evts} end]
-%%     ),
-%%
-%%     Evts = lists:map(fun(Id) ->
-%%         #write_event{file_uuid = ?FILE_ID(Id), size = EvtSize, counter = 1,
-%%             file_size = EvtSize, blocks = [#file_block{
-%%                 offset = 0, size = EvtSize
-%%             }]}
-%%     end, lists:seq(1, FileNum)),
-%%
-%%     % List of events that are supposed to be received multiple times as a result
-%%     % of event handler execution.
-%%     BatchSize = CtrThr div FileNum,
-%%     EvtsToRecv = lists:sort(lists:map(fun(Evt) ->
-%%         Evt#write_event{counter = BatchSize, size = BatchSize * EvtSize}
-%%     end, Evts)),
-%%
-%%     % Emit events for different files.
-%%     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-%%         lists:foreach(fun(_) ->
-%%             lists:foreach(fun(Evt) ->
-%%                 emit(Worker, Evt, SessId)
-%%             end, Evts)
-%%         end, lists:seq(1, EvtNum))
-%%     end),
-%%
-%%     % Check whether events have been aggregated in terms of the same file ID
-%%     % and handler has been executed.
-%%     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-%%         lists:foreach(fun(_) ->
-%%             {ok, {handler, AggrEvts}} = test_utils:receive_any(?TIMEOUT),
-%%             ?assertEqual(EvtsToRecv, lists:sort(AggrEvts))
-%%         end, lists:seq(1, EvtNum div CtrThr))
-%%     end),
-%%
-%%     unsubscribe(Worker, SubId),
-%%     remove_pending_messages(),
-%%
-%%     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-%%         evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
-%%
-%% -performance([
-%%     {repeats, 10},
-%%     {parameters, [?CTR_THR(5), ?EVT_NUM(20)]},
-%%     {description, "Check whether event stream executes handlers when events number "
-%%     "exceeds counter threshold."},
-%%     {config, [{name, small_counter_threshold},
-%%         {description, "Executes event handler for stream with small counter threshold."},
-%%         {parameters, [?CTR_THR(10), ?EVT_NUM(50000)]}
-%%     ]},
-%%     {config, [{name, medium_counter_threshold},
-%%         {description, "Executes event handler for stream with medium counter threshold."},
-%%         {parameters, [?CTR_THR(100), ?EVT_NUM(50000)]}
-%%     ]},
-%%     {config, [{name, large_counter_threshold},
-%%         {description, "Executes event handler for stream with large counter threshold."},
-%%         {parameters, [?CTR_THR(1000), ?EVT_NUM(50000)]}
-%%     ]}
-%% ]).
-%% event_stream_counter_emission_rule_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     Self = self(),
-%%     FileId = <<"file_uuid">>,
-%%     SessId = ?config(session_id, Config),
-%%     CtrThr = ?config(ctr_thr, Config),
-%%     EvtNum = ?config(evt_num, Config),
-%%
-%%     {ok, SubId} = subscribe(Worker,
-%%         all,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(Meta) -> Meta >= CtrThr end,
-%%         [fun(_) -> Self ! handler end]
-%%     ),
-%%
-%%     % Emit events.
-%%     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-%%         lists:foreach(fun(_) ->
-%%             emit(Worker, #write_event{
-%%                 file_uuid = FileId, counter = 1, size = 0, file_size = 0
-%%             }, SessId)
-%%         end, lists:seq(1, EvtNum))
-%%     end),
-%%
-%%     % Check whether events have been aggregated and handler has been executed
-%%     % when emission rule has been satisfied.
-%%     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-%%         lists:foreach(fun(_) ->
-%%             ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
-%%         end, lists:seq(1, EvtNum div CtrThr))
-%%     end),
-%%
-%%     unsubscribe(Worker, SubId),
-%%     remove_pending_messages(),
-%%
-%%     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-%%         evt_per_sec(EvtNum, EmitUs + AggrUs)].
-%%
-%% -performance([
-%%     {repeats, 10},
-%%     {parameters, [?SIZE_THR(100), ?EVT_NUM(20), ?EVT_SIZE(10)]},
-%%     {description, "Check whether event stream executes handlers when summary events size "
-%%     "exceeds size threshold."},
-%%     {config, [{name, small_size_threshold},
-%%         {description, "Executes event handler for stream with small size threshold."},
-%%         {parameters, [?EVT_NUM(50000)]}
-%%     ]},
-%%     {config, [{name, medium_size_threshold},
-%%         {description, "Executes event handler for stream with medium size threshold."},
-%%         {parameters, [?SIZE_THR(1000), ?EVT_NUM(50000)]}
-%%     ]},
-%%     {config, [{name, large_size_threshold},
-%%         {description, "Executes event handler for stream with large size threshold."},
-%%         {parameters, [?SIZE_THR(10000), ?EVT_NUM(50000)]}
-%%     ]}
-%% ]).
-%% event_stream_size_emission_rule_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     Self = self(),
-%%     FileId = <<"file_uuid">>,
-%%     SessId = ?config(session_id, Config),
-%%     SizeThr = ?config(size_thr, Config),
-%%     EvtNum = ?config(evt_num, Config),
-%%     EvtSize = ?config(evt_size, Config),
-%%
-%%     {ok, SubId} = subscribe(Worker,
-%%         all,
-%%         infinity,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(Meta) -> Meta >= SizeThr end,
-%%         fun(Meta, #write_event{size = Size}) -> Meta + Size end,
-%%         [fun(_) -> Self ! handler end]
-%%     ),
-%%
-%%     % Emit events.
-%%     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-%%         lists:foreach(fun(_) ->
-%%             emit(Worker, #write_event{
-%%                 counter = 1, file_uuid = FileId, size = EvtSize, file_size = 0
-%%             }, SessId)
-%%         end, lists:seq(1, EvtNum))
-%%     end),
-%%
-%%     % Check whether events have been aggregated and handler has been executed
-%%     % when emission rule has been satisfied.
-%%     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-%%         lists:foreach(fun(_) ->
-%%             ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
-%%         end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
-%%     end),
-%%
-%%     unsubscribe(Worker, SubId),
-%%     remove_pending_messages(),
-%%
-%%     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-%%         evt_per_sec(EvtNum, EmitUs + AggrUs)].
-%%
-%% %% Check whether event stream executes handlers when emission time expires.
-%% event_stream_time_emission_rule_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     SessId = ?config(session_id, Config),
-%%     Self = self(),
-%%     EmTime = timer:seconds(2),
-%%     EvtsCount = 100,
-%%
-%%     {ok, SubId} = subscribe(Worker,
-%%         gui,
-%%         EmTime,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(_) -> false end,
-%%         [fun(Evts) -> Self ! {handler, Evts} end]
-%%     ),
-%%
-%%     % Emit events.
-%%     lists:foreach(fun(N) ->
-%%         emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
-%%             blocks = [#file_block{offset = N, size = 1}]}, SessId)
-%%     end, lists:seq(0, EvtsCount - 1)),
-%%
-%%     % Check whether event handlers have been executed.
-%%     ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
-%%         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
-%%         blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT + EmTime)),
-%%     ?assertEqual({error, timeout}, test_utils:receive_any(EmTime)),
-%%
-%%     unsubscribe(Worker, SubId),
-%%
-%%     ok.
-%%
-%% %% Check whether event stream is reinitialized in previous state in case of crash.
-%% event_stream_crash_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     SessId = ?config(session_id, Config),
-%%     Self = self(),
-%%     EvtsCount = 100,
-%%     HalfEvtsCount = round(EvtsCount / 2),
-%%
-%%     {ok, SubId} = subscribe(Worker,
-%%         gui,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(Meta) -> Meta >= EvtsCount end,
-%%         [fun(Evts) -> Self ! {handler, Evts} end]
-%%     ),
-%%
-%%     % Emit first part of events.
-%%     lists:foreach(fun(N) ->
-%%         emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
-%%             blocks = [#file_block{offset = N, size = 1}]}, SessId)
-%%     end, lists:seq(0, HalfEvtsCount - 1)),
-%%
-%%     % Get event stream pid.
-%%     {ok, {SessSup, _}} = rpc:call(Worker, session,
-%%         get_session_supervisor_and_node, [SessId]),
-%%     {ok, EvtManSup} = get_child(SessSup, event_manager_sup),
-%%     {ok, EvtStmSup} = get_child(EvtManSup, event_stream_sup),
-%%     {ok, EvtStm} = get_child(EvtStmSup, undefined),
-%%
-%%     % Send crash message and wait for event stream recovery.
-%%     gen_server:cast(EvtStm, kill),
-%%     timer:sleep(?TIMEOUT),
-%%
-%%     % Emit second part of events.
-%%     lists:foreach(fun(N) ->
-%%         emit(Worker, #write_event{size = 1, counter = 1, file_size = N + 1,
-%%             blocks = [#file_block{offset = N, size = 1}]}, SessId)
-%%     end, lists:seq(HalfEvtsCount, EvtsCount - 1)),
-%%
-%%     % Check whether event handlers have been executed.
-%%     ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
-%%         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
-%%         blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT)),
-%%     ?assertEqual({error, timeout}, test_utils:receive_any()),
-%%
-%%     unsubscribe(Worker, SubId),
-%%
-%%     ok.
-%%
-%% %% Check whether subscription can be created and cancelled.
-%% event_manager_subscription_creation_and_cancellation_test(Config) ->
-%%     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
-%%     Self = self(),
-%%     SessId1 = <<"session_id_1">>,
-%%     SessId2 = <<"session_id_2">>,
-%%     Iden1 = #identity{user_id = <<"user_id_1">>},
-%%     Iden2 = #identity{user_id = <<"user_id_2">>},
-%%
-%%     session_setup(Worker1, SessId1, Iden1, Self),
-%%
-%%     {ok, SubId} = subscribe(Worker2,
-%%         all,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(Meta) -> Meta >= 6 end,
-%%         [fun(Evts) -> Self ! {handler, Evts} end]
-%%     ),
-%%
-%%     session_setup(Worker2, SessId2, Iden2, Self),
-%%
-%%     % Check whether subscription message has been sent to clients.
-%%     ?assertMatch({ok, #write_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-%%     ?assertMatch({ok, #write_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-%%     ?assertEqual({error, timeout}, test_utils:receive_any()),
-%%
-%%     % Check subscription has been added to distributed cache.
-%%     ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
-%%
-%%     % Unsubscribe and check subscription cancellation message has been sent to
-%%     % clients
-%%     unsubscribe(Worker1, SubId),
-%%     ?assertEqual({ok, #subscription_cancellation{id = SubId}},
-%%         test_utils:receive_any(?TIMEOUT)),
-%%     ?assertEqual({ok, #subscription_cancellation{id = SubId}},
-%%         test_utils:receive_any(?TIMEOUT)),
-%%     ?assertEqual({error, timeout}, test_utils:receive_any()),
-%%
-%%     % Check subscription has been removed from distributed cache.
-%%     ?assertEqual({ok, []}, rpc:call(Worker1, subscription, list, [])),
-%%
-%%     session_teardown(Worker1, SessId2),
-%%     session_teardown(Worker2, SessId1),
-%%
-%%     ok.
-%%
-%% -performance([
-%%     {repeats, 10},
-%%     {parameters, [?SUB_NUM(2), ?EVT_NUM(1000)]},
-%%     {description, "Check whether multiple subscriptions are properly processed."},
-%%     {config, [{name, small_subs_num},
-%%         {description, "Creates subscriptions for events associated with small "
-%%         "number of different files."},
-%%         {parameters, [?SUB_NUM(10)]}
-%%     ]},
-%%     {config, [{name, medium_subs_num},
-%%         {description, "Creates subscriptions for events associated with medium "
-%%         "number of different files."},
-%%         {parameters, [?SUB_NUM(20)]}
-%%     ]},
-%%     {config, [{name, large_subs_num},
-%%         {description, "Creates subscriptions for events associated with large "
-%%         "number of different files."},
-%%         {parameters, [?SUB_NUM(50)]}
-%%     ]}
-%% ]).
-%% event_manager_multiple_subscription_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     SessId = ?config(session_id, Config),
-%%     Self = self(),
-%%     SubsNum = ?config(sub_num, Config),
-%%     EvtsNum = ?config(evt_num, Config),
-%%
-%%     % Create subscriptions for events associated with different files.
-%%     {SubIds, FileIds} = lists:unzip(lists:map(fun(N) ->
-%%         FileId = <<"file_uuid_", (integer_to_binary(N))/binary>>,
-%%         {ok, SubId} = subscribe(Worker,
-%%             gui,
-%%             fun(#write_event{file_uuid = Id}) -> Id =:= FileId; (_) ->
-%%                 false end,
-%%             fun(Meta) -> Meta >= EvtsNum end,
-%%             [fun(Evts) -> Self ! {handler, Evts} end]
-%%         ),
-%%         {SubId, FileId}
-%%     end, lists:seq(1, SubsNum))),
-%%
-%%     % Emit events.
-%%     utils:pforeach(fun(FileId) ->
-%%         lists:foreach(fun(N) ->
-%%             emit(Worker, #write_event{file_uuid = FileId, size = 1, counter = 1,
-%%                 file_size = N + 1, blocks = [#file_block{offset = N, size = 1}]},
-%%                 SessId)
-%%         end, lists:seq(0, EvtsNum - 1))
-%%     end, FileIds),
-%%
-%%     % Check whether event handlers have been executed.
-%%     lists:foreach(fun(FileId) ->
-%%         ?assertMatch({ok, _}, test_utils:receive_msg({handler, [#write_event{
-%%             file_uuid = FileId, size = EvtsNum, counter = EvtsNum,
-%%             file_size = EvtsNum, blocks = [#file_block{
-%%                 offset = 0, size = EvtsNum
-%%             }]
-%%         }]}, ?TIMEOUT))
-%%     end, FileIds),
-%%     ?assertEqual({error, timeout}, test_utils:receive_any()),
-%%
-%%     lists:foreach(fun(SubId) ->
-%%         unsubscribe(Worker, SubId)
-%%     end, SubIds),
-%%     remove_pending_messages(),
-%%
-%%     ok.
-%%
-%% %% Check whether multiple handlers are executed in terms of one event stream.
-%% event_manager_multiple_handlers_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     Self = self(),
-%%     FileId = <<"file_uuid">>,
-%%     SessId = <<"session_id">>,
-%%     Iden = #identity{user_id = <<"user_id">>},
-%%
-%%     session_setup(Worker, SessId, Iden, Self),
-%%
-%%     {ok, SubId} = subscribe(Worker,
-%%         all,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(Meta) -> Meta >= 10 end,
-%%         [
-%%             fun(Evts) -> Self ! {handler1, Evts} end,
-%%             fun(Evts) -> Self ! {handler2, Evts} end,
-%%             fun(Evts) -> Self ! {handler3, Evts} end
-%%         ]
-%%     ),
-%%
-%%     % Emit events.
-%%     lists:foreach(fun(N) ->
-%%         emit(Worker, #write_event{file_uuid = FileId, size = 1, counter = 1,
-%%             file_size = N + 1, blocks = [#file_block{offset = N, size = 1}]}, SessId)
-%%     end, lists:seq(0, 9)),
-%%
-%%     % Check whether events have been aggregated and each handler has been executed.
-%%     lists:foreach(fun(Handler) ->
-%%         ?assertMatch({ok, _}, test_utils:receive_msg({Handler, [#write_event{
-%%             file_uuid = FileId, counter = 10, size = 10, file_size = 10,
-%%             blocks = [#file_block{offset = 0, size = 10}]
-%%         }]}, ?TIMEOUT))
-%%     end, [handler1, handler2, handler3]),
-%%
-%%     unsubscribe(Worker, SubId),
-%%     session_teardown(Worker, SessId),
-%%
-%%     ok.
-%%
-%% -performance([
-%%     {repeats, 10},
-%%     {parameters, [?CLI_NUM(3), ?CTR_THR(5), ?EVT_NUM(1000)]},
-%%     {description, "Check whether event stream executes handlers for multiple clients."},
-%%     {config, [{name, small_client_number},
-%%         {description, "Small number of clients connected to the server."},
-%%         {parameters, [?CLI_NUM(10)]}
-%%     ]},
-%%     {config, [{name, medium_client_number},
-%%         {description, "Medium number of clients connected to the server."},
-%%         {parameters, [?CLI_NUM(100)]}
-%%     ]},
-%%     {config, [{name, large_client_number},
-%%         {description, "Large number of clients connected to the server."},
-%%         {parameters, [?CLI_NUM(500)]}
-%%     ]}
-%% ]).
-%% event_manager_multiple_clients_test(Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     Self = self(),
-%%     FileId = <<"file_uuid">>,
-%%     CliNum = ?config(cli_num, Config),
-%%     CtrThr = ?config(ctr_thr, Config),
-%%     EvtNum = ?config(evt_num, Config),
-%%
-%%     SessIds = lists:map(fun(N) ->
-%%         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-%%         Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-%%         session_setup(Worker, SessId, Iden, Self),
-%%         SessId
-%%     end, lists:seq(1, CliNum)),
-%%
-%%     {ok, SubId} = subscribe(Worker,
-%%         all,
-%%         fun(#write_event{}) -> true; (_) -> false end,
-%%         fun(Meta) -> Meta >= CtrThr end,
-%%         [fun(_) -> Self ! handler end]
-%%     ),
-%%
-%%     % Emit events.
-%%     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-%%         utils:pforeach(fun(SessId) ->
-%%             lists:foreach(fun(_) ->
-%%                 emit(Worker, #write_event{
-%%                     file_uuid = FileId, counter = 1, size = 0, file_size = 0
-%%                 }, SessId)
-%%             end, lists:seq(1, EvtNum))
-%%         end, SessIds)
-%%     end),
-%%
-%%     % Check whether events have been aggregated and handler has been executed
-%%     % when emission rule has been satisfied.
-%%     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-%%         lists:foreach(fun(_) ->
-%%             lists:foreach(fun(_) ->
-%%                 ?assertMatch({ok, _}, test_utils:receive_msg(handler, ?TIMEOUT))
-%%             end, lists:seq(1, EvtNum div CtrThr))
-%%         end, SessIds)
-%%     end),
-%%
-%%     unsubscribe(Worker, SubId),
-%%     lists:foreach(fun(SessId) ->
-%%         session_teardown(Worker, SessId)
-%%     end, SessIds),
-%%     remove_pending_messages(),
-%%
-%%     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-%%         evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)].
+event_manager_should_start_event_stream_on_subscription(Config) ->
+    EvtMan = ?config(event_manager, Config),
+    gen_server:cast(EvtMan, #subscription{id = 1}),
+    ?assertReceived({start_event_stream, #subscription{id = 1}}, ?TIMEOUT).
+
+event_manager_should_terminate_event_stream_on_subscription_cancellation(Config) ->
+    EvtMan = ?config(event_manager, Config),
+    gen_server:cast(EvtMan, #subscription_cancellation{id = 1}),
+    ?assertReceived({'DOWN', _, _, _, _}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -650,87 +109,49 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
-%% init_per_testcase(event_stream_crash_test, Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     Self = self(),
-%%     SessId = <<"session_id">>,
-%%     Iden = #identity{user_id = <<"user_id">>},
-%%     test_utils:mock_new(Worker, [communicator, logger]),
-%%     test_utils:mock_expect(Worker, communicator, send, fun
-%%         (_, _) -> ok
-%%     end),
-%%     test_utils:mock_expect(Worker, logger, dispatch_log, fun
-%%         (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
-%%         (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
-%%     end),
-%%     session_setup(Worker, SessId, Iden, Self),
-%%     [{session_id, SessId} | Config];
-%%
-%% init_per_testcase(Case, Config) when
-%%     Case =:= event_manager_subscription_creation_and_cancellation_test;
-%%     Case =:= event_manager_multiple_handlers_test;
-%%     Case =:= event_manager_multiple_clients_test ->
-%%     Self = self(),
-%%     Workers = ?config(op_worker_nodes, Config),
-%%     test_utils:mock_new(Workers, communicator),
-%%     test_utils:mock_expect(Workers, communicator, send, fun
-%%         (#write_subscription{} = Msg, _) -> Self ! Msg, ok;
-%%         (#subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
-%%         (_, _) -> ok
-%%     end),
-%%     Config;
+init_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    mock_event_stream_sup(Worker),
+    init_per_testcase(event_manager_should_update_session_on_init, Config);
 
 init_per_testcase(Case, Config) when
-%%     Case =:= event_stream_counter_emission_rule_test;
-%%     Case =:= event_stream_size_emission_rule_test;
-%%     Case =:= event_stream_time_emission_rule_test;
-%%     Case =:= event_manager_multiple_subscription_test;
-    Case =:= event_stream_the_same_file_uuid_aggregation_test ->
-%%     Case =:= event_stream_different_file_uuid_aggregation_test ->
+    Case =:= event_manager_should_start_event_streams_on_init;
+    Case =:= event_manager_should_unregister_event_stream;
+    Case =:= event_manager_should_forward_events_to_event_streams;
+    Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Self = self(),
-    SessId = <<"session_id">>,
-    Iden = #identity{user_id = <<"user_id">>},
-    test_utils:mock_new(Worker, communicator),
-    test_utils:mock_expect(Worker, communicator, send, fun
-        (_, _) -> ok
-    end),
-    session_setup(Worker, SessId, Iden, Self),
-    [{session_id, SessId} | Config].
+    mock_subscription(Worker),
+    mock_event_stream_sup(Worker),
+    init_per_testcase(event_manager_should_update_session_on_init, Config);
 
-%% end_per_testcase(event_stream_crash_test, Config) ->
-%%     [Worker | _] = ?config(op_worker_nodes, Config),
-%%     SessId = ?config(session_id, Config),
-%%     remove_pending_messages(),
-%%     session_teardown(Worker, SessId),
-%%     test_utils:mock_validate(Worker, [communicator, logger]),
-%%     test_utils:mock_unload(Worker, [communicator, logger]),
-%%     proplists:delete(session_id, Config);
-%%
-%% end_per_testcase(Case, Config) when
-%%     Case =:= event_manager_subscription_creation_and_cancellation_test;
-%%     Case =:= event_manager_multiple_handlers_test;
-%%     Case =:= event_manager_multiple_clients_test ->
-%%     Workers = ?config(op_worker_nodes, Config),
-%%     remove_pending_messages(),
-%%     test_utils:mock_validate(Workers, communicator),
-%%     test_utils:mock_unload(Workers, communicator),
-%%     Config;
+init_per_testcase(_, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {ok, SessId} = create_session(Worker),
+    mock_event_manager_sup(Worker),
+    {ok, EvtMan} = start_event_manager(Worker, SessId),
+    [{event_manager, EvtMan}, {session_id, SessId} | Config].
+
+end_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    end_per_testcase(event_manager_should_update_session_on_init, Config),
+    validate_and_unload_mocks(Worker, [event_stream_sup]);
 
 end_per_testcase(Case, Config) when
-%%     Case =:= event_stream_counter_emission_rule_test;
-%%     Case =:= event_stream_size_emission_rule_test;
-%%     Case =:= event_stream_time_emission_rule_test;
-%%     Case =:= event_manager_multiple_subscription_test;
-    Case =:= event_stream_the_same_file_uuid_aggregation_test ->
-%%     Case =:= event_stream_different_file_uuid_aggregation_test ->
+    Case =:= event_manager_should_start_event_streams_on_init;
+    Case =:= event_manager_should_unregister_event_stream;
+    Case =:= event_manager_should_forward_events_to_event_streams;
+    Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
+    end_per_testcase(event_manager_should_update_session_on_init, Config),
+    validate_and_unload_mocks(Worker, [subscription, event_stream_sup]);
+
+end_per_testcase(_, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    stop_event_manager(?config(event_manager, Config)),
+    validate_and_unload_mocks(Worker, [event_manager_sup]),
+    remove_session(Worker, ?config(session_id, Config)),
     remove_pending_messages(),
-    session_teardown(Worker, SessId),
-    test_utils:mock_validate(Worker, communicator),
-    test_utils:mock_unload(Worker, communicator),
-    proplists:delete(session_id, Config).
+    proplists:delete(session_id, proplists:delete(event_manager, Config)).
 
 %%%===================================================================
 %%% Internal functions
@@ -739,116 +160,125 @@ end_per_testcase(Case, Config) when
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates new test session.
+%% Starts event manager for given session.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid()) -> ok.
-session_setup(Worker, SessId, Iden, Con) ->
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Con])).
+-spec start_event_manager(Worker :: node(), SessId :: session:id()) ->
+    {ok, EvtMan :: pid()}.
+start_event_manager(Worker, SessId) ->
+    EvtManSup = self(),
+    ?assertMatch({ok, _}, rpc:call(Worker, gen_server, start, [
+        event_manager, [EvtManSup, SessId], []
+    ])).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Remove existing test session.
+%% Stops event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
-session_teardown(Worker, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
+-spec stop_event_manager(EvtMan :: pid()) -> true.
+stop_event_manager(EvtMan) ->
+    exit(EvtMan, shutdown).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Emits an event.
+%% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), Evt :: event_manager:event(), SessId :: session:id()) ->
-    ok.
-emit(Worker, Evt, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, event_manager, emit, [Evt, SessId])).
+-spec create_session(Worker :: node()) -> {ok, SessId :: session:id()}.
+create_session(Worker) ->
+    ?assertMatch({ok, _}, rpc:call(Worker, session, create, [#document{
+        key = <<"session_id">>, value = #session{}
+    }])).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv subscribe(Worker, Scope, infinity, AdmRule, EmRule, Handlers)
+%% Removes session document from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), Scope :: event_manager:subscription_scope(),
-    AdmRule :: event_stream:admission_rule(),
-    EmRule :: event_stream:emission_rule(),
-    Handlers :: [event_stream:event_handler()]) ->
-    {ok, SubId :: event_manager:subscription_id()}.
-subscribe(Worker, Scope, AdmRule, EmRule, Handlers) ->
-    subscribe(Worker, Scope, infinity, AdmRule, EmRule, Handlers).
+-spec remove_session(Worker :: node(), SessId :: session:id()) -> ok.
+remove_session(Worker, SessId) ->
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId])).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv subscribe(Worker, Scope, infinity, AdmRule, EmRule, TrRule, Handlers)
+%% Mocks event manager supervisor, so that it returns this process as event
+%% stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), Scope :: event_manager:subscription_scope(),
-    EmTime :: timeout(), AdmRule :: event_stream:admission_rule(),
-    EmRule :: event_stream:emission_rule(),
-    Handlers :: [event_stream:event_handler()]) ->
-    {ok, SubId :: event_manager:subscription_id()}.
-subscribe(Worker, Scope, EmTime, AdmRule, EmRule, Handlers) ->
-    TrRule = fun(Meta, #event{counter = Counter}) -> Meta + Counter end,
-    subscribe(Worker, Scope, EmTime, AdmRule, EmRule, TrRule, Handlers).
+-spec mock_event_manager_sup(Worker :: node()) -> ok.
+mock_event_manager_sup(Worker) ->
+    EvtStmSup = self(),
+    test_utils:mock_new(Worker, [event_manager_sup]),
+    test_utils:mock_expect(Worker, event_manager_sup, get_event_stream_sup, fun
+        (_) -> {ok, EvtStmSup}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates event subscription.
+%% Mocks event stream supervisor, so that it notifies this process when event
+%% stream is started. Moreover, started fake event stream will forward all
+%% received messages to this process.
 %% @end
 %%--------------------------------------------------------------------
--spec subscribe(Worker :: node(), Scope :: event_manager:subscription_scope(),
-    EmTime :: timeout(), AdmRule :: event_stream:admission_rule(),
-    EmRule :: event_stream:emission_rule(),
-    TrRule :: event_stream:transition_rule(),
-    Handlers :: [event_stream:event_handler()]) ->
-    {ok, SubId :: event_manager:subscription_id()}.
-subscribe(Worker, Scope, EmTime, AdmRule, EmRule, TrRule, Handlers) ->
-    StmDef = ?WRITE_EVENT_STREAM#event_stream_definition{
-        subscription = #subscription{scope = Scope},
-        metadata = 0,
-        admission_rule = AdmRule,
-        transition_rule = TrRule,
-        emission_rule = EmRule,
-        emission_time = EmTime,
-        handlers = Handlers
-    },
-    SubAnswer = rpc:call(Worker, event_manager, subscribe, [StmDef]),
-    ?assertMatch({ok, _}, SubAnswer),
-    SubAnswer.
+-spec mock_event_stream_sup(Worker :: node()) -> ok.
+mock_event_stream_sup(Worker) ->
+    Self = self(),
+    Loop = fun(Fun) -> receive Msg -> Self ! Msg, Fun(Fun) end end,
+    {EvtStm, _} = spawn_monitor(fun() -> Loop(Loop) end),
+    test_utils:mock_new(Worker, [event_stream_sup]),
+    test_utils:mock_expect(Worker, event_stream_sup, start_event_stream, fun
+        (_, _, Sub, _) -> Self ! {start_event_stream, Sub}, {ok, EvtStm}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes event subscription.
+%% Mocks subscription model, so that it returns defined list of subscriptions.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(Worker :: node(), SubId :: event_manager:subscription_id()) ->
-    ok.
-unsubscribe(Worker, SubId) ->
-    ?assertEqual(ok, rpc:call(Worker, event_manager, unsubscribe, [SubId])).
+-spec mock_subscription(Worker :: node()) -> ok.
+mock_subscription(Worker) ->
+    test_utils:mock_new(Worker, [subscription]),
+    test_utils:mock_expect(Worker, subscription, list, fun
+        () -> {ok, [#subscription{id = 1}, #subscription{id = 2}]}
+    end).
 
-%% %%--------------------------------------------------------------------
-%% %% @private
-%% %% @doc
-%% %% Returns supervisor child.
-%% %% @end
-%% %%--------------------------------------------------------------------
-%% -spec get_child(Sup :: pid(), ChildId :: term()) ->
-%%     {ok, Child :: pid()} | {error, not_found}.
-%% get_child(Sup, ChildId) ->
-%%     Children = supervisor:which_children(Sup),
-%%     case lists:keyfind(ChildId, 1, Children) of
-%%         {ChildId, Child, _, _} -> {ok, Child};
-%%         false -> {error, not_found}
-%%     end.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Validates and unloads mocks.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_and_unload_mocks(Worker :: node(), Mocks :: [atom()]) -> ok.
+validate_and_unload_mocks(Worker, Mocks) ->
+    test_utils:mock_validate(Worker, Mocks),
+    test_utils:mock_unload(Worker, Mocks).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Repeatedly executes provided function until it returns expected value or
+%% attempts limit exceeds.
+%% @end
+%%--------------------------------------------------------------------
+-spec repeat(Fun :: fun(), Expected :: term(), Attempts :: non_neg_integer(),
+    Delay :: timeout()) -> ok.
+repeat(Fun, Expected, 0, _) ->
+    ?assertMatch(Expected, Fun());
+
+repeat(Fun, Expected, Attempts, Delay) ->
+    case Fun() of
+        Expected -> ok;
+        _ ->
+            timer:sleep(Delay),
+            repeat(Fun, Expected, Attempts - 1, Delay)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -862,36 +292,3 @@ remove_pending_messages() ->
         {error, timeout} -> ok;
         _ -> remove_pending_messages()
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns summary events emission time parameter.
-%% @end
-%%--------------------------------------------------------------------
--spec emit_time(Value :: integer() | float(), Unit :: string()) -> #parameter{}.
-emit_time(Value, Unit) ->
-    #parameter{name = emit_time, description = "Summary events emission time.",
-        value = Value, unit = Unit}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns summary events aggregation time parameter.
-%% @end
-%%--------------------------------------------------------------------
--spec aggr_time(Value :: integer() | float(), Unit :: string()) -> #parameter{}.
-aggr_time(Value, Unit) ->
-    #parameter{name = aggr_time, description = "Summary events aggregation time.",
-        value = Value, unit = Unit}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns number of events per second parameter.
-%% @end
-%%--------------------------------------------------------------------
--spec evt_per_sec(EvtNum :: integer(), Time :: integer()) -> #parameter{}.
-evt_per_sec(EvtNum, Time) ->
-    #parameter{name = evtps, unit = "event/s", description = "Number of events per second.",
-        value = 1000000 * EvtNum / Time}.

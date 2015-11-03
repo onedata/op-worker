@@ -68,7 +68,7 @@ start_link(EvtManSup, SessId) ->
     {stop, Reason :: term()} | ignore.
 init([EvtManSup, SessId]) ->
     process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{manager => self()}),
+    {ok, SessId} = session:update(SessId, #{event_manager => self()}),
     {ok, #state{event_manager_sup = EvtManSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -113,13 +113,12 @@ handle_cast(#event{} = Evt, #state{event_streams = Stms} = State) ->
 
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = Stms} = State) ->
-    subscription:send(Sub, SessId),
     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
     {noreply, State#state{event_streams = maps:put(SubId, EvtStm, Stms)}};
 
 handle_cast(#subscription_cancellation{id = SubId}, #state{event_streams = Stms} = State) ->
-    {ok, StmPid} = maps:find(SubId, Stms),
-    erlang:exit(StmPid, shutdown),
+    {ok, EvtStm} = maps:find(SubId, Stms),
+    erlang:exit(EvtStm, shutdown),
     {noreply, State#state{event_streams = maps:remove(SubId, Stms)}};
 
 handle_cast(Request, State) ->
@@ -136,6 +135,9 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info({'EXIT', EvtManSup, shutdown}, #state{event_manager_sup = EvtManSup} = State) ->
+    {stop, shutdown, State};
+
 handle_info(timeout, #state{event_manager_sup = EvtManSup, session_id = SessId} = State) ->
     {ok, EvtStmSup} = event_manager_sup:get_event_stream_sup(EvtManSup),
     {noreply, State#state{
@@ -160,7 +162,7 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session:update(SessId, #{manager => undefined}).
+    session:update(SessId, #{event_manager => undefined}).
 
 %%--------------------------------------------------------------------
 %% @private

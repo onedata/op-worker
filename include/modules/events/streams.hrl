@@ -32,14 +32,14 @@
 %%                     and decides whether event handler should be executed
 %% emission_time     - maximal delay between successive event handler executions
 -record(event_stream_definition, {
-    metadata :: event_stream:metadata(),
+    metadata = 0 :: event_stream:metadata(),
     init_handler = fun(_, _) -> ok end :: event_stream:init_handler(),
     terminate_handler = fun(_) -> ok end :: event_stream:terminate_handler(),
     event_handler = fun(_, _) -> ok end :: event_stream:event_handler(),
     admission_rule :: event_stream:admission_rule(),
     aggregation_rule :: event_stream:aggregation_rule(),
-    transition_rule = fun(State, #event{counter = Counter}) ->
-        State + Counter
+    transition_rule = fun(Meta, #event{counter = Counter}) ->
+        Meta + Counter
     end :: event_stream:transition_rule(),
     emission_rule = fun(_) -> false end :: event_stream:emission_rule(),
     emission_time = infinity :: event_stream:emission_time()
