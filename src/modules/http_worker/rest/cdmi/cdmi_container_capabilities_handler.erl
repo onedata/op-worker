@@ -63,7 +63,12 @@ content_types_provided(Req, State) ->
 %% @end
 %% ====================================================================
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi_capability(Req, #{opts => Opts} = State) ->
+get_cdmi_capability(Req, State) ->
+  %% TODO: change to pattern matching in function header when it'll be doable in Erlang
+  case maps:is_key(opts, State) of
+    true -> Opts = maps:get(opts, State);
+    false -> Opts = []
+  end,
   RawCapabilities = prepare_capability_ans(Opts, State),
   Capabilities = cdmi_utils:encode_to_json(RawCapabilities),
   {Capabilities, Req, State}.
