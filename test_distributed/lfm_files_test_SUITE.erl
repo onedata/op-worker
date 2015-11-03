@@ -149,7 +149,7 @@ lfm_write_test(Config) ->
 
     WriteAndTest =
         fun(Worker, Handle, Offset, Bytes) ->
-            ct:print("Testing lfm write with offset ~p and binary ~p", [Offset, Bytes]),
+%%             ct:print("Testing lfm write with offset ~p and binary ~p", [Offset, Bytes]),
             Size = size(Bytes),
             ?assertMatch({ok, Size}, write(Worker, Handle, Offset, Bytes)),
             for(Offset, Offset + Size - 1,
@@ -157,7 +157,7 @@ lfm_write_test(Config) ->
                     for(1, Offset + Size - I,
                         fun(J) ->
                             SubBytes = binary:part(Bytes, I - Offset, J),
-                            ct:print("===== Offset ~p Size ~p Expected ~p", [I, J, SubBytes]),
+%%                             ct:print("===== Offset ~p Size ~p Expected ~p", [I, J, SubBytes]),
                             ?assertMatch({ok, SubBytes}, read(Worker, Handle, I, J))
                         end)
                 end)

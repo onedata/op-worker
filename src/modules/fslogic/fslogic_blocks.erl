@@ -164,7 +164,7 @@ invalidate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Bl
     ?debug("OldBlocks invalidate ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = invalidate(Doc, OldBlocks, Blocks),
     ?debug("NewBlocks invalidate ~p", [NewBlocks]),
-    NewBlocks1 = consolidate(lists:sort(NewBlocks)),
+    NewBlocks1 = consolidate(NewBlocks),
     ?debug("NewBlocks1 invalidate ~p", [NewBlocks1]),
     {ok, _} = file_location:save(Doc#document{value = Loc#file_location{blocks = NewBlocks1, size = upper(NewBlocks1)}}),
     ok;

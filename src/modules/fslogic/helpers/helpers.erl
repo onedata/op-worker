@@ -41,6 +41,7 @@
 %% new_handle/1
 %%--------------------------------------------------------------------
 %% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
+%%      @todo: maybe cache new_helper_obj result
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(#helper_init{}) -> handle().

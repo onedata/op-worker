@@ -84,7 +84,6 @@
 %%--------------------------------------------------------------------
 -spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
 mkdir(SessId, Path) ->
-    _CTX = fslogic_context:new(SessId),
     lfm_dirs:mkdir(Path).
 
 
@@ -97,7 +96,6 @@ mkdir(SessId, Path) ->
 %%--------------------------------------------------------------------
 -spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, FileKey, Limit, Offset) ->
-    CTX = fslogic_context:new(SessId),
     lfm_dirs:ls(FileKey, Limit, Offset).
 
 
@@ -109,7 +107,6 @@ ls(SessId, FileKey, Limit, Offset) ->
 %%--------------------------------------------------------------------
 -spec get_children_count(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
     lfm_dirs:get_children_count(FileKey).
 
 

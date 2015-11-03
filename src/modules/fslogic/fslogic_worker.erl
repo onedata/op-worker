@@ -47,11 +47,14 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    {ok, CounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
+    {ok, TimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
+    {ok, SizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
     Sub = #write_event_subscription{
         producer = all,
-        producer_counter_threshold = 100,
-        producer_time_threshold = 500,
-        producer_size_threshold = 1024 * 1024 * 10, %% 10MB
+        producer_counter_threshold = CounterThreshold,
+        producer_time_threshold = TimeThreshold,
+        producer_size_threshold = SizeThreshold,
         event_stream = ?WRITE_EVENT_STREAM#event_stream{
             metadata = 0,
             emission_time = 500,
@@ -186,9 +189,8 @@ handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
     fslogic_req_generic:rename_file(Ctx, {uuid, UUID}, CanonicalTargetPath);
 handle_fuse_request(Ctx, #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, UUID}, ATime, MTime, CTime);
-handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = ParentUUID, flags = Flags,
-                                                force_cluster_proxy = ForceClusterProxy, mode = Mode}) ->
-    fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags, ForceClusterProxy);
+handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = ParentUUID, flags = Flags, mode = Mode}) ->
+    fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags);
 handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->

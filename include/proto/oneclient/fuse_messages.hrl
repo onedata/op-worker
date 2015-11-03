@@ -79,13 +79,12 @@
     name :: file_meta:name(),
     parent_uuid :: file_meta:uuid(),
     flags :: atom(),
-    mode = 8#644 :: file_meta:posix_permissions(),
-    force_cluster_proxy = false :: boolean()
+    mode = 8#644 :: file_meta:posix_permissions()
 }).
 
 -record(get_file_location, {
     uuid :: file_meta:uuid(),
-    flags :: atom()
+    flags :: 'READ_WRITE' | 'READ' | 'WRITE' | undefined
 }).
 
 -record(unlink, {

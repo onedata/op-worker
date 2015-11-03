@@ -36,7 +36,8 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Opens the file. To used opened descriptor, pass returned handle to other functions.
-%%
+%% File may and should be closed with release/1, but file will be closed automatically
+%% when handle goes out of scope (term will be released by Erlang's GC).
 %% @end
 %%--------------------------------------------------------------------
 -spec open(Storage :: datastore:document(), FileId :: helpers:file(), OpenMode :: helpers:open_mode()) ->
