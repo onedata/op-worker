@@ -36,36 +36,36 @@ rest_init(Req, _Opts) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), dict()) -> ok.
+-spec terminate(Reason :: term(), req(), #{}) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), dict() | {error, term()}) -> {[binary()], req(), dict()}.
+-spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:malformed_request/2
 %%--------------------------------------------------------------------
--spec malformed_request(req(), dict()) -> {boolean(), req(), dict()}.
+-spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
 malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_request(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
--spec resource_exists(req(), dict()) -> {boolean(), req(), dict()}.
+-spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
 resource_exists(Req, State) ->
     {false, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_provided(req(), dict()) ->
-    {[{binary(), atom()}], req(), dict()}.
+-spec content_types_provided(req(), #{}) ->
+    {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
         {<<"application/cdmi-container">>, get}
@@ -74,8 +74,8 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), dict()) ->
-    {[{binary(), atom()}], req(), dict()}.
+-spec content_types_accepted(req(), #{}) ->
+    {[{binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put}
@@ -84,7 +84,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
--spec delete_resource(req(), dict()) -> {term(), req(), dict()}.
+-spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, State) ->
     {true, Req, State}.
 
@@ -97,7 +97,7 @@ delete_resource(Req, State) ->
 %% Handles GET with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get(req(), dict()) -> {term(), req(), dict()}.
+-spec get(req(), #{}) -> {term(), req(), #{}}.
 get(Req, State) ->
     {<<"ok">>, Req, State}.
 
@@ -106,6 +106,6 @@ get(Req, State) ->
 %% Handles PUT with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put(req(), dict()) -> {term(), req(), dict()}.
+-spec put(req(), #{}) -> {term(), req(), #{}}.
 put(Req, State) ->
     {true, Req, State}.

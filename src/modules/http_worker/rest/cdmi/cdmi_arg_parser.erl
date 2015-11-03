@@ -24,14 +24,13 @@
 %%--------------------------------------------------------------------
 %% @doc Extract the CDMI version and options and put it in State.
 %%--------------------------------------------------------------------
--spec malformed_request(req(), dict()) -> {true|false, req(), dict()}.
+-spec malformed_request(req(), #{}) -> {true|false, req(), #{}}.
 malformed_request(Req, State) ->
   {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
   Version = get_supported_version(RawVersion),
-  {Req3, Qs} = cowboy_req:qs(Req2),
+  {Qs, Req3} = cowboy_req:qs(Req2),
   Opts = parse_opts(Qs),
-  State2 = dict:store(cdmi_version, Version, State),
-  NewState = dict:store(options, Opts, State2),
+  NewState = State#{cdmi_version := Version, options := Opts},
   {false, Req3, NewState}.
 
 %%%===================================================================
