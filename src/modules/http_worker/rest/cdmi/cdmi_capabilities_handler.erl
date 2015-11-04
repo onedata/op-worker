@@ -43,10 +43,9 @@ allowed_methods(Req, State) ->
 %% @doc @equiv pre_handler:malformed_request/2
 %% ====================================================================
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
-malformed_request(Req, State) ->
+malformed_request(Req, #{version := Version} = State) ->
   {false, Req, State} = cdmi_arg_parser:malformed_request(Req, State),
-  %% TODO: change to pattern matching in function header when it'll be doable in Erlang
-  case maps:get(version, State) of
+  case Version of
     undefined -> throw(?unsupported_version);
     _ -> {false, Req, State}
   end.
@@ -69,12 +68,7 @@ content_types_provided(Req, State) ->
 %% @end
 %% ====================================================================
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi_capability(Req, State) ->
-  %% TODO: change to pattern matching in function header when it'll be doable in Erlang
-  case maps:is_key(opts, State) of
-    true -> Opts = maps:get(opts, State);
-    false -> Opts = []
-  end,
+get_cdmi_capability(Req, #{opts := Opts} = State) ->
   RawCapabilities = prepare_capability_ans(Opts, State),
   Capabilities = cdmi_utils:encode_to_json(RawCapabilities),
   {Capabilities, Req, State}.
