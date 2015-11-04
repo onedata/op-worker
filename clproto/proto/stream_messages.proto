@@ -35,8 +35,9 @@ message MessageAcknowledgement {
                                          // processed message from the stream
 }
 
-// Reinitializes each message stream
+// Reinitializes message stream
 message MessageStreamReset {
+    required uint64 stream_id = 1; // ID of stream to be reinitialized
 }
 
 // Marks the end of message stream
