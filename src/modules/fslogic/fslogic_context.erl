@@ -18,11 +18,21 @@
 
 %% API
 -export([gen_global_session_id/2, read_global_session_id/1, is_global_session_id/1]).
--export([get_user_id/1]).
+-export([get_user_id/1, new/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%%  Returns newly created fslogic CTX for given session ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(session:id()) -> fslogic_worker:ctx() | no_return().
+new(SessId) ->
+    {ok, #document{value = Session}} = session:get(SessId),
+    #fslogic_ctx{session = Session, session_id = SessId}.
 
 
 %% gen_global_session_id/1

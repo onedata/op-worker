@@ -171,7 +171,7 @@ multi_message_test(Config) ->
     % then
     lists:foreach(
         fun(N) ->
-            ?assertMatch({ok, N}, test_utils:receive_msg(N, timer:seconds(5)))
+            ?assertReceived(N, timer:seconds(5))
         end, MsgNumbers),
     T3 = os:timestamp(),
     ok = ssl2:close(Sock),
@@ -697,6 +697,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                     % respond with the same data to the server (excluding stream_reset)
                     case Body of
                         {message_stream_reset, _} -> ok;
+                        {event_subscription, _} -> ok;
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
                             ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
@@ -725,7 +726,7 @@ unmock_identity(Workers) ->
     test_utils:mock_unload(Workers, identity).
 
 receive_server_message() ->
-    receive_server_message([message_stream_reset]).
+    receive_server_message([message_stream_reset, event_subscription]).
 
 receive_server_message(IgnoredMsgList) ->
     receive

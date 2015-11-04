@@ -39,13 +39,20 @@
 -define(ROOT_DIR_UUID, <<"">>).
 -define(ROOT_DIR_NAME, <<"">>).
 
+%% Separator used in filename for specifying snapshot version.
+-define(SNAPSHOT_SEPARATOR, "::").
+
+%% Prefix for link name for #file_location link
+-define(LOCATION_PREFIX, "location_").
+
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
--export([get_ancestors/1]).
+-export([get_ancestors/1, attach_location/3, get_locations/1]).
+-export([snapshot_name/2]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -128,8 +135,9 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName}} = FileDoc) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
     ?run(begin
+             false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->
                      case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
@@ -139,6 +147,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                                      SavedDoc = FileDoc#document{key = UUID},
                                      {ok, Scope} = get_scope(Parent),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
                                      {ok, UUID};
                                  {error, Reason} ->
@@ -279,22 +288,52 @@ before(_ModelName, _Method, _Level, _Context) ->
 list_children(Entry, Offset, Count) ->
     ?run(begin
              {ok, #document{} = File} = get(Entry),
-             Res = datastore:foreach_link(?LINK_STORE_LEVEL, File, fun
-                 (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
-                     Acc;
-                 (LinkName, {_Key, ?MODEL_NAME}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
-                     {Skip - 1, Count1, Acc};
-                 (LinkName, {Key, ?MODEL_NAME}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
-                     {0, Count1 - 1, [#child_link{uuid = Key, name = LinkName} | Acc]};
-                 (_LinkName, _LinkTarget, AccIn) ->
-                     AccIn
-             end, {Offset, Count, []}),
+             Res = datastore:foreach_link(?LINK_STORE_LEVEL, File,
+                 fun
+                     (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
+                         Acc;
+                     (LinkName, {_Key, ?MODEL_NAME}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
+                         case is_snapshot(LinkName) of
+                             true ->
+                                 {Skip, Count1, Acc};
+                             false ->
+                                 {Skip - 1, Count1, Acc}
+                         end;
+                     (LinkName, {Key, ?MODEL_NAME}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
+                         case is_snapshot(LinkName) of
+                             true ->
+                                 {0, Count1, Acc};
+                             false ->
+                                 {0, Count1 - 1, [#child_link{uuid = Key, name = LinkName} | Acc]}
+                         end;
+                     (_LinkName, _LinkTarget, AccIn) ->
+                         AccIn
+                 end, {Offset, Count, []}),
              case Res of
                  {ok, {_, _, UUIDs}} ->
                      {ok, UUIDs};
                  {error, Reason} ->
                      {error, Reason}
              end
+         end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's locations attached with attach_location/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_locations(entry()) -> {ok, [datastore:key()]} | datastore:get_error().
+get_locations(Entry) ->
+    ?run(begin
+             {ok, #document{} = File} = get(Entry),
+             datastore:foreach_link(?LINK_STORE_LEVEL, File,
+                 fun
+                     (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
+                         [Key | AccIn];
+                     (_LinkName, _LinkTarget, AccIn) ->
+                         AccIn
+                 end, [])
          end).
 
 %%--------------------------------------------------------------------
@@ -325,7 +364,7 @@ get_ancestors(Entry) ->
     ?run(begin
              {ok, #document{key = Key}} = get(Entry),
              {ok, get_ancestors2(Key, [])}
-    end).
+         end).
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(Key, Acc) ->
@@ -427,7 +466,7 @@ get_scope(Entry) ->
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.
 setup_onedata_user(UUID) ->
-    ?debug("setup_onedata_user ~p", [UUID]),
+    ?info("setup_onedata_user ~p", [UUID]),
     try
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
             onedata_user:get(UUID),
@@ -438,11 +477,13 @@ setup_onedata_user(UUID) ->
             case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
                 {ok, #document{key = Key}} -> {ok, Key};
                 {error, {not_found, _}} ->
-                    create({uuid, ?ROOT_DIR_UUID}, #document{key = ?SPACES_BASE_DIR_NAME, value = #file_meta{
-                        name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
-                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                        is_scope = true
-                    }})
+                    create({uuid, ?ROOT_DIR_UUID},
+                        #document{key = ?SPACES_BASE_DIR_NAME,
+                            value = #file_meta{
+                                name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
+                                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                                is_scope = true
+                            }})
             end,
 
         lists:foreach(fun(SpaceId) ->
@@ -451,33 +492,51 @@ setup_onedata_user(UUID) ->
                 false ->
                     {ok, #space_details{name = SpaceName}} =
                         gr_spaces:get_details(provider, SpaceId),
-                    {ok, _} = create({uuid, SpacesRootUUID}, #document{key = SpaceId, value = #file_meta{
-                        name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                        mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                        is_scope = true
-                    }})
+                    {ok, _} = create({uuid, SpacesRootUUID},
+                        #document{key = SpaceId,
+                            value = #file_meta{
+                                name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#1770,
+                                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                                is_scope = true
+                            }})
             end
         end, Spaces),
 
-        {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID}, #document{key = UUID,
-            value = #file_meta{
-                name = UUID, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                is_scope = true
-            }
-        }),
-        {ok, _SpacesUUID} = create({uuid, RootUUID}, #document{key = fslogic_path:spaces_uuid(UUID),
-            value = #file_meta{
-                name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                is_scope = true
-            }
-        })
+        {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
+            #document{key = UUID,
+                value = #file_meta{
+                    name = UUID, type = ?DIRECTORY_TYPE, mode = 8#1770,
+                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                    is_scope = true
+                }
+            }),
+        {ok, _SpacesUUID} = create({uuid, RootUUID},
+            #document{key = fslogic_path:spaces_uuid(UUID),
+                value = #file_meta{
+                    name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
+                    mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
+                    is_scope = true
+                }
+            })
     catch
         Error:Reason ->
-            ?error_stacktrace("Cannot initialize onedata user files metadata "
-            "due to: ~p:~p", [Error, Reason])
+            ?error_stacktrace("Cannot initialize onedata user files metadata due to: ~p:~p", [Error, Reason])
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds links between given file_meta and given location document.
+%% @end
+%%--------------------------------------------------------------------
+-spec attach_location(entry(), Location :: datastore:document() | datastore:key(), ProviderId :: oneprovider:id()) ->
+    ok.
+attach_location(Entry, #document{key = LocId}, ProviderId) ->
+    attach_location(Entry, LocId, ProviderId);
+attach_location(Entry, LocId, ProviderId) ->
+    {ok, #document{key = FileId} = FDoc} = get(Entry),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}}).
 
 %%%===================================================================
 %%% Internal functions
@@ -555,8 +614,8 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                              SetterFun(Entry0, ScopeUUID0),
                              Receiver();
                          exit ->
-                           ok,
-                           Master ! scope_setting_done
+                             ok,
+                             Master ! scope_setting_done
                      end
                  end,
              Setters = [spawn_link(ReceiverFun) || _ <- lists:seq(1, ?SET_SCOPER_WORKERS)],
@@ -570,12 +629,12 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                  end,
 
              lists:foreach(fun(Setter) ->
-               Setter ! exit,
-               receive
-                 scope_setting_done -> ok
-               after 200 ->
-                 ?error("set_scopes error for entry: ~p", [Entry])
-               end
+                 Setter ! exit,
+                 receive
+                     scope_setting_done -> ok
+                 after 200 ->
+                     ?error("set_scopes error for entry: ~p", [Entry])
+                 end
              end, Setters),
              Res
          end).
@@ -651,10 +710,18 @@ is_valid_filename(<<"..">>) ->
 is_valid_filename(FileName) when not is_binary(FileName) ->
     false;
 is_valid_filename(FileName) when is_binary(FileName) ->
-    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
-        [] -> true;
-        _ -> false
-    end.
+    DirSep =
+        case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
+            [] -> true;
+            _ -> false
+        end,
+    SnapSep =
+        case binary:matches(FileName, <<?SNAPSHOT_SEPARATOR>>) of
+            [] -> true;
+            _ -> false
+        end,
+
+    SnapSep andalso DirSep.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -672,3 +739,39 @@ normalize_error({ok, Inv}) ->
     normalize_error({invalid_response, normalize_error(Inv)});
 normalize_error(Reason) ->
     Reason.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns filename than explicity points at given version of snaphot.
+%% @end
+%%--------------------------------------------------------------------
+-spec snapshot_name(FileName :: name(), Version :: non_neg_integer()) -> binary().
+snapshot_name(FileName, Version) ->
+    <<FileName/binary, ?SNAPSHOT_SEPARATOR, (integer_to_binary(Version))/binary>>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given filename explicity points at specific version of snaphot.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_snapshot(FileName :: name()) -> boolean().
+is_snapshot(FileName) ->
+    try
+        case binary:split(FileName, <<?SNAPSHOT_SEPARATOR>>) of
+            [FN, VR] ->
+                _ = binary_to_integer(VR),
+                is_valid_filename(FN);
+            _ ->
+                false
+        end
+    catch
+        _:_ ->
+            false
+    end.
+
+
+-spec location_ref(oneprovider:id()) -> binary().
+location_ref(ProviderId) ->
+    <<?LOCATION_PREFIX, ProviderId/binary>>.

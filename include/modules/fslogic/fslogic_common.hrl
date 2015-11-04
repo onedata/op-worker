@@ -25,7 +25,8 @@
 
 %% Context definition
 -record(fslogic_ctx, {
-    session :: #session{}
+    session :: #session{},
+    session_id :: session:id()
 }).
 
 %% Stub record
@@ -39,6 +40,12 @@
 %% root user definitions
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
+
+
+%% Deafult file modes
+
+%% Mode for automatically created parent directory while creating file/directory.
+-define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
 
 
 -endif.

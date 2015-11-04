@@ -23,6 +23,16 @@
 -define(GRPCSR_ENV, grpcsr_path).
 -define(GRPCERT_ENV, grpcert_path).
 
+
+%% ID of provider that is not currently registered in Global Registry
+-define(NON_GLOBAL_PROVIDER_ID, <<"non_global_provider">>).
+
+
+%% ID of this provider (assigned by global registry)
+-type id() :: binary().
+
+-export_type([id/0]).
+
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
 -export([get_provider_domain/0, get_gr_domain/0]).
@@ -168,12 +178,20 @@ get_provider_id() ->
         {ok, ProviderId} ->
             ProviderId;
         _ ->
-            {ok, Bin} = file:read_file(gr_plugin:get_cert_path()),
-            [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
-            PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
-            ProviderId = get_provider_id(PeerCert),
-            application:set_env(?APP_NAME, provider_id, ProviderId),
-            ProviderId
+            try file:read_file(gr_plugin:get_cert_path()) of
+                {ok, Bin} ->
+                    [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
+                    PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
+                    ProviderId = get_provider_id(PeerCert),
+                    application:set_env(?APP_NAME, provider_id, ProviderId),
+                    ProviderId;
+                {error, _} ->
+                    ?NON_GLOBAL_PROVIDER_ID
+            catch
+                _:Reason ->
+                    ?error_stacktrace("Unable to read certificate file due to ~p", [Reason]),
+                    ?NON_GLOBAL_PROVIDER_ID
+            end
     end.
 
 

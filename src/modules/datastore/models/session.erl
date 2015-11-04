@@ -25,10 +25,10 @@
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_sequencer_manager/1, get_communicator/1, get_auth/1]).
 
--export_type([id/0, identity/0]).
-
 -type id() :: binary().
 -type identity() :: #identity{}.
+
+-export_type([id/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -161,7 +161,7 @@ get_session_supervisor_and_node(SessId) ->
 get_event_manager(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{event_manager = undefined}}} ->
-            {error, {not_found, missing}};
+            {error, {not_found, event_manager}};
         {ok, #document{value = #session{event_manager = EvtMan}}} ->
             {ok, EvtMan};
         {error, Reason} ->

@@ -21,14 +21,15 @@
 -define(LOCAL_STATE, datastore_local_state).
 
 %% #document types
--type key() :: undefined | binary() | atom() | integer().
+-type uuid() :: binary().
+-type key() :: undefined | uuid() | atom() | integer().
 -type ext_key() :: key() | term().
 -type document() :: #document{}.
 -type value() :: term().
 -type document_diff() :: #{term() => term()} | fun((OldValue :: value()) -> NewValue :: value()).
 -type bucket() :: atom() | binary().
 
--export_type([key/0, ext_key/0, value/0, document/0, document_diff/0, bucket/0]).
+-export_type([uuid/0, key/0, ext_key/0, value/0, document/0, document_diff/0, bucket/0]).
 
 %% Error types
 -type generic_error() :: {error, Reason :: term()}.

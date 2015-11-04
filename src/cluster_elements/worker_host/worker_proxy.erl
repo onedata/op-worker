@@ -36,7 +36,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec call(WorkerRef :: request_dispatcher:worker_ref(), Request :: term()) ->
-    ok | {ok, term()} | {error, term()}.
+    Result :: term() | {error, term()}.
 call(WorkerRef, Request) ->
     call(WorkerRef, Request, ?DEFAULT_REQUEST_TIMEOUT).
 
@@ -47,7 +47,7 @@ call(WorkerRef, Request) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec call(WorkerRef :: request_dispatcher:worker_ref(), Request :: term(), Timeout :: timeout()) ->
-    ok | {ok, term()} | {error, term()}.
+    Result :: term() | {error, term()}.
 call(WorkerRef, Request, Timeout) ->
     MsgId = make_ref(),
     case choose_node(WorkerRef) of

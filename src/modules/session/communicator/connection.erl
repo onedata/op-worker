@@ -202,8 +202,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #sock_state{}) -> term().
-terminate(Reason, #sock_state{session_id = Id} = State) ->
+terminate(Reason, #sock_state{session_id = Id, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
+    ssl2:close(Socket),
     catch communicator:remove_connection(Id, self()),
     ssl2:close(State#sock_state.socket),
     ok.

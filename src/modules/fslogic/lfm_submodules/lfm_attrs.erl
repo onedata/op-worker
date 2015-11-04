@@ -12,9 +12,11 @@
 
 -include("types.hrl").
 -include("errors.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([stat/1, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+-export([stat/2, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
 
 %%%===================================================================
 %%% API
@@ -26,9 +28,12 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(FileKey :: file_key()) -> {ok, file_attributes()} | error_reply().
-stat(_Path) ->
-    {ok, undefined}.
+-spec stat(fslogic_worker:ctx(), FileKey :: file_id_or_path()) -> {ok, file_attributes()} | error_reply().
+stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
+    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = FileEntry},
+        fun(#file_attr{} = Attrs) ->
+            {ok, Attrs}
+        end).
 
 
 %%--------------------------------------------------------------------

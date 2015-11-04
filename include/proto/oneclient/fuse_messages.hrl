@@ -14,6 +14,7 @@
 -define(FUSE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
+-include("modules/datastore/datastore.hrl").
 
 -record(child_link, {
     uuid :: binary(),
@@ -74,10 +75,57 @@
     child_links :: [#child_link{}]
 }).
 
--type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
-                        #delete_file{} | #update_times{} | #change_mode{} | #rename{}.
+-record(get_new_file_location, {
+    name :: file_meta:name(),
+    parent_uuid :: file_meta:uuid(),
+    flags :: atom(),
+    mode = 8#644 :: file_meta:posix_permissions()
+}).
 
--type fuse_response() :: #file_attr{} | #file_children{}.
+-record(get_file_location, {
+    uuid :: file_meta:uuid(),
+    flags :: fslogic_worker:open_flags()
+}).
+
+-record(unlink, {
+    uuid :: file_meta:uuid()
+}).
+
+
+-record(get_helper_params, {
+    storage_id :: storage:id(),
+    force_cluster_proxy = false :: boolean()
+}).
+
+-record(truncate, {
+    uuid :: file_meta:uuid(),
+    size :: non_neg_integer()
+}).
+
+
+-record(close, {
+    uuid :: file_meta:uuid()
+}).
+
+
+-record(helper_arg, {
+    key :: binary(),
+    value :: binary()
+}).
+
+
+-record(helper_params, {
+    helper_name :: binary(),
+    helper_args :: [#helper_arg{}]
+}).
+
+
+-type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
+                        #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
+                        #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
+                        #get_file_location{}.
+
+-type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} | #file_location{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
