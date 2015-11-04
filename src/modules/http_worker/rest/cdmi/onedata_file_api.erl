@@ -1,67 +1,27 @@
 %%%-------------------------------------------------------------------
-%%% @author Lukasz Opiola
+%%% @author Tomasz Lichoń
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module offers a high level API for operating on logical filesystem.
-%%% When passing a file in arguments, one can use one of the following:
-%%% {uuid, FileUUIDBin} - preferred and fast. UUIDs are returned from 'ls' function.
-%%% {path, BinaryFilePath} - slower than by uuid (path has to be resolved). Discouraged, but there are cases when this is useful.
-%%% {handle, BinaryHandle} - fastest, but not possible in all functions. The handle can be obtained from open function.
-%%%
-%%% This module is merely a convenient wrapper that calls functions from lfm_xxx modules.
+%%% @doc Public api for logical filesystem managemant, available in
+%%% protocol plugins.
 %%% @end
 %%%-------------------------------------------------------------------
--module(logical_file_manager).
+-module(onedata_file_api).
 
-
-% TODO Issues connected with logical_files_manager
-% 1) User context lib - a simple library is needed to set and retrieve the user context. If not context is set, it should crash
-% with an error. 'root' atom can be used to set root context.
-% 2) Structure of file handle - what should it contain:
-%   - file uuid
-%   - expiration time
-%   - connected session
-%   - session type
-%   - open mode
-%   - ??
-% 3) How to get rid of rubbish like not closed opens - check expired handles if a session connected with them has ended?
-% 4) All errors should be listed in one hrl -> ctool/include/posix/errors.hrl
-% 4) Common types should be listed in one hrl -> types.hrl
-% 5) chown is no longer featured in lfm as it is not needed by higher layers
-% 6) Blocks related functions should go to another module (synchronize, mark_as_truncated etc).
-
-
--define(run(F),
-    try
-        F()
-    catch
-        _:{badmatch, {error, {not_found, file_meta}}} ->
-            {error, ?ENOENT};
-        _:___Reason ->
-            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason]),
-            {error, ___Reason}
-    end).
-
-
--include("types.hrl").
--include("modules/fslogic/lfm_internal.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
-
--type handle() :: #lfm_handle{}.
-
--export_type([handle/0]).
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Functions operating on directories
 -export([mkdir/2, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, get_block_map/1, unlink/1, unlink/2]).
+-export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
+    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
@@ -70,6 +30,36 @@
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
 -export([create_share/2, get_share/1, remove_share/1]).
+
+%%--------------------------------------------------------------------
+%% IDs of entities
+-type file_uuid() :: binary().
+-type group_id() :: binary().
+-type user_id() :: binary().
+%%--------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
+%% Types connected with files
+-type file_path() :: binary().
+-type file_handle() :: logical_file_manager:handle().
+-type file_name() :: binary().
+-type file_id_or_path() :: {uuid, file_uuid()} | {path, file_path()}.
+-type file_key() :: {path, file_path()} | {uuid, file_uuid()} | {handle, file_handle()}.
+-type open_mode() :: write | read | rdwr.
+-type perms_octal() :: non_neg_integer().
+-type permission_type() :: root | owner | delete | read | write | execute | rdwr.
+-type file_attributes() :: #file_attr{}.
+-type xattr_key() :: binary().
+-type xattr_value() :: binary().
+-type access_control_entity() :: term(). % TODO should be a proper record
+-type block_range() :: term(). % TODO should be a proper record
+-type share_id() :: binary().
+%%--------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
+%% Misc
+-type error_reply() :: {error, term()}.
+%%--------------------------------------------------------------------
 
 %%%===================================================================
 %%% API
@@ -82,10 +72,9 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
-mkdir(SessId, Path) ->
-    _CTX = fslogic_context:new(SessId),
-    lfm_dirs:mkdir(Path).
+-spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
+mkdir(Identity, Path) ->
+    logical_file_manager:mkdir(Identity, Path).
 
 
 %%--------------------------------------------------------------------
@@ -95,10 +84,9 @@ mkdir(SessId, Path) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls(SessId, FileKey, Limit, Offset) ->
-    CTX = fslogic_context:new(SessId),
-    lfm_dirs:ls(FileKey, Limit, Offset).
+-spec ls(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+ls(Identity, FileKey, Limit, Offset) ->
+    logical_file_manager:ls(Identity, FileKey, Limit, Offset).
 
 
 %%--------------------------------------------------------------------
@@ -107,10 +95,9 @@ ls(SessId, FileKey, Limit, Offset) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
-get_children_count(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    lfm_dirs:get_children_count(FileKey).
+-spec get_children_count(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
+get_children_count(Identity, FileKey) ->
+    logical_file_manager:get_children_count(Identity, FileKey).
 
 
 %%--------------------------------------------------------------------
@@ -121,8 +108,7 @@ get_children_count(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
 exists(FileKey) ->
-    lfm_files:exists(FileKey).
-
+    logical_file_manager:exists(FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -132,8 +118,7 @@ exists(FileKey) ->
 %%--------------------------------------------------------------------
 -spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
 mv(FileKeyFrom, PathTo) ->
-    lfm_files:mv(FileKeyFrom, PathTo).
-
+    logical_file_manager:mv(FileKeyFrom, PathTo).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -143,8 +128,7 @@ mv(FileKeyFrom, PathTo) ->
 %%--------------------------------------------------------------------
 -spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
 cp(PathFrom, PathTo) ->
-    lfm_files:cp(PathFrom, PathTo).
-
+    logical_file_manager:cp(PathFrom, PathTo).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -152,16 +136,12 @@ cp(PathFrom, PathTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(handle()) -> ok | error_reply().
-unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_uuid = UUID}) ->
-    unlink(SessId, {uuid, UUID}).
-
--spec unlink(session:id(), fslogic_worker:file()) -> ok | error_reply().
-unlink(SessId, FileEntry) ->
-    ?run(fun() ->
-        CTX = fslogic_context:new(SessId),
-        lfm_files:unlink(CTX, ensure_uuid(CTX, FileEntry))
-    end).
+-spec unlink(file_handle()) -> ok | error_reply().
+unlink(Handle) ->
+    logical_file_manager:unlink(Handle).
+-spec unlink(onedata_auth_api:identity(), fslogic_worker:file()) -> ok | error_reply().
+unlink(Identity, FileEntry) ->
+    logical_file_manager:unlink(Identity, FileEntry).
 
 
 %%--------------------------------------------------------------------
@@ -170,20 +150,10 @@ unlink(SessId, FileEntry) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+-spec create(Identity :: onedata_auth_api:identity(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
     {ok, file_uuid()} | error_reply().
-create(SessId, Path, Mode) ->
-    try
-        CTX = fslogic_context:new(SessId),
-        {ok, Tokens} = fslogic_path:verify_file_path(Path),
-        Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-        {ok, CanonicalPath} = file_meta:gen_path(Entry),
-        lfm_files:create(CTX, CanonicalPath, Mode)
-    catch
-        _:Reason ->
-            ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
-            {error, Reason}
-    end .
+create(Identity, Path, Mode) ->
+    logical_file_manager:create(Identity, Path, Mode).
 
 
 %%--------------------------------------------------------------------
@@ -192,10 +162,9 @@ create(SessId, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, handle()} | error_reply().
-open(SessId, FileKey, OpenType) ->
-    CTX = fslogic_context:new(SessId),
-    lfm_files:open(CTX, ensure_uuid(CTX, FileKey), OpenType).
+-spec open(onedata_auth_api:identity(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
+open(Identity, FileKey, OpenType) ->
+    logical_file_manager:open(Identity, FileKey, OpenType).
 
 
 %%--------------------------------------------------------------------
@@ -204,30 +173,10 @@ open(SessId, FileKey, OpenType) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: handle(), Offset :: integer(), Buffer :: binary()) ->
-    {ok, NewHandle :: handle(), integer()} | error_reply().
+-spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) ->
+    {ok, NewHandle :: file_handle(), integer()} | error_reply().
 write(FileHandle, Offset, Buffer) ->
-    Size = size(Buffer),
-    try lfm_files:write(FileHandle, Offset, Buffer) of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, _, Size} = Ret1 ->
-            Ret1;
-        {ok, _, 0} = Ret2 ->
-            Ret2;
-        {ok, NewHandle, Written} ->
-            ?info("OMG ~p ~p ~p", [Buffer, Written, Size]),
-            case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written)) of
-                {ok, NewHandle1, Written1} ->
-                    {ok, NewHandle1, Written + Written1};
-                {error, Reason1} ->
-                    {error, Reason1}
-            end
-    catch
-        _:Error ->
-            ?error_stacktrace("Write error for file ~p: ~p", [FileHandle, Error]),
-            {error, Error}
-    end.
+    logical_file_manager:write(FileHandle, Offset, Buffer).
 
 
 %%--------------------------------------------------------------------
@@ -236,31 +185,10 @@ write(FileHandle, Offset, Buffer) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
-    {ok, NewHandle :: handle(), binary()} | error_reply().
+-spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: file_handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
-    try lfm_files:read(FileHandle, Offset, MaxSize) of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, NewHandle, Bytes} = Ret1 ->
-            case size(Bytes) of
-                MaxSize ->
-                    Ret1;
-                0 ->
-                    Ret1;
-                Size ->
-                    case lfm_files:read(NewHandle, Offset + Size, MaxSize - Size) of
-                        {ok, NewHandle1, Bytes1} ->
-                            {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
-                        {error, Reason} ->
-                            {error, Reason}
-                    end
-            end
-    catch
-        _:Error ->
-            ?error_stacktrace("Read error for file ~p: ~p", [FileHandle, Error]),
-            {error, Error}
-    end.
+    logical_file_manager:read(FileHandle, Offset, MaxSize).
 
 
 %%--------------------------------------------------------------------
@@ -269,21 +197,12 @@ read(FileHandle, Offset, MaxSize) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(FileHandle :: handle(), Size :: non_neg_integer()) -> ok | error_reply().
-truncate(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Size) ->
-    truncate(SessId, {uuid, FileUUID}, Size).
-
--spec truncate(SessId :: session:id(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
-truncate(SessId, FileKey, Size) ->
-    try
-        CTX = fslogic_context:new(SessId),
-        {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
-        lfm_files:truncate(CTX, FileUUID, Size)
-    catch
-        _:Reason ->
-            ?error_stacktrace("truncate error for file ~p: ~p", [FileKey, Reason]),
-            {error, Reason}
-    end .
+-spec truncate(FileHandle :: file_handle(), Size :: non_neg_integer()) -> ok | error_reply().
+truncate(Handle, Size) ->
+    logical_file_manager:truncate(Handle, Size).
+-spec truncate(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
+truncate(Identity, FileKey, Size) ->
+    logical_file_manager:truncate(Identity, FileKey, Size).
 
 
 %%--------------------------------------------------------------------
@@ -293,14 +212,12 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec get_block_map(FileHandle :: handle()) -> {ok, [block_range()]} | error_reply().
-get_block_map(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    get_block_map(SessId, {uuid, FileUUID}).
-
--spec get_block_map(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
-get_block_map(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    lfm_files:get_block_map(CTX, ensure_uuid(CTX, FileKey)).
+-spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
+get_block_map(Handle) ->
+    logical_file_manager:get_block_map(Handle).
+-spec get_block_map(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+get_block_map(Identity, FileKey) ->
+    logical_file_manager:get_block_map(Identity, FileKey).
 
 
 %%--------------------------------------------------------------------
@@ -311,8 +228,7 @@ get_block_map(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) -> ok | error_reply().
 set_perms(Path, NewPerms) ->
-    lfm_perms:set_perms(Path, NewPerms).
-
+    logical_file_manager:set_perms(Path, NewPerms).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -322,8 +238,7 @@ set_perms(Path, NewPerms) ->
 %%--------------------------------------------------------------------
 -spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
 check_perms(Path, PermType) ->
-    lfm_perms:check_perms(Path, PermType).
-
+    logical_file_manager:check_perms(Path, PermType).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -333,8 +248,7 @@ check_perms(Path, PermType) ->
 %%--------------------------------------------------------------------
 -spec get_acl(FileKey :: file_key()) -> {ok, [access_control_entity()]} | error_reply().
 get_acl(Path) ->
-    lfm_perms:get_acl(Path).
-
+    logical_file_manager:get_acl(Path).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -344,8 +258,7 @@ get_acl(Path) ->
 %%--------------------------------------------------------------------
 -spec set_acl(FileKey :: file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
 set_acl(Path, EntityList) ->
-    lfm_perms:set_acl(Path, EntityList).
-
+    logical_file_manager:set_acl(Path, EntityList).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -353,14 +266,12 @@ set_acl(Path, EntityList) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(handle()) -> {ok, file_attributes()} | error_reply().
-stat(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    stat(SessId, {uuid, UUID}).
-
--spec stat(session:id(), file_key()) -> {ok, file_attributes()} | error_reply().
-stat(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    lfm_attrs:stat(CTX, FileKey).
+-spec stat(file_handle()) -> {ok, file_attributes()} | error_reply().
+stat(Handle) ->
+    logical_file_manager:stat(Handle).
+-spec stat(onedata_auth_api:identity(), file_key()) -> {ok, file_attributes()} | error_reply().
+stat(Identity, FileKey) ->
+    logical_file_manager:stat(Identity, FileKey).
 
 
 %%--------------------------------------------------------------------
@@ -371,8 +282,7 @@ stat(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
 get_xattr(Path, Key) ->
-    lfm_attrs:get_xattr(Path, Key).
-
+    logical_file_manager:get_xattr(Path, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -382,8 +292,7 @@ get_xattr(Path, Key) ->
 %%--------------------------------------------------------------------
 -spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
 set_xattr(Path, Key, Value) ->
-    lfm_attrs:set_xattr(Path, Key, Value).
-
+    logical_file_manager:set_xattr(Path, Key, Value).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -393,8 +302,7 @@ set_xattr(Path, Key, Value) ->
 %%--------------------------------------------------------------------
 -spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
 remove_xattr(Path, Key) ->
-    lfm_attrs:remove_xattr(Path, Key).
-
+    logical_file_manager:remove_xattr(Path, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -404,8 +312,7 @@ remove_xattr(Path, Key) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
 list_xattr(Path) ->
-    lfm_attrs:list_xattr(Path).
-
+    logical_file_manager:list_xattr(Path).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -415,8 +322,7 @@ list_xattr(Path) ->
 %%--------------------------------------------------------------------
 -spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_uuid()} | error_reply().
 create_symlink(Path, TargetFileKey) ->
-    lfm_links:create_symlink(Path, TargetFileKey).
-
+    logical_file_manager:create_symlink(Path, TargetFileKey).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -426,8 +332,7 @@ create_symlink(Path, TargetFileKey) ->
 %%--------------------------------------------------------------------
 -spec read_symlink(FileKey :: file_key()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 read_symlink(FileKey) ->
-    lfm_links:read_symlink(FileKey).
-
+    logical_file_manager:read_symlink(FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -437,8 +342,7 @@ read_symlink(FileKey) ->
 %%--------------------------------------------------------------------
 -spec remove_symlink(FileKey :: file_key()) -> ok | error_reply().
 remove_symlink(FileKey) ->
-    lfm_links:remove_symlink(FileKey).
-
+    logical_file_manager:remove_symlink(FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -450,8 +354,7 @@ remove_symlink(FileKey) ->
 -spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
     {ok, ShareID :: share_id()} | error_reply().
 create_share(Path, ShareWith) ->
-    lfm_shares:create_share(Path, ShareWith).
-
+    logical_file_manager:create_share(Path, ShareWith).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -461,8 +364,7 @@ create_share(Path, ShareWith) ->
 %%--------------------------------------------------------------------
 -spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 get_share(ShareID) ->
-    lfm_shares:get_share(ShareID).
-
+    logical_file_manager:get_share(ShareID).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -472,19 +374,4 @@ get_share(ShareID) ->
 %%--------------------------------------------------------------------
 -spec remove_share(ShareID :: share_id()) -> ok | error_reply().
 remove_share(ShareID) ->
-    lfm_shares:remove_share(ShareID).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Converts given file entry to UUID.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:file()) -> {uuid, file_uuid()}.
-ensure_uuid(_CTX, {uuid, UUID}) ->
-    {uuid, UUID};
-ensure_uuid(_CTX, #document{key = UUID}) ->
-    {uuid, UUID};
-ensure_uuid(CTX, {path, Path}) ->
-    {uuid, fslogic_path:to_uuid(CTX, Path)}.
-
+    logical_file_manager:remove_share(ShareID).

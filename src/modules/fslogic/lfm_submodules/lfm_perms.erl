@@ -11,7 +11,7 @@
 -module(lfm_perms).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).

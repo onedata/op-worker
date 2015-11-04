@@ -11,7 +11,7 @@
 -module(lfm_dirs).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([mkdir/1, ls/3, get_children_count/1]).

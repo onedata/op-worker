@@ -12,7 +12,7 @@
 -module(lfm_utils).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([write_all/3, ls_all/1]).

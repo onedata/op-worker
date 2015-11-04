@@ -11,7 +11,7 @@
 -module(lfm_attrs).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
