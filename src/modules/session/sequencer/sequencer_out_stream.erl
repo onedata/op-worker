@@ -213,9 +213,9 @@ unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
 %%--------------------------------------------------------------------
 -spec store_and_forward_message(Msg :: #server_message{}, State :: #state{}) ->
     NewState :: #state{}.
-store_and_forward_message(#server_message{} = Msg, #state{
+store_and_forward_message(#server_message{message_stream = MsgStm} = Msg, #state{
     sequence_number = SeqNum, session_id = SessId, messages = Msgs} = State) ->
-    NewMsg = Msg#server_message{message_stream = #message_stream{
+    NewMsg = Msg#server_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
     communicator:send(NewMsg, SessId),

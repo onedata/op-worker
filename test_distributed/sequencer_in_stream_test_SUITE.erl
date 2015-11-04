@@ -66,33 +66,33 @@ all() -> [
 %%%===================================================================
 
 sequencer_in_stream_should_register_with_sequencer_manager_on_init(_) ->
-    ?assertReceived({'$gen_cast', {register_in_stream, 1, _}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', {register_in_stream, 1, _}}, ?TIMEOUT).
 
 sequencer_in_stream_should_unregister_from_sequencer_manager_on_terminate(Config) ->
     stop_sequencer_in_stream(?config(sequencer_in_stream, Config)),
-    ?assertReceived({'$gen_cast', {unregister_in_stream, 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', {unregister_in_stream, 1}}, ?TIMEOUT).
 
 sequencer_in_stream_should_send_message_stream_reset_on_init(_) ->
-    ?assertReceived(#message_stream_reset{}, ?TIMEOUT).
+    ?assertReceivedMatch(#message_stream_reset{}, ?TIMEOUT).
 
 sequencer_in_stream_should_send_message_acknowledgement_on_terminate(Config) ->
     SeqStm = ?config(sequencer_in_stream, Config),
     route_message(SeqStm, client_message(0)),
     stop_sequencer_in_stream(SeqStm),
-    ?assertReceived(#message_acknowledgement{}, ?TIMEOUT).
+    ?assertReceivedMatch(#message_acknowledgement{}, ?TIMEOUT).
 
 sequencer_in_stream_should_send_message_request_when_receiving_timout_exceeded(_) ->
-    ?assertReceived(#message_request{}, ?TIMEOUT).
+    ?assertReceivedMatch(#message_request{}, ?TIMEOUT).
 
 sequencer_in_stream_should_send_message_request_when_missing_message(Config) ->
     route_message(?config(sequencer_in_stream, Config), client_message(10)),
-    ?assertReceived(#message_request{
+    ?assertReceivedMatch(#message_request{
         stream_id = 1, lower_sequence_number = 0, upper_sequence_number = 9
     }, ?TIMEOUT).
 
 sequencer_in_stream_should_send_message_request_when_requesting_timeout_exceeded(Config) ->
     route_message(?config(sequencer_in_stream, Config), client_message(10)),
-    ?assertReceived(#message_request{
+    ?assertReceivedMatch(#message_request{
         stream_id = 1, lower_sequence_number = 0, upper_sequence_number = 0
     }, ?TIMEOUT).
 
@@ -105,7 +105,7 @@ sequencer_in_stream_should_forward_messages_in_ascending_sequence_number_order(C
     lists:foreach(fun(SeqNum) ->
         #client_message{message_stream = #message_stream{
             sequence_number = MsgSeqNum
-        }} = ?assertReceived(#client_message{}, ?TIMEOUT),
+        }} = ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
         ?assertEqual(SeqNum, MsgSeqNum)
     end, lists:seq(0, MsgCtr - 1)).
 
@@ -113,8 +113,8 @@ sequencer_in_stream_should_ignore_duplicated_messages(Config) ->
     SeqStm = ?config(sequencer_in_stream, Config),
     route_message(SeqStm, client_message(0)),
     route_message(SeqStm, client_message(0)),
-    ?assertReceived(#client_message{}, ?TIMEOUT),
-    ?assertNotReceived(#client_message{}).
+    ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
+    ?assertNotReceivedMatch(#client_message{}).
 
 sequencer_in_stream_should_send_message_acknowledgement_when_threshold_exceeded(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -125,7 +125,7 @@ sequencer_in_stream_should_send_message_acknowledgement_when_threshold_exceeded(
     lists:foreach(fun(SeqNum) ->
         route_message(SeqStm, client_message(SeqNum))
     end, lists:seq(0, LastSeqNum)),
-    ?assertReceived(#message_acknowledgement{
+    ?assertReceivedMatch(#message_acknowledgement{
         sequence_number = LastSeqNum
     }, ?TIMEOUT).
 
@@ -133,19 +133,19 @@ sequencer_in_stream_should_send_message_request_for_awaited_message(Config) ->
     SeqStm = ?config(sequencer_in_stream, Config),
     route_message(SeqStm, client_message(1)),
     route_message(SeqStm, client_message(0)),
-    ?assertReceived(#message_request{
+    ?assertReceivedMatch(#message_request{
         stream_id = 1, lower_sequence_number = 2, upper_sequence_number = 2
     }, ?TIMEOUT).
 
 sequecner_in_stream_should_send_message_acknowledgement_when_end_of_stream(Config) ->
     route_message(?config(sequencer_in_stream, Config),
         client_message(0, #end_of_message_stream{})),
-    ?assertReceived(#message_acknowledgement{sequence_number = 0}, ?TIMEOUT).
+    ?assertReceivedMatch(#message_acknowledgement{sequence_number = 0}, ?TIMEOUT).
 
 sequencer_in_stream_should_unregister_from_sequencer_manager_when_end_of_stream(Config) ->
     route_message(?config(sequencer_in_stream, Config),
         client_message(0, #end_of_message_stream{})),
-    ?assertReceived({'$gen_cast', {unregister_in_stream, 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', {unregister_in_stream, 1}}, ?TIMEOUT).
 
 
 %%%===================================================================

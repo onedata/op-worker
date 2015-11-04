@@ -67,37 +67,37 @@ event_manager_should_update_session_on_terminate(Config) ->
     ) end, {error, {not_found, missing}}, 10, 500).
 
 event_manager_should_start_event_streams_on_init(_) ->
-    ?assertReceived({start_event_stream, #subscription{id = 1}}, ?TIMEOUT),
-    ?assertReceived({start_event_stream, #subscription{id = 2}}, ?TIMEOUT).
+    ?assertReceivedMatch({start_event_stream, #subscription{id = 1}}, ?TIMEOUT),
+    ?assertReceivedMatch({start_event_stream, #subscription{id = 2}}, ?TIMEOUT).
 
 event_manager_should_register_event_stream(Config) ->
     EvtMan = ?config(event_manager, Config),
     gen_server:cast(EvtMan, {register_stream, 1, self()}),
     gen_server:cast(EvtMan, #event{}),
-    ?assertReceived({'$gen_cast', #event{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_unregister_event_stream(Config) ->
     EvtMan = ?config(event_manager, Config),
     gen_server:cast(EvtMan, {unregister_stream, 1}),
     gen_server:cast(EvtMan, {unregister_stream, 2}),
     gen_server:cast(EvtMan, #event{}),
-    ?assertNotReceived({'$gen_cast', #event{}}, ?TIMEOUT).
+    ?assertNotReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_forward_events_to_event_streams(Config) ->
     EvtMan = ?config(event_manager, Config),
     gen_server:cast(EvtMan, #event{}),
-    ?assertReceived({'$gen_cast', #event{}}, ?TIMEOUT),
-    ?assertReceived({'$gen_cast', #event{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT),
+    ?assertReceivedMatch({'$gen_cast', #event{}}, ?TIMEOUT).
 
 event_manager_should_start_event_stream_on_subscription(Config) ->
     EvtMan = ?config(event_manager, Config),
     gen_server:cast(EvtMan, #subscription{id = 1}),
-    ?assertReceived({start_event_stream, #subscription{id = 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({start_event_stream, #subscription{id = 1}}, ?TIMEOUT).
 
 event_manager_should_terminate_event_stream_on_subscription_cancellation(Config) ->
     EvtMan = ?config(event_manager, Config),
     gen_server:cast(EvtMan, #subscription_cancellation{id = 1}),
-    ?assertReceived({'DOWN', _, _, _, _}, ?TIMEOUT).
+    ?assertReceivedMatch({'DOWN', _, _, _, _}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -112,7 +112,7 @@ end_per_suite(Config) ->
 init_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_event_stream_sup(Worker),
-    init_per_testcase(event_manager_should_update_session_on_init, Config);
+    init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
     Case =:= event_manager_should_start_event_streams_on_init;
@@ -122,7 +122,7 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_subscription(Worker),
     mock_event_stream_sup(Worker),
-    init_per_testcase(event_manager_should_update_session_on_init, Config);
+    init_per_testcase(default, Config);
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -133,7 +133,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(event_manager_should_update_session_on_init, Config),
+    end_per_testcase(default, Config),
     validate_and_unload_mocks(Worker, [event_stream_sup]);
 
 end_per_testcase(Case, Config) when
@@ -142,7 +142,7 @@ end_per_testcase(Case, Config) when
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(event_manager_should_update_session_on_init, Config),
+    end_per_testcase(default, Config),
     validate_and_unload_mocks(Worker, [subscription, event_stream_sup]);
 
 end_per_testcase(_, Config) ->

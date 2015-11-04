@@ -70,15 +70,16 @@ emit(EvtType, Ref) ->
 %%--------------------------------------------------------------------
 -spec subscribe(Sub :: subscription()) ->
     {ok, SubId :: subscription:id()} | {error, Reason :: term()}.
-subscribe(Sub) ->
-    SubId = subscription:generate_id(),
-    NewSub = Sub#subscription{id = SubId},
-    case subscription:create(#document{key = SubId, value = NewSub}) of
+subscribe(#subscription{id = undefined} = Sub) ->
+    subscribe(Sub#subscription{id = subscription:generate_id()});
+
+subscribe(#subscription{id = SubId} = Sub) ->
+    case subscription:create(#document{key = SubId, value = Sub}) of
         {ok, SubId} ->
-            send_to_event_managers(NewSub),
+            send_to_event_managers(Sub),
             {ok, SubId};
         {error, already_exists} ->
-            subscribe(Sub);
+            subscribe(Sub#subscription{id = undefined});
         {error, Reason} ->
             {error, Reason}
     end.
@@ -91,8 +92,12 @@ subscribe(Sub) ->
 %%--------------------------------------------------------------------
 -spec subscribe(Sub :: subscription(), Ref :: event_manager_ref()) ->
     {ok, SubId :: subscription:id()} | {error, Reason :: term()}.
-subscribe(Sub, Ref) ->
-    send_to_event_manager(Sub, Ref).
+subscribe(#subscription{id = undefined} = Sub, Ref) ->
+    subscribe(Sub#subscription{id = subscription:generate_id()}, Ref);
+
+subscribe(#subscription{id = SubId} = Sub, Ref) ->
+    send_to_event_manager(Sub, Ref),
+    {ok, SubId}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -145,7 +150,7 @@ set_key(#event{type = #update_event{type = #file_attr{uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid};
 
 set_key(#event{type = #update_event{type = #file_location{uuid = Uuid}}} = Evt) ->
-    Evt#event{type = Uuid}.
+    Evt#event{key = Uuid}.
 
 %%--------------------------------------------------------------------
 %% @private

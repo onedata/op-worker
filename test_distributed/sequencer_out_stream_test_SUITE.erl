@@ -62,15 +62,15 @@ all() -> [
 %%%===================================================================
 
 sequencer_out_stream_should_register_with_sequencer_manager_on_init(_) ->
-    ?assertReceived({'$gen_cast', {register_out_stream, 1, _}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', {register_out_stream, 1, _}}, ?TIMEOUT).
 
 sequencer_out_stream_should_unregister_from_sequencer_manager_on_terminate(Config) ->
     stop_sequencer_out_stream(?config(sequencer_out_stream, Config)),
-    ?assertReceived({'$gen_cast', {unregister_out_stream, 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', {unregister_out_stream, 1}}, ?TIMEOUT).
 
 sequencer_out_stream_should_forward_messages(Config) ->
     send_message(?config(sequencer_out_stream, Config), server_message()),
-    ?assertReceived(#server_message{message_stream = #message_stream{
+    ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 0
     }}, ?TIMEOUT).
 
@@ -78,7 +78,7 @@ sequencer_out_stream_should_increment_sequence_number(Config) ->
     send_message(?config(sequencer_out_stream, Config), server_message()),
     remove_pending_messages(?TIMEOUT),
     send_message(?config(sequencer_out_stream, Config), server_message()),
-    ?assertReceived(#server_message{message_stream = #message_stream{
+    ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 1
     }}, ?TIMEOUT).
 
@@ -87,7 +87,7 @@ sequencer_out_stream_should_resend_all_messages_on_message_stream_reset(Config) 
     send_message(SeqStm, server_message()),
     remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_stream_reset{}),
-    ?assertReceived(#server_message{message_stream = #message_stream{
+    ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 0
     }}, ?TIMEOUT).
 
@@ -97,7 +97,7 @@ sequencer_out_stream_should_remove_messages_on_message_acknowledgement(Config) -
     send_message(SeqStm, #message_acknowledgement{sequence_number = 0}),
     remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_stream_reset{}),
-    ?assertNotReceived(#server_message{}, ?TIMEOUT).
+    ?assertNotReceivedMatch(#server_message{}, ?TIMEOUT).
 
 sequencer_out_stream_should_recompute_sequence_numbers_on_message_stream_reset(Config) ->
     SeqStm = ?config(sequencer_out_stream, Config),
@@ -106,7 +106,7 @@ sequencer_out_stream_should_recompute_sequence_numbers_on_message_stream_reset(C
     send_message(SeqStm, server_message()),
     remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_stream_reset{}),
-    ?assertReceived(#server_message{message_stream = #message_stream{
+    ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 0
     }}, ?TIMEOUT).
 
@@ -119,7 +119,7 @@ sequencer_out_stream_should_resend_messages_on_message_request(Config) ->
     send_message(SeqStm, #message_request{
         lower_sequence_number = 1, upper_sequence_number = 1
     }),
-    ?assertReceived(#server_message{message_stream = #message_stream{
+    ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 1
     }}, ?TIMEOUT).
 
@@ -131,19 +131,19 @@ sequencer_out_stream_should_ignore_message_request_for_acknowledged_messages(Con
     send_message(SeqStm, #message_request{
         lower_sequence_number = 0, upper_sequence_number = 0
     }),
-    ?assertNotReceived(#server_message{}, ?TIMEOUT).
+    ?assertNotReceivedMatch(#server_message{}, ?TIMEOUT).
 
 sequencer_out_stream_should_ignore_message_request_for_unsent_messages(Config) ->
     send_message(?config(sequencer_out_stream, Config), #message_request{
         lower_sequence_number = 0, upper_sequence_number = 0
     }),
-    ?assertNotReceived(#server_message{}, ?TIMEOUT).
+    ?assertNotReceivedMatch(#server_message{}, ?TIMEOUT).
 
 sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_end_of_stream(Config) ->
     SeqStm = ?config(sequencer_out_stream, Config),
     send_message(SeqStm, server_message(#end_of_message_stream{})),
     send_message(SeqStm, #message_acknowledgement{sequence_number = 0}),
-    ?assertReceived({'$gen_cast', {unregister_out_stream, 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', {unregister_out_stream, 1}}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

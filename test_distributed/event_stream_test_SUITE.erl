@@ -62,40 +62,40 @@ all() -> [
 event_stream_should_register_with_event_manager_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
-    ?assertReceived({'$gen_cast', {register_stream, 1, EvtStm}}, ?TIMEOUT),
+    ?assertReceivedMatch({'$gen_cast', {register_stream, 1, EvtStm}}, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_unregister_from_event_manager_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
     stop_event_stream(EvtStm),
-    ?assertReceived({'$gen_cast', {unregister_stream, 1}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', {unregister_stream, 1}}, ?TIMEOUT).
 
 event_stream_should_execute_init_handler_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
-    ?assertReceived({init_handler, #subscription{}, <<_/binary>>}, ?TIMEOUT),
+    ?assertReceivedMatch({init_handler, #subscription{}, <<_/binary>>}, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_execute_terminate_handler_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
     stop_event_stream(EvtStm),
-    ?assertReceived({terminate_handler, _}, ?TIMEOUT).
+    ?assertReceivedMatch({terminate_handler, _}, ?TIMEOUT).
 
 event_stream_should_execute_event_handler_on_terminate(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker),
     emit(Worker, EvtStm, read_event(1, [{0, 1}])),
     stop_event_stream(EvtStm),
-    ?assertReceived({event_handler, [_]}, ?TIMEOUT).
+    ?assertReceivedMatch({event_handler, [_]}, ?TIMEOUT).
 
 event_stream_should_execute_event_handler_when_emission_rule_satisfied(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker, fun(_) -> true end, infinity),
     Evt = read_event(1, [{0, 1}]),
     emit(Worker, EvtStm, Evt),
-    ?assertReceived({event_handler, [Evt]}, ?TIMEOUT),
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_execute_event_handler_when_emission_time_satisfied(Config) ->
@@ -103,7 +103,7 @@ event_stream_should_execute_event_handler_when_emission_time_satisfied(Config) -
     {ok, EvtStm} = start_event_stream(Worker, fun(_) -> false end, 500),
     Evt = read_event(1, [{0, 1}]),
     emit(Worker, EvtStm, Evt),
-    ?assertReceived({event_handler, [Evt]}, ?TIMEOUT),
+    ?assertReceivedMatch({event_handler, [Evt]}, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_aggregate_events_with_the_same_key(Config) ->
@@ -114,7 +114,7 @@ event_stream_should_aggregate_events_with_the_same_key(Config) ->
     lists:foreach(fun(N) ->
         emit(Worker, EvtStm, read_event(1, [{N, 1}]))
     end, lists:seq(0, CtrThr - 1)),
-    ?assertReceived({event_handler, [#event{counter = CtrThr}]}, ?TIMEOUT),
+    ?assertReceivedMatch({event_handler, [#event{counter = CtrThr}]}, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_not_aggregate_events_with_different_keys(Config) ->
@@ -123,14 +123,14 @@ event_stream_should_not_aggregate_events_with_different_keys(Config) ->
         fun(Ctr) -> Ctr >= 2 end, infinity),
     emit(Worker, EvtStm, read_event(<<"file_uuid_1">>, 1, [{0, 1}])),
     emit(Worker, EvtStm, read_event(<<"file_uuid_2">>, 1, [{0, 1}])),
-    ?assertReceived({event_handler, [_ | _]}, ?TIMEOUT),
+    ?assertReceivedMatch({event_handler, [_ | _]}, ?TIMEOUT),
     stop_event_stream(EvtStm).
 
 event_stream_should_check_admission_rule(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, EvtStm} = start_event_stream(Worker, fun(_) -> true end, infinity),
     emit(Worker, EvtStm, write_event(<<"file_uuid">>, 1, 1, [{0, 1}])),
-    ?assertNotReceived({event_handler, [_]}),
+    ?assertNotReceivedMatch({event_handler, [_]}),
     stop_event_stream(EvtStm).
 
 event_stream_should_reset_metadata_after_event_handler_execution(Config) ->
@@ -140,7 +140,7 @@ event_stream_should_reset_metadata_after_event_handler_execution(Config) ->
         fun(Ctr) -> Ctr >= 1 end, infinity),
     lists:foreach(fun(N) ->
         emit(Worker, EvtStm, read_event(1, [{N, 1}])),
-        ?assertReceived({event_handler, [#event{}]}, ?TIMEOUT)
+        ?assertReceivedMatch({event_handler, [#event{}]}, ?TIMEOUT)
     end, lists:seq(0, CtrThr - 1)),
     stop_event_stream(EvtStm).
 

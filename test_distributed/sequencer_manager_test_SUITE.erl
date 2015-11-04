@@ -79,38 +79,38 @@ sequencer_manager_should_register_sequencer_in_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_in_stream, 1, self()}),
     gen_server:cast(SeqMan, client_message()),
-    ?assertReceived({'$gen_event', #client_message{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
 
 sequencer_manager_should_unregister_sequencer_in_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_in_stream, 1, self()}),
     gen_server:cast(SeqMan, {unregister_in_stream, 1}),
     gen_server:cast(SeqMan, client_message()),
-    ?assertNotReceived({'$gen_event', #client_message{}}, ?TIMEOUT).
+    ?assertNotReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
 
 sequencer_manager_should_register_sequencer_out_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
     gen_server:cast(SeqMan, server_message()),
-    ?assertReceived({'$gen_cast', #server_message{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', #server_message{}}, ?TIMEOUT).
 
 sequencer_manager_should_unregister_sequencer_out_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
     gen_server:cast(SeqMan, {unregister_out_stream, 1}),
     gen_server:cast(SeqMan, server_message()),
-    ?assertNotReceived({'$gen_cast', #server_message{}}, ?TIMEOUT).
+    ?assertNotReceivedMatch({'$gen_cast', #server_message{}}, ?TIMEOUT).
 
 sequencer_manager_should_create_sequencer_stream_on_open_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     ?assertMatch({ok, _}, gen_server:call(SeqMan, open_stream)),
-    ?assertReceived({start_sequencer_stream, _}, ?TIMEOUT).
+    ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT).
 
 sequencer_manager_should_send_end_of_message_stream_on_close_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
     gen_server:cast(SeqMan, {close_stream, 1}),
-    ?assertReceived({'$gen_cast', #server_message{
+    ?assertReceivedMatch({'$gen_cast', #server_message{
         message_body = #end_of_message_stream{}
     }}, ?TIMEOUT).
 
@@ -119,26 +119,26 @@ sequencer_manager_should_forward_message_stream_reset(Config) ->
     Msg = #message_stream_reset{stream_id = 1},
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
     gen_server:cast(SeqMan, #client_message{message_body = Msg}),
-    ?assertReceived({'$gen_cast', Msg}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT).
 
 sequencer_manager_should_forward_message_request(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     Msg = #message_request{stream_id = 1},
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
     gen_server:cast(SeqMan, #client_message{message_body = Msg}),
-    ?assertReceived({'$gen_cast', Msg}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT).
 
 sequencer_manager_should_forward_message_acknowledgement(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     Msg = #message_acknowledgement{stream_id = 1},
     gen_server:cast(SeqMan, {register_out_stream, 1, self()}),
     gen_server:cast(SeqMan, #client_message{message_body = Msg}),
-    ?assertReceived({'$gen_cast', Msg}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT).
 
 sequencer_manager_should_start_sequencer_in_stream_on_first_message(Config) ->
     gen_server:cast(?config(sequencer_manager, Config), client_message()),
-    ?assertReceived({start_sequencer_stream, _}, ?TIMEOUT),
-    ?assertReceived({'$gen_event', #client_message{}}, ?TIMEOUT).
+    ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT),
+    ?assertReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -155,7 +155,7 @@ init_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_sequencer_stream_sup(Worker),
-    init_per_testcase(sequencer_manager_should_update_session_on_init, Config);
+    init_per_testcase(default, Config);
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -168,7 +168,7 @@ end_per_testcase(Case, Config) when
     Case =:= sequencer_manager_should_create_sequencer_stream_on_open_stream;
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    end_per_testcase(sequencer_manager_should_update_session_on_init, Config),
+    end_per_testcase(default, Config),
     validate_and_unload_mocks(Worker, [sequencer_stream_sup]);
 
 end_per_testcase(_, Config) ->

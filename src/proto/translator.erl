@@ -79,6 +79,19 @@ translate_from_protobuf(#'MessageStream'{stream_id = StmId, sequence_number = Se
     #message_stream{stream_id = StmId, sequence_number = SeqNum};
 translate_from_protobuf(#'EndOfMessageStream'{}) ->
     #end_of_message_stream{};
+translate_from_protobuf(#'MessageStreamReset'{stream_id = StmId}) ->
+    #message_stream_reset{stream_id = StmId};
+translate_from_protobuf(#'MessageRequest'{} = Record) ->
+    #message_request{
+        stream_id = Record#'MessageRequest'.stream_id,
+        lower_sequence_number = Record#'MessageRequest'.lower_sequence_number,
+        upper_sequence_number = Record#'MessageRequest'.upper_sequence_number
+    };
+translate_from_protobuf(#'MessageAcknowledgement'{} = Record) ->
+    #message_acknowledgement{
+        stream_id = Record#'MessageAcknowledgement'.stream_id,
+        sequence_number = Record#'MessageAcknowledgement'.sequence_number
+    };
 translate_from_protobuf(#'Token'{value = Val}) ->
     #auth{macaroon = Val};
 translate_from_protobuf(#'Ping'{data = Data}) ->
@@ -139,8 +152,10 @@ translate_to_protobuf(#handshake_response{session_id = Id}) ->
     {handshake_response, #'HandshakeResponse'{session_id = Id}};
 translate_to_protobuf(#message_stream{stream_id = StmId, sequence_number = SeqNum}) ->
     #'MessageStream'{stream_id = StmId, sequence_number = SeqNum};
-translate_to_protobuf(#message_stream_reset{}) ->
-    {message_stream_reset, #'MessageStreamReset'{}};
+translate_to_protobuf(#end_of_message_stream{}) ->
+    {end_of_stream, #'EndOfMessageStream'{}};
+translate_to_protobuf(#message_stream_reset{stream_id = StmId}) ->
+    {message_stream_reset, #'MessageStreamReset'{stream_id = StmId}};
 translate_to_protobuf(#message_request{stream_id = StmId,
     lower_sequence_number = LowerSeqNum, upper_sequence_number = UpperSeqNum}) ->
     {message_request, #'MessageRequest'{stream_id = StmId,

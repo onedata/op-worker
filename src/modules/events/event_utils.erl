@@ -61,8 +61,8 @@ inject_event_stream_definition(#subscription{type = #file_attr_subscription{
                 when Uuid =:= FileUuid -> true;
             (_) -> false
         end,
-        emission_rule = fun(Meta) -> Meta >= CtrThr end,
-        emission_time = TimeThr,
+        emission_rule = emission_rule_from_counter_threshold(CtrThr),
+        emission_time = emission_time_from_time_threshold(TimeThr),
         init_handler = open_sequencer_stream_handler(),
         terminate_handler = close_sequencer_stream_handler(),
         event_handler = send_events_handler()
@@ -77,8 +77,8 @@ inject_event_stream_definition(#subscription{type = #file_location_subscription{
                 when Uuid =:= FileUuid -> true;
             (_) -> false
         end,
-        emission_rule = fun(Meta) -> Meta >= CtrThr end,
-        emission_time = TimeThr,
+        emission_rule = emission_rule_from_counter_threshold(CtrThr),
+        emission_time = emission_time_from_time_threshold(TimeThr),
         init_handler = open_sequencer_stream_handler(),
         terminate_handler = close_sequencer_stream_handler(),
         event_handler = send_events_handler()
@@ -175,3 +175,29 @@ send_events_handler() ->
             sequencer:send_message(Evt, StmId, SeqMan)
         end, Evts)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns emission rule based on the counter threshold.
+%% @end
+%%--------------------------------------------------------------------
+-spec emission_rule_from_counter_threshold(CtrThr :: undefined | non_neg_integer()) ->
+    Rule :: event_stream:emission_rule().
+emission_rule_from_counter_threshold(undefined) ->
+    fun(_) -> false end;
+emission_rule_from_counter_threshold(CtrThr) when is_integer(CtrThr) ->
+    fun(Meta) -> Meta >= CtrThr end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns emission time based on the time threshold.
+%% @end
+%%--------------------------------------------------------------------
+-spec emission_time_from_time_threshold(TimeThr :: undefined | non_neg_integer()) ->
+    Time :: event_stream:emission_time().
+emission_time_from_time_threshold(undefined) ->
+    infinity;
+emission_time_from_time_threshold(TimeThr) when is_integer(TimeThr) ->
+    TimeThr.
