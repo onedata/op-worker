@@ -114,7 +114,7 @@ route_message_should_forward_messages_to_different_streams(Config) ->
         Msg
     end, lists:seq(1, 10)),
     lists:foreach(fun(Msg) ->
-        ?assertReceivedNextMatch(Msg, ?TIMEOUT)
+        ?assertReceivedMatch(Msg, ?TIMEOUT)
     end, Msgs).
 
 %%%===================================================================
