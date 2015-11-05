@@ -17,7 +17,7 @@
 %% API
 -export([rest_init/2, terminate/3, resource_exists/2, malformed_request/2,
     allowed_methods/2, content_types_provided/2, content_types_accepted/2,
-    delete_resource/2]).
+    delete_resource/2, is_authorized/2]).
 
 %% Content type routing functions
 -export([get/2, put/2]).
@@ -87,6 +87,13 @@ content_types_accepted(Req, State) ->
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, State) ->
     {true, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:is_authorized/2
+%%--------------------------------------------------------------------
+-spec is_authorized(req(), #state{}) -> {boolean(), req(), #state{}}.
+is_authorized(Req, State) ->
+    rest_auth:is_authorized(Req, State).
 
 %%%===================================================================
 %%% Content type handler functions
