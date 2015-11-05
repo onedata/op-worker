@@ -13,8 +13,6 @@
 -ifndef(OP_WORKER_MODULES_EVENTS_TYPES_HRL).
 -define(OP_WORKER_MODULES_EVENTS_TYPES_HRL, 1).
 
--include("proto/oneclient/fuse_messages.hrl").
-
 %% definition of a top level event wrapper
 %% key     - arbitrary value that distinguish events, i.e. events with the same
 %%           key can be aggregated
@@ -39,7 +37,7 @@
 %% definition of an event associated with an update operation in the file system
 %% type - wrapped structure that has been modified
 -record(update_event, {
-    type :: #file_attr{} | #file_location{}
+    type :: event:update_type()
 }).
 
 %% definition of an event associated with a write operation in the file system

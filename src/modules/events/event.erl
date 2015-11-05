@@ -20,10 +20,11 @@
 %% API
 -export([emit/1, emit/2, subscribe/1, subscribe/2, unsubscribe/1, unsubscribe/2]).
 
--export_type([key/0, type/0, counter/0, subscription/0]).
+-export_type([key/0, type/0, update_type/0, counter/0, subscription/0]).
 
 -type key() :: term().
 -type type() :: #read_event{} | #update_event{} | #write_event{}.
+-type update_type() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
 -type event_manager_ref() :: pid() | session:id().
@@ -78,8 +79,6 @@ subscribe(#subscription{id = SubId} = Sub) ->
         {ok, SubId} ->
             send_to_event_managers(Sub),
             {ok, SubId};
-        {error, already_exists} ->
-            subscribe(Sub#subscription{id = undefined});
         {error, Reason} ->
             {error, Reason}
     end.

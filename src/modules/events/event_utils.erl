@@ -13,11 +13,14 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/events/definitions.hrl").
--include("proto/oneclient/server_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 
 %% API
--export([aggregate_blocks/2, inject_event_stream_definition/1]).
+-export([aggregate_blocks/2]).
+-export([send_subscription_handler/0, send_subscription_cancellation_handler/0,
+    inject_event_stream_definition/1]).
 
 -export_type([file_block/0]).
 
@@ -83,6 +86,34 @@ inject_event_stream_definition(#subscription{type = #file_location_subscription{
         terminate_handler = close_sequencer_stream_handler(),
         event_handler = send_events_handler()
     }}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns handler which sends subscription to the remote client.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_subscription_handler() -> Handler :: event_stream:init_handler().
+send_subscription_handler() ->
+    fun(#subscription{id = SubId} = Sub, SessId) ->
+        {ok, StmId} = sequencer:open_stream(SessId),
+        sequencer:send_message(Sub, StmId, SessId),
+        {SubId, StmId, SessId}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns handler which sends subscription cancellation to the remote client.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_subscription_cancellation_handler() ->
+    Handler :: event_stream:terminate_handler().
+send_subscription_cancellation_handler() ->
+    fun({SubId, StmId, SessId}) ->
+        sequencer:send_message(#subscription_cancellation{id = SubId}, StmId, SessId),
+        sequencer:close_stream(StmId, SessId)
+    end.
 
 %%%===================================================================
 %%% Internal functions

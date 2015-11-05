@@ -13,6 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

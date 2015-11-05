@@ -11,6 +11,7 @@
 %%%-------------------------------------------------------------------
 -module(translator).
 -author("Tomasz Lichon").
+-author("Rafal Slota").
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -117,6 +118,16 @@ translate_from_protobuf(#'ChangeMode'{uuid = UUID, mode = Mode}) ->
     #change_mode{uuid = UUID, mode = Mode};
 translate_from_protobuf(#'Rename'{uuid = UUID, target_path = TargetPath}) ->
     #rename{uuid = UUID, target_path = TargetPath};
+translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = Flags}) ->
+    #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = Flags};
+translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
+    #get_file_location{uuid = UUID, flags = Flags};
+translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
+    #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
+translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
+    #truncate{uuid = UUID, size = Size};
+translate_from_protobuf(#'Close'{uuid = UUID}) ->
+    #close{uuid = UUID};
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -177,8 +188,6 @@ translate_to_protobuf(#fuse_response{status = Status, fuse_response = FuseRespon
     }};
 translate_to_protobuf(#child_link{uuid = UUID, name = Name}) ->
     #'ChildLink'{uuid = UUID, name = Name};
-translate_to_protobuf(#file_block{offset = Offset, size = Size}) ->
-    #'FileBlock'{offset = Offset, size = Size};
 translate_to_protobuf(#file_attr{} = FileAttr) ->
     {file_attr, #'FileAttr'{
         uuid = FileAttr#file_attr.uuid,
@@ -192,18 +201,29 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         type = FileAttr#file_attr.type,
         size = FileAttr#file_attr.size
     }};
-translate_to_protobuf(#file_location{} = FileLocation) ->
-    {file_attr, #'FileLocation'{
-        uuid = FileLocation#file_location.uuid,
-        provider_id = FileLocation#file_location.provider_id,
-        storage_id = FileLocation#file_location.storage_id,
-        file_id = FileLocation#file_location.file_id,
-        blocks = [translate_to_protobuf(B) || B <- FileLocation#file_location.blocks]
-    }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
-        translate_to_protobuf(ChildLink)
-    end, FileEntries)}};
+                                                                    translate_to_protobuf(ChildLink)
+                                                            end, FileEntries)}};
+translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
+    {helper_params, #'HelperParams'{helper_name = HelperName,
+                                    helper_args = lists:map(fun(HelpersArg) ->
+                                                                    translate_to_protobuf(HelpersArg)
+                                                            end, HelpersArgs)}};
+translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
+    #'HelperArg'{key = Key, value = Value};
+translate_to_protobuf(#file_location{} = Record) ->
+    {file_location, #'FileLocation'{
+                       uuid = Record#file_location.uuid,
+                       provider_id = Record#file_location.provider_id,
+                       storage_id = Record#file_location.storage_id,
+                       file_id = Record#file_location.file_id,
+                       blocks = lists:map(fun(Block) ->
+                                                  translate_to_protobuf(Block)
+                                          end, Record#file_location.blocks)
+                      }};
+translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
+    #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_to_protobuf(undefined) ->
     undefined.
 

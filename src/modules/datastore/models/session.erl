@@ -25,10 +25,10 @@
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_communicator/1, get_auth/1]).
 
--export_type([id/0, identity/0]).
-
 -type id() :: binary().
 -type identity() :: #identity{}.
+
+-export_type([id/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks

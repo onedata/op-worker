@@ -15,6 +15,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([deserialize_client_message/2, serialize_server_message/1]).

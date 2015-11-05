@@ -120,13 +120,17 @@ init_per_testcase(Case, Config) when
     Case =:= event_manager_should_forward_events_to_event_streams;
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    {ok, SessId} = session_setup(Worker),
     mock_subscription(Worker),
     mock_event_stream_sup(Worker),
-    init_per_testcase(default, Config);
+    mock_event_manager_sup(Worker),
+    {ok, EvtMan} = start_event_manager(Worker, SessId),
+    [{event_manager, EvtMan}, {session_id, SessId} | Config];
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
+    mock_subscription(Worker, []),
     mock_event_manager_sup(Worker),
     {ok, EvtMan} = start_event_manager(Worker, SessId),
     [{event_manager, EvtMan}, {session_id, SessId} | Config].
@@ -143,12 +147,12 @@ end_per_testcase(Case, Config) when
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     end_per_testcase(default, Config),
-    validate_and_unload_mocks(Worker, [subscription, event_stream_sup]);
+    validate_and_unload_mocks(Worker, [event_stream_sup]);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_event_manager(?config(event_manager, Config)),
-    validate_and_unload_mocks(Worker, [event_manager_sup]),
+    validate_and_unload_mocks(Worker, [event_manager_sup, subscription]),
     session_teardown(Worker, ?config(session_id, Config)),
     remove_pending_messages(),
     proplists:delete(session_id, proplists:delete(event_manager, Config)).
@@ -244,9 +248,19 @@ mock_event_stream_sup(Worker) ->
 %%--------------------------------------------------------------------
 -spec mock_subscription(Worker :: node()) -> ok.
 mock_subscription(Worker) ->
+    mock_subscription(Worker, [#subscription{id = 1}, #subscription{id = 2}]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks subscription model, so that it returns custom list of subscriptions.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_subscription(Worker :: node(), Subs :: [#subscription{}]) -> ok.
+mock_subscription(Worker, Subs) ->
     test_utils:mock_new(Worker, [subscription]),
     test_utils:mock_expect(Worker, subscription, list, fun
-        () -> {ok, [#subscription{id = 1}, #subscription{id = 2}]}
+        () -> {ok, Subs}
     end).
 
 %%--------------------------------------------------------------------

@@ -34,13 +34,19 @@
     identity,
     file_meta,
     cache_controller,
-    task_pool
+    task_pool,
+    storage,
+    file_location,
+    file_watcher
 ]).
 
 %% List of all global caches
 -define(GLOBAL_CACHES, [
     some_record,
-    file_meta
+    file_meta,
+    storage,
+    file_location,
+    file_watcher
 ]).
 
 %% List of all local caches
@@ -104,7 +110,37 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
+    version = 1,    %% Snaphot version
     is_scope = false :: boolean()
 }).
 
+
+%% Helper name and its arguments
+-record(helper_init, {
+    name :: helpers:name(),
+    args :: helpers:args()
+}).
+
+%% Model for storing storage information
+-record(storage, {
+    name :: storage:name(),
+    helpers :: [#helper_init{}]
+}).
+
+
+%% Model for storing file's location data
+-record(file_location, {
+    uuid :: file_meta:uuid(),
+    provider_id :: oneprovider:id(),
+    storage_id :: storage:id(),
+    file_id :: helpers:file(),
+    blocks = [] :: [fslogic_blocks:block()],
+    size = 0 :: non_neg_integer() | undefined
+}).
+
+%% Model for tracking open files and watched attributes
+-record(file_watcher, {
+    open_sessions = [] :: [session:id()], %% Sessions that opened the file
+    attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
+}).
 -endif.

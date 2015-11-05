@@ -12,8 +12,10 @@
 -module(events_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("modules/events/definitions.hrl").
 -include("modules/datastore/datastore.hrl").
+-include("modules/events/definitions.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -57,14 +59,14 @@ all() -> [
 subscribe_should_create_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = subscribe(Worker),
-    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription, list, [])),
+    ?assertMatch({ok, [_, _]}, rpc:call(Worker, subscription, list, [])),
     unsubscribe(Worker, SubId).
 
 unsubscribe_should_remove_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = subscribe(Worker),
     unsubscribe(Worker, SubId),
-    ?assertMatch({ok, []}, rpc:call(Worker, subscription, list, [])).
+    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription, list, [])).
 
 subscribe_should_notify_event_manager(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

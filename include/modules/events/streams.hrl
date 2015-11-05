@@ -14,6 +14,7 @@
 -define(OP_WORKER_MODULES_EVENTS_STREAMS_HRL, 1).
 
 -include("types.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 
 %% definition of an event stream
 %% metadata          - arbitrary term
