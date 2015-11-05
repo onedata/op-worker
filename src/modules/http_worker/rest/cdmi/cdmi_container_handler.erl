@@ -20,7 +20,7 @@
     delete_resource/2]).
 
 %% Content type routing functions
--export([get/2, put/2]).
+-export([get_cdmi/2, put_cdmi/2, put_binary/2]).
 
 %%%===================================================================
 %%% API
@@ -59,7 +59,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
 resource_exists(Req, State) ->
-    {false, Req, State}.
+    cdmi_existence_checker:resource_exists(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -68,7 +68,7 @@ resource_exists(Req, State) ->
     {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, get}
+        {<<"application/cdmi-container">>, get_cdmi}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -78,7 +78,8 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put}
+        {<<"application/cdmi-container">>, put_cdmi},
+        {'*', put_binary}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -97,8 +98,8 @@ delete_resource(Req, State) ->
 %% Handles GET with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get(req(), #{}) -> {term(), req(), #{}}.
-get(Req, State) ->
+-spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
+get_cdmi(Req, State) ->
     {<<"ok">>, Req, State}.
 
 %%--------------------------------------------------------------------
@@ -106,6 +107,16 @@ get(Req, State) ->
 %% Handles PUT with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put(req(), #{}) -> {term(), req(), #{}}.
-put(Req, State) ->
+-spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
+put_cdmi(Req, State) ->
+    {true, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT without cdmi content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_binary(req(), #{}) -> {term(), req(), #{}}.
+put_binary(Req, State = #{identity := Identity, path := Path}) ->
+    {ok, _} = onedata_file_api:mkdir(Identity, Path),
     {true, Req, State}.
