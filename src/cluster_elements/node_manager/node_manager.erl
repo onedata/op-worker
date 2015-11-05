@@ -110,11 +110,9 @@ init([]) ->
     process_flag(trap_exit,true),
     try
         ensure_correct_hostname(),
-        listener_starter:start_protocol_listener(),
-        listener_starter:start_gui_listener(),
-        listener_starter:start_rest_listener(),
-        listener_starter:start_redirector_listener(),
-        listener_starter:start_dns_listeners(),
+        lists:foreach(fun(Module) -> erlang:apply(Module, start_listener, []) end, ?LISTENERS),
+        ?info("All listeners started"),
+
         gen_server:cast(self(), connect_to_ccm),
         next_mem_check(),
         next_task_check(),
@@ -319,7 +317,8 @@ handle_info(_Request, State) ->
     | term().
 terminate(_Reason, _State) ->
     ?info("Shutting down ~p due to ~p", [?MODULE, _Reason]),
-    listener_starter:stop_listeners().
+    lists:foreach(fun(Module) -> erlang:apply(Module, stop_listener, []) end, ?LISTENERS),
+    ?info("All listeners stopped").
 
 %%--------------------------------------------------------------------
 %% @private

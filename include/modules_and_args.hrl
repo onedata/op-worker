@@ -20,6 +20,14 @@
     fslogic_worker
 ]).
 
+-define(LISTENERS, [
+    start_dns_listener,
+    start_gui_listener,
+    start_protocol_listener,
+    start_redirector_listener,
+    start_rest_listener
+]).
+
 -define(MODULES_WITH_ARGS, [
     {datastore_worker, []},
     {dns_worker, []},
