@@ -1,4 +1,4 @@
-"""Author: Konrad Zemek
+"""Author: Konrad Zemek, Piotr Ociepka
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 

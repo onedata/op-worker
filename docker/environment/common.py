@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Authors: Łukasz Opioła, Konrad Zemek
+"""Authors: Łukasz Opioła, Konrad Zemek, Piotr Ociepka
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
@@ -178,7 +178,6 @@ def create_users(container, os_config):
     """Creates system users on docker specified by 'container', according description in sys_config.
     """
     for user in os_config['users']:
-        print("### CREATE %s" % user)
         uid = str(hash(user) % 50000 + 10000)
         command = ["adduser", "--disabled-password", "--gecos", "''", "--uid", uid, user]
         assert 0 is docker.exec_(container, command, interactive=True)

@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Authors: Łukasz Opioła, Konrad Zemek
+"""Authors: Łukasz Opioła, Konrad Zemek, Piotr Ociepka
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
@@ -52,6 +52,12 @@ def _node_up(image, bindir, config, config_path, dns_servers):
     hostname = node['name']
     os_config = config['os_config']
 
+    # copy get_token.escript to /root/build
+    local_path = os.getcwd()
+    local_path = os.path.join(local_path, "bamboos", "docker", "environment", "get_token.escript")
+    docker_path = os.path.join(bindir, "get_token.escript")
+    subprocess.check_call(['cp', local_path, docker_path])
+
     command = '''set -e
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
 [ -d /root/build/relwithdebinfo ] && cp /root/build/relwithdebinfo/oneclient /root/bin/oneclient
@@ -101,32 +107,18 @@ chmod 600 /tmp/{user}_key'''
 
         if 'token' in client:
             user = client['token']
-            # TODO: gen_token
-            command = '''echo \"#!/usr/bin/env escript
-%%! -name gettoken@test -setcookie cookie3
-
-main([GR_Node, UID]) ->
-  try
-    Token = rpc:call(list_to_atom(GR_Node), auth_logic, gen_auth_code, [list_to_binary(UID)]),
-    {ok, File} = file:open("token", [write]),
-    ok = file:write(File, Token),
-    ok = file:close(File)
-  catch
-      _T:M -> io:format(\\\"ERROR: ~p~n\\\", [M])
-  end.\" > get_token.escript && chmod u+x get_token.escript'''
-            assert 0 is docker.exec_(container, command)
             gr_node = "gr@node1." + gr
-            command = "docker exec %s bash -c './get_token.escript %s %s'" % (container, gr_node, user)
-            assert 0 is subprocess.call([command], shell=True)
-
+            command = 'docker exec %s escript /root/build/get_token.escript %s %s' % (container, gr_node, user)
+            token = subprocess.check_output(command, shell=True)
             gr = "node1." + gr
             op = "worker1." + op
             command = "GLOBAL_REGISTRY_URL=" + gr + \
                       " PROVIDER_HOSTNAME=" + op + \
                       ' ./oneclient --authentication token --no_check_certificate ' + mounting_point + \
                   ' < token'
-            # TODO: uncomment when mounting will succeed
+            # TODO: uncomment one of belows when mounting will succeed
             # assert 0 is docker.exec_(container, command)
+            # subprocess.check_call('docker exec %s %s' % (container, command), shell=True)
         elif 'user_cert' in client:
             # TODO: uncomment when we'll respect certificates
             # cert = client["user_cert"]
