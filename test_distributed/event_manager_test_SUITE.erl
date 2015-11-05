@@ -48,7 +48,7 @@ all() -> [
     event_manager_should_terminate_event_stream_on_subscription_cancellation
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%===================================================================
 %%% Test functions
@@ -126,7 +126,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SessId} = create_session(Worker),
+    {ok, SessId} = session_setup(Worker),
     mock_event_manager_sup(Worker),
     {ok, EvtMan} = start_event_manager(Worker, SessId),
     [{event_manager, EvtMan}, {session_id, SessId} | Config].
@@ -149,7 +149,7 @@ end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_event_manager(?config(event_manager, Config)),
     validate_and_unload_mocks(Worker, [event_manager_sup]),
-    remove_session(Worker, ?config(session_id, Config)),
+    session_teardown(Worker, ?config(session_id, Config)),
     remove_pending_messages(),
     proplists:delete(session_id, proplists:delete(event_manager, Config)).
 
@@ -187,8 +187,8 @@ stop_event_manager(EvtMan) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Worker :: node()) -> {ok, SessId :: session:id()}.
-create_session(Worker) ->
+-spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+session_setup(Worker) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session, create, [#document{
         key = <<"session_id">>, value = #session{}
     }])).
@@ -199,8 +199,8 @@ create_session(Worker) ->
 %% Removes session document from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_session(Worker :: node(), SessId :: session:id()) -> ok.
-remove_session(Worker, SessId) ->
+-spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
+session_teardown(Worker, SessId) ->
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId])).
 
 %%--------------------------------------------------------------------

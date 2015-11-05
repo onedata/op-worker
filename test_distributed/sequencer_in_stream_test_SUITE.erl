@@ -59,7 +59,7 @@ all() -> [
     sequencer_in_stream_should_unregister_from_sequencer_manager_when_end_of_stream
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%===================================================================
 %%% Test functions

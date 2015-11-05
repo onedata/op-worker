@@ -49,7 +49,7 @@ all() -> [
     route_message_should_forward_messages_to_different_streams
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%===================================================================
 %%% Test functions
@@ -132,7 +132,7 @@ init_per_testcase(Case, Config) when
     Case =:= send_message_should_inject_stream_id_into_message ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_communicator(Worker),
-    {ok, SessId} = create_session(Worker),
+    {ok, SessId} = session_setup(Worker),
     {ok, StmId} = open_stream(Worker, SessId),
     [{session_id, SessId}, {stream_id, StmId} | Config];
 
@@ -143,12 +143,12 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_router(Worker),
     mock_communicator(Worker, fun(_, _) -> ok end),
-    {ok, SessId} = create_session(Worker),
+    {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config];
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SessId} = create_session(Worker),
+    {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
 
 end_per_testcase(Case, Config) when
@@ -157,7 +157,7 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     close_stream(Worker, SessId, ?config(stream_id, Config)),
-    remove_session(Worker, SessId),
+    session_teardown(Worker, SessId),
     validate_and_unload_mocks(Worker, [communicator]),
     proplists:delete(stream_id, proplists:delete(session_id, Config));
 
@@ -167,13 +167,13 @@ end_per_testcase(Case, Config) when
     Case =:= route_message_should_forward_messages_to_different_streams ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    remove_session(Worker, SessId),
+    session_teardown(Worker, SessId),
     validate_and_unload_mocks(Worker, [communicator, router]),
     proplists:delete(session_id, Config);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    remove_session(Worker, ?config(session_id, Config)),
+    session_teardown(Worker, ?config(session_id, Config)),
     proplists:delete(session_id, Config).
 
 %%%===================================================================
@@ -183,22 +183,22 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv create_session(Worker, <<"session_id">>
+%% @equiv session_setup(Worker, <<"session_id">>
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Worker :: node()) -> {ok, SessId :: session:id()}.
-create_session(Worker) ->
-    create_session(Worker, <<"session_id">>).
+-spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+session_setup(Worker) ->
+    session_setup(Worker, <<"session_id">>).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session with given ID.
+%% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Worker :: node(), SessId :: session:id()) ->
+-spec session_setup(Worker :: node(), SessId :: session:id()) ->
     {ok, SessId :: session:id()}.
-create_session(Worker, SessId) ->
+session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user_id">>},
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
@@ -209,12 +209,12 @@ create_session(Worker, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes session.
+%% Removes session document from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_session(Worker :: node(), SessId :: session:id()) -> ok.
-remove_session(Worker, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
+-spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
+session_teardown(Worker, SessId) ->
+    rpc:call(Worker, session_manager, remove_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private

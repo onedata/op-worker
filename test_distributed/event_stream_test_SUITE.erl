@@ -53,7 +53,7 @@ all() -> [
     event_stream_should_reset_metadata_after_event_handler_execution
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%===================================================================
 %%% Test functions

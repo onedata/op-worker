@@ -77,6 +77,7 @@ start_link(SeqManSup, SessId) ->
 init([SeqManSup, SessId]) ->
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{sequencer_manager => self()}),
+    send_message_stream_reset(SessId),
     {ok, #state{sequencer_manager_sup = SeqManSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -127,6 +128,13 @@ handle_cast({close_stream, StmId}, State) ->
     forward_to_sequencer_out_stream(#server_message{
         message_body = #end_of_message_stream{}
     }, StmId, State),
+    {noreply, State};
+
+handle_cast(#client_message{message_body = #message_stream_reset{
+    stream_id = undefined} = Msg}, #state{sequencer_out_streams = Stms} = State) ->
+    maps:map(fun(_, SeqStm) ->
+        gen_server:cast(SeqStm, Msg)
+    end, Stms),
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_stream_reset{
@@ -216,6 +224,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends a message stream reset request for all streams to the remote client.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_message_stream_reset(SessId :: session:id()) -> ok.
+send_message_stream_reset(SessId) ->
+    communicator:send(#message_stream_reset{}, SessId).
 
 %%--------------------------------------------------------------------
 %% @private

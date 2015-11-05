@@ -28,6 +28,7 @@
 %% tests
 -export([
     sequencer_manager_should_update_session_on_init/1,
+    sequencer_manager_should_send_message_stream_reset_on_init/1,
     sequencer_manager_should_update_session_on_terminate/1,
     sequencer_manager_should_register_sequencer_in_stream/1,
     sequencer_manager_should_unregister_sequencer_in_stream/1,
@@ -36,6 +37,7 @@
     sequencer_manager_should_create_sequencer_stream_on_open_stream/1,
     sequencer_manager_should_send_end_of_message_stream_on_close_stream/1,
     sequencer_manager_should_forward_message_stream_reset/1,
+    sequencer_manager_should_forward_message_stream_reset_to_all_streams/1,
     sequencer_manager_should_forward_message_request/1,
     sequencer_manager_should_forward_message_acknowledgement/1,
     sequencer_manager_should_start_sequencer_in_stream_on_first_message/1
@@ -44,6 +46,7 @@
 -performance({test_cases, []}).
 all() -> [
     sequencer_manager_should_update_session_on_init,
+    sequencer_manager_should_send_message_stream_reset_on_init,
     sequencer_manager_should_update_session_on_terminate,
     sequencer_manager_should_register_sequencer_in_stream,
     sequencer_manager_should_unregister_sequencer_in_stream,
@@ -52,14 +55,15 @@ all() -> [
     sequencer_manager_should_create_sequencer_stream_on_open_stream,
     sequencer_manager_should_send_end_of_message_stream_on_close_stream,
     sequencer_manager_should_forward_message_stream_reset,
+    sequencer_manager_should_forward_message_stream_reset_to_all_streams,
     sequencer_manager_should_forward_message_request,
     sequencer_manager_should_forward_message_acknowledgement,
     sequencer_manager_should_start_sequencer_in_stream_on_first_message
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
-%%%===================================================================
+%%%========================================================s===========
 %%% Test functions
 %%%===================================================================
 
@@ -67,6 +71,9 @@ sequencer_manager_should_update_session_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertMatch({ok, _}, rpc:call(Worker, session, get_sequencer_manager,
         [?config(session_id, Config)])).
+
+sequencer_manager_should_send_message_stream_reset_on_init(_) ->
+    ?assertReceivedMatch(#message_stream_reset{}, ?TIMEOUT).
 
 sequencer_manager_should_update_session_on_terminate(Config) ->
     stop_sequencer_manager(?config(sequencer_manager, Config)),
@@ -121,6 +128,17 @@ sequencer_manager_should_forward_message_stream_reset(Config) ->
     gen_server:cast(SeqMan, #client_message{message_body = Msg}),
     ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT).
 
+sequencer_manager_should_forward_message_stream_reset_to_all_streams(Config) ->
+    SeqMan = ?config(sequencer_manager, Config),
+    Msg = #message_stream_reset{},
+    lists:foreach(fun(StmId) ->
+        gen_server:cast(SeqMan, {register_out_stream, StmId, self()})
+    end, lists:seq(0, 4)),
+    gen_server:cast(SeqMan, #client_message{message_body = Msg}),
+    lists:foreach(fun(_) ->
+        ?assertReceivedMatch({'$gen_cast', Msg}, ?TIMEOUT)
+    end, lists:seq(0, 4)).
+
 sequencer_manager_should_forward_message_request(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
     Msg = #message_request{stream_id = 1},
@@ -159,7 +177,8 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SessId} = create_session(Worker),
+    {ok, SessId} = session_setup(Worker),
+    mock_communicator(Worker),
     mock_sequencer_manager_sup(Worker),
     {ok, SeqMan} = start_sequencer_manager(Worker, SessId),
     [{sequencer_manager, SeqMan}, {session_id, SessId} | Config].
@@ -174,8 +193,8 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_manager(?config(sequencer_manager, Config)),
-    validate_and_unload_mocks(Worker, [sequencer_manager_sup]),
-    remove_session(Worker, ?config(session_id, Config)),
+    validate_and_unload_mocks(Worker, [communicator, sequencer_manager_sup]),
+    session_teardown(Worker, ?config(session_id, Config)),
     remove_pending_messages(),
     proplists:delete(session_id, proplists:delete(sequencer_manager, Config)).
 
@@ -213,8 +232,8 @@ stop_sequencer_manager(SeqMan) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Worker :: node()) -> {ok, SessId :: session:id()}.
-create_session(Worker) ->
+-spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+session_setup(Worker) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session, create, [#document{
         key = <<"session_id">>, value = #session{}
     }])).
@@ -225,9 +244,9 @@ create_session(Worker) ->
 %% Removes session document from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_session(Worker :: node(), SessId :: session:id()) -> ok.
-remove_session(Worker, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId])).
+-spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
+session_teardown(Worker, SessId) ->
+    rpc:call(Worker, session, delete, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -285,6 +304,20 @@ mock_sequencer_stream_sup(Worker) ->
                 {ok, Self}
         end
     ).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks communicator, so that on send it forwards all messages to this process.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_communicator(Worker :: node()) -> ok.
+mock_communicator(Worker) ->
+    Self = self(),
+    test_utils:mock_new(Worker, [communicator]),
+    test_utils:mock_expect(Worker, communicator, send, fun
+        (Msg, _) -> Self ! Msg
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

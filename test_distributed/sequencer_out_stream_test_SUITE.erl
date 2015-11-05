@@ -55,7 +55,7 @@ all() -> [
     sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_end_of_stream
 ].
 
--define(TIMEOUT, timer:seconds(1)).
+-define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
 %%% Test functions

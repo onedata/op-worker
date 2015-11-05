@@ -48,7 +48,7 @@ all() -> [
     emit_file_location_update_event_should_execute_handler
 ].
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(15)).
 
 %%%===================================================================
 %%% Test functions
@@ -149,7 +149,7 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-        create_session(Worker, SessId),
+        session_setup(Worker, SessId),
         SessId
     end, lists:seq(0, 4)),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
@@ -157,7 +157,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SessId} = create_session(Worker),
+    {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
 
 end_per_testcase(Case, Config) when
@@ -181,13 +181,13 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
-        remove_session(Worker, SessId)
+        session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
     proplists:delete(subscription_id, proplists:delete(session_ids, Config));
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    remove_session(Worker, ?config(session_id, Config)),
+    session_teardown(Worker, ?config(session_id, Config)),
     proplists:delete(session_id, Config).
 
 %%%===================================================================
@@ -197,22 +197,22 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv create_session(Worker, <<"session_id">>
+%% @equiv session_setup(Worker, <<"session_id">>
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Worker :: node()) -> {ok, SessId :: session:id()}.
-create_session(Worker) ->
-    create_session(Worker, <<"session_id">>).
+-spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
+session_setup(Worker) ->
+    session_setup(Worker, <<"session_id">>).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session with given ID.
+%% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Worker :: node(), SessId :: session:id()) ->
+-spec session_setup(Worker :: node(), SessId :: session:id()) ->
     {ok, SessId :: session:id()}.
-create_session(Worker, SessId) ->
+session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user_id">>},
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
@@ -223,12 +223,12 @@ create_session(Worker, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Removes session.
+%% Removes session document from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_session(Worker :: node(), SessId :: session:id()) -> ok.
-remove_session(Worker, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
+-spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
+session_teardown(Worker, SessId) ->
+    rpc:call(Worker, session_manager, remove_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private

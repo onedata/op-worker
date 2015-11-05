@@ -430,7 +430,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-        create_session(Worker, SessId, Iden, Self),
+        session_setup(Worker, SessId, Iden, Self),
         SessId
     end, lists:seq(1, CliNum)),
 
@@ -463,7 +463,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
 
     unsubscribe(Worker, SubId),
     lists:foreach(fun(SessId) ->
-        remove_session(Worker, SessId)
+        session_teardown(Worker, SessId)
     end, SessIds),
     remove_pending_messages(),
 
@@ -500,7 +500,7 @@ init_per_testcase(_, Config) ->
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
     end),
-    create_session(Worker, SessId, Iden, Self),
+    session_setup(Worker, SessId, Iden, Self),
     [{session_id, SessId} | Config].
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
@@ -514,7 +514,7 @@ end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     remove_pending_messages(),
-    remove_session(Worker, SessId),
+    session_teardown(Worker, SessId),
     test_utils:mock_validate(Worker, communicator),
     test_utils:mock_unload(Worker, communicator),
     proplists:delete(session_id, Config).
@@ -526,24 +526,24 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates new test session.
+%% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Worker :: node(), SessId :: session:id(),
+-spec session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:identity(), Con :: pid()) -> ok.
-create_session(Worker, SessId, Iden, Con) ->
+session_setup(Worker, SessId, Iden, Con) ->
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, Iden, Con])).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Remove existing test session.
+%% Removes session document from datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_session(Worker :: node(), SessId :: session:id()) -> ok.
-remove_session(Worker, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
+-spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
+session_teardown(Worker, SessId) ->
+    rpc:call(Worker, session_manager, remove_session, [SessId]).
 
 %%--------------------------------------------------------------------
 %% @private
