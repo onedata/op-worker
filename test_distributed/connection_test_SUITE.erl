@@ -62,7 +62,7 @@ token_connection_test(Config) ->
     ok = ssl2:close(Sock).
 
 % todo VFS-1158 Modify & enable the test after veryfing client certificate.
-cert_connection_test(Config) ->
+cert_connection_test(_Config) ->
 %%     % given
 %%     remove_pending_messages(),
 %%     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
@@ -246,16 +246,11 @@ client_communicate_async_test(Config) ->
     % when
     {ok, MsgId} = rpc:call(Worker1, communicator, communicate_async,
         [ServerMsgInternal, SessionId, Self]),
-    ReceivedMessage =
-        receive
-            #client_message{} = Msg -> Msg
-        after timer:seconds(5) ->
-            {error, timeout}
-        end,
 
     % then
-    ?assertMatch(#client_message{message_id = MsgId, message_body = Status},
-        ReceivedMessage),
+    ?assertReceivedMatch(#client_message{
+        message_id = MsgId, message_body = Status
+    }, timer:seconds(5)),
 
     % given
     test_utils:mock_expect(Workers, router, route_message,
@@ -413,7 +408,7 @@ multi_connection_test(Config) ->
     lists:foreach(
         fun(ConnectionAns) ->
             ?assertMatch({ok, {_, _}}, ConnectionAns),
-            {ok, {Sock, SessId}} = ConnectionAns,
+            {ok, {_Sock, SessId}} = ConnectionAns,
             ?assert(is_binary(SessId))
         end, Connections),
     lists:foreach(fun({ok, {Sock, _}}) -> ssl2:close(Sock) end, Connections).
@@ -700,7 +695,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                     % respond with the same data to the server (excluding stream_reset)
                     case Body of
                         {message_stream_reset, _} -> ok;
-                        {event_subscription, _} -> ok;
+                        {subscription, _} -> ok;
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
                             ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
@@ -729,7 +724,7 @@ unmock_identity(Workers) ->
     test_utils:mock_unload(Workers, identity).
 
 receive_server_message() ->
-    receive_server_message([message_stream_reset, event_subscription]).
+    receive_server_message([message_stream_reset, subscription]).
 
 receive_server_message(IgnoredMsgList) ->
     receive

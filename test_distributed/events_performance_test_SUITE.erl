@@ -208,7 +208,9 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
     % and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            {ok, {event_handler, AggrEvts}} = test_utils:receive_any(?TIMEOUT),
+            {event_handler, AggrEvts} = ?assertReceivedMatch(
+                {event_handler, _}, ?TIMEOUT
+            ),
             ?assertEqual(EvtsToRecv, lists:sort(AggrEvts))
         end, lists:seq(1, EvtNum div CtrThr))
     end),
@@ -393,7 +395,6 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
             }
         }]}, ?TIMEOUT)
     end, FileUuids),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     lists:foreach(fun(SubId) ->
         unsubscribe(Worker, SubId)
