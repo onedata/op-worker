@@ -9,6 +9,7 @@ to start.
 
 import copy
 import os
+import sys
 import subprocess
 
 from . import common, docker, dns, globalregistry, provider_worker
