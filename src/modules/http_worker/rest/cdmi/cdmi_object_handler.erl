@@ -91,7 +91,7 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #state{}) -> {boolean(), req(), #state{}}.
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
 
