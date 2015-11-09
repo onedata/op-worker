@@ -11,6 +11,7 @@
 -module(lfm_utils).
 -author("Rafal Slota").
 
+-include_lib("ctool/include/posix/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API

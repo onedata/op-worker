@@ -152,7 +152,7 @@ lfm_write_test(Config) ->
                         fun(J) ->
                             SubBytes = binary:part(Bytes, I - Offset, J),
 %%                             ct:print("===== Offset ~p Size ~p Expected ~p", [I, J, SubBytes]),
-                            ?assertMatch({ok, SubBytes}, read(Worker, Handle, I, J))
+                            ?assertMatch({ok, SubBytes}, lfm_proxy:read(Worker, Handle, I, J))
                         end)
                 end)
 

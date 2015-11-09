@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("common_test/include/ct.hrl").
+-include("types.hrl").
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, read/4, write/4]).
@@ -92,7 +93,7 @@ unlink(Worker, SessId, File) ->
         end).
 
 -spec open(node(), session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) ->
-    {ok, handle()} | error_reply().
+    {ok, logical_files_manager:handle()} | error_reply().
 open(Worker, SessId, FileKey, OpenMode) ->
     exec(Worker,
         fun(Host) ->
@@ -107,8 +108,8 @@ open(Worker, SessId, FileKey, OpenMode) ->
             Host ! {self(), Result}
         end).
 
--spec read(node(), handle(), integer(), integer()) ->
-    {ok, handle(), binary()} | error_reply().
+-spec read(node(), logical_files_manager:handle(), integer(), integer()) ->
+    {ok, logical_files_manager:handle(), binary()} | error_reply().
 read(Worker, TestHandle, Offset, Size) ->
     exec(Worker,
         fun(Host) ->
@@ -123,7 +124,8 @@ read(Worker, TestHandle, Offset, Size) ->
             Host ! {self(), Result}
         end).
 
--spec write(node(), handle(), integer(), binary()) -> {ok, handle(), integer()} | error_reply().
+-spec write(node(), logical_files_manager:handle(), integer(), binary()) ->
+    {ok, logical_files_manager:handle(), integer()} | error_reply().
 write(Worker, TestHandle, Offset, Bytes) ->
     exec(Worker,
         fun(Host) ->
