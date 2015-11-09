@@ -35,7 +35,8 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
     {ok, _} = file_meta:update(FileEntry, UpdateMap1),
 
-    spawn(fun() -> catch fslogic_notify:attributes(FileEntry, [SessId]) end),
+    %% @todo: replace with events
+    spawn(fun() -> fslogic_notify:attributes(FileEntry, [SessId]) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 

@@ -34,7 +34,7 @@ insert_open_watcher(Key, SessionId) ->
         fun() ->
             case get(Key) of
                 {ok, #document{value = #file_watcher{open_sessions = OpenSess} = Value} = Doc} ->
-                    {ok, _} = save(Doc#document{value = Value#file_watcher{open_sessions = lists:usort([SessionId | OpenSess])}}),
+                    {ok, _} = save(Doc#document{value = Value#file_watcher{open_sessions = lists:umerge([SessionId], OpenSess)}}),
                     ok;
                 {error, {not_found, _}} ->
                     {ok, _} = create(#document{key = Key, value = #file_watcher{open_sessions = [SessionId]}}),
@@ -54,7 +54,7 @@ insert_attr_watcher(Key, SessionId) ->
         fun() ->
             case get(Key) of
                 {ok, #document{value = #file_watcher{attr_sessions = OpenSess} = Value} = Doc} ->
-                    {ok, _} = save(Doc#document{value = Value#file_watcher{attr_sessions = lists:usort([SessionId | OpenSess])}}),
+                    {ok, _} = save(Doc#document{value = Value#file_watcher{attr_sessions = lists:umerge([SessionId], OpenSess)}}),
                     ok;
                 {error, {not_found, _}} ->
                     {ok, _} = create(#document{key = Key, value = #file_watcher{attr_sessions = [SessionId]}}),
@@ -80,7 +80,7 @@ get_open_watchers(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get all sessions that was previousely registered with get_attr_watchers/2
+%% Get all sessions that were previously registered with get_attr_watchers/2
 %% @end
 %%--------------------------------------------------------------------
 -spec get_attr_watchers(Key :: datastore:key()) -> [session:id()].

@@ -41,6 +41,7 @@
 %% new_handle/1
 %%--------------------------------------------------------------------
 %% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
+%%      @todo: maybe cache new_helper_obj result
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(#helper_init{}) -> handle().
@@ -54,7 +55,7 @@ new_handle(#helper_init{name = Name, args = Args}) ->
 %%--------------------------------------------------------------------
 -spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()] | args()) -> handle().
 new_handle(HelperName, HelperArgs) when is_map(HelperArgs) ->
-    new_handle(HelperName, [V || {_K, V} <- maps:to_list(HelperArgs)]);
+    new_handle(HelperName, maps:values(HelperArgs));
 new_handle(HelperName, HelperArgs) ->
     ?debug("helpers:new_handle ~p ~p", [HelperName, HelperArgs]),
     {ok, Instance} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
@@ -204,7 +205,6 @@ read(#helper_handle{} = HelperHandle, File, Offset, Size) ->
                    {ok, Size :: non_neg_integer()} | {error, term()}.
 write(#helper_handle{} = HelperHandle, File, Offset, Data) ->
     apply_helper_nif(HelperHandle, write, [File, Offset, Data]).
-%%     {ok, size(Data)}.
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.

@@ -30,12 +30,10 @@
 %%--------------------------------------------------------------------
 -spec stat(fslogic_worker:ctx(), FileKey :: file_id_or_path()) -> {ok, file_attributes()} | error_reply().
 stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_file_attr{entry = FileEntry}}) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{} = Attrs} ->
-            {ok, Attrs};
-        #fuse_response{status = #status{code = Code}} ->
-            {error, Code}
-    end.
+    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = FileEntry},
+        fun(#file_attr{} = Attrs) ->
+            {ok, Attrs}
+        end).
 
 
 %%--------------------------------------------------------------------

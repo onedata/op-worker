@@ -447,8 +447,8 @@ event_manager_subscription_creation_and_cancellation_test(Config) ->
     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
 
     %% FSLogic's subscription
-%%     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-%%     ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
+    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
 
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 

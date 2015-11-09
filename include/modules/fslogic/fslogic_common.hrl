@@ -37,4 +37,10 @@
 -define(ROOT_SESS_ID, <<"0">>).
 
 
+%% Deafult file modes
+
+%% Mode for automatically created parent directory while creating file/directory.
+-define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
+
+
 -endif.

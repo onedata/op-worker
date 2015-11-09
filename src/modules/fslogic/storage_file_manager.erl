@@ -14,6 +14,7 @@
 -include("types.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("storage_file_manager_errors.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% File handle used by the module
@@ -36,7 +37,8 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Opens the file. To used opened descriptor, pass returned handle to other functions.
-%%
+%% File may and should be closed with release/1, but file will be closed automatically
+%% when handle goes out of scope (term will be released by Erlang's GC).
 %% @end
 %%--------------------------------------------------------------------
 -spec open(Storage :: datastore:document(), FileId :: helpers:file(), OpenMode :: helpers:open_mode()) ->
@@ -79,8 +81,8 @@ mkdir(Storage, FileId, Mode, Recursive) ->
             case Tokens of
                 [_] -> ok;
                 [_ | _]  ->
-                    LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
-                    ok = mkdir(Storage, LeafLess, 8#755, true)
+                    LeafLess = fslogic_path:dirname(Tokens),
+                    ok = mkdir(Storage, LeafLess, ?AUTO_CREATED_PARENT_DIR_MODE, true)
             end,
             mkdir(Storage, FileId, Mode, false);
         {error, Reason} ->

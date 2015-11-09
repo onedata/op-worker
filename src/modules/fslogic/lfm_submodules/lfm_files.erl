@@ -68,12 +68,10 @@ cp(_PathFrom, _PathTo) ->
 %%--------------------------------------------------------------------
 -spec unlink(fslogic_worker:ctx(), {uuid, file_uuid()}) -> ok | error_reply().
 unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #unlink{uuid = UUID}}) of
-        #fuse_response{status = #status{code = ?OK}} ->
-            ok;
-        #fuse_response{status = #status{code = Code}} ->
-            {error, Code}
-    end.
+    lfm_utils:call_fslogic(SessId, #unlink{uuid = UUID},
+        fun(_) ->
+            ok
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -86,14 +84,10 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId,
-                                            #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode}}) of
-        #fuse_response{status = #status{code = ?OK},
-                       fuse_response = #file_location{uuid = UUID}} ->
-            {ok, UUID};
-        #fuse_response{status = #status{code = Code}} ->
-            {error, Code}
-    end.
+    lfm_utils:call_fslogic(SessId, #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode},
+        fun(#file_location{uuid = UUID}) ->
+            {ok, UUID}
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -103,20 +97,17 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%--------------------------------------------------------------------
 -spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #get_file_location{uuid = UUID}}) of
-        #fuse_response{status = #status{code = ?OK},
-                       fuse_response = #file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}} ->
+    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID},
+        fun(#file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             case storage_file_manager:open(Storage, FileId, OpenType) of
                 {ok, SFMHandle} ->
                     {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, SFMHandle}}]),
-                                     fslogic_ctx = CTX, file_uuid = UUID, open_mode = OpenType}};
+                        fslogic_ctx = CTX, file_uuid = UUID, open_mode = OpenType}};
                 {error, Reason} ->
                     {error, Reason}
-            end;
-        #fuse_response{status = #status{code = Code}} ->
-            {error, Code}
-    end.
+            end
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -180,12 +171,10 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTyp
 %%--------------------------------------------------------------------
 -spec truncate(fslogic_worker:ctx(), FileUUID :: file_uuid(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(#fslogic_ctx{session_id = SessId}, FileUUID, Size) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #truncate{uuid = FileUUID, size = Size}}) of
-        #fuse_response{status = #status{code = ?OK}} ->
-            event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId);
-        #fuse_response{status = #status{code = Code}} ->
-            {error, Code}
-    end.
+    lfm_utils:call_fslogic(SessId, #truncate{uuid = FileUUID, size = Size},
+    fun(_) ->
+        event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId)
+    end).
 
 
 %%--------------------------------------------------------------------
