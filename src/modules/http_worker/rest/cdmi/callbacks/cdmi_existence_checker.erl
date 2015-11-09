@@ -9,7 +9,7 @@
 %%% Common cowboy callback's implementation for cdmi handlers.
 %%% @end
 %%%--------------------------------------------------------------------
--module(cdmi_callbacks).
+-module(cdmi_existence_checker).
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -28,10 +28,12 @@
 -spec resource_exists(cowboy_req:req(), #{}) -> {boolean(), cowboy_req:req(), #{}}.
 resource_exists(Req, State = #{path := Path, identity := Identity}) ->
     case logical_file_manager:stat(Identity, {path, Path}) of
-        {ok, #file_attr{}} ->
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             {true, Req, State};
+        {ok, #file_attr{}} ->
+            redirect_to_object(Req, State);
         _ ->
-            redirect_to_object(Req, State)
+            {false, Req, State}
     end.
 
 

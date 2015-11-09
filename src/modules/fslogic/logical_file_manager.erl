@@ -61,7 +61,8 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, get_block_map/1, unlink/1, unlink/2]).
+-export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
+    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes

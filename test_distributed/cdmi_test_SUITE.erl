@@ -130,7 +130,7 @@ use_supported_cdmi_version(Config) ->
     {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
 
     % then
-    ?assertEqual("404", Code).
+    ?assertNotEqual("400", Code).
 
 use_unsupported_cdmi_version(Config) ->
     % given
