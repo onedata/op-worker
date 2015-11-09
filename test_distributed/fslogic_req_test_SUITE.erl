@@ -490,26 +490,11 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-
-    file_meta_mock_setup(Workers),
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
-    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
-
-    User1 = {1, [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User2 = {2, [<<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
-    User4 = {4, [<<"space_id4">>]},
-
-    initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
+    initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    initializer:teardown_sesion(Worker, Config),
-    mocks_teardown(Workers, [file_meta, gr_spaces]),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    initializer:clean_test_users_and_spaces(Config),
 
     ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [])),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, 60000)).
@@ -517,50 +502,3 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks gr_spaces module, so that it returns default space details for default
-%% space ID.
-%% @end
-%%--------------------------------------------------------------------
--spec gr_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}]) -> ok.
-gr_spaces_mock_setup(Workers, Spaces) ->
-    test_utils:mock_new(Workers, gr_spaces),
-    test_utils:mock_expect(Workers, gr_spaces, get_details,
-        fun(provider, SpaceId) ->
-            {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
-            {ok, #space_details{name = SpaceName}}
-        end
-    ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks file_meta module, so that creation of onedata user sends notification.
-%% @end
-%%--------------------------------------------------------------------
--spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
-file_meta_mock_setup(Workers) ->
-    Self = self(),
-    test_utils:mock_new(Workers, file_meta),
-    test_utils:mock_expect(Workers, file_meta, 'after',
-        fun(onedata_user, create, _, _, {ok, UUID}) ->
-            file_meta:setup_onedata_user(UUID),
-            Self ! onedata_user_setup
-        end
-    ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec mocks_teardown(Workers :: node() | [node()],
-    Modules :: module() | [module()]) -> ok.
-mocks_teardown(Workers, Modules) ->
-    test_utils:mock_validate(Workers, Modules),
-    test_utils:mock_unload(Workers, Modules).
