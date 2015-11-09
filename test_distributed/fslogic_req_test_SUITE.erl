@@ -504,11 +504,11 @@ init_per_testcase(_, Config) ->
     User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
     User4 = {4, [<<"space_id4">>]},
 
-    session_setup(Worker, [User1, User2, User3, User4], Config).
+    initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    session_teardown(Worker, Config),
+    initializer:teardown_sesion(Worker, Config),
     mocks_teardown(Workers, [file_meta, gr_spaces]),
 
     ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [])),
@@ -517,69 +517,6 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), [{UserNum :: non_neg_integer(), [SpaceIds :: binary()]}], Config :: term()) -> NewConfig :: term().
-session_setup(_Worker, [], Config) ->
-    Config;
-session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
-    Self = self(),
-
-    Name = fun(Text, Num) -> name(Text, Num) end,
-
-    SessId = Name("session_id", UserNum),
-    UserId = Name("user_id", UserNum),
-    Iden = #identity{user_id = UserId},
-    UserName = Name("username", UserNum),
-
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
-    {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, create, [
-        #document{key = UserId, value = #onedata_user{
-            name = UserName, space_ids = SpaceIds
-        }}
-    ]),
-    ?assertEqual({ok, onedata_user_setup}, test_utils:receive_msg(
-        onedata_user_setup, ?TIMEOUT)),
-    [
-        {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
-        {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
-        | session_setup(Worker, R, Config)
-    ].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes existing test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
-session_teardown(Worker, Config) ->
-    lists:foldl(fun
-        ({{session_id, _}, SessId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
-            Acc;
-        ({{spaces, _}, SpaceIds}, Acc) ->
-            lists:foreach(fun(SpaceId) ->
-                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
-            end, SpaceIds),
-            Acc;
-        ({{user_id, _}, UserId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_path:spaces_uuid(UserId)])),
-            Acc;
-        ({{fslogic_ctx, _}, _}, Acc) ->
-            Acc;
-        (Elem, Acc) ->
-            [Elem | Acc]
-    end, [], Config).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -627,6 +564,3 @@ file_meta_mock_setup(Workers) ->
 mocks_teardown(Workers, Modules) ->
     test_utils:mock_validate(Workers, Modules),
     test_utils:mock_unload(Workers, Modules).
-
-name(Text, Num) ->
-    list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
