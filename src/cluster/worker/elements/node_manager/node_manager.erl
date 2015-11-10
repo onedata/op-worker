@@ -22,8 +22,8 @@
 
 -include("global_definitions.hrl").
 -include("modules_and_args.hrl").
--include("cluster_elements/node_manager/node_manager.hrl").
--include("cluster_elements/worker_host/worker_protocol.hrl").
+-include("cluster/worker/elements/node_manager/node_manager.hrl").
+-include("cluster/worker/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 

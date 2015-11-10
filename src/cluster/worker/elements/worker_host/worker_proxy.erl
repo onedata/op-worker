@@ -16,7 +16,7 @@
 -author("Tomasz Lichon").
 -author("Krzysztof Trzepla").
 
--include("cluster_elements/worker_host/worker_protocol.hrl").
+-include("cluster/worker/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(10)).

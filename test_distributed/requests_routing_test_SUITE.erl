@@ -13,7 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
--include("cluster_elements/worker_host/worker_protocol.hrl").
+-include("cluster/worker/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
