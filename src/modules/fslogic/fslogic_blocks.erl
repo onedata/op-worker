@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("cluster/worker/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 

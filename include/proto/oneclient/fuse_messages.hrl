@@ -15,6 +15,7 @@
 
 -include("common_messages.hrl").
 -include("cluster/worker/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 
 -record(child_link, {
     uuid :: binary(),

@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("cluster/worker/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

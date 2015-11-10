@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("modules/http_worker/http_common.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("cluster/worker/modules/datastore/datastore.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 

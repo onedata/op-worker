@@ -10,9 +10,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
-
--include("modules/datastore/datastore_models_def.hrl").
-
 -ifndef(DATASTORE_MODELS_HRL).
 -define(DATASTORE_MODELS_HRL, 1).
 
@@ -40,6 +37,13 @@
     last_user = non :: string() | non,
     last_action_time = {0,0,0} :: tuple(),
     deleted_links = [] :: list()
+}).
+
+%% sample model with example fields
+-record(task_pool, {
+    task :: task_manager:task(),
+    owner :: pid(),
+    node :: node()
 }).
 
 %% List of all available models

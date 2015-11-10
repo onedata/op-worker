@@ -14,6 +14,7 @@
 -define(FSLOGIC_COMMON_HRL, 1).
 
 -include("cluster/worker/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% helper macro for not implemented functions

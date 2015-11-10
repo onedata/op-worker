@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("cluster/worker/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").

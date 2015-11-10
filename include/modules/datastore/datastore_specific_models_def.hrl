@@ -5,75 +5,14 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Models definitions. Shall not be included directly in any erl file.
+%%% @doc Models definitions. Extends datastore models.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(DATASTORE_MODELS_HRL).
--define(DATASTORE_MODELS_HRL, 1).
+-ifndef(DATASTORE_SPECIFIC_MODELS_HRL).
+-define(DATASTORE_SPECIFIC_MODELS_HRL, 1).
 
 -include("proto/common/credentials.hrl").
-
-%% Wrapper for all models' records
--record(document, {
-    key :: datastore:ext_key(),
-    rev :: term(),
-    value :: datastore:value(),
-    links :: term()
-}).
-
-%% Models' definitions
-
-%% List of all available models
--define(MODELS, [
-    some_record,
-    subscription,
-    session,
-    onedata_user,
-    identity,
-    file_meta,
-    cache_controller,
-    task_pool,
-    storage,
-    file_location,
-    file_watcher
-]).
-
-%% List of all global caches
--define(GLOBAL_CACHES, [
-    some_record,
-    file_meta,
-    storage,
-    file_location,
-    file_watcher
-]).
-
-%% List of all local caches
--define(LOCAL_CACHES, [
-]).
-
-%% Model that controls utilization of cache
--record(cache_controller, {
-    timestamp = {0,0,0} :: tuple(),
-    action = non :: atom(),
-    last_user = non :: string() | non,
-    last_action_time = {0,0,0} :: tuple(),
-    deleted_links = [] :: list()
-}).
-
-%% sample model with example fields
--record(task_pool, {
-    task :: task_manager:task(),
-    owner :: pid(),
-    node :: node()
-}).
-
-%% sample model with example fields
--record(some_record, {
-    field1 :: term(),
-    field2 :: term(),
-    field3 :: term()
-}).
 
 %% event manager model:
 %% value - mapping from subscription ID to subscription

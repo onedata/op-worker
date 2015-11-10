@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("cluster/worker/elements/task_manager/task_manager.hrl").
 -include("cluster/worker/modules/datastore/datastore_models_def.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 

@@ -13,6 +13,7 @@
 -ifndef(DATASTORE_MODEL_HRL).
 -define(DATASTORE_MODEL_HRL, 1).
 
+-include("modules/datastore/datastore_specific_models_def.hrl").% todo: solve how to remove
 -include("cluster/worker/modules/datastore/datastore.hrl").
 -include("cluster/worker/modules/datastore/datastore_models_def.hrl").
 -include("cluster/worker/modules/datastore/datastore_common_internal.hrl").
