@@ -32,6 +32,11 @@ all() -> [choose_adequate_handler, use_supported_cdmi_version, use_unsupported_c
 
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
+-define(USER_1_TOKEN, {"X-Auth-Token", "1"}).
+-define(USER_2_TOKEN, {"X-Auth-Token", "2"}).
+-define(USER_3_TOKEN, {"X-Auth-Token", "3"}).
+-define(USER_4_TOKEN, {"X-Auth-Token", "4"}).
+-define(USER_5_TOKEN, {"X-Auth-Token", "5"}).
 
 %%%===================================================================
 %%% Test functions
@@ -44,12 +49,12 @@ choose_adequate_handler(Config) ->
     Dir = "dir/",
 
     % when
-    do_request(Worker, File, get, [], []),
+    {ok, _, _, _} = do_request(Worker, File, get, [], []),
     % then
     ?assert(rpc:call(Worker, meck, called, [cdmi_object_handler, rest_init, '_'])),
 
     % when
-    do_request(Worker, Dir, get, [], []),
+    {ok, _, _, _} = do_request(Worker, Dir, get, [], []),
     % then
     ?assert(rpc:call(Worker, meck, called, [cdmi_container_handler, rest_init, '_'])).
 
@@ -61,7 +66,7 @@ list_basic_dir_test(Config) ->
     %todo create TestDir
 
     % when
-    {Code, ResponseHeaders, Response} = do_request(Worker, TestDir ++ "/", get, RequestHeaders, []),
+    {ok, Code, ResponseHeaders, Response} = do_request(Worker, TestDir ++ "/", get, RequestHeaders, []),
 
     % then
     ?assertEqual("200", Code),
@@ -85,7 +90,7 @@ list_root_dir_test(Config) ->
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
 
     % when
-    {Code, _, Response} = do_request(Worker, [], get, RequestHeaders, []),
+    {ok, Code, _, Response} = do_request(Worker, [], get, RequestHeaders, []),
 
     % then
     ?assertEqual("200", Code),
@@ -101,7 +106,7 @@ list_nonexisting_dir_test(Config) ->
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
 
     % when
-    {Code, _, _} = do_request(Worker, "nonexisting_dir/", get, RequestHeaders, []),
+    {ok, Code, _, _} = do_request(Worker, "nonexisting_dir/", get, RequestHeaders, []),
 
     % then
     ?assertEqual("404", Code).
@@ -112,7 +117,7 @@ get_selective_params_of_dir_test(Config) ->
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
 
     % when
-    {Code, _, Response} = do_request(Worker, "spaces/?children;objectName", get, RequestHeaders, []),
+    {ok, Code, _, Response} = do_request(Worker, "spaces/?children;objectName", get, RequestHeaders, []),
 
     % then
     ?assertEqual("200", Code),
@@ -124,13 +129,13 @@ get_selective_params_of_dir_test(Config) ->
 use_supported_cdmi_version(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    RequestHeaders = [{"X-CDMI-Specification-Version", "1.1.1"}, ?USER_1_TOKEN],
 
     % when
-    {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
+    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders, []),
 
     % then
-    ?assertNotEqual("400", Code).
+    ?assertEqual("404", Code).
 
 use_unsupported_cdmi_version(Config) ->
     % given
@@ -138,7 +143,7 @@ use_unsupported_cdmi_version(Config) ->
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
 
     % when
-    {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
+    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders, []),
 
     % then
     ?assertEqual("400", Code).
@@ -148,9 +153,11 @@ use_unsupported_cdmi_version(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
-
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    initializer:setup_storage(ConfigWithNodes).
 end_per_suite(Config) ->
+    tracer:stop(),
+    initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(choose_adequate_handler, Config) ->
@@ -160,14 +167,19 @@ init_per_testcase(choose_adequate_handler, Config) ->
 init_per_testcase(_, Config) ->
     ssl:start(),
     ibrowse:start(),
-    Config.
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
+    mock_user_auth(ConfigWithSessionInfo),
+    lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(choose_adequate_handler, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, [cdmi_object_handler, cdmi_container_handler]),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
-end_per_testcase(_, _Config) ->
+end_per_testcase(_, Config) ->
+    lfm_proxy:teardown(Config),
+    initializer:clean_test_users_and_spaces(Config),
+    unmock_user_auth(Config),
     ibrowse:stop(),
     ssl:stop().
 
@@ -177,15 +189,13 @@ end_per_testcase(_, _Config) ->
 
 % Performs a single request using ibrowse
 do_request(Node, RestSubpath, Method, Headers, Body) ->
-    {ok, Code, RespHeaders, Response} =
-        ibrowse:send_req(
+    ibrowse:send_req(
             cdmi_endpoint(Node) ++ RestSubpath,
             Headers,
             Method,
             Body,
             [{ssl_options, [{reuse_sessions, false}]}]
-        ),
-    {Code, RespHeaders, Response}.
+        ).
 
 cdmi_endpoint(Node) ->
     Port =
@@ -198,3 +208,23 @@ cdmi_endpoint(Node) ->
             P -> P
         end,
     string:join(["https://", utils:get_host(Node), ":", Port, "/cdmi/"], "").
+
+mock_user_auth(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, rest_auth),
+    test_utils:mock_expect(Workers, rest_auth, is_authorized,
+        fun(Req, State) ->
+            case cowboy_req:header(<<"x-auth-token">>, Req) of
+                {undefined, NewReq} ->
+                    {{false, <<"authentication_error">>}, NewReq, State};
+                {Token, NewReq} ->
+                    UserId = ?config({user_id, binary_to_integer(Token)}, Config),
+                    {true, NewReq, State#{identity => #identity{user_id = UserId}}}
+            end
+        end
+    ).
+
+unmock_user_auth(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate(Workers, rest_auth),
+    test_utils:mock_unload(Workers, rest_auth).

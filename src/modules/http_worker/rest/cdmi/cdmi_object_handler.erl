@@ -15,9 +15,9 @@
 -include("modules/http_worker/http_common.hrl").
 
 %% API
--export([rest_init/2, terminate/3, resource_exists/2, malformed_request/2,
-    allowed_methods/2, content_types_provided/2, content_types_accepted/2,
-    delete_resource/2, is_authorized/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
+    resource_exists/2, is_authorized/2, content_types_provided/2,
+    content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
 -export([get/2, put/2]).
@@ -55,6 +55,13 @@ malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_request(Req, State).
 
 %%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:is_authorized/2
+%%--------------------------------------------------------------------
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+is_authorized(Req, State) ->
+    rest_auth:is_authorized(Req, State).
+
+%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
 -spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
@@ -87,13 +94,6 @@ content_types_accepted(Req, State) ->
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, State) ->
     {true, Req, State}.
-
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2
-%%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
-is_authorized(Req, State) ->
-    rest_auth:is_authorized(Req, State).
 
 %%%===================================================================
 %%% Content type handler functions
