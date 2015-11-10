@@ -50,7 +50,7 @@ allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2, updates State
+%% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
 is_authorized(Req, State) ->
