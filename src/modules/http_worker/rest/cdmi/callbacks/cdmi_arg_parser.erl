@@ -31,7 +31,7 @@ malformed_request(Req, State) ->
   {Qs, Req3} = cowboy_req:qs(Req2),
   Opts = parse_opts(Qs),
   {RawPath, Req4} = cowboy_req:path(Req3),
-  <<"/cdmi/", Path/binary>> = RawPath,
+  <<"/cdmi", Path/binary>> = RawPath,
 
   NewState = State#{cdmi_version => Version, options => Opts, path => Path},
   {false, Req4, NewState}.

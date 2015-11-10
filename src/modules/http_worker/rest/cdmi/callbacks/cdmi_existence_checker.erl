@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
 
 %% API
@@ -32,7 +33,7 @@ resource_exists(Req, State = #{path := Path, identity := Identity}) ->
             {true, Req, State};
         {ok, #file_attr{}} ->
             redirect_to_object(Req, State);
-        _ ->
+        {error, ?ENOENT} ->
             {false, Req, State}
     end.
 

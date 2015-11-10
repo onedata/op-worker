@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Functions operating on directories
--export([mkdir/2, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
@@ -72,9 +72,12 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
-mkdir(Identity, Path) ->
-    logical_file_manager:mkdir(Identity, Path).
+mkdir(SessId, Path) ->
+    logical_file_manager:mkdir(SessId, Path).
+
+-spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
+mkdir(Identity, Path, Mode) ->
+    logical_file_manager:mkdir(Identity, Path, Mode).
 
 
 %%--------------------------------------------------------------------

@@ -17,26 +17,25 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([choose_adequate_handler/1, list_basic_dir_test/1, list_root_dir_test/1,
-    list_nonexisting_dir_test/1, get_selective_params_of_dir_test/1,
-    use_supported_cdmi_version/1, use_unsupported_cdmi_version/1]).
+-export([choose_adequate_handler/1, use_supported_cdmi_version/1,
+    use_unsupported_cdmi_version/1, create_dir_test/1]).
 
 -performance({test_cases, []}).
-all() -> [choose_adequate_handler, use_supported_cdmi_version, use_unsupported_cdmi_version].
+all() -> [choose_adequate_handler, use_supported_cdmi_version,
+    use_unsupported_cdmi_version, create_dir_test].
 
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
--define(USER_1_TOKEN, {"X-Auth-Token", "1"}).
--define(USER_2_TOKEN, {"X-Auth-Token", "2"}).
--define(USER_3_TOKEN, {"X-Auth-Token", "3"}).
--define(USER_4_TOKEN, {"X-Auth-Token", "4"}).
--define(USER_5_TOKEN, {"X-Auth-Token", "5"}).
+
+-define(USER_1_TOKEN_HEADER, {"X-Auth-Token", "1"}).
+-define(CDMI_VERSION_HEADER, {"X-CDMI-Specification-Version", "1.1.1"}).
 
 %%%===================================================================
 %%% Test functions
@@ -58,78 +57,10 @@ choose_adequate_handler(Config) ->
     % then
     ?assert(rpc:call(Worker, meck, called, [cdmi_container_handler, rest_init, '_'])).
 
-list_basic_dir_test(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    TestDir="dir",
-    %todo create TestDir
-
-    % when
-    {ok, Code, ResponseHeaders, Response} = do_request(Worker, TestDir ++ "/", get, RequestHeaders, []),
-
-    % then
-    ?assertEqual("200", Code),
-    ContentType = proplists:get_value("content-type", ResponseHeaders),
-    {struct, CdmiResponse} = mochijson2:decode(Response),
-    ObjectType = proplists:get_value(<<"objectType">>, CdmiResponse),
-    ObjectName = proplists:get_value(<<"objectName">>, CdmiResponse),
-    CompletionStatus = proplists:get_value(<<"completionStatus">>, CdmiResponse),
-    Children = proplists:get_value(<<"children">>, CdmiResponse),
-    Metadata = proplists:get_value(<<"metadata">>, CdmiResponse),
-    ?assertEqual("application/cdmi-container", ContentType),
-    ?assertEqual(<<"application/cdmi-container">>, ObjectType),
-    ?assertEqual(<<"dir/">>, ObjectName),
-    ?assertEqual(<<"Complete">>, CompletionStatus),
-    ?assertEqual([], Children),
-    ?assertNotEqual(<<>>, Metadata).
-
-list_root_dir_test(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
-
-    % when
-    {ok, Code, _, Response} = do_request(Worker, [], get, RequestHeaders, []),
-
-    % then
-    ?assertEqual("200", Code),
-    {struct, CdmiResponse} = mochijson2:decode(Response),
-    ObjectName = proplists:get_value(<<"objectName">>, CdmiResponse),
-    Children = proplists:get_value(<<"children">>, CdmiResponse),
-    ?assertEqual(<<"/">>, ObjectName),
-    ?assertEqual([<<"spaces/">>], Children).
-
-list_nonexisting_dir_test(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
-
-    % when
-    {ok, Code, _, _} = do_request(Worker, "nonexisting_dir/", get, RequestHeaders, []),
-
-    % then
-    ?assertEqual("404", Code).
-
-get_selective_params_of_dir_test(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
-
-    % when
-    {ok, Code, _, Response} = do_request(Worker, "spaces/?children;objectName", get, RequestHeaders, []),
-
-    % then
-    ?assertEqual("200", Code),
-    {struct,CdmiResponse4} = mochijson2:decode(Response),
-    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiResponse4)),
-    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiResponse4)),
-    ?assertEqual(2,length(CdmiResponse4)).
-
 use_supported_cdmi_version(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.1.1"}, ?USER_1_TOKEN],
+    RequestHeaders = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
 
     % when
     {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders, []),
@@ -147,6 +78,21 @@ use_unsupported_cdmi_version(Config) ->
 
     % then
     ?assertEqual("400", Code).
+
+% Tests dir creation (cdmi container PUT), remember that every container URI ends
+% with '/'
+create_dir_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    DirName = "toCreate/",
+
+    %%------ non-cdmi create -------
+    ?assert(not object_exists(Config, DirName)),
+
+    {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER], []),
+    ?assertEqual("201",Code1),
+
+    ?assert(object_exists(Config, DirName)).
+    %%------------------------------
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -178,10 +124,11 @@ end_per_testcase(choose_adequate_handler, Config) ->
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
     unmock_user_auth(Config),
+    initializer:clean_test_users_and_spaces(Config),
     ibrowse:stop(),
-    ssl:stop().
+    ssl:stop(),
+    timer:sleep(timer:seconds(1)). %todo fix datastore 'no_file_meta' error, and remove this sleep
 
 %%%===================================================================
 %%% Internal functions
@@ -228,3 +175,14 @@ unmock_user_auth(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate(Workers, rest_auth),
     test_utils:mock_unload(Workers, rest_auth).
+
+object_exists(Config, Path) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, 1}, Config),
+
+    case lfm_proxy:stat(Worker, SessionId, {path, utils:ensure_unicode_binary(Path)}) of
+        {ok, _} ->
+            true;
+        {error, ?ENOENT} ->
+            false
+    end.
