@@ -17,11 +17,6 @@
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% % the state of request, it is created in rest_init function, and passed to every cowboy callback functions
-%% -record(state, {
-%%     identity :: #{}
-%% }).
-
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
     content_types_accepted/2, delete_resource/2, resource_exists/2]).
