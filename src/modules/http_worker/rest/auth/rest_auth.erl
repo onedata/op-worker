@@ -15,12 +15,46 @@
 -include("modules/http_worker/http_common.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([authenticate/1]).
+-export([is_authorized/2]).
 
 %%%===================================================================
 %%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:is_authorized/2
+%%--------------------------------------------------------------------
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+is_authorized(Req, State) ->
+    case authenticate(Req) of
+        {{ok, Iden}, NewReq} ->
+            {true, NewReq, State#{identity => Iden}};
+        {{error, {not_found, _}}, NewReq} ->
+            GrUrl = gr_plugin:get_gr_url(),
+            ProviderId = oneprovider:get_provider_id(),
+            {_, NewReq2} = cowboy_req:host(NewReq),
+            {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
+
+            {ok, NewReq4} = cowboy_req:reply(
+                307,
+                [
+                    {<<"location">>, <<(list_to_binary(GrUrl))/binary,
+                        "/user/providers/", ProviderId/binary, "/auth_proxy?ref=https://", Url/binary>>}
+                ],
+                <<"">>,
+                NewReq3
+            ),
+            {halt, NewReq4, State};
+        {{error, Error}, NewReq} ->
+            ?debug("Authentication error ~p", [Error]),
+            {{false, <<"authentication_error">>}, NewReq, State}
+    end.
+
+%%%===================================================================
+%%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -41,10 +75,6 @@ authenticate(Req) ->
         {Token, NewReq} ->
             authenticate_using_token(NewReq, Token)
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,3 +106,4 @@ authenticate_using_cert(Req) ->
         Error ->
             {Error, Req}
     end.
+

@@ -12,8 +12,10 @@
 -module(onedata_auth_api).
 -author("Tomasz Lichon").
 
+-include("modules/http_worker/http_common.hrl").
+
 %% API
--export([authenticate/1]).
+-export([is_authorized/2]).
 
 -type identity() :: any().
 
@@ -24,13 +26,11 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Authenticates user basing on request headers
-%% @end
+%% @doc @equiv pre_handler:is_authorized/2, updates State
 %%--------------------------------------------------------------------
--spec authenticate(Req :: cowboy_req:req()) -> {{ok, identity()} | {error, term()}, cowboy_req:req()}.
-authenticate(Req) ->
-    rest_auth:authenticate(Req).
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+is_authorized(Req, State) ->
+    rest_auth:is_authorized(Req, State).
 
 %%%===================================================================
 %%% Internal functions

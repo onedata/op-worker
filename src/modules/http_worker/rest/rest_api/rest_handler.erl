@@ -59,30 +59,7 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #state{}) -> {boolean(), req(), #state{}}.
 is_authorized(Req, State) ->
-    case rest_auth:authenticate(Req) of
-        {{ok, Iden}, NewReq} ->
-            {true, NewReq, State#state{identity = Iden}};
-        {{error, {not_found, _}}, NewReq} ->
-            GrUrl = gr_plugin:get_gr_url(),
-            ProviderId = oneprovider:get_provider_id(),
-            {_, NewReq2} = cowboy_req:host(NewReq),
-            {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
-
-            {ok, NewReq4} = cowboy_req:reply(
-                307,
-                [
-                    {<<"location">>, <<(list_to_binary(GrUrl))/binary,
-                        "/user/providers/", ProviderId/binary, "/auth_proxy?ref=https://", Url/binary>>}
-                ],
-                <<"">>,
-                NewReq3
-            ),
-            {halt, NewReq4, State};
-        {{error, Error}, NewReq} ->
-            ?debug("Authentication error ~p", [Error]),
-            {{false, <<"authentication_error">>}, NewReq, State}
-    end.
-
+    rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
