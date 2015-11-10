@@ -11,8 +11,8 @@
 -module(datastore).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_engine.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore_engine.hrl").
 -include("cluster_elements/node_manager/task_manager.hrl").
 -include_lib("ctool/include/logging.hrl").
 

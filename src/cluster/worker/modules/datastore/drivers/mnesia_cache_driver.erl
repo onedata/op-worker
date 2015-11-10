@@ -13,8 +13,8 @@
 -behaviour(store_driver_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_common_internal.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% store_driver_behaviour callbacks

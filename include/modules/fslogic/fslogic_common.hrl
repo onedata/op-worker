@@ -13,7 +13,7 @@
 -ifndef(FSLOGIC_COMMON_HRL).
 -define(FSLOGIC_COMMON_HRL, 1).
 
--include("modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% helper macro for not implemented functions

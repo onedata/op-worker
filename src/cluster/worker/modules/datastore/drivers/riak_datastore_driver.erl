@@ -12,8 +12,8 @@
 -author("Rafal Slota").
 -behaviour(store_driver_behaviour).
 
--include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_common_internal.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Bucket type that is defined in database and configured to store "map" data type

@@ -13,9 +13,9 @@
 -ifndef(DATASTORE_MODEL_HRL).
 -define(DATASTORE_MODEL_HRL, 1).
 
--include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_models_def.hrl").
--include("modules/datastore/datastore_common_internal.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore_models_def.hrl").
+-include("cluster/worker/modules/datastore/datastore_common_internal.hrl").
 
 %% Name of current model
 -define(MODEL_NAME, ?MODULE).

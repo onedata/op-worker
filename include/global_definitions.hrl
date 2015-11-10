@@ -13,7 +13,7 @@
 -ifndef(GLOBAL_DEFINITIONS_HRL).
 -define(GLOBAL_DEFINITIONS_HRL, 1).
 
--include("modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
 
 %%%===================================================================
 %%% Global names

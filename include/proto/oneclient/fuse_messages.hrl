@@ -14,7 +14,7 @@
 -define(FUSE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
--include("modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
 
 -record(child_link, {
     uuid :: binary(),

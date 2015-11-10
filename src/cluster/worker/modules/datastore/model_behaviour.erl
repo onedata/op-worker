@@ -11,7 +11,7 @@
 -module(model_behaviour).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore_common_internal.hrl").
+-include("cluster/worker/modules/datastore/datastore_common_internal.hrl").
 
 -type model_action() :: save | get | delete | update | create | create_or_update | exists | list | add_links | delete_links |
                         fetch_link | foreach_link | run_synchronized.

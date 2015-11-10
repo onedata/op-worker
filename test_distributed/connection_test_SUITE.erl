@@ -18,7 +18,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
