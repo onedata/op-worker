@@ -12,9 +12,9 @@
 -author("Michal Wrzeszcz").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore.hrl").
--include("modules/datastore/datastore_model.hrl").
--include("modules/datastore/datastore_engine.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore_model.hrl").
+-include("cluster/worker/modules/datastore/datastore_engine.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 

@@ -12,7 +12,7 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/helpers.hrl").
--include("modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 

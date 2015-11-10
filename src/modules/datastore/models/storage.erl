@@ -13,7 +13,7 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore_model.hrl").
+-include("cluster/worker/modules/datastore/datastore_model.hrl").
 
 %% ID of root storage which links to all registered storage to simplify list/1 operation
 -define(ROOT_STORAGE, <<"root_storage">>).

@@ -11,7 +11,7 @@
 -module(fslogic_blocks).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 

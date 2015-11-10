@@ -13,7 +13,7 @@
 -module(session_manager).
 -author("Krzysztof Trzepla").
 
--include("modules/datastore/datastore.hrl").
+-include("cluster/worker/modules/datastore/datastore.hrl").
 
 %% API
 -export([reuse_or_create_session/3, update_session_auth/2, remove_session/1]).

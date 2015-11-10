@@ -14,7 +14,7 @@
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore_model.hrl").
+-include("cluster/worker/modules/datastore/datastore_model.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% model_behaviour callbacks

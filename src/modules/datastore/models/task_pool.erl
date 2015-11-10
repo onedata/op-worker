@@ -12,8 +12,8 @@
 -author("Michał Wrzeszcz").
 -behaviour(model_behaviour).
 
--include("cluster_elements/node_manager/task_manager.hrl").
--include("modules/datastore/datastore_model.hrl").
+-include("cluster/worker/elements/task_manager/task_manager.hrl").
+-include("cluster/worker/modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, list/1, list_failed/1, exists/1, delete/1, delete/2, update/2, update/3,
