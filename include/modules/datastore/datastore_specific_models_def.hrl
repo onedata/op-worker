@@ -87,4 +87,33 @@
     open_sessions = [] :: [session:id()], %% Sessions that opened the file
     attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
 }).
+
+%% List of all available models
+-define(MODELS, [
+    some_record,
+    subscription,
+    session,
+    onedata_user,
+    identity,
+    file_meta,
+    cache_controller,
+    task_pool,
+    storage,
+    file_location,
+    file_watcher
+]).
+
+%% List of all global caches
+-define(GLOBAL_CACHES, [
+    some_record,
+    file_meta,
+    storage,
+    file_location,
+    file_watcher
+]).
+
+%% List of all local caches
+-define(LOCAL_CACHES, [
+]).
+
 -endif.

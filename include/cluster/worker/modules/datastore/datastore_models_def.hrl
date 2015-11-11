@@ -46,16 +46,5 @@
     node :: node()
 }).
 
-%% List of all available models
--define(MODELS, [
-]).
-
-%% List of all global caches
--define(GLOBAL_CACHES, [
-]).
-
-%% List of all local caches
--define(LOCAL_CACHES, [
-]).
 
 -endif.

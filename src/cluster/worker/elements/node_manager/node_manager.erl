@@ -51,7 +51,6 @@
     Pid :: pid(),
     Error :: {already_started, Pid} | term().
 start_link() ->
-    ?warning("start link", []),
     gen_server:start_link({local, ?NODE_MANAGER_NAME}, ?MODULE, [], []).
 
 %%--------------------------------------------------------------------
