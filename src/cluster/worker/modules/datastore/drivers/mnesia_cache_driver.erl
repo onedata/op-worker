@@ -68,9 +68,9 @@ init_bucket(_BucketName, Models, NodeToSync) ->
                         MakeTable(TransactionTable, ModelName, [key | Fields])
                     };
                 _ -> %% there is at least one mnesia node -> join cluster
-                    Tables = [table_name(MName) || MName <- ?MODELS] ++
-                             [links_table_name(MName) || MName <- ?MODELS] ++
-                             [transaction_table_name(MName) || MName <- ?MODELS],
+                    Tables = [table_name(MName) || MName <- datastore_config:models()] ++
+                             [links_table_name(MName) || MName <- datastore_config:models()] ++
+                             [transaction_table_name(MName) || MName <- datastore_config:models()],
                     ok = rpc:call(NodeToSync, mnesia, wait_for_tables, [Tables, ?MNESIA_WAIT_TIMEOUT]),
                     ExpandTable = fun(TabName) ->
                         case rpc:call(NodeToSync, mnesia, change_config, [extra_db_nodes, [Node]]) of

@@ -607,7 +607,7 @@ ensure_state_loaded(NodeToSync) ->
     try
         case ets:info(?LOCAL_STATE) of
             undefined ->
-                Configs = load_local_state(?MODELS),
+                Configs = load_local_state(datastore_config:models()),
                 init_drivers(Configs, NodeToSync);
             _ -> ok
         end
@@ -737,7 +737,7 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                 FullArgs = [ModelConfig | Args],
                 worker_proxy:call(datastore_worker, {driver_call, driver_to_module(Driver), Method, FullArgs}, timer:minutes(5));
             {task, Task} ->
-                Level = case lists:member(ModelName, ?GLOBAL_CACHES) of
+                Level = case lists:member(ModelName, datastore_config:global_caches()) of
                              true -> ?CLUSTER_LEVEL;
                              _ -> ?NODE_LEVEL
                          end,

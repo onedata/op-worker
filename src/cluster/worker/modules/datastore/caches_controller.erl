@@ -173,10 +173,10 @@ decode_uuid(Uuid) ->
 %%--------------------------------------------------------------------
 -spec delete_old_keys(StoreType :: globally_cached | locally_cached, TimeWindow :: integer()) -> ok.
 delete_old_keys(globally_cached, TimeWindow) ->
-  delete_old_keys(global_only, ?GLOBAL_CACHES, TimeWindow);
+  delete_old_keys(global_only, datastore_config:global_caches(), TimeWindow);
 
 delete_old_keys(locally_cached, TimeWindow) ->
-  delete_old_keys(local_only, ?LOCAL_CACHES, TimeWindow).
+  delete_old_keys(local_only, datastore_config:local_caches(), TimeWindow).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -214,7 +214,7 @@ wait_for_cache_dump(N) ->
 %%--------------------------------------------------------------------
 -spec cache_to_datastore_level(ModelName :: atom()) -> datastore:store_level().
 cache_to_datastore_level(ModelName) ->
-  case lists:member(ModelName, ?GLOBAL_CACHES) of
+  case lists:member(ModelName, datastore_config:global_caches()) of
     true -> ?GLOBAL_ONLY_LEVEL;
     _ -> ?LOCAL_ONLY_LEVEL
   end.
@@ -226,7 +226,7 @@ cache_to_datastore_level(ModelName) ->
 %%--------------------------------------------------------------------
 -spec cache_to_task_level(ModelName :: atom()) -> task_manager:level().
 cache_to_task_level(ModelName) ->
-  case lists:member(ModelName, ?GLOBAL_CACHES) of
+  case lists:member(ModelName, datastore_config:global_caches()) of
     true -> ?CLUSTER_LEVEL;
     _ -> ?NODE_LEVEL
   end.

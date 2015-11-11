@@ -51,7 +51,7 @@ init(_Args) ->
         fun(Model, StateAcc) ->
             #model_config{name = RecordName} = ModelConfig = Model:model_init(),
             maps:put(RecordName, ModelConfig, StateAcc)
-        end, #{}, ?MODELS),
+        end, #{}, datastore_config:models()),
 
     {ok, State#{db_nodes => DBNodes}}.
 

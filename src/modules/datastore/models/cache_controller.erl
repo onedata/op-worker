@@ -327,7 +327,7 @@ before(_ModelName, _Method, _Level, _Context, _Level2) ->
 %%--------------------------------------------------------------------
 -spec get_hooks_config() -> list().
 get_hooks_config() ->
-    caches_controller:get_hooks_config(?GLOBAL_CACHES ++ ?LOCAL_CACHES).
+    caches_controller:get_hooks_config(datastore_config:global_caches() ++ datastore_config:local_caches()).
 
 %%--------------------------------------------------------------------
 %% @private

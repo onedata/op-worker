@@ -648,13 +648,13 @@ set_hooks(Case, Config) ->
         local ->
             test_utils:mock_new(Workers, caches_controller),
             test_utils:mock_expect(Workers, caches_controller, cache_to_datastore_level, fun(ModelName) ->
-                case lists:member(ModelName, ?GLOBAL_CACHES -- [some_record]) of
+                case lists:member(ModelName, datastore_config:global_caches() -- [some_record]) of
                     true -> global_only;
                     _ -> local_only
                 end
             end),
             test_utils:mock_expect(Workers, caches_controller, cache_to_task_level, fun(ModelName) ->
-                case lists:member(ModelName, ?GLOBAL_CACHES -- [some_record]) of
+                case lists:member(ModelName, datastore_config:global_caches() -- [some_record]) of
                     true -> cluster;
                     _ -> node
                 end
