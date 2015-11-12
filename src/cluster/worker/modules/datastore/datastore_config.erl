@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% todo
+%%% This module defines config of the datastore. It contains default
+%%% (required by infrastructure) config, which is complemented by
+%%% information from datastore_config_plugin.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datastore_config).
@@ -21,7 +23,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% todo
+%% List of models used.
 %% @end
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
@@ -33,7 +35,7 @@ models() -> [
 
 %%--------------------------------------------------------------------
 %% @doc
-%% todo
+%% List of models cached globally.
 %% @end
 %%--------------------------------------------------------------------
 -spec global_caches() -> Models :: [model_behaviour:model_type()].
@@ -43,7 +45,7 @@ global_caches() -> [
 
 %%--------------------------------------------------------------------
 %% @doc
-%% todo
+%% List of models cached locally.
 %% @end
 %%--------------------------------------------------------------------
 -spec local_caches() -> Models :: [model_behaviour:model_type()].

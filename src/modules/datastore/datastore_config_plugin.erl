@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% todo
+%%% This module defines datastore config related to op_worker.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(datastore_config_plugin).
@@ -18,8 +18,9 @@
 -export([models/0, global_caches/0, local_caches/0]).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% todo
+%% {@link datastore_config_behaviour} callback models/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
@@ -35,8 +36,9 @@ models() -> [
 ].
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% todo
+%% {@link datastore_config_behaviour} callback global_caches/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec global_caches() -> Models :: [model_behaviour:model_type()].
@@ -48,8 +50,9 @@ global_caches() -> [
 ].
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% todo
+%% {@link datastore_config_behaviour} callback local_caches/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec local_caches() -> Models :: [model_behaviour:model_type()].
