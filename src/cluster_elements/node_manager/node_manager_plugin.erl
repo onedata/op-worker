@@ -32,6 +32,54 @@
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% {@link node_manager_plugin_behaviour} callback modules/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules() -> Models :: [atom()].
+modules() -> [
+  datastore_worker,
+  dns_worker,
+  session_manager_worker,
+  http_worker,
+  fslogic_worker
+].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% {@link node_manager_plugin_behaviour} callback listeners/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec listeners() -> Listeners :: [atom()].
+listeners() -> [
+  start_dns_listener,
+  start_gui_listener,
+  start_protocol_listener,
+  start_redirector_listener,
+  start_rest_listener
+].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% {@link node_manager_plugin_behaviour} callback modules_with_args/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_with_args() -> Models :: [{atom(), [any()]}].
+modules_with_args() -> [
+  {datastore_worker, []},
+  {dns_worker, []},
+  {session_manager_worker, [
+    {supervisor_spec, session_manager_worker:supervisor_spec()},
+    {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
+  ]},
+  {http_worker, []},
+  {fslogic_worker, []}
+].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% {@link node_manager_plugin_behaviour}  callback on_init/0.
 %% @end
 %%--------------------------------------------------------------------
@@ -45,6 +93,7 @@
   Timeout :: non_neg_integer() | infinity.
 on_init([]) ->
   try
+    ensure_correct_hostname(),
     lists:foreach(fun(Module) -> erlang:apply(Module, start_listener, []) end, node_manager:listeners()),
     ?info("All listeners started"),
 
@@ -292,48 +341,19 @@ next_task_check() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% {@link node_manager_plugin_behaviour} callback modules/0.
+%% Makes sure node hostname belongs to provider domain.
 %% @end
 %%--------------------------------------------------------------------
--spec modules() -> Models :: [atom()].
-modules() -> [
-  datastore_worker,
-  dns_worker,
-  session_manager_worker,
-  http_worker,
-  fslogic_worker
-].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% {@link node_manager_plugin_behaviour} callback listeners/0.
-%% @end
-%%--------------------------------------------------------------------
--spec listeners() -> Listeners :: [atom()].
-listeners() -> [
-  start_dns_listener,
-  start_gui_listener,
-  start_protocol_listener,
-  start_redirector_listener,
-  start_rest_listener
-].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% {@link node_manager_plugin_behaviour} callback modules_with_args/0.
-%% @end
-%%--------------------------------------------------------------------
--spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> [
-  {datastore_worker, []},
-  {dns_worker, []},
-  {session_manager_worker, [
-    {supervisor_spec, session_manager_worker:supervisor_spec()},
-    {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
-  ]},
-  {http_worker, []},
-  {fslogic_worker, []}
-].
-
+-spec ensure_correct_hostname() -> ok | no_return().
+ensure_correct_hostname() ->
+  Hostname = oneprovider:get_node_hostname(),
+  Domain = oneprovider:get_provider_domain(),
+  case string:join(tl(string:tokens(Hostname, ".")), ".") of
+    Domain ->
+      ok;
+    _ ->
+      ?error("Node hostname must be in provider domain. Check env conf. "
+      "Current configuration:~nHostname: ~p~nDomain: ~p",
+        [Hostname, Domain]),
+      throw(wrong_hostname)
+  end.

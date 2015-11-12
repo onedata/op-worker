@@ -128,7 +128,6 @@ refresh_ip_address() ->
 init([]) ->
     process_flag(trap_exit,true),
     try
-        ensure_correct_hostname(),
         ok = ?NODE_MANAGER_PLUGIN:on_init([]),
         gen_server:cast(self(), connect_to_ccm),
 
@@ -475,25 +474,5 @@ check_node_ip_address() ->
     catch T:M ->
         ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
         {127, 0, 0, 1}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Makes sure node hostname belongs to provider domain.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_correct_hostname() -> ok | no_return().
-ensure_correct_hostname() ->
-    Hostname = oneprovider:get_node_hostname(),
-    Domain = oneprovider:get_provider_domain(),
-    case string:join(tl(string:tokens(Hostname, ".")), ".") of
-        Domain ->
-            ok;
-        _ ->
-            ?error("Node hostname must be in provider domain. Check env conf. "
-            "Current configuration:~nHostname: ~p~nDomain: ~p",
-                [Hostname, Domain]),
-            throw(wrong_hostname)
     end.
 
