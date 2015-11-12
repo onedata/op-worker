@@ -73,3 +73,25 @@
 -callback on_code_change(OldVsn :: (term() | {down, term()}), State :: term(), Extra :: term()) ->
   {ok, NewState :: term()} | {error, Reason :: term()}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% List of modules to be loaded. Consistient with modules_with_args
+%% as in the original implementation.
+%% @end
+%%--------------------------------------------------------------------
+-callback modules() -> Models :: [atom()].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List of listeners to be loaded by node_manager.
+%% @end
+%%--------------------------------------------------------------------
+-callback listeners() -> Listeners :: [atom()].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List of modules (accompanied by their configs) to be loaded by node_manager.
+%% @end
+%%--------------------------------------------------------------------
+-callback modules_with_args() -> Models :: [{atom(), [any()]}].
+

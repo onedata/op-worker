@@ -21,7 +21,6 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
--include("modules_and_args.hrl").
 -include("cluster/worker/elements/node_manager/node_manager.hrl").
 -include("cluster/worker/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -30,7 +29,7 @@
 -define(NODE_MANAGER_PLUGIN, node_manager_plugin).
 
 %% API
--export([start_link/0, stop/0, get_ip_address/0, refresh_ip_address/0]).
+-export([start_link/0, stop/0, get_ip_address/0, refresh_ip_address/0, modules/0, listeners/0, modules_with_args/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -38,6 +37,34 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List of loaded modules. Consistient with modules_with_args
+%% as in the original implementation.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules() -> Models :: [atom()].
+modules() ->
+    ?NODE_MANAGER_PLUGIN:modules().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List of listeners loaded by node_manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec listeners() -> Listeners :: [atom()].
+listeners() ->
+    ?NODE_MANAGER_PLUGIN:listeners().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List of modules (accompanied by their configs) loaded by node_manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_with_args() -> Models :: [{atom(), [any()]}].
+modules_with_args() ->
+    ?NODE_MANAGER_PLUGIN:modules_with_args().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -394,13 +421,13 @@ init_node() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts all workers defined in "modules_and_args.hrl" on node, and notifies
+%% Starts all workers on node, and notifies
 %% ccm about successfull init
 %% @end
 %%--------------------------------------------------------------------
 -spec init_workers() -> ok.
 init_workers() ->
-    lists:foreach(fun({Module, Args}) -> ok = start_worker(Module, Args) end, ?MODULES_WITH_ARGS),
+    lists:foreach(fun({Module, Args}) -> ok = start_worker(Module, Args) end, modules_with_args()),
     ?info("All workers started"),
     ok.
 

@@ -15,7 +15,6 @@
 -behaviour(cowboy_http_handler).
 
 -include("global_definitions.hrl").
--include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
@@ -167,7 +166,7 @@ get_cluster_status(Timeout) ->
             try
                 NodeManagerStatuses = check_node_managers(Nodes, Timeout),
                 DistpatcherStatuses = check_dispatchers(Nodes, Timeout),
-                Workers = [{Node, Name} || Node <- Nodes, Name <- ?MODULES],
+                Workers = [{Node, Name} || Node <- Nodes, Name <- node_manager:modules()],
                 WorkerStatuses = check_workers(Nodes, Workers, Timeout),
                 {ok, _} = calculate_cluster_status(Nodes, NodeManagerStatuses, DistpatcherStatuses, WorkerStatuses)
             catch

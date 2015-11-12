@@ -15,14 +15,15 @@
 -behaviour(node_manager_plugin_behaviour).
 
 -include("global_definitions.hrl").
--include("modules_and_args.hrl").
 -include("cluster/worker/elements/node_manager/node_manager.hrl").
 -include("cluster/worker/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
 %% node_manager_plugin_behaviour callbacks
--export([on_init/1, handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2, on_terminate/2, on_code_change/3]).
+-export([on_init/1, on_terminate/2, on_code_change/3,
+  handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
+  modules/0, modules_with_args/0, listeners/0]).
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -44,7 +45,7 @@
   Timeout :: non_neg_integer() | infinity.
 on_init([]) ->
   try
-    lists:foreach(fun(Module) -> erlang:apply(Module, start_listener, []) end, ?LISTENERS),
+    lists:foreach(fun(Module) -> erlang:apply(Module, start_listener, []) end, node_manager:listeners()),
     ?info("All listeners started"),
 
     next_mem_check(),
@@ -194,7 +195,7 @@ handle_info_extension(_Request, State) ->
   | {shutdown, term()}
   | term().
 on_terminate(_Reason, _State) ->
-  lists:foreach(fun(Module) -> erlang:apply(Module, stop_listener, []) end, ?LISTENERS),
+  lists:foreach(fun(Module) -> erlang:apply(Module, stop_listener, []) end, node_manager:listeners()),
   ?info("All listeners stopped").
 
 %%--------------------------------------------------------------------
@@ -288,4 +289,51 @@ next_task_check() ->
   Interval = timer:minutes(IntervalMin),
   erlang:send_after(Interval, self(), {timer, check_tasks}).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% {@link node_manager_plugin_behaviour} callback modules/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules() -> Models :: [atom()].
+modules() -> [
+  datastore_worker,
+  dns_worker,
+  session_manager_worker,
+  http_worker,
+  fslogic_worker
+].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% {@link node_manager_plugin_behaviour} callback listeners/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec listeners() -> Listeners :: [atom()].
+listeners() -> [
+  start_dns_listener,
+  start_gui_listener,
+  start_protocol_listener,
+  start_redirector_listener,
+  start_rest_listener
+].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% {@link node_manager_plugin_behaviour} callback modules_with_args/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_with_args() -> Models :: [{atom(), [any()]}].
+modules_with_args() -> [
+  {datastore_worker, []},
+  {dns_worker, []},
+  {session_manager_worker, [
+    {supervisor_spec, session_manager_worker:supervisor_spec()},
+    {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
+  ]},
+  {http_worker, []},
+  {fslogic_worker, []}
+].
 

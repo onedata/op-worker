@@ -18,7 +18,6 @@
 
 -behaviour(gen_server).
 
--include("modules_and_args.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
