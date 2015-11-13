@@ -17,8 +17,8 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
--include("cluster/worker/modules/datastore/datastore.hrl").
--include("cluster/worker/modules/datastore/datastore_common_internal.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore_common_internal.hrl").
 
 -define(call_store(N, M, A), ?call_store(N, datastore, M, A)).
 -define(call_store(N, Mod, M, A), rpc:call(N, Mod, M, A)).

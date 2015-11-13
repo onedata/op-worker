@@ -14,7 +14,7 @@
 -define(DATASTORE_MODEL_HRL, 1).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("cluster/worker/modules/datastore/datastore_models_def.hrl").
--include("cluster/worker/modules/datastore/datastore_model_helper.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore_model_helper.hrl").
 
 -endif.

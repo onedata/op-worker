@@ -12,7 +12,7 @@
 -author("Rafal Slota").
 -behaviour(model_behaviour).
 
--include("cluster/worker/modules/datastore/datastore_model.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,

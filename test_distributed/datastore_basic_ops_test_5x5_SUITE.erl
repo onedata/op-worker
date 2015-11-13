@@ -15,8 +15,8 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include("datastore_basic_ops_utils.hrl").
--include("cluster/worker/modules/datastore/datastore_common_internal.hrl").
--include("cluster/worker/modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore_common_internal.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore_models_def.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).

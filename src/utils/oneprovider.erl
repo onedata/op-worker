@@ -15,7 +15,7 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
--include("cluster/worker/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 

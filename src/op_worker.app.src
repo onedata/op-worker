@@ -28,7 +28,8 @@
             gproc,
             lager,
             ibrowse,
-            cowboy
+            cowboy,
+            cluster_worker
         ]},
         {mod, {op_worker_app, []}},
         {env, []}

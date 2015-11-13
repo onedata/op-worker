@@ -64,55 +64,7 @@ init([]) ->
     MaxRestarts = 5,
     RestartTimeWindowSecs = 10,
     {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
-        main_worker_sup_spec(),
-        request_dispatcher_spec(),
-        node_manager_spec()
     ]}}.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a supervisor child_spec for a main worker supervisor child.
-%% @end
-%%--------------------------------------------------------------------
--spec main_worker_sup_spec() -> supervisor:child_spec().
-main_worker_sup_spec() ->
-    Id = Module = main_worker_sup,
-    Restart = permanent,
-    Shutdown = infinity,
-    Type = supervisor,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a worker child_spec for a request dispatcher child.
-%% @end
-%%--------------------------------------------------------------------
--spec request_dispatcher_spec() -> supervisor:child_spec().
-request_dispatcher_spec() ->
-    Id = Module = request_dispatcher,
-    Restart = permanent,
-    Shutdown = timer:seconds(5),
-    Type = worker,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates a worker child_spec for a node manager child.
-%% @end
-%%--------------------------------------------------------------------
--spec node_manager_spec() -> supervisor:child_spec().
-node_manager_spec() ->
-    Id = Module = node_manager,
-    Restart = permanent,
-    Shutdown = timer:seconds(5),
-    Type = worker,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
 
 
