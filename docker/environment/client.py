@@ -38,7 +38,6 @@ def _tweak_config(config, os_config, name, uid):
         client_config['op_domain'] = provider_worker.provider_domain(client['op_domain'], uid)
         client_config['gr_domain'] = globalregistry.gr_domain(client['gr_domain'], uid)
         client_config['user_key'] = client['user_key']
-        client_config['mounting_point'] = client['mounting_point']
         if 'user_cert' in client.keys():
             client_config['user_cert'] = client['user_cert']
         if 'token' in client.keys():
