@@ -9,6 +9,8 @@ to start.
 
 import copy
 import os
+import sys
+import subprocess
 
 from . import common, docker, dns, globalregistry, provider_worker
 
@@ -71,6 +73,12 @@ bash'''
         cert_file=open(cert_file_path, 'r').read(),
         key_file=open(key_file_path, 'r').read())
 
+    volumes = [(bindir, '/root/build', 'ro')]
+    storages = node['storage']
+    for name in storages:
+        s = storages[name]
+        volumes.append((s['host_path'], s['volume_path'], 'rw'))
+
     container = docker.run(
         image=image,
         name=hostname,
@@ -80,9 +88,15 @@ bash'''
         interactive=True,
         tty=True,
         workdir='/root/bin',
-        volumes=[(bindir, '/root/build', 'ro')],
+        volumes=volumes,
         dns_list=dns_servers,
+        run_params=["--privileged"],
         command=command)
+
+    for user in node['docker_users']:
+        command = "docker exec %s adduser --disabled-password --gecos '' %s" % (container, user)
+        # print command
+        subprocess.check_call(command, stdout=sys.stdout, shell=True)
 
     return {'docker_ids': [container], 'client_nodes': [hostname]}
 
