@@ -74,9 +74,9 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 EOF
 set -e
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/op_worker console'''
+/root/bin/node/bin/cluster_worker console'''
     command = command.format(
-        gen_dev_args=json.dumps({'op_worker': config}),
+        gen_dev_args=json.dumps({'cluster_worker': config}),
         uid=os.geteuid(),
         gid=os.getegid())
 
