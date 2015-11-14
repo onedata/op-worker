@@ -113,15 +113,18 @@ custom_error_when_handler_throws_error(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
+    op_test_utils:clear_models(Worker, [subscription]),
+    NewConfig.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(Module, Config)
-    when Module =:= internal_error_when_handler_crashes
-    orelse Module =:= custom_code_when_handler_throws_code
-    orelse Module =:= custom_error_when_handler_throws_error ->
+init_per_testcase(Case, Config) when
+    Case =:= internal_error_when_handler_crashes;
+    Case =:= custom_code_when_handler_throws_code;
+    Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     ibrowse:start(),
@@ -133,10 +136,10 @@ init_per_testcase(_, Config) ->
     mock_gr_certificates(Config),
     Config.
 
-end_per_testcase(Module, Config)
-    when Module =:= internal_error_when_handler_crashes
-    orelse Module =:= custom_code_when_handler_throws_code
-    orelse Module =:= custom_error_when_handler_throws_error ->
+end_per_testcase(Case, Config) when
+    Case =:= internal_error_when_handler_crashes;
+    Case =:= custom_code_when_handler_throws_code;
+    Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, rest_handler),
     ibrowse:stop(),
@@ -173,13 +176,13 @@ mock_gr_certificates(Config) ->
     [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
     SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
 
-    test_utils:mock_new(Workers, [oneprovider]),
+    test_utils:mock_new(Workers, [oneprovider, gr_endpoint]),
+
     test_utils:mock_expect(Workers, oneprovider, get_provider_id,
         fun() -> <<"050fec8f157d6e4b31fd6d2924923c7a">> end),
     test_utils:mock_expect(Workers, oneprovider, get_globalregistry_cert,
         fun() -> public_key:pkix_decode_cert(CACertEncoded, otp) end),
 
-    test_utils:mock_new(Workers, [gr_endpoint]),
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
@@ -197,10 +200,8 @@ mock_gr_certificates(Config) ->
 
 unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [gr_endpoint]),
-    test_utils:mock_unload(Workers, [gr_endpoint]),
-    test_utils:mock_validate(Workers, [oneprovider]),
-    test_utils:mock_unload(Workers, [oneprovider]).
+    test_utils:mock_validate(Workers, [gr_endpoint, oneprovider]),
+    test_utils:mock_unload(Workers, [gr_endpoint, oneprovider]).
 
 -spec test_crash(term(), term()) -> no_return().
 test_crash(_, _) ->

@@ -82,10 +82,7 @@ all() -> [
 %% Check whether sequencer manager sends reset streams message at the start.
 sequencer_stream_reset_stream_message_test(_) ->
     % Check whether reset stream message was sent.
-    ?assertMatch({ok, _}, test_utils:receive_msg(
-        #message_stream_reset{}, ?TIMEOUT)),
-
-    ok.
+    ?assertReceived(#message_stream_reset{}, ?TIMEOUT).
 
 -performance([
     {repeats, 10},
@@ -103,14 +100,16 @@ sequencer_stream_reset_stream_message_test(_) ->
 ]).
 sequencer_stream_messages_ordering_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
+    Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
     StmId = 1,
     MsgNum = ?config(msg_num, Config),
     MsgOrd = ?config(msg_ord, Config),
 
+    op_test_utils:remove_pending_messages(),
     communicator_echo_mock_setup(Worker, SessId),
-    session_setup(Worker, SessId, Iden, Config),
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config),
 
     SeqNums = case MsgOrd of
                   normal -> lists:seq(0, MsgNum - 1);
@@ -139,9 +138,9 @@ sequencer_stream_messages_ordering_test(Config) ->
         end, lists:seq(0, MsgNum - 1))
     end),
 
-    session_teardown(Worker, [{session_id, SessId}]),
-    mocks_teardown(Worker, [communicator]),
-    remove_pending_messages(),
+    op_test_utils:session_teardown(Worker, [{session_id, SessId}]),
+    test_utils:mock_validate(Worker, communicator),
+    test_utils:mock_unload(Worker, communicator),
 
     [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
         msg_per_sec(MsgNum, SendUs + RecvUs)].
@@ -166,9 +165,9 @@ sequencer_stream_request_messages_test(Config) ->
 
     % Check whether 'MsgsCount' - 1 request messages were sent.
     lists:foreach(fun(SeqNum) ->
-        ?assertMatch({ok, _}, test_utils:receive_msg(#message_request{
-            stream_id = StmId, lower_sequence_number = 0, upper_sequence_number = SeqNum
-        }, ?TIMEOUT))
+        ?assertReceived(#message_request{stream_id = StmId,
+            lower_sequence_number = 0, upper_sequence_number = SeqNum
+        }, ?TIMEOUT)
     end, lists:seq(MsgsCount - 2, 0, -1)),
 
     ok.
@@ -192,9 +191,10 @@ sequencer_stream_messages_acknowledgement_test(Config) ->
     end, lists:seq(MsgsCount - 1, 0, -1)),
 
     % Check whether messages acknowledgement was sent.
-    ?assertMatch({ok, _}, test_utils:receive_msg(#message_acknowledgement{
-        stream_id = StmId, sequence_number = MsgsCount - 1
-    }, ?TIMEOUT)),
+    SeqNum = MsgsCount - 1,
+    ?assertReceived(#message_acknowledgement{
+        stream_id = StmId, sequence_number = SeqNum
+    }, ?TIMEOUT),
 
     ok.
 
@@ -214,16 +214,14 @@ sequencer_stream_end_of_stream_test(Config) ->
     ])),
 
     % Check whether last message was sent.
-    ?assertMatch({ok, _}, test_utils:receive_msg(
-        #client_message{message_stream = #message_stream{
-            stream_id = StmId, sequence_number = SeqNum
-        }, message_body = #end_of_message_stream{}}, ?TIMEOUT
-    )),
+    ?assertReceived(#client_message{message_stream = #message_stream{
+        stream_id = StmId, sequence_number = SeqNum
+    }, message_body = #end_of_message_stream{}}, ?TIMEOUT),
 
     % Check whether last message acknowledgement was sent.
-    ?assertMatch({ok, _}, test_utils:receive_msg(#message_acknowledgement{
+    ?assertReceived(#message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum
-    }, ?TIMEOUT)),
+    }, ?TIMEOUT),
 
     % Check whether sequencer stream process has terminated normaly.
     {ok, {SessSup, _}} = rpc:call(Worker, session,
@@ -246,8 +244,7 @@ sequencer_stream_periodic_ack_test(Config) ->
     MsgsCount = min(MsgsAckWin, 5),
 
     % Check whether reset stream message was sent.
-    ?assertMatch({ok, _}, test_utils:receive_msg(
-        #message_stream_reset{}, ?TIMEOUT)),
+    ?assertReceived(#message_stream_reset{}, ?TIMEOUT),
 
     % Send messages in right order and wait for periodic acknowledgement.
     lists:foreach(fun(SeqNum) ->
@@ -263,8 +260,7 @@ sequencer_stream_periodic_ack_test(Config) ->
         }, ?TIMEOUT + SecsAckWin)
     end, lists:seq(0, MsgsCount - 1)),
 
-    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertNotReceived(_),
 
     ok.
 
@@ -287,10 +283,10 @@ sequencer_stream_duplication_test(Config) ->
 
     % Check whether messages were not duplicated and forwarded in right order.
     lists:foreach(fun(Msg) ->
-        ?assertEqual({ok, Msg}, test_utils:receive_any(?TIMEOUT))
+        ?assertReceived(Msg, ?TIMEOUT)
     end, Msgs),
 
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertNotReceived(_),
 
     ok.
 
@@ -334,10 +330,10 @@ sequencer_stream_crash_test(Config) ->
 
     % Check whether messages were not lost and forwarded in right order.
     lists:foreach(fun(Msg) ->
-        ?assertEqual({ok, Msg}, test_utils:receive_any(?TIMEOUT))
+        ?assertReceived(Msg, ?TIMEOUT)
     end, Msgs),
 
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertNotReceived(_),
 
     ok.
 
@@ -361,12 +357,14 @@ sequencer_stream_crash_test(Config) ->
 ]).
 sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
     MsgNum = ?config(msg_num, Config),
     StmNum = ?config(stm_num, Config),
 
-    session_setup(Worker, SessId, Iden, Config),
+    op_test_utils:remove_pending_messages(),
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config),
 
     Msgs = [#message_stream{sequence_number = SeqNum} ||
         SeqNum <- lists:seq(0, MsgNum - 1)],
@@ -394,10 +392,9 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
     % from each stream.
     {MsgsMap, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
         lists:foldl(fun(_, Map) ->
-            Msg = test_utils:receive_any(?TIMEOUT),
-            ?assertMatch({ok, #client_message{}}, Msg),
-            {ok, #client_message{message_stream = #message_stream{stream_id = StmId,
-                sequence_number = SeqNum}}} = Msg,
+            #client_message{message_stream = #message_stream{
+                stream_id = StmId, sequence_number = SeqNum}
+            } = ?assertReceived(#client_message{}, ?TIMEOUT),
             StmMsgs = maps:get(StmId, Map),
             maps:update(StmId, [SeqNum | StmMsgs], Map)
         end, InitialMsgsMap, lists:seq(0, MsgNum * StmNum - 1))
@@ -407,9 +404,9 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
         ?assertEqual(RevSeqNums, maps:get(StmId, MsgsMap))
     end, lists:seq(1, StmNum)),
 
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertNotReceived(_),
 
-    session_teardown(Worker, [{session_id, SessId}]),
+    op_test_utils:session_teardown(Worker, [{session_id, SessId}]),
 
     [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
         msg_per_sec(MsgNum * StmNum, SendUs + RecvUs)].
@@ -419,35 +416,44 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
+    op_test_utils:clear_models(Worker, [subscription]),
+    NewConfig.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(sequencer_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
+    op_test_utils:remove_pending_messages(),
     router_echo_mock_setup(Worker),
     communicator_retransmission_mock_setup(Worker),
     logger_crash_mock_setup(Worker),
-    session_setup(Worker, SessId, Iden, Config);
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config);
 
 init_per_testcase(sequencer_stream_duplication_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
+    op_test_utils:remove_pending_messages(),
     router_echo_mock_setup(Worker),
     communicator_retransmission_mock_setup(Worker),
-    session_setup(Worker, SessId, Iden, Config);
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config);
 
 init_per_testcase(sequencer_stream_messages_ordering_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     router_echo_mock_setup(Worker),
     Config;
 
 init_per_testcase(sequencer_manager_multiple_streams_messages_ordering_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     router_echo_mock_setup(Worker),
     communicator_retransmission_mock_setup(Worker),
     Config;
@@ -459,30 +465,29 @@ init_per_testcase(Case, Config) when
     Case =:= sequencer_stream_end_of_stream_test;
     Case =:= sequencer_stream_periodic_ack_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
+    op_test_utils:remove_pending_messages(),
     router_echo_mock_setup(Worker),
     communicator_echo_mock_setup(Worker, SessId),
-    session_setup(Worker, SessId, Iden, Config).
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config).
 
 end_per_testcase(sequencer_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    remove_pending_messages(),
-    NewConfig = session_teardown(Worker, Config),
-    mocks_teardown(Worker, [router, communicator, logger]),
-    NewConfig;
+    op_test_utils:session_teardown(Worker, Config),
+    test_utils:mock_validate(Worker, [router, communicator, logger]),
+    test_utils:mock_unload(Worker, [router, communicator, logger]);
 
 end_per_testcase(sequencer_stream_messages_ordering_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    remove_pending_messages(),
-    mocks_teardown(Worker, [router]),
-    Config;
+    test_utils:mock_validate(Worker, [router]),
+    test_utils:mock_unload(Worker, [router]);
 
 end_per_testcase(sequencer_manager_multiple_streams_messages_ordering_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    remove_pending_messages(),
-    mocks_teardown(Worker, [router, communicator]),
-    Config;
+    test_utils:mock_validate(Worker, [router, communicator]),
+    test_utils:mock_unload(Worker, [router, communicator]);
 
 end_per_testcase(Case, Config) when
     Case =:= sequencer_stream_reset_stream_message_test;
@@ -492,40 +497,14 @@ end_per_testcase(Case, Config) when
     Case =:= sequencer_stream_periodic_ack_test;
     Case =:= sequencer_stream_duplication_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    remove_pending_messages(),
-    NewConfig = session_teardown(Worker, Config),
-    mocks_teardown(Worker, [router, communicator]),
-    NewConfig.
+    op_test_utils:session_teardown(Worker, Config),
+    test_utils:mock_validate(Worker, [router, communicator]),
+    test_utils:mock_unload(Worker, [router, communicator]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Config :: term()) -> NewConfig :: term().
-session_setup(Worker, SessId, Iden, Config) ->
-    Self = self(),
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
-    [{session_id, SessId}, {identity, Iden} | Config].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes existing test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
-session_teardown(Worker, Config) ->
-    SessId = ?config(session_id, Config),
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
-    proplists:delete(session_id, proplists:delete(identity, Config)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -599,18 +578,6 @@ logger_crash_mock_setup(Workers) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec mocks_teardown(Workers :: node() | [node()],
-    Modules :: module() | [module()]) -> ok.
-mocks_teardown(Workers, Modules) ->
-    test_utils:mock_validate(Workers, Modules),
-    test_utils:mock_unload(Workers, Modules).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Returns supervisor child.
 %% @end
 %%--------------------------------------------------------------------
@@ -621,19 +588,6 @@ get_child(Sup, ChildId) ->
     case lists:keyfind(ChildId, 1, Children) of
         {ChildId, Child, _, _} -> {ok, Child};
         false -> {error, not_found}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any() of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
     end.
 
 %%--------------------------------------------------------------------

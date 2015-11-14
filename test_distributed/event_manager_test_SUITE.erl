@@ -116,6 +116,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     EvtNum = ?config(evt_num, Config),
     EvtSize = ?config(evt_size, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         all,
         fun(#write_event{}) -> true; (_) -> false end,
@@ -133,8 +134,6 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
         end, lists:seq(1, EvtNum))
     end),
 
-%%     #document{value = #file_location{file_id = FID, storage_id = SID}} = fslogic_utils:get_local_file_location({uuid, FileId}),
-
     % Check whether events have been aggregated and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(N) ->
@@ -150,7 +149,6 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -181,6 +179,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
     EvtSize = ?config(evt_size, Config),
     FileNum = ?config(file_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         all,
         fun(#write_event{}) -> true; (_) -> false end,
@@ -189,7 +188,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
     ),
 
     Evts = lists:map(fun(Id) ->
-        #write_event{source = {session,<<"session_id">>}, file_uuid = ?FILE_ID(Id), size = EvtSize, counter = 1,
+        #write_event{source = {session, <<"session_id">>}, file_uuid = ?FILE_ID(Id), size = EvtSize, counter = 1,
             file_size = EvtSize, blocks = [#file_block{
                 offset = 0, size = EvtSize
             }]}
@@ -215,13 +214,12 @@ event_stream_different_file_id_aggregation_test(Config) ->
     % and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            {ok, {handler, AggrEvts}} = test_utils:receive_any(?TIMEOUT),
+            {handler, AggrEvts} = ?assertReceived({handler, _}, ?TIMEOUT),
             ?assertEqual(EvtsToRecv, lists:sort(AggrEvts))
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
@@ -252,6 +250,7 @@ event_stream_counter_emission_rule_test(Config) ->
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         all,
         fun(#write_event{}) -> true; (_) -> false end,
@@ -277,7 +276,6 @@ event_stream_counter_emission_rule_test(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -309,6 +307,7 @@ event_stream_size_emission_rule_test(Config) ->
     EvtNum = ?config(evt_num, Config),
     EvtSize = ?config(evt_size, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         all,
         infinity,
@@ -336,7 +335,6 @@ event_stream_size_emission_rule_test(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -368,7 +366,7 @@ event_stream_time_emission_rule_test(Config) ->
         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
         blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT + EmTime),
 
-    ?assertEqual({error, timeout}, test_utils:receive_any(EmTime)),
+    ?assertNotReceived(_, EmTime),
 
     unsubscribe(Worker, SubId),
 
@@ -416,7 +414,7 @@ event_stream_crash_test(Config) ->
     ?assertReceived({handler, [#write_event{
         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
         blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertNotReceived(_),
 
     unsubscribe(Worker, SubId),
 
@@ -431,7 +429,7 @@ event_manager_subscription_creation_and_cancellation_test(Config) ->
     Iden1 = #identity{user_id = <<"user_id_1">>},
     Iden2 = #identity{user_id = <<"user_id_2">>},
 
-    session_setup(Worker1, SessId1, Iden1, Self),
+    op_test_utils:session_setup(Worker1, SessId1, Iden1, Self, Config),
 
     {ok, SubId} = subscribe(Worker2,
         all,
@@ -440,33 +438,28 @@ event_manager_subscription_creation_and_cancellation_test(Config) ->
         [fun(Evts) -> Self ! {handler, Evts} end]
     ),
 
-    session_setup(Worker2, SessId2, Iden2, Self),
+    op_test_utils:session_setup(Worker2, SessId2, Iden2, Self, Config),
 
     % Check whether subscription message has been sent to clients.
-    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-
-    %% FSLogic's subscription
-    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-    ?assertMatch({ok, #write_event_subscription{}}, test_utils:receive_any(?TIMEOUT)),
-
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
+    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
+    ?assertNotReceived(_),
 
     % Check subscription has been added to distributed cache.
-    ?assertMatch({ok, [_, _]}, rpc:call(Worker1, subscription, list, [])),
+    ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
 
     % Unsubscribe and check subscription cancellation message has been sent to
     % clients
     unsubscribe(Worker1, SubId),
     ?assertReceived(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
     ?assertReceived(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertNotReceived(_),
 
     % Check subscription has been removed from distributed cache.
-    ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
+    ?assertMatch({ok, []}, rpc:call(Worker1, subscription, list, [])),
 
-    session_teardown(Worker1, SessId2),
-    session_teardown(Worker2, SessId1),
+    op_test_utils:session_teardown(Worker1, [{session_id, SessId2}]),
+    op_test_utils:session_teardown(Worker2, [{session_id, SessId1}]),
 
     ok.
 
@@ -497,12 +490,14 @@ event_manager_multiple_subscription_test(Config) ->
     SubsNum = ?config(sub_num, Config),
     EvtsNum = ?config(evt_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     % Create subscriptions for events associated with different files.
     {SubIds, FileIds} = lists:unzip(lists:map(fun(N) ->
         FileId = <<"file_id_", (integer_to_binary(N))/binary>>,
         {ok, SubId} = subscribe(Worker,
             gui,
-            fun(#write_event{file_uuid = Id}) -> Id =:= FileId; (_) -> false end,
+            fun(#write_event{file_uuid = Id}) -> Id =:= FileId; (_) ->
+                false end,
             fun(Meta) -> Meta >= EvtsNum end,
             [fun(Evts) -> Self ! {handler, Evts} end]
         ),
@@ -527,12 +522,11 @@ event_manager_multiple_subscription_test(Config) ->
             }]
         }]}, ?TIMEOUT)
     end, FileIds),
-    ?assertEqual({error, timeout}, test_utils:receive_any()),
+    ?assertNotReceived(_),
 
     lists:foreach(fun(SubId) ->
         unsubscribe(Worker, SubId)
     end, SubIds),
-    remove_pending_messages(),
 
     ok.
 
@@ -544,7 +538,8 @@ event_manager_multiple_handlers_test(Config) ->
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
 
-    session_setup(Worker, SessId, Iden, Self),
+    op_test_utils:remove_pending_messages(),
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config),
 
     {ok, SubId} = subscribe(Worker,
         all,
@@ -572,7 +567,7 @@ event_manager_multiple_handlers_test(Config) ->
     end, [handler1, handler2, handler3]),
 
     unsubscribe(Worker, SubId),
-    session_teardown(Worker, SessId),
+    op_test_utils:session_teardown(Worker, [{session_id, SessId}]),
 
     ok.
 
@@ -601,10 +596,11 @@ event_manager_multiple_clients_test(Config) ->
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-        session_setup(Worker, SessId, Iden, Self),
+        op_test_utils:session_setup(Worker, SessId, Iden, Self, Config),
         SessId
     end, lists:seq(1, CliNum)),
 
@@ -638,9 +634,8 @@ event_manager_multiple_clients_test(Config) ->
 
     unsubscribe(Worker, SubId),
     lists:foreach(fun(SessId) ->
-        session_teardown(Worker, SessId)
+        op_test_utils:session_teardown(Worker, [{session_id, SessId}])
     end, SessIds),
-    remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)].
@@ -650,7 +645,10 @@ event_manager_multiple_clients_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
+    op_test_utils:clear_models(Worker, [subscription]),
+    NewConfig.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -660,6 +658,7 @@ init_per_testcase(event_stream_crash_test, Config) ->
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
+    op_test_utils:remove_pending_messages(),
     test_utils:mock_new(Worker, [communicator, logger]),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
@@ -668,8 +667,7 @@ init_per_testcase(event_stream_crash_test, Config) ->
         (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
         (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
     end),
-    session_setup(Worker, SessId, Iden, Self),
-    [{session_id, SessId} | Config];
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config);
 
 init_per_testcase(Case, Config) when
     Case =:= event_manager_subscription_creation_and_cancellation_test;
@@ -677,6 +675,7 @@ init_per_testcase(Case, Config) when
     Case =:= event_manager_multiple_clients_test ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
         (#write_event_subscription{} = Msg, _) -> Self ! Msg, ok;
@@ -696,31 +695,26 @@ init_per_testcase(Case, Config) when
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
+    op_test_utils:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
     end),
-    session_setup(Worker, SessId, Iden, Self),
-    [{session_id, SessId} | Config].
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config).
 
 end_per_testcase(event_stream_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
-    remove_pending_messages(),
-    session_teardown(Worker, SessId),
+    op_test_utils:session_teardown(Worker, Config),
     test_utils:mock_validate(Worker, [communicator, logger]),
-    test_utils:mock_unload(Worker, [communicator, logger]),
-    proplists:delete(session_id, Config);
+    test_utils:mock_unload(Worker, [communicator, logger]);
 
 end_per_testcase(Case, Config) when
     Case =:= event_manager_subscription_creation_and_cancellation_test;
     Case =:= event_manager_multiple_handlers_test;
     Case =:= event_manager_multiple_clients_test ->
     Workers = ?config(op_worker_nodes, Config),
-    remove_pending_messages(),
     test_utils:mock_validate(Workers, communicator),
-    test_utils:mock_unload(Workers, communicator),
-    Config;
+    test_utils:mock_unload(Workers, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= event_stream_counter_emission_rule_test;
@@ -730,38 +724,13 @@ end_per_testcase(Case, Config) when
     Case =:= event_stream_the_same_file_id_aggregation_test;
     Case =:= event_stream_different_file_id_aggregation_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
-    remove_pending_messages(),
-    session_teardown(Worker, SessId),
+    op_test_utils:session_teardown(Worker, Config),
     test_utils:mock_validate(Worker, communicator),
-    test_utils:mock_unload(Worker, communicator),
-    proplists:delete(session_id, Config).
+    test_utils:mock_unload(Worker, communicator).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid()) -> ok.
-session_setup(Worker, SessId, Iden, Con) ->
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Con])).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Remove existing test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
-session_teardown(Worker, SessId) ->
-    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -858,19 +827,6 @@ get_child(Sup, ChildId) ->
     case lists:keyfind(ChildId, 1, Children) of
         {ChildId, Child, _, _} -> {ok, Child};
         false -> {error, not_found}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any() of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
     end.
 
 %%--------------------------------------------------------------------
