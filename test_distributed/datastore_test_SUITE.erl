@@ -35,9 +35,9 @@
 -performance({test_cases, []}).
 all() ->
     [local_cache_test, global_cache_test, global_cache_atomic_update_test,
-     global_cache_list_test, persistance_test, local_cache_list_test,
-     disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
-     cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
+        global_cache_list_test, persistance_test, local_cache_list_test,
+        disk_only_links_test, global_only_links_test, globally_cached_links_test, link_walk_test,
+        cache_monitoring_test, old_keys_cleaning_test, cache_clearing_test].
 
 %%%===================================================================
 %%% Test functions
@@ -100,9 +100,9 @@ old_keys_cleaning_test(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
     disable_cache_control(Workers), % Automatic cleaning may influence results
 
-    Times = [timer:hours(7*24), timer:hours(24), timer:hours(1), timer:minutes(10), 0],
+    Times = [timer:hours(7 * 24), timer:hours(24), timer:hours(1), timer:minutes(10), 0],
     {_, KeysWithTimes} = lists:foldl(fun(T, {Num, Ans}) ->
-        K = list_to_binary("old_keys_cleaning_test"++integer_to_list(Num)),
+        K = list_to_binary("old_keys_cleaning_test" ++ integer_to_list(Num)),
         {Num + 1, [{K, T} | Ans]}
     end, {1, []}, Times),
 
@@ -178,8 +178,8 @@ cache_clearing_test(Config) ->
     Mem0Node = rpc:call(Worker2, erlang, memory, [total]),
     ct:print("Mem0 ~p xxx ~p", [Mem0, Mem0Node]),
     FreeMem = 100 - Mem0,
-    ToAdd = min(20, FreeMem/2),
-    MemTarget = Mem0 + ToAdd/2,
+    ToAdd = min(20, FreeMem / 2),
+    MemTarget = Mem0 + ToAdd / 2,
     MemUsage = Mem0 + ToAdd,
 
     ?assertMatch(ok, rpc:call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget])),
@@ -198,7 +198,7 @@ cache_clearing_test(Config) ->
     Mem2Node = rpc:call(Worker2, erlang, memory, [total]),
     ct:print("Mem2 ~p xxx ~p, check_mem: ~p", [Mem2, Mem2Node, CheckMemAns]),
     % TODO Change to node memory checking when DB nodes will be run at separate machine
-    ?assert(Mem2Node < (Mem0Node + Mem1Node)/2),
+    ?assert(Mem2Node < (Mem0Node + Mem1Node) / 2),
 %%     ?assert(Mem2 < MemTarget),
 
     ok.
@@ -340,7 +340,7 @@ local_cache_list_test(Config) ->
 %% Simple usege of link_walk
 link_walk_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
-    
+
     Level = ?DISK_ONLY_LEVEL,
     Key1 = rand_key(),
     Key2 = rand_key(),
@@ -462,56 +462,49 @@ end_per_testcase(_, Config) ->
 local_access_only(Node, Level) ->
     Key = rand_key(),
 
-    ?assertMatch({ok, Key},
-        ?call_store(Node, create, [Level,
-            #document{
-                key = Key,
-                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
+    ?assertMatch({ok, Key}, ?call_store(Node, create, [
+        Level, #document{key = Key, value = #some_record{
+            field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}
+        }}
+    ])),
 
-    ?assertMatch({error, already_exists},
-        ?call_store(Node, create, [Level,
-            #document{
-                key = Key,
-                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
+    ?assertMatch({error, already_exists}, ?call_store(Node, create, [
+        Level, #document{key = Key, value = #some_record{
+            field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}
+        }}
+    ])),
 
-    ?assertMatch({ok, true},
-        ?call_store(Node, exists, [Level,
-            some_record, Key])),
+    ?assertMatch({ok, true}, ?call_store(Node, exists, [Level, some_record, Key])),
 
     ?assertMatch({ok, #document{value = #some_record{field3 = {test, tuple}}}},
-        ?call_store(Node, get, [Level,
-            some_record, Key])),
+        ?call_store(Node, get, [Level, some_record, Key])),
 
     Pid = self(),
-    ?assertMatch({ok, Key},
-        ?call_store(Node, update, [Level,
-            some_record, Key, #{field2 => Pid}])),
+    ?assertMatch({ok, Key}, ?call_store(Node, update, [
+        Level, some_record, Key, #{field2 => Pid}
+    ])),
 
     ?assertMatch({ok, #document{value = #some_record{field2 = Pid}}},
-        ?call_store(Node, get, [Level,
-            some_record, Key])),
+        ?call_store(Node, get, [Level, some_record, Key])),
 
-    ?assertMatch(ok,
-        ?call_store(Node, delete, [Level,
-            some_record, Key, fun() -> false end])),
+    ?assertMatch(ok, ?call_store(Node, delete, [
+        Level, some_record, Key, fun() -> false end
+    ])),
 
     ?assertMatch({ok, #document{value = #some_record{field2 = Pid}}},
-        ?call_store(Node, get, [Level,
-            some_record, Key])),
+        ?call_store(Node, get, [Level, some_record, Key])),
 
-    ?assertMatch(ok,
-        ?call_store(Node, delete, [Level,
-            some_record, Key])),
+    ?assertMatch(ok, ?call_store(Node, delete, [
+        Level, some_record, Key
+    ])),
 
-    ?assertMatch({error, {not_found, _}},
-        ?call_store(Node, get, [Level,
-            some_record, Key])),
+    ?assertMatch({error, {not_found, _}}, ?call_store(Node, get, [
+        Level, some_record, Key
+    ])),
 
-    ?assertMatch({error, {not_found, _}},
-        ?call_store(Node, update, [Level,
-            some_record, Key, #{field2 => self()}])),
+    ?assertMatch({error, {not_found, _}}, ?call_store(Node, update, [
+        Level, some_record, Key, #{field2 => self()}
+    ])),
 
     ok.
 
@@ -522,39 +515,37 @@ global_access(Config, Level) ->
 
     Key = rand_key(),
 
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, create, [Level,
-            #document{
-                key = Key,
-                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
+    ?assertMatch({ok, _}, ?call_store(Worker1, create, [Level, #document{
+        key = Key, value = #some_record{
+            field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}
+        }
+    }])),
 
-    ?assertMatch({ok, true},
-        ?call_store(Worker2, exists, [Level,
-            some_record, Key])),
+    ?assertMatch({ok, true}, ?call_store(Worker2, exists, [
+        Level, some_record, Key
+    ])),
 
-    ?assertMatch({ok, true},
-        ?call_store(Worker1, exists, [Level,
-            some_record, Key])),
+    ?assertMatch({ok, true}, ?call_store(Worker1, exists, [
+        Level, some_record, Key
+    ])),
 
-    ?assertMatch({error, already_exists},
-        ?call_store(Worker2, create, [Level,
-            #document{
-                key = Key,
-                value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
-            }])),
+    ?assertMatch({error, already_exists}, ?call_store(Worker2, create, [
+        Level, #document{key = Key, value = #some_record{
+            field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}
+        }}
+    ])),
 
-    ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
-        ?call_store(Worker1, get, [Level,
-            some_record, Key])),
+    ?assertMatch({ok, #document{value = #some_record{
+        field1 = 1, field3 = {test, tuple}
+    }}}, ?call_store(Worker1, get, [Level, some_record, Key])),
 
-    ?assertMatch({ok, #document{value = #some_record{field1 = 1, field3 = {test, tuple}}}},
-        ?call_store(Worker2, get, [Level,
-            some_record, Key])),
+    ?assertMatch({ok, #document{value = #some_record{
+        field1 = 1, field3 = {test, tuple}
+    }}}, ?call_store(Worker2, get, [Level, some_record, Key])),
 
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, update, [Level,
-            some_record, Key, #{field1 => 2}])),
+    ?assertMatch({ok, _}, ?call_store(Worker1, update, [
+        Level, some_record, Key, #{field1 => 2}
+    ])),
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 2}}},
         ?call_store(Worker2, get, [Level,
@@ -585,18 +576,16 @@ generic_links_test(Config, Level) ->
         value = #some_record{field1 = 3}
     },
 
-
     %% Create some documents and links
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, some_record, create, [Doc1])),
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [Doc1])),
 
-    ?assertMatch({ok, _},
-        ?call_store(Worker2, some_record, create, [Doc2])),
+    ?assertMatch({ok, _}, ?call_store(Worker2, some_record, create, [Doc2])),
 
-    ?assertMatch({ok, _},
-        ?call_store(Worker1, some_record, create, [Doc3])),
+    ?assertMatch({ok, _}, ?call_store(Worker1, some_record, create, [Doc3])),
 
-    ?assertMatch(ok, ?call_store(Worker2, add_links, [Level, Doc1, [{link2, Doc2}, {link3, Doc3}]])),
+    ?assertMatch(ok, ?call_store(Worker2, add_links, [
+        Level, Doc1, [{link2, Doc2}, {link3, Doc3}]
+    ])),
 
     %% Fetch all links and theirs targets
     Ret0 = ?call_store(Worker2, fetch_link_target, [Level, Doc1, link2]),
@@ -656,7 +645,7 @@ generic_links_test(Config, Level) ->
 
 %% generic list operation (on several nodes)
 generic_list_test(Nodes, Level) ->
-    
+
     Ret0 = ?call_store(rand_node(Nodes), list, [Level, some_record, ?GET_ALL, []]),
     ?assertMatch({ok, _}, Ret0),
     {ok, Objects0} = Ret0,
@@ -670,14 +659,15 @@ generic_list_test(Nodes, Level) ->
                 key = Key,
                 value = #some_record{field1 = 1, field2 = <<"abc">>, field3 = {test, tuple}}
             }])
-        end,
+    end,
 
     [?assertMatch({ok, _}, CreateDocFun(Key)) || Key <- Keys],
 
     Ret1 = ?call_store(rand_node(Nodes), list, [Level, some_record, ?GET_ALL, []]),
     ?assertMatch({ok, _}, Ret1),
     {ok, Objects1} = Ret1,
-    ReceivedKeys = lists:map(fun(#document{key = Key}) -> Key end, Objects1 -- Objects0),
+    ReceivedKeys = lists:map(fun(#document{key = Key}) ->
+        Key end, Objects1 -- Objects0),
 
     ?assertMatch(ObjCount, erlang:length(Objects1) - erlang:length(Objects0)),
     ?assertMatch([], ReceivedKeys -- Keys),
@@ -713,14 +703,14 @@ while(Counter, F, Guard) ->
             ok;
         _ ->
             F(Counter),
-            while(Counter+1, F, Guard)
+            while(Counter + 1, F, Guard)
     end.
 
-from_timestamp({Mega,Sec,Micro}) ->
-    (Mega*1000000 + Sec)*1000 + Micro/1000.
+from_timestamp({Mega, Sec, Micro}) ->
+    (Mega * 1000000 + Sec) * 1000 + Micro / 1000.
 
 to_timestamp(T) ->
-    {trunc(T/1000000000), trunc(T/1000) rem 1000000, trunc(T*1000) rem 1000000}.
+    {trunc(T / 1000000000), trunc(T / 1000) rem 1000000, trunc(T * 1000) rem 1000000}.
 
 disable_cache_control(Workers) ->
     disable_cache_control_and_set_dump_delay(Workers, 1000).
