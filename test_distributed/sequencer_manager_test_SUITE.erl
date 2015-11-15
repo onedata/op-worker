@@ -82,7 +82,7 @@ all() -> [
 %% Check whether sequencer manager sends reset streams message at the start.
 sequencer_stream_reset_stream_message_test(_) ->
     % Check whether reset stream message was sent.
-    ?assertReceived(#message_stream_reset{}, ?TIMEOUT).
+    ?assertReceivedMatch(#message_stream_reset{}, ?TIMEOUT).
 
 -performance([
     {repeats, 10},
@@ -131,7 +131,7 @@ sequencer_stream_messages_ordering_test(Config) ->
     % Check whether messages were forwarded in right order.
     {_, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
         lists:foreach(fun(SeqNum) ->
-            ?assertReceived(#client_message{
+            ?assertReceivedMatch(#client_message{
                 message_stream = #message_stream{
                     stream_id = StmId, sequence_number = SeqNum
                 }}, ?TIMEOUT)
@@ -165,7 +165,7 @@ sequencer_stream_request_messages_test(Config) ->
 
     % Check whether 'MsgsCount' - 1 request messages were sent.
     lists:foreach(fun(SeqNum) ->
-        ?assertReceived(#message_request{stream_id = StmId,
+        ?assertReceivedMatch(#message_request{stream_id = StmId,
             lower_sequence_number = 0, upper_sequence_number = SeqNum
         }, ?TIMEOUT)
     end, lists:seq(MsgsCount - 2, 0, -1)),
@@ -192,7 +192,7 @@ sequencer_stream_messages_acknowledgement_test(Config) ->
 
     % Check whether messages acknowledgement was sent.
     SeqNum = MsgsCount - 1,
-    ?assertReceived(#message_acknowledgement{
+    ?assertReceivedMatch(#message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum
     }, ?TIMEOUT),
 
@@ -214,12 +214,12 @@ sequencer_stream_end_of_stream_test(Config) ->
     ])),
 
     % Check whether last message was sent.
-    ?assertReceived(#client_message{message_stream = #message_stream{
+    ?assertReceivedMatch(#client_message{message_stream = #message_stream{
         stream_id = StmId, sequence_number = SeqNum
     }, message_body = #end_of_message_stream{}}, ?TIMEOUT),
 
     % Check whether last message acknowledgement was sent.
-    ?assertReceived(#message_acknowledgement{
+    ?assertReceivedMatch(#message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum
     }, ?TIMEOUT),
 
@@ -244,7 +244,7 @@ sequencer_stream_periodic_ack_test(Config) ->
     MsgsCount = min(MsgsAckWin, 5),
 
     % Check whether reset stream message was sent.
-    ?assertReceived(#message_stream_reset{}, ?TIMEOUT),
+    ?assertReceivedMatch(#message_stream_reset{}, ?TIMEOUT),
 
     % Send messages in right order and wait for periodic acknowledgement.
     lists:foreach(fun(SeqNum) ->
@@ -254,13 +254,13 @@ sequencer_stream_periodic_ack_test(Config) ->
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message,
             [Msg, SessId]
         )),
-        ?assertReceived(Msg, (?TIMEOUT)),
-        ?assertReceived(#message_acknowledgement{
+        ?assertReceivedMatch(Msg, (?TIMEOUT)),
+        ?assertReceivedMatch(#message_acknowledgement{
             stream_id = 1, sequence_number = SeqNum
         }, ?TIMEOUT + SecsAckWin)
     end, lists:seq(0, MsgsCount - 1)),
 
-    ?assertNotReceived(_),
+    ?assertNotReceivedMatch(_),
 
     ok.
 
@@ -283,10 +283,10 @@ sequencer_stream_duplication_test(Config) ->
 
     % Check whether messages were not duplicated and forwarded in right order.
     lists:foreach(fun(Msg) ->
-        ?assertReceived(Msg, ?TIMEOUT)
+        ?assertReceivedMatch(Msg, ?TIMEOUT)
     end, Msgs),
 
-    ?assertNotReceived(_),
+    ?assertNotReceivedMatch(_),
 
     ok.
 
@@ -330,10 +330,10 @@ sequencer_stream_crash_test(Config) ->
 
     % Check whether messages were not lost and forwarded in right order.
     lists:foreach(fun(Msg) ->
-        ?assertReceived(Msg, ?TIMEOUT)
+        ?assertReceivedMatch(Msg, ?TIMEOUT)
     end, Msgs),
 
-    ?assertNotReceived(_),
+    ?assertNotReceivedMatch(_),
 
     ok.
 
@@ -394,7 +394,7 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
         lists:foldl(fun(_, Map) ->
             #client_message{message_stream = #message_stream{
                 stream_id = StmId, sequence_number = SeqNum}
-            } = ?assertReceived(#client_message{}, ?TIMEOUT),
+            } = ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
             StmMsgs = maps:get(StmId, Map),
             maps:update(StmId, [SeqNum | StmMsgs], Map)
         end, InitialMsgsMap, lists:seq(0, MsgNum * StmNum - 1))
@@ -404,7 +404,7 @@ sequencer_manager_multiple_streams_messages_ordering_test(Config) ->
         ?assertEqual(RevSeqNums, maps:get(StmId, MsgsMap))
     end, lists:seq(1, StmNum)),
 
-    ?assertNotReceived(_),
+    ?assertNotReceivedMatch(_),
 
     op_test_utils:session_teardown(Worker, [{session_id, SessId}]),
 

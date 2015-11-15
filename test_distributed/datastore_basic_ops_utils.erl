@@ -26,7 +26,9 @@
 -export([create_delete_test/2, create_sync_delete_test/2, save_test/2, save_sync_test/2, update_test/2,
     update_sync_test/2, get_test/2, exists_test/2, mixed_test/2, set_hooks/2, unset_hooks/2]).
 
+-define(TIMEOUT, timer:seconds(60)).
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
+-define(call(N, M, F, A), rpc:call(N, M, F, A, ?TIMEOUT)).
 
 %%%===================================================================
 %%% API
@@ -567,15 +569,15 @@ for(I, N, F) ->
     for(I + 1, N, F).
 
 spawn_at_nodes(Nodes, Threads, ConflictedThreads, Fun) ->
-    spawn_at_nodes(Nodes, [], Threads, 1, 0, ConflictedThreads, Fun).
+    spawn_at_nodes(Nodes, [], Threads, 1, 0, ConflictedThreads, Fun, []).
 
-spawn_at_nodes(_Nodes, _Nodes2, 0, _DocsSetNum, _DocNumInSet, _ConflictedThreads, _Fun) ->
-    ok;
-spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet, ConflictedThreads, ConflictedThreads, Fun) ->
-    spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet + 1, 0, ConflictedThreads, Fun);
-spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
-    spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun);
-spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
+spawn_at_nodes(_Nodes, _Nodes2, 0, _DocsSetNum, _DocNumInSet, _ConflictedThreads, _Fun, Pids) ->
+    lists:foreach(fun(Pid) -> Pid ! start end, Pids);
+spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet, ConflictedThreads, ConflictedThreads, Fun, Pids) ->
+    spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet + 1, 0, ConflictedThreads, Fun, Pids);
+spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun, Pids) ->
+    spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun, Pids);
+spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun, Pids) ->
     Master = self(),
     FileBeg = case performance:is_stress_test() of
                   true ->
@@ -583,16 +585,16 @@ spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, Conflicted
                   _ ->
                       "_"
               end,
-    spawn(N, fun() ->
+    Pid = spawn(N, fun() ->
         try
-            timer:sleep(timer:seconds(1)), % sleep to allow all threads start
+            receive start -> ok end,
             Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
             E1:E2 ->
                 Master ! {store_ans, {uncatched_error, E1, E2, erlang:get_stacktrace()}, 0}
         end
     end),
-    spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet + 1, ConflictedThreads, Fun).
+    spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet + 1, ConflictedThreads, Fun, [Pid | Pids]).
 
 count_answers(Exp) ->
     count_answers(Exp, {0, 0, 0, 0, []}). %{OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}
@@ -658,7 +660,7 @@ set_hooks(Case, Config) ->
         _ ->
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, cache_controller}]))
+                    ?assert(?call(W, ets, delete_object, [datastore_local_state, {MC, cache_controller}]))
                 end, ModelConfig)
             end, Workers)
     end,
@@ -675,11 +677,11 @@ unset_hooks(Case, Config) ->
 
     case check_config_name(Case) of
         global ->
-            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
+            ?assertMatch(ok, ?call(W, caches_controller, wait_for_cache_dump, [])),
             ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
         local ->
             lists:foreach(fun(Wr) ->
-                ?assertMatch(ok, rpc:call(Wr, caches_controller, wait_for_cache_dump, [])),
+                ?assertMatch(ok, ?call(Wr, caches_controller, wait_for_cache_dump, [])),
                 ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Wr}, clear_mem_synch, 60000))
             end, Workers),
             test_utils:mock_validate(Workers, [caches_controller]),
@@ -687,7 +689,7 @@ unset_hooks(Case, Config) ->
         _ ->
             lists:foreach(fun(Wr) ->
                 lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(Wr, ets, insert, [datastore_local_state, {MC, cache_controller}]))
+                    ?assert(?call(Wr, ets, insert, [datastore_local_state, {MC, cache_controller}]))
                 end, ModelConfig)
             end, Workers)
     end.

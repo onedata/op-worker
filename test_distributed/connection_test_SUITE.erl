@@ -88,12 +88,12 @@ cert_connection_test(_Config) ->
 %%     {ok, Sock} = ssl2:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
 %%         {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
 %%
-%%     {ok, Pid} = ?assertReceived(_, ?TIMEOUT),
+%%     {ok, Pid} = ?assertReceivedMatch(_, ?TIMEOUT),
 %%     State = sys:get_state(Pid),
 %%     #'OTPCertificate'{} = Cert = erlang:element(2, State),
 %%
 %%     ok = ssl2:send(Sock, HandshakeReqRaw),
-%%     ?assertReceived({ssl, _, RawHandshakeResponse}, ?TIMEOUT),
+%%     ?assertReceivedMatch({ssl, _, RawHandshakeResponse}, ?TIMEOUT),
 %%
 %%     % then
 %%     ?assertEqual(CertDer, ssl2:peercert(Sock)),
@@ -169,7 +169,7 @@ multi_message_test(Config) ->
 
     % then
     lists:foreach(fun(N) ->
-        ?assertReceived(N, ?TIMEOUT)
+        ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
     T3 = os:timestamp(),
     ok = ssl2:close(Sock),
@@ -236,7 +236,7 @@ client_communicate_async_test(Config) ->
 
     % then
     #client_message{message_id = MsgId, message_body = Status} =
-        ?assertReceived(#client_message{}, ?TIMEOUT),
+        ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
 
     % given
     test_utils:mock_expect(Workers, router, route_message, fun
@@ -251,7 +251,7 @@ client_communicate_async_test(Config) ->
         [ServerMsgInternal, SessionId]),
 
     % then
-    ?assertReceived({router_message_called, MsgId2}, ?TIMEOUT),
+    ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
     ok = ssl2:close(Sock).
 
 -performance([
@@ -310,7 +310,7 @@ multi_ping_pong_test(Config) ->
         end) || _ <- ConnNumbersList
     ],
     lists:foreach(fun(_) ->
-        ?assertReceived(success, infinity)
+        ?assertReceivedMatch(success, infinity)
     end, ConnNumbersList),
     T2 = os:timestamp(),
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
@@ -430,7 +430,7 @@ bandwidth_test(Config) ->
 
     % then
     lists:foreach(fun(_) ->
-        ?assertReceived(router_message_called, ?TIMEOUT)
+        ?assertReceivedMatch(router_message_called, ?TIMEOUT)
     end, lists:seq(1, PacketNum)),
     T3 = os:timestamp(),
     ssl2:close(Sock),
@@ -499,7 +499,7 @@ python_client_test(Config) ->
 
     % then
     lists:foreach(fun(_) ->
-        ?assertReceived(router_message_called, timer:seconds(15))
+        ?assertReceivedMatch(router_message_called, timer:seconds(15))
     end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
     catch port_close(PythonClient),

@@ -61,10 +61,10 @@
 
 %% API
 -export([save/2, save_sync/2, update/4, update_sync/4, create/2, create_sync/2, create_or_update/3,
-         get/3, list/4, delete/4, delete/3, delete_sync/4, delete_sync/3, exists/3]).
+    get/3, list/4, delete/4, delete/3, delete_sync/4, delete_sync/3, exists/3]).
 -export([fetch_link/3, fetch_link/4, add_links/3, add_links/4, delete_links/3, delete_links/4,
-         foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
-         link_walk/4, link_walk/5]).
+    foreach_link/4, foreach_link/5, fetch_link_target/3, fetch_link_target/4,
+    link_walk/4, link_walk/5]).
 -export([configs_per_bucket/1, ensure_state_loaded/1, healthcheck/0, level_to_driver/1, driver_to_module/1]).
 -export([run_synchronized/3]).
 
@@ -202,7 +202,6 @@ delete(Level, ModelName, Key) ->
     delete(Level, ModelName, Key, ?PRED_ALWAYS).
 
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes #document with given key. Sync operation on memory with sync operation on disk
@@ -214,8 +213,10 @@ delete(Level, ModelName, Key) ->
 delete_sync(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
-            spawn(fun() -> catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
-            spawn(fun() -> catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
+            spawn(fun() ->
+                catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
+            spawn(fun() ->
+                catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
             %% @todo: uncomment following line when local cache will support links
             % spawn(fun() -> catch delete_links(?LOCAL_ONLY_LEVEL, Key, ModelName, all) end),
             ok;
@@ -458,7 +459,6 @@ normalize_link_target({_LinkName, {_TargetKey, ModelName}} = ValidLink) when is_
     ValidLink.
 
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -491,7 +491,8 @@ model_name(Record) when is_tuple(Record) ->
 %%--------------------------------------------------------------------
 -spec run_prehooks(Config :: model_behaviour:model_config(),
     Method :: model_behaviour:model_action(), Level :: store_level(),
-    Context :: term()) -> ok | {task, task_manager:task()}| {error, Reason :: term()}.
+    Context :: term()) ->
+    ok | {ok, term()} | {task, task_manager:task()}| {error, Reason :: term()}.
 run_prehooks(#model_config{name = ModelName}, Method, Level, Context) ->
     Hooked = ets:lookup(?LOCAL_STATE, {ModelName, Method}),
     HooksRes =
@@ -670,7 +671,7 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
             exec_driver(ModelName, Rest, Method, Args);
         {error, Reason} ->
             {error, Reason};
-        Result when Method =:= get; Method =:= fetch_link ; Method =:= foreach_link ->
+        Result when Method =:= get; Method =:= fetch_link; Method =:= foreach_link ->
             Result;
         {ok, true} = Result when Method =:= exists ->
             Result;
@@ -689,6 +690,8 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                     _ ->
                         erlang:apply(Driver, Method, FullArgs)
                 end;
+            {ok, Value} ->
+                {ok, Value};
             {task, _Task} ->
                 {error, prehook_ans_not_supported};
             {error, Reason} ->
@@ -726,7 +729,8 @@ exec_cache_async(ModelName, [Driver1, Driver2], Method, Args) ->
         {error, Reason} ->
             {error, Reason};
         Result ->
-            spawn(fun() -> exec_cache_async(ModelName, Driver2, Method, Args) end),
+            spawn(fun() ->
+                exec_cache_async(ModelName, Driver2, Method, Args) end),
             Result
     end;
 exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
@@ -736,11 +740,13 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
             ok ->
                 FullArgs = [ModelConfig | Args],
                 worker_proxy:call(datastore_worker, {driver_call, driver_to_module(Driver), Method, FullArgs}, timer:minutes(5));
+            {ok, Value} ->
+                {ok, Value};
             {task, Task} ->
                 Level = case lists:member(ModelName, ?GLOBAL_CACHES) of
-                             true -> ?CLUSTER_LEVEL;
-                             _ -> ?NODE_LEVEL
-                         end,
+                            true -> ?CLUSTER_LEVEL;
+                            _ -> ?NODE_LEVEL
+                        end,
                 ok = task_manager:start_task(Task, Level);
             {error, Reason} ->
                 {error, Reason}

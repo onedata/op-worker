@@ -42,10 +42,9 @@ all() -> [
     lfm_truncate_test
 ].
 
--define(TIMEOUT, timer:seconds(5)).
-
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}])).
--define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args)).
+-define(TIMEOUT, timer:seconds(10)).
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).
+-define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
 %%% Test function
@@ -188,7 +187,6 @@ lfm_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {_SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test5">>, 8#755)),
 
@@ -200,20 +198,16 @@ lfm_stat_test(Config) ->
     ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test5">>})),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 3, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 2, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ?assertMatch({ok, 9}, write(W, Handle11, 1, <<"123456789">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ok.
 
@@ -223,7 +217,6 @@ lfm_truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {_SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test6">>, 8#755)),
 
@@ -235,26 +228,21 @@ lfm_truncate_test(Config) ->
     ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test6">>})),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
 
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 1)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 1}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 1}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 10)),
 
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 10)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 1)),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 1, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
 
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 5)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 5}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 5}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"aabc">>}, read(W, Handle11, 0, 4)),
 
     ok.
@@ -266,9 +254,11 @@ get_uuid_privileged(Worker, SessId, Path) ->
 
 
 get_uuid(Worker, SessId, Path) ->
-    RootFileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
-    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = RootFileAttr,
+    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
+        #fuse_response{status = #status{code = ?OK}},
+        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+        30
+    ),
     UUID.
 
 %%%===================================================================
@@ -296,6 +286,7 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
+    communicator_mock_setup(Workers),
     file_meta_mock_setup(Workers),
     Space1 = {<<"space_id1">>, <<"space_name1">>},
     Space2 = {<<"space_id2">>, <<"space_name2">>},
@@ -339,9 +330,8 @@ end_per_testcase(_, Config) ->
     end, ?config(servers, Config)),
 
     session_teardown(Worker, Config),
-    test_utils:mock_validate(Workers, [file_meta, gr_spaces]),
-    test_utils:mock_unload(Workers, [file_meta, gr_spaces]),
-    timer:sleep(timer:seconds(10)).
+    test_utils:mock_validate(Workers, [communicator, file_meta, gr_spaces]),
+    test_utils:mock_unload(Workers, [communicator, file_meta, gr_spaces]).
 
 %%%===================================================================
 %%% Internal functions
@@ -374,7 +364,7 @@ session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
             name = UserName, space_ids = SpaceIds
         }}
     ]),
-    ?assertReceived(onedata_user_setup, ?TIMEOUT),
+    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
         {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
@@ -441,6 +431,19 @@ file_meta_mock_setup(Workers) ->
             file_meta:setup_onedata_user(UUID),
             Self ! onedata_user_setup
     end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks communicator module, so that it ignores all messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
+communicator_mock_setup(Workers) ->
+    test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send,
+        fun(_, _) -> ok end
+    ).
 
 name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
@@ -540,11 +543,6 @@ for(From, To, Fun) ->
     for(From, To, 1, Fun).
 for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
-
-
-wait_for_events() ->
-    timer:sleep(timer:seconds(2)).
-
 
 gen_storage_dir() ->
     ?TEMP_DIR ++ "/storage/" ++ erlang:binary_to_list(gen_name()).

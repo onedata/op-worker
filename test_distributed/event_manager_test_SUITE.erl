@@ -140,7 +140,7 @@ event_stream_the_same_file_id_aggregation_test(Config) ->
             Size = CtrThr * EvtSize,
             Offset = (N - 1) * Size,
             FileSize = N * CtrThr * EvtSize,
-            ?assertReceived({handler, [#write_event{
+            ?assertReceivedMatch({handler, [#write_event{
                 file_uuid = FileId, counter = CtrThr, size = Size,
                 file_size = FileSize, blocks = [#file_block{
                     offset = Offset, size = Size}]
@@ -214,7 +214,7 @@ event_stream_different_file_id_aggregation_test(Config) ->
     % and handler has been executed.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            {handler, AggrEvts} = ?assertReceived({handler, _}, ?TIMEOUT),
+            {handler, AggrEvts} = ?assertReceivedMatch({handler, _}, ?TIMEOUT),
             ?assertEqual(EvtsToRecv, lists:sort(AggrEvts))
         end, lists:seq(1, EvtNum div CtrThr))
     end),
@@ -271,7 +271,7 @@ event_stream_counter_emission_rule_test(Config) ->
     % when emission rule has been satisfied.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            ?assertReceived(handler, ?TIMEOUT)
+            ?assertReceivedMatch(handler, ?TIMEOUT)
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
@@ -330,7 +330,7 @@ event_stream_size_emission_rule_test(Config) ->
     % when emission rule has been satisfied.
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
-            ?assertReceived(handler, ?TIMEOUT)
+            ?assertReceivedMatch(handler, ?TIMEOUT)
         end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
     end),
 
@@ -362,11 +362,11 @@ event_stream_time_emission_rule_test(Config) ->
     end, lists:seq(0, EvtsCount - 1)),
 
     % Check whether event handlers have been executed.
-    ?assertReceived({handler, [#write_event{
+    ?assertReceivedMatch({handler, [#write_event{
         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
         blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT + EmTime),
 
-    ?assertNotReceived(_, EmTime),
+    ?assertNotReceivedMatch(_, EmTime),
 
     unsubscribe(Worker, SubId),
 
@@ -411,10 +411,10 @@ event_stream_crash_test(Config) ->
     end, lists:seq(HalfEvtsCount, EvtsCount - 1)),
 
     % Check whether event handlers have been executed.
-    ?assertReceived({handler, [#write_event{
+    ?assertReceivedMatch({handler, [#write_event{
         size = EvtsCount, counter = EvtsCount, file_size = EvtsCount,
         blocks = [#file_block{offset = 0, size = EvtsCount}]}]}, ?TIMEOUT),
-    ?assertNotReceived(_),
+    ?assertNotReceivedMatch(_),
 
     unsubscribe(Worker, SubId),
 
@@ -441,9 +441,9 @@ event_manager_subscription_creation_and_cancellation_test(Config) ->
     op_test_utils:session_setup(Worker2, SessId2, Iden2, Self, Config),
 
     % Check whether subscription message has been sent to clients.
-    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
-    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
-    ?assertNotReceived(_),
+    ?assertReceivedMatch(#write_event_subscription{}, ?TIMEOUT),
+    ?assertReceivedMatch(#write_event_subscription{}, ?TIMEOUT),
+    ?assertNotReceivedMatch(_),
 
     % Check subscription has been added to distributed cache.
     ?assertMatch({ok, [_]}, rpc:call(Worker1, subscription, list, [])),
@@ -451,9 +451,9 @@ event_manager_subscription_creation_and_cancellation_test(Config) ->
     % Unsubscribe and check subscription cancellation message has been sent to
     % clients
     unsubscribe(Worker1, SubId),
-    ?assertReceived(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
-    ?assertReceived(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
-    ?assertNotReceived(_),
+    ?assertReceivedMatch(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
+    ?assertReceivedMatch(#event_subscription_cancellation{id = SubId}, ?TIMEOUT),
+    ?assertNotReceivedMatch(_),
 
     % Check subscription has been removed from distributed cache.
     ?assertMatch({ok, []}, rpc:call(Worker1, subscription, list, [])),
@@ -515,14 +515,14 @@ event_manager_multiple_subscription_test(Config) ->
 
     % Check whether event handlers have been executed.
     lists:foreach(fun(FileId) ->
-        ?assertReceived({handler, [#write_event{
+        ?assertReceivedMatch({handler, [#write_event{
             file_uuid = FileId, size = EvtsNum, counter = EvtsNum,
             file_size = EvtsNum, blocks = [#file_block{
                 offset = 0, size = EvtsNum
             }]
         }]}, ?TIMEOUT)
     end, FileIds),
-    ?assertNotReceived(_),
+    ?assertNotReceivedMatch(_),
 
     lists:foreach(fun(SubId) ->
         unsubscribe(Worker, SubId)
@@ -560,7 +560,7 @@ event_manager_multiple_handlers_test(Config) ->
 
     % Check whether events have been aggregated and each handler has been executed.
     lists:foreach(fun(Handler) ->
-        ?assertReceived({Handler, [#write_event{
+        ?assertReceivedMatch({Handler, [#write_event{
             file_uuid = FileId, counter = 10, size = 10, file_size = 10,
             blocks = [#file_block{offset = 0, size = 10}]
         }]}, ?TIMEOUT)
@@ -627,7 +627,7 @@ event_manager_multiple_clients_test(Config) ->
     {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
         lists:foreach(fun(_) ->
             lists:foreach(fun(_) ->
-                ?assertReceived(handler, ?TIMEOUT)
+                ?assertReceivedMatch(handler, ?TIMEOUT)
             end, lists:seq(1, EvtNum div CtrThr))
         end, SessIds)
     end),

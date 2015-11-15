@@ -73,9 +73,9 @@ session_manager_session_creation_and_reuse_test(Config) ->
         % Check connections have been added to communicator associated with
         % reused session.
         lists:foreach(fun(_) ->
-            ?assertReceived(add_connection, ?TIMEOUT)
+            ?assertReceivedMatch(add_connection, ?TIMEOUT)
         end, AnswersWithoutCreatedAnswer),
-        ?assertNotReceived(_)
+        ?assertNotReceivedMatch(_)
 
     end, [
         {SessId1, Iden1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
@@ -254,9 +254,7 @@ session_supervisor_child_crash_test(Config) ->
 
         apply(Fun, [Child | Args]),
 
-        timer:sleep(?TIMEOUT),
-
-        ?assertMatch({error, {not_found, _}}, rpc:call(Worker, session, get, [SessId])),
+        ?assertMatch({error, {not_found, _}}, rpc:call(Worker, session, get, [SessId]), 10),
         ?assertEqual([], supervisor:which_children({session_manager_worker_sup, Node}))
     end, [
         {event_manager_sup, fun erlang:exit/2, [kill]},

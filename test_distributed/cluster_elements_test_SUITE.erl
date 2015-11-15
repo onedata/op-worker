@@ -31,9 +31,10 @@
 -export([transaction_retry_test_base/0, transaction_error_test_base/0]).
 
 -performance({test_cases, []}).
-all() -> [ccm_and_worker_test, task_pool_test, task_manager_repeats_test, task_manager_rerun_test,
-    transaction_test, transaction_rollback_test, transaction_rollback_stop_test,
-    multi_transaction_test, transaction_retry_test, transaction_error_test].
+all() ->
+    [ccm_and_worker_test, task_pool_test, task_manager_repeats_test, task_manager_rerun_test,
+        transaction_test, transaction_rollback_test, transaction_rollback_stop_test,
+        multi_transaction_test, transaction_retry_test, transaction_error_test].
 
 %%%===================================================================
 %%% Test functions
@@ -109,10 +110,8 @@ task_manager_repeats_test_base(Config, Level, FirstCheckNum) ->
     ?assertEqual(FirstCheckNum, length(A2)),
     ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level])),
 
-    timer:sleep(timer:seconds(1)),
-    ?assertEqual(0, count_answers()),
-    timer:sleep(timer:seconds(6)),
-    ?assertEqual(5, count_answers()),
+    ?assertEqual(0, count_answers(), 1, timer:seconds(1)),
+    ?assertEqual(5, count_answers(), 1, timer:seconds(6)),
     ?assertEqual({ok, []}, rpc:call(W1, task_pool, list, [Level])),
     ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level])),
 
@@ -139,8 +138,7 @@ task_manager_rerun_test_base(Config, Level, FirstCheckNum) ->
     ?assertEqual(FirstCheckNum, length(A2)),
     ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level])),
 
-    timer:sleep(timer:seconds(5)),
-    ?assertEqual(0, count_answers()),
+    ?assertEqual(0, count_answers(), 1, timer:seconds(5)),
 
     case Level of
         ?NON_LEVEL ->
@@ -149,8 +147,7 @@ task_manager_rerun_test_base(Config, Level, FirstCheckNum) ->
             lists:foreach(fun(W) ->
                 gen_server:cast({?NODE_MANAGER_NAME, W}, check_tasks)
             end, WorkersList),
-            timer:sleep(timer:seconds(2)),
-            ?assertEqual(5, count_answers()),
+            ?assertEqual(5, count_answers(), 1, timer:seconds(2)),
             ?assertEqual({ok, []}, rpc:call(W1, task_pool, list, [Level])),
             ?assertEqual({ok, []}, rpc:call(W1, task_pool, list_failed, [Level]))
     end,
@@ -321,8 +318,7 @@ transaction_retry_test_base() ->
     ?assertEqual(ok, transaction:rollback_point(Rollback1)),
 
     ?assertEqual(task_sheduled, transaction:rollback(1)),
-    timer:sleep(1000), % task is asynch
-    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual(ok, get_rollback_ans(1), 1),
     ?assertEqual(ok, get_rollback_ans(102)),
     ?assertEqual(ok, get_rollback_ans(303)),
     ?assertEqual(ok, get_rollback_ans(1304)),
@@ -362,9 +358,8 @@ transaction_error_test_base() ->
     ?assertEqual(ok, transaction:rollback_point(Rollback2)),
     ?assertEqual(ok, transaction:rollback_point(Rollback1)),
 
-    ?assertEqual({rollback_fun_error,  {error, some_error}}, transaction:rollback(1)),
-    timer:sleep(1000), % task is asynch
-    ?assertEqual(ok, get_rollback_ans(1)),
+    ?assertEqual({rollback_fun_error, {error, some_error}}, transaction:rollback(1)),
+    ?assertEqual(ok, get_rollback_ans(1), 1),
     ?assertEqual(ok, get_rollback_ans(1)),
     ?assertEqual(ok, get_rollback_ans(2)),
     ?assertEqual(ok, get_rollback_ans(12)),

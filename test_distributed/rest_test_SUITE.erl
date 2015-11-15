@@ -77,7 +77,7 @@ internal_error_when_handler_crashes(Config) ->
     test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_crash/2),
 
     % when
-    {ok, Status, _, _} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+    {ok, Status, _, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
 
     % then
     ?assertEqual("500", Status).
@@ -89,7 +89,7 @@ custom_code_when_handler_throws_code(Config) ->
     test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400/2),
 
     % when
-    {ok, Status, _, _} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+    {ok, Status, _, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
 
     % then
     ?assertEqual("400", Status).
@@ -101,7 +101,7 @@ custom_error_when_handler_throws_error(Config) ->
     test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400_with_description/2),
 
     % when
-    {ok, Status, _, Body} =  ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+    {ok, Status, _, Body} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
 
     % then
     ?assertEqual("400", Status),
