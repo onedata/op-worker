@@ -9,6 +9,7 @@ to start.
 
 import copy
 import os
+import sys
 import subprocess
 
 from . import common, docker, dns, globalregistry, provider_worker
@@ -83,58 +84,6 @@ bash'''
     # create system users and groups
     common.create_users(container, os_config)
     common.create_groups(container, os_config)
-
-    # mount oneclients
-    for client in node["clients"]:
-        name = client["name"]
-        op = client["op_domain"]
-        gr = client["gr_domain"]
-        key = client["user_key"]
-        mounting_point = client["mounting_point"]
-
-        key_file_path = os.path.join(common.get_file_dir(config_path), key)
-        command = '''cat <<"EOF" > /tmp/{user}_key
-{key_file}
-EOF
-chmod 600 /tmp/{user}_key'''
-        command = command.format(
-            user=name,
-            key_file=open(key_file_path, 'r').read())
-        assert 0 is docker.exec_(container, command)
-
-        command = ['mkdir', '-p', mounting_point]
-        assert 0 is docker.exec_(container, command)
-
-        if 'token' in client:
-            user = client['token']
-            gr_node = "gr@node1." + gr
-            command = 'docker exec %s escript /root/build/get_token.escript %s %s' % (container, gr_node, user)
-            token = subprocess.check_output(command, shell=True)
-            gr = "node1." + gr
-            op = "worker1." + op
-            command = "GLOBAL_REGISTRY_URL=" + gr + \
-                      " PROVIDER_HOSTNAME=" + op + \
-                      ' ./oneclient --authentication token --no_check_certificate ' + mounting_point + \
-                  ' < token'
-            # TODO: uncomment one of belows when mounting will succeed
-            # assert 0 is docker.exec_(container, command)
-            # subprocess.check_call('docker exec %s %s' % (container, command), shell=True)
-        elif 'user_cert' in client:
-            # TODO: uncomment when we'll respect certificates
-            # cert = client["user_cert"]
-            # cert_file_path = os.path.join(common.get_file_dir(config_path), cert)
-            # command = '''cat <<"EOF" > /tmp/{user}_cert
-            # {cert_file}
-            # EOF
-            # chmod 600 /tmp/{user}_cert'''
-            # command = command.format(
-            #     user=name,
-            #     cert_file=open(cert_file_path, 'r').read())
-            # assert 0 is docker.exec_(container, command)
-
-            # command = '''X509_USER_CERT=/tmp/%s_cert X509_USER_KEY=/tmp/%s_key PROVIDER_HOSTNAME=%s GLOBAL_REGISTRY_URL=%s ./oneclient %s''' % (name, name, op, gr, mounting_point)
-            # docker.exec_(container, command, output=True)
-            pass
 
     return {'docker_ids': [container], 'client_nodes': [hostname]}
 
