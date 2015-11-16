@@ -23,11 +23,29 @@
 %% node_manager_plugin_behaviour callbacks
 -export([on_init/1, on_terminate/2, on_code_change/3,
   handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
-  modules/0, modules_with_args/0, listeners/0]).
+  modules/0, modules_with_args/0, listeners/0, ccm_nodes/0, db_nodes/0]).
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List ccm nodes to be used by node manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec ccm_nodes() -> Nodes :: [atom()].
+ccm_nodes() ->
+  application:get_env(?APP_NAME, ccm_nodes).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% List db nodes to be used by node manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec db_nodes() -> Nodes :: [atom()].
+db_nodes() ->
+  application:get_env(?APP_NAME, db_nodes).
 
 %%--------------------------------------------------------------------
 %% @private
