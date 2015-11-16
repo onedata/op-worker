@@ -31,11 +31,11 @@
 %%--------------------------------------------------------------------
 -spec start_listener() -> {ok, pid()} | no_return().
 start_listener() ->
-  {ok, DNSPort} = application:get_env(?APP_NAME, dns_port),
-  {ok, EdnsMaxUdpSize} = application:get_env(?APP_NAME, edns_max_udp_size),
+  {ok, DNSPort} = application:get_env(?WORKER_APP_NAME, dns_port),
+  {ok, EdnsMaxUdpSize} = application:get_env(?WORKER_APP_NAME, edns_max_udp_size),
   {ok, TCPNumAcceptors} =
-    application:get_env(?APP_NAME, dns_tcp_acceptor_pool_size),
-  {ok, TCPTImeout} = application:get_env(?APP_NAME, dns_tcp_timeout_seconds),
+    application:get_env(?WORKER_APP_NAME, dns_tcp_acceptor_pool_size),
+  {ok, TCPTImeout} = application:get_env(?WORKER_APP_NAME, dns_tcp_timeout_seconds), %todo fix APP_NAME
   OnFailureFun = fun() ->
     ?error("Could not start DNS server on node ~p.", [node()])
   end,

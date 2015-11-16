@@ -52,7 +52,7 @@ init(_Type, Req, _Opts) ->
 %%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
-    {ok, Timeout} = application:get_env(?APP_NAME, nagios_healthcheck_timeout),
+    {ok, Timeout} = application:get_env(?WORKER_APP_NAME, nagios_healthcheck_timeout),
     {ok, CachingTime} = application:get_env(?APP_NAME, nagios_caching_time),
     CachedResponse = case application:get_env(?APP_NAME, nagios_cache) of
                          {ok, {LastCheck, LastValue}} ->
