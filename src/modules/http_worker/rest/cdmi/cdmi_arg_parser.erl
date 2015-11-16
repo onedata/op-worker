@@ -1,4 +1,4 @@
-%%%--------------------------------------------------------------------
+  %%%--------------------------------------------------------------------
 %%% @author Piotr Ociepka
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -40,11 +40,11 @@ malformed_request(Req, State) ->
 %% @doc @equiv cdmi_arg_parser:malformed_request/2
 %% ====================================================================
 -spec malformed_capability_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
-malformed_capability_request(Req, #{version := Version} = State) ->
-  {false, Req, State} = cdmi_arg_parser:malformed_request(Req, State),
-  case Version of
-    undefined -> throw(?unsupported_version);
-    _ -> {false, Req, State}
+malformed_capability_request(Req, State) ->
+  {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
+  case maps:find(cdmi_version, State2) of
+    {ok, _} -> {false, Req, State};
+    _ -> throw(?unsupported_version)
   end.
 
 %%%===================================================================
