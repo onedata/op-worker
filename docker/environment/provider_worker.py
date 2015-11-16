@@ -13,7 +13,7 @@ import subprocess
 from . import common, docker, riak, couchbase, dns, globalregistry, provider_ccm
 
 PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
-
+DOCKER_BINDIR_PATH = '/root/build'
 
 def provider_domain(op_instance, uid):
     """Formats domain for a provider."""
@@ -81,7 +81,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         uid=os.geteuid(),
         gid=os.getegid())
 
-    volumes = [(bindir, '/root/build', 'ro')]
+    volumes = [(bindir, DOCKER_BINDIR_PATH, 'ro')]
     volumes = common.add_shared_storages(volumes, config['os_config']['storages'])
 
     if logdir:
@@ -235,7 +235,7 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
         storages = config['os_configs'][os_config]['storages']
         for node in output['op_worker_nodes']:
             container = node.split("@")[1]
-            script_path = os.path.join('/root/build', script_name)
+            script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
             for st_path in storages:
                 st_name = st_path
                 command = 'docker exec %s escript %s %s %s %s' % (container, script_path, node, st_name, st_path)
