@@ -238,8 +238,8 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
             script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
             for st_path in storages:
                 st_name = st_path
-                command = 'docker exec %s escript %s %s %s %s' % (container, script_path, node, st_name, st_path)
-                subprocess.check_call(command, shell=True)
+                command = 'escript %s %s %s %s' % (script_path, node, st_name, st_path)
+                docker.exec_(container, command, tty=True)
         # clean-up
         command = ['rm', os.path.join(bindir, script_name)]
         subprocess.check_call(command)
