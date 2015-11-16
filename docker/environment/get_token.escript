@@ -9,5 +9,5 @@ main([GR_Node, UID]) ->
     ok = file:write(File, Token),
     ok = file:close(File)
   catch
-    _T:M -> io:format("ERROR: ~p~n", [M])
+    T:M -> io:format("ERROR: {~p, ~p}~n", [M])
 end.
