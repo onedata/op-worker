@@ -129,7 +129,7 @@ task_manager_rerun_test_base(Config, Level, FirstCheckNum) ->
     Workers = [W1, W2, W1, W2, W1],
 
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, application, set_env, [?APP_NAME, task_fail_sleep_time_ms, 100]))
+        ?assertEqual(ok, test_utils:set_env(W, ?APP_NAME, task_fail_sleep_time_ms, 100))
     end, WorkersList),
 
     ControllerPid = start_tasks(Level, Workers, 25),

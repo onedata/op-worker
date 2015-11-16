@@ -91,7 +91,7 @@ end_per_testcase(_, _Config) ->
     {ok, Sock :: term()}.
 connect_via_token(Node, TokenVal, SessionId) ->
     % given
-    {ok, Port} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{
         session_id = SessionId,
