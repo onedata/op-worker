@@ -12,12 +12,4 @@
 -author("Piotr Ociepka").
 
 %% API
--export([encode_to_json/1]).
-
-%% ====================================================================
-%% @doc Converts Erlang term to SJON binary
-%% ====================================================================
--spec encode_to_json(term()) -> binary().
-encode_to_json(Term) ->
-  Encoder = mochijson2:encoder([{utf8, true}]),
-  iolist_to_binary(Encoder(Term)).
+-export([]).

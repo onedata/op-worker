@@ -43,13 +43,8 @@ allowed_methods(Req, State) ->
 %% @doc @equiv pre_handler:malformed_request/2
 %% ====================================================================
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
-malformed_request(Req, #{version := Version} = State) ->
-  {false, Req, State} = cdmi_arg_parser:malformed_request(Req, State),
-  case Version of
-    undefined -> throw(?unsupported_version);
-    _ -> {false, Req, State}
-  end.
-
+malformed_request(Req, State) ->
+  cdmi_arg_parser:malformed_capability_request(Req, State).
 
 %% ====================================================================
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -70,7 +65,7 @@ content_types_provided(Req, State) ->
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi_capability(Req, #{opts := Opts} = State) ->
   RawCapabilities = prepare_capability_ans(Opts, State),
-  Capabilities = cdmi_utils:encode_to_json(RawCapabilities),
+  Capabilities = jiffy:encode(RawCapabilities),
   {Capabilities, Req, State}.
 
 %% ====================================================================
@@ -82,4 +77,16 @@ get_cdmi_capability(Req, #{opts := Opts} = State) ->
 %% ====================================================================
 -spec prepare_capability_ans([Opt :: binary], #{}) -> [{Capability :: binary(), Value :: term()}].
 prepare_capability_ans(_Opts, _State) ->
-  [].
+  ObjectType = "application/cdmi-capability",
+  ObjectName = "cdmi_capabilities/",
+  ParentUri = "/",
+  Children = ["container/", "dataobject/"],
+  ChildrenRange = "0-" ++ integer_to_list(length(Children) - 1),
+  Capabilities = #{},
+
+  #{objectType => ObjectType,
+    objectName => ObjectName,
+    parentURI => ParentUri,
+    children => Children,
+    childrenrange => ChildrenRange,
+    capabilities => Capabilities}.

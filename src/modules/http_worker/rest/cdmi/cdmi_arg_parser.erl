@@ -15,7 +15,7 @@
 -include("modules/http_worker/http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 
--export([get_supported_version/1, parse_opts/1, malformed_request/2]).
+-export([get_supported_version/1, parse_opts/1, malformed_request/2, malformed_capability_request/2]).
 
 %%%===================================================================
 %%% API
@@ -35,6 +35,17 @@ malformed_request(Req, State) ->
 
   NewState = State#{cdmi_version => Version, options => Opts, path => Path},
   {false, Req4, NewState}.
+
+%% ====================================================================
+%% @doc @equiv cdmi_arg_parser:malformed_request/2
+%% ====================================================================
+-spec malformed_capability_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
+malformed_capability_request(Req, #{version := Version} = State) ->
+  {false, Req, State} = cdmi_arg_parser:malformed_request(Req, State),
+  case Version of
+    undefined -> throw(?unsupported_version);
+    _ -> {false, Req, State}
+  end.
 
 %%%===================================================================
 %%% Internal functions

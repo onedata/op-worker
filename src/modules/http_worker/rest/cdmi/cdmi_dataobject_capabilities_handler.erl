@@ -64,13 +64,8 @@ content_types_provided(Req, State) ->
 %% ====================================================================
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi_capability(Req, #{opts := Opts} = State) ->
-  %% TODO: change to pattern matching in function header when it'll be doable in Erlang
-%%   case maps:is_key(opts, State) of
-%%     true -> Opts = maps:get(opts, State);
-%%     false -> Opts = []
-%%   end,
   RawCapabilities = prepare_capability_ans(Opts, State),
-  Capabilities = cdmi_utils:encode_to_json(RawCapabilities),
+  Capabilities = jiffy:encode(RawCapabilities),
   {Capabilities, Req, State}.
 
 %% ====================================================================
@@ -82,4 +77,16 @@ get_cdmi_capability(Req, #{opts := Opts} = State) ->
 %% ====================================================================
 -spec prepare_capability_ans([Opt :: binary], #{}) -> [{Capability :: binary(), Value :: term()}].
 prepare_capability_ans(_Opts, _State) ->
-  [].
+  ObjectType = "application/cdmi-capability",
+  ObjectName = "cdmi_capabilities/dataobject/",
+  ParentUri = "/cdmi_capabilities/",
+  Children = [],
+%%   ChildrenRange = "0-0",
+  Capabilities = #{},
+
+  #{objectType => ObjectType,
+    objectName => ObjectName,
+    parentURI => ParentUri,
+    children => Children,
+%%     childrenrange => ChildrenRange,
+    capabilities => Capabilities}.
