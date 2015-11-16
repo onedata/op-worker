@@ -43,7 +43,7 @@ malformed_request(Req, State) ->
 malformed_capability_request(Req, State) ->
   {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
   case maps:find(cdmi_version, State2) of
-    {ok, _} -> {false, Req, State};
+    {ok, _} -> {false, Req, State2};
     _ -> throw(?unsupported_version)
   end.
 
