@@ -104,22 +104,6 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     common.create_users(container, config['os_config'])
     common.create_groups(container, config['os_config'])
 
-    # create storages
-    # copy escript to docker host
-    script_name = 'create_storage.escript'
-    pwd = common.get_script_dir()
-    command = ['cp', os.path.join(pwd, script_name), os.path.join(bindir, script_name)]
-    subprocess.check_call(command)
-    # execute escript
-    script_path = os.path.join('/root/build', script_name)
-    for st_path in config['os_config']['storages']:
-        st_name = st_path
-        command = 'docker exec %s escript %s %s %s' % (container, script_path, st_name, st_path)
-        subprocess.check_call(command, shell=True)
-    # clean-up
-    command = ['rm', os.path.join(bindir, script_name)]
-    subprocess.check_call(command)
-
     return container, {
         'docker_ids': [container],
         'op_worker_nodes': [node_name]
