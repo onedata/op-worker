@@ -76,7 +76,7 @@ sequencer_out_stream_should_forward_messages(Config) ->
 
 sequencer_out_stream_should_increment_sequence_number(Config) ->
     send_message(?config(sequencer_out_stream, Config), server_message()),
-    remove_pending_messages(?TIMEOUT),
+    op_test_utils:remove_pending_messages(?TIMEOUT),
     send_message(?config(sequencer_out_stream, Config), server_message()),
     ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 1
@@ -85,7 +85,7 @@ sequencer_out_stream_should_increment_sequence_number(Config) ->
 sequencer_out_stream_should_resend_all_messages_on_message_stream_reset(Config) ->
     SeqStm = ?config(sequencer_out_stream, Config),
     send_message(SeqStm, server_message()),
-    remove_pending_messages(?TIMEOUT),
+    op_test_utils:remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_stream_reset{}),
     ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 0
@@ -95,7 +95,7 @@ sequencer_out_stream_should_remove_messages_on_message_acknowledgement(Config) -
     SeqStm = ?config(sequencer_out_stream, Config),
     send_message(SeqStm, server_message()),
     send_message(SeqStm, #message_acknowledgement{sequence_number = 0}),
-    remove_pending_messages(?TIMEOUT),
+    op_test_utils:remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_stream_reset{}),
     ?assertNotReceivedMatch(#server_message{}, ?TIMEOUT).
 
@@ -104,7 +104,7 @@ sequencer_out_stream_should_recompute_sequence_numbers_on_message_stream_reset(C
     send_message(SeqStm, server_message()),
     send_message(SeqStm, #message_acknowledgement{sequence_number = 0}),
     send_message(SeqStm, server_message()),
-    remove_pending_messages(?TIMEOUT),
+    op_test_utils:remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_stream_reset{}),
     ?assertReceivedMatch(#server_message{message_stream = #message_stream{
         sequence_number = 0
@@ -115,7 +115,7 @@ sequencer_out_stream_should_resend_messages_on_message_request(Config) ->
     send_message(SeqStm, server_message()),
     send_message(SeqStm, server_message()),
     send_message(SeqStm, server_message()),
-    remove_pending_messages(?TIMEOUT),
+    op_test_utils:remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_request{
         lower_sequence_number = 1, upper_sequence_number = 1
     }),
@@ -127,7 +127,7 @@ sequencer_out_stream_should_ignore_message_request_for_acknowledged_messages(Con
     SeqStm = ?config(sequencer_out_stream, Config),
     send_message(SeqStm, server_message()),
     send_message(SeqStm, #message_acknowledgement{sequence_number = 0}),
-    remove_pending_messages(?TIMEOUT),
+    op_test_utils:remove_pending_messages(?TIMEOUT),
     send_message(SeqStm, #message_request{
         lower_sequence_number = 0, upper_sequence_number = 0
     }),
@@ -165,7 +165,7 @@ end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_out_stream(?config(sequencer_out_stream, Config)),
     validate_and_unload_mocks(Worker, [communicator]),
-    remove_pending_messages(0),
+    op_test_utils:remove_pending_messages(),
     proplists:delete(sequencer_out_stream, Config).
 
 %%%===================================================================
@@ -251,16 +251,3 @@ mock_communicator(Worker) ->
 validate_and_unload_mocks(Worker, Mocks) ->
     test_utils:mock_validate(Worker, Mocks),
     test_utils:mock_unload(Worker, Mocks).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages(Timeout :: timeout()) -> ok.
-remove_pending_messages(Timeout) ->
-    case test_utils:receive_any(Timeout) of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages(Timeout)
-    end.

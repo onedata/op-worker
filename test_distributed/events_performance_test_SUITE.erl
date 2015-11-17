@@ -142,7 +142,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -216,7 +216,7 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
@@ -271,7 +271,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -329,7 +329,7 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -399,7 +399,7 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     lists:foreach(fun(SubId) ->
         unsubscribe(Worker, SubId)
     end, SubIds),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
 
     ok.
 
@@ -466,7 +466,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, SessIds),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)].
@@ -506,7 +506,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
     test_utils:mock_validate(Workers, communicator),
     test_utils:mock_unload(Workers, communicator),
     Config;
@@ -514,7 +514,7 @@ end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    remove_pending_messages(),
+    op_test_utils:remove_pending_messages(),
     session_teardown(Worker, SessId),
     test_utils:mock_validate(Worker, communicator),
     test_utils:mock_unload(Worker, communicator),
@@ -615,19 +615,6 @@ subscribe(Worker, EmTime, AdmRule, EmRule, TrRule, Handler) ->
     ok.
 unsubscribe(Worker, SubId) ->
     ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any(timer:seconds(1)) of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

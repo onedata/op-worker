@@ -238,8 +238,9 @@ client_communicate_async_test(Config) ->
         [ServerMsgInternal, SessionId, Self]),
 
     % then
-    ?assertMatch(#client_message{message_id = MsgId, message_body = Status},
-        ReceivedMessage),
+    ?assertReceivedMatch(#client_message{
+        message_id = MsgId, message_body = Status
+    }, ?TIMEOUT),
 
     % given
     test_utils:mock_expect(Workers, router, route_message, fun

@@ -16,7 +16,7 @@
 
 %% API
 -export([session_setup/5, session_teardown/2]).
--export([remove_pending_messages/0, clear_models/2]).
+-export([remove_pending_messages/0, remove_pending_messages/1, clear_models/2]).
 
 %%%===================================================================
 %%% API
@@ -47,16 +47,27 @@ session_teardown(Worker, Config) ->
     ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Removes messages for process messages queue.
+%% @equiv remove_pending_messages(0)
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_pending_messages() -> ok.
 remove_pending_messages() ->
+    remove_pending_messages(0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes messages for process queue. Waits 'Timeout' milliseconds for the
+%% next message.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages(Timeout :: timeout()) -> ok.
+remove_pending_messages(Timeout) ->
     receive
-        _ -> remove_pending_messages()
+        _ -> remove_pending_messages(Timeout)
     after
-        0 -> ok
+        Timeout -> ok
     end.
 
 %%--------------------------------------------------------------------

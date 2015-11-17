@@ -130,10 +130,7 @@ close_sequencer_stream_handler() ->
 -spec send_events_handler() -> Handler :: event_stream:event_handler().
 send_events_handler() ->
     fun(Evts, {StmId, SessId}) ->
-        {ok, SeqMan} = session:get_sequencer_manager(SessId),
-        lists:foreach(fun(Evt) ->
-            sequencer:send_message(Evt, StmId, SeqMan)
-        end, Evts)
+        sequencer:send_message(#events{events = Evts}, StmId, SessId)
     end.
 
 %%--------------------------------------------------------------------

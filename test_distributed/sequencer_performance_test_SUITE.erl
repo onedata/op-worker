@@ -196,8 +196,9 @@ end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    validate_and_unload_mocks(Workers, [communicator, router]),
-    remove_pending_messages(),
+    test_utils:mock_validate(Workers, [communicator, router]),
+    test_utils:mock_unload(Workers, [communicator, router]),
+    op_test_utils:remove_pending_messages(),
     proplists:delete(session_id, Config).
 
 %%%===================================================================
@@ -290,30 +291,6 @@ mock_router(Workers) ->
     test_utils:mock_expect(Workers, router, route_message, fun
         (Msg) -> Self ! Msg
     end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec validate_and_unload_mocks(Workers :: [node()], Mocks :: [atom()]) -> ok.
-validate_and_unload_mocks(Workers, Mocks) ->
-    test_utils:mock_validate(Workers, Mocks),
-    test_utils:mock_unload(Workers, Mocks).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any(timer:seconds(1)) of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
