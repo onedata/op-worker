@@ -22,7 +22,8 @@
 
 -define(TIMEOUT, timer:seconds(60)).
 -define(call_store(N, F, A), ?call(N, datastore, F, A)).
--define(call(N, M, F, A), rpc:call(N, M, F, A, ?TIMEOUT)).
+-define(call(N, M, F, A), ?call(N, M, F, A, ?TIMEOUT)).
+-define(call(N, M, F, A, T), rpc:call(N, M, F, A, T)).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -173,14 +174,14 @@ cache_clearing_test(Config) ->
     MemTarget = Mem0 + ToAdd / 2,
     MemUsage = Mem0 + ToAdd,
 
-    ?assertMatch(ok, ?call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget])),
+    ?assertMatch(ok, ?call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget], timer:minutes(10))),
     ?assertMatch(ok, test_utils:set_env(Worker2, ?APP_NAME, mem_to_clear_cache, MemTarget)),
     [{_, Mem1}] = monitoring:get_memory_stats(),
     Mem1Node = ?call(Worker2, erlang, memory, [total]),
     ct:print("Mem1 ~p xxx ~p", [Mem1, Mem1Node]),
     ?assert(Mem1 > MemTarget),
 
-    ?assertEqual(ok, ?call(Worker2, caches_controller, wait_for_cache_dump, []), 10),
+    ?assertEqual(ok, ?call(Worker2, caches_controller, wait_for_cache_dump, []), 30),
     % TODO Add answer checking when DB nodes will be run at separate machine
     CheckMemAns = gen_server:call({?NODE_MANAGER_NAME, Worker2}, check_mem_synch, ?TIMEOUT),
 %%     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker2}, check_mem_synch, ?TIMEOUT)),
@@ -201,10 +202,9 @@ utilize_memory(MemUsage, MemTarget) ->
 
     Add100MB = fun(_KeyBeg) ->
         for(1, 100 * 4, fun(I) ->
-            some_record:create(
-                #document{
-                    value = #some_record{field1 = I, field2 = binary:copy(OneDoc), field3 = {test, tuple}}
-                })
+            some_record:create(#document{value = #some_record{
+                field1 = I, field2 = binary:copy(OneDoc), field3 = {test, tuple}}
+            })
         end)
     end,
     Guard = fun() ->

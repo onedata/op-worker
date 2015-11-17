@@ -56,7 +56,7 @@ all() -> [
     sequencer_manager_multiple_streams_messages_ordering_test
 ].
 
--define(TIMEOUT, timer:seconds(15)).
+-define(TIMEOUT, timer:seconds(60)).
 -define(MSG_NUM(Value), [
     {name, msg_num}, {value, Value}, {description, "Number of messages."}
 ]).
@@ -108,7 +108,6 @@ sequencer_stream_messages_ordering_test(Config) ->
     MsgOrd = ?config(msg_ord, Config),
 
     op_test_utils:remove_pending_messages(),
-    communicator_echo_mock_setup(Worker, SessId),
     op_test_utils:session_setup(Worker, SessId, Iden, Self, Config),
 
     SeqNums = case MsgOrd of
@@ -139,8 +138,6 @@ sequencer_stream_messages_ordering_test(Config) ->
     end),
 
     op_test_utils:session_teardown(Worker, [{session_id, SessId}]),
-    test_utils:mock_validate(Worker, communicator),
-    test_utils:mock_unload(Worker, communicator),
 
     [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
         msg_per_sec(MsgNum, SendUs + RecvUs)].
@@ -319,7 +316,7 @@ sequencer_stream_crash_test(Config) ->
 
     % Send crash message and wait for event stream recovery.
     gen_server:cast(SeqStm, kill),
-    timer:sleep(?TIMEOUT),
+    timer:sleep(timer:seconds(15)),
 
     % Send second part of messages.
     lists:foreach(fun(Msg) ->
@@ -449,6 +446,7 @@ init_per_testcase(sequencer_stream_messages_ordering_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     op_test_utils:remove_pending_messages(),
     router_echo_mock_setup(Worker),
+    communicator_echo_mock_setup(Worker),
     Config;
 
 init_per_testcase(sequencer_manager_multiple_streams_messages_ordering_test, Config) ->
@@ -470,7 +468,7 @@ init_per_testcase(Case, Config) when
     Iden = #identity{user_id = <<"user_id">>},
     op_test_utils:remove_pending_messages(),
     router_echo_mock_setup(Worker),
-    communicator_echo_mock_setup(Worker, SessId),
+    communicator_echo_mock_setup(Worker),
     op_test_utils:session_setup(Worker, SessId, Iden, Self, Config).
 
 end_per_testcase(sequencer_stream_crash_test, Config) ->
@@ -481,8 +479,8 @@ end_per_testcase(sequencer_stream_crash_test, Config) ->
 
 end_per_testcase(sequencer_stream_messages_ordering_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Worker, [router]),
-    test_utils:mock_unload(Worker, [router]);
+    test_utils:mock_validate(Worker, [router, communicator]),
+    test_utils:mock_unload(Worker, [router, communicator]);
 
 end_per_testcase(sequencer_manager_multiple_streams_messages_ordering_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -526,15 +524,12 @@ router_echo_mock_setup(Workers) ->
 %% Mocks communicator module, so that all messages are sent back to test process.
 %% @end
 %%--------------------------------------------------------------------
--spec communicator_echo_mock_setup(Workers :: node() | [node()],
-    SessId :: session:id()) -> ok.
-communicator_echo_mock_setup(Workers, SessId) ->
+-spec communicator_echo_mock_setup(Workers :: node() | [node()]) -> ok.
+communicator_echo_mock_setup(Workers) ->
     Self = self(),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send,
-        fun(Msg, Id) when Id =:= SessId ->
-            Self ! Msg, ok
-        end
+        fun(Msg, _) -> Self ! Msg, ok end
     ).
 
 %%--------------------------------------------------------------------
