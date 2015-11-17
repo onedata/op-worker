@@ -91,7 +91,7 @@ end_per_testcase(_, _Config) ->
     {ok, Sock :: term()}.
 connect_via_token(Node, TokenVal, SessionId) ->
     % given
-    {ok, Port} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
     TokenAuthMessage = #'ClientMessage'{message_body =
     {handshake_request, #'HandshakeRequest'{
         session_id = SessionId,
@@ -137,7 +137,7 @@ mock_gr_certificates(Config) ->
     [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
     SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
 
-    test_utils:mock_new(Workers, [gr_endpoint]),
+    test_utils:mock_new(Workers, gr_endpoint),
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
@@ -155,5 +155,5 @@ mock_gr_certificates(Config) ->
 
 unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [gr_endpoint]),
-    test_utils:mock_unload(Workers, [gr_endpoint]).
+    test_utils:mock_validate(Workers, gr_endpoint),
+    test_utils:mock_unload(Workers, gr_endpoint).

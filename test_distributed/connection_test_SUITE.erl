@@ -39,14 +39,16 @@
 -performance({test_cases, [multi_message_test, multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test,
     python_client_test]}).
-all() ->
-    [token_connection_test, cert_connection_test, protobuf_msg_test,
-        multi_message_test, client_send_test, client_communicate_test,
-        client_communicate_async_test, multi_ping_pong_test,
-        sequential_ping_pong_test, multi_connection_test, bandwidth_test,
-        python_client_test, proto_version_test].
+all() -> [
+    token_connection_test, cert_connection_test, protobuf_msg_test,
+    multi_message_test, client_send_test, client_communicate_test,
+    client_communicate_async_test, multi_ping_pong_test,
+    sequential_ping_pong_test, multi_connection_test, bandwidth_test,
+    python_client_test, proto_version_test
+].
 
 -define(MACAROON, <<"TOKEN_VALUE">>).
+-define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
 %%% Test functions
@@ -54,7 +56,6 @@ all() ->
 
 token_connection_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
 
     % then
@@ -87,12 +88,12 @@ cert_connection_test(_Config) ->
 %%     {ok, Sock} = ssl2:connect(utils:get_host_as_atom(Worker1), 5555, [binary, {packet, 4},
 %%         {active, true}, {certfile, Cert}, {cacertfile, Cert}]),
 %%
-%%     {ok, Pid} = test_utils:receive_any(timer:seconds(5)),
+%%     {ok, Pid} = ?assertReceivedMatch(_, ?TIMEOUT),
 %%     State = sys:get_state(Pid),
 %%     #'OTPCertificate'{} = Cert = erlang:element(2, State),
 %%
 %%     ok = ssl2:send(Sock, HandshakeReqRaw),
-%%     {ok, {ssl, _, RawHandshakeResponse}} = test_utils:receive_any(timer:seconds(5)),
+%%     ?assertReceivedMatch({ssl, _, RawHandshakeResponse}, ?TIMEOUT),
 %%
 %%     % then
 %%     ?assertEqual(CertDer, ssl2:peercert(Sock)),
@@ -105,12 +106,11 @@ cert_connection_test(_Config) ->
 
 protobuf_msg_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_expect(Workers, router, preroute_message,
-        fun(#client_message{message_body = #event{object = #read_event{}}}, _) ->
+    test_utils:mock_expect(Workers, router, preroute_message, fun
+        (#client_message{message_body = #event{object = #read_event{}}}, _) ->
             ok
-        end),
+    end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
         message_body = {event, #'Event'{counter = 1, object =
@@ -140,13 +140,11 @@ protobuf_msg_test(Config) ->
 ]).
 multi_message_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
     Self = self(),
     MsgNumbers = lists:seq(1, MsgNum),
-    Events = lists:map(
-        fun(N) ->
+    Events = lists:map(fun(N) ->
             #'ClientMessage'{message_body = {event, #'Event'{
                 counter = N,
                 object = {read_event, #'ReadEvent'{
@@ -156,6 +154,7 @@ multi_message_test(Config) ->
                 }}}}}
         end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
+    op_test_utils:remove_pending_messages(),
     test_utils:mock_expect(Workers, router, route_message,
         fun(#client_message{message_body = #event{
             counter = Counter,
@@ -172,10 +171,9 @@ multi_message_test(Config) ->
     T2 = os:timestamp(),
 
     % then
-    lists:foreach(
-        fun(N) ->
-            ?assertReceivedMatch(N, timer:seconds(5))
-        end, MsgNumbers),
+    lists:foreach(fun(N) ->
+        ?assertReceivedMatch(N, ?TIMEOUT)
+    end, MsgNumbers),
     T3 = os:timestamp(),
     ok = ssl2:close(Sock),
     [
@@ -186,17 +184,14 @@ multi_message_test(Config) ->
 
 client_send_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, {Sock, SessionId}} = connect_via_token(Worker1),
     Code = 'VOK',
     Description = <<"desc">>,
-    ServerMsgInternal = #server_message{
-        message_body = #status{
-            code = Code,
-            description = Description
-        }
-    },
+    ServerMsgInternal = #server_message{message_body = #status{
+        code = Code,
+        description = Description
+    }},
     ServerMessageProtobuf = #'ServerMessage'{
         message_id = undefined,
         message_body = {status, #'Status'{
@@ -214,12 +209,8 @@ client_send_test(Config) ->
 
 client_communicate_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    Status = #status{
-        code = 'VOK',
-        description = <<"desc">>
-    },
+    Status = #status{code = 'VOK', description = <<"desc">>},
     ServerMsgInternal = #server_message{message_body = Status},
 
     % when
@@ -233,7 +224,6 @@ client_communicate_test(Config) ->
 
 client_communicate_async_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Status = #status{
         code = 'VOK',
@@ -248,25 +238,23 @@ client_communicate_async_test(Config) ->
         [ServerMsgInternal, SessionId, Self]),
 
     % then
-    ?assertReceivedMatch(#client_message{
-        message_id = MsgId, message_body = Status
-    }, timer:seconds(5)),
+    ?assertMatch(#client_message{message_id = MsgId, message_body = Status},
+        ReceivedMessage),
 
     % given
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_id = Id = #message_id{issuer = server,
+    test_utils:mock_expect(Workers, router, route_message, fun
+        (#client_message{message_id = Id = #message_id{issuer = server,
             recipient = undefined}}) ->
             Self ! {router_message_called, Id},
             ok
-        end),
+    end),
 
     % when
     {ok, MsgId2} = rpc:call(Worker1, communicator, communicate_async,
         [ServerMsgInternal, SessionId]),
-    RouterNotification = test_utils:receive_any(timer:seconds(5)),
 
     % then
-    ?assertEqual({ok, {router_message_called, MsgId2}}, RouterNotification),
+    ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
     ok = ssl2:close(Sock).
 
 -performance([
@@ -287,50 +275,45 @@ client_communicate_async_test(Config) ->
 ]).
 multi_ping_pong_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
     MsgNum = ?config(msg_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
     MsgNumbers = lists:seq(1, MsgNum),
     MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
-    Pings = lists:map(
-        fun(N) ->
-            #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
-        end, MsgNumbersBin),
+    Pings = lists:map(fun(N) ->
+        #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
+    end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
+    op_test_utils:remove_pending_messages(),
     Self = self(),
 
     T1 = os:timestamp(),
     [
-        spawn_link(
-            fun() ->
-                % when
-                {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
-                lists:foreach(fun(E) ->
-                    ok = ssl2:send(Sock, E)
-                end, RawPings),
-                Received = lists:map(
-                    fun(_) ->
-                        Pong = receive_server_message(),
-                        ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
-                        {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
-                    end, MsgNumbersBin),
+        spawn_link(fun() ->
+            % when
+            {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
+            lists:foreach(fun(E) ->
+                ok = ssl2:send(Sock, E)
+            end, RawPings),
+            Received = lists:map(fun(_) ->
+                Pong = receive_server_message(),
+                ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}}}, Pong),
+                {binary_to_integer(Pong#'ServerMessage'.message_id), Pong}
+            end, MsgNumbersBin),
 
-                % then
-                {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
-                IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
-                lists:foreach(
-                    fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
-                        ?assertEqual(Id, MsgId)
-                    end, IdToMessage),
-                ok = ssl2:close(Sock),
-                Self ! success
-            end)
-        || _ <- ConnNumbersList
+            % then
+            {_, ReceivedInOrder} = lists:unzip(lists:keysort(1, Received)),
+            IdToMessage = lists:zip(MsgNumbersBin, ReceivedInOrder),
+            lists:foreach(fun({Id, #'ServerMessage'{message_id = MsgId}}) ->
+                ?assertEqual(Id, MsgId)
+            end, IdToMessage),
+            ok = ssl2:close(Sock),
+            Self ! success
+        end) || _ <- ConnNumbersList
     ],
     lists:foreach(fun(_) ->
-        {ok, success} = test_utils:receive_msg(success, infinity)
+        ?assertReceivedMatch(success, infinity)
     end, ConnNumbersList),
     T2 = os:timestamp(),
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
@@ -349,30 +332,28 @@ multi_ping_pong_test(Config) ->
 ]).
 sequential_ping_pong_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
     MsgNumbers = lists:seq(1, MsgNum),
     MsgNumbersBin = lists:map(fun(N) -> integer_to_binary(N) end, MsgNumbers),
-    Pings = lists:map(
-        fun(N) ->
-            #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
-        end, MsgNumbersBin),
+    Pings = lists:map(fun(N) ->
+        #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
+    end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
+    op_test_utils:remove_pending_messages(),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
     T1 = os:timestamp(),
     lists:foldl(fun(E, N) ->
-        % send ping & receive pong
+        % send ping
         ok = ssl2:send(Sock, E),
-        Pong = receive_server_message(),
 
-        % validate pong
+        % receive & validate pong
         BinaryN = integer_to_binary(N),
-        ?assertMatch(#'ServerMessage'{message_body = {pong, #'Pong'{}},
-            message_id = BinaryN},
-            Pong),
+        ?assertMatch(#'ServerMessage'{message_body = {
+            pong, #'Pong'{}
+        }, message_id = BinaryN}, receive_server_message()),
         N + 1
     end, 1, RawPings),
     T2 = os:timestamp(),
@@ -393,24 +374,22 @@ sequential_ping_pong_test(Config) ->
 ]).
 multi_connection_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
+    op_test_utils:remove_pending_messages(),
 
     % when
-    Connections = lists:map(
-        fun(_) ->
-            connect_via_token(Worker1, [])
-        end, ConnNumbersList),
+    Connections = lists:map(fun(_) ->
+        connect_via_token(Worker1, [])
+    end, ConnNumbersList),
 
     % then
-    lists:foreach(
-        fun(ConnectionAns) ->
-            ?assertMatch({ok, {_, _}}, ConnectionAns),
-            {ok, {_Sock, SessId}} = ConnectionAns,
-            ?assert(is_binary(SessId))
-        end, Connections),
+    lists:foreach(fun(ConnectionAns) ->
+        ?assertMatch({ok, {_, _}}, ConnectionAns),
+        {ok, {_Sock, SessId}} = ConnectionAns,
+        ?assert(is_binary(SessId))
+    end, Connections),
     lists:foreach(fun({ok, {Sock, _}}) -> ssl2:close(Sock) end, Connections).
 
 -performance([
@@ -428,19 +407,21 @@ multi_connection_test(Config) ->
 ]).
 bandwidth_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
     Data = crypto:rand_bytes(PacketSize * 1024),
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
+
+
+    op_test_utils:remove_pending_messages(),
     Self = self(),
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #ping{}}) ->
+    test_utils:mock_expect(Workers, router, route_message, fun
+        (#client_message{message_body = #ping{}}) ->
             Self ! router_message_called,
             ok
-        end),
+    end),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
@@ -451,11 +432,9 @@ bandwidth_test(Config) ->
     T2 = os:timestamp(),
 
     % then
-    lists:foreach(
-        fun(_) ->
-            ?assertEqual({ok, router_message_called},
-                test_utils:receive_msg(router_message_called, timer:seconds(5)))
-        end, lists:seq(1, PacketNum)),
+    lists:foreach(fun(_) ->
+        ?assertReceivedMatch(router_message_called, ?TIMEOUT)
+    end, lists:seq(1, PacketNum)),
     T3 = os:timestamp(),
     ssl2:close(Sock),
     [
@@ -479,7 +458,6 @@ bandwidth_test(Config) ->
 ]).
 python_client_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
     PacketNum = ?config(packet_num, Config),
@@ -488,17 +466,20 @@ python_client_test(Config) ->
     Packet = #'ClientMessage'{message_body = {ping, #'Ping'{data = Data}}},
     PacketRaw = messages:encode_msg(Packet),
 
-    HandshakeMessage = #'ClientMessage'{message_body =
-    {handshake_request, #'HandshakeRequest'{session_id = <<"session_id">>,
-        token = #'Token'{value = ?MACAROON}}}},
+    HandshakeMessage = #'ClientMessage'{message_body = {handshake_request,
+        #'HandshakeRequest'{session_id = <<"session_id">>, token = #'Token'{
+            value = ?MACAROON
+        }}
+    }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
+    op_test_utils:remove_pending_messages(),
     Self = self(),
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #ping{}}) ->
+    test_utils:mock_expect(Workers, router, route_message, fun
+        (#client_message{message_body = #ping{}}) ->
             Self ! router_message_called,
             ok
-        end),
+    end),
 
     ClientPath = ?TEST_FILE(Config, "ssl_client.py"),
     MessagePath = ?TEST_FILE(Config, "message.arg"),
@@ -506,7 +487,7 @@ python_client_test(Config) ->
     file:write_file(MessagePath, PacketRaw),
     file:write_file(HandshakeMsgPath, HandshakeMessageRaw),
     Host = utils:get_host(Worker1),
-    {ok, Port} = rpc:call(Worker1, application, get_env, [?APP_NAME, protocol_handler_port]),
+    {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, protocol_handler_port),
 
     % when
     T1 = os:timestamp(),
@@ -520,18 +501,15 @@ python_client_test(Config) ->
     PythonClient = open_port({spawn_executable, ClientPath}, [{args, Args}]),
 
     % then
-    lists:foreach(
-        fun(_) ->
-            ?assertEqual({ok, router_message_called},
-                test_utils:receive_msg(router_message_called, timer:seconds(15)))
-        end, lists:seq(1, PacketNum)),
+    lists:foreach(fun(_) ->
+        ?assertReceivedMatch(router_message_called, timer:seconds(15))
+    end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
     catch port_close(PythonClient),
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
 proto_version_test(Config) ->
     % given
-    remove_pending_messages(),
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     MsgId = <<"message_id">>,
     GetProtoVersion = #'ClientMessage'{
@@ -543,19 +521,14 @@ proto_version_test(Config) ->
 
     % when
     ok = ssl2:send(Sock, GetProtoVersionRaw),
-    ProtoVersion = receive_server_message(),
 
     %then
-    ?assertMatch(
-        #'ServerMessage'{
-            message_id = MsgId,
-            message_body = {protocol_version, #'ProtocolVersion'{}}
-        },
-        ProtoVersion
-    ),
-    #'ServerMessage'{
-        message_body = {_, #'ProtocolVersion'{major = Major, minor = Minor}}
-    } = ProtoVersion,
+    #'ServerMessage'{message_body = {_, #'ProtocolVersion'{
+        major = Major, minor = Minor
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_id = MsgId,
+        message_body = {protocol_version, #'ProtocolVersion'{}}
+    }, receive_server_message()),
     ?assert(is_integer(Major)),
     ?assert(is_integer(Minor)),
     ok = ssl2:close(Sock).
@@ -571,55 +544,58 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(cert_connection_test, Config) ->
-    application:ensure_started(ssl2),
+    op_test_utils:remove_pending_messages(),
     Workers = ?config(op_worker_nodes, Config),
+    application:ensure_started(ssl2),
     test_utils:mock_new(Workers, serializator),
     mock_identity(Workers),
     Config;
 
-init_per_testcase(Case, Config) when Case =:= protobuf_msg_test
-    orelse Case =:= multi_message_test
-    orelse Case =:= client_communicate_async_test
-    orelse Case =:= bandwidth_test
-    orelse Case =:= python_client_test ->
-    application:ensure_started(ssl2),
+init_per_testcase(Case, Config) when
+    Case =:= protobuf_msg_test;
+    Case =:= multi_message_test;
+    Case =:= client_communicate_async_test;
+    Case =:= bandwidth_test;
+    Case =:= python_client_test ->
     Workers = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
+    application:ensure_started(ssl2),
     test_utils:mock_new(Workers, router),
     mock_identity(Workers),
     Config;
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     mock_identity(Workers),
     application:ensure_started(ssl2),
     Config.
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    unmock_identity(Workers),
-    test_utils:mock_validate(Workers, serializator),
-    test_utils:mock_unload(Workers, serializator);
+    test_utils:mock_validate(Workers, [identity, serializator]),
+    test_utils:mock_unload(Workers, [identity, serializator]);
 
-end_per_testcase(Case, Config) when Case =:= protobuf_msg_test
-    orelse Case =:= multi_message_test
-    orelse Case =:= client_communicate_async_test
-    orelse Case =:= bandwidth_test ->
+end_per_testcase(Case, Config) when
+    Case =:= protobuf_msg_test;
+    Case =:= multi_message_test;
+    Case =:= client_communicate_async_test;
+    Case =:= bandwidth_test ->
     Workers = ?config(op_worker_nodes, Config),
-    unmock_identity(Workers),
-    test_utils:mock_validate(Workers, router),
-    test_utils:mock_unload(Workers, router);
+    test_utils:mock_validate(Workers, [identity, router]),
+    test_utils:mock_unload(Workers, [identity, router]);
 
 end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
-    unmock_identity(Workers),
-    test_utils:mock_validate(Workers, router),
-    test_utils:mock_unload(Workers, router);
+    test_utils:mock_validate(Workers, [identity, router]),
+    test_utils:mock_unload(Workers, [identity, router]);
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    unmock_identity(Workers).
+    test_utils:mock_validate(Workers, identity),
+    test_utils:mock_unload(Workers, identity).
 
 %%%===================================================================
 %%% Internal functions
@@ -648,29 +624,31 @@ connect_via_token(Node, SocketOpts) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_via_token(Node, SocketOpts, SessId) ->
     % given
-    TokenAuthMessage = #'ClientMessage'{message_body =
-    {handshake_request, #'HandshakeRequest'{session_id = SessId,
-        token = #'Token'{value = ?MACAROON}}}},
+    TokenAuthMessage = #'ClientMessage'{message_body = {handshake_request,
+        #'HandshakeRequest'{session_id = SessId, token = #'Token'{
+            value = ?MACAROON
+        }}
+    }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
-    ActiveOpt =
-        case proplists:get_value(active, SocketOpts) of
-            undefined -> [];
-            Other -> [{active, Other}]
-        end,
-    OtherOpts = proplists:delete(active, SocketOpts),
-    {ok, Port} = rpc:call(Node, application, get_env, [?APP_NAME, protocol_handler_port]),
-    AdditionalOpts = [{reuse_sessions, false}], % todo delete reuse_sessions flag
+    ActiveOpt = case proplists:get_value(active, SocketOpts) of
+                    undefined -> [];
+                    Other -> [{active, Other}]
+                end,
+    NewSocketOpts = proplists:delete(active, SocketOpts),
+    {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
 
     % when
     {ok, Sock} = (catch ssl2:connect(utils:get_host(Node), Port, [binary,
-        {packet, 4}, {active, once}] ++ OtherOpts ++ AdditionalOpts, timer:minutes(1))),
+        {packet, 4}, {active, once}, {reuse_sessions, false} | NewSocketOpts
+    ], timer:minutes(1))),
     ok = ssl2:send(Sock, TokenAuthMessageRaw),
 
     % then
-    HandshakeResponse = receive_server_message(),
-    ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, HandshakeResponse),
-    #'ServerMessage'{message_body = {handshake_response,
-        #'HandshakeResponse'{session_id = SessionId}}} = HandshakeResponse,
+    #'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{
+        session_id = SessionId
+    }}} = ?assertMatch(#'ServerMessage'{message_body = {handshake_response, _}},
+        receive_server_message()
+    ),
     ssl2:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessionId}}.
 
@@ -719,10 +697,6 @@ mock_identity(Workers) ->
         end
     ).
 
-unmock_identity(Workers) ->
-    test_utils:mock_validate(Workers, identity),
-    test_utils:mock_unload(Workers, identity).
-
 receive_server_message() ->
     receive_server_message([message_stream_reset, subscription]).
 
@@ -733,23 +707,9 @@ receive_server_message(IgnoredMsgList) ->
             Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
-                true ->
-                    receive_server_message(IgnoredMsgList);
+                true -> receive_server_message(IgnoredMsgList);
                 false -> Msg
             end
-    after timer:seconds(5) ->
+    after ?TIMEOUT ->
         {error, timeout}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any() of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
     end.

@@ -55,7 +55,7 @@ list_basic_dir_test(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    TestDir="dir",
+    TestDir = "dir",
     %todo create TestDir
 
     % when
@@ -114,10 +114,10 @@ get_selective_params_of_dir_test(Config) ->
 
     % then
     ?assertEqual("200", Code),
-    {struct,CdmiResponse4} = mochijson2:decode(Response),
-    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiResponse4)),
-    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiResponse4)),
-    ?assertEqual(2,length(CdmiResponse4)).
+    {struct, CdmiResponse4} = mochijson2:decode(Response),
+    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>, CdmiResponse4)),
+    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>, CdmiResponse4)),
+    ?assertEqual(2, length(CdmiResponse4)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -167,7 +167,7 @@ cdmi_endpoint(Node) ->
     Port =
         case get(port) of
             undefined ->
-                {ok, P} = rpc:call(Node, application, get_env, [?APP_NAME, http_worker_rest_port]),
+                {ok, P} = test_utils:get_env(Node, ?APP_NAME, http_worker_rest_port),
                 PStr = integer_to_list(P),
                 put(port, PStr),
                 PStr;
