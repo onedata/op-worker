@@ -102,6 +102,9 @@ protected:
         std::ofstream f(testFilePath.string());
         f << "test_123456789_test" << std::endl;
         f.close();
+
+        ctx.uid = getuid();
+        ctx.gid = getgid();
     }
 
     void TearDown() override

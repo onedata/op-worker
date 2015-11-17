@@ -35,6 +35,7 @@ struct StorageHelperCTX {
 };
 
 using CTXRef = StorageHelperCTX &;
+using CTXConstRef = const StorageHelperCTX &;
 using error_t = std::error_code;
 
 template <class... T>
