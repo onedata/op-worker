@@ -95,7 +95,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         detach=True,
         interactive=True,
         tty=True,
-        workdir='/root/build',
+        workdir=DOCKER_BINDIR_PATH,
         volumes=volumes,
         dns_list=dns_servers,
         command=command)
@@ -226,24 +226,27 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
         common.merge(output, domains)
 
         # create storages
-        # copy escript to docker host
-        script_name = 'create_storage.escript'
-        pwd = common.get_script_dir()
-        command = ['cp', os.path.join(pwd, script_name), os.path.join(bindir, script_name)]
-        subprocess.check_call(command)
-        # execute escript
-        storages = config['os_configs'][os_config]['storages']
-        for node in output['op_worker_nodes']:
-            container = node.split("@")[1]
-            script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
-            for st_path in storages:
-                st_name = st_path
-                command = 'escript %s %s %s %s' % (script_path, node, st_name, st_path)
-                docker.exec_(container, command, tty=True)
-        # clean-up
-        command = ['rm', os.path.join(bindir, script_name)]
-        subprocess.check_call(command)
+        create_storages(config['os_configs'][os_config], output['op_worker_nodes'], bindir)
 
     # Make sure domains are added to the dns server.
     dns.maybe_restart_with_configuration(dns_server, uid, output)
     return output
+
+def create_storages(os_config, op_nodes, bindir):
+    # copy escript to docker host
+    script_name = 'create_storage.escript'
+    pwd = common.get_script_dir()
+    command = ['cp', os.path.join(pwd, script_name), os.path.join(bindir, script_name)]
+    subprocess.check_call(command)
+    # execute escript
+    storages = os_config['storages']
+    for node in op_nodes:
+        container = node.split("@")[1]
+        script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
+        for st_path in storages:
+            st_name = st_path
+            command = 'escript %s %s %s %s' % (script_path, node, st_name, st_path)
+            docker.exec_(container, command, tty=True)
+    # clean-up
+    command = ['rm', os.path.join(bindir, script_name)]
+    subprocess.check_call(command)
