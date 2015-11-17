@@ -12,6 +12,7 @@
 -ifndef(CDMI_ERRORS_HRL).
 -define(CDMI_ERRORS_HRL, 1).
 
+%% HTTP error code 400 and request sent to client
 -define(unsupported_version,
   {400, [{<<"error_unsupported_version">>, <<"Given CDMI version is not supported. Use 1.1.1 instead.">>}]}).
 
