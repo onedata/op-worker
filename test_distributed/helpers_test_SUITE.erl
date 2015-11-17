@@ -23,7 +23,7 @@
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
 
 -define(dio_root(Config), ?TEMP_DIR).
--define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), utils:ensure_list(File)))).
+-define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), str_utils:to_list(File)))).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,

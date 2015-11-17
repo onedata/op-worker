@@ -233,12 +233,12 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
         case Attribute#'AttributeTypeAndValue'.type of
             ?'id-at-commonName' ->
                 {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                {true, utils:ensure_binary(Id)};
+                {true, str_utils:to_binary(Id)};
             _ -> false
         end
     end, Attrs),
 
-    utils:ensure_binary(ProviderId).
+    str_utils:to_binary(ProviderId).
 
 
 %%--------------------------------------------------------------------
