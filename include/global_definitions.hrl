@@ -26,6 +26,9 @@
 %% Name of the base worker application.
 -define(WORKER_APP_NAME, cluster_worker).
 
+%% Name supervisor of the base worker application.
+-define(WORKER_SUP_NAME, cluster_worker_sup).
+
 %% Local name (name and node is used to identify it) of supervisor that
 %% coordinates application at each node (one supervisor per node).
 -define(APPLICATION_SUPERVISOR_NAME, op_worker_sup).

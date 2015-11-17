@@ -35,11 +35,12 @@ start_listener() ->
   {ok, EdnsMaxUdpSize} = application:get_env(?WORKER_APP_NAME, edns_max_udp_size),
   {ok, TCPNumAcceptors} =
     application:get_env(?WORKER_APP_NAME, dns_tcp_acceptor_pool_size),
-  {ok, TCPTImeout} = application:get_env(?WORKER_APP_NAME, dns_tcp_timeout_seconds), %todo fix APP_NAME
+  {ok, TCPTImeout} = application:get_env(?WORKER_APP_NAME, dns_tcp_timeout_seconds),
   OnFailureFun = fun() ->
     ?error("Could not start DNS server on node ~p.", [node()])
   end,
-  ok = dns_server:start(cluster_worker_sup, DNSPort, dns_worker, %todo fix cluster_worker_sup/APPLICATION_SUPERVISOR_NAME
+  %todo resolve why dns_server cannot start with op_worker supervisor
+  ok = dns_server:start(?WORKER_SUP_NAME, DNSPort, dns_worker,
     EdnsMaxUdpSize, TCPNumAcceptors, TCPTImeout, OnFailureFun).
 
 %%--------------------------------------------------------------------
