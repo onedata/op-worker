@@ -75,9 +75,9 @@ public:
     {
     }
 
-    virtual std::string toString() const override { return ""; }
+    std::string toString() const override { return ""; }
 
-    virtual std::unique_ptr<ProtocolClientMessage> serialize() const override
+    std::unique_ptr<ProtocolClientMessage> serializeAndDestroy() override
     {
         auto msg = std::make_unique<ProtocolClientMessage>();
         auto status = msg->mutable_status();
