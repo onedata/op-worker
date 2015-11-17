@@ -20,11 +20,11 @@
 %% API
 -export([emit/1, emit/2, subscribe/1, subscribe/2, unsubscribe/1, unsubscribe/2]).
 
--export_type([key/0, type/0, update_type/0, counter/0, subscription/0]).
+-export_type([key/0, object/0, update_object/0, counter/0, subscription/0]).
 
 -type key() :: term().
--type type() :: #read_event{} | #update_event{} | #write_event{}.
--type update_type() :: #file_attr{} | #file_location{}.
+-type object() :: #read_event{} | #update_event{} | #write_event{}.
+-type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
 -type event_manager_ref() :: pid() | session:id().
@@ -38,22 +38,22 @@
 %% Sends an event to all event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: #event{} | type()) -> ok | {error, Reason :: term()}.
+-spec emit(Evt :: #event{} | object()) -> ok | {error, Reason :: term()}.
 emit(#event{key = undefined} = Evt) ->
     emit(set_key(Evt));
 
 emit(#event{} = Evt) ->
     send_to_event_managers(Evt);
 
-emit(EvtType) ->
-    emit(#event{type = EvtType}).
+emit(EvtObject) ->
+    emit(#event{object = EvtObject}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends an event to the event manager associated with a session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: #event{} | type(), Ref :: event_manager_ref()) ->
+-spec emit(Evt :: #event{} | object(), Ref :: event_manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(#event{key = undefined} = Evt, Ref) ->
     emit(set_key(Evt), Ref);
@@ -61,8 +61,8 @@ emit(#event{key = undefined} = Evt, Ref) ->
 emit(#event{} = Evt, Ref) ->
     send_to_event_manager(Evt, Ref);
 
-emit(EvtType, Ref) ->
-    emit(#event{type = EvtType}, Ref).
+emit(EvtObject, Ref) ->
+    emit(#event{object = EvtObject}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,7 +103,7 @@ subscribe(#subscription{id = SubId} = Sub, Ref) ->
 %% Removes durable event subscription and notifies all event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(SubId :: subscription:id() | subscription:cancellaton()) ->
+-spec unsubscribe(SubId :: subscription:id() | subscription:cancellation()) ->
     ok | {error, Reason :: term()}.
 unsubscribe(#subscription_cancellation{id = Id} = SubCan) ->
     case subscription:delete(Id) of
@@ -119,7 +119,7 @@ unsubscribe(SubId) ->
 %% Removes subscription associated with a session.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(SubId :: subscription:id() | subscription:cancellaton(),
+-spec unsubscribe(SubId :: subscription:id() | subscription:cancellation(),
     Ref :: event_manager_ref()) -> ok | {error, Reason :: term()}.
 unsubscribe(#subscription_cancellation{} = SubCan, Ref) ->
     send_to_event_manager(SubCan, Ref);
@@ -139,16 +139,16 @@ unsubscribe(SubId, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_key(Evt :: #event{}) -> NewEvt :: #event{}.
-set_key(#event{type = #read_event{file_uuid = FileUuid}} = Evt) ->
+set_key(#event{object = #read_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
 
-set_key(#event{type = #write_event{file_uuid = FileUuid}} = Evt) ->
+set_key(#event{object = #write_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
 
-set_key(#event{type = #update_event{type = #file_attr{uuid = Uuid}}} = Evt) ->
+set_key(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid};
 
-set_key(#event{type = #update_event{type = #file_location{uuid = Uuid}}} = Evt) ->
+set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid}.
 
 %%--------------------------------------------------------------------

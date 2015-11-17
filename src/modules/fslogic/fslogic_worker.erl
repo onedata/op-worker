@@ -53,7 +53,7 @@ init(_Args) ->
     SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
     Sub = #subscription{
         id = SubId,
-        type = #write_subscription{
+        object = #write_subscription{
             counter_threshold = CounterThreshold,
             time_threshold = TimeThreshold,
             size_threshold = SizeThreshold
@@ -215,7 +215,7 @@ handle_events([], _) ->
 handle_events([Event | T], InitResult) ->
     handle_events(Event, InitResult),
     handle_events(T, InitResult);
-handle_events(#event{type = #write_event{blocks = Blocks, file_uuid = FileUUID,
+handle_events(#event{object = #write_event{blocks = Blocks, file_uuid = FileUUID,
     file_size = FileSize}} = T, {_, _, SessId}) ->
     ?debug("fslogic handle_events: ~p", [T]),
 

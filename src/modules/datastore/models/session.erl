@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session management model, frequently invoked by incomming tcp
+%%% Session management model, frequently invoked by incoming tcp
 %%% connections in connection
 %%% @end
 %%%-------------------------------------------------------------------

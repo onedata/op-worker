@@ -49,17 +49,17 @@
 %% Default read event stream specialization
 -define(READ_EVENT_STREAM, #event_stream_definition{
     admission_rule = fun
-        (#event{type = #read_event{}}) -> true;
+        (#event{object = #read_event{}}) -> true;
         (_) -> false
     end,
-    aggregation_rule = fun(#event{type = T1} = E1, #event{type = T2} = E2) ->
+    aggregation_rule = fun(#event{object = O1} = E1, #event{object = O2} = E2) ->
         E1#event{
             counter = E1#event.counter + E2#event.counter,
-            type = T1#read_event{
-                size = T1#read_event.size + T2#read_event.size,
-                blocks = event_utils:aggregate_blocks(
-                    T1#read_event.blocks,
-                    T2#read_event.blocks
+            object = O2#read_event{
+                size = O1#read_event.size + O2#read_event.size,
+                blocks = fslogic_blocks:aggregate(
+                    O1#read_event.blocks,
+                    O2#read_event.blocks
                 )
             }
         }
@@ -69,18 +69,18 @@
 %% Default write event stream specialization
 -define(WRITE_EVENT_STREAM, #event_stream_definition{
     admission_rule = fun
-        (#event{type = #write_event{}}) -> true;
+        (#event{object = #write_event{}}) -> true;
         (_) -> false
     end,
-    aggregation_rule = fun(#event{type = T1} = E1, #event{type = T2} = E2) ->
+    aggregation_rule = fun(#event{object = O1} = E1, #event{object = O2} = E2) ->
         E1#event{
             counter = E1#event.counter + E2#event.counter,
-            type = T1#write_event{
-                size = T1#write_event.size + T2#write_event.size,
-                file_size = T2#write_event.file_size,
-                blocks = event_utils:aggregate_blocks(
-                    T1#write_event.blocks,
-                    T2#write_event.blocks
+            % Use new write event (O2), because it has up-to-date file size.
+            object = O2#write_event{
+                size = O1#write_event.size + O2#write_event.size,
+                blocks = fslogic_blocks:aggregate(
+                    O1#write_event.blocks,
+                    O2#write_event.blocks
                 )
             }
         }
@@ -90,7 +90,7 @@
 %% Default file attr event stream specialization
 -define(FILE_ATTR_EVENT_STREAM, #event_stream_definition{
     admission_rule = fun
-        (#event{type = #update_event{type = #file_attr{}}}) -> true;
+        (#event{object = #update_event{object = #file_attr{}}}) -> true;
         (_) -> false
     end,
     aggregation_rule = fun(#event{} = E1, #event{} = E2) ->
@@ -101,7 +101,7 @@
 %% Default file location event stream specialization
 -define(FILE_LOCATION_EVENT_STREAM, #event_stream_definition{
     admission_rule = fun
-        (#event{type = #update_event{type = #file_location{}}}) -> true;
+        (#event{object = #update_event{object = #file_location{}}}) -> true;
         (_) -> false
     end,
     aggregation_rule = fun(#event{} = E1, #event{} = E2) ->

@@ -7,8 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_fsm behaviour and is responsible for sorting
-%%% incomming stream messages in ascending order of sequence number and
-%%% forwarding them to the router.
+%%% incoming stream messages in ascending order of sequence number and
+%%% forwarding them to the router. It is supervised by sequencer stream
+%%% supervisor and coordinated by sequencer manager.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_in_stream).
@@ -55,9 +56,9 @@
 -define(MSG_ACK_THRESHOLD, application:get_env(?APP_NAME,
     sequencer_stream_msg_ack_threshold, 100)).
 -define(RECEIVING_TIMEOUT, timer:seconds(application:get_env(?APP_NAME,
-    sequencer_stream_msg_req_long_timeout, 10))).
+    sequencer_stream_msg_req_long_timeout_seconds, 10))).
 -define(REQUESTING_TIMEOUT, timer:seconds(application:get_env(?APP_NAME,
-    sequencer_stream_msg_req_short_timeout, 1))).
+    sequencer_stream_msg_req_short_timeout_seconds, 1))).
 
 %%%===================================================================
 %%% API
@@ -65,7 +66,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the sequencer stream for incomming messages.
+%% Starts the sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(SeqMan :: pid(), StmId :: stream_id(), SessId :: session:id()) ->
@@ -80,7 +81,7 @@ start_link(SeqMan, StmId, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the sequencer stream for incomming messages.
+%% Initializes the sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
@@ -200,7 +201,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% a 'processing' state. If other client message arrives a request is sent for
 %% messages having sequence number ranging from the awaited sequence number up
 %% to the sequence number proceeding the one of the received message. Sequencer
-%% stream goes into a 'requesting' state. If timeout occurres a request for
+%% stream goes into a 'requesting' state. If timeout occurs a request for
 %% message with a awaited sequence number is sent and sequencer stream remains
 %% in 'receiving' state.
 %% @end

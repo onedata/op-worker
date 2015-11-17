@@ -13,14 +13,14 @@
 -ifndef(OP_WORKER_MODULES_EVENTS_SUBSCRIPTIONS_HRL).
 -define(OP_WORKER_MODULES_EVENTS_SUBSCRIPTIONS_HRL, 1).
 
-%% definiton of a top level subscription wrapper
+%% definition of a top level subscription wrapper
 %% id           - ID of a subscription
-%% type         - wrapped subscription
+%% object       - wrapped subscription
 %% subscriber   - owner of a subscription
 %% event_stream - definition of an event stream
 -record(subscription, {
     id :: subscription:id(),
-    type :: subscription:type(),
+    object :: subscription:object(),
     event_stream :: event_stream:definition()
 }).
 
@@ -30,7 +30,7 @@
     id :: subscription:id()
 }).
 
-%% definiton of a subscription for file attributes changes
+%% definition of a subscription for file attributes changes
 %% file_uuid         - UUID of a file for which notifications should be sent
 %% counter_threshold - maximal number of aggregated events before emission
 %% time_threshold    - maximal delay in milliseconds between successive events
@@ -41,7 +41,7 @@
     time_threshold :: non_neg_integer()
 }).
 
-%% definiton of a subscription for file location changes
+%% definition of a subscription for file location changes
 %% file_uuid         - UUID of a file for which notifications should be sent
 %% counter_threshold - maximal number of aggregated events before emission
 %% time_threshold    - maximal delay in milliseconds between successive events

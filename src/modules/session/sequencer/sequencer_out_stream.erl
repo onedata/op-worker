@@ -7,7 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible for storing
-%%% outgoing stream messages and resending them on request.
+%%% outgoing stream messages and resending them on request.  It is supervised by
+%%% sequencer stream supervisor and coordinated by sequencer manager.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_out_stream).

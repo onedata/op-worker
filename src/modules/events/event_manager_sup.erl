@@ -7,7 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements supervisor behaviour and is responsible
-%%% for supervising and restarting event managers.
+%%% for supervising and restarting event manager. It is initialized on session
+%%% creation by session supervisor and in turn it initializes event manager
+%%% along with event stream supervisor.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(event_manager_sup).

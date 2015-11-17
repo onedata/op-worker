@@ -108,12 +108,12 @@ protobuf_msg_test(Config) ->
     remove_pending_messages(),
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message,
-        fun(#client_message{message_body = #event{type = #read_event{}}}, _) ->
+        fun(#client_message{message_body = #event{object = #read_event{}}}, _) ->
             ok
         end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
-        message_body = {event, #'Event'{counter = 1, type =
+        message_body = {event, #'Event'{counter = 1, object =
         {read_event, #'ReadEvent'{file_uuid = <<"id">>, size = 1, blocks = []}}
         }}
     },
@@ -149,7 +149,7 @@ multi_message_test(Config) ->
         fun(N) ->
             #'ClientMessage'{message_body = {event, #'Event'{
                 counter = N,
-                type = {read_event, #'ReadEvent'{
+                object = {read_event, #'ReadEvent'{
                     file_uuid = <<"id">>,
                     size = 1,
                     blocks = []
@@ -159,7 +159,7 @@ multi_message_test(Config) ->
     test_utils:mock_expect(Workers, router, route_message,
         fun(#client_message{message_body = #event{
             counter = Counter,
-            type = #read_event{}}
+            object = #read_event{}}
         }) ->
             Self ! Counter,
             ok

@@ -17,11 +17,16 @@
 %% key     - arbitrary value that distinguish events, i.e. events with the same
 %%           key can be aggregated
 %% counter - number of events aggregated in this event
-%% type    - wrapped event
+%% object  - wrapped event
 -record(event, {
     key :: event:key(),
     counter = 1 :: event:counter(),
-    type :: event:type()
+    object :: event:object()
+}).
+
+%% definition of a events container
+-record(events, {
+    events = [] :: [#event{}]
 }).
 
 %% definition of an event associated with a read operation in the file system
@@ -31,13 +36,13 @@
 -record(read_event, {
     file_uuid :: file_meta:uuid(),
     size :: file_meta:size(),
-    blocks = [] :: [event_utils:file_block()]
+    blocks = [] :: fslogic_blocks:blocks()
 }).
 
 %% definition of an event associated with an update operation in the file system
-%% type - wrapped structure that has been modified
+%% object - wrapped structure that has been modified
 -record(update_event, {
-    type :: event:update_type()
+    object :: event:update_object()
 }).
 
 %% definition of an event associated with a write operation in the file system
@@ -49,7 +54,7 @@
     file_uuid :: file_meta:uuid(),
     file_size :: file_meta:size(),
     size :: file_meta:size(),
-    blocks = [] :: [event_utils:file_block()]
+    blocks = [] :: fslogic_blocks:blocks()
 }).
 
 -endif.

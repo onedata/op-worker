@@ -45,7 +45,6 @@
     uuid :: file_meta:uuid(),
     atime :: file_meta:time(),
     mtime :: file_meta:time(),
-
     ctime :: file_meta:time()
 }).
 

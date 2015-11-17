@@ -188,7 +188,7 @@ start_event_stream(Worker, EmRule, EmTime) ->
     EvtMan = self(),
     Sub = #subscription{
         id = 1,
-        type = #read_subscription{},
+        object = #read_subscription{},
         event_stream = ?READ_EVENT_STREAM#event_stream_definition{
             init_handler = fun(Sub, SessId) ->
                 EvtMan ! {init_handler, Sub, SessId}
@@ -248,7 +248,7 @@ read_event(Size, Blocks) ->
 -spec read_event(FileUuid :: file_meta:uuid(), Size :: file_meta:size(),
     Blocks :: proplists:proplist()) -> Evt :: #event{}.
 read_event(FileUuid, Size, Blocks) ->
-    #event{key = FileUuid, type = #read_event{
+    #event{key = FileUuid, object = #read_event{
         file_uuid = FileUuid, size = Size, blocks = [
             #file_block{offset = O, size = S} || {O, S} <- Blocks
         ]
@@ -264,7 +264,7 @@ read_event(FileUuid, Size, Blocks) ->
     FileSize :: file_meta:size(), Blocks :: proplists:proplist()) ->
     Evt :: #event{}.
 write_event(FileUuid, Size, FileSize, Blocks) ->
-    #event{key = FileUuid, type = #write_event{
+    #event{key = FileUuid, object = #write_event{
         file_uuid = FileUuid, size = Size, file_size = FileSize, blocks = [
             #file_block{offset = O, size = S} || {O, S} <- Blocks
         ]

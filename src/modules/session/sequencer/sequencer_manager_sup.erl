@@ -7,7 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements supervisor behaviour and is responsible
-%%% for supervising and restarting sequencer managers.
+%%% for supervising and restarting sequencer manager and sequencer stream
+%%% supervisors. It is initialized on session creation by session supervisor
+%%% and in turn it initializes sequencer manager along with sequencer stream
+%%% supervisors, both for incoming and outgoing messages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_manager_sup).

@@ -180,7 +180,7 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts sequencer stream for incomming messages.
+%% Starts sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_sequencer_in_stream(Worker :: node()) -> {ok, SeqStm :: pid()}.
@@ -193,7 +193,7 @@ start_sequencer_in_stream(Worker) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Stops sequencer stream for incomming messages.
+%% Stops sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec stop_sequencer_in_stream(SeqStm :: pid()) -> true.
@@ -244,10 +244,10 @@ client_message(SeqNum, Body) ->
 -spec set_sequencer_in_stream_timeouts(Worker :: node()) -> ok.
 set_sequencer_in_stream_timeouts(Worker) ->
     rpc:call(Worker, application, set_env, [
-        ?APP_NAME, sequencer_stream_msg_req_short_timeout, 1
+        ?APP_NAME, sequencer_stream_msg_req_short_timeout_seconds, 1
     ]),
     rpc:call(Worker, application, set_env, [
-        ?APP_NAME, sequencer_stream_msg_req_long_timeout, 1
+        ?APP_NAME, sequencer_stream_msg_req_long_timeout_seconds, 1
     ]).
 
 %%--------------------------------------------------------------------

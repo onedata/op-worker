@@ -7,7 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for dispatching events to event streams.
+%%% for dispatching events to event streams. Whenever an event arrives it it
+%%% forwarded to all registered event streams. Event manager is supervised by
+%%% event manager supervisor and initialized on session creation.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(event_manager).
@@ -60,7 +62,11 @@ start_link(EvtManSup, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the event manager.
+%% Initializes the event manager. Returns timeout equal to zero, so that
+%% event manager receives 'timeout' message in handle_info immediately after
+%% initialization. This mechanism is introduced in order to avoid deadlock
+%% when asking event manager supervisor for event stream supervisor pid during
+%% supervision tree creation.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->

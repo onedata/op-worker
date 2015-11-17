@@ -7,7 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for dispatching messages to sequencer streams.
+%%% for dispatching messages to sequencer streams. When a message arrives it is
+%%% forwarded to sequencer stream associated with stream ID. Sequencer manager
+%%% is supervised by sequencer manager supervisor and initialized on session
+%%% creation.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(sequencer_manager).
@@ -34,9 +37,9 @@
 %% sequencer manager state:
 %% session_id                - ID of session associated with sequencer manager
 %% sequencer_manager_sup     - pid of sequencer manager supervisor
-%% sequencer_in_stream_sup   - pid of incomming sequencer stream supervisor
+%% sequencer_in_stream_sup   - pid of incoming sequencer stream supervisor
 %% sequencer_out_stream_sup  - pid of outgoing sequencer stream supervisor
-%% sequencer_in_streams      - mapping from stream ID to an incomming sequencer stream pid
+%% sequencer_in_streams      - mapping from stream ID to an incoming sequencer stream pid
 %% sequencer_out_streams     - mapping from stream ID to an outgoing sequencer stream pid
 -record(state, {
     session_id :: session:id(),
@@ -68,7 +71,11 @@ start_link(SeqManSup, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the server.
+%% Initializes the server. Returns timeout equal to zero, so that
+%% sequencer manager receives 'timeout' message in handle_info immediately after
+%% initialization. This mechanism is introduced in order to avoid deadlock
+%% when asking sequencer manager supervisor for sequencer stream supervisor pid
+%% during supervision tree creation.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
@@ -280,7 +287,7 @@ forward_to_sequencer_out_stream(Msg, StmId, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns sequencer stream for incomming messages associated with provided
+%% Returns sequencer stream for incoming messages associated with provided
 %% stream ID. If stream does not exist creates one.
 %% @see create_sequencer_in_stream/2
 %% @end
@@ -297,7 +304,7 @@ get_or_create_sequencer_in_stream(#client_message{message_stream = #message_stre
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates sequencer stream for incomming messages.
+%% Creates sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_sequencer_in_stream(StmId :: stream_id(), State :: #state{}) ->

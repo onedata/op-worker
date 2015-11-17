@@ -38,8 +38,10 @@
 -spec translate_from_protobuf(tuple() | undefined) -> tuple() | undefined.
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
-translate_from_protobuf(#'Event'{counter = Counter, type = {_, Record}}) ->
-    #event{counter = Counter, type = translate_from_protobuf(Record)};
+translate_from_protobuf(#'Events'{events = Evts}) ->
+    #events{events = [translate_from_protobuf(Evt) || Evt <- Evts]};
+translate_from_protobuf(#'Event'{counter = Counter, object = {_, Record}}) ->
+    #event{counter = Counter, object = translate_from_protobuf(Record)};
 translate_from_protobuf(#'ReadEvent'{} = Record) ->
     #read_event{
         file_uuid = Record#'ReadEvent'.file_uuid,
@@ -56,7 +58,7 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
 translate_from_protobuf(#'Subscription'{} = Record) ->
     #subscription{
         id = Record#'Subscription'.id,
-        type = translate_from_protobuf(Record#'Subscription'.type)
+        object = translate_from_protobuf(Record#'Subscription'.object)
     };
 translate_from_protobuf(#'FileAttrSubscription'{} = Record) ->
     #file_attr_subscription{
@@ -139,12 +141,14 @@ translate_from_protobuf(undefined) ->
 -spec translate_to_protobuf(tuple() | undefined) -> tuple() | undefined.
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
-translate_to_protobuf(#event{counter = Counter, type = Type}) ->
-    {event, #'Event'{counter = Counter, type = translate_to_protobuf(Type)}};
-translate_to_protobuf(#update_event{type = Type}) ->
-    {update_event, #'UpdateEvent'{type = translate_to_protobuf(Type)}};
-translate_to_protobuf(#subscription{id = Id, type = Type}) ->
-    {subscription, #'Subscription'{id = Id, type = translate_to_protobuf(Type)}};
+translate_to_protobuf(#events{events = Evts}) ->
+    {events, #'Events'{events = [translate_to_protobuf(Evt) || Evt <- Evts]}};
+translate_to_protobuf(#event{counter = Counter, object = Type}) ->
+    {event, #'Event'{counter = Counter, object = translate_to_protobuf(Type)}};
+translate_to_protobuf(#update_event{object = Type}) ->
+    {update_event, #'UpdateEvent'{object = translate_to_protobuf(Type)}};
+translate_to_protobuf(#subscription{id = Id, object = Type}) ->
+    {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
     {read_subscription, #'ReadSubscription'{
         counter_threshold = Sub#read_subscription.counter_threshold,
@@ -203,25 +207,25 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
-                                                                    translate_to_protobuf(ChildLink)
-                                                            end, FileEntries)}};
+        translate_to_protobuf(ChildLink)
+    end, FileEntries)}};
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
-                                    helper_args = lists:map(fun(HelpersArg) ->
-                                                                    translate_to_protobuf(HelpersArg)
-                                                            end, HelpersArgs)}};
+        helper_args = lists:map(fun(HelpersArg) ->
+            translate_to_protobuf(HelpersArg)
+        end, HelpersArgs)}};
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
     #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
-                       uuid = Record#file_location.uuid,
-                       provider_id = Record#file_location.provider_id,
-                       storage_id = Record#file_location.storage_id,
-                       file_id = Record#file_location.file_id,
-                       blocks = lists:map(fun(Block) ->
-                                                  translate_to_protobuf(Block)
-                                          end, Record#file_location.blocks)
-                      }};
+        uuid = Record#file_location.uuid,
+        provider_id = Record#file_location.provider_id,
+        storage_id = Record#file_location.storage_id,
+        file_id = Record#file_location.file_id,
+        blocks = lists:map(fun(Block) ->
+            translate_to_protobuf(Block)
+        end, Record#file_location.blocks)
+    }};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_to_protobuf(undefined) ->

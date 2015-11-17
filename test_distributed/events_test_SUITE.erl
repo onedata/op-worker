@@ -73,7 +73,7 @@ subscribe_should_notify_event_manager(Config) ->
     Evt = read_event(1, [{0, 1}]),
     emit(Worker, ?config(session_id, Config), Evt),
     ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, type = Evt
+        key = <<"file_uuid">>, object = Evt
     }]}, ?TIMEOUT).
 
 subscribe_should_notify_all_event_managers(Config) ->
@@ -82,7 +82,7 @@ subscribe_should_notify_all_event_managers(Config) ->
     emit(Worker, Evt),
     lists:foreach(fun(_) ->
         ?assertReceivedMatch({event_handler, [#event{
-            key = <<"file_uuid">>, type = Evt
+            key = <<"file_uuid">>, object = Evt
         }]}, ?TIMEOUT)
     end, ?config(session_ids, Config)).
 
@@ -91,7 +91,7 @@ emit_read_event_should_execute_handler(Config) ->
     Evt = read_event(1, [{0, 1}]),
     emit(Worker, ?config(session_id, Config), Evt),
     ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, type = Evt
+        key = <<"file_uuid">>, object = Evt
     }]}, ?TIMEOUT).
 
 emit_write_event_should_execute_handler(Config) ->
@@ -99,7 +99,7 @@ emit_write_event_should_execute_handler(Config) ->
     Evt = write_event(1, 1, [{0, 1}]),
     emit(Worker, ?config(session_id, Config), Evt),
     ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, type = Evt
+        key = <<"file_uuid">>, object = Evt
     }]}, ?TIMEOUT).
 
 emit_file_attr_update_event_should_execute_handler(Config) ->
@@ -107,7 +107,7 @@ emit_file_attr_update_event_should_execute_handler(Config) ->
     Evt = file_attr_update_event(),
     emit(Worker, ?config(session_id, Config), Evt),
     ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, type = Evt
+        key = <<"file_uuid">>, object = Evt
     }]}, ?TIMEOUT).
 
 emit_file_location_update_event_should_execute_handler(Config) ->
@@ -115,7 +115,7 @@ emit_file_location_update_event_should_execute_handler(Config) ->
     Evt = file_location_update_event(),
     emit(Worker, ?config(session_id, Config), Evt),
     ?assertReceivedMatch({event_handler, [#event{
-        key = <<"file_uuid">>, type = Evt
+        key = <<"file_uuid">>, object = Evt
     }]}, ?TIMEOUT).
 
 %%%===================================================================
@@ -411,7 +411,7 @@ write_event(FileUuid, Size, FileSize, Blocks) ->
 %%--------------------------------------------------------------------
 -spec file_attr_update_event() -> #update_event{}.
 file_attr_update_event() ->
-    #update_event{type = #file_attr{uuid = <<"file_uuid">>}}.
+    #update_event{object = #file_attr{uuid = <<"file_uuid">>}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -421,7 +421,7 @@ file_attr_update_event() ->
 %%--------------------------------------------------------------------
 -spec file_location_update_event() -> #update_event{}.
 file_location_update_event() ->
-    #update_event{type = #file_location{uuid = <<"file_uuid">>}}.
+    #update_event{object = #file_location{uuid = <<"file_uuid">>}}.
 
 %%--------------------------------------------------------------------
 %% @private

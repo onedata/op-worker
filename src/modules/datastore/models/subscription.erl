@@ -24,12 +24,12 @@
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--export_type([id/0, type/0, cancellaton/0]).
+-export_type([id/0, object/0, cancellation/0]).
 
 -type id() :: integer().
--type type() :: #file_attr_subscription{} | #file_location_subscription{} |
-                #read_subscription{} | #write_subscription{}.
--type cancellaton() :: #subscription_cancellation{}.
+-type object() :: #file_attr_subscription{} | #file_location_subscription{} |
+                  #read_subscription{} | #write_subscription{}.
+-type cancellation() :: #subscription_cancellation{}.
 
 %%%===================================================================
 %%% API

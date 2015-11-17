@@ -110,7 +110,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
     EvtSize = ?config(evt_size, Config),
 
     {ok, SubId} = subscribe(Worker,
-        fun(#event{type = #write_event{}}) -> true; (_) -> false end,
+        fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
         fun(Evts, _) -> Self ! {event_handler, Evts} end
     ),
@@ -133,7 +133,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
             FileSize = N * CtrThr * EvtSize,
             ?assertReceivedMatch({event_handler, [#event{
                 counter = CtrThr,
-                type = #write_event{
+                object = #write_event{
                     file_uuid = FileUuid, size = Size, file_size = FileSize,
                     blocks = [#file_block{offset = Offset, size = Size}]
                 }
@@ -174,12 +174,12 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
     FileNum = ?config(file_num, Config),
 
     {ok, SubId} = subscribe(Worker,
-        fun(#event{type = #write_event{}}) -> true; (_) -> false end,
+        fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
         fun(Evts, _) -> Self ! {event_handler, Evts} end
     ),
 
-    Evts = lists:map(fun(Uuid) -> #event{type = #write_event{
+    Evts = lists:map(fun(Uuid) -> #event{object = #write_event{
         file_uuid = ?FILE_UUID(Uuid), size = EvtSize, file_size = EvtSize,
         blocks = [#file_block{offset = 0, size = EvtSize}]
     }} end, lists:seq(1, FileNum)),
@@ -187,10 +187,10 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
     % List of events that are supposed to be received multiple times as a result
     % of event handler execution.
     BatchSize = CtrThr div FileNum,
-    EvtsToRecv = lists:sort(lists:map(fun(#event{type = #write_event{
+    EvtsToRecv = lists:sort(lists:map(fun(#event{object = #write_event{
         file_uuid = FileUuid
     } = Type} = Evt) ->
-        Evt#event{key = FileUuid, counter = BatchSize, type = Type#write_event{
+        Evt#event{key = FileUuid, counter = BatchSize, object = Type#write_event{
             size = BatchSize * EvtSize
         }}
     end, Evts)),
@@ -248,7 +248,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     EvtNum = ?config(evt_num, Config),
 
     {ok, SubId} = subscribe(Worker,
-        fun(#event{type = #write_event{}}) -> true; (_) -> false end,
+        fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
         fun(_, _) -> Self ! event_handler end
     ),
@@ -305,9 +305,9 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
 
     {ok, SubId} = subscribe(Worker,
         infinity,
-        fun(#event{type = #write_event{}}) -> true; (_) -> false end,
+        fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= SizeThr end,
-        fun(Meta, #event{type = #write_event{size = Size}}) -> Meta + Size end,
+        fun(Meta, #event{object = #write_event{size = Size}}) -> Meta + Size end,
         fun(_, _) -> Self ! event_handler end
     ),
 
@@ -366,7 +366,7 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
         FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
         {ok, SubId} = subscribe(Worker,
             fun
-                (#event{type = #write_event{file_uuid = Uuid}}) ->
+                (#event{object = #write_event{file_uuid = Uuid}}) ->
                     Uuid =:= FileUuid;
                 (_) -> false
             end,
@@ -389,7 +389,7 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     % Check whether event handlers have been executed.
     lists:foreach(fun(FileUuid) ->
         ?assertReceivedMatch({event_handler, [#event{
-            counter = EvtsNum, type = #write_event{
+            counter = EvtsNum, object = #write_event{
                 file_uuid = FileUuid, size = EvtsNum, file_size = EvtsNum,
                 blocks = [#file_block{offset = 0, size = EvtsNum}]
             }
@@ -436,7 +436,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
     end, lists:seq(1, CliNum)),
 
     {ok, SubId} = subscribe(Worker,
-        fun(#event{type = #write_event{}}) -> true; (_) -> false end,
+        fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
         fun(_, _) -> Self ! event_handler end
     ),

@@ -48,6 +48,10 @@ translate_file_block_from_protobuf_test() ->
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)),
     ?assertEqual(Internal2, translator:translate_from_protobuf(Protobuf2)).
 
+translate_events_from_protobuf_test() ->
+    {Internal, Protobuf} = get_events(5, 1),
+    ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
+
 translate_event_from_protobuf_test() ->
     {Internal, Protobuf} = get_event(1),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
@@ -94,6 +98,11 @@ translate_status_to_protobuf_test() ->
     ),
     ?assertEqual({status, #'Status'{code = 'VEIO'}},
         translator:translate_to_protobuf(#status{code = 'VEIO'})
+    ).
+
+translate_events_to_protobuf_test() ->
+    ?assertEqual({events, #'Events'{events = [{event, #'Event'{counter = 1}}]}},
+        translator:translate_to_protobuf(#events{events = [#event{counter = 1}]})
     ).
 
 translate_event_to_protobuf_test() ->
@@ -233,10 +242,17 @@ get_file_block(Off, S) ->
 get_file_block_list(Num, MaxS) ->
     lists:unzip([get_file_block(random:uniform(MaxS), random:uniform(MaxS)) || _ <- lists:seq(1, Num)]).
 
+get_events(N, Counter) ->
+    {InternalEvt, ProtobufEvt} = get_event(Counter),
+    {
+        #events{events = lists:duplicate(N, InternalEvt)},
+        #'Events'{events = lists:duplicate(N, ProtobufEvt)}
+    }.
+
 get_event(Counter) ->
     {
         #event{counter = Counter},
-        #'Event'{counter = Counter, type = {type, undefined}}
+        #'Event'{counter = Counter, object = {object, undefined}}
     }.
 
 get_read_event(FileUuid, Size, Num, MaxS) ->

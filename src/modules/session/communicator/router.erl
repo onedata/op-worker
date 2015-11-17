@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module decides where to send incomming client messages.
+%%% This module decides where to send incoming client messages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(router).
@@ -78,6 +78,9 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #event{} = Evt}) ->
     event:emit(Evt, SessId);
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #events{events = Evts}}) ->
+    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, SessId) end, Evts);
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription{} = Sub}) ->
     event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId);

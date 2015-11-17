@@ -243,7 +243,7 @@ session_teardown(Worker, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends message to sequencer stream for incomming messages.
+%% Sends message to sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(Worker :: node(), SessId :: session:id(), Msg :: term()) -> ok.

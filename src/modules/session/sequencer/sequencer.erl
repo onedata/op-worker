@@ -66,7 +66,7 @@ send_message(Msg, StmId, Ref) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Forwards message to the sequencer stream for incomming messages.
+%% Forwards message to the sequencer stream for incoming messages.
 %% @end
 %%--------------------------------------------------------------------
 -spec route_message(Msg :: term(), Ref :: sequencer_manager_ref()) ->

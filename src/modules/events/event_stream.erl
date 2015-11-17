@@ -7,7 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible
-%%% for aggregating incomming events and executing handlers.
+%%% for aggregating incoming events and executing handlers. It is supervised by
+%%% event_stream_sup supervisor and coordinated by event_manager.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(event_stream).
@@ -95,9 +96,9 @@ init([EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, SessId]) -
         subscription_id = SubId,
         event_manager = EvtMan,
         init_result = execute_init_handler(StmDef, Sub, SessId),
-        metadata = reset_metadata(StmDef),
+        metadata = get_initial_metadata(StmDef),
         definition = StmDef,
-        emission_ref = schedule_emission(StmDef)
+        emission_ref = schedule_event_handler_execution(StmDef)
     }}.
 
 %%--------------------------------------------------------------------
@@ -151,10 +152,10 @@ handle_cast(_Request, State) ->
 handle_info({'EXIT', EvtMan, shutdown}, #state{event_manager = EvtMan} = State) ->
     {stop, shutdown, State};
 
-handle_info({periodic_emission, Ref}, #state{emission_ref = Ref} = State) ->
+handle_info({execute_event_handler, Ref}, #state{emission_ref = Ref} = State) ->
     {noreply, execute_event_handler(State)};
 
-handle_info({periodic_emission, _}, State) ->
+handle_info({execute_event_handler, _}, State) ->
     {noreply, State};
 
 handle_info(_Info, State) ->
@@ -250,8 +251,8 @@ execute_event_handler(#state{events = Evts, definition = #event_stream_definitio
     Handler(maps:values(Evts), InitResult),
     State#state{
         events = #{},
-        metadata = reset_metadata(StmDef),
-        emission_ref = schedule_emission(StmDef)
+        metadata = get_initial_metadata(StmDef),
+        emission_ref = schedule_event_handler_execution(StmDef)
     }.
 
 %%--------------------------------------------------------------------
@@ -260,8 +261,8 @@ execute_event_handler(#state{events = Evts, definition = #event_stream_definitio
 %% Returns initial stream metadata.
 %% @end
 %%--------------------------------------------------------------------
--spec reset_metadata(StmDef :: definition()) -> Meta :: metadata().
-reset_metadata(#event_stream_definition{metadata = Meta}) ->
+-spec get_initial_metadata(StmDef :: definition()) -> Meta :: metadata().
+get_initial_metadata(#event_stream_definition{metadata = Meta}) ->
     Meta.
 
 %%--------------------------------------------------------------------
@@ -286,19 +287,20 @@ process_event(Evt, #state{events = Evts, metadata = Meta,
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Resets the time emission by sending 'periodic_emission' message to itself.
-%% Message is marked with new reference stored in event stream state, so that
-%% event stream can ignore messages with reference different from the one saved
-%% in the state.
+%% Schedules sending 'execute_event_handler' message to itself. Message is
+%% marked with new reference stored in event stream state, so that event stream
+%% can ignore messages with reference different from the one saved in the state.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_emission(StmDef :: definition()) -> Ref :: undefined | reference().
-schedule_emission(#event_stream_definition{emission_time = Time}) when is_integer(Time) ->
+-spec schedule_event_handler_execution(StmDef :: definition()) ->
+    Ref :: undefined | reference().
+schedule_event_handler_execution(#event_stream_definition{emission_time = Time})
+    when is_integer(Time) ->
     Ref = make_ref(),
-    erlang:send_after(Time, self(), {periodic_emission, Ref}),
+    erlang:send_after(Time, self(), {execute_event_handler, Ref}),
     Ref;
 
-schedule_emission(#event_stream_definition{}) ->
+schedule_event_handler_execution(#event_stream_definition{}) ->
     undefined.
 
 %%--------------------------------------------------------------------
