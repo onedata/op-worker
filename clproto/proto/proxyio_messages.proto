@@ -1,0 +1,30 @@
+/**
+ * Communication protocol for ProxyIO helper.
+ * @author Konrad Zemek
+ * @copyright (C) 2015 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in
+ * 'LICENSE.txt'
+ */
+
+package one.clproto;
+
+import "common_messages.proto";
+
+message RemoteRead {
+    required bytes  storage_id = 1;
+    required bytes  file_id    = 2;
+    required uint64 offset     = 3;
+    required uint64 size       = 4;
+}
+
+message RemoteWrite {
+    required bytes  storage_id = 1;
+    required bytes  file_id    = 2;
+    required uint64 offset     = 3;
+    required bytes  data       = 4;
+}
+
+message RemoteData {
+    required Status status = 1;
+    optional bytes  data   = 2;
+}
