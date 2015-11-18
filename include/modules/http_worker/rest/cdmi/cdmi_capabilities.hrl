@@ -15,6 +15,7 @@
 -define(default_get_capability_opts,[<<"objectType">>,<<"objectID">>,<<"objectName">>,<<"parentURI">>,<<"parentID">>,<<"capabilities">>,<<"childrenrange">>,<<"children">>]).
 
 %% List of general cdmi system capabilites
+%% CDMI documentation: chapter 12.1.1 and table 100.
 -define(root_capability_list,[
   {<<"cdmi_dataobjects">>, <<"true">>}
 %%   {<<"cdmi_security_access_control">>, <<"true">>},
@@ -24,6 +25,7 @@
 ]).
 
 %% List of cdmi container capabilites
+%% Documentation: chapters 12.1.2, 12.1.3 and tables 101, 102
 -define(dataobject_capability_list,[
 %%   {<<"cdmi_acl">>,<<"true">>},
 %%   {<<"cdmi_size">>,<<"true">>},
@@ -40,6 +42,7 @@
 ]).
 
 %% List of cdmi object capabilites
+%% Documentation: chapters 12.1.2, 12.1.4 and tables 101, 103
 -define(container_capability_list,[
 %%   {<<"cdmi_acl">>,<<"true">>},
 %%   {<<"cdmi_size">>,<<"true">>},
@@ -66,7 +69,7 @@
 
 %% todo uncomment IDs
 
-% Fake database uuids, necessary for objectid generation
+% Fake datastore uuids, necessary for objectid generation
 %% -define(root_capability_uuid,"0000000000000001").
 %% -define(container_capability_uuid,"0000000000000002").
 %% -define(dataobject_capability_uuid,"0000000000000003").
