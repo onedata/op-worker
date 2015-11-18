@@ -13,13 +13,32 @@
 
 -include("modules/datastore/datastore.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/helpers.hrl").
 
 %% API
 -export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2]).
+-export([new_user_ctx/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec new_user_ctx(helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+    helpers:user_ctx().
+new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
+    new_posix_user_ctx(SessionId, SpaceUUID).
+
+
+-spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+    #posix_user_ctx{}.
+new_posix_user_ctx(SessionId, SpaceUUID) ->
+    #posix_user_ctx{
+        uid = 0,
+        gid = 0
+    }.
+
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,6 +89,9 @@ new_helper_init(HelperName, HelperArgs) ->
 -spec new_storage(Name :: storage:name(), [#helper_init{}]) -> #storage{}.
 new_storage(Name, Helpers) ->
     #storage{name = Name, helpers = Helpers}.
+
+
+
 
 %%%===================================================================
 %%% Internal functions

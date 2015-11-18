@@ -21,4 +21,12 @@
     st_ctime, st_blksize, st_blocks
 }).
 
+
+-define(DIRECTIO_HELPER_NAME, <<"DirectIO">>).
+
+-record(posix_user_ctx, {
+    uid :: non_neg_integer(),
+    gid :: non_neg_integer()
+}).
+
 -endif.
