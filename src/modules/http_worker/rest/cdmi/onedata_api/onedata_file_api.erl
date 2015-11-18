@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Public api for logical filesystem managemant, available in
+%%% @doc Public api for logical filesystem management, available in
 %%% protocol plugins.
 %%% @end
 %%%-------------------------------------------------------------------
