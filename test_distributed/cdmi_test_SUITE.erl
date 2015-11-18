@@ -109,7 +109,7 @@ capabilities_test(Config) ->
     ?assertEqual("application/cdmi-capability", proplists:get_value("content-type", Headers8)),
     CdmiResponse8 = json:decode(Response8),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
-    ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"objectName">>, CdmiResponse8)),
+    ?assertEqual(?root_capability_path, proplists:get_value(<<"objectName">>, CdmiResponse8)),
     ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
     ?assertEqual([<<"container/">>, <<"dataobject/">>], proplists:get_value(<<"children">>, CdmiResponse8)),
     Capabilities = proplists:get_value(<<"capabilities">>, CdmiResponse8),
@@ -123,7 +123,7 @@ capabilities_test(Config) ->
 %%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
 
     CdmiResponse9 = json:decode(Response9),
-    ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>, CdmiResponse9)),
+    ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse9)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
 %%   ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
     ?assertEqual(<<"container/">>, proplists:get_value(<<"objectName">>, CdmiResponse9)),
@@ -138,7 +138,7 @@ capabilities_test(Config) ->
 %%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
 
     CdmiResponse10 = json:decode(Response10),
-    ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"parentURI">>, CdmiResponse10)),
+    ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse10)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
 %%   ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
     ?assertEqual(<<"dataobject/">>, proplists:get_value(<<"objectName">>, CdmiResponse10)),
