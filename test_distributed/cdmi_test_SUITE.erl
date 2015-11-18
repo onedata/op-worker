@@ -103,7 +103,7 @@ capabilities_test(Config) ->
 
     %%--- system capabilities ------
     RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.1.1"}],
-    {Code8, Headers8, Response8} = do_request(Worker, "cdmi_capabilities/", get, RequestHeaders8, []),
+    {ok, Code8, Headers8, Response8} = do_request(Worker, "cdmi_capabilities/", get, RequestHeaders8, []),
     ?assertEqual("200", Code8),
 
     ?assertEqual("application/cdmi-capability", proplists:get_value("content-type", Headers8)),
@@ -118,7 +118,7 @@ capabilities_test(Config) ->
 
     %%-- container capabilities ----
     RequestHeaders9 = [{"X-CDMI-Specification-Version", "1.1.1"}],
-    {Code9, _Headers9, Response9} = do_request(Worker, "cdmi_capabilities/container/", get, RequestHeaders9, []),
+    {ok, Code9, _Headers9, Response9} = do_request(Worker, "cdmi_capabilities/container/", get, RequestHeaders9, []),
     ?assertEqual("200", Code9),
 %%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
 
@@ -133,7 +133,7 @@ capabilities_test(Config) ->
 
     %%-- dataobject capabilities ---
     RequestHeaders10 = [{"X-CDMI-Specification-Version", "1.1.1"}],
-    {Code10, _Headers10, Response10} = do_request(Worker, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
+    {ok, Code10, _Headers10, Response10} = do_request(Worker, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
     ?assertEqual("200", Code10),
 %%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
 
