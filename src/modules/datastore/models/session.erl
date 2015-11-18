@@ -25,8 +25,8 @@
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_sequencer_manager/1, get_communicator/1, get_auth/1]).
 
--type id() :: binary() | fake_session_id().
--type fake_session_id() :: #identity{}.
+-type id() :: binary() | dummy_session_id().
+-type dummy_session_id() :: #identity{}.
 -type identity() :: #identity{}.
 
 -export_type([id/0, identity/0]).
@@ -70,7 +70,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(#identity{} = Identity) ->
-    {ok, #document{key = Identity, value = #session{type = fake, identity = Identity}}};
+    {ok, #document{key = Identity, value = #session{type = dummy, identity = Identity}}};
 get(?ROOT_SESS_ID) ->
     {ok, #document{key = ?ROOT_SESS_ID, value = #session{identity = #identity{user_id = ?ROOT_USER_ID}}}};
 get(Key) ->
