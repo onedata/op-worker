@@ -90,7 +90,8 @@ prepare_capability_ans([<<"objectID">> | Tail]) ->
   prepare_capability_ans(Tail);
 %%   [{<<"objectID">>, ?container_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
-  [{<<"objectName">>, utils:ensure_unicode_binary(rest_utils:get_path_leaf_with_ending_slash(?container_capability_path))} | prepare_capability_ans(Tail)];
+  [{<<"objectName">>, utils:ensure_path_ends_with_slash(filename:basename(?container_capability_path))}
+    | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
   [{<<"parentURI">>, utils:ensure_unicode_binary(?root_capability_path)} | prepare_capability_ans(Tail)];
 %% todo uncomment when ID'll be used

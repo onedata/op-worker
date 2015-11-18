@@ -70,7 +70,6 @@ get_cdmi_capability(Req, #{options := Opts} = State) ->
                       [] -> prepare_capability_ans(?default_get_capability_opts);
                       X -> prepare_capability_ans(X)
                     end,
-%%   RawCapabilities = prepare_capability_ans(Opts),
   Capabilities = json:encode(RawCapabilities),
   {Capabilities, Req, State}.
 
@@ -91,7 +90,7 @@ prepare_capability_ans([<<"objectID">> | Tail]) ->
   prepare_capability_ans(Tail);
 %%   [{<<"objectID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
-  [{<<"objectName">>, utils:ensure_unicode_binary(?root_capability_path)} | prepare_capability_ans(Tail)];
+  [{<<"objectName">>, ?root_capability_path} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
   prepare_capability_ans(Tail);
 prepare_capability_ans([<<"parentID">> | Tail]) ->
@@ -102,6 +101,6 @@ prepare_capability_ans([<<"childrenrange">> | Tail]) ->
   [{<<"childrenrange">>, <<"0-1">>} | prepare_capability_ans(Tail)]; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
 prepare_capability_ans([<<"children">> | Tail]) ->
   [{<<"children">>, [
-    utils:ensure_unicode_binary(rest_utils:get_path_leaf_with_ending_slash(?container_capability_path)),
-    utils:ensure_unicode_binary(rest_utils:get_path_leaf_with_ending_slash(?dataobject_capability_path))
+    utils:ensure_path_ends_with_slash(filename:basename(?container_capability_path)),
+    utils:ensure_path_ends_with_slash(filename:basename(?dataobject_capability_path))
   ]} | prepare_capability_ans(Tail)].
