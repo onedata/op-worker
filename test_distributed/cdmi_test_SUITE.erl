@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -25,11 +26,11 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([get_file_test/1, choose_adequate_handler/1, use_supported_cdmi_version/1,
+-export([get_file_test/1, delete_file_test/1, choose_adequate_handler/1, use_supported_cdmi_version/1,
     use_unsupported_cdmi_version/1, create_dir_test/1]).
 
 -performance({test_cases, []}).
-all() -> [get_file_test, choose_adequate_handler, use_supported_cdmi_version,
+all() -> [get_file_test, delete_file_test, choose_adequate_handler, use_supported_cdmi_version,
     use_unsupported_cdmi_version, create_dir_test].
 
 -define(MACAROON, "macaroon").
@@ -53,7 +54,7 @@ all() -> [get_file_test, choose_adequate_handler, use_supported_cdmi_version,
 % parameters we need by listing then as ';' separated list after '?' in URL ),
 %  )
 get_file_test(Config) ->
-    FileName = "/toRead.txt",
+    FileName = "toRead.txt",
     FileContent = <<"Some content...">>,
     Size = string:len(binary_to_list(FileContent)),
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -63,27 +64,68 @@ get_file_test(Config) ->
     write_to_file(Config, FileName,FileContent),
     ?assertEqual(FileContent,get_file_content(Config, FileName, Size)),
 
-
     %%------- noncdmi read --------
-    {Code4, Headers4, Response4} = do_request(Worker, FileName, get, [], []),
+
+    tracer:start(Worker),
+    tracer:trace_calls(pre_handler),
+    tracer:trace_calls(cdmi_object_handler, get_binary),
+    tracer:trace_calls(cdmi_object_handler, stream_file),
+    tracer:trace_calls(cdmi_object_handler, get_mimetype),
+    tracer:trace_calls(cdmi_object_handler, parse_byte_range),
+    tracer:trace_calls(cowboy_req, reply),
+    {ok, Code4, Headers4, Response4} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
+    tracer:stop(),
     ?assertEqual("200",Code4),
 
-    ?assertEqual("application/octet-stream", proplists:get_value("content-type",Headers4)),
+    ct:pal("HEADERS:~p~n", [Headers4]),
+    ct:pal("RESPONSE:~p~n", [Response4]),
+
+    ?assertEqual(?MIMETYPE_DEFAULT_VALUE, proplists:get_value("content-type",Headers4)),
     ?assertEqual(binary_to_list(FileContent), Response4),
     %%------------------------------
 
     %% selective value read non-cdmi
     RequestHeaders7 = [{"Range","1-3,5-5,-3"}],
-    {Code7, _Headers7, Response7} = do_request(Worker, FileName, get, RequestHeaders7, []),
+    {ok, Code7, _Headers7, Response7} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders7]),
     ?assertEqual("206",Code7),
     ?assertEqual("omec...", Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
     %%------------------------------
 
     %% selective value read non-cdmi error
     RequestHeaders8 = [{"Range","1-3,6-4,-3"}],
-    {Code8, _Headers8, _Response8} = do_request(Worker, FileName, get, RequestHeaders8, []),
+    {ok, Code8, _Headers8, _Response8} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
     ?assertEqual("400",Code8).
     %%------------------------------
+
+% Tests cdmi object DELETE requests
+delete_file_test(Config) ->
+    FileName = "toDelete",
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, 1}, Config),
+    GroupFileName = string:join(["spaces", binary_to_list(SpaceName),"groupFile"], "/"),
+
+    %%----- basic delete -----------
+    create_file(Config, "/" ++ FileName),
+    ?assert(object_exists(Config, FileName)),
+    RequestHeaders1 = [?CDMI_VERSION_HEADER],
+    {ok, Code1, _Headers1, _Response1} = do_request(Worker, FileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders1]),
+    ?assertEqual("204",Code1),
+
+    ?assert(not object_exists(Config, FileName)),
+
+    %%------------------------------
+
+%%     ----- delete group file ------
+    create_file(Config, GroupFileName),
+    ?assert(object_exists(Config, GroupFileName)),
+
+    RequestHeaders2 = [?CDMI_VERSION_HEADER],
+    {ok, Code2, _Headers2, _Response2} = do_request(Worker, GroupFileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders2]),
+    ?assertEqual("204",Code2),
+
+    ?assert(not object_exists(Config, GroupFileName)).
+%%------------------------------
+
 
 choose_adequate_handler(Config) ->
     % given
@@ -107,7 +149,7 @@ use_supported_cdmi_version(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
 
     % when
-    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders, []),
+    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders),
 
     % then
     ?assertEqual("404", Code).
@@ -118,7 +160,7 @@ use_unsupported_cdmi_version(Config) ->
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
 
     % when
-    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders, []),
+    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders),
 
     % then
     ?assertEqual("400", Code).
@@ -132,7 +174,7 @@ create_dir_test(Config) ->
     %%------ non-cdmi create -------
     ?assert(not object_exists(Config, DirName)),
 
-    {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER], []),
+    {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER]),
     ?assertEqual("201",Code1),
 
     ?assert(object_exists(Config, DirName)).
@@ -171,14 +213,16 @@ end_per_testcase(_, Config) ->
     unmock_user_auth(Config),
     initializer:clean_test_users_and_spaces(Config),
     ibrowse:stop(),
-    ssl:stop(),
-    timer:sleep(timer:seconds(1)). %todo fix datastore 'no_file_meta' error, and remove this sleep
+    ssl:stop().
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 % Performs a single request using ibrowse
+do_request(Node, RestSubpath, Method, Headers) ->
+    do_request(Node, RestSubpath, Method, Headers, []).
+
 do_request(Node, RestSubpath, Method, Headers, Body) ->
     ibrowse:send_req(
             cdmi_endpoint(Node) ++ RestSubpath,
@@ -224,7 +268,7 @@ object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:stat(Worker, SessionId, {path, utils:ensure_unicode_binary(Path)}) of
+    case lfm_proxy:stat(Worker, SessionId, {path, utils:ensure_unicode_binary("/" ++ Path)}) of
         {ok, _} ->
             true;
         {error, ?ENOENT} ->
@@ -235,17 +279,16 @@ create_file(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:create(Worker, SessionId, {path, utils:ensure_unicode_binary(Path)}, ?FILE_PERMISSIONS) of
+    case lfm_proxy:create(Worker, SessionId, utils:ensure_unicode_binary("/" ++ Path), ?FILE_PERMISSIONS) of
         {ok, UUID} -> UUID;
         {error, Code} -> {error, Code}
     end.
 
-%% FileKey type is file_id_or_path() :: {uuid, file_uuid()} | { path, file_path()}
-open_file(Config, FileKey, OpenMode) ->
+open_file(Config, Path, OpenMode) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:open(Worker, SessionId, FileKey, OpenMode) of
+    case lfm_proxy:open(Worker, SessionId, {path, utils:ensure_unicode_binary("/" ++ Path)}, OpenMode) of
         {error, Error} -> {error, Error};
         FileHandle -> FileHandle
     end.
@@ -254,18 +297,18 @@ write_to_file(Config, Path, Data) ->
     %%TODO maybe Offset sholud be function argument ?
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    FileHandle = open_file(Config, {path, Path}, write),
+    {ok, FileHandle} = open_file(Config, Path, write),
     case lfm_proxy:write(Worker, FileHandle, ?OFFSET, Data) of
         {error, Error} -> {error, Error};
-        Result -> Result
+        {ok, Bytes} -> Bytes
     end.
 
 get_file_content(Config, Path, Size) ->
     %%TODO maybe Offset sholud be function argument ?
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    FileHandle = open_file(Config, {path, Path}, write),
+    {ok, FileHandle} = open_file(Config, Path, write),
     case lfm_proxy:read(Worker, FileHandle, ?OFFSET, Size) of
         {error, Error} -> {error, Error};
-        Result -> Result
+        {ok, Content} -> Content
     end.

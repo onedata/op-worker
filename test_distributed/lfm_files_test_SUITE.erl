@@ -276,9 +276,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
-    timer:sleep(timer:seconds(1)). %todo fix datastore 'no_file_meta' error, and remove this sleep
-
+    initializer:clean_test_users_and_spaces(Config).
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
