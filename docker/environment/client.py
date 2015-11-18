@@ -38,11 +38,8 @@ def _tweak_config(config, os_config, name, uid):
         client_config['op_domain'] = provider_worker.provider_domain(client['op_domain'], uid)
         client_config['gr_domain'] = globalregistry.gr_domain(client['gr_domain'], uid)
         client_config['user_key'] = client['user_key']
-        client_config['mounting_point'] = client['mounting_point']
         if 'user_cert' in client.keys():
             client_config['user_cert'] = client['user_cert']
-        if 'token' in client.keys():
-            client_config['token'] = client['token']
 
         node['clients'].append(client_config)
     return cfg
@@ -52,12 +49,6 @@ def _node_up(image, bindir, config, config_path, dns_servers):
     node = config['node']
     hostname = node['name']
     os_config = config['os_config']
-
-    # copy get_token.escript to /root/build
-    local_path = os.getcwd()
-    local_path = os.path.join(local_path, "bamboos", "docker", "environment", "get_token.escript")
-    docker_path = os.path.join(bindir, "get_token.escript")
-    subprocess.check_call(['cp', local_path, docker_path])
 
     command = '''set -e
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
