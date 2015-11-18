@@ -67,9 +67,9 @@ content_types_provided(Req, State) ->
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi_capability(Req, #{options := Opts} = State) ->
   RawCapabilities = case Opts of
-    [] -> prepare_capability_ans(?default_get_capability_opts);
-    X -> prepare_capability_ans(X)
-  end,
+                      [] -> prepare_capability_ans(?default_get_capability_opts);
+                      X -> prepare_capability_ans(X)
+                    end,
 %%   RawCapabilities = prepare_capability_ans(Opts),
   Capabilities = json:encode(RawCapabilities),
   {Capabilities, Req, State}.

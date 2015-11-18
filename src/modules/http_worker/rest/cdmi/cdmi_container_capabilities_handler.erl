@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc This is a cdmi handler module providing access to cdmi_capabilities
-%% which are used to discover operation that can be performed.
+%% which are used to discover operation that can be performed with containers.
 %% @end
 %% ===================================================================
 -module(cdmi_container_capabilities_handler).
@@ -45,8 +45,7 @@ allowed_methods(Req, State) ->
 %% ====================================================================
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
 malformed_request(Req, State) ->
-  cdmi_capabilities_handler:malformed_request(Req, State).
-
+  cdmi_arg_parser:malformed_capability_request(Req, State).
 
 %% ====================================================================
 %% @doc @equiv pre_handler:content_types_provided/2
