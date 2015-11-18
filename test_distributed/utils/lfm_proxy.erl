@@ -109,7 +109,7 @@ open(Worker, SessId, FileKey, OpenMode) ->
         end).
 
 -spec read(node(), logical_file_manager:handle(), integer(), integer()) ->
-    {ok, logical_file_manager:handle(), binary()} | error_reply().
+    {ok, binary()} | error_reply().
 read(Worker, TestHandle, Offset, Size) ->
     exec(Worker,
         fun(Host) ->
