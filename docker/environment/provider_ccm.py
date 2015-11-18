@@ -10,7 +10,6 @@ from __future__ import print_function
 import copy
 import json
 import os
-import subprocess
 
 from . import common, docker, dns
 
@@ -100,14 +99,12 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
 
     # CCMs of every provider are started together
     for op_instance in config['provider_domains']:
-        os_config = config['provider_domains'][op_instance]['os_config']
         gen_dev_cfg = {
             'config': {
                 'input_dir': input_dir,
                 'target_dir': '/root/bin'
             },
-            'nodes': config['provider_domains'][op_instance]['op_ccm'],
-            'os_config': config['os_configs'][os_config]
+            'nodes': config['provider_domains'][op_instance]['op_ccm']
         }
 
         tweaked_configs = [

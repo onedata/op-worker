@@ -8,7 +8,6 @@ Brings up a set of oneprovider worker nodes. They can create separate clusters.
 import copy
 import json
 import os
-import subprocess
 
 from . import common, docker, riak, couchbase, dns, globalregistry, provider_ccm
 
@@ -82,7 +81,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         gid=os.getegid())
 
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes = common.add_shared_storages(volumes, config['os_config']['storages'])
+    volumes += [common.volume_for_storage(s) for s in config['os_config']['storages']]
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -101,8 +100,8 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         command=command)
 
     # create system users and grous
-    common.create_users(container, config['os_config'])
-    common.create_groups(container, config['os_config'])
+    common.create_users(container, config['os_config']['users'])
+    common.create_groups(container, config['os_config']['groups'])
 
     return container, {
         'docker_ids': [container],

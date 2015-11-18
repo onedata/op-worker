@@ -32,12 +32,14 @@ def _tweak_config(config, os_config, name, uid):
     node['clients'] = []
     clients = config[name]['clients']
     for cl in clients:
-        client = copy.deepcopy(clients[cl])
+        client = clients[cl]
         client_config = {}
         client_config['name'] = client['name']
         client_config['op_domain'] = provider_worker.provider_domain(client['op_domain'], uid)
         client_config['gr_domain'] = globalregistry.gr_domain(client['gr_domain'], uid)
-        client_config['user_key'] = client['user_key']
+        # these fields aren't mandatory
+        if 'user_key' in client.keys():
+            client_config['user_key'] = client['user_key']
         if 'user_cert' in client.keys():
             client_config['user_cert'] = client['user_cert']
 
@@ -57,7 +59,7 @@ def _node_up(image, bindir, config, config_path, dns_servers):
 bash'''
 
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes = common.add_shared_storages(volumes, os_config['storages'])
+    volumes += [common.volume_for_storage(s) for s in os_config['storages']]
 
     container = docker.run(
         image=image,
@@ -73,8 +75,8 @@ bash'''
         command=command)
 
     # create system users and groups
-    common.create_users(container, os_config)
-    common.create_groups(container, os_config)
+    common.create_users(container, os_config['users'])
+    common.create_groups(container, os_config['groups'])
 
     return {'docker_ids': [container], 'client_nodes': [hostname]}
 

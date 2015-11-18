@@ -14,7 +14,6 @@ import json
 import os
 import requests
 import time
-import subprocess
 
 from . import docker
 
@@ -174,29 +173,29 @@ def generate_uid():
     return str(int(time.time()))
 
 
-def create_users(container, os_config):
-    """Creates system users on docker specified by 'container', according description in sys_config.
+def create_users(container, users):
+    """Creates system users on docker specified by 'container'.
     """
-    for user in os_config['users']:
+    for user in users:
         uid = str(hash(user) % 50000 + 10000)
-        command = ["adduser", "--disabled-password", "--gecos", "''", "--uid", uid, user]
+        command = ["adduser", "--disabled-password", "--gecos", "''",
+                   "--uid", uid, user]
         assert 0 is docker.exec_(container, command, interactive=True)
 
-def create_groups(container, os_config):
-    """Creates system groups on docker specified by 'container', according description in sys_config.
+def create_groups(container, groups):
+    """Creates system groups on docker specified by 'container'.
     """
-    for group in os_config['groups']:
+    for group in groups:
         gid = str(hash(group) % 50000 + 10000)
         command = ["groupadd", "-g", gid, group]
-        docker.exec_(container, command, interactive=True)
-        for user in os_config['groups'][group]:
+        assert 0 is docker.exec_(container, command, interactive=True)
+        for user in groups[group]:
             command = ["usermod", "-a", "-G", group, user]
-            docker.exec_(container, command, interactive=True)
+            assert 0 is docker.exec_(container, command, interactive=True)
 
 
-def add_shared_storages(volumes, storages):
-    """Adds path for shared storages to the storages list given to docker.run().
+def volume_for_storage(storage):
+    """Returns tuple (path_on_host, path_on_docker, read_wtire_mode)
+    for a given storage
     """
-    for s in storages:
-        volumes.append((os.path.join('/tmp/onedata/storage/', s), s, 'rw'))
-    return volumes
+    return os.path.join('/tmp/onedata/storage/', storage), storage, 'rw'
