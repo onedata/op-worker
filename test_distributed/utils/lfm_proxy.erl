@@ -93,7 +93,7 @@ unlink(Worker, SessId, File) ->
         end).
 
 -spec open(node(), session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) ->
-    {ok, logical_files_manager:handle()} | error_reply().
+    {ok, logical_file_manager:handle()} | error_reply().
 open(Worker, SessId, FileKey, OpenMode) ->
     exec(Worker,
         fun(Host) ->
@@ -108,8 +108,8 @@ open(Worker, SessId, FileKey, OpenMode) ->
             Host ! {self(), Result}
         end).
 
--spec read(node(), logical_files_manager:handle(), integer(), integer()) ->
-    {ok, logical_files_manager:handle(), binary()} | error_reply().
+-spec read(node(), logical_file_manager:handle(), integer(), integer()) ->
+    {ok, logical_file_manager:handle(), binary()} | error_reply().
 read(Worker, TestHandle, Offset, Size) ->
     exec(Worker,
         fun(Host) ->
@@ -124,8 +124,8 @@ read(Worker, TestHandle, Offset, Size) ->
             Host ! {self(), Result}
         end).
 
--spec write(node(), logical_files_manager:handle(), integer(), binary()) ->
-    {ok, logical_files_manager:handle(), integer()} | error_reply().
+-spec write(node(), logical_file_manager:handle(), integer(), binary()) ->
+    {ok, integer()} | error_reply().
 write(Worker, TestHandle, Offset, Bytes) ->
     exec(Worker,
         fun(Host) ->

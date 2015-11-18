@@ -128,7 +128,7 @@ end_per_testcase(_, Config) ->
     initializer:clean_test_users_and_spaces(Config),
     ibrowse:stop(),
     ssl:stop(),
-    timer:sleep(timer:seconds(1)). %todo fix datastore 'no_file_meta' error, and remove this sleep
+    timer:sleep(timer:seconds(10)). %todo fix datastore 'no_file_meta' error, and remove this sleep
 
 %%%===================================================================
 %%% Internal functions
