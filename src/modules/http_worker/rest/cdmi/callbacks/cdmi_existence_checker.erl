@@ -17,7 +17,7 @@
 -include("modules/http_worker/rest/http_status.hrl").
 
 %% API
--export([resource_exists/2]).
+-export([container_resource_exists/2, object_resource_exists/2]).
 
 %%%===================================================================
 %%% API
@@ -26,16 +26,17 @@
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
--spec resource_exists(cowboy_req:req(), #{}) -> {boolean(), cowboy_req:req(), #{}}.
-resource_exists(Req, State = #{path := Path, identity := Identity}) ->
-    case logical_file_manager:stat(Identity, {path, Path}) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            {true, Req, State};
-        {ok, #file_attr{}} ->
-            redirect_to_object(Req, State);
-        {error, ?ENOENT} ->
-            {false, Req, State}
-    end.
+-spec container_resource_exists(cowboy_req:req(), #{}) -> {boolean(), cowboy_req:req(), #{}}.
+container_resource_exists(Req, State) ->
+    resource_exists(Req, State, container).
+
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:resource_exists/2
+%%--------------------------------------------------------------------
+-spec object_resource_exists(cowboy_req:req(), #{}) -> {boolean(), cowboy_req:req(), #{}}.
+object_resource_exists(Req, State) ->
+    resource_exists(Req, State, object).
 
 
 %%%===================================================================
@@ -53,3 +54,34 @@ redirect_to_object(Req, State) ->
     Req2 = cowboy_req:set_resp_header(<<"Location">>, Location, Req),
     {ok, Req3} = cowboy_req:reply(?MOVED_PERMANENTLY, [], [], Req2),
     {halt, Req3, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Redirect this request to the same url but with trailing '/'.
+%% @end
+%%--------------------------------------------------------------------
+-spec redirect_to_container(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
+redirect_to_container(Req, State) ->
+    Location = <<"location">>, %todo prepare
+    Req2 = cowboy_req:set_resp_header(<<"Location">>, Location, Req),
+    {ok, Req3} = cowboy_req:reply(?MOVED_PERMANENTLY, [], [], Req2),
+    {halt, Req3, State}.
+
+%%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:resource_exists/2
+%%--------------------------------------------------------------------
+resource_exists(Req, State = #{path := Path, identity := Identity}, Type) ->
+    case logical_file_manager:stat(Identity, {path, Path}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == container ->
+            {true, Req, State};
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == object ->
+            {true, Req, State};
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == object ->
+            redirect_to_object(Req, State);
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == container ->
+            redirect_to_container(Req, State);
+        {ok, #file_attr{type = ?LINK_TYPE}} ->
+            {false, Req, State};
+        {error, ?ENOENT} ->
+            {false, Req, State}
+    end.
