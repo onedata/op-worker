@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
+-include("proto/oneclient/event_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -131,11 +132,10 @@ sequencer_stream_messages_ordering_test(Config) ->
     % Check whether messages were forwarded in right order.
     {_, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
         lists:foreach(fun(SeqNum) ->
-            ?assertMatch({ok, _}, test_utils:receive_msg(#client_message{
+            ?assertReceived(#client_message{
                 message_stream = #message_stream{
                     stream_id = StmId, sequence_number = SeqNum
-                }
-            }, ?TIMEOUT))
+                }}, ?TIMEOUT)
         end, lists:seq(0, MsgNum - 1))
     end),
 
@@ -257,12 +257,13 @@ sequencer_stream_periodic_ack_test(Config) ->
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message,
             [Msg, SessId]
         )),
-        ?assertEqual({ok, Msg}, test_utils:receive_any(?TIMEOUT)),
-        ?assertEqual({ok, #message_acknowledgement{
+        ?assertReceived(Msg, (?TIMEOUT)),
+        ?assertReceived(#message_acknowledgement{
             stream_id = 1, sequence_number = SeqNum
-        }}, test_utils:receive_any(?TIMEOUT + SecsAckWin))
+        }, ?TIMEOUT + SecsAckWin)
     end, lists:seq(0, MsgsCount - 1)),
 
+    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     ok.

@@ -11,7 +11,7 @@
 -module(lfm_shares).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([create_share/2, get_share/1, remove_share/1]).
@@ -39,7 +39,7 @@ create_share(_Path, _ShareWith) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) -> {ok, {file_id(), file_name()}} | error_reply().
+-spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 get_share(_ShareID) ->
     {ok, {<<"">>, <<"">>}}.
 

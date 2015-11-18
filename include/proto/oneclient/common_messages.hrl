@@ -13,7 +13,7 @@
 -ifndef(COMMON_MESSAGES_HRL).
 -define(COMMON_MESSAGES_HRL, 1).
 
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -record(status, {
     code :: code(),
@@ -22,7 +22,9 @@
 
 -record(file_block, {
     offset :: non_neg_integer(),
-    size :: non_neg_integer()
+    size :: non_neg_integer(),
+    file_id :: binary(),
+    storage_id :: storage:id()
 }).
 
 -record(data, {

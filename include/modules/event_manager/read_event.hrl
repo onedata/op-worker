@@ -16,7 +16,7 @@
 
 -record(read_event, {
     counter :: non_neg_integer(),
-    file_id :: binary(),
+    file_uuid :: binary(),
     size :: non_neg_integer(),
     blocks = [] :: [event_utils:file_block()]
 }).
@@ -26,9 +26,9 @@
     metadata = 0,
     admission_rule = fun(#read_event{}) -> true; (_) -> false end,
     aggregation_rule = fun
-        (#read_event{file_id = Id} = Evt1, #read_event{file_id = Id} = Evt2) ->
+        (#read_event{file_uuid = Id} = Evt1, #read_event{file_uuid = Id} = Evt2) ->
             {ok, #read_event{
-                file_id = Evt1#read_event.file_id,
+                file_uuid = Evt1#read_event.file_uuid,
                 counter = Evt1#read_event.counter + Evt2#read_event.counter,
                 size = Evt1#read_event.size + Evt2#read_event.size,
                 blocks = event_utils:aggregate_blocks(

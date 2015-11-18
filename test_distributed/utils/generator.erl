@@ -1,0 +1,45 @@
+%%%--------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% Generates random names.
+%%% @end
+%%%--------------------------------------------------------------------
+-module(generator).
+-author("Tomasz Lichon").
+
+-include_lib("common_test/include/ct.hrl").
+
+%% API
+-export([gen_name/0, gen_storage_dir/1]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generate random storage dir inside ct priv_dir.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_dir(Config :: list()) -> string().
+gen_storage_dir(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    PrivDir ++ "/storage/" ++ erlang:binary_to_list(gen_name()).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generate random name.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_name() -> binary().
+gen_name() ->
+    binary:replace(base64:encode(crypto:rand_bytes(12)), <<"/">>, <<"">>, [global]).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

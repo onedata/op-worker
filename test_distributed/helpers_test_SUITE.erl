@@ -22,7 +22,7 @@
 -define(call(N, M, A), ?call(N, helpers, M, A)).
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
 
--define(dio_root(Config), ?TEMP_DIR).
+-define(dio_root(Config), ?config(priv_dir, Config)).
 -define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), utils:ensure_list(File)))).
 
 %% export for ct
@@ -120,7 +120,7 @@ open_test(Config) ->
     File = gen_filename(),
 
     {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch({ok, _}, call(Config, open, [File, r])).
+    ?assertMatch({ok, _}, call(Config, open, [File, read])).
 
 read_test(Config) ->
     File = gen_filename(),

@@ -13,10 +13,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1]).
+-export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
+-export([get_local_file_location/1, get_local_storage_file_locations/1]).
 
 
 %%%===================================================================
@@ -59,3 +61,30 @@ get_parent({path, Path}) ->
 get_parent(File) ->
     {ok, Doc} = file_meta:get_parent(File),
     Doc.
+
+-spec gen_storage_file_id(Entry :: fslogic_worker:file()) ->
+    helpers:file() | no_return().
+gen_storage_file_id(Entry) ->
+    {ok, Path} = file_meta:gen_path(Entry),
+    {ok, #document{value = #file_meta{version = Version}}} = file_meta:get(Entry),
+    file_meta:snapshot_name(Path, Version).
+
+
+-spec get_local_file_location(fslogic_worker:file()) ->
+    datastore:document() | no_return().
+get_local_file_location(Entry) ->
+    LProviderId = oneprovider:get_provider_id(),
+    {ok, LocIds} = file_meta:get_locations(Entry),
+    Locations = [file_location:get(LocId) || LocId <- LocIds],
+    [LocalLocation] = [Location || {ok, #document{value = #file_location{provider_id = ProviderId}} = Location} <- Locations, LProviderId =:= ProviderId],
+    LocalLocation.
+
+-spec get_local_storage_file_locations(datastore:document() | #file_location{} | fslogic_worker:file()) ->
+    [{storage:id(), helpers:file()}] | no_return().
+get_local_storage_file_locations(#document{value = #file_location{} = Location}) ->
+    get_local_storage_file_locations(Location);
+get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DSID, file_id = DFID}) ->
+    lists:usort([{DSID, DFID} | [{SID, FID} || #file_block{storage_id = SID, file_id = FID} <- Blocks]]);
+get_local_storage_file_locations(Entry) ->
+    #document{} = Doc = get_local_file_location(Entry),
+    get_local_storage_file_locations(Doc).

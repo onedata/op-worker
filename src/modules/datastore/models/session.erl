@@ -25,10 +25,11 @@
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
     get_sequencer_manager/1, get_communicator/1, get_auth/1]).
 
--export_type([id/0, identity/0]).
-
--type id() :: binary().
+-type id() :: binary() | fake_session_id().
+-type fake_session_id() :: #identity{}.
 -type identity() :: #identity{}.
+
+-export_type([id/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -68,6 +69,8 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+get(#identity{} = Identity) ->
+    {ok, #document{key = Identity, value = #session{type = fake, identity = Identity}}};
 get(?ROOT_SESS_ID) ->
     {ok, #document{key = ?ROOT_SESS_ID, value = #session{identity = #identity{user_id = ?ROOT_USER_ID}}}};
 get(Key) ->
@@ -161,7 +164,7 @@ get_session_supervisor_and_node(SessId) ->
 get_event_manager(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{event_manager = undefined}}} ->
-            {error, {not_found, missing}};
+            {error, {not_found, event_manager}};
         {ok, #document{value = #session{event_manager = EvtMan}}} ->
             {ok, EvtMan};
         {error, Reason} ->

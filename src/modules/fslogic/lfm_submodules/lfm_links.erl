@@ -11,7 +11,7 @@
 -module(lfm_links).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
@@ -26,7 +26,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_id()} | error_reply().
+-spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_uuid()} | error_reply().
 create_symlink(_Path, _TargetFileKey) ->
     {ok, <<"">>}.
 
@@ -37,7 +37,7 @@ create_symlink(_Path, _TargetFileKey) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read_symlink(FileKey :: file_key()) -> {ok, {file_id(), file_name()}} | error_reply().
+-spec read_symlink(FileKey :: file_key()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 read_symlink(_FileKey) ->
     {ok, {<<"">>, <<"">>}}.
 

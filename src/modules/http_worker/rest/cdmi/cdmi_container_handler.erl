@@ -15,12 +15,12 @@
 -include("modules/http_worker/http_common.hrl").
 
 %% API
--export([rest_init/2, terminate/3, resource_exists/2, malformed_request/2,
-    allowed_methods/2, content_types_provided/2, content_types_accepted/2,
-    delete_resource/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
+    is_authorized/2, resource_exists/2, content_types_provided/2,
+    content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get/2, put/2]).
+-export([get_cdmi/2, put_cdmi/2, put_binary/2]).
 
 %%%===================================================================
 %%% API
@@ -55,11 +55,18 @@ malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_request(Req, State).
 
 %%--------------------------------------------------------------------
+%% @doc @equiv pre_handler:is_authorized/2
+%%--------------------------------------------------------------------
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+is_authorized(Req, State) ->
+    rest_auth:is_authorized(Req, State).
+
+%%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
 -spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
 resource_exists(Req, State) ->
-    {false, Req, State}.
+    cdmi_existence_checker:resource_exists(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -68,7 +75,7 @@ resource_exists(Req, State) ->
     {[{binary(), atom()}], req(), #{}}.
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, get}
+        {<<"application/cdmi-container">>, get_cdmi}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -78,7 +85,8 @@ content_types_provided(Req, State) ->
     {[{binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put}
+        {<<"application/cdmi-container">>, put_cdmi},
+        {'*', put_binary}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -97,8 +105,8 @@ delete_resource(Req, State) ->
 %% Handles GET with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get(req(), #{}) -> {term(), req(), #{}}.
-get(Req, State) ->
+-spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
+get_cdmi(Req, State) ->
     {<<"ok">>, Req, State}.
 
 %%--------------------------------------------------------------------
@@ -106,6 +114,16 @@ get(Req, State) ->
 %% Handles PUT with "application/cdmi-container" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put(req(), #{}) -> {term(), req(), #{}}.
-put(Req, State) ->
+-spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
+put_cdmi(Req, State) ->
+    {true, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT without cdmi content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_binary(req(), #{}) -> {term(), req(), #{}}.
+put_binary(Req, State = #{identity := Identity, path := Path}) ->
+    ok = onedata_file_api:mkdir(Identity, Path),
     {true, Req, State}.
