@@ -9,6 +9,15 @@ add_custom_command(OUTPUT ${APPMOCK_BINARY}
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/appmock)
 add_custom_target(appmock ALL DEPENDS ${APPMOCK_BINARY})
 
+set(PROTO_DIR ${PROJECT_SOURCE_DIR}/clproto/proto)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/proto)
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/proto/__init__.py "")
+file(GLOB PROTO_FILES ${PROTO_DIR}/*.proto)
+add_custom_target(pythonProto
+    COMMAND ${PROTOBUF_PROTOC_EXECUTABLE} --python_out ${CMAKE_CURRENT_BINARY_DIR}/proto -I ${PROTO_DIR} ${PROTO_FILES}
+    COMMENT "Running Python protocol buffer compiler for integration tests"
+    VERBATIM)
+
 find_package(Boost COMPONENTS python REQUIRED)
 find_package(PythonLibs REQUIRED)
 include_directories(SYSTEM ${PYTHON_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
@@ -33,4 +42,6 @@ foreach(TEST_DIR ${TEST_DIRS})
         helpersShared
         ${Boost_LIBRARIES}
         ${PYTHON_LIBRARIES})
+
+    add_dependencies(${TEST_NAME} pythonProto)
 endforeach()
