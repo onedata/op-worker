@@ -689,6 +689,8 @@ exec_driver(ModelName, Driver, Method, Args) when is_atom(Driver) ->
                     _ ->
                         erlang:apply(Driver, Method, FullArgs)
                 end;
+            {ok, Value} ->
+                {ok, Value};
             {task, _Task} ->
                 {error, prehook_ans_not_supported};
             {error, Reason} ->
@@ -736,6 +738,8 @@ exec_cache_async(ModelName, Driver, Method, Args) when is_atom(Driver) ->
             ok ->
                 FullArgs = [ModelConfig | Args],
                 worker_proxy:call(datastore_worker, {driver_call, driver_to_module(Driver), Method, FullArgs}, timer:minutes(5));
+            {ok, Value} ->
+                {ok, Value};
             {task, Task} ->
                 Level = case lists:member(ModelName, ?GLOBAL_CACHES) of
                              true -> ?CLUSTER_LEVEL;
