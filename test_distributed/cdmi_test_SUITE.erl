@@ -162,8 +162,6 @@ capabilities_test(Config) ->
   ?assertEqual(list_to_binary(?root_capability_path), proplists:get_value(<<"objectName">>, CdmiResponse8)),
   ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
   ?assertEqual([<<"container/">>, <<"dataobject/">>], proplists:get_value(<<"children">>, CdmiResponse8)),
-%%   ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse8)),
-%%   {struct,Capabilities} = proplists:get_value(<<"capabilities">>,CdmiResponse8),
   Capabilities = proplists:get_value(<<"capabilities">>, CdmiResponse8),
   ?assertEqual(?root_capability_list, Capabilities),
   %%------------------------------
@@ -179,8 +177,6 @@ capabilities_test(Config) ->
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
 %%   ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
   ?assertEqual(<<"container/">>, proplists:get_value(<<"objectName">>, CdmiResponse9)),
-%%   ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse9)),
-%%   {struct,Capabilities2} = proplists:get_value(<<"capabilities">>,CdmiResponse9),
   Capabilities2 = proplists:get_value(<<"capabilities">>, CdmiResponse9),
   ?assertEqual(?container_capability_list, Capabilities2),
   %%------------------------------
@@ -196,8 +192,6 @@ capabilities_test(Config) ->
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
 %%   ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
   ?assertEqual(<<"dataobject/">>, proplists:get_value(<<"objectName">>, CdmiResponse10)),
-%%   ?assertMatch({struct,_}, proplists:get_value(<<"capabilities">>,CdmiResponse10)),
-%%   {struct,Capabilities3} = proplists:get_value(<<"capabilities">>,CdmiResponse10),
   Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
   ?assertEqual(?dataobject_capability_list, Capabilities3).
 %%------------------------------
@@ -233,10 +227,6 @@ end_per_testcase(_, _Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-% Performs a single request using ibrowse
-do_request(RestSubpath, Method, Headers, Body) ->
-  do_request(RestSubpath, Method, Headers, Body, true).
 
 % Performs a single request using ibrowse
 do_request(Node, RestSubpath, Method, Headers, Body) ->

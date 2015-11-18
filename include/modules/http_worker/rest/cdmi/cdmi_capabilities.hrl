@@ -16,47 +16,47 @@
 
 %% List of general cdmi system capabilites
 -define(root_capability_list,[
-  {<<"cdmi_dataobjects">>, <<"true">>},
-  {<<"cdmi_security_access_control">>, <<"true">>},
-  {<<"cdmi_object_move_from_local">>, <<"true">>},
-  {<<"cdmi_object_copy_from_local">>, <<"true">>},
-  {<<"cdmi_object_access_by_ID">>, <<"true">>}
+  {<<"cdmi_dataobjects">>, <<"true">>}
+%%   {<<"cdmi_security_access_control">>, <<"true">>},
+%%   {<<"cdmi_object_move_from_local">>, <<"true">>},
+%%   {<<"cdmi_object_copy_from_local">>, <<"true">>},
+%%   {<<"cdmi_object_access_by_ID">>, <<"true">>}
 ]).
 
 %% List of cdmi container capabilites
 -define(dataobject_capability_list,[
-  {<<"cdmi_acl">>,<<"true">>},
-  {<<"cdmi_size">>,<<"true">>},
-  {<<"cdmi_ctime">>,<<"true">>},
-  {<<"cdmi_atime">>,<<"true">>},
-  {<<"cdmi_mtime">>,<<"true">>},
-  {<<"cdmi_read_value">>,<<"true">>},
-  {<<"cdmi_read_value_range">>,<<"true">>},
-  {<<"cdmi_read_metadata">>,<<"true">>},
-  {<<"cdmi_modify_value">>,<<"true">>},
-  {<<"cdmi_modify_value_range">>,<<"true">>},
-  {<<"cdmi_modify_metadata">>,<<"true">>},
+%%   {<<"cdmi_acl">>,<<"true">>},
+%%   {<<"cdmi_size">>,<<"true">>},
+%%   {<<"cdmi_ctime">>,<<"true">>},
+%%   {<<"cdmi_atime">>,<<"true">>},
+%%   {<<"cdmi_mtime">>,<<"true">>},
+%%   {<<"cdmi_read_value">>,<<"true">>},
+%%   {<<"cdmi_read_value_range">>,<<"true">>},
+%%   {<<"cdmi_read_metadata">>,<<"true">>},
+%%   {<<"cdmi_modify_value">>,<<"true">>},
+%%   {<<"cdmi_modify_value_range">>,<<"true">>},
+%%   {<<"cdmi_modify_metadata">>,<<"true">>},
   {<<"cdmi_delete_dataobject">>,<<"true">>}
 ]).
 
 %% List of cdmi object capabilites
 -define(container_capability_list,[
-  {<<"cdmi_acl">>,<<"true">>},
-  {<<"cdmi_size">>,<<"true">>},
-  {<<"cdmi_ctime">>,<<"true">>},
-  {<<"cdmi_atime">>,<<"true">>},
-  {<<"cdmi_mtime">>,<<"true">>},
-  {<<"cdmi_list_children">>,<<"true">>},
-  {<<"cdmi_list_children_range">>,<<"true">>},
-  {<<"cdmi_read_metadata">>,<<"true">>},
-  {<<"cdmi_modify_metadata">>,<<"true">>},
-  {<<"cdmi_create_dataobject">>,<<"true">>},
+%%   {<<"cdmi_acl">>,<<"true">>},
+%%   {<<"cdmi_size">>,<<"true">>},
+%%   {<<"cdmi_ctime">>,<<"true">>},
+%%   {<<"cdmi_atime">>,<<"true">>},
+%%   {<<"cdmi_mtime">>,<<"true">>},
+%%   {<<"cdmi_list_children">>,<<"true">>},
+%%   {<<"cdmi_list_children_range">>,<<"true">>},
+%%   {<<"cdmi_read_metadata">>,<<"true">>},
+%%   {<<"cdmi_modify_metadata">>,<<"true">>},
+%%   {<<"cdmi_create_dataobject">>,<<"true">>},
   {<<"cdmi_create_container">>,<<"true">>},
-  {<<"cdmi_delete_container">>,<<"true">>},
-  {<<"cdmi_move_container">>,<<"true">>},
-  {<<"cdmi_copy_container">>,<<"true">>},
-  {<<"cdmi_move_dataobject">>,<<"true">>},
-  {<<"cdmi_copy_dataobject">>,<<"true">>}
+  {<<"cdmi_delete_container">>,<<"true">>}
+%%   {<<"cdmi_move_container">>,<<"true">>},
+%%   {<<"cdmi_copy_container">>,<<"true">>},
+%%   {<<"cdmi_move_dataobject">>,<<"true">>},
+%%   {<<"cdmi_copy_dataobject">>,<<"true">>}
 ]).
 
 %% Paths for all cdmi capability containers (they can be refered by those paths)
