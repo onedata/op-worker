@@ -38,10 +38,10 @@ create_test_users_and_spaces(Config) ->
     Space4 = {<<"space_id4">>, <<"space_name4">>},
     gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
 
-    User1 = {1, [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User2 = {2, [<<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
-    User4 = {4, [<<"space_id4">>]},
+    User1 = {1, [Space1, Space2, Space3, Space4]},
+    User2 = {2, [Space2, Space3, Space4]},
+    User3 = {3, [Space3, Space4]},
+    User4 = {4, [Space4]},
 
     initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
 
@@ -55,8 +55,11 @@ clean_test_users_and_spaces(Config) ->
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(), [SpaceIds :: binary()]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{UserNum, SpaceIds} | R], Config) ->
+
+setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     Self = self(),
+
+    {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
 
     Name = fun(Text, Num) -> name(Text, Num) end,
 
@@ -76,7 +79,7 @@ setup_session(Worker, [{UserNum, SpaceIds} | R], Config) ->
     ?assertEqual({ok, onedata_user_setup}, test_utils:receive_msg(
         onedata_user_setup, ?TIMEOUT)),
     [
-        {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
+        {{spaces, UserNum}, Spaces}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
         {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
         | setup_session(Worker, R, Config)
     ].
