@@ -13,6 +13,8 @@
 
 -include("modules/http_worker/http_common.hrl").
 
+-include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2, content_types_provided/2]).
 -export([get_cdmi_capability/2]).
@@ -63,9 +65,13 @@ content_types_provided(Req, State) ->
 %% @end
 %% ====================================================================
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi_capability(Req, #{opts := Opts} = State) ->
-  RawCapabilities = prepare_capability_ans(Opts, State),
-  Capabilities = jiffy:encode(RawCapabilities),
+get_cdmi_capability(Req, State) ->
+  #{options := Opts} = State,
+  RawCapabilities = case Opts of
+    [] -> prepare_capability_ans(?default_get_capability_opts);
+    X -> prepare_capability_ans(X)
+  end,
+  Capabilities = json:encode(RawCapabilities),
   {Capabilities, Req, State}.
 
 %% ====================================================================
@@ -75,18 +81,28 @@ get_cdmi_capability(Req, #{opts := Opts} = State) ->
 %% ====================================================================
 %% @doc Return proplist contains CDMI answer
 %% ====================================================================
--spec prepare_capability_ans([Opt :: binary], #{}) -> [{Capability :: binary(), Value :: term()}].
-prepare_capability_ans(_Opts, _State) ->
-  ObjectType = "application/cdmi-capability",
-  ObjectName = "cdmi_capabilities/dataobject/",
-  ParentUri = "/cdmi_capabilities/",
-  Children = [],
-%%   ChildrenRange = "0-0",
-  Capabilities = #{},
-
-  #{objectType => ObjectType,
-    objectName => ObjectName,
-    parentURI => ParentUri,
-    children => Children,
-%%     childrenrange => ChildrenRange,
-    capabilities => Capabilities}.
+-spec prepare_capability_ans([Opt :: binary]) -> [{Capability :: binary(), Value :: term()}].
+prepare_capability_ans([]) ->
+  [];
+prepare_capability_ans([<<"objectType">> | Tail]) ->
+  [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
+%% todo uncomment when ID'll be used
+prepare_capability_ans([<<"objectID">> | Tail]) ->
+  prepare_capability_ans(Tail);
+%%   [{<<"objectID">>, ?dataobject_capability_id} | prepare_capability_ans(Tail)];
+prepare_capability_ans([<<"objectName">> | Tail]) ->
+  [{<<"objectName">>, utils:ensure_unicode_binary(rest_utils:get_path_leaf_with_ending_slash(?dataobject_capability_path))} | prepare_capability_ans(Tail)];
+prepare_capability_ans([<<"parentURI">> | Tail]) ->
+  [{<<"parentURI">>, utils:ensure_unicode_binary(?root_capability_path)} | prepare_capability_ans(Tail)];
+%% todo uncomment when ID'll be used
+prepare_capability_ans([<<"parentID">> | Tail]) ->
+  prepare_capability_ans(Tail);
+%%   [{<<"parentID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
+prepare_capability_ans([<<"capabilities">> | Tail]) ->
+  [{<<"capabilities">>, ?dataobject_capability_list} | prepare_capability_ans(Tail)];
+prepare_capability_ans([<<"childrenrange">> | Tail]) ->
+  prepare_capability_ans(Tail);
+prepare_capability_ans([<<"children">> | Tail]) ->
+  [{<<"children">>, []} | prepare_capability_ans(Tail)];
+prepare_capability_ans([_Other | Tail]) ->
+  prepare_capability_ans(Tail).

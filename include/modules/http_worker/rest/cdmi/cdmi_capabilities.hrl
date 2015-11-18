@@ -64,12 +64,14 @@
 -define(container_capability_path,"cdmi_capabilities/container/").
 -define(dataobject_capability_path,"cdmi_capabilities/dataobject/").
 
+%% todo uncomment IDs
+
 % Fake database uuids, necessary for objectid generation
 %% -define(root_capability_uuid,"0000000000000001").
 %% -define(container_capability_uuid,"0000000000000002").
 %% -define(dataobject_capability_uuid,"0000000000000003").
 
-% Cdmi objectISs for all cdmi capability containers
+% Cdmi objectIDs for all cdmi capability containers
 %% -define(root_capability_id,cdmi_id:uuid_to_objectid(?root_capability_uuid)).
 %% -define(container_capability_id,cdmi_id:uuid_to_objectid(?container_capability_uuid)).
 %% -define(dataobject_capability_id,cdmi_id:uuid_to_objectid(?dataobject_capability_uuid)).
