@@ -6,7 +6,7 @@
 %% @end
 %%%-------------------------------------------------------------------
 %%% @doc This header provides common definitions for cdmi_objects,
-%%% (they can be accessed via cdmi_object.erl handler)
+%%% (they can be accessed via cdmi_object_handler.erl)
 %%% @end
 %%%-------------------------------------------------------------------
 

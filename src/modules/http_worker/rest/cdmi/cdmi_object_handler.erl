@@ -79,7 +79,7 @@ resource_exists(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_provided(req(), #{}) ->
     {[{binary(), atom()}], req(), #{}}.
-content_types_provided(Req, State) ->
+content_types_provided(Req, #{cdmi_version := undefined} = State) ->
     {[
         {<<"application/binary">>, get_binary}
     ], Req, State};
@@ -104,7 +104,7 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, #{path := Path, identity := Identity} = State) ->
-    case onedata_file_api:unlink(Identity, {path, utils:ensure_unicode_binary(Path)}) of
+    case onedata_file_api:unlink(Identity, get_file_key(Path)) of
         ok -> {true, Req, State};
         {error, Code} -> cdmi_error:unlink_failed_reply(Req, State, Code)
     end.
@@ -139,16 +139,8 @@ get_binary(Req, #{path := Path} = State) ->
                 ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
                 ({_, _}, Acc)  -> Acc
             end, 0, Ranges),
-            StreamFun = fun(Socket, Transport) ->
-                try
-                    {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-                    lists:foreach(fun(Rng) ->
-                        stream_file(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
-                catch Type:Message ->
-                    % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
-                    ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
-                end
-            end,
+
+            StreamFun = stream(State, Ranges),
 
             % set mimetype
             Req2 = cowboy_req:set_resp_header(<<"content-type">>, get_mimetype(Path), Req1),
@@ -156,6 +148,7 @@ get_binary(Req, #{path := Path} = State) ->
             % reply with stream and adequate status
             {ok, Req3} = case RawRange of
                              undefined ->
+
                                  cowboy_req:reply(?HTTP_OK, [], {StreamSize, StreamFun}, Req2);
                              _ ->
                                  cowboy_req:reply(?PARTIAL_CONTENT, [], {StreamSize, StreamFun}, Req2)
@@ -224,27 +217,47 @@ parse_byte_range(State, [First | Rest]) ->
 %% and streamed to given Socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_file(Socket :: term(), Transport :: atom(), State :: #{}, Range, Encoding :: binary(), BufferSize :: integer()) -> Result when
+-spec stream_range(Socket :: term(), Transport :: atom(), State :: #{}, Range, Encoding :: binary(), BufferSize :: integer()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
     Result :: ok | no_return().
-stream_file(Socket, Transport, State, Range, Encoding, BufferSize) when (BufferSize rem 3) =/= 0 ->
+stream_range(Socket, Transport, State, Range, Encoding, BufferSize) when (BufferSize rem 3) =/= 0 ->
     %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
-    stream_file(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3));
-stream_file(Socket, Transport, State, default, Encoding, BufferSize) ->
+    stream_range(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3));
+stream_range(Socket, Transport, State, default, Encoding, BufferSize) ->
     %default range should remain consistent with parse_object_ans/2 valuerange clause
     Size = get_size(State),
-    stream_file(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize);
-stream_file(Socket, Transport, #{path := Path} = State, {From, To}, Encoding, BufferSize) ->
+    stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize);
+stream_range(Socket, Transport, #{path := Path, identity := Identity} = State, {From, To}, Encoding, BufferSize) ->
     ToRead = To - From + 1,
+    {ok, FileHandle} = onedata_file_api:open(Identity, get_file_key(Path) ,read),
     case ToRead > BufferSize of
         true ->
-            {ok, Data} = onedata_file_api:read(Path, From, BufferSize),
+            {ok, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
             Transport:send(Socket, encode(Data, Encoding)),
-            stream_file(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize);
+            stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize);
         false ->
-            {ok, Data} = onedata_file_api:read(Path, From, ToRead),
+            {ok, Data} = onedata_file_api:read(FileHandle, From, ToRead),
             Transport:send(Socket, encode(Data, Encoding))
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads given ranges of file and streams to given Socket
+%% @end
+%%--------------------------------------------------------------------
+stream(#{path := Path} = State, Ranges) ->
+    fun(Socket, Transport) ->
+        try
+            {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
+            lists:foreach(fun(Rng) ->
+            stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
+        catch Type:Message ->
+            % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
+            ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
+        end
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -255,6 +268,7 @@ stream_file(Socket, Transport, #{path := Path} = State, {From, To}, Encoding, Bu
 -spec get_mimetype(string()) -> binary().
 get_mimetype(Path) ->
     case onedata_file_api:get_xattr(Path, ?MIMETYPE_XATTR_KEY) of
+        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE; %%TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
         {ok, Value} -> Value;
         {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
     end.
@@ -263,7 +277,7 @@ get_mimetype(Path) ->
 %% @doc Encodes data according to given ecoding
 %%--------------------------------------------------------------------
 -spec encode(Data :: binary(), Encoding :: binary()) -> binary().
-encode(Data, Encoding) when Encoding =:= <<"base64">> ->
+encode(Data, Encoding) when Encoding =:= ?ENCODING_DEFAULT_VALUE ->
     base64:encode(Data);
 encode(Data, _) ->
     Data.
@@ -275,3 +289,10 @@ encode(Data, _) ->
 get_size(#{identity := Identity, path := Path} = _State) ->
     {ok, #file_attr{size = Size}} = onedata_file_api:stat(Identity, {path, Path}),
     Size.
+
+%%--------------------------------------------------------------------
+%% @doc Get file key
+%%--------------------------------------------------------------------
+-spec get_file_key(Path :: onedata_file_api:file_path()) -> onedata_file_api:file_id_or_path().
+get_file_key(Path) ->
+    {path, utils:ensure_unicode_binary(Path)}.
