@@ -292,7 +292,10 @@ safe_delete(Level, ModelName, Key) ->
                 FullArgs2 = [ModelConfig, Key, Pred],
                 erlang:apply(datastore:level_to_driver(Level), delete, FullArgs2);
             {error, {not_found, _}} -> ok;
-            {error, Reason} -> {error, Reason}
+            {error, Reason} ->
+                ?error("Error in cache controller safe_delete. Args: ~p. Error: ~p.",
+                [{Level, ModelName, Key}, Reason]), 
+                {error, Reason}
         end
     catch
         E1:E2 ->
