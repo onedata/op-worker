@@ -1,13 +1,13 @@
+import copy
+import json
 import os
 import re
 import sys
-import copy
-import json
 import time
 import traceback
+from contextlib import contextmanager
 from subprocess import Popen, PIPE
 
-PERFORMANCE_ENV_VARIABLE = 'PERFORMANCE'
 PERFORMANCE_RESULT_FILE = os.path.join(os.environ.get('BASE_TEST_DIR', '.'),
                                        'performance.json')
 
@@ -77,37 +77,28 @@ class Duration(object):
         return self.value / 1000000.
 
 
-def duration(d, f, *args, **kwargs):
-    """Measures execution time of function call."""
+@contextmanager
+def measure(duration):
     start_time = time.time()
-    result = f(*args, **kwargs)
+    yield start_time
     end_time = time.time()
-    d.increment(int((end_time - start_time) * 1000000))
-    return result
+    duration.increment(int((end_time - start_time) * 1000000))
 
 
-# noinspection PyDefaultArgument
-def performance(config={}, skip=False):
+def performance(repeats=1, parameters=[], configs={}, perf_enabled=False):
     """Decorator that wraps test case and enables execution of performance
     tests configurations."""
 
     def performance_decorator(test_case):
-        if os.environ.get(PERFORMANCE_ENV_VARIABLE) == 'True' and skip:
-            pass
-        else:
-            default_reps = config.get('repeats', 1)
-            default_params = config.get('parameters', [])
+        def test_case_decorator(*args, **kwargs):
+            if perf_enabled:
+                test_suite = sys.modules[test_case.__module__]
+                exec_perf_configs(test_suite, test_case, args, kwargs,
+                                  repeats, parameters, configs)
+            else:
+                exec_ct_config(test_case, parameters, args, kwargs)
 
-            def test_case_decorator(*args, **kwargs):
-                if os.environ.get(PERFORMANCE_ENV_VARIABLE) == 'True':
-                    test_suite = sys.modules[test_case.__module__]
-                    configs = config.get('configs', {})
-                    exec_perf_configs(test_suite, test_case, args, kwargs,
-                                      default_reps, default_params, configs)
-                else:
-                    exec_ct_config(test_case, default_params, args, kwargs)
-
-            return test_case_decorator
+        return test_case_decorator
 
     return performance_decorator
 
@@ -121,12 +112,16 @@ def exec_ct_config(test_case, params, args, kwargs):
 def exec_perf_configs(test_suite, test_case, case_args, case_kwargs,
                       default_reps, default_params, configs):
     """Executes integration test case using performance configurations."""
-    results = map(lambda (config_name, config):
-                  exec_perf_config(test_suite, test_case, case_args,
-                                   case_kwargs, config_name, config,
-                                   default_reps, default_params),
-                  configs.items())
-    assert all(results)
+    exceptions = []
+    for config_name, config in configs.items():
+        failed_repeats = exec_perf_config(test_suite, test_case, case_args,
+                                          case_kwargs, config_name, config,
+                                          default_reps, default_params)
+
+        exceptions.extend(failed_repeats)
+
+    if exceptions:
+        raise exceptions[0][0], exceptions[0][1], exceptions[0][2]
 
 
 # noinspection PyShadowingNames
@@ -169,7 +164,10 @@ def exec_perf_config(test_suite, test_case, case_args, case_kwargs, config_name,
         'successful_repeats_summary': format_parameters(reps_summary),
         'successful_repeats_average': format_parameters(reps_average),
         'successful_repeats_details': format_parameters(reps_details),
-        'failed_repeats_details': failed_reps
+        'failed_repeats_details': {
+            rep: "".join(traceback.format_exception(*edetails))
+            for rep, edetails in failed_reps.items()
+            }
     }})
     cases.update({case_name: {
         'name': case_name,
@@ -187,11 +185,7 @@ def exec_perf_config(test_suite, test_case, case_args, case_kwargs, config_name,
 
     save_performance_results(performance)
 
-    # Check whether performance configuration execution has been successfully
-    # completed.
-    if failed_reps:
-        return False
-    return True
+    return failed_reps.values()
 
 
 # noinspection PyShadowingNames
@@ -229,17 +223,18 @@ def exec_test_repeat(test_case, case_args, case_kwargs):
     """Executes test case once."""
     try:
         test_time = Duration()
-        result = duration(test_time, test_case, *case_args, **case_kwargs)
-        result = [result] if not isinstance(result, list) else result
-        params = filter(lambda param: isinstance(param, Parameter), result)
-        params.insert(0, Parameter(
-            name='test_time',
-            description='Test execution time.',
-            value=test_time.ms(),
-            unit='ms'))
-        return True, params
-    except Exception as e:
-        return False, '{0}\n{1}'.format(e.message, traceback.format_exc())
+        with measure(test_time):
+            result = test_case(*case_args, **case_kwargs)
+            result = [result] if not isinstance(result, list) else result
+            params = filter(lambda param: isinstance(param, Parameter), result)
+            params.insert(0, Parameter(
+                name='test_time',
+                description='Test execution time.',
+                value=test_time.ms(),
+                unit='ms'))
+            return True, params
+    except Exception:
+        return False, sys.exc_info()
 
 
 # noinspection PyBroadException

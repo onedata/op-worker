@@ -2,6 +2,9 @@ import os
 import random
 import string
 import sys
+from Queue import Queue
+from contextlib import contextmanager
+from threading import Thread
 
 _script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -15,6 +18,7 @@ annotations_dir = os.path.join(project_dir, 'test', 'annotations')
 sys.path = [appmock_dir, docker_dir, annotations_dir] + sys.path
 
 from performance import Parameter
+from proto import messages_pb2
 
 
 def random_int():
@@ -62,3 +66,32 @@ def translate_unit(unit):
         return 1048576
     else:
         return 1
+
+
+def _with_reply_process(endpoint, responses, queue):
+    for response in responses:
+        [received_msg] = endpoint.wait_for_any_messages(return_history=True)
+        endpoint.client.reset_tcp_history()
+
+        client_message = messages_pb2.ClientMessage()
+        client_message.ParseFromString(received_msg)
+
+        response.message_id = client_message.message_id.encode('utf-8')
+        endpoint.send(response.SerializeToString())
+
+        queue.put(client_message)
+
+
+@contextmanager
+def reply(endpoint, responses):
+    if not isinstance(responses, list):
+        responses = [responses]
+
+    queue = Queue()
+    p = Thread(target=_with_reply_process, args=(endpoint, responses, queue))
+    p.start()
+
+    try:
+        yield queue
+    finally:
+        p.join()
