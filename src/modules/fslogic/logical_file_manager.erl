@@ -79,7 +79,6 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a directory.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
@@ -91,7 +90,6 @@ mkdir(SessId, Path) ->
 %% @doc
 %% Lists some contents of a directory.
 %% Returns up to Limit of entries, starting with Offset-th entry.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
@@ -102,7 +100,6 @@ ls(SessId, FileKey, Limit, Offset) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns number of children of a directory.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_count(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
@@ -113,7 +110,6 @@ get_children_count(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if a file or directory exists.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
@@ -124,7 +120,6 @@ exists(FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Moves a file or directory to a new location.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
@@ -135,7 +130,6 @@ mv(FileKeyFrom, PathTo) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Copies a file or directory to given location.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
@@ -146,7 +140,6 @@ cp(PathFrom, PathTo) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a file or an empty directory.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(handle()) -> ok | error_reply().
@@ -164,7 +157,6 @@ unlink(SessId, FileEntry) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
@@ -186,7 +178,6 @@ create(SessId, Path, Mode) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Opens a file in selected mode and returns a file handle used to read or write.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, handle()} | error_reply().
@@ -198,7 +189,6 @@ open(SessId, FileKey, OpenType) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Writes data to a file. Returns number of written bytes.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: handle(), Offset :: integer(), Buffer :: binary()) ->
@@ -229,7 +219,6 @@ write(FileHandle, Offset, Buffer) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Reads requested part of a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
@@ -262,7 +251,6 @@ read(FileHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate(FileHandle :: handle(), Size :: non_neg_integer()) -> ok | error_reply().
@@ -285,7 +273,6 @@ truncate(SessId, FileKey, Size) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns block map for a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 
@@ -302,7 +289,6 @@ get_block_map(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Changes the permissions of a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) -> ok | error_reply().
@@ -313,7 +299,6 @@ set_perms(Path, NewPerms) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if current user has given permissions for given file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
@@ -324,7 +309,6 @@ check_perms(Path, PermType) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's Access Control List.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(FileKey :: file_key()) -> {ok, [access_control_entity()]} | error_reply().
@@ -335,7 +319,6 @@ get_acl(Path) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates file's Access Control List.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(FileKey :: file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
@@ -346,7 +329,6 @@ set_acl(Path, EntityList) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file attributes.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(handle()) -> {ok, file_attributes()} | error_reply().
@@ -362,7 +344,6 @@ stat(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's extended attribute by key.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
@@ -373,7 +354,6 @@ get_xattr(Path, Key) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates file's extended attribute by key.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
@@ -384,7 +364,6 @@ set_xattr(Path, Key, Value) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes file's extended attribute by key.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
@@ -395,7 +374,6 @@ remove_xattr(Path, Key) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns complete list of extended attributes of a file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
@@ -406,7 +384,6 @@ list_xattr(Path) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a symbolic link.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_uuid()} | error_reply().
@@ -417,7 +394,6 @@ create_symlink(Path, TargetFileKey) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns the symbolic link's target file.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec read_symlink(FileKey :: file_key()) -> {ok, {file_uuid(), file_name()}} | error_reply().
@@ -428,7 +404,6 @@ read_symlink(FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes a symbolic link.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_symlink(FileKey :: file_key()) -> ok | error_reply().
@@ -440,7 +415,6 @@ remove_symlink(FileKey) ->
 %% @doc
 %% Creates a share for given file. File can be shared with anyone or
 %% only specified group of users.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
@@ -452,7 +426,6 @@ create_share(Path, ShareWith) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns shared file by share_id.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
@@ -463,7 +436,6 @@ get_share(ShareID) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes file share by ShareID.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(ShareID :: share_id()) -> ok | error_reply().

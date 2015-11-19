@@ -44,10 +44,9 @@ all() -> [
     lfm_truncate_test
 ].
 
--define(TIMEOUT, timer:seconds(5)).
-
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}])).
--define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args)).
+-define(TIMEOUT, timer:seconds(10)).
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).
+-define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
 %%% Test function
@@ -57,8 +56,8 @@ all() -> [
 fslogic_new_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
@@ -164,11 +163,11 @@ lfm_create_and_access_test(Config) ->
 lfm_create_and_unlink_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
-    RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
+    _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
+    _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
 
     FilePath1 = <<"/", (gen_name())/binary>>,
     FilePath2 = <<"/", (gen_name())/binary>>,
@@ -196,11 +195,11 @@ lfm_create_and_unlink_test(Config) ->
 lfm_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
-    RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
+    _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
+    _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
 
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test3">>, 8#755)),
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test4">>, 8#755)),
@@ -219,7 +218,6 @@ lfm_write_test(Config) ->
 
     WriteAndTest =
         fun(Worker, Handle, Offset, Bytes) ->
-%%             ct:print("Testing lfm write with offset ~p and binary ~p", [Offset, Bytes]),
             Size = size(Bytes),
             ?assertMatch({ok, Size}, write(Worker, Handle, Offset, Bytes)),
             for(Offset, Offset + Size - 1,
@@ -227,11 +225,9 @@ lfm_write_test(Config) ->
                     for(1, Offset + Size - I,
                         fun(J) ->
                             SubBytes = binary:part(Bytes, I - Offset, J),
-%%                             ct:print("===== Offset ~p Size ~p Expected ~p", [I, J, SubBytes]),
                             ?assertMatch({ok, SubBytes}, read(Worker, Handle, I, J))
                         end)
                 end)
-
 
 
         end,
@@ -260,8 +256,7 @@ lfm_write_test(Config) ->
 lfm_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
 
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test5">>, 8#755)),
 
@@ -273,20 +268,16 @@ lfm_stat_test(Config) ->
     ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test5">>})),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 3, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 2, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 6}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ?assertMatch({ok, 9}, write(W, Handle11, 1, <<"123456789">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test5">>})),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test5">>}), 10),
 
     ok.
 
@@ -295,8 +286,7 @@ lfm_truncate_test(Config) ->
 
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
 
     ?assertMatch({ok, _}, create(W, SessId1, <<"/test6">>, 8#755)),
 
@@ -308,31 +298,24 @@ lfm_truncate_test(Config) ->
     ?assertMatch({ok, #file_attr{size = 0}}, stat(W, SessId1, {path, <<"/test6">>})),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 3}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
 
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 1)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 1}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 1}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 10)),
 
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 10)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"a">>}, read(W, Handle11, 0, 1)),
 
     ?assertMatch({ok, 3}, write(W, Handle11, 1, <<"abc">>)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 10}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
 
     ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 5)),
-    wait_for_events(),
-    ?assertMatch({ok, #file_attr{size = 5}}, stat(W, SessId1, {path, <<"/test6">>})),
+    ?assertMatch({ok, #file_attr{size = 5}}, stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"aabc">>}, read(W, Handle11, 0, 4)),
 
     ok.
-
-
 
 
 %% Get uuid of given by path file. Possible as root to bypass permissions checks.
@@ -341,9 +324,11 @@ get_uuid_privileged(Worker, SessId, Path) ->
 
 
 get_uuid(Worker, SessId, Path) ->
-    RootFileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
-    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
-    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = RootFileAttr,
+    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
+        #fuse_response{status = #status{code = ?OK}},
+        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+        30
+    ),
     UUID.
 
 %%%===================================================================
@@ -371,6 +356,7 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
+    communicator_mock_setup(Workers),
     file_meta_mock_setup(Workers),
     Space1 = {<<"space_id1">>, <<"space_name1">>},
     Space2 = {<<"space_id2">>, <<"space_name2">>},
@@ -384,26 +370,23 @@ init_per_testcase(_, Config) ->
     User4 = {4, [<<"space_id4">>]},
 
     Host = self(),
-    Servers = lists:map(
-        fun(W) ->
-            spawn_link(W,
-                fun() ->
-                    lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
-                    Host ! {self(), done},
-                    receive
-                        exit -> ok
-                    end
-                end)
-        end, ?config(op_worker_nodes, Config)),
-
-    lists:foreach(
-        fun(Server) ->
+    Servers = lists:map(fun(W) ->
+        spawn_link(W, fun() ->
+            lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
+            Host ! {self(), done},
             receive
-                {Server, done} -> ok
-            after timer:seconds(5) ->
-                error("Cannot setup lfm_handles ETS")
+                exit -> ok
             end
-        end, Servers),
+        end)
+    end, ?config(op_worker_nodes, Config)),
+
+    lists:foreach(fun(Server) ->
+        receive
+            {Server, done} -> ok
+        after timer:seconds(5) ->
+            error("Cannot setup lfm_handles ETS")
+        end
+    end, Servers),
 
 
     Config1 = session_setup(Worker, [User1, User2, User3, User4], Config),
@@ -412,14 +395,13 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
-    lists:foreach(
-        fun(Pid) ->
-            Pid ! exit
-        end, ?config(servers, Config)),
+    lists:foreach(fun(Pid) ->
+        Pid ! exit
+    end, ?config(servers, Config)),
 
     session_teardown(Worker, Config),
-    mocks_teardown(Workers, [file_meta, gr_spaces]),
-    timer:sleep(timer:seconds(10)).
+    test_utils:mock_validate(Workers, [communicator, file_meta, gr_spaces]),
+    test_utils:mock_unload(Workers, [communicator, file_meta, gr_spaces]).
 
 %%%===================================================================
 %%% Internal functions
@@ -452,8 +434,7 @@ session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
             name = UserName, space_ids = SpaceIds
         }}
     ]),
-    ?assertEqual({ok, onedata_user_setup}, test_utils:receive_msg(
-        onedata_user_setup, ?TIMEOUT)),
+    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
         {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
@@ -469,24 +450,24 @@ session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
 -spec session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
 session_teardown(Worker, Config) ->
     lists:foldl(fun
-                    ({{session_id, _}, SessId}, Acc) ->
-                        ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
-                        Acc;
-                    ({{spaces, _}, SpaceIds}, Acc) ->
-                        lists:foreach(fun(SpaceId) ->
-                            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
-                                      end, SpaceIds),
-                        Acc;
-                    ({{user_id, _}, UserId}, Acc) ->
-                        ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
-                        ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
-                        ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_path:spaces_uuid(UserId)])),
-                        Acc;
-                    ({{fslogic_ctx, _}, _}, Acc) ->
-                        Acc;
-                    (Elem, Acc) ->
-                        [Elem | Acc]
-                end, [], Config).
+        ({{session_id, _}, SessId}, Acc) ->
+            ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
+            Acc;
+        ({{spaces, _}, SpaceIds}, Acc) ->
+            lists:foreach(fun(SpaceId) ->
+                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
+            end, SpaceIds),
+            Acc;
+        ({{user_id, _}, UserId}, Acc) ->
+            ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_path:spaces_uuid(UserId)])),
+            Acc;
+        ({{fslogic_ctx, _}, _}, Acc) ->
+            Acc;
+        (Elem, Acc) ->
+            [Elem | Acc]
+    end, [], Config).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -499,12 +480,11 @@ session_teardown(Worker, Config) ->
     [{binary(), binary()}]) -> ok.
 gr_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_new(Workers, gr_spaces),
-    test_utils:mock_expect(Workers, gr_spaces, get_details,
-        fun(provider, SpaceId) ->
+    test_utils:mock_expect(Workers, gr_spaces, get_details, fun
+        (provider, SpaceId) ->
             {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
             {ok, #space_details{name = SpaceName}}
-        end
-    ).
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -516,24 +496,24 @@ gr_spaces_mock_setup(Workers, Spaces) ->
 file_meta_mock_setup(Workers) ->
     Self = self(),
     test_utils:mock_new(Workers, file_meta),
-    test_utils:mock_expect(Workers, file_meta, 'after',
-        fun(onedata_user, create, _, _, {ok, UUID}) ->
+    test_utils:mock_expect(Workers, file_meta, 'after', fun
+        (onedata_user, create, _, _, {ok, UUID}) ->
             file_meta:setup_onedata_user(UUID),
             Self ! onedata_user_setup
-        end
-    ).
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Validates and unloads mocks.
+%% Mocks communicator module, so that it ignores all messages.
 %% @end
 %%--------------------------------------------------------------------
--spec mocks_teardown(Workers :: node() | [node()],
-    Modules :: module() | [module()]) -> ok.
-mocks_teardown(Workers, Modules) ->
-    test_utils:mock_validate(Workers, Modules),
-    test_utils:mock_unload(Workers, Modules).
+-spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
+communicator_mock_setup(Workers) ->
+    test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send,
+        fun(_, _) -> ok end
+    ).
 
 name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
@@ -543,94 +523,86 @@ gen_name() ->
 
 
 stat(Worker, SessId, FileKey) ->
-    exec(Worker,
-        fun(Host) ->
-            Result =
-                logical_file_manager:stat(SessId, FileKey),
-            Host ! {self(), Result}
-        end).
+    exec(Worker, fun(Host) ->
+        Result =
+            logical_file_manager:stat(SessId, FileKey),
+        Host ! {self(), Result}
+    end).
 
 
 truncate(Worker, SessId, FileKey, Size) ->
-    exec(Worker,
-        fun(Host) ->
-            Result =
-                logical_file_manager:truncate(SessId, FileKey, Size),
-            Host ! {self(), Result}
-        end).
+    exec(Worker, fun(Host) ->
+        Result =
+            logical_file_manager:truncate(SessId, FileKey, Size),
+        Host ! {self(), Result}
+    end).
 
 
 create(Worker, SessId, FilePath, Mode) ->
-    exec(Worker,
-        fun(Host) ->
-            Result =
-                logical_file_manager:create(SessId, FilePath, Mode),
-            Host ! {self(), Result}
-        end).
+    exec(Worker, fun(Host) ->
+        Result =
+            logical_file_manager:create(SessId, FilePath, Mode),
+        Host ! {self(), Result}
+    end).
 
 unlink(Worker, SessId, File) ->
-    exec(Worker,
-        fun(Host) ->
-            Result =
-                logical_file_manager:unlink(SessId, File),
-            Host ! {self(), Result}
-        end).
+    exec(Worker, fun(Host) ->
+        Result =
+            logical_file_manager:unlink(SessId, File),
+        Host ! {self(), Result}
+    end).
 
 
 open(Worker, SessId, FileKey, OpenMode) ->
-    exec(Worker,
-        fun(Host) ->
-            Result =
-                case logical_file_manager:open(SessId, FileKey, OpenMode) of
-                    {ok, Handle} ->
-                        TestHandle = crypto:rand_bytes(10),
-                        ets:insert(lfm_handles, {TestHandle, Handle}),
-                        {ok, TestHandle};
-                    Other -> Other
-                end,
-            Host ! {self(), Result}
-        end).
+    exec(Worker, fun(Host) ->
+        Result =
+            case logical_file_manager:open(SessId, FileKey, OpenMode) of
+                {ok, Handle} ->
+                    TestHandle = crypto:rand_bytes(10),
+                    ets:insert(lfm_handles, {TestHandle, Handle}),
+                    {ok, TestHandle};
+                Other -> Other
+            end,
+        Host ! {self(), Result}
+    end).
 
 read(Worker, TestHandle, Offset, Size) ->
-    exec(Worker,
-        fun(Host) ->
-            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            Result =
-                case logical_file_manager:read(Handle, Offset, Size) of
-                    {ok, NewHandle, Res}  ->
-                        ets:insert(lfm_handles, {TestHandle, NewHandle}),
-                        {ok, Res};
-                    Other -> Other
-                end,
-            Host ! {self(), Result}
-        end).
+    exec(Worker, fun(Host) ->
+        [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+        Result =
+            case logical_file_manager:read(Handle, Offset, Size) of
+                {ok, NewHandle, Res} ->
+                    ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                    {ok, Res};
+                Other -> Other
+            end,
+        Host ! {self(), Result}
+    end).
 
 write(Worker, TestHandle, Offset, Bytes) ->
-    exec(Worker,
-        fun(Host) ->
-            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            Result =
-                case logical_file_manager:write(Handle, Offset, Bytes) of
-                    {ok, NewHandle, Res}  ->
-                        ets:insert(lfm_handles, {TestHandle, NewHandle}),
-                        {ok, Res};
-                    Other -> Other
-                end,
-            Host ! {self(), Result}
-        end).
+    exec(Worker, fun(Host) ->
+        [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+        Result =
+            case logical_file_manager:write(Handle, Offset, Bytes) of
+                {ok, NewHandle, Res} ->
+                    ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                    {ok, Res};
+                Other -> Other
+            end,
+        Host ! {self(), Result}
+    end).
 
 
 exec(Worker, Fun) ->
     Host = self(),
-    Pid = spawn_link(Worker,
-        fun() ->
-            try
-                Fun(Host)
-            catch
-                _:Reason ->
-                    Host ! {self(), {error, {test_exec, Reason, erlang:get_stacktrace()}}}
-            end
-        end),
+    Pid = spawn_link(Worker, fun() ->
+        try
+            Fun(Host)
+        catch
+            _:Reason ->
+                Host ! {self(), {error, {test_exec, Reason, erlang:get_stacktrace()}}}
+        end
+    end),
     receive
         {Pid, Result} -> Result
     after timer:seconds(5) ->
@@ -641,11 +613,6 @@ for(From, To, Fun) ->
     for(From, To, 1, Fun).
 for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
-
-
-wait_for_events() ->
-    timer:sleep(timer:seconds(2)).
-
 
 gen_storage_dir() ->
     ?TEMP_DIR ++ "/storage/" ++ erlang:binary_to_list(gen_name()).

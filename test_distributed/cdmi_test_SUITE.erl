@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -23,10 +24,11 @@
     end_per_testcase/2]).
 
 -export([choose_adequate_handler/1, list_basic_dir_test/1, list_root_dir_test/1,
-    list_nonexisting_dir_test/1, get_selective_params_of_dir_test/1]).
+    list_nonexisting_dir_test/1, get_selective_params_of_dir_test/1,
+    use_supported_cdmi_version/1, use_unsupported_cdmi_version/1]).
 
 -performance({test_cases, []}).
-all() -> [choose_adequate_handler].
+all() -> [choose_adequate_handler, use_supported_cdmi_version, use_unsupported_cdmi_version].
 
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
@@ -55,7 +57,7 @@ list_basic_dir_test(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    TestDir="dir",
+    TestDir = "dir",
     %todo create TestDir
 
     % when
@@ -114,10 +116,33 @@ get_selective_params_of_dir_test(Config) ->
 
     % then
     ?assertEqual("200", Code),
-    {struct,CdmiResponse4} = mochijson2:decode(Response),
-    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiResponse4)),
-    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiResponse4)),
-    ?assertEqual(2,length(CdmiResponse4)).
+    {struct, CdmiResponse4} = mochijson2:decode(Response),
+    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>, CdmiResponse4)),
+    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>, CdmiResponse4)),
+    ?assertEqual(2, length(CdmiResponse4)).
+
+use_supported_cdmi_version(Config) ->
+    % given
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    RequestHeaders = [{"X-CDMI-Specification-Version", "1.1.1"}],
+
+    % when
+    {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
+
+    % then
+    %% we are to get 404 because path "/" doesn't exist.
+    ?assertEqual("404", Code).
+
+use_unsupported_cdmi_version(Config) ->
+    % given
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
+
+    % when
+    {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
+
+    % then
+    ?assertEqual("400", Code).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -167,7 +192,7 @@ cdmi_endpoint(Node) ->
     Port =
         case get(port) of
             undefined ->
-                {ok, P} = rpc:call(Node, application, get_env, [?APP_NAME, http_worker_rest_port]),
+                {ok, P} = test_utils:get_env(Node, ?APP_NAME, http_worker_rest_port),
                 PStr = integer_to_list(P),
                 put(port, PStr),
                 PStr;

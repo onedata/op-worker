@@ -29,7 +29,7 @@
     admission_rule = fun(#write_event{}) -> true; (_) -> false end,
     aggregation_rule = fun
         (#write_event{source = Source, file_uuid = Id, file_size = FSize1} = Evt1,
-         #write_event{source = Source, file_uuid = Id, file_size = FSize2, blocks = Blocks2} = Evt2) ->
+         #write_event{source = Source, file_uuid = Id, file_size = FSize2} = Evt2) ->
             NewFileSize =   %% Get maximum file size but only if defined
                 case FSize2 of
                     _ when is_integer(FSize2) ->

@@ -274,26 +274,32 @@ delete_old_keys(Level, Caches, TimeWindow) ->
 -spec safe_delete(Level :: datastore:store_level(), ModelName :: model_behaviour:model_type(), Key :: datastore:key()) ->
   ok | datastore:generic_error().
 safe_delete(Level, ModelName, Key) ->
-  try
-    ModelConfig = ModelName:model_init(),
-    FullArgs = [ModelConfig, Key],
-    {ok, Doc} = worker_proxy:call(datastore_worker,
-      {driver_call, datastore:driver_to_module(datastore:level_to_driver(Level)), get, FullArgs}),
-
-    Value = Doc#document.value,
-    Pred = fun() ->
-      case erlang:apply(datastore:level_to_driver(Level), get, FullArgs) of
-        {ok, Doc2} ->
-          Doc2#document.value =:= Value;
-        _ ->
-          false
-      end
-    end,
-    FullArgs2 = [ModelConfig, Key, Pred],
-    erlang:apply(datastore:level_to_driver(Level), delete, FullArgs2)
-  catch
-    E1:E2 ->
-      ?error_stacktrace("Error in cache controller safe_delete. "
-        ++"Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
-      {error, safe_delete_failed}
-  end.
+    try
+        ModelConfig = ModelName:model_init(),
+        FullArgs = [ModelConfig, Key],
+        Module = datastore:driver_to_module(datastore:level_to_driver(Level)),
+        case worker_proxy:call(datastore_worker, {driver_call, Module, get, FullArgs}) of
+            {ok, Doc} ->
+                Value = Doc#document.value,
+                Pred = fun() ->
+                    case erlang:apply(datastore:level_to_driver(Level), get, FullArgs) of
+                        {ok, Doc2} ->
+                            Doc2#document.value =:= Value;
+                        _ ->
+                            false
+                    end
+                end,
+                FullArgs2 = [ModelConfig, Key, Pred],
+                erlang:apply(datastore:level_to_driver(Level), delete, FullArgs2);
+            {error, {not_found, _}} -> ok;
+            {error, Reason} ->
+                ?error("Error in cache controller safe_delete. Args: ~p. Error: ~p.",
+                [{Level, ModelName, Key}, Reason]), 
+                {error, Reason}
+        end
+    catch
+        E1:E2 ->
+            ?error_stacktrace("Error in cache controller safe_delete. "
+            ++ "Args: ~p. Error: ~p:~p.", [{Level, ModelName, Key}, E1, E2]),
+            {error, safe_delete_failed}
+    end.
