@@ -20,16 +20,18 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
+-include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+  end_per_testcase/2]).
 
 -export([choose_adequate_handler/1, use_supported_cdmi_version/1,
-    use_unsupported_cdmi_version/1, create_dir_test/1]).
+    use_unsupported_cdmi_version/1, create_dir_test/1, capabilities_test/1]).
 
 -performance({test_cases, []}).
 all() -> [choose_adequate_handler, use_supported_cdmi_version,
-    use_unsupported_cdmi_version, create_dir_test].
+    use_unsupported_cdmi_version, create_dir_test, capabilities_test].
 
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
@@ -93,6 +95,56 @@ create_dir_test(Config) ->
 
     ?assert(object_exists(Config, DirName)).
     %%------------------------------
+
+% tests if capabilities of objects, containers, and whole storage system are set properly
+capabilities_test(Config) ->
+%%   todo uncomment tests with IDs
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    %%--- system capabilities ------
+    RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    {ok, Code8, Headers8, Response8} = do_request(Worker, "cdmi_capabilities/", get, RequestHeaders8, []),
+    ?assertEqual("200", Code8),
+
+    ?assertEqual("application/cdmi-capability", proplists:get_value("content-type", Headers8)),
+    CdmiResponse8 = json:decode(Response8),
+%%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
+    ?assertEqual(?root_capability_path, proplists:get_value(<<"objectName">>, CdmiResponse8)),
+    ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
+    ?assertEqual([<<"container/">>, <<"dataobject/">>], proplists:get_value(<<"children">>, CdmiResponse8)),
+    Capabilities = proplists:get_value(<<"capabilities">>, CdmiResponse8),
+    ?assertEqual(?root_capability_list, Capabilities),
+    %%------------------------------
+
+    %%-- container capabilities ----
+    RequestHeaders9 = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    {ok, Code9, _Headers9, Response9} = do_request(Worker, "cdmi_capabilities/container/", get, RequestHeaders9, []),
+    ?assertEqual("200", Code9),
+%%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
+
+    CdmiResponse9 = json:decode(Response9),
+    ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse9)),
+%%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
+%%   ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
+    ?assertEqual(<<"container/">>, proplists:get_value(<<"objectName">>, CdmiResponse9)),
+    Capabilities2 = proplists:get_value(<<"capabilities">>, CdmiResponse9),
+    ?assertEqual(?container_capability_list, Capabilities2),
+    %%------------------------------
+
+    %%-- dataobject capabilities ---
+    RequestHeaders10 = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    {ok, Code10, _Headers10, Response10} = do_request(Worker, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
+    ?assertEqual("200", Code10),
+%%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
+
+    CdmiResponse10 = json:decode(Response10),
+    ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse10)),
+%%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
+%%   ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
+    ?assertEqual(<<"dataobject/">>, proplists:get_value(<<"objectName">>, CdmiResponse10)),
+    Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
+    ?assertEqual(?dataobject_capability_list, Capabilities3).
+%%------------------------------
 
 %%%===================================================================
 %%% SetUp and TearDown functions

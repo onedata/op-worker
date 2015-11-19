@@ -132,7 +132,7 @@ sequencer_stream_messages_ordering_test(Config) ->
     % Check whether messages were forwarded in right order.
     {_, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
         lists:foreach(fun(SeqNum) ->
-            ?assertReceived(#client_message{
+            ?assertReceivedMatch(#client_message{
                 message_stream = #message_stream{
                     stream_id = StmId, sequence_number = SeqNum
                 }}, ?TIMEOUT)
@@ -257,13 +257,13 @@ sequencer_stream_periodic_ack_test(Config) ->
         ?assertEqual(ok, rpc:call(Worker, sequencer_manager, route_message,
             [Msg, SessId]
         )),
-        ?assertReceived(Msg, (?TIMEOUT)),
-        ?assertReceived(#message_acknowledgement{
+        ?assertReceivedMatch(Msg, (?TIMEOUT)),
+        ?assertReceivedMatch(#message_acknowledgement{
             stream_id = 1, sequence_number = SeqNum
         }, ?TIMEOUT + SecsAckWin)
     end, lists:seq(0, MsgsCount - 1)),
 
-    ?assertReceived(#write_event_subscription{}, ?TIMEOUT),
+    ?assertReceivedMatch(#write_event_subscription{}, ?TIMEOUT),
     ?assertEqual({error, timeout}, test_utils:receive_any()),
 
     ok.

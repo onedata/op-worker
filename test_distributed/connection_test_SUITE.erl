@@ -171,7 +171,7 @@ multi_message_test(Config) ->
     % then
     lists:foreach(
         fun(N) ->
-            ?assertReceived(N, timer:seconds(5))
+            ?assertReceivedMatch(N, timer:seconds(5))
         end, MsgNumbers),
     T3 = os:timestamp(),
     ok = ssl2:close(Sock),
