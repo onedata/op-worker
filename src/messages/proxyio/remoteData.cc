@@ -9,7 +9,6 @@
 #include "remoteData.h"
 
 #include "messages.pb.h"
-#include "messages/status.h"
 
 #include <sstream>
 
@@ -18,14 +17,15 @@ namespace messages {
 namespace proxyio {
 
 RemoteData::RemoteData(std::unique_ptr<ProtocolServerMessage> serverMessage)
-    : m_data{std::move(*serverMessage->mutable_remote_data()->mutable_data())}
+    : ProxyIOResponse(serverMessage)
 {
-    if (!serverMessage->has_remote_data())
+    if (!serverMessage->proxyio_response().has_remote_data())
         throw std::system_error{std::make_error_code(std::errc::protocol_error),
             "remote_data field missing"};
 
-    auto &statusMsg = serverMessage->remote_data().status();
-    Status(statusMsg).throwOnError();
+    m_data.swap(*serverMessage->mutable_proxyio_response()
+                     ->mutable_remote_data()
+                     ->mutable_data());
 }
 
 std::string RemoteData::toString() const

@@ -8,7 +8,7 @@ import os
 import sys
 
 import pytest
-from proto import messages_pb2, common_messages_pb2, proxyio_messages_pb2
+from proto import messages_pb2, common_messages_pb2
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(script_dir))
@@ -27,37 +27,51 @@ def storage_id():
 
 
 @pytest.fixture
+def space_id():
+    return random_str()
+
+
+@pytest.fixture
 def endpoint(appmock_client):
     return appmock_client.tcp_endpoint(5555)
 
 
 @pytest.fixture
-def helper(storage_id, endpoint):
-    return proxy_io.ProxyIOProxy(storage_id, endpoint.ip, endpoint.port)
+def helper(space_id, storage_id, endpoint):
+    return proxy_io.ProxyIOProxy(space_id, storage_id, endpoint.ip,
+                                 endpoint.port)
 
 
-def test_write_should_write_data(storage_id, endpoint, helper):
-    server_message = messages_pb2.ServerMessage()
-    server_message.status.code = common_messages_pb2.Status.VOK
-
+def test_write_should_write_data(space_id, storage_id, endpoint, helper):
+    wrote = random_int()
     file_id = random_str()
     data = random_str()
     offset = random_int()
 
+    server_message = messages_pb2.ServerMessage()
+    server_message.proxyio_response.status.code = common_messages_pb2.Status.ok
+    server_message.proxyio_response.remote_write_result.wrote = wrote
+
     with reply(endpoint, server_message) as queue:
-        assert len(data) == helper.write(file_id, data, offset)
+        assert wrote == helper.write(file_id, data, offset)
         received = queue.get()
 
-    assert received.HasField('remote_write')
-    assert received.remote_write.storage_id == storage_id
-    assert received.remote_write.file_id == file_id
-    assert received.remote_write.offset == offset
-    assert received.remote_write.data == data
+    assert received.HasField('proxyio_request')
+
+    request = received.proxyio_request
+    assert request.space_id == space_id
+    assert request.storage_id == storage_id
+    assert request.file_id == file_id
+
+    assert request.HasField('remote_write')
+    assert request.remote_write.offset == offset
+    assert request.remote_write.data == data
 
 
 def test_write_should_pass_errors(endpoint, helper):
     server_message = messages_pb2.ServerMessage()
-    server_message.status.code = common_messages_pb2.Status.VEACCES
+    server_message.proxyio_response.status.code = \
+        common_messages_pb2.Status.eacces
 
     with pytest.raises(RuntimeError) as excinfo:
         with reply(endpoint, server_message):
@@ -66,29 +80,35 @@ def test_write_should_pass_errors(endpoint, helper):
     assert 'Permission denied' in str(excinfo.value)
 
 
-def test_read_should_read_data(storage_id, endpoint, helper):
+def test_read_should_read_data(space_id, storage_id, endpoint, helper):
     data = random_str()
     file_id = random_str()
     offset = random_int()
 
     server_message = messages_pb2.ServerMessage()
-    server_message.remote_data.status.code = common_messages_pb2.Status.VOK
-    server_message.remote_data.data = data
+    server_message.proxyio_response.status.code = common_messages_pb2.Status.ok
+    server_message.proxyio_response.remote_data.data = data
 
     with reply(endpoint, server_message) as queue:
         assert data == helper.read(file_id, offset, len(data))
         received = queue.get()
 
-    assert received.HasField('remote_read')
-    assert received.remote_read.storage_id == storage_id
-    assert received.remote_read.file_id == file_id
-    assert received.remote_read.offset == offset
-    assert received.remote_read.size == len(data)
+    assert received.HasField('proxyio_request')
+
+    request = received.proxyio_request
+    assert request.space_id == space_id
+    assert request.storage_id == storage_id
+    assert request.file_id == file_id
+
+    assert request.HasField('remote_read')
+    assert request.remote_read.offset == offset
+    assert request.remote_read.size == len(data)
 
 
 def test_read_should_pass_errors(endpoint, helper):
     server_message = messages_pb2.ServerMessage()
-    server_message.remote_data.status.code = common_messages_pb2.Status.VEPERM
+    server_message.proxyio_response.status.code = \
+        common_messages_pb2.Status.eperm
 
     with pytest.raises(RuntimeError) as excinfo:
         with reply(endpoint, server_message):

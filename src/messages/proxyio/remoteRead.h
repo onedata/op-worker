@@ -9,7 +9,7 @@
 #ifndef HELPERS_MESSAGES_PROXYIO_REMOTE_READ_H
 #define HELPERS_MESSAGES_PROXYIO_REMOTE_READ_H
 
-#include "messages/clientMessage.h"
+#include "proxyIORequest.h"
 
 #include <sys/types.h>
 
@@ -18,23 +18,23 @@
 
 namespace one {
 namespace messages {
+namespace proxyio {
 
-class RemoteRead : public ClientMessage {
+class RemoteRead : public ProxyIORequest {
 public:
-    RemoteRead(std::string storageId, std::string fileId, const off_t offset,
-        const std::size_t size);
+    RemoteRead(std::string spaceId, std::string storageId, std::string fileId,
+        const off_t offset, const std::size_t size);
 
     std::string toString() const override;
 
 private:
     std::unique_ptr<ProtocolClientMessage> serializeAndDestroy() override;
 
-    std::string m_storageId;
-    std::string m_fileId;
     const off_t m_offset;
     const std::size_t m_size;
 };
 
+} // namespace proxyio
 } // namespace messages
 } // namespace one
 

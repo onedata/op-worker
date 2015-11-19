@@ -14,11 +14,12 @@
 
 namespace one {
 namespace messages {
+namespace proxyio {
 
-RemoteWrite::RemoteWrite(std::string storageId, std::string fileId,
-    const off_t offset, asio::const_buffer data)
-    : m_storageId{std::move(storageId)}
-    , m_fileId{std::move(fileId)}
+RemoteWrite::RemoteWrite(std::string spaceId, std::string storageId,
+    std::string fileId, const off_t offset, asio::const_buffer data)
+    : ProxyIORequest{std::move(spaceId), std::move(storageId),
+          std::move(fileId)}
     , m_offset{offset}
     , m_data{data}
 {
@@ -27,26 +28,26 @@ RemoteWrite::RemoteWrite(std::string storageId, std::string fileId,
 std::string RemoteWrite::toString() const
 {
     std::stringstream stream;
-    stream << "type: 'RemoteWrite', storageId: '" << m_storageId
-           << "', fileId: '" << m_fileId << "', offset: " << m_offset
+    stream << "type: 'RemoteWrite', spaceId: '" << m_spaceId
+           << "', storageId: '" << m_storageId << "', fileId: '" << m_fileId
+           << "', offset: " << m_offset
            << ", data size: " << asio::buffer_size(m_data);
     return stream.str();
 }
 
 std::unique_ptr<ProtocolClientMessage> RemoteWrite::serializeAndDestroy()
 {
-    auto clientMsg = std::make_unique<ProtocolClientMessage>();
-    auto writeMsg = clientMsg->mutable_remote_write();
+    auto clientMsg = ProxyIORequest::serializeAndDestroy();
+    auto writeMsg =
+        clientMsg->mutable_proxyio_request()->mutable_remote_write();
 
-    writeMsg->mutable_storage_id()->swap(m_storageId);
-    writeMsg->mutable_file_id()->swap(m_fileId);
     writeMsg->set_offset(m_offset);
-
-    writeMsg->mutable_data()->assign(std::string(
-        asio::buffer_cast<const char *>(m_data), asio::buffer_size(m_data)));
+    writeMsg->mutable_data()->assign(
+        asio::buffer_cast<const char *>(m_data), asio::buffer_size(m_data));
 
     return clientMsg;
 }
 
+} // namespace proxyio
 } // namespace messages
 } // namespace one

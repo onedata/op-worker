@@ -9,7 +9,7 @@
 #ifndef HELPERS_MESSAGES_PROXYIO_REMOTE_WRITE_H
 #define HELPERS_MESSAGES_PROXYIO_REMOTE_WRITE_H
 
-#include "messages/clientMessage.h"
+#include "ProxyIORequest.h"
 
 #include <asio/buffer.hpp>
 
@@ -20,23 +20,23 @@
 
 namespace one {
 namespace messages {
+namespace proxyio {
 
-class RemoteWrite : public ClientMessage {
+class RemoteWrite : public ProxyIORequest {
 public:
-    RemoteWrite(std::string storageId, std::string fileId, const off_t offset,
-        asio::const_buffer data);
+    RemoteWrite(std::string spaceId, std::string storageId, std::string fileId,
+        const off_t offset, asio::const_buffer data);
 
     std::string toString() const override;
 
 private:
     std::unique_ptr<ProtocolClientMessage> serializeAndDestroy() override;
 
-    std::string m_storageId;
-    std::string m_fileId;
     const off_t m_offset;
     asio::const_buffer m_data;
 };
 
+} // namespace proxyio
 } // namespace messages
 } // namespace one
 
