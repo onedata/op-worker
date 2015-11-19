@@ -105,13 +105,16 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
                                               type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                                              ctime = CTime, uid = UID, name = Name}}} ->
+                                              ctime = CTime, uid = UID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
             ok = file_watcher:insert_attr_watcher(UUID, SessId),
 
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+            #posix_user_ctx{gid = GID} = fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-                               #file_attr{
+                               #file_attr {
+                                  gid = GID,
                                   uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
                                   ctime = CTime, uid = fslogic_utils:gen_storage_uid(UID), size = Size, name = Name
                                  }};

@@ -17,7 +17,7 @@
 
 %% API
 -export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2]).
--export([new_user_ctx/3]).
+-export([new_user_ctx/3, new_posix_user_ctx/2]).
 
 %%%===================================================================
 %%% API
@@ -32,7 +32,13 @@ new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) -
 
 -spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     #posix_user_ctx{}.
+new_posix_user_ctx(?ROOT_SESS_ID, _) ->
+    #posix_user_ctx{
+        uid = 0,
+        gid = 0
+    };
 new_posix_user_ctx(SessionId, SpaceUUID) ->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
     FinalGID =
         case helpers_nif:groupname_to_gid(SpaceName) of
@@ -41,10 +47,17 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
             {error, _} ->
                 <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceUUID),
                 LowestGID = 60000,
-                LowestGID + GID0 rem 100000
+                LowestGID + GID0 rem 1000000
+        end,
+
+    FinalUID =
+        begin
+            <<UID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, UserId),
+            LowestUID = 60000,
+            LowestUID + UID0 rem 100000
         end,
     #posix_user_ctx{
-        uid = 0,
+        uid = FinalUID,
         gid = FinalGID
     }.
 
