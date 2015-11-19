@@ -245,35 +245,34 @@ chmod_test(Config) ->
 
 
 default_permissions_test(Config) ->
-    [Worker, _] = Workers = ?config(op_worker_nodes, Config),
+    [Worker, _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
     {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
     {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
 
-    test_utils:mock_new(Workers, check_permissions),
-    test_utils:mock_expect(Workers, check_permissions, validate_scope_access,
-        fun(_, _, _) ->
-            ok
-        end),
+    test_utils:mock_new(Worker, check_permissions),
+    test_utils:mock_expect(Worker, check_permissions, validate_scope_access, fun
+        (_, _, _) -> ok
+    end),
 
     lists:foreach( %% File
-    fun({Path, SessIds}) ->
-        lists:foreach(
-            fun(SessId) ->
-                UUID = get_uuid_privileged(Worker, SessId, Path),
+        fun({Path, SessIds}) ->
+            lists:foreach(
+                fun(SessId) ->
+                    UUID = get_uuid_privileged(Worker, SessId, Path),
 
-                ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #delete_file{uuid = UUID}))
-            end, SessIds)
+                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #delete_file{uuid = UUID}))
+                end, SessIds)
 
-    end, [
+        end, [
             {<<"/">>, [SessId1, SessId2, SessId3, SessId4]},
             {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
             {<<"/spaces/space_name1">>, [SessId1, SessId2, SessId3, SessId4]},
             {<<"/spaces/space_name2">>, [SessId1, SessId2, SessId3, SessId4]},
             {<<"/spaces/space_name3">>, [SessId1, SessId2, SessId3, SessId4]},
             {<<"/spaces/space_name4">>, [SessId1, SessId2, SessId3, SessId4]}
-    ]),
+        ]),
 
     lists:foreach( %% File
         fun({Path, SessIds}) ->
@@ -284,11 +283,11 @@ default_permissions_test(Config) ->
                 end, SessIds)
 
         end, [
-                {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
-                {<<"/spaces/space_name1">>, [SessId2, SessId3, SessId4]},
-                {<<"/spaces/space_name2">>, [SessId3, SessId4]},
-                {<<"/spaces/space_name3">>, [SessId4]},
-                {<<"/spaces/space_name4">>, []}
+            {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name1">>, [SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name2">>, [SessId3, SessId4]},
+            {<<"/spaces/space_name3">>, [SessId4]},
+            {<<"/spaces/space_name4">>, []}
         ]),
 
     lists:foreach(fun %% File
@@ -317,16 +316,16 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                    ?req(Worker, SessId, #get_file_children{uuid = UUID}))
+                        ?req(Worker, SessId, #get_file_children{uuid = UUID}))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->
-                lists:foreach(
-                    fun(SessId) ->
-                        UUID = get_uuid_privileged(Worker, SessId, Path),
-                        ?assertMatch(#fuse_response{status = #status{code = Code}},
-                            ?req(Worker, SessId, #change_mode{uuid = UUID, mode = Mode}))
-                    end, SessIds)
-        end,
+            lists:foreach(
+                fun(SessId) ->
+                    UUID = get_uuid_privileged(Worker, SessId, Path),
+                    ?assertMatch(#fuse_response{status = #status{code = Code}},
+                        ?req(Worker, SessId, #change_mode{uuid = UUID, mode = Mode}))
+                end, SessIds)
+    end,
         [
             {mkdir, <<"/spaces/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/spaces/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
@@ -361,7 +360,7 @@ default_permissions_test(Config) ->
             {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId3], ?OK}
         ]),
 
-    test_utils:mock_unload(Workers, [check_permissions]),
+    test_utils:mock_unload(Worker, [check_permissions]),
     ok.
 
 
@@ -463,13 +462,13 @@ update_times_test(Config) ->
 %% Get uuid of given by path file. Possible as root to bypass permissions checks.
 get_uuid_privileged(Worker, SessId, Path) ->
     SessId1 = case Path of
-               <<"/">> ->
-                   SessId;
-               <<"/spaces">> ->
-                   SessId;
-               _ ->
-                   ?ROOT_SESS_ID
-           end,
+                  <<"/">> ->
+                      SessId;
+                  <<"/spaces">> ->
+                      SessId;
+                  _ ->
+                      ?ROOT_SESS_ID
+              end,
     get_uuid(Worker, SessId1, Path).
 
 
@@ -492,6 +491,7 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
+    communicator_mock_setup(Workers),
     file_meta_mock_setup(Workers),
     Space1 = {<<"space_id1">>, <<"space_name1">>},
     Space2 = {<<"space_id2">>, <<"space_name2">>},
@@ -509,10 +509,11 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, Config),
-    mocks_teardown(Workers, [file_meta, gr_spaces]),
+    test_utils:mock_validate(Workers, [file_meta, gr_spaces, communicator]),
+    test_utils:mock_unload(Workers, [file_meta, gr_spaces, communicator]),
 
-    ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [])),
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, 60000)).
+    ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [], timer:seconds(60))),
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, timer:seconds(60))).
 
 %%%===================================================================
 %%% Internal functions
@@ -545,8 +546,7 @@ session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
             name = UserName, space_ids = SpaceIds
         }}
     ]),
-    ?assertEqual({ok, onedata_user_setup}, test_utils:receive_msg(
-        onedata_user_setup, ?TIMEOUT)),
+    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
         {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
@@ -619,14 +619,15 @@ file_meta_mock_setup(Workers) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Validates and unloads mocks.
+%% Mocks communicator module, so that it ignores all messages.
 %% @end
 %%--------------------------------------------------------------------
--spec mocks_teardown(Workers :: node() | [node()],
-    Modules :: module() | [module()]) -> ok.
-mocks_teardown(Workers, Modules) ->
-    test_utils:mock_validate(Workers, Modules),
-    test_utils:mock_unload(Workers, Modules).
+-spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
+communicator_mock_setup(Workers) ->
+    test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send,
+        fun(_, _) -> ok end
+    ).
 
 name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).

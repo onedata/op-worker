@@ -541,8 +541,14 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                                        Record#cache_controller{last_action_time = os:timestamp()}
                                    end,
                                    update(Level, Uuid, UpdateFun2),
-                                   {ok, SavedValue} = datastore:get(Level, ModelName, Key),
-                                   {ok, save, [SavedValue]};
+                                   case datastore:get(Level, ModelName, Key) of
+                                       {ok, SavedValue} ->
+                                           {ok, save, [SavedValue]};
+                                       {error, {not_found, _}} ->
+                                           ok;
+                                       GetError ->
+                                           {get_error, GetError}
+                                   end;
                                _ ->
                                    {error, not_last_user}
                            end

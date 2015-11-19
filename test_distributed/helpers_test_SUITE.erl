@@ -145,8 +145,8 @@ write_test(Config) ->
     {ok, Dev2} = call(Config, file, open, [?path(Config, File), [read, binary]]),
     {ok, <<"tetest">>} = call(Config, file, read, [Dev2, 6]).
 
-release_test(Config) ->
-    File = gen_filename(),
+release_test(_Config) ->
+    _File = gen_filename(),
     %todo
     ok.
 

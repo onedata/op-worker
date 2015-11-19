@@ -74,9 +74,9 @@ session_manager_session_creation_and_reuse_test(Config) ->
         % Check connections have been added to communicator associated with
         % reused session.
         lists:foreach(fun(_) ->
-            ?assertMatch({ok, _}, test_utils:receive_msg(add_connection, ?TIMEOUT))
+            ?assertReceivedMatch(add_connection, ?TIMEOUT)
         end, AnswersWithoutCreatedAnswer),
-        ?assertEqual({error, timeout}, test_utils:receive_any())
+        ?assertNotReceivedMatch(_)
 
     end, [
         {SessId1, Iden1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
@@ -255,9 +255,7 @@ session_supervisor_child_crash_test(Config) ->
 
         apply(Fun, [Child | Args]),
 
-        timer:sleep(?TIMEOUT),
-
-        ?assertMatch({error, {not_found, _}}, rpc:call(Worker, session, get, [SessId])),
+        ?assertMatch({error, {not_found, _}}, rpc:call(Worker, session, get, [SessId]), 10),
         ?assertEqual([], supervisor:which_children({session_manager_worker_sup, Node}))
     end, [
         {event_manager_sup, fun erlang:exit/2, [kill]},
@@ -272,7 +270,10 @@ session_supervisor_child_crash_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
+    op_test_utils:clear_models(Worker, [subscription]),
+    NewConfig.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -296,11 +297,7 @@ init_per_testcase(session_getters_test, Config) ->
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
-
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
-
-    [{session_id, SessId} | Config];
+    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config);
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -341,46 +338,31 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
-
-    ?assertEqual(ok, rpc:call(Worker, session_manager,
-        remove_session, [SessId])),
-
-    proplists:delete(session_id, Config);
+    op_test_utils:session_teardown(Worker, Config);
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-
     test_utils:mock_validate(Worker, logger),
-    test_utils:mock_unload(Worker, logger),
-
-    Config;
+    test_utils:mock_unload(Worker, logger);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_creation_and_reuse_test;
     Case =:= session_manager_session_removal_test ->
     Workers = ?config(op_worker_nodes, Config),
-
     test_utils:mock_validate(Workers, communicator),
-    test_utils:mock_unload(Workers, communicator),
-
-    proplists:delete(session_ids, proplists:delete(identities, Config));
+    test_utils:mock_unload(Workers, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test ->
     Workers = ?config(op_worker_nodes, Config),
     SessIds = ?config(session_ids, Config),
-
     lists:foreach(fun(SessId) ->
         ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
             remove_session, [SessId]))
     end, SessIds),
-
     test_utils:mock_validate(Workers, communicator),
-    test_utils:mock_unload(Workers, communicator),
-
-    proplists:delete(session_ids, proplists:delete(identities, Config)).
+    test_utils:mock_unload(Workers, communicator).
 
 %%%===================================================================
 %%% Internal functions

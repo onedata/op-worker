@@ -27,7 +27,9 @@
 -export([create_delete_test/2, create_sync_delete_test/2, save_test/2, save_sync_test/2, update_test/2,
     update_sync_test/2, get_test/2, exists_test/2, mixed_test/2, set_hooks/2, unset_hooks/2]).
 
+-define(TIMEOUT, timer:seconds(60)).
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
+-define(call(N, M, F, A), rpc:call(N, M, F, A, ?TIMEOUT)).
 
 %%%===================================================================
 %%% API
@@ -55,7 +57,7 @@ create_delete_test_base(Config, Level, Fun, Fun2) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(Fun, Level, [
                     #document{
-                        key = list_to_binary(DocsSet++integer_to_list(I)),
+                        key = list_to_binary(DocsSet ++ integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
                     }]),
                 AfterProcessing = os:timestamp(),
@@ -67,21 +69,21 @@ create_delete_test_base(Config, Level, Fun, Fun2) ->
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, TestFun),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
     {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList} = count_answers(OpsNum),
-    ?assertEqual(OpsNum, OkNum+ErrorNum),
+    ?assertEqual(OpsNum, OkNum + ErrorNum),
     % TODO change when datastore behavior will be coherent
     ct:print("Create ok num: ~p, error num ~p:, level ~p", [OkNum, ErrorNum, Level]),
-    case ((ThreadsNum * DocsPerThead < OkNum) or (DocsPerThead * trunc(ThreadsNum/ConflictedThreads) > OkNum)) of
+    case ((ThreadsNum * DocsPerThead < OkNum) or (DocsPerThead * trunc(ThreadsNum / ConflictedThreads) > OkNum)) of
         true -> ct:print("Create errors list: ~p", [ErrorsList]);
         _ -> ok
     end,
-    ?assert((ThreadsNum * DocsPerThead >= OkNum) and (DocsPerThead * trunc(ThreadsNum/ConflictedThreads) =< OkNum)),
+    ?assert((ThreadsNum * DocsPerThead >= OkNum) and (DocsPerThead * trunc(ThreadsNum / ConflictedThreads) =< OkNum)),
 
     TestFun2 = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             for(OpsPerDoc, fun() ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(Fun2, Level, [
-                    some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                    some_record, list_to_binary(DocsSet ++ integer_to_list(I))]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
             end)
@@ -97,17 +99,17 @@ create_delete_test_base(Config, Level, Fun, Fun2) ->
                           0 ->
                               0;
                           _ ->
-                              ErrorTime/ErrorNum
+                              ErrorTime / ErrorNum
                       end,
 
     [
-        #parameter{name = create_ok_time, value = OkTime/OkNum, unit = "us",
+        #parameter{name = create_ok_time, value = OkTime / OkNum, unit = "us",
             description = "Average time of create operation that ended successfully"},
         #parameter{name = create_error_time, value = CreateErrorTime, unit = "us",
             description = "Average time of create operation that filed (e.g. file exists)"},
         #parameter{name = create_error_num, value = ErrorNum, unit = "-",
             description = "Average numer of create operation that filed (e.g. file exists)"},
-        #parameter{name = delete_time, value = OkTime2/OkNum2, unit = "us",
+        #parameter{name = delete_time, value = OkTime2 / OkNum2, unit = "us",
             description = "Average time of delete operation"}
     ].
 
@@ -133,7 +135,7 @@ save_test_base(Config, Level, Fun, Fun2) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(Fun, Level, [
                     #document{
-                        key = list_to_binary(DocsSet++integer_to_list(I)),
+                        key = list_to_binary(DocsSet ++ integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
                     }]),
                 AfterProcessing = os:timestamp(),
@@ -152,7 +154,7 @@ save_test_base(Config, Level, Fun, Fun2) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(Fun2, Level, [
-                some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                some_record, list_to_binary(DocsSet ++ integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
         end)
@@ -164,7 +166,7 @@ save_test_base(Config, Level, Fun, Fun2) ->
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum2, OkNum2),
 
-    #parameter{name = save_time, value = OkTime/OkNum, unit = "us",
+    #parameter{name = save_time, value = OkTime / OkNum, unit = "us",
         description = "Average time of save operation"}.
 
 update_test(Config, Level) ->
@@ -188,8 +190,8 @@ update_test_base(Config, Level, Fun, Fun2, Fun3) ->
             for(1, OpsPerDoc, fun(J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(Fun, Level, [
-                    some_record, list_to_binary(DocsSet++integer_to_list(I)),
-                    #{field1 => I+J}
+                    some_record, list_to_binary(DocsSet ++ integer_to_list(I)),
+                    #{field1 => I + J}
                 ]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -204,14 +206,14 @@ update_test_base(Config, Level, Fun, Fun2, Fun3) ->
     ct:print("Update ok num: ~p, error num ~p:, level ~p", [OkNum, ErrorNum, Level]),
 %%     ?assertEqual(0, OkNum),
 %%     ?assertEqual(OpsNum, ErrorNum),
-    ?assertEqual(OpsNum, OkNum+ErrorNum),
+    ?assertEqual(OpsNum, OkNum + ErrorNum),
 
     SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(Fun2, Level, [
                 #document{
-                    key = list_to_binary(DocsSet++integer_to_list(I)),
+                    key = list_to_binary(DocsSet ++ integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
                 }]),
             AfterProcessing = os:timestamp(),
@@ -234,7 +236,7 @@ update_test_base(Config, Level, Fun, Fun2, Fun3) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(Fun3, Level, [
-                some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                some_record, list_to_binary(DocsSet ++ integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
         end)
@@ -249,11 +251,11 @@ update_test_base(Config, Level, Fun, Fun2, Fun3) ->
                           0 ->
                               0;
                           _ ->
-                              ErrorTime/ErrorNum
+                              ErrorTime / ErrorNum
                       end,
 
     [
-        #parameter{name = update_ok_time, value = OkTime3/OkNum3, unit = "us",
+        #parameter{name = update_ok_time, value = OkTime3 / OkNum3, unit = "us",
             description = "Average time of update operation that ended successfully"},
         #parameter{name = update_error_time, value = UpdateErrorTime, unit = "us",
             description = "Average time of update operation that failed (e.g. file does not exist)"},
@@ -276,7 +278,7 @@ get_test(Config, Level) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(get, Level, [
-                    some_record, list_to_binary(DocsSet++integer_to_list(I))
+                    some_record, list_to_binary(DocsSet ++ integer_to_list(I))
                 ]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -291,14 +293,14 @@ get_test(Config, Level) ->
     ct:print("Get ok num: ~p, error num ~p:, level ~p", [OkNum, ErrorNum, Level]),
 %%     ?assertEqual(0, OkNum),
 %%     ?assertEqual(OpsNum, ErrorNum),
-    ?assertEqual(OpsNum, OkNum+ErrorNum),
+    ?assertEqual(OpsNum, OkNum + ErrorNum),
 
     SaveMany = fun(DocsSet) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(save, Level, [
                 #document{
-                    key = list_to_binary(DocsSet++integer_to_list(I)),
+                    key = list_to_binary(DocsSet ++ integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
                 }]),
             AfterProcessing = os:timestamp(),
@@ -321,7 +323,7 @@ get_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(delete, Level, [
-                some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                some_record, list_to_binary(DocsSet ++ integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
         end)
@@ -333,14 +335,14 @@ get_test(Config, Level) ->
     ?assertEqual(OpsNum2, OkNum4),
 
     GetErrorTime = case ErrorNum of
-                          0 ->
-                              0;
-                          _ ->
-                              ErrorTime/ErrorNum
-                      end,
+                       0 ->
+                           0;
+                       _ ->
+                           ErrorTime / ErrorNum
+                   end,
 
     [
-        #parameter{name = get_ok_time, value = OkTime3/OkNum3, unit = "us",
+        #parameter{name = get_ok_time, value = OkTime3 / OkNum3, unit = "us",
             description = "Average time of get operation that ended successfully"},
         #parameter{name = get_error_time, value = GetErrorTime, unit = "us",
             description = "Average time of get operation that failed (e.g. file does not exist)"},
@@ -363,7 +365,7 @@ exists_test(Config, Level) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(exists, Level, [
-                    some_record, list_to_binary(DocsSet++integer_to_list(I))
+                    some_record, list_to_binary(DocsSet ++ integer_to_list(I))
                 ]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -382,7 +384,7 @@ exists_test(Config, Level) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(save, Level, [
                 #document{
-                    key = list_to_binary(DocsSet++integer_to_list(I)),
+                    key = list_to_binary(DocsSet ++ integer_to_list(I)),
                     value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
                 }]),
             AfterProcessing = os:timestamp(),
@@ -405,7 +407,7 @@ exists_test(Config, Level) ->
         for(1, DocsPerThead, fun(I) ->
             BeforeProcessing = os:timestamp(),
             Ans = ?call_store(delete, Level, [
-                some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                some_record, list_to_binary(DocsSet ++ integer_to_list(I))]),
             AfterProcessing = os:timestamp(),
             Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
         end)
@@ -417,9 +419,9 @@ exists_test(Config, Level) ->
     ?assertEqual(OpsNum2, OkNum4),
 
     [
-        #parameter{name = exists_true_time, value = OkTime3/OkNum3, unit = "us",
+        #parameter{name = exists_true_time, value = OkTime3 / OkNum3, unit = "us",
             description = "Average time of exists operation that returned true"},
-        #parameter{name = exists_false_time, value = OkTime/OkNum, unit = "us",
+        #parameter{name = exists_false_time, value = OkTime / OkNum, unit = "us",
             description = "Average time of exists operation that returned false"}
     ].
 
@@ -444,7 +446,7 @@ mixed_test(Config, Level) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(create, Level, [
                     #document{
-                        key = list_to_binary(DocsSet++integer_to_list(I)),
+                        key = list_to_binary(DocsSet ++ integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
                     }]),
                 AfterProcessing = os:timestamp(),
@@ -459,7 +461,7 @@ mixed_test(Config, Level) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(save, Level, [
                     #document{
-                        key = list_to_binary(DocsSet++integer_to_list(I)),
+                        key = list_to_binary(DocsSet ++ integer_to_list(I)),
                         value = #some_record{field1 = I, field2 = <<"abc">>, field3 = {test, tuple}}
                     }]),
                 AfterProcessing = os:timestamp(),
@@ -473,8 +475,8 @@ mixed_test(Config, Level) ->
             for(1, OpsPerDoc, fun(J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(update, Level, [
-                    some_record, list_to_binary(DocsSet++integer_to_list(I)),
-                    #{field1 => I+J}
+                    some_record, list_to_binary(DocsSet ++ integer_to_list(I)),
+                    #{field1 => I + J}
                 ]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -487,11 +489,8 @@ mixed_test(Config, Level) ->
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, UpdateMany),
     OpsNum = ThreadsNum * DocsPerThead * OpsPerDoc,
 
-    {OkNum, OkTime, ErrorNum, ErrorTime, _ErrorsList} = count_answers(3*OpsNum),
-    ?assertEqual(3*OpsNum, OkNum+ErrorNum),
-
-
-
+    {OkNum, OkTime, ErrorNum, ErrorTime, _ErrorsList} = count_answers(3 * OpsNum),
+    ?assertEqual(3 * OpsNum, OkNum + ErrorNum),
 
 
     GetMany = fun(DocsSet) ->
@@ -499,7 +498,7 @@ mixed_test(Config, Level) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(get, Level, [
-                    some_record, list_to_binary(DocsSet++integer_to_list(I))
+                    some_record, list_to_binary(DocsSet ++ integer_to_list(I))
                 ]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -512,7 +511,7 @@ mixed_test(Config, Level) ->
             for(1, OpsPerDoc, fun(_J) ->
                 BeforeProcessing = os:timestamp(),
                 Ans = ?call_store(exists, Level, [
-                    some_record, list_to_binary(DocsSet++integer_to_list(I))
+                    some_record, list_to_binary(DocsSet ++ integer_to_list(I))
                 ]),
                 AfterProcessing = os:timestamp(),
                 Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
@@ -522,9 +521,9 @@ mixed_test(Config, Level) ->
 
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, GetMany),
     spawn_at_nodes(Workers, ThreadsNum, ConflictedThreads, ExistMultiCheck),
-    {OkNum2, OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(2*OpsNum),
+    {OkNum2, OkTime2, _ErrorNum2, _ErrorTime2, ErrorsList2} = count_answers(2 * OpsNum),
     ?assertEqual([], ErrorsList2),
-    ?assertEqual(2*OpsNum, OkNum2),
+    ?assertEqual(2 * OpsNum, OkNum2),
 
     case performance:should_clear(Config) of
         true ->
@@ -532,7 +531,7 @@ mixed_test(Config, Level) ->
                 for(1, DocsPerThead, fun(I) ->
                     BeforeProcessing = os:timestamp(),
                     Ans = ?call_store(delete, Level, [
-                        some_record, list_to_binary(DocsSet++integer_to_list(I))]),
+                        some_record, list_to_binary(DocsSet ++ integer_to_list(I))]),
                     AfterProcessing = os:timestamp(),
                     Master ! {store_ans, Ans, timer:now_diff(AfterProcessing, BeforeProcessing)}
                 end)
@@ -548,9 +547,9 @@ mixed_test(Config, Level) ->
     end,
 
     [
-        #parameter{name = create_save_update_time, value = (OkTime+ErrorTime)/(OkNum+ErrorNum), unit = "us",
+        #parameter{name = create_save_update_time, value = (OkTime + ErrorTime) / (OkNum + ErrorNum), unit = "us",
             description = "Average time of create/save/update"},
-        #parameter{name = get_exist_time, value = OkTime2/OkNum2, unit = "us",
+        #parameter{name = get_exist_time, value = OkTime2 / OkNum2, unit = "us",
             description = "Average time of get/exist"}
     ].
 
@@ -571,56 +570,56 @@ for(I, N, F) ->
     for(I + 1, N, F).
 
 spawn_at_nodes(Nodes, Threads, ConflictedThreads, Fun) ->
-    spawn_at_nodes(Nodes, [], Threads, 1, 0, ConflictedThreads, Fun).
+    spawn_at_nodes(Nodes, [], Threads, 1, 0, ConflictedThreads, Fun, []).
 
-spawn_at_nodes(_Nodes, _Nodes2, 0, _DocsSetNum, _DocNumInSet, _ConflictedThreads, _Fun) ->
-    ok;
-spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet, ConflictedThreads, ConflictedThreads, Fun) ->
-    spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet+1, 0, ConflictedThreads, Fun);
-spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
-    spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun);
-spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun) ->
+spawn_at_nodes(_Nodes, _Nodes2, 0, _DocsSetNum, _DocNumInSet, _ConflictedThreads, _Fun, Pids) ->
+    lists:foreach(fun(Pid) -> Pid ! start end, Pids);
+spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet, ConflictedThreads, ConflictedThreads, Fun, Pids) ->
+    spawn_at_nodes(Nodes, Nodes2, Threads, DocsSet + 1, 0, ConflictedThreads, Fun, Pids);
+spawn_at_nodes([], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun, Pids) ->
+    spawn_at_nodes(Nodes2, [], Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun, Pids);
+spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, ConflictedThreads, Fun, Pids) ->
     Master = self(),
     FileBeg = case performance:is_stress_test() of
-        true ->
-            "_" ++ get(file_beg) ++ "_";
-        _ ->
-            "_"
-    end,
-    spawn(N, fun() ->
+                  true ->
+                      "_" ++ get(file_beg) ++ "_";
+                  _ ->
+                      "_"
+              end,
+    Pid = spawn(N, fun() ->
         try
-            timer:sleep(timer:seconds(1)), % sleep to allow all threads start
+            receive start -> ok end,
             Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
             E1:E2 ->
                 Master ! {store_ans, {uncatched_error, E1, E2, erlang:get_stacktrace()}, 0}
         end
     end),
-    spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet+1, ConflictedThreads, Fun).
+    spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet + 1, ConflictedThreads, Fun, [Pid | Pids]).
 
 count_answers(Exp) ->
-    count_answers(Exp, {0,0,0,0, []}). %{OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}
+    count_answers(Exp, {0, 0, 0, 0, []}). %{OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}
 
 count_answers(0, TmpAns) ->
     TmpAns;
 
 count_answers(Num, {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList}) ->
     NewAns = receive
-              {store_ans, Ans, Time} ->
-                  case Ans of
-                      ok ->
-                          {OkNum + 1, OkTime + Time, ErrorNum, ErrorTime, ErrorsList};
-                      {ok, _} ->
-                          {OkNum + 1, OkTime + Time, ErrorNum, ErrorTime, ErrorsList};
-                      {uncatched_error, E1, E2, ST} ->
-                          ?assertEqual({ok, ok, ok}, {E1, E2, ST}),
-                          error;
-                      E ->
-                          {OkNum, OkTime, ErrorNum + 1, ErrorTime + Time, [E | ErrorsList]}
-                  end
-          after ?REQUEST_TIMEOUT ->
-              {error, timeout}
-          end,
+                 {store_ans, Ans, Time} ->
+                     case Ans of
+                         ok ->
+                             {OkNum + 1, OkTime + Time, ErrorNum, ErrorTime, ErrorsList};
+                         {ok, _} ->
+                             {OkNum + 1, OkTime + Time, ErrorNum, ErrorTime, ErrorsList};
+                         {uncatched_error, E1, E2, ST} ->
+                             ?assertEqual({ok, ok, ok}, {E1, E2, ST}),
+                             error;
+                         E ->
+                             {OkNum, OkTime, ErrorNum + 1, ErrorTime + Time, [E | ErrorsList]}
+                     end
+             after ?REQUEST_TIMEOUT ->
+                 {error, timeout}
+             end,
     case NewAns of
         {error, timeout} ->
             {OkNum, OkTime, ErrorNum, ErrorTime, ErrorsList};
@@ -662,7 +661,7 @@ set_hooks(Case, Config) ->
         _ ->
             lists:foreach(fun(W) ->
                 lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(W, ets, delete_object, [datastore_local_state, {MC, cache_controller}]))
+                    ?assert(?call(W, ets, delete_object, [datastore_local_state, {MC, cache_controller}]))
                 end, ModelConfig)
             end, Workers)
     end,
@@ -679,18 +678,19 @@ unset_hooks(Case, Config) ->
 
     case check_config_name(Case) of
         global ->
-            ?assertMatch(ok, rpc:call(W, caches_controller, wait_for_cache_dump, [])),
+            ?assertMatch(ok, ?call(W, caches_controller, wait_for_cache_dump, [])),
             ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000));
         local ->
             lists:foreach(fun(Wr) ->
-                ?assertMatch(ok, rpc:call(Wr, caches_controller, wait_for_cache_dump, [])),
+                ?assertMatch(ok, ?call(Wr, caches_controller, wait_for_cache_dump, [])),
                 ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Wr}, clear_mem_synch, 60000))
             end, Workers),
+            test_utils:mock_validate(Workers, [caches_controller]),
             test_utils:mock_unload(Workers, [caches_controller]);
         _ ->
             lists:foreach(fun(Wr) ->
                 lists:foreach(fun(MC) ->
-                    ?assert(rpc:call(Wr, ets, insert, [datastore_local_state, {MC, cache_controller}]))
+                    ?assert(?call(Wr, ets, insert, [datastore_local_state, {MC, cache_controller}]))
                 end, ModelConfig)
             end, Workers)
     end.
