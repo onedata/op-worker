@@ -233,7 +233,6 @@ init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     initializer:setup_storage(ConfigWithNodes).
 end_per_suite(Config) ->
-    tracer:stop(),
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
