@@ -127,7 +127,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
 
     LeafLess = fslogic_path:dirname(FileId),
-    SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, LeafLess),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, Storage, LeafLess),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
