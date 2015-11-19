@@ -73,8 +73,7 @@ setup_session(Worker, [{UserNum, SpaceIds} | R], Config) ->
             name = UserName, space_ids = SpaceIds
         }}
     ]),
-    ?assertEqual({ok, onedata_user_setup}, test_utils:receive_msg(
-        onedata_user_setup, ?TIMEOUT)),
+    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
         {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
