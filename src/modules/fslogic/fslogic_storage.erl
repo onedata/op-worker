@@ -44,11 +44,6 @@ new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) -
 %%--------------------------------------------------------------------
 -spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     #posix_user_ctx{}.
-new_posix_user_ctx(?ROOT_SESS_ID, _) ->
-    #posix_user_ctx{
-        uid = 0,
-        gid = 0
-    };
 new_posix_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
