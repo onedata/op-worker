@@ -35,7 +35,7 @@
 -type error_code() :: atom().
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
--type args() :: #{binary() => binary()}.
+-type args() :: helpers_nif:helper_args().
 -type user_ctx() :: #posix_user_ctx{}.
 -type init() :: #helper_init{}.
 
@@ -60,9 +60,7 @@ new_handle(#helper_init{name = Name, args = Args}) ->
 %% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()] | args()) -> handle().
-new_handle(HelperName, HelperArgs) when is_map(HelperArgs) ->
-    new_handle(HelperName, maps:values(HelperArgs));
+-spec new_handle(HelperName :: helpers_nif:nif_string(), args()) -> handle().
 new_handle(HelperName, HelperArgs) ->
     ?debug("helpers:new_handle~p ~p", [HelperName, HelperArgs]),
     {ok, Instance} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
@@ -72,7 +70,7 @@ new_handle(HelperName, HelperArgs) ->
 
 -spec set_user_ctx(handle(), user_ctx()) -> ok.
 set_user_ctx(#helper_handle{ctx = CTX}, #posix_user_ctx{uid = UID, gid = GID}) ->
-    helpers_nif:set_user_ctx(CTX, UID, GID);
+    ok = helpers_nif:set_user_ctx(CTX, UID, GID);
 set_user_ctx(_, Unknown) ->
     ?error("Unknown user context ~p", [Unknown]),
     erlang:error({unknown_user_ctx_type, erlang:element(1, Unknown)}).

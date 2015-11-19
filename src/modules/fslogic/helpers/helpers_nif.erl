@@ -21,9 +21,10 @@
 -type file_type() :: 'S_IFREG' | 'S_IFCHR' | 'S_IFBLK' | 'S_IFIFO' | 'S_IFSOCK'.
 -type fd() :: non_neg_integer().
 -type nif_string() :: string() | binary().
+-type helper_args() :: #{binary() => binary()}.
 -type request_id() :: {integer(), integer(), integer()}. %% Response message from helper will be {request_id(), Result :: term()}
 
--export_type([nif_string/0, resource_handle/0, file_type/0]).
+-export_type([nif_string/0, resource_handle/0, file_type/0, helper_args/0]).
 
 %% API
 -export([init/0]).
@@ -84,7 +85,7 @@ get_user_ctx(_HelperCTX) ->
 %% @doc Transalates given username to UID.
 %% @end
 %%--------------------------------------------------------------------
--spec username_to_uid(UName :: string() | binary()) -> {ok, UID :: integer()}.
+-spec username_to_uid(UName :: string() | binary()) -> {ok, UID :: integer()} | {error, einval}.
 username_to_uid(_UName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
@@ -92,7 +93,7 @@ username_to_uid(_UName) ->
 %% @doc Translates given groupname to GID.
 %% @end
 %%--------------------------------------------------------------------
--spec groupname_to_gid(GName :: string() | binary()) -> {ok, GID :: integer()}.
+-spec groupname_to_gid(GName :: string() | binary()) -> {ok, GID :: integer()} | {error, einval}.
 groupname_to_gid(_GName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 

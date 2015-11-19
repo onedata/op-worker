@@ -33,9 +33,19 @@ new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) -
 -spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     #posix_user_ctx{}.
 new_posix_user_ctx(SessionId, SpaceUUID) ->
+    {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+    FinalGID =
+        case helpers_nif:groupname_to_gid(SpaceName) of
+            {ok, GID} ->
+                GID;
+            {error, _} ->
+                <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceUUID),
+                LowestGID = 60000,
+                LowestGID + GID0 rem 100000
+        end,
     #posix_user_ctx{
         uid = 0,
-        gid = 0
+        gid = FinalGID
     }.
 
 

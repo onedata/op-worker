@@ -12,6 +12,7 @@
 #include <sstream>
 #include <system_error>
 #include "nifpp.h"
+#include <sys/fsuid.h>
 
 #include <pwd.h>
 #include <grp.h>
@@ -29,24 +30,20 @@ using helper_ptr = std::shared_ptr<one::helpers::IStorageHelper>;
 using helper_ctx_ptr = std::shared_ptr<one::helpers::StorageHelperCTX>;
 using reqid_t = std::tuple<int, int, int>;
 using one::helpers::error_t;
+using helper_args_t = std::unordered_map<std::string, std::string>;
 
 /**
  * Static resource holder.
  */
 struct HelpersNIF {
-    std::shared_ptr<one::communication::Communicator> nullCommunicator =
-        nullptr;
-    one::helpers::BufferLimits limits = one::helpers::BufferLimits();
     asio::io_service dioService;
-    asio::io_service cproxyService;
     asio::executor_work<asio::io_service::executor_type> dio_work =
         asio::make_work(dioService);
 
     std::vector<std::thread> workers;
 
     one::helpers::StorageHelperFactory SHFactory =
-        one::helpers::StorageHelperFactory(
-            nullCommunicator, limits, dioService, cproxyService);
+        one::helpers::StorageHelperFactory(dioService);
 
     ~HelpersNIF()
     {
@@ -240,26 +237,6 @@ struct NifCTX {
 };
 
 /**
- * Converts NIF term to one::helpers::IStorageHelper::ArgsMap structure.
- */
-one::helpers::IStorageHelper::ArgsMap get_helper_args(
-    ErlNifEnv *env, ERL_NIF_TERM term)
-{
-    one::helpers::IStorageHelper::ArgsMap args;
-
-    if (enif_is_list(env, term) && !enif_is_empty_list(env, term)) {
-        int i = 0;
-        ERL_NIF_TERM list, head, tail;
-        for (list = term; enif_get_list_cell(env, list, &head, &tail);
-             list = tail, ++i)
-            args.emplace(
-                one::helpers::srvArg(i), nifpp::get<std::string>(env, head));
-    }
-
-    return args;
-}
-
-/**
  * Runs given function and returns result or error term.
  */
 template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, const T &fun)
@@ -423,7 +400,7 @@ void handle_result(NifCTX ctx, error_t e, T... value)
 ERL_NIF_TERM new_helper_obj(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     auto helperName = nifpp::get<std::string>(env, argv[0]);
-    auto helperArgs = get_helper_args(env, argv[1]);
+    auto helperArgs = nifpp::get<helper_args_t>(env, argv[1]);
     auto helperObj =
         application.SHFactory.getStorageHelper(helperName, helperArgs);
     if (!helperObj)
@@ -521,14 +498,14 @@ ERL_NIF_TERM get_flags(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
     std::vector<nifpp::str_atom> flags;
     for (auto &flag : atom_to_flag) {
-        if (ctx->m_ffi.flags & flag.second) {
+        if (ctx->flags & flag.second) {
             flags.push_back(flag.first);
         }
     }
 
     for (auto &flag : atom_to_open_mode) {
         // Mask only open mode (ACCMODE) and compare by value
-        if ((ctx->m_ffi.flags & O_ACCMODE) == flag.second) {
+        if ((ctx->flags & O_ACCMODE) == flag.second) {
             flags.push_back(flag.first);
         }
     }
@@ -539,11 +516,11 @@ ERL_NIF_TERM get_flags(ErlNifEnv *env, helper_ctx_ptr ctx)
 ERL_NIF_TERM set_flags(
     ErlNifEnv *env, helper_ctx_ptr ctx, std::vector<nifpp::str_atom> flagAtoms)
 {
-    ctx->m_ffi.flags = 0;
+    ctx->flags = 0;
     for (auto &atom : flagAtoms) {
         auto flagTerm = get_flag_value(env, atom);
         auto flag = nifpp::get<int>(env, flagTerm);
-        ctx->m_ffi.flags |= flag;
+        ctx->flags |= flag;
     }
 
     return nifpp::make(env, ok);
@@ -551,12 +528,12 @@ ERL_NIF_TERM set_flags(
 
 ERL_NIF_TERM get_fd(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
-    return nifpp::make(env, std::make_tuple(ok, ctx->m_ffi.fh));
+    return nifpp::make(env, std::make_tuple(ok, ctx->fh));
 }
 
 ERL_NIF_TERM set_fd(ErlNifEnv *env, helper_ctx_ptr ctx, int fh)
 {
-    ctx->m_ffi.fh = fh;
+    ctx->fh = fh;
     return nifpp::make(env, ok);
 }
 
