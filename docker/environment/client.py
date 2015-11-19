@@ -33,22 +33,17 @@ def _tweak_config(config, os_config, name, uid):
     clients = config[name]['clients']
     for cl in clients:
         client = clients[cl]
-        client_config = {}
-        client_config['name'] = client['name']
-        client_config['op_domain'] = provider_worker.provider_domain(client['op_domain'], uid)
-        client_config['gr_domain'] = globalregistry.gr_domain(client['gr_domain'], uid)
-        # these fields aren't mandatory
-        if 'user_key' in client.keys():
-            client_config['user_key'] = client['user_key']
-        if 'user_cert' in client.keys():
-            client_config['user_cert'] = client['user_cert']
+        client_config = {'name': client['name'],
+                         'op_domain': provider_worker.provider_domain(client['op_domain'], uid),
+                         'gr_domain': globalregistry.gr_domain(client['gr_domain'], uid),
+                         'user_key': client['user_key'],
+                         'user_cert': client['user_cert']}
 
         node['clients'].append(client_config)
     return cfg
 
 
 def _node_up(image, bindir, config, config_path, dns_servers):
-    print(config)
     node = config['node']
     hostname = node['name']
     os_config = config['os_config']
@@ -135,8 +130,6 @@ def up(image, bindir, dns_server, uid, config_path):
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
     for cfg in configs:
-        print(" ### ")
-        print(cfg)
         node_out = _node_up(image, bindir, cfg, config_path, dns_servers)
         common.merge(output, node_out)
 
