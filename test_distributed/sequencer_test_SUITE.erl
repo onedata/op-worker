@@ -122,7 +122,10 @@ route_message_should_forward_messages_to_different_streams(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
+    op_test_utils:clear_models(Worker, [subscription]),
+    NewConfig.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -158,8 +161,7 @@ end_per_testcase(Case, Config) when
     SessId = ?config(session_id, Config),
     close_stream(Worker, SessId, ?config(stream_id, Config)),
     session_teardown(Worker, SessId),
-    validate_and_unload_mocks(Worker, [communicator]),
-    proplists:delete(stream_id, proplists:delete(session_id, Config));
+    test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= route_message_should_forward_message;
@@ -168,13 +170,11 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    validate_and_unload_mocks(Worker, [communicator, router]),
-    proplists:delete(session_id, Config);
+    test_utils:mock_validate_and_unload(Worker, [communicator, router]);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    session_teardown(Worker, ?config(session_id, Config)),
-    proplists:delete(session_id, Config).
+    session_teardown(Worker, ?config(session_id, Config)).
 
 %%%===================================================================
 %%% Internal functions
@@ -307,15 +307,4 @@ mock_router(Worker) ->
     test_utils:mock_expect(Worker, router, route_message, fun
         (Msg) -> Self ! Msg
     end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec validate_and_unload_mocks(Worker :: node(), Mocks :: [atom()]) -> ok.
-validate_and_unload_mocks(Worker, Mocks) ->
-    test_utils:mock_validate(Worker, Mocks),
-    test_utils:mock_unload(Worker, Mocks).
 

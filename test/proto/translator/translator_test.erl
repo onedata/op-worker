@@ -101,12 +101,12 @@ translate_status_to_protobuf_test() ->
     ).
 
 translate_events_to_protobuf_test() ->
-    ?assertEqual({events, #'Events'{events = [{event, #'Event'{counter = 1}}]}},
+    ?assertEqual({events, #'Events'{events = [#'Event'{counter = 1}]}},
         translator:translate_to_protobuf(#events{events = [#event{counter = 1}]})
     ).
 
 translate_event_to_protobuf_test() ->
-    ?assertEqual({event, #'Event'{counter = 1}},
+    ?assertEqual(#'Event'{counter = 1},
         translator:translate_to_protobuf(#event{counter = 1})
     ).
 

@@ -78,9 +78,9 @@ sequencer_manager_should_send_message_stream_reset_on_init(_) ->
 sequencer_manager_should_update_session_on_terminate(Config) ->
     stop_sequencer_manager(?config(sequencer_manager, Config)),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    repeat(fun() -> rpc:call(
+    ?assertEqual({error, {not_found, missing}}, rpc:call(
         Worker, session, get_sequencer_manager, [?config(session_id, Config)]
-    ) end, {error, {not_found, missing}}, 10, 500).
+    ), 10).
 
 sequencer_manager_should_register_sequencer_in_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
@@ -90,10 +90,11 @@ sequencer_manager_should_register_sequencer_in_stream(Config) ->
 
 sequencer_manager_should_unregister_sequencer_in_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
-    gen_server:cast(SeqMan, {register_in_stream, 1, self()}),
+    gen_server:cast(SeqMan, client_message()),
     gen_server:cast(SeqMan, {unregister_in_stream, 1}),
     gen_server:cast(SeqMan, client_message()),
-    ?assertNotReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
+    ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT),
+    ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT).
 
 sequencer_manager_should_register_sequencer_out_stream(Config) ->
     SeqMan = ?config(sequencer_manager, Config),
@@ -169,6 +170,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(Case, Config) when
+    Case =:= sequencer_manager_should_unregister_sequencer_in_stream;
     Case =:= sequencer_manager_should_create_sequencer_stream_on_open_stream;
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -178,25 +180,25 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
+    op_test_utils:remove_pending_messages(),
     mock_communicator(Worker),
     mock_sequencer_manager_sup(Worker),
     {ok, SeqMan} = start_sequencer_manager(Worker, SessId),
     [{sequencer_manager, SeqMan}, {session_id, SessId} | Config].
 
 end_per_testcase(Case, Config) when
+    Case =:= sequencer_manager_should_unregister_sequencer_in_stream;
     Case =:= sequencer_manager_should_create_sequencer_stream_on_open_stream;
     Case =:= sequencer_manager_should_start_sequencer_in_stream_on_first_message ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     end_per_testcase(default, Config),
-    validate_and_unload_mocks(Worker, [sequencer_stream_sup]);
+    test_utils:mock_validate_and_unload(Worker, sequencer_stream_sup);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_manager(?config(sequencer_manager, Config)),
-    validate_and_unload_mocks(Worker, [communicator, sequencer_manager_sup]),
-    session_teardown(Worker, ?config(session_id, Config)),
-    remove_pending_messages(),
-    proplists:delete(session_id, proplists:delete(sequencer_manager, Config)).
+    test_utils:mock_validate_and_unload(Worker, [communicator, sequencer_manager_sup]),
+    session_teardown(Worker, ?config(session_id, Config)).
 
 %%%===================================================================
 %%% Internal functions
@@ -296,7 +298,7 @@ mock_sequencer_manager_sup(Worker) ->
 -spec mock_sequencer_stream_sup(Worker :: node()) -> ok.
 mock_sequencer_stream_sup(Worker) ->
     Self = self(),
-    test_utils:mock_new(Worker, [sequencer_stream_sup]),
+    test_utils:mock_new(Worker, sequencer_stream_sup),
     test_utils:mock_expect(Worker, sequencer_stream_sup,
         start_sequencer_stream, fun
             (_, _, StmId, _) ->
@@ -314,51 +316,7 @@ mock_sequencer_stream_sup(Worker) ->
 -spec mock_communicator(Worker :: node()) -> ok.
 mock_communicator(Worker) ->
     Self = self(),
-    test_utils:mock_new(Worker, [communicator]),
+    test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (Msg, _) -> Self ! Msg
     end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec validate_and_unload_mocks(Worker :: node(), Mocks :: [atom()]) -> ok.
-validate_and_unload_mocks(Worker, Mocks) ->
-    test_utils:mock_validate(Worker, Mocks),
-    test_utils:mock_unload(Worker, Mocks).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Repeatedly executes provided function until it returns expected value or
-%% attempts limit exceeds.
-%% @end
-%%--------------------------------------------------------------------
--spec repeat(Fun :: fun(), Expected :: term(), Attempts :: non_neg_integer(),
-    Delay :: timeout()) -> ok.
-repeat(Fun, Expected, 0, _) ->
-    ?assertMatch(Expected, Fun());
-
-repeat(Fun, Expected, Attempts, Delay) ->
-    case Fun() of
-        Expected -> ok;
-        _ ->
-            timer:sleep(Delay),
-            repeat(Fun, Expected, Attempts - 1, Delay)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any() of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
-    end.

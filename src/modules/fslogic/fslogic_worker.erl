@@ -160,9 +160,8 @@ report_error(FuseRequest, Error, LogLevel) ->
     MsgFormat = "Cannot process request ~p due to error: ~p (code: ~p)",
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-%%         info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
-        warning ->
-            ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
+%%      info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
+        warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
         error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,
     #fuse_response{status = Status}.

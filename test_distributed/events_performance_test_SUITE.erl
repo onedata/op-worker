@@ -109,6 +109,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
     EvtNum = ?config(evt_num, Config),
     EvtSize = ?config(evt_size, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
@@ -142,7 +143,6 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -173,6 +173,7 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
     EvtSize = ?config(evt_size, Config),
     FileNum = ?config(file_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
@@ -216,7 +217,6 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
@@ -247,6 +247,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
@@ -271,7 +272,6 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -303,11 +303,13 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
     EvtNum = ?config(evt_num, Config),
     EvtSize = ?config(evt_size, Config),
 
+    op_test_utils:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         infinity,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= SizeThr end,
-        fun(Meta, #event{object = #write_event{size = Size}}) -> Meta + Size end,
+        fun(Meta, #event{object = #write_event{size = Size}}) ->
+            Meta + Size end,
         fun(_, _) -> Self ! event_handler end
     ),
 
@@ -329,7 +331,6 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
     end),
 
     unsubscribe(Worker, SubId),
-    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -361,6 +362,7 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     SubsNum = ?config(sub_num, Config),
     EvtsNum = ?config(evt_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     % Create subscriptions for events associated with different files.
     {SubIds, FileUuids} = lists:unzip(lists:map(fun(N) ->
         FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
@@ -399,7 +401,6 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     lists:foreach(fun(SubId) ->
         unsubscribe(Worker, SubId)
     end, SubIds),
-    op_test_utils:remove_pending_messages(),
 
     ok.
 
@@ -428,6 +429,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
 
+    op_test_utils:remove_pending_messages(),
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
@@ -466,7 +468,6 @@ subscribe_should_work_for_multiple_sessions(Config) ->
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, SessIds),
-    op_test_utils:remove_pending_messages(),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)].
@@ -476,7 +477,10 @@ subscribe_should_work_for_multiple_sessions(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
+    op_test_utils:clear_models(Worker, [subscription]),
+    NewConfig.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -484,6 +488,7 @@ end_per_suite(Config) ->
 init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
         (#write_subscription{} = Msg, _) -> Self ! Msg, ok;
@@ -497,6 +502,7 @@ init_per_testcase(_, Config) ->
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
+    op_test_utils:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
@@ -506,19 +512,13 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
-    test_utils:mock_validate(Workers, communicator),
-    test_utils:mock_unload(Workers, communicator),
-    Config;
+    test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    op_test_utils:remove_pending_messages(),
     session_teardown(Worker, SessId),
-    test_utils:mock_validate(Worker, communicator),
-    test_utils:mock_unload(Worker, communicator),
-    proplists:delete(session_id, Config).
+    test_utils:mock_validate_and_unload(Worker, communicator).
 
 %%%===================================================================
 %%% Internal functions
@@ -552,7 +552,7 @@ session_teardown(Worker, SessId) ->
 %% Emits an event.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), Evt :: #event{} | event:type(),
+-spec emit(Worker :: node(), Evt :: #event{} | event:object(),
     SessId :: session:id()) -> ok.
 emit(Worker, Evt, SessId) ->
     ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt, SessId])).

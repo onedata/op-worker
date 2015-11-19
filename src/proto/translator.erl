@@ -144,7 +144,7 @@ translate_to_protobuf(#status{code = Code, description = Desc}) ->
 translate_to_protobuf(#events{events = Evts}) ->
     {events, #'Events'{events = [translate_to_protobuf(Evt) || Evt <- Evts]}};
 translate_to_protobuf(#event{counter = Counter, object = Type}) ->
-    {event, #'Event'{counter = Counter, object = translate_to_protobuf(Type)}};
+    #'Event'{counter = Counter, object = translate_to_protobuf(Type)};
 translate_to_protobuf(#update_event{object = Type}) ->
     {update_event, #'UpdateEvent'{object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->

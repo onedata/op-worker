@@ -133,6 +133,7 @@ handle_cast({unregister_out_stream, StmId}, #state{sequencer_out_streams = Stms}
 
 handle_cast({close_stream, StmId}, State) ->
     forward_to_sequencer_out_stream(#server_message{
+        message_stream = #message_stream{stream_id = StmId},
         message_body = #end_of_message_stream{}
     }, StmId, State),
     {noreply, State};
@@ -165,8 +166,10 @@ handle_cast(#client_message{} = Msg, State) ->
     {noreply, NewState};
 
 handle_cast(#server_message{} = Msg, State) ->
-    {ok, SeqStm} = get_sequencer_out_stream(Msg, State),
-    gen_server:cast(SeqStm, Msg),
+    case get_sequencer_out_stream(Msg, State) of
+        {ok, SeqStm} -> gen_server:cast(SeqStm, Msg);
+        {error, not_found} -> ok
+    end,
     {noreply, State};
 
 handle_cast(Request, State) ->
@@ -249,13 +252,21 @@ send_message_stream_reset(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sequencer_out_stream(Ref :: #server_message{} | stream_id(),
-    State :: #state{}) -> {ok, SeqStm :: pid()}.
+    State :: #state{}) -> {ok, SeqStm :: pid()} | {error, not_found}.
 get_sequencer_out_stream(#server_message{message_stream = #message_stream{
     stream_id = StmId}}, State) ->
     get_sequencer_out_stream(StmId, State);
 
-get_sequencer_out_stream(StmId, #state{sequencer_out_streams = Stms}) ->
-    maps:find(StmId, Stms).
+get_sequencer_out_stream(StmId, #state{session_id = SessId,
+    sequencer_out_streams = Stms}) ->
+    case maps:find(StmId, Stms) of
+        {ok, SeqStm} ->
+            {ok, SeqStm};
+        error ->
+            ?warning("Sequencer out stream not found for stream ~p and "
+            "session: ~p", [StmId, SessId]),
+            {error, not_found}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -281,8 +292,10 @@ create_sequencer_out_stream(StmId, #state{sequencer_out_stream_sup = SeqStmSup,
 -spec forward_to_sequencer_out_stream(Msg :: term(), StmId :: stream_id(),
     State :: #state{}) -> ok.
 forward_to_sequencer_out_stream(Msg, StmId, State) ->
-    {ok, SeqStm} = get_sequencer_out_stream(StmId, State),
-    gen_server:cast(SeqStm, Msg).
+    case get_sequencer_out_stream(StmId, State) of
+        {ok, SeqStm} -> gen_server:cast(SeqStm, Msg);
+        {error, not_found} -> ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

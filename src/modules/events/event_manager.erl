@@ -194,8 +194,8 @@ code_change(_OldVsn, State, _Extra) ->
 -spec start_event_streams(EvtStmSup :: pid(), SessId :: session:id()) ->
     Stms :: streams().
 start_event_streams(EvtStmSup, SessId) ->
-    {ok, Subs} = subscription:list(),
-    lists:foldl(fun(#subscription{id = SubId} = Sub, Stms) ->
+    {ok, Docs} = subscription:list(),
+    lists:foldl(fun(#document{key = SubId, value = Sub}, Stms) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
         maps:put(SubId, EvtStm, Stms)
-    end, #{}, Subs).
+    end, #{}, Docs).

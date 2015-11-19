@@ -85,10 +85,10 @@ route_message_should_forward_messages_in_right_order(Config) ->
     MsgOrd = ?config(msg_ord, Config),
 
     SeqNums = case MsgOrd of
-                  normal -> lists:seq(0, MsgNum - 1);
-                  reverse -> lists:seq(MsgNum - 1, 0, -1);
-                  random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
-              end,
+        normal -> lists:seq(0, MsgNum - 1);
+        reverse -> lists:seq(MsgNum - 1, 0, -1);
+        random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
+    end,
 
     % Send 'MsgNum' messages in 'MsgOrd' order.
     {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
@@ -187,6 +187,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     mock_router(Workers),
     mock_communicator(Workers),
     {ok, SessId} = session_setup(Worker),
@@ -196,10 +197,7 @@ end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    test_utils:mock_validate(Workers, [communicator, router]),
-    test_utils:mock_unload(Workers, [communicator, router]),
-    op_test_utils:remove_pending_messages(),
-    proplists:delete(session_id, Config).
+    test_utils:mock_validate_and_unload(Workers, [communicator, router]).
 
 %%%===================================================================
 %%% Internal functions

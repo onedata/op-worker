@@ -330,8 +330,7 @@ end_per_testcase(_, Config) ->
     end, ?config(servers, Config)),
 
     session_teardown(Worker, Config),
-    test_utils:mock_validate(Workers, [communicator, file_meta, gr_spaces]),
-    test_utils:mock_unload(Workers, [communicator, file_meta, gr_spaces]).
+    test_utils:mock_validate_and_unload(Workers, [communicator, file_meta, gr_spaces]).
 
 %%%===================================================================
 %%% Internal functions

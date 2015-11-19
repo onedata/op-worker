@@ -124,12 +124,11 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTy
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
-            ok = event:emit(
-                   #write_event{
-                      file_uuid = UUID,
-                      blocks = [
-                                #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = Written}
-                               ]}, SessId),
+            ok = event:emit(#write_event{
+                file_uuid = UUID, blocks = [#file_block{
+                    file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
+                }]
+            }, SessId),
             {ok, NewHandle, Written};
         {error, Reason2} ->
             {error, Reason2}
@@ -150,14 +149,12 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTyp
 
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
-            ok = event:emit(
-                   #read_event{
-                      file_uuid = UUID,
-                      blocks = [
-                                #file_block{
-                                   file_id = FileId, storage_id = StorageId,
-                                   offset = Offset, size = size(Data)}
-                               ]}, SessId),
+            ok = event:emit(#read_event{
+                file_uuid = UUID, blocks = [#file_block{
+                    file_id = FileId, storage_id = StorageId, offset = Offset,
+                    size = size(Data)
+                }]
+            }, SessId),
             {ok, NewHandle, Data};
         {error, Reason2} ->
             {error, Reason2}

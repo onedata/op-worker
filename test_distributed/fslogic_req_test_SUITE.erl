@@ -360,7 +360,7 @@ default_permissions_test(Config) ->
             {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId3], ?OK}
         ]),
 
-    test_utils:mock_unload(Worker, [check_permissions]),
+    test_utils:mock_unload(Worker, check_permissions),
     ok.
 
 
@@ -509,8 +509,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, Config),
-    test_utils:mock_validate(Workers, [file_meta, gr_spaces, communicator]),
-    test_utils:mock_unload(Workers, [file_meta, gr_spaces, communicator]),
+    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, communicator]),
 
     ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [], timer:seconds(60))),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, timer:seconds(60))).

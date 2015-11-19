@@ -200,8 +200,7 @@ mock_gr_certificates(Config) ->
 
 unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [gr_endpoint, oneprovider]),
-    test_utils:mock_unload(Workers, [gr_endpoint, oneprovider]).
+    test_utils:mock_validate_and_unload(Workers, [gr_endpoint, oneprovider]).
 
 -spec test_crash(term(), term()) -> no_return().
 test_crash(_, _) ->

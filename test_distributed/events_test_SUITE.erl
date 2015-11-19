@@ -59,14 +59,14 @@ all() -> [
 subscribe_should_create_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = subscribe(Worker),
-    ?assertMatch({ok, [_, _]}, rpc:call(Worker, subscription, list, [])),
+    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription, list, [])),
     unsubscribe(Worker, SubId).
 
 unsubscribe_should_remove_subscription(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = subscribe(Worker),
     unsubscribe(Worker, SubId),
-    ?assertMatch({ok, [_]}, rpc:call(Worker, subscription, list, [])).
+    ?assertMatch({ok, []}, rpc:call(Worker, subscription, list, [])).
 
 subscribe_should_notify_event_manager(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -123,7 +123,10 @@ emit_file_location_update_event_should_execute_handler(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
+    op_test_utils:clear_models(Worker, [subscription]),
+    NewConfig.
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -168,15 +171,14 @@ end_per_testcase(Case, Config) when
     Case =:= emit_file_attr_update_event_should_execute_handler;
     Case =:= emit_file_location_update_event_should_execute_handler ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    NewConfig = end_per_testcase(default, Config),
-    unsubscribe(Worker, ?config(subscription_id, NewConfig)),
-    proplists:delete(subscription_id, NewConfig);
+    unsubscribe(Worker, ?config(subscription_id, Config)),
+    end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_event_manager ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(session_id, Config), ?config(subscription_id, Config)),
-    end_per_testcase(default, proplists:delete(subscription_id, Config));
+    end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
@@ -184,13 +186,11 @@ end_per_testcase(Case, Config) when
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
-    end, ?config(session_ids, Config)),
-    proplists:delete(subscription_id, proplists:delete(session_ids, Config));
+    end, ?config(session_ids, Config));
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    session_teardown(Worker, ?config(session_id, Config)),
-    proplists:delete(session_id, Config).
+    session_teardown(Worker, ?config(session_id, Config)).
 
 %%%===================================================================
 %%% Internal functions
@@ -335,7 +335,7 @@ unsubscribe(Worker, SessId, SubId) ->
 %% Emits an event to all event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), Evt :: event:type()) -> ok.
+-spec emit(Worker :: node(), Evt :: event:object()) -> ok.
 emit(Worker, Evt) ->
     ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt])).
 
@@ -345,7 +345,7 @@ emit(Worker, Evt) ->
 %% Emits an event to event manager associated with a session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Worker :: node(), SessId :: session:id(), Evt :: event:type()) -> ok.
+-spec emit(Worker :: node(), SessId :: session:id(), Evt :: event:object()) -> ok.
 emit(Worker, SessId, Evt) ->
     ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt, SessId])).
 

@@ -160,6 +160,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     mock_communicator(Worker),
     mock_router(Worker),
     set_sequencer_in_stream_timeouts(Worker),
@@ -169,9 +170,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_in_stream(?config(sequencer_in_stream, Config)),
-    validate_and_unload_mocks(Worker, [communicator, router]),
-    remove_pending_messages(),
-    proplists:delete(sequencer_in_stream, Config).
+    test_utils:mock_validate_and_unload(Worker, [communicator, router]).
 
 %%%===================================================================
 %%% Internal functions
@@ -278,26 +277,4 @@ mock_router(Worker) ->
         (Msg) -> Self ! Msg
     end).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec validate_and_unload_mocks(Worker :: node(), Mocks :: [atom()]) -> ok.
-validate_and_unload_mocks(Worker, Mocks) ->
-    test_utils:mock_validate(Worker, Mocks),
-    test_utils:mock_unload(Worker, Mocks).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any() of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
-    end.

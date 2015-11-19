@@ -108,14 +108,17 @@ protobuf_msg_test(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message, fun
-        (#client_message{message_body = #event{object = #read_event{}}}, _) ->
-            ok
+        (#client_message{message_body = #events{events = [#event{
+            object = #read_event{}
+        }]}}, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
-        message_body = {event, #'Event'{counter = 1, object =
-        {read_event, #'ReadEvent'{file_uuid = <<"id">>, size = 1, blocks = []}}
-        }}
+        message_body = {events, #'Events'{events = [#'Event'{
+            counter = 1, object = {read_event, #'ReadEvent'{
+                file_uuid = <<"id">>, size = 1, blocks = []
+            }}
+        }]}}
     },
     RawMsg = messages:encode_msg(Msg),
 
@@ -123,7 +126,7 @@ protobuf_msg_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl2:send(Sock, RawMsg),
 
-    % then
+% then
     ok = ssl2:close(Sock).
 
 -performance([
@@ -145,24 +148,24 @@ multi_message_test(Config) ->
     Self = self(),
     MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(fun(N) ->
-            #'ClientMessage'{message_body = {event, #'Event'{
-                counter = N,
-                object = {read_event, #'ReadEvent'{
-                    file_uuid = <<"id">>,
-                    size = 1,
-                    blocks = []
-                }}}}}
-        end, MsgNumbers),
+        #'ClientMessage'{message_body = {events, #'Events'{events = [#'Event'{
+            counter = N,
+            object = {read_event, #'ReadEvent'{
+                file_uuid = <<"id">>,
+                size = 1,
+                blocks = []
+            }}
+        }]}}}
+    end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
     op_test_utils:remove_pending_messages(),
-    test_utils:mock_expect(Workers, router, route_message,
-        fun(#client_message{message_body = #event{
-            counter = Counter,
-            object = #read_event{}}
-        }) ->
+    test_utils:mock_expect(Workers, router, route_message, fun
+        (#client_message{message_body = #events{events = [#event{
+            counter = Counter, object = #read_event{}
+        }]}}) ->
             Self ! Counter,
             ok
-        end),
+    end),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
@@ -170,7 +173,7 @@ multi_message_test(Config) ->
     lists:foreach(fun(E) -> ok = ssl2:send(Sock, E) end, RawEvents),
     T2 = os:timestamp(),
 
-    % then
+% then
     lists:foreach(fun(N) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
@@ -506,7 +509,7 @@ python_client_test(Config) ->
         ?assertReceivedMatch(router_message_called, timer:seconds(15))
     end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
-    catch port_close(PythonClient),
+        catch port_close(PythonClient),
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
 proto_version_test(Config) ->
@@ -574,8 +577,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [identity, serializator]),
-    test_utils:mock_unload(Workers, [identity, serializator]);
+    test_utils:mock_validate_and_unload(Workers, [identity, serializator]);
 
 end_per_testcase(Case, Config) when
     Case =:= protobuf_msg_test;
@@ -583,20 +585,17 @@ end_per_testcase(Case, Config) when
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [identity, router]),
-    test_utils:mock_unload(Workers, [identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [identity, router]);
 
 end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
-    test_utils:mock_validate(Workers, [identity, router]),
-    test_utils:mock_unload(Workers, [identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [identity, router]);
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, identity),
-    test_utils:mock_unload(Workers, identity).
+    test_utils:mock_validate_and_unload(Workers, identity).
 
 %%%===================================================================
 %%% Internal functions
@@ -632,9 +631,9 @@ connect_via_token(Node, SocketOpts, SessId) ->
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
-                    undefined -> [];
-                    Other -> [{active, Other}]
-                end,
+        undefined -> [];
+        Other -> [{active, Other}]
+    end,
     NewSocketOpts = proplists:delete(active, SocketOpts),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
 

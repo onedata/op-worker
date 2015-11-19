@@ -62,9 +62,9 @@ event_manager_should_update_session_on_init(Config) ->
 event_manager_should_update_session_on_terminate(Config) ->
     stop_event_manager(?config(event_manager, Config)),
     [Worker | _] = ?config(op_worker_nodes, Config),
-    repeat(fun() -> rpc:call(
+    ?assertEqual({error, {not_found, missing}}, rpc:call(
         Worker, session, get_event_manager, [?config(session_id, Config)]
-    ) end, {error, {not_found, missing}}, 10, 500).
+    ), 10).
 
 event_manager_should_start_event_streams_on_init(_) ->
     ?assertReceivedMatch({start_event_stream, #subscription{id = 1}}, ?TIMEOUT),
@@ -121,6 +121,7 @@ init_per_testcase(Case, Config) when
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
+    op_test_utils:remove_pending_messages(),
     mock_subscription(Worker),
     mock_event_stream_sup(Worker),
     mock_event_manager_sup(Worker),
@@ -130,6 +131,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
+    op_test_utils:remove_pending_messages(),
     mock_subscription(Worker, []),
     mock_event_manager_sup(Worker),
     {ok, EvtMan} = start_event_manager(Worker, SessId),
@@ -138,7 +140,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(event_manager_should_start_event_stream_on_subscription, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     end_per_testcase(default, Config),
-    validate_and_unload_mocks(Worker, [event_stream_sup]);
+    test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
 end_per_testcase(Case, Config) when
     Case =:= event_manager_should_start_event_streams_on_init;
@@ -147,15 +149,13 @@ end_per_testcase(Case, Config) when
     Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     end_per_testcase(default, Config),
-    validate_and_unload_mocks(Worker, [event_stream_sup]);
+    test_utils:mock_validate_and_unload(Worker, event_stream_sup);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_event_manager(?config(event_manager, Config)),
-    validate_and_unload_mocks(Worker, [event_manager_sup, subscription]),
-    session_teardown(Worker, ?config(session_id, Config)),
-    remove_pending_messages(),
-    proplists:delete(session_id, proplists:delete(event_manager, Config)).
+    test_utils:mock_validate_and_unload(Worker, [event_manager_sup, subscription]),
+    session_teardown(Worker, ?config(session_id, Config)).
 
 %%%===================================================================
 %%% Internal functions
@@ -248,7 +248,10 @@ mock_event_stream_sup(Worker) ->
 %%--------------------------------------------------------------------
 -spec mock_subscription(Worker :: node()) -> ok.
 mock_subscription(Worker) ->
-    mock_subscription(Worker, [#subscription{id = 1}, #subscription{id = 2}]).
+    mock_subscription(Worker, [
+        #document{key = 1, value = #subscription{id = 1}},
+        #document{key = 2, value = #subscription{id = 2}}
+    ]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -256,53 +259,9 @@ mock_subscription(Worker) ->
 %% Mocks subscription model, so that it returns custom list of subscriptions.
 %% @end
 %%--------------------------------------------------------------------
--spec mock_subscription(Worker :: node(), Subs :: [#subscription{}]) -> ok.
-mock_subscription(Worker, Subs) ->
+-spec mock_subscription(Worker :: node(), Subs :: [#document{}]) -> ok.
+mock_subscription(Worker, Docs) ->
     test_utils:mock_new(Worker, [subscription]),
     test_utils:mock_expect(Worker, subscription, list, fun
-        () -> {ok, Subs}
+        () -> {ok, Docs}
     end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec validate_and_unload_mocks(Worker :: node(), Mocks :: [atom()]) -> ok.
-validate_and_unload_mocks(Worker, Mocks) ->
-    test_utils:mock_validate(Worker, Mocks),
-    test_utils:mock_unload(Worker, Mocks).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Repeatedly executes provided function until it returns expected value or
-%% attempts limit exceeds.
-%% @end
-%%--------------------------------------------------------------------
--spec repeat(Fun :: fun(), Expected :: term(), Attempts :: non_neg_integer(),
-    Delay :: timeout()) -> ok.
-repeat(Fun, Expected, 0, _) ->
-    ?assertMatch(Expected, Fun());
-
-repeat(Fun, Expected, Attempts, Delay) ->
-    case Fun() of
-        Expected -> ok;
-        _ ->
-            timer:sleep(Delay),
-            repeat(Fun, Expected, Attempts - 1, Delay)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes messages for process messages queue.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_pending_messages() -> ok.
-remove_pending_messages() ->
-    case test_utils:receive_any() of
-        {error, timeout} -> ok;
-        _ -> remove_pending_messages()
-    end.

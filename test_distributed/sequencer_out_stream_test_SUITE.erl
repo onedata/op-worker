@@ -157,6 +157,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    op_test_utils:remove_pending_messages(),
     mock_communicator(Worker),
     {ok, SeqStm} = start_sequencer_out_stream(Worker),
     [{sequencer_out_stream, SeqStm} | Config].
@@ -164,9 +165,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     stop_sequencer_out_stream(?config(sequencer_out_stream, Config)),
-    validate_and_unload_mocks(Worker, [communicator]),
-    op_test_utils:remove_pending_messages(),
-    proplists:delete(sequencer_out_stream, Config).
+    test_utils:mock_validate_and_unload(Worker, communicator).
 
 %%%===================================================================
 %%% Internal functions
@@ -240,14 +239,3 @@ mock_communicator(Worker) ->
     test_utils:mock_expect(Worker, communicator, send, fun
         (Msg, _) -> Self ! Msg
     end).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec validate_and_unload_mocks(Worker :: node(), Mocks :: [atom()]) -> ok.
-validate_and_unload_mocks(Worker, Mocks) ->
-    test_utils:mock_validate(Worker, Mocks),
-    test_utils:mock_unload(Worker, Mocks).

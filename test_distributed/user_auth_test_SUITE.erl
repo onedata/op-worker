@@ -59,7 +59,7 @@ token_authentication(Config) ->
         {ok, #document{value = #identity{user_id = ?USER_ID}}},
         rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
     ),
-    unmock_gr_certificates(Config),
+    test_utils:mock_validate_and_unload(Worker1, gr_endpoint),
     ok = ssl:close(Sock).
 
 %%%===================================================================
@@ -152,8 +152,3 @@ mock_gr_certificates(Config) ->
                 ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
         end
     ).
-
-unmock_gr_certificates(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, gr_endpoint),
-    test_utils:mock_unload(Workers, gr_endpoint).

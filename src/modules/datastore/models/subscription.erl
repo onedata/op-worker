@@ -28,7 +28,7 @@
 
 -type id() :: integer().
 -type object() :: #file_attr_subscription{} | #file_location_subscription{} |
-                  #read_subscription{} | #write_subscription{}.
+#read_subscription{} | #write_subscription{}.
 -type cancellation() :: #subscription_cancellation{}.
 
 %%%===================================================================
@@ -95,14 +95,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
 list() ->
-    case datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []) of
-        {ok, Docs} ->
-            {ok, lists:map(fun(#document{value = Sub}) ->
-                Sub
-            end, Docs)};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
