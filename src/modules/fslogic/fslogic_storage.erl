@@ -54,7 +54,7 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
             {error, _} ->
                 fslogic_utils:gen_storage_uid(SpaceUUID)
         end,
-    
+
     FinalUID = fslogic_utils:gen_storage_uid(UserId),
     #posix_user_ctx{
         uid = FinalUID,
