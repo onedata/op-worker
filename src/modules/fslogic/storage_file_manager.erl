@@ -115,7 +115,7 @@ mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
                     chmod(SFMHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
                 E -> E
             end,
-            Noop(HelperHandle),
+            Noop(HelperHandle), %% @todo: check why NIF crashes when this term is destroyed before recursive call
             R;
         {error, Reason} ->
             {error, Reason}
