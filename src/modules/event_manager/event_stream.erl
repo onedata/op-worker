@@ -116,7 +116,7 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(initialize, #state{subscription_id = SubId, event_manager = EvtMan} = State) ->
-    case gen_server:call(EvtMan, {event_stream_initialized, SubId}) of
+    case gen_server:call(EvtMan, {event_stream_initialized, SubId}, timer:seconds(30)) of
         {ok, #state{} = EvtStmState} ->
             ?info("Event stream reinitialized in state: ~p", [EvtStmState]),
             {noreply, reset_time_emission(EvtStmState)};

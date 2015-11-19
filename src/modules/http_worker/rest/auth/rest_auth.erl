@@ -25,7 +25,10 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2
+%% @doc
+%% This function authorizes user and inserts 'identity' field to
+%% request's State
+%% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
 is_authorized(Req, State) ->

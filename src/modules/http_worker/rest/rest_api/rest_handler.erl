@@ -17,11 +17,6 @@
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% the state of request, it is created in rest_init function, and passed to every cowboy callback functions
--record(state, {
-    identity :: #identity{}
-}).
-
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, is_authorized/2,
     content_types_accepted/2, delete_resource/2, resource_exists/2]).
@@ -38,33 +33,33 @@
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
-    {ok, Req, #state{}}.
+    {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), #state{}) -> ok.
+-spec terminate(Reason :: term(), req(), #{}) -> ok.
 terminate(_, _, _) ->
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), #state{} | {error, term()}) -> {[binary()], req(), #state{}}.
+-spec allowed_methods(req(), #{} | {error, term()}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #state{}) -> {boolean(), req(), #state{}}.
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_accepted/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), #state{}) -> {[{binary(), atom()}], req(), #state{}}.
+-spec content_types_accepted(req(), #{}) -> {[{binary(), atom()}], req(), #{}}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/json">>, handle_json_data}
@@ -75,14 +70,14 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
--spec resource_exists(req(), #state{}) -> {term(), req(), #state{}}.
+-spec resource_exists(req(), #{}) -> {term(), req(), #{}}.
 resource_exists(Req, State) ->
     {false, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
--spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
+-spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, State) ->
     {true, Req, State}.
 
@@ -95,8 +90,8 @@ delete_resource(Req, State) ->
 %% Handles PUT with "application/json" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec handle_json_data(req(), #state{}) -> {term(), req(), #state{}}.
-handle_json_data(Req, State = #state{identity = ?GLOBALREGISTRY_IDENTITY}) ->
+-spec handle_json_data(req(), #{}) -> {term(), req(), #{}}.
+handle_json_data(Req, State = #{identity := ?GLOBALREGISTRY_IDENTITY}) ->
     case cowboy_req:path_info(Req) of
         {[<<"auth">>], _}  ->
             {ok, Body, Req2} = cowboy_req:body(Req),
