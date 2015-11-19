@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/http_worker/http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
@@ -118,37 +119,25 @@ delete_resource(Req, #{path := Path, identity := Identity} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
-get_binary(Req, #{path := Path} = State) ->
+get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) ->
 
-    Size = get_size(State),
     % get optional 'Range' header
     {Ranges, Req1} = get_ranges(Req, State),
 
-    % return bad request if Range is invalid
-    case Ranges of
-        invalid -> cdmi_error:invalid_range_reply(Req1, State);
-        _ ->
-            % prepare data size and stream function
-            StreamSize = lists:foldl(fun
-                ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
-                ({_, _}, Acc)  -> Acc
-            end, 0, Ranges),
+    % prepare response
+    StreamSize = get_stream_size(Ranges, Size),
+    StreamFun = stream(State, Ranges),
+    Req2 = cowboy_req:set_resp_header(<<"content-type">>, get_mimetype(Path), Req1),
 
-            StreamFun = stream(State, Ranges),
+    HttpStatus =
+        case Ranges of
+            undefined -> ?HTTP_OK;
+            _ -> ?PARTIAL_CONTENT
+        end,
 
-            % set mimetype
-            Req2 = cowboy_req:set_resp_header(<<"content-type">>, get_mimetype(Path), Req1),
-
-            % reply with stream and adequate status
-            {ok, Req3} = case RawRange of
-                             undefined ->
-
-                                 cowboy_req:reply(?HTTP_OK, [], {StreamSize, StreamFun}, Req2);
-                             _ ->
-                                 cowboy_req:reply(?PARTIAL_CONTENT, [], {StreamSize, StreamFun}, Req2)
-                         end,
-            {halt, Req3, State}
-    end.
+    % reply
+    {ok, Req3} = cowboy_req:reply(HttpStatus, [], {StreamSize, StreamFun}, Req2),
+    {halt, Req3, State}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -190,8 +179,7 @@ parse_byte_range(State, Range) when is_binary(Range) ->
     end;
 parse_byte_range(_, []) ->
     [];
-parse_byte_range(State, [First | Rest]) ->
-    Size = get_size(State),
+parse_byte_range(#{attributes := #file_attr{size = Size}} = State, [First | Rest]) ->
     Range = case binary:split(First, <<"-">>, [global]) of
                 [<<>>, FromEnd] -> {max(0, Size - binary_to_integer(FromEnd)), Size - 1};
                 [From, <<>>] -> {binary_to_integer(From), Size - 1};
@@ -218,9 +206,8 @@ parse_byte_range(State, [First | Rest]) ->
 stream_range(Socket, Transport, State, Range, Encoding, BufferSize, FileHandle) when (BufferSize rem 3) =/= 0 ->
     %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
     stream_range(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3), FileHandle);
-stream_range(Socket, Transport, State, default, Encoding, BufferSize, FileHandle) ->
+stream_range(Socket, Transport, #{attributes := #file_attr{size = Size}} = State, default, Encoding, BufferSize, FileHandle) ->
     %default range should remain consistent with parse_object_ans/2 valuerange clause
-    Size = get_size(State),
     stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
 stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
@@ -237,9 +224,12 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Reads given ranges of file and streams to given Socket
+%% Returns fun that reads given ranges of file and streams to given Socket
 %% @end
 %%--------------------------------------------------------------------
+-spec stream(Stata ::#{}, Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined) -> any().
+stream(#{attributes := #file_attr{size = Size}} = State, undefined) ->
+    stream(State, [{0, Size -1}]);
 stream(#{path := Path, identity := Identity} = State, Ranges) ->
     {ok, FileHandle} = onedata_file_api:open(Identity, {path, Path} ,read),
     fun(Socket, Transport) ->
@@ -280,19 +270,26 @@ encode(Data, _) ->
 %%--------------------------------------------------------------------
 %% @doc Encodes data according to given ecoding
 %%--------------------------------------------------------------------
--spec get_ranges(Req :: cowboy_req(), #{}) -> {[{non_neg_integer(), non_neg_integer()}], cowboy_req()}.
+-spec get_ranges(Req :: req(), #{}) -> {[{non_neg_integer(), non_neg_integer()}], req()}.
 get_ranges(Req, State) ->
     {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
     case RawRange of
         undefined -> {undefined, Req1};
-        _ -> {parse_byte_range(State, RawRange), Req1}
+        _ ->
+            case parse_byte_range(State, RawRange) of
+                invalid ->throw(?invalid_range);
+                Ranges -> {Ranges, Req1}
+            end
     end.
 
-
 %%--------------------------------------------------------------------
-%% @doc Gets size from map State
+%% @doc Gets size of a stream
 %%--------------------------------------------------------------------
--spec get_size(State :: #{}) -> non_neg_integer().
-get_size(#{identity := Identity, path := Path} = _State) ->
-    {ok, #file_attr{size = Size}} = onedata_file_api:stat(Identity, {path, Path}),
-    Size.
+-spec get_stream_size(Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined,
+    Size :: non_neg_integer()) -> non_neg_integer().
+get_stream_size(undefined, Size) -> Size;
+get_stream_size(Ranges, _Size) ->
+    lists:foldl(fun
+        ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
+        ({_, _}, Acc)  -> Acc
+    end, 0, Ranges).
