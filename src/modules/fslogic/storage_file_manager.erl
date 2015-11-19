@@ -102,7 +102,11 @@ mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
                     LeafLess = fslogic_path:dirname(Tokens),
                     ok = mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true)
             end,
-            mkdir(SFMHandle, Mode, false);
+            case mkdir(SFMHandle, Mode, false) of
+                ok ->
+                    chmod(SFMHandle, Mode);
+                E -> E
+            end;
         {error, Reason} ->
             {error, Reason}
     end.
