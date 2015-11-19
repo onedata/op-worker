@@ -246,7 +246,7 @@ def create_storages(os_config, op_nodes, bindir):
         script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
         for st_path in storages:
             st_name = st_path
-            command = 'escript %s %s %s %s' % (script_path, node, st_name, st_path)
+            command = ['escript', script_path, node, st_name, st_path]
             docker.exec_(container, command, tty=True)
     # clean-up
     command = ['rm', os.path.join(bindir, script_name)]

@@ -53,10 +53,10 @@ def _node_up(image, bindir, config, config_path, dns_servers):
     os_config = config['os_config']
 
     # copy get_token.escript to /root/build
-    local_path = os.getcwd()
-    local_path = os.path.join(local_path, "bamboos", "docker", "environment", "get_token.escript")
-    docker_path = os.path.join(bindir, "get_token.escript")
-    subprocess.check_call(['cp', local_path, docker_path])
+    # local_path = os.getcwd()
+    # local_path = os.path.join(local_path, "bamboos", "docker", "environment", "get_token.escript")
+    # docker_path = os.path.join(bindir, "get_token.escript")
+    # subprocess.check_call(['cp', local_path, docker_path])
 
     command = '''set -e
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
