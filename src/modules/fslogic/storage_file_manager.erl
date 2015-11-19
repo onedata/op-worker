@@ -104,7 +104,7 @@ mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
             end,
             case mkdir(SFMHandle, Mode, false) of
                 ok ->
-                    chmod(SFMHandle, Mode);
+                    chmod(SFMHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
                 E -> E
             end;
         {error, Reason} ->
