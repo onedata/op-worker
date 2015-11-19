@@ -179,8 +179,7 @@ end_per_testcase(_, Config) ->
     unmock_user_auth(Config),
     initializer:clean_test_users_and_spaces(Config),
     ibrowse:stop(),
-    ssl:stop(),
-    timer:sleep(timer:seconds(10)). %todo fix datastore 'no_file_meta' error, and remove this sleep
+    ssl:stop().
 
 %%%===================================================================
 %%% Internal functions
@@ -200,7 +199,7 @@ cdmi_endpoint(Node) ->
     Port =
         case get(port) of
             undefined ->
-                {ok, P} = rpc:call(Node, application, get_env, [?APP_NAME, http_worker_rest_port]),
+                {ok, P} = test_utils:get_env(Node, ?APP_NAME, http_worker_rest_port),
                 PStr = integer_to_list(P),
                 put(port, PStr),
                 PStr;

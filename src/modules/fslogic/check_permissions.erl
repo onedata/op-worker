@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([before_advice/4, after_advice/5]).
+-export([before_advice/4, after_advice/5, validate_scope_access/3]).
 
 %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
 -type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {parent, item_definition()}.
@@ -51,7 +51,7 @@ before_advice(#annotation{data = [Obj | R]} = A, M, F, [#fslogic_ctx{} | _Inputs
 %% actual before_advice impl.
 before_advice(#annotation{}, _M, _F, [#fslogic_ctx{session = #session{identity = #identity{user_id = ?ROOT_USER_ID}}} | _Inputs] = Args) ->
     Args;   %% Always allow access by root user
-before_advice(#annotation{data = root}, _M, _F, [#fslogic_ctx{} | _Inputs] = Args) ->
+before_advice(#annotation{data = root}, _M, _F, [#fslogic_ctx{} | _Inputs] = _Args) ->
     throw(?EACCES); %% At this point user is not root so deny any requests that require root
 
 %% Check whether user owns the item
@@ -78,7 +78,7 @@ before_advice(#annotation{data = {none, Item}}, _M, _F,
 
 %% Check whether user owns the item but only if parent of the item has sticky bit.
 before_advice(#annotation{data = {owner_if_parent_sticky, Item}}, _M, _F,
-    [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
+    [#fslogic_ctx{session = #session{identity = #identity{user_id = _UserId}}} = Ctx | Inputs] = Args) ->
 
     #document{value = #file_meta{}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
     #document{value = #file_meta{mode = Mode}} = fslogic_utils:get_parent(Subj),
@@ -98,7 +98,7 @@ before_advice(#annotation{data = {AccessType, Item}}, _M, _F,
 
     case IsScope of
         true  ->
-            ok = validate_scope_access(AccessType, FileDoc, UserId);
+            ok = check_permissions:validate_scope_access(AccessType, FileDoc, UserId);
         false ->
             ok
     end,
