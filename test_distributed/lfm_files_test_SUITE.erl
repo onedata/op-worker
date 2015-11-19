@@ -211,21 +211,21 @@ lfm_truncate_test(Config) ->
 
     ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>})),
 
-    ?assertMatch({ok, 3}, write(W, Handle11, 0, <<"abc">>)),
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
     ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
 
-    ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 1)),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 1)),
     ?assertMatch({ok, #file_attr{size = 1}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"a">>}, lfm_proxy:read(W, Handle11, 0, 10)),
 
-    ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 10)),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 10)),
     ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"a">>}, lfm_proxy:read(W, Handle11, 0, 1)),
 
-    ?assertMatch({ok, 3}, write(W, Handle11, 1, <<"abc">>)),
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 1, <<"abc">>)),
     ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
 
-    ?assertMatch(ok, truncate(W, SessId1, {path, <<"/test6">>}, 5)),
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 5)),
     ?assertMatch({ok, #file_attr{size = 5}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"aabc">>}, lfm_proxy:read(W, Handle11, 0, 4)).
 

@@ -30,11 +30,11 @@
 resource_exists(Req, State = #{path := Path, identity := Identity}) ->
     case logical_file_manager:stat(Identity, {path, Path}) of
         {ok, Attr = #file_attr{type = ?DIRECTORY_TYPE}} ->
-            {true, Req, State#{attributes = Attr}};
+            {true, Req, State#{attributes := Attr}};
         {ok, #file_attr{}} ->
             redirect_to_object(Req, State);
         {error, ?ENOENT} ->
-            {false, Req, State#{attributes = undefined}}
+            {false, Req, State#{attributes := undefined}}
     end.
 
 

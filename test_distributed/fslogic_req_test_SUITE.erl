@@ -489,12 +489,12 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     communicator_mock_setup(Workers),
     initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces(Config),
     test_utils:mock_validate(Workers, [communicator]),
     test_utils:mock_unload(Workers, [communicator]),
