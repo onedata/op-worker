@@ -64,7 +64,7 @@ public:
       , gid(helperCTX.gid)
     {
         prev_uid = setfsuid(uid);
-        prev_gid = setfsgid(uid);
+        prev_gid = setfsgid(gid);
 
         current_uid = setfsuid(-1);
         current_gid = setfsgid(-1);
