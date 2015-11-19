@@ -109,7 +109,7 @@ delete_file_test(Config) ->
 
     %%------------------------------
 
-%%     ----- delete group file ------
+    %%----- delete group file ------
     create_file(Config, GroupFileName),
     ?assert(object_exists(Config, GroupFileName)),
 
@@ -118,7 +118,7 @@ delete_file_test(Config) ->
     ?assertEqual("204",Code2),
 
     ?assert(not object_exists(Config, GroupFileName)).
-%%------------------------------
+    %%------------------------------
 
 
 choose_adequate_handler(Config) ->

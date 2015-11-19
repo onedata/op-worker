@@ -104,10 +104,8 @@ content_types_accepted(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, #{path := Path, identity := Identity} = State) ->
-    case onedata_file_api:unlink(Identity, get_file_key(Path)) of
-        ok -> {true, Req, State};
-        {error, Code} -> cdmi_error:unlink_failed_reply(Req, State, Code)
-    end.
+    ok = onedata_file_api:unlink(Identity, {path, Path}),
+    {true, Req, State}.
 
 
 %%%===================================================================
@@ -124,11 +122,7 @@ get_binary(Req, #{path := Path} = State) ->
 
     Size = get_size(State),
     % get optional 'Range' header
-    {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
-    Ranges = case RawRange of
-                 undefined -> [{0,Size-1}];
-                 _ -> parse_byte_range(State, RawRange)
-             end,
+    {Ranges, Req1} = get_ranges(Req, State),
 
     % return bad request if Range is invalid
     case Ranges of
@@ -217,24 +211,24 @@ parse_byte_range(State, [First | Rest]) ->
 %% and streamed to given Socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_range(Socket :: term(), Transport :: atom(), State :: #{}, Range, Encoding :: binary(), BufferSize :: integer()) -> Result when
+-spec stream_range(Socket :: term(), Transport :: atom(), State :: #{}, Range, Encoding :: binary(),
+    BufferSize :: integer(), FileHandle :: onedata_file_api:file_handle()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
     Result :: ok | no_return().
-stream_range(Socket, Transport, State, Range, Encoding, BufferSize) when (BufferSize rem 3) =/= 0 ->
+stream_range(Socket, Transport, State, Range, Encoding, BufferSize, FileHandle) when (BufferSize rem 3) =/= 0 ->
     %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
-    stream_range(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3));
-stream_range(Socket, Transport, State, default, Encoding, BufferSize) ->
+    stream_range(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3), FileHandle);
+stream_range(Socket, Transport, State, default, Encoding, BufferSize, FileHandle) ->
     %default range should remain consistent with parse_object_ans/2 valuerange clause
     Size = get_size(State),
-    stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize);
-stream_range(Socket, Transport, #{path := Path, identity := Identity} = State, {From, To}, Encoding, BufferSize) ->
+    stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
+stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHandle) ->
     ToRead = To - From + 1,
-    {ok, FileHandle} = onedata_file_api:open(Identity, get_file_key(Path) ,read),
     case ToRead > BufferSize of
         true ->
             {ok, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
             Transport:send(Socket, encode(Data, Encoding)),
-            stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize);
+            stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, FileHandle);
         false ->
             {ok, Data} = onedata_file_api:read(FileHandle, From, ToRead),
             Transport:send(Socket, encode(Data, Encoding))
@@ -246,12 +240,13 @@ stream_range(Socket, Transport, #{path := Path, identity := Identity} = State, {
 %% Reads given ranges of file and streams to given Socket
 %% @end
 %%--------------------------------------------------------------------
-stream(#{path := Path} = State, Ranges) ->
+stream(#{path := Path, identity := Identity} = State, Ranges) ->
+    {ok, FileHandle} = onedata_file_api:open(Identity, {path, Path} ,read),
     fun(Socket, Transport) ->
         try
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
             lists:foreach(fun(Rng) ->
-            stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize) end, Ranges)
+            stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize, FileHandle) end, Ranges)
         catch Type:Message ->
             % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
             ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
@@ -283,16 +278,21 @@ encode(Data, _) ->
     Data.
 
 %%--------------------------------------------------------------------
+%% @doc Encodes data according to given ecoding
+%%--------------------------------------------------------------------
+-spec get_ranges(Req :: cowboy_req(), #{}) -> {[{non_neg_integer(), non_neg_integer()}], cowboy_req()}.
+get_ranges(Req, State) ->
+    {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
+    case RawRange of
+        undefined -> {undefined, Req1};
+        _ -> {parse_byte_range(State, RawRange), Req1}
+    end.
+
+
+%%--------------------------------------------------------------------
 %% @doc Gets size from map State
 %%--------------------------------------------------------------------
 -spec get_size(State :: #{}) -> non_neg_integer().
 get_size(#{identity := Identity, path := Path} = _State) ->
     {ok, #file_attr{size = Size}} = onedata_file_api:stat(Identity, {path, Path}),
     Size.
-
-%%--------------------------------------------------------------------
-%% @doc Get file key
-%%--------------------------------------------------------------------
--spec get_file_key(Path :: onedata_file_api:file_path()) -> onedata_file_api:file_id_or_path().
-get_file_key(Path) ->
-    {path, utils:ensure_unicode_binary(Path)}.
