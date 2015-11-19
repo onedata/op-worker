@@ -129,8 +129,11 @@ close_sequencer_stream_handler() ->
 %%--------------------------------------------------------------------
 -spec send_events_handler() -> Handler :: event_stream:event_handler().
 send_events_handler() ->
-    fun(Evts, {StmId, SessId}) ->
-        sequencer:send_message(#events{events = Evts}, StmId, SessId)
+    fun
+        ([], _) ->
+            ok;
+        (Evts, {StmId, SessId}) ->
+            sequencer:send_message(#events{events = Evts}, StmId, SessId)
     end.
 
 %%--------------------------------------------------------------------

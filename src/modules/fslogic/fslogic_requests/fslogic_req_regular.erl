@@ -78,7 +78,6 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
 get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, Flags) ->
     ?debug("get_file_location for ~p ~p", [File, Flags]),
     {ok, #document{key = UUID}} = file_meta:get(File),
-    ok = file_watcher:insert_open_watcher(UUID, SessId),
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
     #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
@@ -133,8 +132,6 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
 
     storage_file_manager:unlink(Storage, FileId),
     ok = storage_file_manager:create(Storage, FileId, Mode),
-
-    ok = file_watcher:insert_open_watcher(UUID, SessId),
 
     #fuse_response{status = #status{code = ?OK}, fuse_response =
                        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.

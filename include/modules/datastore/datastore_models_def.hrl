@@ -36,8 +36,7 @@
     cache_controller,
     task_pool,
     storage,
-    file_location,
-    file_watcher
+    file_location
 ]).
 
 %% List of all global caches
@@ -45,8 +44,7 @@
     some_record,
     file_meta,
     storage,
-    file_location,
-    file_watcher
+    file_location
 ]).
 
 %% List of all local caches
@@ -138,9 +136,4 @@
     size = 0 :: non_neg_integer() | undefined
 }).
 
-%% Model for tracking open files and watched attributes
--record(file_watcher, {
-    open_sessions = [] :: [session:id()], %% Sessions that opened the file
-    attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
-}).
 -endif.

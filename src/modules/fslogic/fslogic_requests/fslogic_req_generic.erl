@@ -36,7 +36,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
     {ok, _} = file_meta:update(FileEntry, UpdateMap1),
 
     %% @todo: replace with events
-    spawn(fun() -> fslogic_notify:attributes(FileEntry, [SessId]) end),
+    spawn(fun() -> fslogic_event:attributes(FileEntry, [SessId]) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -73,7 +73,7 @@ chmod(_CTX, FileEntry, Mode) ->
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
     %% @todo: replace with events
-    spawn(fun() -> fslogic_notify:attributes(FileEntry, []) end),
+    spawn(fun() -> fslogic_event:attributes(FileEntry, []) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -105,8 +105,6 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
                                               type = Type, mode = Mode, atime = ATime, mtime = MTime,
                                               ctime = CTime, uid = UID, name = Name}}} ->
             Size = fslogic_blocks:get_file_size(File),
-
-            ok = file_watcher:insert_attr_watcher(UUID, SessId),
 
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                                #file_attr{
