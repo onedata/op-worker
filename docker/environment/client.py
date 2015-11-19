@@ -32,16 +32,12 @@ def _tweak_config(config, os_config, name, uid):
     node['clients'] = []
     clients = config[name]['clients']
     for cl in clients:
-        client = copy.deepcopy(clients[cl])
-        client_config = {}
-        client_config['name'] = client['name']
-        client_config['op_domain'] = provider_worker.provider_domain(client['op_domain'], uid)
-        client_config['gr_domain'] = globalregistry.gr_domain(client['gr_domain'], uid)
-        client_config['user_key'] = client['user_key']
-        if 'user_cert' in client.keys():
-            client_config['user_cert'] = client['user_cert']
-        if 'token' in client.keys():
-            client_config['token'] = client['token']
+        client = clients[cl]
+        client_config = {'name': client['name'],
+                         'op_domain': provider_worker.provider_domain(client['op_domain'], uid),
+                         'gr_domain': globalregistry.gr_domain(client['gr_domain'], uid),
+                         'user_key': client['user_key'],
+                         'user_cert': client['user_cert']}
 
         node['clients'].append(client_config)
     return cfg
@@ -52,20 +48,56 @@ def _node_up(image, bindir, config, config_path, dns_servers):
     hostname = node['name']
     os_config = config['os_config']
 
-    # copy get_token.escript to /root/build
-    # local_path = os.getcwd()
-    # local_path = os.path.join(local_path, "bamboos", "docker", "environment", "get_token.escript")
-    # docker_path = os.path.join(bindir, "get_token.escript")
-    # subprocess.check_call(['cp', local_path, docker_path])
+    client_data = {}
 
+    # We want the binary from debug more than relwithdebinfo, and any of these
+    # more than from release (ifs are in reverse order so it works when
+    # there are multiple dirs).
     command = '''set -e
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
 [ -d /root/build/relwithdebinfo ] && cp /root/build/relwithdebinfo/oneclient /root/bin/oneclient
 [ -d /root/build/debug ] && cp /root/build/debug/oneclient /root/bin/oneclient
-bash'''
+mkdir /tmp/certs
+mkdir /tmp/keys
+'''
+
+    for client in node['clients']:
+        # for each client instance we want to have separated certs and keys
+        client_name = client["name"]
+        client_data[client_name] = {'client_name': client_name,
+                                    'op_domain': client['op_domain'],
+                                    'gr_domain': client['gr_domain'],
+                                    # todo: add this field to env.json to mount oneclient
+                                    # 'mounting_path': client['mounting_path],
+                                    # 'token_for': client['token_for'],
+                                    'cert_file_path': client['user_cert'],
+                                    'key_file_path': client['user_key']}
+        # cert_file_path and key_file_path can both be an absolute path
+        # or relative to gen_dev_args.json
+        cert_file_path = os.path.join(common.get_file_dir(config_path),
+                                      client_name,
+                                      client_data[client_name]['cert_file_path'])
+        key_file_path = os.path.join(common.get_file_dir(config_path),
+                                     client_name,
+                                     client_data[client_name]['key_file_path'])
+        command += '''mkdir /tmp/certs/{client_name}
+mkdir /tmp/keys/{client_name}
+cat <<"EOF" > /tmp/certs/{client_name}/cert
+{cert_file}
+EOF
+cat <<"EOF" > /tmp/keys/{client_name}/key
+{key_file}
+EOF
+'''
+
+        command = command.format(
+            client_name=client_name,
+            cert_file=open(cert_file_path, 'r').read(),
+            key_file=open(key_file_path, 'r').read())
+    command += '''bash'''
 
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes = common.add_shared_storages(volumes, os_config['storages'])
+    volumes += [common.volume_for_storage(s) for s in os_config['storages']]
 
     container = docker.run(
         image=image,
@@ -81,8 +113,12 @@ bash'''
         command=command)
 
     # create system users and groups
-    common.create_users(container, os_config)
-    common.create_groups(container, os_config)
+    common.create_users(container, os_config['users'])
+    common.create_groups(container, os_config['groups'])
+
+    # mount oneclients as declared in config
+    for client in client_data:
+        mount_oneclient(container, client_data[client])
 
     return {'docker_ids': [container], 'client_nodes': [hostname]}
 
@@ -98,3 +134,23 @@ def up(image, bindir, dns_server, uid, config_path):
         common.merge(output, node_out)
 
     return output
+
+
+def mount_oneclient(container, config):
+    # todo: uncomment to mount oneclient
+    # # ask GR for token with get_token.escript (from onedata/tests/cucumber/scenarios/steps/utils)
+    # command = ['escript', 'get_token.escript', config['gr_domain'], config['token_for']]
+    # token = docker.exec_(container, command, tty=True, output=True)
+    # command = 'echo ' + token + ' > token'
+    # docker.exec_(container, command)
+    # # mount oneclient
+    # command = 'mkdir ' + config['mounting_path'] + \
+    #           ' X509_USER_CERT ' + config['cert_file_path'] + \
+    #           ' X509_USER_KEY ' + config['key_file_path'] + \
+    #           ' PROVIDER_HOSTNAME ' + config['op_domain'] + \
+    #           ' GLOBAL_REGISTRY_URL ' + config['gr_domain'] + \
+    #           ' ./oneclient --authentication token --no_check_certificate ' + \
+    #           config['mounting_path'] + \
+    #           ' < token && rm token'
+    # docker.exec_(container, command, tty=True)
+    pass

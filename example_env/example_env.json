@@ -162,7 +162,7 @@
           "name": "client1",
           "op_domain": "p1",
           "gr_domain": "gr",
-          "token": "u1",
+          "user_cert": "./cert.pem",
           "user_key": "./cert.pem"
         },
         "client2": {
