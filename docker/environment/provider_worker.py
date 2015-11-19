@@ -8,6 +8,7 @@ Brings up a set of oneprovider worker nodes. They can create separate clusters.
 import copy
 import json
 import os
+import subprocess
 
 from . import common, docker, riak, couchbase, dns, globalregistry, provider_ccm
 
@@ -226,27 +227,31 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
         common.merge(output, domains)
 
         # create storages
-        create_storages(config['os_configs'][os_config], output['op_worker_nodes'], bindir)
+        create_storages(config['os_configs'][os_config]['storages'],
+                        output['op_worker_nodes'],
+                        config['provider_domains'][op_instance]['op_worker'],
+                        bindir)
 
     # Make sure domains are added to the dns server.
     dns.maybe_restart_with_configuration(dns_server, uid, output)
     return output
 
-def create_storages(os_config, op_nodes, bindir):
+def create_storages(storages, op_nodes, op_config, bindir):
     # copy escript to docker host
     script_name = 'create_storage.escript'
     pwd = common.get_script_dir()
     command = ['cp', os.path.join(pwd, script_name), os.path.join(bindir, script_name)]
     subprocess.check_call(command)
     # execute escript
-    storages = os_config['storages']
     for node in op_nodes:
         container = node.split("@")[1]
+        worker_name = container.split(".")[0]
+        cookie = op_config[worker_name]['vm.args']['setcookie']
         script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
         for st_path in storages:
             st_name = st_path
-            command = ['escript', script_path, node, st_name, st_path]
-            docker.exec_(container, command, tty=True)
+            command = ['escript', script_path, cookie, node, st_name, st_path]
+            assert 0 is docker.exec_(container, command, tty=True)
     # clean-up
     command = ['rm', os.path.join(bindir, script_name)]
     subprocess.check_call(command)
