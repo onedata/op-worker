@@ -48,7 +48,7 @@ all() ->
 
 -define(FILE_PERMISSIONS, 8#664).
 
--define(OFFSET, 0).
+-define(FILE_BEGINNING, 0).
 
 
 %%%===================================================================
@@ -67,8 +67,8 @@ get_file_test(Config) ->
 
     create_file(Config, FileName),
     ?assert(object_exists(Config, FileName)),
-    write_to_file(Config, FileName,FileContent),
-    ?assertEqual(FileContent,get_file_content(Config, FileName, Size)),
+    write_to_file(Config, FileName,FileContent, ?FILE_BEGINNING),
+    ?assertEqual(FileContent,get_file_content(Config, FileName, Size, ?FILE_BEGINNING)),
 
     %%------- noncdmi read --------
 
@@ -337,22 +337,20 @@ open_file(Config, Path, OpenMode) ->
         FileHandle -> FileHandle
     end.
 
-write_to_file(Config, Path, Data) ->
-    %%TODO maybe Offset sholud be function argument ?
+write_to_file(Config, Path, Data, Offset) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {ok, FileHandle} = open_file(Config, Path, write),
-    case lfm_proxy:write(Worker, FileHandle, ?OFFSET, Data) of
+    case lfm_proxy:write(Worker, FileHandle, Offset, Data) of
         {error, Error} -> {error, Error};
         {ok, Bytes} -> Bytes
     end.
 
-get_file_content(Config, Path, Size) ->
-    %%TODO maybe Offset sholud be function argument ?
+get_file_content(Config, Path, Size, Offset) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {ok, FileHandle} = open_file(Config, Path, write),
-    case lfm_proxy:read(Worker, FileHandle, ?OFFSET, Size) of
+    case lfm_proxy:read(Worker, FileHandle, Offset, Size) of
         {error, Error} -> {error, Error};
         {ok, Content} -> Content
     end.
