@@ -22,7 +22,7 @@
 -define(call(N, M, A), ?call(N, helpers, M, A)).
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
 
--define(dio_root(Config), ?config(priv_dir, Config)).
+-define(dio_root(Config), "/tmp").
 -define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), utils:ensure_list(File)))).
 
 %% export for ct
