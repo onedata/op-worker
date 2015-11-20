@@ -9,7 +9,7 @@
 #ifndef HELPERS_MESSAGES_PROXYIO_REMOTE_WRITE_H
 #define HELPERS_MESSAGES_PROXYIO_REMOTE_WRITE_H
 
-#include "ProxyIORequest.h"
+#include "proxyIORequest.h"
 
 #include <asio/buffer.hpp>
 
