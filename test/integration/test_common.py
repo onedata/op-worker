@@ -71,15 +71,17 @@ def translate_unit(unit):
 
 
 def _with_reply_process(endpoint, responses, queue):
-    for response in responses:
+    while responses:
         [received_msg] = endpoint.wait_for_any_messages(return_history=True)
         endpoint.client.reset_tcp_history()
 
         client_message = messages_pb2.ClientMessage()
         client_message.ParseFromString(received_msg)
 
-        response.message_id = client_message.message_id.encode('utf-8')
-        endpoint.send(response.SerializeToString())
+        if hasattr(client_message, 'message_id'):
+            response = responses.pop(0)
+            response.message_id = client_message.message_id.encode('utf-8')
+            endpoint.send(response.SerializeToString())
 
         queue.put(client_message)
 
