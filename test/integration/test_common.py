@@ -1,3 +1,4 @@
+import copy
 import os
 import random
 import string
@@ -5,6 +6,8 @@ import sys
 from Queue import Queue
 from contextlib import contextmanager
 from threading import Thread
+
+import time
 
 _script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -17,7 +20,6 @@ annotations_dir = os.path.join(project_dir, 'test', 'annotations')
 # Append useful modules to the path
 sys.path = [appmock_dir, docker_dir, annotations_dir] + sys.path
 
-from performance import Parameter
 from proto import messages_pb2
 
 
@@ -95,3 +97,81 @@ def reply(endpoint, responses):
         yield queue
     finally:
         p.join()
+
+
+class PerformanceResult(object):
+    def set(self, value):
+        self.value = value
+
+
+class Parameter(object):
+    """Input/output parameter used by performance test module."""
+
+    def __init__(self, name='', description='', value=0, unit=''):
+        self.name = name
+        self.description = description
+        self.value = value
+        self.unit = unit
+
+    def __repr__(self):
+        return "Parameter(name: '{0}', description: '{1}', value: {2}," \
+               " unit: '{3}')".format(self.name, self.description, self.value,
+                                      self.unit)
+
+    def aggregate_value(self, value):
+        """Adds given value to the parameter value."""
+        self.value += value
+        return self
+
+    def append_value(self, rep, value):
+        """Appends value of given repeat to the parameter value."""
+        self.value.update({str(rep): value})
+        return self
+
+    def average(self, n):
+        """Returns average parameter value from n repeats."""
+        param = copy.copy(self)
+        param.value = float(param.value) / n
+        return param
+
+    def format(self):
+        """Returns parameter fields as a dictionary."""
+        return {'name': self.name,
+                'description': self.description,
+                'value': self.maybe_round(self.value),
+                'unit': self.unit}
+
+    def maybe_round(self, value):
+        try:
+            return round(value, 6)
+        except:
+            return value
+
+
+class Duration(object):
+    def __init__(self, value=0):
+        self.value = value
+
+    def increment(self, microseconds_diff):
+        """Increment duration by difference in microseconds."""
+        self.value += microseconds_diff
+
+    def us(self):
+        """Returns duration in microseconds."""
+        return self.value
+
+    def ms(self):
+        """Returns duration in milliseconds."""
+        return self.value / 1000.
+
+    def s(self):
+        """Returns duration in seconds."""
+        return self.value / 1000000.
+
+
+@contextmanager
+def measure(duration):
+    start_time = time.time()
+    yield start_time
+    end_time = time.time()
+    duration.increment(int((end_time - start_time) * 1000000))

@@ -15,8 +15,6 @@ sys.path.insert(0, os.path.dirname(script_dir))
 # noinspection PyUnresolvedReferences
 from test_common import *
 # noinspection PyUnresolvedReferences
-from performance import *
-# noinspection PyUnresolvedReferences
 from environment import appmock, common, docker
 import proxy_io
 

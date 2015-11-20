@@ -12,7 +12,6 @@ import pytest
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(script_dir))
 from test_common import *
-from performance import *
 # noinspection PyUnresolvedReferences
 from environment import appmock, common, docker
 import communication_stack
@@ -47,14 +46,9 @@ def com1(endpoint):
             'parameters': [msg_num_param(50), msg_size_param(1, 'MB')]
         }
     })
-def test_send(parameters, endpoint, com3):
+def test_send(result, msg_num, msg_size, endpoint, com3):
     """Sends multiple messages using communicator."""
-
     com3.connect()
-
-    msg_num = parameters['msg_num'].value
-    msg_size = parameters['msg_size'].value * translate_unit(
-        parameters['msg_size'].unit)
     msg = random_str(msg_size)
 
     send_time = Duration()
@@ -68,10 +62,10 @@ def test_send(parameters, endpoint, com3):
         endpoint.wait_for_specific_messages(sent_bytes, msg_num,
                                             timeout_sec=600)
 
-    return [
+    result.set([
         send_time_param(send_time.ms()),
         mbps_param(msg_num, msg_size, send_time.us())
-    ]
+    ])
 
 
 @pytest.mark.performance(
@@ -89,16 +83,12 @@ def test_send(parameters, endpoint, com3):
             'parameters': [msg_num_param(50), msg_size_param(1, 'MB')]
         }
     })
-def test_communicate(parameters, endpoint, com1):
+def test_communicate(result, msg_num, msg_size, endpoint, com1):
     """Sends multiple messages and receives replies using communicator."""
 
     com1.connect()
 
     endpoint.wait_for_connections()
-
-    msg_num = parameters['msg_num'].value
-    msg_size = parameters['msg_size'].value * translate_unit(
-        parameters['msg_size'].unit)
     msg = random_str(msg_size)
 
     communicate_time = Duration()
@@ -115,10 +105,10 @@ def test_communicate(parameters, endpoint, com1):
         with measure(communicate_time):
             assert reply == com1.communicateReceive()
 
-    return [
+    result.set([
         communicate_time_param(communicate_time.ms()),
         mbps_param(msg_num, msg_size, communicate_time.us())
-    ]
+    ])
 
 
 def test_successful_handshake(endpoint, com1):

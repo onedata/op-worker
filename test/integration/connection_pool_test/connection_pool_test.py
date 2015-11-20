@@ -12,7 +12,6 @@ import pytest
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(script_dir))
 from test_common import *
-from performance import *
 # noinspection PyUnresolvedReferences
 from environment import appmock, common, docker
 # noinspection PyUnresolvedReferences
@@ -22,6 +21,11 @@ import connection_pool
 @pytest.fixture
 def endpoint(appmock_client):
     return appmock_client.tcp_endpoint(5555)
+
+
+@pytest.fixture
+def cp(endpoint):
+    return connection_pool.ConnectionPoolProxy(3, endpoint.ip, endpoint.port)
 
 
 @pytest.mark.performance(
@@ -38,15 +42,10 @@ def endpoint(appmock_client):
             'parameters': [msg_num_param(10000), msg_size_param(1, 'MB')]
         }
     })
-def test_cp_should_send_messages(parameters, endpoint):
+def test_cp_should_send_messages(result, msg_num, msg_size, endpoint, cp):
     """Sends multiple messages using connection pool and checks whether they
     have been received."""
 
-    cp = connection_pool.ConnectionPoolProxy(3, endpoint.ip, endpoint.port)
-
-    msg_num = parameters['msg_num'].value
-    msg_size = parameters['msg_size'].value * translate_unit(
-        parameters['msg_size'].unit)
     msg = random_str(msg_size)
 
     send_time = Duration()
@@ -57,10 +56,10 @@ def test_cp_should_send_messages(parameters, endpoint):
     with measure(send_time):
         endpoint.wait_for_specific_messages(msg, msg_num, timeout_sec=600)
 
-    return [
+    result.set([
         send_time_param(send_time.ms()),
         mbps_param(msg_num, msg_size, send_time.us())
-    ]
+    ])
 
 
 @pytest.mark.performance(
@@ -77,14 +76,9 @@ def test_cp_should_send_messages(parameters, endpoint):
             'parameters': [msg_size_param(1, 'MB')]
         }
     })
-def test_cp_should_receive_messages(parameters, endpoint):
+def test_cp_should_receive_messages(result, msg_num, msg_size, endpoint, cp):
     """Receives multiple messages using connection pool."""
 
-    cp = connection_pool.ConnectionPoolProxy(3, endpoint.ip, endpoint.port)
-
-    msg_num = parameters['msg_num'].value
-    msg_size = parameters['msg_size'].value * translate_unit(
-        parameters['msg_size'].unit)
     msgs = [random_str(msg_size) for _ in xrange(msg_num)]
 
     recv_time = Duration()
@@ -100,7 +94,7 @@ def test_cp_should_receive_messages(parameters, endpoint):
     assert len(msgs) == len(recv)
     assert msgs.sort() == recv.sort()
 
-    return [
+    result.set([
         recv_time_param(recv_time.ms()),
         mbps_param(msg_num, msg_size, recv_time.us())
-    ]
+    ])
