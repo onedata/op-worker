@@ -12,6 +12,9 @@
 -ifndef(HTTP_STATUS_HRL).
 -define(HTTP_STATUS_HRL, 1).
 
+-define(HTTP_OK, 200).
+-define(PARTIAL_CONTENT, 206).
+
 -define(MOVED_PERMANENTLY, 301).
 -define(BAD_REQUEST, 400).
 -define(UNSUPPORTED_MEDIA_TYPE, 415).

@@ -66,7 +66,7 @@ is_authorized(Req, State) ->
 %%--------------------------------------------------------------------
 -spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
 resource_exists(Req, State) ->
-    cdmi_existence_checker:resource_exists(Req, State).
+    cdmi_existence_checker:container_resource_exists(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2

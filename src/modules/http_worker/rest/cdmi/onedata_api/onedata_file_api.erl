@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Public api for logical filesystem managemant, available in
+%%% @doc Public api for logical filesystem management, available in
 %%% protocol plugins.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -61,6 +61,7 @@
 -type error_reply() :: {error, term()}.
 %%--------------------------------------------------------------------
 
+-export_type([file_handle/0]).
 %%%===================================================================
 %%% API
 %%%===================================================================
