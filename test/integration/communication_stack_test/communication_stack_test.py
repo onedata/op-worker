@@ -33,17 +33,17 @@ def com1(endpoint):
 
 
 @pytest.mark.performance(
-    parameters=[msg_num_param(1), msg_size_param(100, 'B')],
+    parameters=[Parameter.msg_num(1), Parameter.msg_size(100, 'B')],
     configs={
         'multiple_small_messages': {
             'description': 'Sends multiple small messages using '
                            'communicator.',
-            'parameters': [msg_num_param(1000000)]
+            'parameters': [Parameter.msg_num(1000000)]
         },
         'multiple_large_messages': {
             'description': 'Sends multiple large messages using '
                            'communicator.',
-            'parameters': [msg_num_param(50), msg_size_param(1, 'MB')]
+            'parameters': [Parameter.msg_num(50), Parameter.msg_size(1, 'MB')]
         }
     })
 def test_send(result, msg_num, msg_size, endpoint, com3):
@@ -63,25 +63,25 @@ def test_send(result, msg_num, msg_size, endpoint, com3):
                                             timeout_sec=600)
 
     result.set([
-        send_time_param(send_time.ms()),
-        mbps_param(msg_num, msg_size, send_time.us()),
-        msgps_param(msg_num, send_time)
+        Parameter.send_time(send_time),
+        Parameter.mbps(msg_num, msg_size, send_time),
+        Parameter.msgps(msg_num, send_time)
     ])
 
 
 @pytest.mark.performance(
     repeats=10,
-    parameters=[msg_num_param(1), msg_size_param(100, 'B')],
+    parameters=[Parameter.msg_num(1), Parameter.msg_size(100, 'B')],
     configs={
         'multiple_small_messages': {
             'description': 'Receives multiple small messages using '
                            'communicator.',
-            'parameters': [msg_num_param(1000)]
+            'parameters': [Parameter.msg_num(1000)]
         },
         'multiple_large_messages': {
             'description': 'Receives multiple large messages using '
                            'communicator.',
-            'parameters': [msg_num_param(50), msg_size_param(1, 'MB')]
+            'parameters': [Parameter.msg_num(50), Parameter.msg_size(1, 'MB')]
         }
     })
 def test_communicate(result, msg_num, msg_size, endpoint, com1):
@@ -107,9 +107,9 @@ def test_communicate(result, msg_num, msg_size, endpoint, com1):
             assert reply == com1.communicateReceive()
 
     result.set([
-        communicate_time_param(communicate_time.ms()),
-        mbps_param(msg_num, msg_size, communicate_time.us()),
-        msgps_param(msg_num, communicate_time)
+        Parameter.communicate_time(communicate_time),
+        Parameter.mbps(msg_num, msg_size, communicate_time),
+        Parameter.msgps(msg_num, communicate_time)
     ])
 
 

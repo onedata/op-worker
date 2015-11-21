@@ -32,49 +32,6 @@ def random_str(size=random_int()):
                    _ in xrange(size))
 
 
-def msg_num_param(num):
-    return Parameter('msg_num', 'Number of sent messages.', num)
-
-
-def msg_size_param(size, unit):
-    return Parameter('msg_size', 'Size of each message.', size, unit)
-
-
-def send_time_param(value, unit='ms'):
-    return Parameter('send_time', 'Summary time since first messages sent '
-                                  'till last message received.', value, unit)
-
-
-def recv_time_param(value, unit='ms'):
-    return Parameter('recv_time', 'Summary time since first reply sent '
-                                  'till last reply received.', value, unit)
-
-
-def communicate_time_param(value, unit='ms'):
-    return Parameter('communicate_time', 'Summary time since first message '
-                                         'sent till last reply received.',
-                     value, unit)
-
-
-def mbps_param(msg_num, msg_size, us):
-    return Parameter('mbps', 'Transfer speed.',
-                     (1000000. * msg_num * msg_size) / (1048576 * us), 'MB/s')
-
-
-def msgps_param(msg_num, duration):
-    return Parameter('msgps', 'Messages throughput.', msg_num / duration.s(),
-                     'msg/s')
-
-
-def translate_unit(unit):
-    if unit == 'kB':
-        return 1024
-    elif unit == 'MB':
-        return 1048576
-    else:
-        return 1
-
-
 def _with_reply_process(endpoint, responses, queue):
     while responses:
         [received_msg] = endpoint.wait_for_any_messages(return_history=True)
@@ -107,8 +64,11 @@ def reply(endpoint, responses):
 
 
 class PerformanceResult(object):
+    def __init__(self):
+        self.value = []
+
     def set(self, value):
-        self.value = value
+        self.value = value if isinstance(value, list) else [value]
 
 
 class Parameter(object):
@@ -143,16 +103,66 @@ class Parameter(object):
 
     def format(self):
         """Returns parameter fields as a dictionary."""
-        return {'name': self.name,
-                'description': self.description,
-                'value': self.maybe_round(self.value),
-                'unit': self.unit}
 
-    def maybe_round(self, value):
         try:
-            return round(value, 6)
-        except:
-            return value
+            value = round(self.value, 6)
+        except TypeError:
+            value = self.value
+
+        return {
+            'name': self.name,
+            'description': self.description,
+            'value': value,
+            'unit': self.unit
+        }
+
+    @staticmethod
+    def msg_num(num):
+        return Parameter('msg_num', 'Number of sent messages.', num)
+
+    @staticmethod
+    def msg_size(size, unit):
+        return Parameter('msg_size', 'Size of each message.', size, unit)
+
+    @staticmethod
+    def send_time(duration, unit='ms'):
+        value = getattr(Duration, unit)(duration)
+        return Parameter('send_time',
+                         'Summary time since first messages sent '
+                         'till last message received.', value, unit)
+
+    @staticmethod
+    def recv_time(duration, unit='ms'):
+        value = getattr(Duration, unit)(duration)
+        return Parameter('recv_time',
+                         'Summary time since first reply sent '
+                         'till last reply received.', value, unit)
+
+    @staticmethod
+    def communicate_time(duration, unit='ms'):
+        value = getattr(Duration, unit)(duration)
+        return Parameter('communicate_time',
+                         'Summary time since first message sent '
+                         'till last reply received.', value, unit)
+
+    @staticmethod
+    def mbps(msg_num, msg_size, duration):
+        return Parameter('mbps', 'Transfer speed.',
+                         msg_num * msg_size / 1024. / 1024. / duration.s(),
+                         'MB/s')
+
+    @staticmethod
+    def msgps(msg_num, duration):
+        return Parameter('msgps', 'Messages throughput.',
+                         msg_num / duration.s(), 'msg/s')
+
+    def normalized_value(self):
+        if self.unit == 'kB':
+            return 1024 * self.value
+        elif self.unit == 'MB':
+            return 1048576 * self.value
+        else:
+            return self.value
 
 
 class Duration(object):

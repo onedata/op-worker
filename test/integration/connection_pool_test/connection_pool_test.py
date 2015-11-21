@@ -29,17 +29,18 @@ def cp(endpoint):
 
 
 @pytest.mark.performance(
-    parameters=[msg_num_param(10), msg_size_param(100, 'B')],
+    parameters=[Parameter.msg_num(10), Parameter.msg_size(100, 'B')],
     configs={
         'multiple_small_messages': {
             'description': 'Sends multiple small messages using connection '
                            'pool.',
-            'parameters': [msg_num_param(1000000)]
+            'parameters': [Parameter.msg_num(1000000)]
         },
         'multiple_large_messages': {
             'description': 'Sends multiple large messages using connection '
                            'pool.',
-            'parameters': [msg_num_param(10000), msg_size_param(1, 'MB')]
+            'parameters': [Parameter.msg_num(10000),
+                           Parameter.msg_size(1, 'MB')]
         }
     })
 def test_cp_should_send_messages(result, msg_num, msg_size, endpoint, cp):
@@ -57,24 +58,24 @@ def test_cp_should_send_messages(result, msg_num, msg_size, endpoint, cp):
         endpoint.wait_for_specific_messages(msg, msg_num, timeout_sec=600)
 
     result.set([
-        send_time_param(send_time.ms()),
-        mbps_param(msg_num, msg_size, send_time.us()),
-        msgps_param(msg_num, send_time)
+        Parameter.send_time(send_time),
+        Parameter.mbps(msg_num, msg_size, send_time),
+        Parameter.msgps(msg_num, send_time)
     ])
 
 
 @pytest.mark.performance(
-    parameters=[msg_num_param(10), msg_size_param(100, 'B')],
+    parameters=[Parameter.msg_num(10), Parameter.msg_size(100, 'B')],
     configs={
         'multiple_small_messages': {
             'description': 'Receives multiple small messages using '
                            'connection pool.',
-            'parameters': [msg_num_param(10000)]
+            'parameters': [Parameter.msg_num(10000)]
         },
         'multiple_large_messages': {
             'description': 'Receives multiple large messages using '
                            'connection pool.',
-            'parameters': [msg_size_param(1, 'MB')]
+            'parameters': [Parameter.msg_size(1, 'MB')]
         }
     })
 def test_cp_should_receive_messages(result, msg_num, msg_size, endpoint, cp):
@@ -96,7 +97,7 @@ def test_cp_should_receive_messages(result, msg_num, msg_size, endpoint, cp):
     assert msgs.sort() == recv.sort()
 
     result.set([
-        recv_time_param(recv_time.ms()),
-        mbps_param(msg_num, msg_size, recv_time.us()),
-        msgps_param(msg_num, recv_time)
+        Parameter.recv_time(recv_time),
+        Parameter.mbps(msg_num, msg_size, recv_time),
+        Parameter.msgps(msg_num, recv_time)
     ])

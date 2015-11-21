@@ -71,7 +71,7 @@ def pytest_generate_tests(metafunc):
         configs = kwargs.get('configs', {})
 
         params = collections.OrderedDict(
-            [(p.name, p.value * translate_unit(p.unit)) for p in params])
+            [(p.name, p.normalized_value()) for p in params])
 
         if not metafunc.config.getoption('--performance'):
             if params:
@@ -86,7 +86,7 @@ def pytest_generate_tests(metafunc):
                 current_params = params.copy()
 
                 for p in config.get('parameters', []):
-                    current_params[p.name] = p.value * translate_unit(p.unit)
+                    current_params[p.name] = p.normalized_value()
 
                 for rep in range(1, repeats + 1):
                     params_values.append(
