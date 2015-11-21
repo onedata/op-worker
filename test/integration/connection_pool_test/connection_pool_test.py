@@ -58,7 +58,8 @@ def test_cp_should_send_messages(result, msg_num, msg_size, endpoint, cp):
 
     result.set([
         send_time_param(send_time.ms()),
-        mbps_param(msg_num, msg_size, send_time.us())
+        mbps_param(msg_num, msg_size, send_time.us()),
+        msgps_param(msg_num, send_time)
     ])
 
 
@@ -96,5 +97,6 @@ def test_cp_should_receive_messages(result, msg_num, msg_size, endpoint, cp):
 
     result.set([
         recv_time_param(recv_time.ms()),
-        mbps_param(msg_num, msg_size, recv_time.us())
+        mbps_param(msg_num, msg_size, recv_time.us()),
+        msgps_param(msg_num, recv_time)
     ])

@@ -61,6 +61,11 @@ def mbps_param(msg_num, msg_size, us):
                      (1000000. * msg_num * msg_size) / (1048576 * us), 'MB/s')
 
 
+def msgps_param(msg_num, duration):
+    return Parameter('msgps', 'Messages throughput.', msg_num / duration.s(),
+                     'msg/s')
+
+
 def translate_unit(unit):
     if unit == 'kB':
         return 1024

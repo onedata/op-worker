@@ -64,7 +64,8 @@ def test_send(result, msg_num, msg_size, endpoint, com3):
 
     result.set([
         send_time_param(send_time.ms()),
-        mbps_param(msg_num, msg_size, send_time.us())
+        mbps_param(msg_num, msg_size, send_time.us()),
+        msgps_param(msg_num, send_time)
     ])
 
 
@@ -107,7 +108,8 @@ def test_communicate(result, msg_num, msg_size, endpoint, com1):
 
     result.set([
         communicate_time_param(communicate_time.ms()),
-        mbps_param(msg_num, msg_size, communicate_time.us())
+        mbps_param(msg_num, msg_size, communicate_time.us()),
+        msgps_param(msg_num, communicate_time)
     ])
 
 
