@@ -136,7 +136,7 @@ get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) 
         end,
 
     % reply
-    {ok, Req3} = cowboy_req:reply(HttpStatus, [], {StreamSize, StreamFun}, Req2),
+    {ok, Req3} = apply(cowboy_req, reply, [HttpStatus, [], {StreamSize, StreamFun}, Req2]),
     {halt, Req3, State}.
 
 %%--------------------------------------------------------------------
@@ -170,7 +170,7 @@ put(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec parse_byte_range(#{}, binary() | list()) -> list(Range) | invalid when
-    Range :: {From :: integer(), To :: integer()}.
+    Range :: {From :: integer(), To :: integer()} | invalid.
 parse_byte_range(State, Range) when is_binary(Range) ->
     Ranges = parse_byte_range(State, binary:split(Range, <<",">>, [global])),
     case lists:member(invalid, Ranges) of
@@ -184,10 +184,10 @@ parse_byte_range(#{attributes := #file_attr{size = Size}} = State, [First | Rest
                 [<<>>, FromEnd] -> {max(0, Size - binary_to_integer(FromEnd)), Size - 1};
                 [From, <<>>] -> {binary_to_integer(From), Size - 1};
                 [From_, To] -> {binary_to_integer(From_), binary_to_integer(To)};
-                _ -> [invalid]
+                _ -> invalid
             end,
     case Range of
-        [invalid] -> [invalid];
+        invalid -> [invalid];
         {Begin, End} when Begin > End -> [invalid];
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
     end.
@@ -270,7 +270,8 @@ encode(Data, _) ->
 %%--------------------------------------------------------------------
 %% @doc Encodes data according to given ecoding
 %%--------------------------------------------------------------------
--spec get_ranges(Req :: req(), #{}) -> {[{non_neg_integer(), non_neg_integer()}], req()}.
+-spec get_ranges(Req :: req(), #{}) ->
+    {[{non_neg_integer(), non_neg_integer()}] | undefined, req()}.
 get_ranges(Req, State) ->
     {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
     case RawRange of
