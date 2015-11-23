@@ -39,6 +39,13 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens the file. To used opened descriptor, pass returned handle to other functions.
+%% File may and should be closed with release/1, but file will be closed automatically
+%% when handle goes out of scope (term will be released by Erlang's GC).
+%% @end
+%%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), Storage :: datastore:document(), FileId :: helpers:file()) ->
     handle().
 new_handle(SessionId, SpaceUUID, Storage, FileId) ->
