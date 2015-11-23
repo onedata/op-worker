@@ -24,12 +24,24 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context based on given helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
 -spec new_user_ctx(helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_posix_user_ctx(SessionId, SpaceUUID).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for all posix-compilant helpers.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
 -spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     #posix_user_ctx{}.
 new_posix_user_ctx(SessionId, SpaceUUID) ->
