@@ -28,7 +28,7 @@
     end_per_testcase/2]).
 
 -export([get_file_test/1, delete_file_test/1, choose_adequate_handler/1, use_supported_cdmi_version/1,
-    use_unsupported_cdmi_version/1, create_dir_test/1, capabilities_test/1]).
+    use_unsupported_cdmi_version/1, create_dir_test/1, capabilities_test/1, create_file_test/1, update_file_test/1]).
 
 -performance({test_cases, []}).
 all() ->
@@ -36,7 +36,7 @@ all() ->
 %%         get_file_test,
 %%         TODO turn on this test after fixing:
 %%         TODO onedata_file_api:read/3 -> {error,{badmatch, {error, {not_found, event_manager}}}}
-        delete_file_test, choose_adequate_handler, use_supported_cdmi_version,
+        create_file_test, update_file_test, delete_file_test, choose_adequate_handler, use_supported_cdmi_version,
         use_unsupported_cdmi_version, create_dir_test, capabilities_test
     ].
 
@@ -45,6 +45,10 @@ all() ->
 
 -define(USER_1_TOKEN_HEADER, {"X-Auth-Token", "1"}).
 -define(CDMI_VERSION_HEADER, {"X-CDMI-Specification-Version", "1.1.1"}).
+
+-define(TEST_DIR_NAME, "dir").
+-define(TEST_FILE_NAME, "file.txt").
+-define(TEST_FILE_CONTENT, <<"test_file_content">>).
 
 -define(FILE_PERMISSIONS, 8#664).
 
@@ -90,6 +94,77 @@ get_file_test(Config) ->
     RequestHeaders8 = [{"Range","1-3,6-4,-3"}],
     {ok, Code8, _Headers8, _Response8} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
     ?assertEqual("400",Code8).
+    %%------------------------------
+
+% Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
+% json string), or without (when we treat request body as new file content)
+create_file_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, 1}, Config),
+    GroupFileName = string:join(["spaces", binary_to_list(SpaceName),"groupFile"], "/"),
+    ToCreate = "file.txt",
+    ToCreate2 = filename:join(["spaces", GroupFileName, "file1.txt"]),
+    ToCreate4 = "file2",
+    ToCreate5 = "file3",
+    FileContent = <<"File content!">>,
+    Size = string:len(binary_to_list(FileContent)),
+
+    %%------ create noncdmi --------
+    ?assert(not object_exists(Config, ToCreate5)),
+
+    RequestHeaders5 = [{"content-type", "application/binary"}],
+    {ok, Code5, _Headers5, _Response5} = do_request(Worker, ToCreate5, put, RequestHeaders5, FileContent),
+    ?assertEqual("201",Code5),
+
+    ?assert(object_exists(Config, ToCreate5)),
+    ?assertEqual(FileContent, get_file_content(Config, ToCreate5, Size, ?FILE_BEGINNING)).
+%%------------------------------
+
+% Tests cdmi object PUT requests (updating content)
+update_file_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    FullName = filename:join(["/",?TEST_DIR_NAME,?TEST_FILE_NAME]),
+    NewValue = <<"New Value!">>,
+    UpdatedValue = <<"123 Value!">>,
+    TestSize = get_content_size(?TEST_FILE_CONTENT),
+    NewSize = get_content_size(NewValue),
+    UpdatedSize = get_content_size(UpdatedValue),
+
+    %% TODO below create and write are for compliance with testcases for cdmi
+    %% TODO delete after adding tests for cdmi cases
+    create_file(Config, FullName),
+    ?assert(object_exists(Config, FullName)),
+    write_to_file(Config, FullName, UpdatedValue, ?FILE_BEGINNING),
+    ?assertEqual(UpdatedValue, get_file_content(Config, FullName, UpdatedSize, ?FILE_BEGINNING)),
+
+    %%--- value replace, http ------
+    RequestBody3 = ?TEST_FILE_CONTENT,
+    {ok, Code3, _Headers3, _Response3} = do_request(Worker, FullName, put, [], RequestBody3),
+    ?assertEqual("204",Code3),
+
+    ?assert(object_exists(Config, FullName)),
+    ?assertEqual(?TEST_FILE_CONTENT, get_file_content(Config, FullName, TestSize, ?FILE_BEGINNING)),
+    %%------------------------------
+
+    %%---- value update, http ------
+    UpdateValue = <<"123">>,
+    RequestHeaders4 = [{"content-range", "0-2"}],
+    {ok, Code4, _Headers4, _Response4} = do_request(Worker, FullName, put, RequestHeaders4, UpdateValue),
+    ?assertEqual("204",Code4),
+
+    ?assert(object_exists(Config, FullName)),
+    ?assertEqual(<<"123t_file_content">>,get_file_content(Config, FullName, get_content_size(UpdateValue), ?FILE_BEGINNING)),
+    %%------------------------------
+
+    %%---- value update, http error ------
+    UpdateValue = <<"123">>,
+    RequestHeaders5 = [{"content-range", "0-2,3-4"}],
+    {ok, Code5, _Headers5, _Response5} = do_request(Worker, FullName, put, RequestHeaders5, UpdateValue),
+    ?assertEqual("400",Code5),
+
+    ?assert(object_exists(Config, FullName)),
+    ?assertEqual(<<"123t_file_content">>,get_file_content(Config, FullName, get_content_size(UpdateValue), ?FILE_BEGINNING)).
+
     %%------------------------------
 
 % Tests cdmi object DELETE requests
@@ -354,3 +429,6 @@ get_file_content(Config, Path, Size, Offset) ->
         {error, Error} -> {error, Error};
         {ok, Content} -> Content
     end.
+
+get_content_size(Content) ->
+    string:len(binary_to_list(Content)).

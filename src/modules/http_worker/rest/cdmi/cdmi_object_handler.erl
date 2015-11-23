@@ -27,7 +27,9 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get/2, put/2, get_binary/2]).
+-export([get_cdmi/2, put_cdmi/2, get_binary/2, put_binary/2]).
+
+-define(DEFAULT_FILE_PERMISSIONS, 8#664).
 
 %%%===================================================================
 %%% API
@@ -95,9 +97,13 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
     {[{binary(), atom()}], req(), #{}}.
+content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-object">>, put}
+        {<<"application/cdmi-object">>, put_cdmi}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -144,17 +150,79 @@ get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) 
 %% Handles GET with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get(req(), #{}) -> {term(), req(), #{}}.
-get(Req, State) ->
+-spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
+get_cdmi(Req, State) ->
     {<<"ok">>, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT without cdmi content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_binary(req(), #{}) -> {term(), req(), #{}}.
+put_binary(ReqArg, State = #{identity := Identity, path := Path}) ->
+    % prepare request data
+    {Content, Req} = cowboy_req:header(<<"content-type">>, ReqArg, ?MIMETYPE_DEFAULT_VALUE),
+    %%  TODO partial upload
+    %%  {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
+    {Mimetype, Encoding} = parse_content(Content),
+    case onedata_file_api:create(Identity, Path, ?DEFAULT_FILE_PERMISSIONS) of
+        ok ->
+            update_completion_status(Path, <<"Processing">>),
+            update_mimetype(Path, Mimetype),
+            update_encoding(Path, Encoding),
+            Ans = write_body_to_file(Req, State, 0),
+            %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+            Ans;
+
+        {error, ?ENOENT} ->
+            case onedata_file_api:check_perms(Path, write) of
+                true -> ok;
+                false -> throw(?forbidden)
+            end,
+            update_completion_status(Path, <<"Processing">>),
+            update_mimetype(Path, Mimetype),
+            update_encoding(Path, Encoding),
+            {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
+            case RawRange of
+                undefined ->
+                    case onedata_file_api:truncate(Identity, {path, Path}, 0) of
+                        ok -> ok;
+                        {error, Err} when Err =:= ?EPERM orelse Err =:= ?EACCES ->
+                        %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                            throw(?forbidden);
+                        Error ->
+                        %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                            throw({?put_object_unknown_error, Error})
+                    end,
+                    Ans = write_body_to_file(Req1, State, 0, false),
+                    %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    Ans;
+                _ ->
+                    {Length, Req2} = cowboy_req:body_length(Req1),
+                    case parse_byte_range(State, RawRange) of
+                        [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
+                            Ans = write_body_to_file(Req2, State, From, false),
+                            %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                            Ans;
+                        _ ->
+                            %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                            throw(?invalid_range)
+                    end
+            end;
+        {error, Err} when Err =:= ?EPERM orelse Err =:= ?EACCES ->
+            throw(?forbidden);
+        _ ->
+            throw(?put_object_unknown_error)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles PUT with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put(req(), #{}) -> {term(), req(), #{}}.
-put(Req, State) ->
+-spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
+put_cdmi(Req, State) ->
     {true, Req, State}.
 
 
@@ -162,6 +230,36 @@ put(Req, State) ->
 %% Internal functions
 %% ====================================================================
 
+%%--------------------------------------------------------------------
+%% @doc @equiv write_body_to_file(Req, State, Offset, true)
+%%--------------------------------------------------------------------
+-spec write_body_to_file(req(), #{}, integer()) -> {boolean(), req(), #{}}.
+write_body_to_file(Req, State, Offset) ->
+    write_body_to_file(Req, State, Offset, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads request's body and writes it to file obtained from state.
+%% This callback return value is compatibile with put requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec write_body_to_file(req(), #{}, integer(), boolean()) -> {boolean(), req(), #{}}.
+write_body_to_file(Req, #{path := Path, identity := Identity} = State, Offset, RemoveIfFails) ->
+    {Status, Chunk, Req1} = cowboy_req:body(Req),
+    {ok, FileHandle} = onedata_file_api:open(Identity, {path, Path}, write),
+    case onedata_file_api:write(FileHandle, Offset, Chunk) of
+        {ok, _NewHandle, Bytes} when is_integer(Bytes) ->
+            case Status of
+                more -> write_body_to_file(Req1, State, Offset + Bytes);
+                ok -> {true, Req1, State}
+            end;
+        _ -> %todo handle write file forbidden
+            case RemoveIfFails of
+                true -> onedata_file_api:unlink(FileHandle);
+                false -> ok
+            end,
+            throw(?write_object_unknown_error)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Parses byte ranges from 'Range' http header format to list of
@@ -293,3 +391,49 @@ get_stream_size(Ranges, _Size) ->
         ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
         ({_, _}, Acc)  -> Acc
     end, 0, Ranges).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses content-type header to mimetype and charset part, if charset
+%% is other than utf-8, function returns undefined
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_content(binary()) -> {Mimetype :: binary(), Encoding :: binary() | undefined}.
+parse_content(Content) ->
+    case binary:split(Content,<<";">>) of
+        [RawMimetype, RawEncoding] ->
+            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
+                [<<"charset">>, <<"utf-8">>] ->
+                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                _ ->
+                    {utils:trim_spaces(RawMimetype), undefined}
+            end;
+        [RawMimetype] ->
+            {utils:trim_spaces(RawMimetype), undefined}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc Updates mimetype associated with file
+%%--------------------------------------------------------------------
+-spec update_mimetype(string(), binary()) -> ok | no_return().
+update_mimetype(_Filepath, undefined) -> ok;
+update_mimetype(Filepath, Mimetype) ->
+    ok = onedata_file_api:set_xattr(Filepath, ?MIMETYPE_XATTR_KEY, Mimetype).
+
+%%--------------------------------------------------------------------
+%% @doc Updates valuetransferencoding associated with file
+%%--------------------------------------------------------------------
+-spec update_encoding(string(), binary()) -> ok | no_return().
+update_encoding(_Filepath, undefined) -> ok;
+update_encoding(Filepath, Encoding) ->
+    ok = onedata_file_api:set_xattr(Filepath, ?ENCODING_XATTR_KEY, Encoding).
+
+%%--------------------------------------------------------------------
+%% @doc Updates completion status associated with file
+%%--------------------------------------------------------------------
+-spec update_completion_status(string(), binary()) -> ok | no_return().
+update_completion_status(_Filepath, undefined) -> ok;
+update_completion_status(Filepath, CompletionStatus)
+    when CompletionStatus =:= <<"Complete">> orelse CompletionStatus =:= <<"Processing">> orelse CompletionStatus =:= <<"Error">> ->
+    ok = onedata_file_api:set_xattr(Filepath, ?COMPLETION_STATUS_XATTR_KEY, CompletionStatus).

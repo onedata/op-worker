@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("modules/http_worker/http_common.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_container.hrl").
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
@@ -106,8 +107,14 @@ delete_resource(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(Req, State) ->
-    {<<"ok">>, Req, State}.
+get_cdmi(Req, #{options := Options} = State) ->
+    NewOptions = case Options of
+                     [] -> ?default_get_dir_opts;
+                     _ -> Options
+                 end,
+    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{optionss := NewOptions}),
+    Response = json:encode({struct, DirCdmi}),
+    {Response, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc
