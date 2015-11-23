@@ -26,7 +26,7 @@ new_ctx_test() ->
 
 new_obj_test() ->
     ok = helpers_nif:init(),
-    ?assertMatch({ok, _}, helpers_nif:new_helper_obj(<<"DirectIO">>, #{<<"root_path">> => <<"/tmp">>}),
+    ?assertMatch({ok, _}, helpers_nif:new_helper_obj(<<"DirectIO">>, #{<<"root_path">> => <<"/tmp">>})),
     ok.
 
 ctx_test_() ->
