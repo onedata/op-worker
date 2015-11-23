@@ -80,7 +80,7 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(fslogic_worker:ctx(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-                    {ok, file_uuid()} | error_reply().
+    {ok, file_uuid()} | error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
@@ -119,20 +119,19 @@ open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
-                   {ok, file_handle(), non_neg_integer()} | error_reply().
+    {ok, file_handle(), non_neg_integer()} | error_reply().
 write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
-                  fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer) ->
+    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer) ->
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, byte_size(Buffer)),
     {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
-            ok = event_manager:emit(
-                   #write_event{
-                      file_uuid = UUID,
-                      blocks = [
-                                #file_block{file_id = FileId, storage_id = StorageId, offset = Offset, size = Written}
-                               ]}, SessId),
+            ok = event_manager:emit(#write_event{
+                file_uuid = UUID, blocks = [#file_block{
+                    file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
+                }]
+            }, SessId),
             {ok, NewHandle, Written};
         {error, Reason2} ->
             {error, Reason2}
@@ -145,22 +144,20 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTy
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
-                  {ok, file_handle(), binary()} | error_reply().
+    {ok, file_handle(), binary()} | error_reply().
 read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
-                 fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize) ->
+    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize) ->
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, MaxSize),
     {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
-            ok = event_manager:emit(
-                   #read_event{
-                      file_uuid = UUID,
-                      blocks = [
-                                #file_block{
-                                   file_id = FileId, storage_id = StorageId,
-                                   offset = Offset, size = size(Data)}
-                               ]}, SessId),
+            ok = event_manager:emit(#read_event{
+                file_uuid = UUID, blocks = [#file_block{
+                    file_id = FileId, storage_id = StorageId, offset = Offset,
+                    size = size(Data)
+                }]
+            }, SessId),
             {ok, NewHandle, Data};
         {error, Reason2} ->
             {error, Reason2}
@@ -175,9 +172,9 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTyp
 -spec truncate(fslogic_worker:ctx(), FileUUID :: file_uuid(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(#fslogic_ctx{session_id = SessId}, FileUUID, Size) ->
     lfm_utils:call_fslogic(SessId, #truncate{uuid = FileUUID, size = Size},
-    fun(_) ->
-        event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId)
-    end).
+        fun(_) ->
+            event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId)
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -201,7 +198,7 @@ get_block_map(_CTX, File) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-                                {default | {storage:id(), helpers:file()}, non_neg_integer()}.
+    {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size) ->
     #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, UUID}),
     #file_location{blocks = Blocks} = LocalLocation,
@@ -214,20 +211,19 @@ get_sfm_handle_key(UUID, Offset, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer(), fslogic_blocks:blocks() | fslogic_blocks:block()) ->
-                                {default | {storage:id(), helpers:file()}, non_neg_integer()}.
+    {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size, [#file_block{offset = O, size = S} | T]) when O + S =< Offset ->
     get_sfm_handle_key(UUID, Offset, Size, T);
 get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _])
-  when Offset >= O, Offset + Size =< O + S ->
+    when Offset >= O, Offset + Size =< O + S ->
     {{SID, FID}, Size};
 get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S, storage_id = SID, file_id = FID} | _])
-  when Offset >= O, Offset + Size > O + S ->
+    when Offset >= O, Offset + Size > O + S ->
     {{SID, FID}, S - (Offset - O)};
-get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = S} | _]) when Offset + Size =< O ->
+get_sfm_handle_key(_UUID, Offset, Size, [#file_block{offset = O, size = _S} | _]) when Offset + Size =< O ->
     {default, Size};
 get_sfm_handle_key(_UUID, _Offset, Size, []) ->
     {default, Size}.
-
 
 
 %%--------------------------------------------------------------------
@@ -236,10 +232,10 @@ get_sfm_handle_key(_UUID, _Offset, Size, []) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_n_update_handle(Handle :: file_handle(), Key :: term(), SFMHandles :: sfm_handles_map(),
-                                     OpenType :: helpers:open_mode()) ->
-                                            {{StorageId :: storage:id(), FileId :: file_uuid()},
-                                             SFMHandle :: storage_file_manager:handle(),
-                                             NewHandle :: file_handle()} |  no_return().
+    OpenType :: helpers:open_mode()) ->
+    {{StorageId :: storage:id(), FileId :: file_uuid()},
+        SFMHandle :: storage_file_manager:handle(),
+        NewHandle :: file_handle()} |  no_return().
 get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
     Key, SFMHandles, OpenType) ->
     {{StorageId, FileId}, SFMHandle} =
