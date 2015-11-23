@@ -57,8 +57,12 @@ def _tweak_config(config, gr_node, gr_instance, uid):
     sys_config['db_nodes'] = [db_erl_node_name(n, gr_instance, uid)
                               for n in sys_config['db_nodes']]
 
+    if 'http_domain' in sys_config:
+        sys_config['http_domain'] = {'string': gr_domain(gr_instance, uid)}
+
     if 'vm.args' not in cfg['nodes']['node']:
         cfg['nodes']['node']['vm.args'] = {}
+
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = gr_erl_node_name(gr_node, gr_instance, uid)
 

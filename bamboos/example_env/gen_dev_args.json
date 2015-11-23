@@ -113,7 +113,7 @@
                         "db_nodes": [
                             "db"
                         ],
-                        "grpcert_domain": {
+                        "http_domain": {
                             "string": "127.0.0.1"
                         },
                         "dev_mode": true
