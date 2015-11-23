@@ -27,9 +27,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_storage_dir(Config :: list()) -> string().
-gen_storage_dir(Config) ->
-    PrivDir = ?config(priv_dir, Config),
-    PrivDir ++ "/storage/" ++ erlang:binary_to_list(gen_name()).
+gen_storage_dir(_Config) ->
+    "/tmp/storage/" ++ erlang:binary_to_list(gen_name()).
 
 %%--------------------------------------------------------------------
 %% @doc
