@@ -39,6 +39,11 @@ get_default_space(UserId) ->
     file_meta:get({uuid, DefaultSpaceId}).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space document for given file.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_space(FileEntry :: fslogic_worker:file()) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
 get_space(FileEntry) ->

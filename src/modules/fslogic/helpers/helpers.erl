@@ -68,6 +68,12 @@ new_handle(HelperName, HelperArgs) ->
     #helper_handle{instance = Instance, ctx = CTX, helper_name = HelperName}.
 
 
+%%--------------------------------------------------------------------
+%% @doc Calls the corresponding helper_nif method and receives result.
+%%      First argument shall be #helper_handle{} from new_handle/2.
+%%      This method uses abstract user_ctx() to set correct user context in lower layers.
+%% @end
+%%--------------------------------------------------------------------
 -spec set_user_ctx(handle(), user_ctx()) -> ok.
 set_user_ctx(#helper_handle{ctx = CTX}, #posix_user_ctx{uid = UID, gid = GID}) ->
     ok = helpers_nif:set_user_ctx(CTX, UID, GID);
