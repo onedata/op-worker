@@ -89,7 +89,7 @@ bash'''
     docker.exec_(containers[0],
                  command=["/opt/couchbase/bin/couchbase-cli", "cluster-init", "-c", "{0}:8091".format(master_hostname),
                           "--cluster-init-username=admin", "--cluster-init-password=password",
-                          "--cluster-init-ramsize=512"],
+                          "--cluster-init-ramsize=512", "--services=data,index,query"],
                  stdout=sys.stderr)
 
     docker.exec_(containers[0],
