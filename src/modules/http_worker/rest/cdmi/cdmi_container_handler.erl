@@ -13,7 +13,17 @@
 -author("Tomasz Lichon").
 
 -include("modules/http_worker/http_common.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_container.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
+
+-define(default_get_dir_opts, [<<"objectType">>, <<"objectID">>,
+    <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>,
+    <<"completionStatus">>, <<"metadata">>, <<"childrenrange">>, <<"children">>]).
+
+% exclusive body fields
+-define(keys_required_to_be_exclusive, [<<"deserialize">>, <<"copy">>,
+    <<"move">>, <<"reference">>, <<"deserializevalue">>, <<"value">>]).
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
@@ -102,9 +112,7 @@ delete_resource(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Handles GET with "application/cdmi-container" content-type
-%% @end
+%% @doc Handles GET with "application/cdmi-container" content-type
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, #{options := Options} = State) ->
@@ -117,13 +125,44 @@ get_cdmi(Req, #{options := Options} = State) ->
     {Response, Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Handles PUT with "application/cdmi-container" content-type
-%% @end
+%% @doc Handles PUT with "application/cdmi-container" content-type
 %%--------------------------------------------------------------------
 -spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
-put_cdmi(Req, State) ->
-    {true, Req, State}.
+put_cdmi(_, #{cdmi_version := undefined}) ->
+    throw(?no_version_given);
+put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs, options := Opts}) ->
+    {ok, Body, Req1} = parse_body(Req),
+
+    % create dir using mkdir/cp/mv
+    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
+    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
+    {ok, OperationPerformed} =
+        case {Attrs, RequestedCopyURI, RequestedMoveURI} of
+            {undefined, undefined, undefined} ->
+                {onedata_file_api:mkdir(Identity, Path), created};
+            {#file_attr{}, undefined, undefined} ->
+                {ok, none};
+            {undefined, CopyURI, undefined} ->
+                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+            {undefined, undefined, MoveURI} ->
+                {onedata_file_api:mv({path, MoveURI}, Path), movied}
+        end,
+
+    %update metadata and return result
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    case OperationPerformed of
+        none ->
+            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
+            ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
+            {true, Req1, State};
+        _  ->
+            {ok, NewAttrs} = onedata_file_api:stat(Identity, {path, Path}),
+            ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
+            Answer = cdmi_container_answer:prepare(?default_get_dir_opts, State#{attributes => NewAttrs, opts => ?default_get_dir_opts}),
+            Response = json:encode(Answer),
+            Req2 = cowboy_req:set_resp_body(Response, Req1),
+            {true, Req2, State}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -134,3 +173,34 @@ put_cdmi(Req, State) ->
 put_binary(Req, State = #{identity := Identity, path := Path}) ->
     ok = onedata_file_api:mkdir(Identity, Path),
     {true, Req, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Reads whole body and decodes it as json.
+%%--------------------------------------------------------------------
+-spec parse_body(cowboy_req:req()) -> {ok, list(), cowboy_req:req()}.
+parse_body(Req) ->
+    {ok, RawBody, Req1} = cowboy_req:body(Req),
+    Body = json:decode(RawBody),
+    ok = validate_body(Body),
+    {ok, Body, Req1}.
+
+%%--------------------------------------------------------------------
+%% @doc Validates correctness of request's body.
+%%--------------------------------------------------------------------
+-spec validate_body(list()) -> ok | no_return().
+validate_body(Body) ->
+    Keys = proplists:get_keys(Body),
+    KeySet = sets:from_list(Keys),
+    ExclusiveRequiredKeysSet = sets:from_list(?keys_required_to_be_exclusive),
+    case length(Keys) =:= length(Body) of
+        true ->
+            case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
+                N when N > 1 -> throw(?conflicting_body_fields);
+                _ -> ok
+            end;
+        false -> throw(?duplicated_body_fields)
+    end.

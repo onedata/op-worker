@@ -45,6 +45,7 @@ all() ->
 
 -define(USER_1_TOKEN_HEADER, {"X-Auth-Token", "1"}).
 -define(CDMI_VERSION_HEADER, {"X-CDMI-Specification-Version", "1.1.1"}).
+-define(CONTAINER_CONTENT_TYPE_HEADER, {"content-type", "application/cdmi-container"}).
 
 -define(TEST_DIR_NAME, "dir").
 -define(TEST_FILE_NAME, "file.txt").
@@ -240,6 +241,9 @@ use_unsupported_cdmi_version(Config) ->
 create_dir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     DirName = "toCreate/",
+    DirName2 = "toCreate2/",
+    MissingParentName="unknown/",
+    DirWithoutParentName = filename:join(MissingParentName,"dir")++"/",
 
     %%------ non-cdmi create -------
     ?assert(not object_exists(Config, DirName)),
@@ -247,7 +251,49 @@ create_dir_test(Config) ->
     {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER]),
     ?assertEqual("201",Code1),
 
-    ?assert(object_exists(Config, DirName)).
+    ?assert(object_exists(Config, DirName)),
+    %%------------------------------
+
+    %%------ basic create ----------
+    ?assert(not object_exists(Config, DirName2)),
+
+    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    tracer:start(Worker),
+    tracer:trace_calls(json),
+    {ok, Code2, _Headers2, Response2} = do_request(Worker, DirName2, put, RequestHeaders2, []),
+    tracer:stop(),
+    ?assertEqual("201",Code2),
+    {struct,CdmiResponse2} = mochijson2:decode(Response2),
+    ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
+    ?assertEqual(list_to_binary(DirName2), proplists:get_value(<<"objectName">>,CdmiResponse2)),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse2)),
+    ?assertEqual([], proplists:get_value(<<"children">>,CdmiResponse2)),
+    ?assert(proplists:get_value(<<"metadata">>,CdmiResponse2) =/= <<>>),
+
+    ?assert(object_exists(Config, DirName2)),
+    %%------------------------------
+
+    %%---------- update ------------
+    ?assert(object_exists(Config, DirName)),
+
+    RequestHeaders3 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    {ok, Code3, _Headers3, _Response3} = do_request(Worker, DirName, put, RequestHeaders3, []),
+    ?assertEqual("204",Code3),
+
+    ?assert(object_exists(Config, DirName)),
+    %%------------------------------
+
+    %%----- missing parent ---------
+    ?assert(not object_exists(Config, MissingParentName)),
+
+    RequestHeaders4 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    tracer:start(Worker),
+    tracer:trace_calls(pre_handler),
+    tracer:trace_calls(cdmi_container_handler),
+    {ok, Code4, _Headers4, _Response4} = do_request(Worker, DirWithoutParentName, put, RequestHeaders4, []),
+    tracer:stop(),
+    ?assertEqual("500",Code4). %todo handle this error in lfm
     %%------------------------------
 
 % tests if capabilities of objects, containers, and whole storage system are set properly
