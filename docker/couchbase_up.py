@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '-i', '--image',
     action='store',
-    default='couchbase/server:latest',
+    default='couchbase/server:community-3.0.1',
     help='docker image to use for the container',
     dest='image')
 
