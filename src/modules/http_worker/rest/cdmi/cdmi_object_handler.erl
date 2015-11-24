@@ -312,11 +312,11 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
     ToRead = To - From + 1,
     case ToRead > BufferSize of
         true ->
-            {ok, NewFileHandle,  Data} = onedata_file_api:read(FileHandle, From, BufferSize),
+            {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
             Transport:send(Socket, encode(Data, Encoding)),
             stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, NewFileHandle);
         false ->
-            {ok, NewFileHandle ,Data} = onedata_file_api:read(FileHandle, From, ToRead),
+            {ok, _NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ToRead),
             Transport:send(Socket, encode(Data, Encoding))
     end.
 
@@ -352,11 +352,9 @@ stream(#{path := Path, identity := Identity} = State, Ranges) ->
 -spec get_mimetype(string()) -> binary().
 get_mimetype(Path) ->
     case onedata_file_api:get_xattr(Path, ?MIMETYPE_XATTR_KEY) of
-        %%TODO lfm_attrs:get_xattr is not yet implemented and always returns {ok, <<"">>}
-        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE;
-        {ok, Value} -> Value
-        %%TODO uncomment when lfm_attrs:get_xattr is implemented
-        %%{error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
+        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE %%TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
+%%         {ok, Value} -> Value
+%%         {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
     end.
 
 %%--------------------------------------------------------------------
