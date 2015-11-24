@@ -52,7 +52,8 @@ clean_test_users_and_spaces(Config) ->
     initializer:teardown_sesion(Worker, Config),
     mocks_teardown(Workers, [file_meta, gr_spaces]).
 
--spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(), [SpaceIds :: binary()]}], Config :: term()) -> NewConfig :: term().
+-spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
+    [Spaces :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
 
