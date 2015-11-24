@@ -89,7 +89,8 @@ teardown_sesion(Worker, Config) ->
         ({{session_id, _}, SessId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
             Acc;
-        ({{spaces, _}, SpaceIds}, Acc) ->
+        ({{spaces, _}, Spaces}, Acc) ->
+            {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
             lists:foreach(fun(SpaceId) ->
                 ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
             end, SpaceIds),
