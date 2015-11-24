@@ -16,10 +16,9 @@ namespace one {
 namespace messages {
 namespace proxyio {
 
-RemoteWrite::RemoteWrite(std::string spaceId, std::string storageId,
-    std::string fileId, const off_t offset, asio::const_buffer data)
-    : ProxyIORequest{std::move(spaceId), std::move(storageId),
-          std::move(fileId)}
+RemoteWrite::RemoteWrite(std::string storageId, std::string fileId,
+    const off_t offset, asio::const_buffer data)
+    : ProxyIORequest{std::move(storageId), std::move(fileId)}
     , m_offset{offset}
     , m_data{data}
 {
@@ -28,9 +27,8 @@ RemoteWrite::RemoteWrite(std::string spaceId, std::string storageId,
 std::string RemoteWrite::toString() const
 {
     std::stringstream stream;
-    stream << "type: 'RemoteWrite', spaceId: '" << m_spaceId
-           << "', storageId: '" << m_storageId << "', fileId: '" << m_fileId
-           << "', offset: " << m_offset
+    stream << "type: 'RemoteWrite', storageId: '" << m_storageId
+           << "', fileId: '" << m_fileId << "', offset: " << m_offset
            << ", data size: " << asio::buffer_size(m_data);
     return stream.str();
 }

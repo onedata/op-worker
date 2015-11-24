@@ -34,7 +34,6 @@ public:
 
 private:
     communication::Communicator &m_communicator;
-    std::string m_spaceId;
     std::string m_storageId;
 };
 

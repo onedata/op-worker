@@ -30,12 +30,11 @@ private:
 
 class ProxyIOProxy {
 public:
-    ProxyIOProxy(std::string spaceId, std::string storageId, std::string host,
-        const unsigned short port)
+    ProxyIOProxy(
+        std::string storageId, std::string host, const unsigned short port)
         : m_communicator{1, host, port, false,
               one::communication::createConnection}
-        , m_helper{{{"storage_id", storageId}, {"space_id", spaceId}},
-              m_communicator}
+        , m_helper{{{"storage_id", storageId}}, m_communicator}
     {
         m_communicator.connect();
     }
@@ -63,9 +62,9 @@ private:
 
 namespace {
 boost::shared_ptr<ProxyIOProxy> create(
-    std::string spaceId, std::string storageId, std::string host, int port)
+    std::string storageId, std::string host, int port)
 {
-    return boost::make_shared<ProxyIOProxy>(spaceId, storageId, host, port);
+    return boost::make_shared<ProxyIOProxy>(storageId, host, port);
 }
 }
 

@@ -25,22 +25,16 @@ def storage_id():
 
 
 @pytest.fixture
-def space_id():
-    return random_str()
-
-
-@pytest.fixture
 def endpoint(appmock_client):
     return appmock_client.tcp_endpoint(5555)
 
 
 @pytest.fixture
-def helper(space_id, storage_id, endpoint):
-    return proxy_io.ProxyIOProxy(space_id, storage_id, endpoint.ip,
-                                 endpoint.port)
+def helper(storage_id, endpoint):
+    return proxy_io.ProxyIOProxy(storage_id, endpoint.ip, endpoint.port)
 
 
-def test_write_should_write_data(space_id, storage_id, endpoint, helper):
+def test_write_should_write_data(storage_id, endpoint, helper):
     wrote = random_int()
     file_id = random_str()
     data = random_str()
@@ -57,7 +51,6 @@ def test_write_should_write_data(space_id, storage_id, endpoint, helper):
     assert received.HasField('proxyio_request')
 
     request = received.proxyio_request
-    assert request.space_id == space_id
     assert request.storage_id == storage_id
     assert request.file_id == file_id
 
@@ -78,7 +71,7 @@ def test_write_should_pass_errors(endpoint, helper):
     assert 'Permission denied' in str(excinfo.value)
 
 
-def test_read_should_read_data(space_id, storage_id, endpoint, helper):
+def test_read_should_read_data(storage_id, endpoint, helper):
     data = random_str()
     file_id = random_str()
     offset = random_int()
@@ -94,7 +87,6 @@ def test_read_should_read_data(space_id, storage_id, endpoint, helper):
     assert received.HasField('proxyio_request')
 
     request = received.proxyio_request
-    assert request.space_id == space_id
     assert request.storage_id == storage_id
     assert request.file_id == file_id
 

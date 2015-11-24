@@ -25,12 +25,10 @@ class ProxyIORequest : public ClientMessage {
 public:
     /**
      * Constructor.
-     * @param spaceId The ID of space related to this request.
      * @param storageId The ID of storage the file is stored on.
      * @param fileId The ID of file that will be manipulated.
      */
-    ProxyIORequest(
-        std::string spaceId, std::string storageId, std::string fileId);
+    ProxyIORequest(std::string storageId, std::string fileId);
 
     virtual ~ProxyIORequest() = default;
 
@@ -38,7 +36,6 @@ protected:
     virtual std::unique_ptr<ProtocolClientMessage>
     serializeAndDestroy() override;
 
-    std::string m_spaceId;
     std::string m_storageId;
     std::string m_fileId;
 };
