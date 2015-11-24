@@ -14,7 +14,6 @@
 
 -include("modules/http_worker/http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_container.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -define(default_get_dir_opts, [<<"objectType">>, <<"objectID">>,
