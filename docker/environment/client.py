@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Authors: Łukasz Opioła, Konrad Zemek, Piotr Ociepka
+"""Authors: Łukasz Opioła, Konrad Zemek
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
@@ -26,9 +26,9 @@ def _tweak_config(config, os_config, name, uid):
     cfg = copy.deepcopy(config)
     cfg = {'node': cfg[name]}
     node = cfg['node']
+    node['name'] = client_hostname(name, uid)
     os_config_name = cfg['node']['os_config']
     cfg['os_config'] = os_config[os_config_name]
-    node['name'] = client_hostname(name, uid)
     node['clients'] = []
     clients = config[name]['clients']
     for cl in clients:
@@ -37,15 +37,19 @@ def _tweak_config(config, os_config, name, uid):
                          'op_domain': provider_worker.provider_domain(client['op_domain'], uid),
                          'gr_domain': globalregistry.gr_domain(client['gr_domain'], uid),
                          'user_key': client['user_key'],
-                         'user_cert': client['user_cert']}
+                         'user_cert': client['user_cert'],
+                         'mounting_path': client['mounting_path'],
+                         'token_for': client['token_for']}
 
         node['clients'].append(client_config)
+
     return cfg
 
 
 def _node_up(image, bindir, config, config_path, dns_servers):
     node = config['node']
     hostname = node['name']
+    shortname = hostname.split(".")[0]
     os_config = config['os_config']
 
     client_data = {}
@@ -67,19 +71,14 @@ mkdir /tmp/keys
         client_data[client_name] = {'client_name': client_name,
                                     'op_domain': client['op_domain'],
                                     'gr_domain': client['gr_domain'],
-                                    # todo: add this field to env.json to mount oneclient
-                                    # 'mounting_path': client['mounting_path],
-                                    # 'token_for': client['token_for'],
-                                    'cert_file_path': client['user_cert'],
-                                    'key_file_path': client['user_key']}
+                                    'mounting_path': client['mounting_path'],
+                                    'token_for': client['token_for']}
         # cert_file_path and key_file_path can both be an absolute path
         # or relative to gen_dev_args.json
         cert_file_path = os.path.join(common.get_file_dir(config_path),
-                                      client_name,
-                                      client_data[client_name]['cert_file_path'])
+                                      client['user_cert'])
         key_file_path = os.path.join(common.get_file_dir(config_path),
-                                     client_name,
-                                     client_data[client_name]['key_file_path'])
+                                     client['user_key'])
         command += '''mkdir /tmp/certs/{client_name}
 mkdir /tmp/keys/{client_name}
 cat <<"EOF" > /tmp/certs/{client_name}/cert
@@ -94,6 +93,10 @@ EOF
             client_name=client_name,
             cert_file=open(cert_file_path, 'r').read(),
             key_file=open(key_file_path, 'r').read())
+
+        client_data[client_name]['user_cert'] = os.path.join('/tmp', 'certs', client_name, 'cert')
+        client_data[client_name]['user_key'] = os.path.join('/tmp', 'keys', client_name, 'key')
+
     command += '''bash'''
 
     volumes = [(bindir, '/root/build', 'ro')]
@@ -116,17 +119,14 @@ EOF
     common.create_users(container, os_config['users'])
     common.create_groups(container, os_config['groups'])
 
-    # mount oneclients as declared in config
-    for client in client_data:
-        mount_oneclient(container, client_data[client])
-
-    return {'docker_ids': [container], 'client_nodes': [hostname]}
+    return {'docker_ids': [container], 'client_nodes': [hostname], 'client_data': {shortname: client_data}}
 
 
 def up(image, bindir, dns_server, uid, config_path):
     config = common.parse_json_file(config_path)['oneclient']
     os_config = common.parse_json_file(config_path)['os_configs']
     configs = [_tweak_config(config, os_config, node, uid) for node in config]
+
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
     for cfg in configs:
@@ -134,23 +134,3 @@ def up(image, bindir, dns_server, uid, config_path):
         common.merge(output, node_out)
 
     return output
-
-
-def mount_oneclient(container, config):
-    # todo: uncomment to mount oneclient
-    # # ask GR for token with get_token.escript (from onedata/tests/cucumber/scenarios/steps/utils)
-    # command = ['escript', 'get_token.escript', config['gr_domain'], config['token_for']]
-    # token = docker.exec_(container, command, tty=True, output=True)
-    # command = 'echo ' + token + ' > token'
-    # docker.exec_(container, command)
-    # # mount oneclient
-    # command = 'mkdir ' + config['mounting_path'] + \
-    #           ' X509_USER_CERT ' + config['cert_file_path'] + \
-    #           ' X509_USER_KEY ' + config['key_file_path'] + \
-    #           ' PROVIDER_HOSTNAME ' + config['op_domain'] + \
-    #           ' GLOBAL_REGISTRY_URL ' + config['gr_domain'] + \
-    #           ' ./oneclient --authentication token --no_check_certificate ' + \
-    #           config['mounting_path'] + \
-    #           ' < token && rm token'
-    # docker.exec_(container, command, tty=True)
-    pass

@@ -1,4 +1,4 @@
-"""Author: Konrad Zemek, Piotr Ociepka
+"""Author: Konrad Zemek
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
@@ -146,7 +146,7 @@ def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    couchbase_output = couchbase.up('couchbase/server:latest', dns, uid, cluster_name, len(db_node_mappings))
+    couchbase_output = couchbase.up('couchbase/server:community-3.0.1', dns, uid, cluster_name, len(db_node_mappings))
 
     return db_node_mappings, couchbase_output
 
@@ -177,7 +177,7 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
             'os_config': config['os_configs'][os_config]
         }
 
-        # Tweak configs, retrieve list of riak nodes to start
+        # Tweak configs, retrieve lis of riak nodes to start
         configs = []
         all_db_nodes = []
         for worker_node in gen_dev_cfg['nodes']:
