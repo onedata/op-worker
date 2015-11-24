@@ -361,10 +361,12 @@ get_mimetype(Path) ->
 %% @doc Encodes data according to given ecoding
 %%--------------------------------------------------------------------
 -spec encode(Data :: binary(), Encoding :: binary()) -> binary().
-encode(Data, Encoding) when Encoding =:= ?ENCODING_DEFAULT_VALUE ->
-    base64:encode(Data);
-encode(Data, _) ->
-    Data.
+encode(Data, _Encoding) ->
+%%TODO uncomment guard when cdmi operations are implemented
+%%     when Encoding =:= ?ENCODING_DEFAULT_VALUE ->
+    base64:encode(Data).
+%% encode(Data, _) ->
+%%     Data.
 
 %%--------------------------------------------------------------------
 %% @doc Encodes data according to given ecoding
