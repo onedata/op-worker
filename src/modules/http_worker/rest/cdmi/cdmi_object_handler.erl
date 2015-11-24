@@ -213,11 +213,11 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
     ToRead = To - From + 1,
     case ToRead > BufferSize of
         true ->
-            {ok, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
+            {ok, _, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
             Transport:send(Socket, encode(Data, Encoding)),
             stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, FileHandle);
         false ->
-            {ok, Data} = onedata_file_api:read(FileHandle, From, ToRead),
+            {ok, _, Data} = onedata_file_api:read(FileHandle, From, ToRead),
             Transport:send(Socket, encode(Data, Encoding))
     end.
 

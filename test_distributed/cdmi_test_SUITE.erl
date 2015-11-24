@@ -33,11 +33,9 @@
 -performance({test_cases, []}).
 all() ->
     [
-%%         get_file_test,
-%%         TODO turn on this test after fixing:
-%%         TODO onedata_file_api:read/3 -> {error,{badmatch, {error, {not_found, event_manager}}}}
-        delete_file_test, choose_adequate_handler, use_supported_cdmi_version,
-        use_unsupported_cdmi_version, create_dir_test, capabilities_test
+        get_file_test, delete_file_test, choose_adequate_handler,
+        use_supported_cdmi_version, use_unsupported_cdmi_version,
+        create_dir_test, capabilities_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -71,7 +69,6 @@ get_file_test(Config) ->
     ?assertEqual(FileContent,get_file_content(Config, FileName, Size, ?FILE_BEGINNING)),
 
     %%------- noncdmi read --------
-
     {ok, Code4, Headers4, Response4} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
     ?assertEqual("200",Code4),
 
@@ -107,7 +104,6 @@ delete_file_test(Config) ->
     ?assertEqual("204",Code1),
 
     ?assert(not object_exists(Config, FileName)),
-
     %%------------------------------
 
     %%----- delete group file ------
@@ -290,23 +286,21 @@ cdmi_endpoint(Node) ->
 
 mock_user_auth(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, rest_auth),
-    test_utils:mock_expect(Workers, rest_auth, is_authorized,
-        fun(Req, State) ->
-            case cowboy_req:header(<<"x-auth-token">>, Req) of
-                {undefined, NewReq} ->
-                    {{false, <<"authentication_error">>}, NewReq, State};
-                {Token, NewReq} ->
-                    UserId = ?config({user_id, binary_to_integer(Token)}, Config),
-                    {true, NewReq, State#{identity => #identity{user_id = UserId}}}
-            end
+    test_utils:mock_new(Workers, identity),
+    test_utils:mock_expect(Workers, identity, get_or_fetch,
+        fun
+            (#auth{macaroon = Token}) when size(Token) == 1 ->
+                UserId = ?config({user_id, binary_to_integer(Token)}, Config),
+                {ok, #document{value = #identity{user_id = UserId}}};
+            (Auth) ->
+                meck:passthrough(Auth)
         end
     ).
 
 unmock_user_auth(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, rest_auth),
-    test_utils:mock_unload(Workers, rest_auth).
+    test_utils:mock_validate(Workers, identity),
+    test_utils:mock_unload(Workers, identity).
 
 object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
