@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Urility functions for initializing things like session or storage configuration.
+%%% Utility functions for initializing things like session or storage configuration.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(initializer).
@@ -52,7 +52,8 @@ clean_test_users_and_spaces(Config) ->
     initializer:teardown_sesion(Worker, Config),
     mocks_teardown(Workers, [file_meta, gr_spaces]).
 
--spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(), [Spaces :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
+-spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
+    [Spaces :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
 
@@ -78,7 +79,8 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     ]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
-        {{spaces, UserNum}, Spaces}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
+        {{spaces, UserNum}, Spaces},
+        {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
         {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
         | setup_session(Worker, R, Config)
     ].
@@ -87,7 +89,8 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
 teardown_sesion(Worker, Config) ->
     lists:foldl(fun
         ({{session_id, _}, SessId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
+            ?assertEqual(ok,
+                rpc:call(Worker, session_manager, remove_session, [SessId])),
             Acc;
         ({{spaces, _}, Spaces}, Acc) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
@@ -98,7 +101,10 @@ teardown_sesion(Worker, Config) ->
         ({{user_id, _}, UserId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
             ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_path:spaces_uuid(UserId)])),
+            ?assertEqual(ok,
+                rpc:call(Worker, file_meta, delete,
+                    [fslogic_path:spaces_uuid(UserId)]
+                )),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
             Acc;
@@ -112,8 +118,15 @@ setup_storage(Config) ->
     TmpDir = generator:gen_storage_dir(Config),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
-    {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
-        [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(TmpDir)})])}]),
+    {ok, StorageId} = rpc:call(
+        Worker, storage, create, [
+            #document{value = fslogic_storage:new_storage(
+                <<"Test">>,
+                [fslogic_storage:new_helper_init(
+                    <<"DirectIO">>,
+                    #{<<"root_path">> => list_to_binary(TmpDir)}
+                )]
+            )}]),
     [{storage_id, StorageId}, {storage_dir, TmpDir} | Config].
 
 
@@ -138,7 +151,7 @@ name(Text, Num) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gr_spaces_mock_setup(Workers :: node() | [node()],
-  [{binary(), binary()}]) -> ok.
+    [{binary(), binary()}]) -> ok.
 gr_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_new(Workers, gr_spaces),
     test_utils:mock_expect(Workers, gr_spaces, get_details,
@@ -172,7 +185,7 @@ file_meta_mock_setup(Workers) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mocks_teardown(Workers :: node() | [node()],
-  Modules :: module() | [module()]) -> ok.
+    Modules :: module() | [module()]) -> ok.
 mocks_teardown(Workers, Modules) ->
     test_utils:mock_validate(Workers, Modules),
     test_utils:mock_unload(Workers, Modules).

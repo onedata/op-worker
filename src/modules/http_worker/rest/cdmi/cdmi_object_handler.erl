@@ -167,7 +167,7 @@ put_binary(ReqArg, State = #{identity := Identity, path := Path}) ->
     %%  {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     {Mimetype, Encoding} = parse_content(Content),
     case onedata_file_api:create(Identity, Path, ?DEFAULT_FILE_PERMISSIONS) of
-        ok ->
+        {ok, _} ->
             update_completion_status(Path, <<"Processing">>),
             update_mimetype(Path, Mimetype),
             update_encoding(Path, Encoding),
@@ -177,8 +177,9 @@ put_binary(ReqArg, State = #{identity := Identity, path := Path}) ->
 
         {error, ?ENOENT} ->
             case onedata_file_api:check_perms(Path, write) of
-                true -> ok;
-                false -> throw(?forbidden)
+                {ok, true} -> ok;
+                {ok, false} -> throw(?forbidden);
+                _ -> throw(?write_object_unknown_error)
             end,
             update_completion_status(Path, <<"Processing">>),
             update_mimetype(Path, Mimetype),
