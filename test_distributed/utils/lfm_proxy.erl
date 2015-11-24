@@ -16,7 +16,7 @@
 -include("types.hrl").
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, read/4, write/4]).
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, read/4, write/4, mkdir/3]).
 
 %%%===================================================================
 %%% API
@@ -137,6 +137,15 @@ write(Worker, TestHandle, Offset, Bytes) ->
                         {ok, Res};
                     Other -> Other
                 end,
+            Host ! {self(), Result}
+        end).
+
+-spec mkdir(node(), session:id(), file_path()) -> ok | error_reply().
+mkdir(Worker, SessId, Path) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:mkdir(SessId, Path),
             Host ! {self(), Result}
         end).
 

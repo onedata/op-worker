@@ -27,7 +27,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, 
     end_per_testcase/2]).
 
--export([get_file_test/1, delete_file_test/1, choose_adequate_handler/1,
+-export([list_dir_test/1, get_file_test/1, delete_file_test/1, choose_adequate_handler/1,
     use_supported_cdmi_version/1, use_unsupported_cdmi_version/1,
     create_dir_test/1, capabilities_test/1, create_file_test/1,
     update_file_test/1]).
@@ -35,10 +35,12 @@
 -performance({test_cases, []}).
 all() ->
     [
+        list_dir_test,
 %%         get_file_test,
 %%         TODO turn on this test after fixing:
 %%         TODO onedata_file_api:read/3 -> {error,{badmatch, {error, {not_found, event_manager}}}}
-        create_file_test, update_file_test, delete_file_test, choose_adequate_handler, use_supported_cdmi_version,
+        create_file_test, update_file_test, delete_file_test,
+        choose_adequate_handler, use_supported_cdmi_version,
         use_unsupported_cdmi_version, create_dir_test, capabilities_test
     ].
 
@@ -63,71 +65,102 @@ all() ->
 %%%===================================================================
 
 % Tests cdmi container GET request (also refered as LIST)
-list_dir_test(_Config) ->
-
+list_dir_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
     %%------ list basic dir --------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code1, Headers1, Response1} = do_request(?Test_dir_name++"/", get, RequestHeaders1, []),
+    {ok, Code1, Headers1, Response1} = 
+        do_request(Worker, ?TEST_DIR_NAME++"/", get,
+            [?USER_1_TOKEN_HEADER | RequestHeaders1], []),
     ?assertEqual("200", Code1),
-    ?assertEqual(proplists:get_value("content-type", Headers1), "application/cdmi-container"),
-    {struct,CdmiResponse1} = mochijson2:decode(Response1),
-    ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiResponse1)),
-    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiResponse1)),
-    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse1)),
-    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiResponse1)),
+    ?assertEqual(proplists:get_value("content-type", Headers1),
+        "application/cdmi-container"),
+    {struct,CdmiResponse1} = json:decode(Response1),
+    ?assertEqual(<<"application/cdmi-container">>,
+        proplists:get_value(<<"objectType">>,CdmiResponse1)),
+    ?assertEqual(<<"dir/">>,
+        proplists:get_value(<<"objectName">>,CdmiResponse1)),
+    ?assertEqual(<<"Complete">>,
+        proplists:get_value(<<"completionStatus">>,CdmiResponse1)),
+    ?assertEqual([<<"file.txt">>],
+        proplists:get_value(<<"children">>,CdmiResponse1)),
     ?assert(proplists:get_value(<<"metadata">>,CdmiResponse1) =/= <<>>),
     %%------------------------------
 
     %%------ list root dir ---------
     RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code2, _Headers2, Response2} = do_request([], get, RequestHeaders2, []),
+    {ok, Code2, _Headers2, Response2} =
+        do_request(Worker, [], get,
+            [?USER_1_TOKEN_HEADER | RequestHeaders2], []),
     ?assertEqual("200", Code2),
-    {struct,CdmiResponse2} = mochijson2:decode(Response2),
+    {struct,CdmiResponse2} = json:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual([<<"dir/">>,<<"spaces/">>], proplists:get_value(<<"children">>,CdmiResponse2)),
+    ?assertEqual([<<"dir/">>,<<"spaces/">>],
+        proplists:get_value(<<"children">>,CdmiResponse2)),
     %%------------------------------
 
     %%--- list nonexisting dir -----
     RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code3, _Headers3, _Response3} = do_request("nonexisting_dir/", get, RequestHeaders3, []),
+    {ok, Code3, _Headers3, _Response3} =
+        do_request(Worker, "nonexisting_dir/",
+            get, [?USER_1_TOKEN_HEADER | RequestHeaders3], []),
     ?assertEqual("404",Code3),
     %%------------------------------
 
     %%-- selective params list -----
     RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code4, _Headers4, Response4} = do_request(?Test_dir_name ++ "/?children;objectName", get, RequestHeaders4, []),
+    {ok, Code4, _Headers4, Response4} =
+        do_request(Worker, ?TEST_DIR_NAME ++ "/?children;objectName",
+            get, [?USER_1_TOKEN_HEADER | RequestHeaders4], []),
     ?assertEqual("200", Code4),
-    {struct,CdmiResponse4} = mochijson2:decode(Response4),
-    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiResponse4)),
-    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiResponse4)),
+    {struct,CdmiResponse4} = json:decode(Response4),
+    ?assertEqual(<<"dir/">>,
+        proplists:get_value(<<"objectName">>,CdmiResponse4)),
+    ?assertEqual([<<"file.txt">>],
+        proplists:get_value(<<"children">>,CdmiResponse4)),
     ?assertEqual(2,length(CdmiResponse4)),
     %%------------------------------
 
     %%---- childrenrange list ------
     ChildrangeDir = "childrange/",
-    create_dir(ChildrangeDir),
-    Childs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"],
+    create_dir(Worker, ChildrangeDir),
+    Childs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
+              "12", "13", "14"],
     ChildsBinaries = lists:map(fun(X) -> list_to_binary(X) end, Childs),
-    lists:map(fun(FileName) -> create_file(filename:join(ChildrangeDir, FileName)) end, Childs),
+    lists:map(fun(FileName) ->
+                create_file(Worker, filename:join(ChildrangeDir, FileName))
+              end, Childs),
 
     RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {Code5, _Headers5, Response5} = do_request(ChildrangeDir ++ "?children;childrenrange", get, RequestHeaders5, []),
+    {ok, Code5, _Headers5, Response5} =
+        do_request(Worker, ChildrangeDir ++ "?children;childrenrange",
+            get, [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
     ?assertEqual("200", Code5),
-    {struct,CdmiResponse5} = mochijson2:decode(Response5),
+    {struct,CdmiResponse5} = json:decode(Response5),
     ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
     ?assert(is_list(ChildrenResponse1)),
-    lists:foreach(fun(Name) -> ?assert(lists:member(Name, ChildrenResponse1)) end, ChildsBinaries),
-    ?assertEqual(<<"0-14">>, proplists:get_value(<<"childrenrange">>, CdmiResponse5)),
+    lists:foreach(fun(Name) ->
+                    ?assert(lists:member(Name, ChildrenResponse1))
+                  end, ChildsBinaries),
+    ?assertEqual(<<"0-14">>,
+        proplists:get_value(<<"childrenrange">>, CdmiResponse5)),
 
-    {Code6, _, Response6} = do_request(ChildrangeDir ++ "?children:2-13;childrenrange", get, RequestHeaders5, []),
-    {Code7, _, Response7} = do_request(ChildrangeDir ++ "?children:0-1;childrenrange", get, RequestHeaders5, []),
-    {Code8, _, Response8} = do_request(ChildrangeDir ++ "?children:14-14;childrenrange", get, RequestHeaders5, []),
+    {ok, Code6, _, Response6} =
+        do_request(Worker, ChildrangeDir ++ "?children:2-13;childrenrange", get,
+            [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
+    {ok, Code7, _, Response7} =
+        do_request(Worker, ChildrangeDir ++ "?children:0-1;childrenrange", get,
+            [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
+    {ok, Code8, _, Response8} =
+        do_request(Worker, ChildrangeDir ++ "?children:14-14;childrenrange", get,
+            [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
     ?assertEqual("200", Code6),
     ?assertEqual("200", Code7),
     ?assertEqual("200", Code8),
-    {struct,CdmiResponse6} = mochijson2:decode(Response6),
-    {struct,CdmiResponse7} = mochijson2:decode(Response7),
-    {struct,CdmiResponse8} = mochijson2:decode(Response8),
+    {struct,CdmiResponse6} = json:decode(Response6),
+    {struct,CdmiResponse7} = json:decode(Response7),
+    {struct,CdmiResponse8} = json:decode(Response8),
     ChildrenResponse6 = proplists:get_value(<<"children">>,CdmiResponse6),
     ChildrenResponse7 = proplists:get_value(<<"children">>,CdmiResponse7),
     ChildrenResponse8 = proplists:get_value(<<"children">>,CdmiResponse8),
@@ -138,10 +171,17 @@ list_dir_test(_Config) ->
     ?assertEqual(12, length(ChildrenResponse6)),
     ?assertEqual(2, length(ChildrenResponse7)),
     ?assertEqual(1, length(ChildrenResponse8)),
-    ?assertEqual(<<"2-13">>, proplists:get_value(<<"childrenrange">>, CdmiResponse6)),
-    ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse7)),
-    ?assertEqual(<<"14-14">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
-    lists:foreach(fun(Name) -> ?assert(lists:member(Name, ChildrenResponse6 ++ ChildrenResponse7 ++ ChildrenResponse8)) end, ChildsBinaries).
+    ?assertEqual(<<"2-13">>,
+        proplists:get_value(<<"childrenrange">>, CdmiResponse6)),
+    ?assertEqual(<<"0-1">>,
+        proplists:get_value(<<"childrenrange">>, CdmiResponse7)),
+    ?assertEqual(<<"14-14">>,
+        proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
+    lists:foreach(
+        fun(Name) ->
+            ?assert(lists:member(Name,
+                ChildrenResponse6 ++ ChildrenResponse7 ++ ChildrenResponse8))
+        end, ChildsBinaries).
 %%------------------------------
 
 %%  Tests cdmi object GET request. Request can be done without cdmi header (in that case
@@ -198,11 +238,9 @@ create_file_test(Config) ->
     ?assert(not object_exists(Config, ToCreate5)),
 
     RequestHeaders5 = [{"content-type", "application/binary"}],
-    tracer:start(Worker),
-    tracer:trace_calls(cdmi_object_handler),
     {ok, Code5, _Headers5, _Response5} =
-        do_request(Worker, ToCreate5, put, [?USER_1_TOKEN_HEADER | RequestHeaders5], FileContent),
-    tracer:stop(),
+        do_request(Worker, ToCreate5, put,
+            [?USER_1_TOKEN_HEADER | RequestHeaders5], FileContent),
     ?assertEqual("201",Code5),
 
     ?assert(object_exists(Config, ToCreate5)),
@@ -352,7 +390,7 @@ create_dir_test(Config) ->
     {ok, Code2, _Headers2, Response2} = do_request(Worker, DirName2, put, RequestHeaders2, []),
     tracer:stop(),
     ?assertEqual("201",Code2),
-    {struct,CdmiResponse2} = mochijson2:decode(Response2),
+    {struct,CdmiResponse2} = json:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
     ?assertEqual(list_to_binary(DirName2), proplists:get_value(<<"objectName">>,CdmiResponse2)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
@@ -567,3 +605,9 @@ get_file_content(Config, Path, Size, Offset) ->
 
 get_content_size(Content) ->
     string:len(binary_to_list(Content)).
+
+create_dir(Config, Path) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, 1}, Config),
+    lfm_proxy:mkdir(Worker, SessionId, utils:ensure_unicode_binary("/" ++ Path)).
+        
