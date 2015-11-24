@@ -96,12 +96,12 @@
 
 -define(save_test_def,
     ?basic_test_def("Performs multipe save operations using many threads. "
-        "Document may be saved many times.")
+    "Document may be saved many times.")
 ).
 
 -define(update_test_def,
     ?basic_test_def("Performs multipe update operations using many threads. "
-        "Document may be updated many times.")
+    "Document may be updated many times.")
 ).
 
 -define(create_sync_delete_test_def,

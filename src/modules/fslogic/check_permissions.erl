@@ -20,10 +20,11 @@
 
 %% API
 -export([before_advice/4, after_advice/5]).
+-export([validate_posix_access/3, validate_scope_access/3]).
 
 %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
 -type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {parent, item_definition()}.
--type access_type() :: write | read | exec. %% Check whether user has write/read/exec permissions
+-type access_type() :: write | read | exec | rdwr. %% Check whether user has write/read/exec permissions
 -type check_type() :: owner %% Check whether user owns the item
                     | none  %% Noop check. Doesn't check given item, but validates ancestors' exec permission.
                     | owner_if_parent_sticky. %% Check whether user owns the item but only if parent of the item
@@ -51,7 +52,7 @@ before_advice(#annotation{data = [Obj | R]} = A, M, F, [#fslogic_ctx{} | _Inputs
 %% actual before_advice impl.
 before_advice(#annotation{}, _M, _F, [#fslogic_ctx{session = #session{identity = #identity{user_id = ?ROOT_USER_ID}}} | _Inputs] = Args) ->
     Args;   %% Always allow access by root user
-before_advice(#annotation{data = root}, _M, _F, [#fslogic_ctx{} | _Inputs] = Args) ->
+before_advice(#annotation{data = root}, _M, _F, [#fslogic_ctx{} | _Inputs] = _Args) ->
     throw(?EACCES); %% At this point user is not root so deny any requests that require root
 
 %% Check whether user owns the item
@@ -78,7 +79,7 @@ before_advice(#annotation{data = {none, Item}}, _M, _F,
 
 %% Check whether user owns the item but only if parent of the item has sticky bit.
 before_advice(#annotation{data = {owner_if_parent_sticky, Item}}, _M, _F,
-    [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
+    [#fslogic_ctx{session = #session{identity = #identity{user_id = _UserId}}} = Ctx | Inputs] = Args) ->
 
     #document{value = #file_meta{}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
     #document{value = #file_meta{mode = Mode}} = fslogic_utils:get_parent(Subj),
@@ -98,7 +99,7 @@ before_advice(#annotation{data = {AccessType, Item}}, _M, _F,
 
     case IsScope of
         true  ->
-            ok = validate_scope_access(AccessType, FileDoc, UserId);
+            ok = check_permissions:validate_scope_access(AccessType, FileDoc, UserId);
         false ->
             ok
     end,
@@ -169,6 +170,7 @@ validate_scope_access(_AccessType, _FileDoc, _UserId) ->
 -spec validate_posix_access(AccessType :: access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId) ->
     ReqBit = case AccessType of
+                 rdwr  -> 8#6;
                  read  -> 8#4;
                  write -> 8#2;
                  exec  -> 8#1
@@ -177,17 +179,17 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
     IsAccessable = case UserId of
                        OwnerId ->
                            ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as owner.", [UserId, ReqBit, FileDoc, Mode]),
-                           ((ReqBit bsl 6) band Mode) > 0;
+                           ((ReqBit bsl 6) band Mode) =:= (ReqBit bsl 6);
                        _ ->
                            {ok, #document{value = #onedata_user{space_ids = Spaces}}} = onedata_user:get(UserId),
                            {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
                            case lists:member(ScopeUUID, Spaces) of
                                true ->
                                    ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as space member.", [UserId, ReqBit, FileDoc, Mode]),
-                                   ((ReqBit bsl 3) band Mode) > 0;
+                                   ((ReqBit bsl 3) band Mode) =:= (ReqBit bsl 3);
                                false ->
                                    ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as other (Spaces ~p, scope ~p).", [UserId, ReqBit, FileDoc, Mode, Spaces, ScopeUUID]),
-                                   (ReqBit band Mode) > 0
+                                   (ReqBit band Mode) =:= ReqBit
                            end
                    end,
 

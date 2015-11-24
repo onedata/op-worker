@@ -30,7 +30,7 @@
 
 -type ctx() :: #fslogic_ctx{}.
 -type file() :: file_meta:entry(). %% Type alias for better code organization
--type open_flags() :: 'READ_WRITE' | 'READ' | 'WRITE'.
+-type open_flags() :: rdwr | write | read.
 -type posix_permissions() :: file_meta:posix_permissions().
 
 -export_type([ctx/0, file/0, open_flags/0, posix_permissions/0]).
