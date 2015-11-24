@@ -59,7 +59,7 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
         true -> error(term_to_big);
         false -> ok
     end,
-    case exec(?DRIVER, set, to_driver_key(Bucket, Key), to_binary(Value), 0) of
+    case exec(?DRIVER, set, to_driver_key(Bucket, Key), to_json(Value), 0) of
         ok ->
             {ok, Key};
         {ok, _} ->
@@ -98,7 +98,7 @@ create(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, value
         true -> error(term_to_big);
         false -> ok
     end,
-    case exec(?DRIVER, add, to_driver_key(Bucket, Key), to_binary(Value), 0) of
+    case exec(?DRIVER, add, to_driver_key(Bucket, Key), to_json(Value), 0) of
         ok ->
             {ok, Key};
         {ok, _} ->
@@ -137,9 +137,9 @@ get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
             {error, Reason};
         {ok, {CAS, Value}} ->
             {ok, #document{key = Key, rev = CAS,
-                value = from_binary(Value)}};
+                value = from_json(Value)}};
         {ok, Value} ->
-            {ok, #document{key = Key, value = from_binary(Value)}}
+            {ok, #document{key = Key, value = from_json(Value)}}
     end.
 
 
@@ -368,6 +368,68 @@ from_binary(<<?ATOM_PREFIX, Atom/binary>>) ->
     binary_to_atom(Atom, utf8);
 from_binary(Bin) ->
     Bin.
+
+
+to_json_term(Term) when is_integer(Term) ->
+    Term;
+to_json_term(Term) when is_binary(Term) ->
+    Term;
+to_json_term(Term) when is_boolean(Term) ->
+    Term;
+to_json_term(Term) when is_float(Term) ->
+    Term;
+to_json_term(Term) when is_list(Term) ->
+    [to_json_term(Elem) || Elem <- Term];
+to_json_term(Term) when is_atom(Term) ->
+    to_binary(Term);
+to_json_term(Term) when is_tuple(Term) ->
+    Elems = tuple_to_list(Term),
+    Proplist0 = [{<<"__RECORD__">>, <<"unknown">>} | lists:zip(lists:seq(1, length(Elems)), Elems)],
+    Proplist1 = [{to_binary(Key), to_json_term(Value)} || {Key, Value} <- Proplist0],
+    maps:from_list(Proplist1);
+to_json_term(Term) when is_map(Term) ->
+    Proplist0 = maps:to_list(Term),
+    Proplist1 = [{to_binary(Key), to_json_term(Value)} || {Key, Value} <- Proplist0],
+    maps:from_list(Proplist1);
+to_json_term(Term) ->
+    to_binary(Term).
+
+
+from_json_term(Term) when is_integer(Term) ->
+    Term;
+from_json_term(Term) when is_boolean(Term) ->
+    Term;
+from_json_term(Term) when is_float(Term) ->
+    Term;
+from_json_term(Term) when is_list(Term) ->
+    [from_json_term(Elem) || Elem <- Term];
+from_json_term(Term) when is_binary(Term) ->
+    from_binary(Term);
+from_json_term(#{<<"__RECORD__">> := RecordType} = Map) ->
+    Proplist0 = [{from_binary(Key), from_json_term(Value)} || {Key, Value} <- maps:to_list(Map), Key =/= <<"__RECORD__">>],
+    Proplist1 = lists:sort(Proplist0),
+    {_, Values} = lists:unzip(Proplist1),
+    list_to_tuple(Values);
+from_json_term(Term) when is_map(Term) ->
+    Proplist0 = maps:to_list(Term),
+    Proplist1 = [{from_binary(Key), from_json_term(Value)} || {Key, Value} <- Proplist0],
+    maps:from_list(Proplist1).
+
+
+
+
+to_json(Term) ->
+    ?info("TERM: ~p", [Term]),
+    JSONTerm = to_json_term(Term),
+    ?info("JSONTerm: ~p", [JSONTerm]),
+    Encoded = jiffy:encode(JSONTerm),
+    ?info("Encoded: ~p", [Encoded]),
+    Encoded.
+
+
+from_json(Binary) ->
+    from_json_term(jiffy:decode(Binary, [return_maps])).
+
 
 -spec links_doc_key(Key :: datastore:key()) -> BinKey :: binary().
 links_doc_key(Key) ->
