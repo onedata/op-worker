@@ -123,8 +123,9 @@ EOF
 
 
 def up(image, bindir, dns_server, uid, config_path):
-    config = common.parse_json_file(config_path)['oneclient']
-    os_config = common.parse_json_file(config_path)['os_configs']
+    json_config = common.parse_json_file(config_path)
+    config = json_config['oneclient']
+    os_config = json_config['os_configs']
     configs = [_tweak_config(config, os_config, node, uid) for node in config]
 
     dns_servers, output = dns.maybe_start(dns_server, uid)
