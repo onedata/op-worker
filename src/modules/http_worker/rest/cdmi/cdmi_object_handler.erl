@@ -213,11 +213,11 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
     ToRead = To - From + 1,
     case ToRead > BufferSize of
         true ->
-            {ok, _, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
+            {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
             Transport:send(Socket, encode(Data, Encoding)),
-            stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, FileHandle);
+            stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, NewFileHandle);
         false ->
-            {ok, _, Data} = onedata_file_api:read(FileHandle, From, ToRead),
+            {ok, _NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ToRead),
             Transport:send(Socket, encode(Data, Encoding))
     end.
 
@@ -253,19 +253,21 @@ stream(#{path := Path, identity := Identity} = State, Ranges) ->
 -spec get_mimetype(string()) -> binary().
 get_mimetype(Path) ->
     case onedata_file_api:get_xattr(Path, ?MIMETYPE_XATTR_KEY) of
-        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE; %%TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
-        {ok, Value} -> Value;
-        {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
+        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE %%TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
+%%         {ok, Value} -> Value
+%%         {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Encodes data according to given ecoding
 %%--------------------------------------------------------------------
 -spec encode(Data :: binary(), Encoding :: binary()) -> binary().
-encode(Data, Encoding) when Encoding =:= ?ENCODING_DEFAULT_VALUE ->
-    base64:encode(Data);
-encode(Data, _) ->
-    Data.
+encode(Data, _Encoding) ->
+%%TODO uncomment guard when cdmi operations are implemented
+%%     when Encoding =:= ?ENCODING_DEFAULT_VALUE ->
+    base64:encode(Data).
+%% encode(Data, _) ->
+%%     Data.
 
 %%--------------------------------------------------------------------
 %% @doc Encodes data according to given ecoding

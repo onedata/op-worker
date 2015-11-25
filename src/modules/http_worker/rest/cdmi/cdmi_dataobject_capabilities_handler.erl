@@ -81,7 +81,7 @@ get_cdmi_capability(Req, State) ->
 %% ====================================================================
 %% @doc Return proplist contains CDMI answer
 %% ====================================================================
--spec prepare_capability_ans([Opt :: binary]) -> [{Capability :: binary(), Value :: term()}].
+-spec prepare_capability_ans([Opt :: binary()]) -> [{Capability :: binary(), Value :: term()}].
 prepare_capability_ans([]) ->
   [];
 prepare_capability_ans([<<"objectType">> | Tail]) ->
