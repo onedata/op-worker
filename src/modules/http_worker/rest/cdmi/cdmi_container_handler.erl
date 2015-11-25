@@ -15,6 +15,7 @@
 -include("modules/http_worker/http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 -define(default_get_dir_opts, [<<"objectType">>, <<"objectID">>,
     <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>,
@@ -125,8 +126,9 @@ get_cdmi(Req, State) ->
 -spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
 put_cdmi(_, #{cdmi_version := undefined}) ->
     throw(?no_version_given);
-put_cdmi(Req, State = #{auth := Auth, path := Path, attributes := Attrs, options := Opts}) ->
+put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, Body, Req1} = parse_body(Req),
+    Attrs = get_attr(Auth, Path),
 
     % create dir using mkdir/cp/mv
     RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
@@ -198,4 +200,15 @@ validate_body(Body) ->
                 _ -> ok
             end;
         false -> throw(?duplicated_body_fields)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Gets attributes of file, returns undefined when file does not exist
+%%--------------------------------------------------------------------
+-spec get_attr(onedata_auth_api:auth(), onedata_file_api:file_path()) ->
+    onedata_file_api:file_attributes() | undefined.
+get_attr(Auth, Path) ->
+    case onedata_file_api:stat(Auth, {path, Path}) of
+        {ok, Attrs} -> Attrs;
+        {error, ?ENOENT} -> undefined
     end.

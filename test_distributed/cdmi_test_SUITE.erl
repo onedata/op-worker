@@ -67,7 +67,7 @@ get_file_test(Config) ->
     create_file(Config, FileName),
     ?assert(object_exists(Config, FileName)),
     write_to_file(Config, FileName,FileContent, ?FILE_BEGINNING),
-    ?assertEqual(FileContent,get_file_content(Config, FileName, Size, ?FILE_BEGINNING)),
+    ?assertEqual(FileContent, get_file_content(Config, FileName, Size, ?FILE_BEGINNING)),
 
     %%------- noncdmi read --------
     {ok, Code4, Headers4, Response4} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
@@ -179,10 +179,7 @@ create_dir_test(Config) ->
     ?assert(not object_exists(Config, DirName2)),
 
     RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    tracer:start(Worker),
-    tracer:trace_calls(json),
     {ok, Code2, _Headers2, Response2} = do_request(Worker, DirName2, put, RequestHeaders2, []),
-    tracer:stop(),
     ?assertEqual("201",Code2),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
