@@ -76,9 +76,9 @@
 mkdir(SessId, Path) ->
     logical_file_manager:mkdir(SessId, Path).
 
--spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
-mkdir(Identity, Path, Mode) ->
-    logical_file_manager:mkdir(Identity, Path, Mode).
+-spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
+mkdir(Auth, Path, Mode) ->
+    logical_file_manager:mkdir(Auth, Path, Mode).
 
 
 %%--------------------------------------------------------------------
@@ -88,9 +88,9 @@ mkdir(Identity, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls(Identity, FileKey, Limit, Offset) ->
-    logical_file_manager:ls(Identity, FileKey, Limit, Offset).
+-spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+ls(Auth, FileKey, Limit, Offset) ->
+    logical_file_manager:ls(Auth, FileKey, Limit, Offset).
 
 
 %%--------------------------------------------------------------------
@@ -99,9 +99,9 @@ ls(Identity, FileKey, Limit, Offset) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
-get_children_count(Identity, FileKey) ->
-    logical_file_manager:get_children_count(Identity, FileKey).
+-spec get_children_count(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
+get_children_count(Auth, FileKey) ->
+    logical_file_manager:get_children_count(Auth, FileKey).
 
 
 %%--------------------------------------------------------------------
@@ -143,9 +143,9 @@ cp(PathFrom, PathTo) ->
 -spec unlink(file_handle()) -> ok | error_reply().
 unlink(Handle) ->
     logical_file_manager:unlink(Handle).
--spec unlink(onedata_auth_api:identity(), fslogic_worker:file()) -> ok | error_reply().
-unlink(Identity, FileEntry) ->
-    logical_file_manager:unlink(Identity, FileEntry).
+-spec unlink(onedata_auth_api:auth(), fslogic_worker:file()) -> ok | error_reply().
+unlink(Auth, FileEntry) ->
+    logical_file_manager:unlink(Auth, FileEntry).
 
 
 %%--------------------------------------------------------------------
@@ -154,10 +154,10 @@ unlink(Identity, FileEntry) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create(Identity :: onedata_auth_api:identity(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+-spec create(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
     {ok, file_uuid()} | error_reply().
-create(Identity, Path, Mode) ->
-    logical_file_manager:create(Identity, Path, Mode).
+create(Auth, Path, Mode) ->
+    logical_file_manager:create(Auth, Path, Mode).
 
 
 %%--------------------------------------------------------------------
@@ -166,9 +166,9 @@ create(Identity, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec open(onedata_auth_api:identity(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
-open(Identity, FileKey, OpenType) ->
-    logical_file_manager:open(Identity, FileKey, OpenType).
+-spec open(onedata_auth_api:auth(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
+open(Auth, FileKey, OpenType) ->
+    logical_file_manager:open(Auth, FileKey, OpenType).
 
 
 %%--------------------------------------------------------------------
@@ -204,9 +204,9 @@ read(FileHandle, Offset, MaxSize) ->
 -spec truncate(FileHandle :: file_handle(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(Handle, Size) ->
     logical_file_manager:truncate(Handle, Size).
--spec truncate(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
-truncate(Identity, FileKey, Size) ->
-    logical_file_manager:truncate(Identity, FileKey, Size).
+-spec truncate(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
+truncate(Auth, FileKey, Size) ->
+    logical_file_manager:truncate(Auth, FileKey, Size).
 
 
 %%--------------------------------------------------------------------
@@ -219,9 +219,9 @@ truncate(Identity, FileKey, Size) ->
 -spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
 get_block_map(Handle) ->
     logical_file_manager:get_block_map(Handle).
--spec get_block_map(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
-get_block_map(Identity, FileKey) ->
-    logical_file_manager:get_block_map(Identity, FileKey).
+-spec get_block_map(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+get_block_map(Auth, FileKey) ->
+    logical_file_manager:get_block_map(Auth, FileKey).
 
 
 %%--------------------------------------------------------------------
@@ -273,9 +273,9 @@ set_acl(Path, EntityList) ->
 -spec stat(file_handle()) -> {ok, file_attributes()} | error_reply().
 stat(Handle) ->
     logical_file_manager:stat(Handle).
--spec stat(onedata_auth_api:identity(), file_key()) -> {ok, file_attributes()} | error_reply().
-stat(Identity, FileKey) ->
-    logical_file_manager:stat(Identity, FileKey).
+-spec stat(onedata_auth_api:auth(), file_key()) -> {ok, file_attributes()} | error_reply().
+stat(Auth, FileKey) ->
+    logical_file_manager:stat(Auth, FileKey).
 
 
 %%--------------------------------------------------------------------

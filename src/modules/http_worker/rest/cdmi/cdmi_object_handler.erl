@@ -110,8 +110,8 @@ content_types_accepted(Req, State) ->
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
-delete_resource(Req, #{path := Path, identity := Identity} = State) ->
-    ok = onedata_file_api:unlink(Identity, {path, Path}),
+delete_resource(Req, #{path := Path, auth := Auth} = State) ->
+    ok = onedata_file_api:unlink(Auth, {path, Path}),
     {true, Req, State}.
 
 
@@ -329,8 +329,8 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
 -spec stream(Stata ::#{}, Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined) -> any().
 stream(#{attributes := #file_attr{size = Size}} = State, undefined) ->
     stream(State, [{0, Size -1}]);
-stream(#{path := Path, identity := Identity} = State, Ranges) ->
-    {ok, FileHandle} = onedata_file_api:open(Identity, {path, Path} ,read),
+stream(#{path := Path, auth := Auth} = State, Ranges) ->
+    {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
     fun(Socket, Transport) ->
         try
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),

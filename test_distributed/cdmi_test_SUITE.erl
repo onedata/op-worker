@@ -331,7 +331,6 @@ delete_file_test(Config) ->
     ?assertEqual("204",Code1),
 
     ?assert(not object_exists(Config, FileName)),
-
     %%------------------------------
 
     %%----- delete group file ------
@@ -410,23 +409,14 @@ create_dir_test(Config) ->
     %%------ basic create ----------
     ?assert(not object_exists(Config, DirName2)),
 
-    RequestHeaders2 = [
-        ?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    tracer:start(Worker),
-    tracer:trace_calls(json),
-    {ok, Code2, _Headers2, Response2} =
-        do_request(Worker, DirName2, put, RequestHeaders2, []),
-    tracer:stop(),
+    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    {ok, Code2, _Headers2, Response2} = do_request(Worker, DirName2, put, RequestHeaders2, []),
     ?assertEqual("201",Code2),
-    {struct,CdmiResponse2} = json:decode(Response2),
-    ?assertEqual(<<"application/cdmi-container">>,
-        proplists:get_value(<<"objectType">>,CdmiResponse2)),
-    ?assertEqual(list_to_binary(DirName2),
-        proplists:get_value(<<"objectName">>,CdmiResponse2)),
+    {struct,CdmiResponse2} = mochijson2:decode(Response2),
+    ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
+    ?assertEqual(list_to_binary(DirName2), proplists:get_value(<<"objectName">>,CdmiResponse2)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiResponse2)),
-    ?assertEqual(<<"Complete">>,
-        proplists:get_value(<<"completionStatus">>,CdmiResponse2)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiResponse2)),
     ?assertEqual([], proplists:get_value(<<"children">>,CdmiResponse2)),
     ?assert(proplists:get_value(<<"metadata">>,CdmiResponse2) =/= <<>>),
 
@@ -547,7 +537,6 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(choose_adequate_handler, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [cdmi_object_handler, cdmi_container_handler]),
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
@@ -588,23 +577,21 @@ cdmi_endpoint(Node) ->
 
 mock_user_auth(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, rest_auth),
-    test_utils:mock_expect(Workers, rest_auth, is_authorized,
-        fun(Req, State) ->
-            case cowboy_req:header(<<"x-auth-token">>, Req) of
-                {undefined, NewReq} ->
-                    {{false, <<"authentication_error">>}, NewReq, State};
-                {Token, NewReq} ->
-                    UserId = ?config({user_id, binary_to_integer(Token)}, Config),
-                    {true, NewReq, State#{identity => #identity{user_id = UserId}}}
-            end
+    test_utils:mock_new(Workers, identity),
+    test_utils:mock_expect(Workers, identity, get_or_fetch,
+        fun
+            (#auth{macaroon = Token}) when size(Token) == 1 ->
+                UserId = ?config({user_id, binary_to_integer(Token)}, Config),
+                {ok, #document{value = #identity{user_id = UserId}}};
+            (Auth) ->
+                meck:passthrough(Auth)
         end
     ).
 
 unmock_user_auth(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, rest_auth),
-    test_utils:mock_unload(Workers, rest_auth).
+    test_utils:mock_validate(Workers, identity),
+    test_utils:mock_unload(Workers, identity).
 
 object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
