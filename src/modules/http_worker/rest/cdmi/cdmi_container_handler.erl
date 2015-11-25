@@ -125,7 +125,7 @@ get_cdmi(Req, State) ->
 -spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
 put_cdmi(_, #{cdmi_version := undefined}) ->
     throw(?no_version_given);
-put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs, options := Opts}) ->
+put_cdmi(Req, State = #{auth := Auth, path := Path, attributes := Attrs, options := Opts}) ->
     {ok, Body, Req1} = parse_body(Req),
 
     % create dir using mkdir/cp/mv
@@ -134,7 +134,7 @@ put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs,
     {ok, OperationPerformed} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {onedata_file_api:mkdir(Identity, Path), created};
+                {onedata_file_api:mkdir(Auth, Path), created};
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
             {undefined, CopyURI, undefined} ->
@@ -151,7 +151,7 @@ put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs,
             ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
         _  ->
-            {ok, NewAttrs} = onedata_file_api:stat(Identity, {path, Path}),
+            {ok, NewAttrs} = onedata_file_api:stat(Auth, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?default_get_dir_opts, State#{attributes => NewAttrs, opts => ?default_get_dir_opts}),
             Response = json:encode(Answer),
