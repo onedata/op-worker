@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Authors: Łukasz Opioła, Konrad Zemek, Piotr Ociepka
+"""Authors: Łukasz Opioła, Konrad Zemek
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
@@ -14,6 +14,7 @@ import json
 import os
 import requests
 import time
+import sys
 
 from . import docker
 
@@ -182,6 +183,7 @@ def create_users(container, users):
                    "--uid", uid, user]
         assert 0 is docker.exec_(container, command, interactive=True)
 
+
 def create_groups(container, groups):
     """Creates system groups on docker specified by 'container'.
     """
@@ -199,3 +201,4 @@ def volume_for_storage(storage):
     for a given storage
     """
     return os.path.join('/tmp/onedata/storage/', storage), storage, 'rw'
+
