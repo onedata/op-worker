@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/http_worker/http_common.hrl").
--include("modules/http_worker/rest/cdmi/cdmi.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -27,7 +26,11 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get/2, put/2, get_binary/2]).
+-export([get_cdmi/2, put/2, get_binary/2]).
+
+%% the default json response for get/put cdmi_object will contain this entities, they can be choosed selectively by appending '?name1;name2' list to the request url
+-define(DEFAULT_GET_FILE_OPTS, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
+-define(DEFAULT_PUT_FILE_OPTS, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
 %%%===================================================================
 %%% API
@@ -86,7 +89,7 @@ content_types_provided(Req, #{cdmi_version := undefined} = State) ->
     ], Req, State};
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-object">>, get_cdmi_object}
+        {<<"application/cdmi-object">>, get_cdmi}
     ], Req, State}.
 
 
@@ -119,15 +122,14 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
-get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) ->
-
+get_binary(Req, #{attributes := #file_attr{size = Size, mimetype = Mimetype}} = State) ->
     % get optional 'Range' header
     {Ranges, Req1} = get_ranges(Req, State),
 
     % prepare response
     StreamSize = get_stream_size(Ranges, Size),
     StreamFun = stream(State, Ranges),
-    Req2 = cowboy_req:set_resp_header(<<"content-type">>, get_mimetype(Path), Req1),
+    Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
 
     HttpStatus =
         case Ranges of
@@ -144,9 +146,49 @@ get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) 
 %% Handles GET with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get(req(), #{}) -> {term(), req(), #{}}.
-get(Req, State) ->
-    {<<"ok">>, Req, State}.
+-spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
+get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path, attributes := #file_attr{size = Size, encoding = Encoding}}) ->
+    NonEmptyOpts = case Opts of [] -> ?DEFAULT_GET_FILE_OPTS; _ -> Opts end,
+    DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State),
+
+    case proplists:get_value(<<"value">>, DirCdmi) of
+        {range, Range} ->
+            BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
+            ValueTransferEncoding = cdmi_object_answer:encoding_to_valuetransferencoding(Encoding),
+            JsonBodyWithoutValue = json:encode({struct, BodyWithoutValue}),
+            JsonBodyPrefix = case BodyWithoutValue of
+                                 [] -> <<"{\"value\":\"">>;
+                                 _ -> <<(erlang:binary_part(JsonBodyWithoutValue,0,byte_size(JsonBodyWithoutValue)-1))/binary,",\"value\":\"">>
+                             end,
+            JsonBodySuffix = <<"\"}">>,
+            DataSize =
+                case Range of
+                    {From, To} when To >= From -> To - From + 1;
+                    default -> Size
+                end,
+            EncodedDataSize = case ValueTransferEncoding of
+                                  <<"base64">> -> byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * utils:ceil(DataSize / 3.0));
+                                  <<"utf-8">> -> byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + DataSize
+                              end,
+
+            {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
+            StreamFun = fun(Socket, Transport) ->
+                try
+                    Transport:send(Socket, JsonBodyPrefix),
+                    {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
+                    stream_range(Socket, Transport, State, Range, ValueTransferEncoding, BufferSize, FileHandle),
+                    Transport:send(Socket,JsonBodySuffix)
+                catch Type:Message ->
+                    % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
+                    ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
+                end
+            end,
+
+            {{stream, EncodedDataSize, StreamFun}, Req, State};
+        undefined ->
+            Response = json:encode({struct, DirCdmi}),
+            {Response, Req, State}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -157,11 +199,9 @@ get(Req, State) ->
 put(Req, State) ->
     {true, Req, State}.
 
-
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc Parses byte ranges from 'Range' http header format to list of
@@ -243,28 +283,12 @@ stream(#{path := Path, auth := Auth} = State, Ranges) ->
         end
     end.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets mimetype associated with file, returns default value if no mimetype
-%% could be found
-%% @end
-%%--------------------------------------------------------------------
--spec get_mimetype(string()) -> binary().
-get_mimetype(Path) ->
-    case onedata_file_api:get_xattr(Path, ?MIMETYPE_XATTR_KEY) of
-        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE %%TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
-%%         {ok, Value} -> Value
-%%         {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
-    end.
-
 %%--------------------------------------------------------------------
 %% @doc Encodes data according to given ecoding
 %%--------------------------------------------------------------------
 -spec encode(Data :: binary(), Encoding :: binary()) -> binary().
-%%TODO uncomment when cdmi operations are implemented
-%% encode(Data, Encoding) when Encoding =:= <<"base64">> ->
-%%     base64:encode(Data).
+encode(Data, Encoding) when Encoding =:= <<"base64">> ->
+    base64:encode(Data);
 encode(Data, _) ->
     Data.
 

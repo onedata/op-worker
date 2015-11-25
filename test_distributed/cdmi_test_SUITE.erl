@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
--include("modules/http_worker/rest/cdmi/cdmi.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -69,11 +68,49 @@ get_file_test(Config) ->
     write_to_file(Config, FileName,FileContent, ?FILE_BEGINNING),
     ?assertEqual(FileContent, get_file_content(Config, FileName, Size, ?FILE_BEGINNING)),
 
+    %%-------- basic read ----------
+    RequestHeaders1 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    {ok, Code1, _Headers1, Response1} = do_request(Worker, FileName, get, RequestHeaders1, []),
+    ?assertEqual("200", Code1),
+    {struct, CdmiResponse1} = mochijson2:decode(Response1),
+
+    ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse1)),
+    ?assertEqual(<<"toRead.txt">>, proplists:get_value(<<"objectName">>, CdmiResponse1)),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>, CdmiResponse1)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse1)),
+    ?assertEqual(<<"base64">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse1)),
+    ?assertEqual(<<"application/octet-stream">>, proplists:get_value(<<"mimetype">>, CdmiResponse1)),
+    ?assertEqual(<<"0-14">>, proplists:get_value(<<"valuerange">>, CdmiResponse1)),
+    ?assert(proplists:get_value(<<"metadata">>, CdmiResponse1) =/= <<>>),
+    ?assertEqual(FileContent, base64:decode(proplists:get_value(<<"value">>, CdmiResponse1))),
+    %%------------------------------
+
+    %%-- selective params read -----
+    RequestHeaders2 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    {ok, Code2, _Headers2, Response2} = do_request(Worker, FileName ++ "?parentURI;completionStatus", get, RequestHeaders2, []),
+    ?assertEqual("200", Code2),
+    {struct, CdmiResponse2} = mochijson2:decode(Response2),
+
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>, CdmiResponse2)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>, CdmiResponse2)),
+    ?assertEqual(2, length(CdmiResponse2)),
+    %%------------------------------
+
+    %%--- selective value read -----
+    RequestHeaders3 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    {ok, Code3, _Headers3, Response3} = do_request(Worker, FileName ++ "?value:1-3;valuerange", get, RequestHeaders3, []),
+    ?assertEqual("200", Code3),
+    {struct, CdmiResponse3} = mochijson2:decode(Response3),
+
+    ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>, CdmiResponse3)),
+    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>, CdmiResponse3))), % 1-3 from FileContent = <<"Some content...">>
+    %%------------------------------
+
     %%------- noncdmi read --------
     {ok, Code4, Headers4, Response4} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
     ?assertEqual("200",Code4),
 
-    ?assertEqual(binary_to_list(?MIMETYPE_DEFAULT_VALUE), proplists:get_value("content-type",Headers4)),
+    ?assertEqual(binary_to_list(<<"application/octet-stream">>), proplists:get_value("content-type",Headers4)),
     ?assertEqual(binary_to_list(FileContent), Response4),
     %%------------------------------
 
@@ -206,11 +243,7 @@ create_dir_test(Config) ->
     ?assert(not object_exists(Config, MissingParentName)),
 
     RequestHeaders4 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    tracer:start(Worker),
-    tracer:trace_calls(pre_handler),
-    tracer:trace_calls(cdmi_container_handler),
     {ok, Code4, _Headers4, _Response4} = do_request(Worker, DirWithoutParentName, put, RequestHeaders4, []),
-    tracer:stop(),
     ?assertEqual("500",Code4). %todo handle this error in lfm
     %%------------------------------
 
