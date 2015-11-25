@@ -50,7 +50,7 @@ cache_monitoring_test(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
     disable_cache_control_and_set_dump_delay(Workers, timer:seconds(5)), % Automatic cleaning may influence results
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, test_utils:set_env(W, ?APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(10)))
+        ?assertEqual(ok, test_utils:set_env(W, ?WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(10)))
     end, Workers),
 
     Key = <<"key">>,
@@ -175,7 +175,7 @@ cache_clearing_test(Config) ->
     MemUsage = Mem0 + ToAdd,
 
     ?assertMatch(ok, ?call(Worker1, ?MODULE, utilize_memory, [MemUsage, MemTarget], timer:minutes(10))),
-    ?assertMatch(ok, test_utils:set_env(Worker2, ?APP_NAME, mem_to_clear_cache, MemTarget)),
+    ?assertMatch(ok, test_utils:set_env(Worker2, ?WORKER_APP_NAME, mem_to_clear_cache, MemTarget)),
     [{_, Mem1}] = monitoring:get_memory_stats(),
     Mem1Node = ?call(Worker2, erlang, memory, [total]),
     ct:print("Mem1 ~p xxx ~p", [Mem1, Mem1Node]),
@@ -709,7 +709,7 @@ disable_cache_control(Workers) ->
 disable_cache_control_and_set_dump_delay(Workers, Delay) ->
     lists:foreach(fun(W) ->
         ?assertEqual(ok, gen_server:call({?NODE_MANAGER_NAME, W}, disable_cache_control)),
-        ?assertEqual(ok, test_utils:set_env(W, ?APP_NAME, cache_to_disk_delay_ms, Delay))
+        ?assertEqual(ok, test_utils:set_env(W, ?WORKER_APP_NAME, cache_to_disk_delay_ms, Delay))
     end, Workers).
 
 for(1, F) ->
