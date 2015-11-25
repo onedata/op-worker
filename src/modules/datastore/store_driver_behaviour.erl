@@ -21,7 +21,7 @@
 %% Called only on nodes with datastore worker.
 %% @end
 %%--------------------------------------------------------------------
--callback init_driver() -> ok.
+-callback init_driver(worker_host:plugin_state()) -> worker_host:plugin_state().
 
 
 %%--------------------------------------------------------------------

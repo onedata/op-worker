@@ -79,7 +79,7 @@ start_gateway(Parent, N, Hostname, Port) ->
 gateway_loop(#{port_fd := PortFD, id := {_, N} = ID, db_hostname := Hostname, db_port := Port} = State) ->
     NewState =
         receive
-            {PortFD, {data, Data}} ->
+            {PortFD, {data, {_, Data}}} ->
                 ?info("[CouchBase Gateway ~p] ~p", [ID, Data]),
                 State;
             {PortFD, closed} ->
@@ -415,8 +415,8 @@ foreach_link(#model_config{bucket = _Bucket} = ModelConfig, Key, Fun, AccIn) ->
 -spec healthcheck(WorkerState :: term()) -> ok | {error, Reason :: term()}.
 healthcheck(_) ->
     try
-        case ensure_couchbeam_connected() of
-            ok -> ok;
+        case get_db() of
+            {ok, _} -> ok;
             {error, Reason} ->
                 {error, Reason}
         end
@@ -543,17 +543,18 @@ to_driver_key(Bucket, Key) ->
     base64:encode(term_to_binary({Bucket, Key})).
 
 
+-spec get_db() -> {ok, term()} | {error, term()}.
 get_db() ->
-    Gateways = maps:to_list(datastore_worker:state_get(db_gateways)),
+    Gateways = maps:values(datastore_worker:state_get(db_gateways)),
     ActiveGateways = [GW || #{status := running} = GW <- Gateways],
 
     case ActiveGateways of
         [] ->
-            ?error("Unable to select CouchBase Gateway: no active gateway"),
+            ?error("Unable to select CouchBase Gateway: no active gateway among: ~p", [Gateways]),
             {error, no_active_gateway};
         _ ->
             #{gw_port := Port} = lists:nth(crypto:rand_uniform(1, length(ActiveGateways) + 1), ActiveGateways),
             Server = couchbeam:server_connection("localhost", Port),
-            {ok, couchbeam:open_db(Server, <<"default">>)}
+            couchbeam:open_db(Server, <<"default">>)
     end.
 
