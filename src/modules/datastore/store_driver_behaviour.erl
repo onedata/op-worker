@@ -17,6 +17,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Initializes the driver. Called always once in context of some supervised long-living process.
+%% Called only on nodes with datastore worker.
+%% @end
+%%--------------------------------------------------------------------
+-callback init_driver() -> ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Initializes given bucket locally (this method is executed per-node).
 %% @end
 %%--------------------------------------------------------------------

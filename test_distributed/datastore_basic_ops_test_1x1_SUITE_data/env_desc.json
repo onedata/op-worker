@@ -11,7 +11,7 @@
     },
     "provider_domains": {
         "p1": {
-            "db_driver": "couchdb",
+            "db_driver": "couchbase",
             "op_ccm": {
                 "ccm": {
                     "vm.args": {

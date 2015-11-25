@@ -34,7 +34,7 @@
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
 
-    %% Get Riak nodes
+    %% Get database nodes
     DBNodes =
         case application:get_env(?APP_NAME, db_nodes) of
             {ok, Nodes} ->
@@ -47,13 +47,15 @@ init(_Args) ->
                 []
         end,
 
-    State = lists:foldl(
+    {ok, State0} = couchdb_datastore_driver:init_driver(#{db_nodes => DBNodes}),
+
+    State1 = lists:foldl(
         fun(Model, StateAcc) ->
             #model_config{name = RecordName} = ModelConfig = Model:model_init(),
             maps:put(RecordName, ModelConfig, StateAcc)
-        end, #{}, ?MODELS),
+        end, State0, ?MODELS),
 
-    {ok, State#{db_nodes => DBNodes}}.
+    {ok, State1}.
 
 %%--------------------------------------------------------------------
 %% @doc
