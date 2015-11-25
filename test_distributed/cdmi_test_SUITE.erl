@@ -68,7 +68,8 @@ all() ->
 % Tests cdmi container GET request (also refered as LIST)
 list_dir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    
+    create_dir(Config, ?TEST_DIR_NAME),
+
     %%------ list basic dir --------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {ok, Code1, Headers1, Response1} = 

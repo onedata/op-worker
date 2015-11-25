@@ -17,7 +17,6 @@
 %% HTTP error code 400 and request sent to client
 -define(unsupported_version,
     {?BAD_REQUEST, [{<<"error_unsupported_version">>, <<"Given CDMI version is not supported. Use 1.1.1 instead.">>}]}).
-  {400, [{<<"error_unsupported_version">>, <<"Given CDMI version is not supported. Use 1.1.1 instead.">>}]}).
 -define(no_version_given,
   {?BAD_REQUEST, [{<<"error_no_version_given">>, <<"No CDMI version given. Add valid 'X-CDMI-Specification-Version' header.">>}]}).
 -define(conflicting_body_fields,
@@ -25,13 +24,11 @@
 -define(duplicated_body_fields,
   {?BAD_REQUEST, [{<<"error_duplicated_body_fields">>, <<"Request body contains duplicates.">>}]}).
 -define(invalid_childrenrange,
-  {400, [{<<"error_invalid_childrenrange">>, <<"Requested childrenrange is invalid.">>}]}).
   {?BAD_REQUEST, [{<<"error_invalid_childrenrange">>, <<"Requested childrenrange is invalid.">>}]}).
 
 %% HTTP error code 400 and request sent to client
 -define(invalid_range,
-  {400, [{<<"error_invalid_range">>, <<"Given range is invalid.">>}]}).
--endif.    {?BAD_REQUEST, [{<<"error_invalid_range">>, <<"Given range is invalid">>}]}).
+    {?BAD_REQUEST, [{<<"error_invalid_range">>, <<"Given range is invalid">>}]}).
 
 %% HTTP error code 500 and request sent to client
 -define(write_object_unknown_error,
