@@ -139,22 +139,22 @@ mock_gr_certificates(Config) ->
             (provider, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, Url ++ URN,
                     [{<<"content-type">>, <<"application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
+                    Body, [SSLOpts, insecure | Options]);
             (client, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, Url ++ URN,
                     [{<<"content-type">>, <<"application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
+                    Body, [SSLOpts, insecure | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, Url ++ URN,
                     [{<<"content-type">>, <<"application/json">>} | Headers],
-                    Body, [SSLOpts | Options]);
+                    Body, [SSLOpts, insecure | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
                 AuthHdr =
                     http_client:request(Method, Url ++ URN, [
                         {<<"content-type">>, <<"application/json">>},
                         {<<"macaroon">>, Macaroon} | Headers
-                    ], Body, [SSLOpts | Options])
+                    ], Body, [SSLOpts, insecure | Options])
         end
     ).
 

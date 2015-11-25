@@ -60,14 +60,14 @@ cert_auth(Config) ->
 
     % then - unauthorized access
     {ok, 307, Headers, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [UnknownCertOpt]),
-    Loc = proplists:get_value("location", Headers),
+    Loc = proplists:get_value(<<"location">>, Headers),
     ?assertMatch({ok, 401, _, _}, do_request(get, Loc, [], <<>>, [UnknownCertOpt])),
 
     % then - authorized access
     {ok, 307, Headers2, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [KnownCertOpt]),
-    Loc2 = proplists:get_value("location", Headers2),
+    Loc2 = proplists:get_value(<<"location">>, Headers2),
     {ok, 307, Headers3, _} = do_request(get, Loc2, [], <<>>, [KnownCertOpt]),
-    Loc3 = proplists:get_value("location", Headers3),
+    Loc3 = proplists:get_value(<<"location">>, Headers3),
     ?assertMatch({ok, 404, _, _}, do_request(get, Loc3, [], <<>>, [KnownCertOpt])).
 
 internal_error_when_handler_crashes(Config) ->
@@ -197,15 +197,15 @@ mock_gr_certificates(Config) ->
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
-                do_request(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>} | Headers], Method, Body, [SSLOptions | Options]);
             (client, URN, Method, Headers, Body, Options) ->
-                do_request(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>} | Headers], Method, Body, [SSLOptions | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
-                do_request(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>} | Headers], Method, Body, [SSLOptions | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {"macaroon", binary_to_list(Macaroon)},
-                do_request(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
+                AuthorizationHeader = {<<"macaroon">>, Macaroon},
+                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
         end
     ).
 

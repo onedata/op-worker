@@ -43,7 +43,7 @@ nagios_test(Config) ->
 
     {ok, 200, _, XMLString} = rpc:call(Worker1, http_client, get, [?HEALTHCHECK_PATH, [], <<>>, [insecure]]),
 
-    {Xml, _} = xmerl_scan:string(XMLString),
+    {Xml, _} = xmerl_scan:string(str_utils:to_list(XMLString)),
 
     [MainStatus] = [X#xmlAttribute.value || X <- Xml#xmlElement.attributes, X#xmlAttribute.name == status],
     % Whole app status might become out_of_sync in some marginal cases when dns or dispatcher does

@@ -56,7 +56,7 @@ choose_adequate_handler(Config) ->
 list_basic_dir_test(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
     TestDir = "dir",
     %todo create TestDir
 
@@ -65,14 +65,14 @@ list_basic_dir_test(Config) ->
 
     % then
     ?assertEqual(200, Code),
-    ContentType = proplists:get_value("content-type", ResponseHeaders),
+    ContentType = proplists:get_value(<<"content-type">>, ResponseHeaders),
     {struct, CdmiResponse} = mochijson2:decode(Response),
     ObjectType = proplists:get_value(<<"objectType">>, CdmiResponse),
     ObjectName = proplists:get_value(<<"objectName">>, CdmiResponse),
     CompletionStatus = proplists:get_value(<<"completionStatus">>, CdmiResponse),
     Children = proplists:get_value(<<"children">>, CdmiResponse),
     Metadata = proplists:get_value(<<"metadata">>, CdmiResponse),
-    ?assertEqual("application/cdmi-container", ContentType),
+    ?assertEqual(<<"application/cdmi-container">>, ContentType),
     ?assertEqual(<<"application/cdmi-container">>, ObjectType),
     ?assertEqual(<<"dir/">>, ObjectName),
     ?assertEqual(<<"Complete">>, CompletionStatus),
@@ -82,7 +82,7 @@ list_basic_dir_test(Config) ->
 list_root_dir_test(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
 
     % when
     {Code, _, Response} = do_request(Worker, [], get, RequestHeaders, []),
@@ -98,7 +98,7 @@ list_root_dir_test(Config) ->
 list_nonexisting_dir_test(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
 
     % when
     {Code, _, _} = do_request(Worker, "nonexisting_dir/", get, RequestHeaders, []),
@@ -109,7 +109,7 @@ list_nonexisting_dir_test(Config) ->
 get_selective_params_of_dir_test(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
 
     % when
     {Code, _, Response} = do_request(Worker, "spaces/?children;objectName", get, RequestHeaders, []),
@@ -124,7 +124,7 @@ get_selective_params_of_dir_test(Config) ->
 use_supported_cdmi_version(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}],
 
     % when
     {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
@@ -136,7 +136,7 @@ use_supported_cdmi_version(Config) ->
 use_unsupported_cdmi_version(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
 
     % when
     {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
