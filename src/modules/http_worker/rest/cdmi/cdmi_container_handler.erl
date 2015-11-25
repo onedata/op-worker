@@ -124,6 +124,6 @@ put_cdmi(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec put_binary(req(), #{}) -> {term(), req(), #{}}.
-put_binary(Req, State = #{identity := Identity, path := Path}) ->
-    ok = onedata_file_api:mkdir(Identity, Path),
+put_binary(Req, State = #{auth := Auth, path := Path}) ->
+    ok = onedata_file_api:mkdir(Auth, Path),
     {true, Req, State}.

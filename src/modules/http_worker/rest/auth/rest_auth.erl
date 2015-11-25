@@ -26,15 +26,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% This function authorizes user and inserts 'identity' field to
+%% This function authorizes user and inserts 'auth' field to
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {{ok, Iden}, NewReq} ->
-            {true, NewReq, State#{identity => Iden}};
+        {{ok, Auth}, NewReq} ->
+            {true, NewReq, State#{auth => Auth}};
         {{error, {not_found, _}}, NewReq} ->
             GrUrl = gr_plugin:get_gr_url(),
             ProviderId = oneprovider:get_provider_id(),
