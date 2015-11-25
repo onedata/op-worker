@@ -197,15 +197,24 @@ mock_gr_certificates(Config) ->
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
-                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>} | Headers],
+                    Body, [SSLOptions | Options]);
             (client, URN, Method, Headers, Body, Options) ->
-                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>} | Headers],
+                    Body, [SSLOptions | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
-                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>} | Headers],
+                    Body, [SSLOptions | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
                 AuthorizationHeader = {<<"macaroon">>, Macaroon},
-                do_request(Url ++ URN, [{<<"content-type">>,<< "application/json">>}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>},
+                        AuthorizationHeader | Headers],
+                    Body, [SSLOptions | Options])
         end
     ).
 
