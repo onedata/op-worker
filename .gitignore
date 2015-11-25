@@ -2,6 +2,7 @@
 .settings
 .eunit
 .idea
+.dialyzer.plt
 
 *.iml
 *.beam
