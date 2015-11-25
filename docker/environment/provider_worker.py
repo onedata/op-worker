@@ -9,6 +9,7 @@ import copy
 import json
 import os
 import subprocess
+import sys
 
 from . import common, docker, riak, couchbase, dns, globalregistry, provider_ccm
 
@@ -251,7 +252,7 @@ def create_storages(storages, op_nodes, op_config, bindir):
         for st_path in storages:
             st_name = st_path
             command = ['escript', script_path, cookie, node, st_name, st_path]
-            assert 0 is docker.exec_(container, command, tty=True)
+            assert 0 is docker.exec_(container, command, tty=True, stdout=sys.stdout, stderr=sys.stderr)
     # clean-up
     command = ['rm', os.path.join(bindir, script_name)]
     subprocess.check_call(command)
