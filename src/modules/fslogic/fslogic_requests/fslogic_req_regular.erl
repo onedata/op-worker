@@ -72,12 +72,15 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), Flags :: fslogic_worker:open_flags()) ->
+-spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), OpenMode :: fslogic_worker:open_flags()) ->
                                no_return() | #fuse_response{}.
--check_permissions([{read, 2}]).
-get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, Flags) ->
-    ?debug("get_file_location for ~p ~p", [File, Flags]),
-    {ok, #document{key = UUID}} = file_meta:get(File),
+-check_permissions([{none, 2}]).
+get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, OpenFlags) ->
+    ?debug("get_file_location for ~p ~p", [File, OpenFlags]),
+    {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
+
+    ok = check_permissions:validate_posix_access(OpenFlags, FileDoc, fslogic_context:get_user_id(CTX)),
+
     ok = file_watcher:insert_open_watcher(UUID, SessId),
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
