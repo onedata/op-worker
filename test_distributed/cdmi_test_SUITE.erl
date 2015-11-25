@@ -64,7 +64,7 @@ list_basic_dir_test(Config) ->
     {Code, ResponseHeaders, Response} = do_request(Worker, TestDir ++ "/", get, RequestHeaders, []),
 
     % then
-    ?assertEqual("200", Code),
+    ?assertEqual(200, Code),
     ContentType = proplists:get_value("content-type", ResponseHeaders),
     {struct, CdmiResponse} = mochijson2:decode(Response),
     ObjectType = proplists:get_value(<<"objectType">>, CdmiResponse),
@@ -88,7 +88,7 @@ list_root_dir_test(Config) ->
     {Code, _, Response} = do_request(Worker, [], get, RequestHeaders, []),
 
     % then
-    ?assertEqual("200", Code),
+    ?assertEqual(200, Code),
     {struct, CdmiResponse} = mochijson2:decode(Response),
     ObjectName = proplists:get_value(<<"objectName">>, CdmiResponse),
     Children = proplists:get_value(<<"children">>, CdmiResponse),
@@ -104,7 +104,7 @@ list_nonexisting_dir_test(Config) ->
     {Code, _, _} = do_request(Worker, "nonexisting_dir/", get, RequestHeaders, []),
 
     % then
-    ?assertEqual("404", Code).
+    ?assertEqual(404, Code).
 
 get_selective_params_of_dir_test(Config) ->
     % given
@@ -115,7 +115,7 @@ get_selective_params_of_dir_test(Config) ->
     {Code, _, Response} = do_request(Worker, "spaces/?children;objectName", get, RequestHeaders, []),
 
     % then
-    ?assertEqual("200", Code),
+    ?assertEqual(200, Code),
     {struct, CdmiResponse4} = mochijson2:decode(Response),
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>, CdmiResponse4)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>, CdmiResponse4)),
@@ -131,7 +131,7 @@ use_supported_cdmi_version(Config) ->
 
     % then
     %% we are to get 404 because path "/" doesn't exist.
-    ?assertEqual("404", Code).
+    ?assertEqual(404, Code).
 
 use_unsupported_cdmi_version(Config) ->
     % given
@@ -142,7 +142,7 @@ use_unsupported_cdmi_version(Config) ->
     {Code, _ResponseHeaders, _Response} = do_request(Worker, "/", get, RequestHeaders, []),
 
     % then
-    ?assertEqual("400", Code).
+    ?assertEqual(400, Code).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -159,8 +159,8 @@ init_per_testcase(choose_adequate_handler, Config) ->
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    ssl:start(),
-    ibrowse:start(),
+    application:start(ssl2),
+    hackney:start(),
     Config.
 
 end_per_testcase(choose_adequate_handler, Config) ->
@@ -169,22 +169,22 @@ end_per_testcase(choose_adequate_handler, Config) ->
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
 end_per_testcase(_, _Config) ->
-    ibrowse:stop(),
-    ssl:stop().
+    hackney:stop(),
+    application:stop(ssl2).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-% Performs a single request using ibrowse
+% Performs a single request using http_client
 do_request(Node, RestSubpath, Method, Headers, Body) ->
     {ok, Code, RespHeaders, Response} =
-        ibrowse:send_req(
+        http_client:request(
+            Method,
             cdmi_endpoint(Node) ++ RestSubpath,
             Headers,
-            Method,
             Body,
-            [{ssl_options, [{reuse_sessions, false}]}]
+            [insecure]
         ),
     {Code, RespHeaders, Response}.
 

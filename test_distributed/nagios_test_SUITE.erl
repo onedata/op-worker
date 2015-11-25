@@ -41,7 +41,7 @@ all() -> [nagios_test].
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
-    {ok, "200", _, XMLString} = rpc:call(Worker1, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]),
+    {ok, 200, _, XMLString} = rpc:call(Worker1, http_client, get, [?HEALTHCHECK_PATH, [], <<>>, [insecure]]),
 
     {Xml, _} = xmerl_scan:string(XMLString),
 

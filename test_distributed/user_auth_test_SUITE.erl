@@ -129,27 +129,32 @@ receive_server_message(IgnoredMsgList) ->
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
-    {ok, Key} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
-    {ok, Cert} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
-    [{KeyType, KeyEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Key]),
-    [{_, CertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Cert]),
-    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
-    SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
+    {ok, KeyPath} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
+    {ok, CertPath} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
+    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
     test_utils:mock_new(Workers, gr_endpoint),
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                http_client:request(Method, Url ++ URN,
+                    [{<<"content-type">>, <<"application/json">>} | Headers],
+                    Body, [SSLOpts | Options]);
             (client, URN, Method, Headers, Body, Options) ->
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                http_client:request(Method, Url ++ URN,
+                    [{<<"content-type">>, <<"application/json">>} | Headers],
+                    Body, [SSLOpts | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                http_client:request(Method, Url ++ URN,
+                    [{<<"content-type">>, <<"application/json">>} | Headers],
+                    Body, [SSLOpts | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {"macaroon", binary_to_list(Macaroon)},
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
+                AuthHdr =
+                    http_client:request(Method, Url ++ URN, [
+                        {<<"content-type">>, <<"application/json">>},
+                        {<<"macaroon">>, Macaroon} | Headers
+                    ], Body, [SSLOpts | Options])
         end
     ).
 

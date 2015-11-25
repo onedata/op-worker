@@ -189,7 +189,8 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 gen_filename() ->
-    list_to_binary(ibrowse_lib:url_encode("helpers_test_" ++ binary_to_list(base64:encode(crypto:rand_bytes(20))))).
+    list_to_binary(http_utils:url_encode(<<"helpers_test_",
+    (base64:encode(crypto:rand_bytes(20)))/binary>>)).
 
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, [?path(Config, "")]),
