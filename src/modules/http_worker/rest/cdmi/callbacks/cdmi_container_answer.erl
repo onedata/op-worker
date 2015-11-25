@@ -75,14 +75,16 @@ prepare([<<"childrenrange">> | Tail], #{options := Opts, path := Path, auth := A
                 <<(integer_to_binary(From))/binary, "-", (integer_to_binary(To))/binary>>
         end,
     [{<<"childrenrange">>, BinaryRange} | prepare(Tail, State)];
-prepare([{<<"children">>, From, To} | Tail], #{path := Path, auth := Auth} = State) ->
+prepare([{<<"children">>, From, To} | Tail], #{path := Path, auth := Auth,
+        identity := Identity} = State) ->
     {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {path, Path}),
     {From1, To1} = normalize_childrenrange(From, To, ChildNum),
     {ok, List} = onedata_file_api:ls(Auth, {path, Path}, To1 - From1 + 1, From1),
     Children = lists:map(
         fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Identity) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
-prepare([<<"children">> | Tail], #{path := Path, auth := Auth} = State) ->
+prepare([<<"children">> | Tail], #{path := Path, auth := Auth,
+        identity := Identity} = State) ->
     {ok, List} = onedata_file_api:ls(Auth, {path, Path}, ?infinity, 0),
     Children = lists:map(
         fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Identity) end, List),
@@ -115,8 +117,8 @@ normalize_childrenrange(From, To, ChildNum) ->
 %% (for regular files returns path ending with slash)
 %% @end
 %%--------------------------------------------------------------------
--spec distinguish_files(Uuid :: file_uuid(), Name :: file_name() ,
-        Identity :: onedata_auth_api:identity()) -> file_name().
+-spec distinguish_files(Uuid :: binary(), Name :: binary() ,
+        Identity :: onedata_auth_api:identity()) -> binary().
 distinguish_files(Uuid, Name, Identity) ->
     case onedata_file_api:stat(Identity, {uuid, Uuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->

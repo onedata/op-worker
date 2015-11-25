@@ -36,7 +36,7 @@
 all() ->
     [
         list_dir_test,
-%%         get_file_test,
+        get_file_test,
 %%         TODO turn on this test after fixing:
 %%         TODO onedata_file_api:read/3 -> {error,{badmatch, {error, {not_found, event_manager}}}}
         create_file_test, update_file_test, delete_file_test,
@@ -68,7 +68,10 @@ all() ->
 % Tests cdmi container GET request (also refered as LIST)
 list_dir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    create_dir(Config, ?TEST_DIR_NAME),
+    create_dir(Config, ?TEST_DIR_NAME ++ "/"),
+    ?assertEqual(true, object_exists(Config, ?TEST_DIR_NAME ++ "/")),
+    create_file(Config, string:join([?TEST_DIR_NAME, ?TEST_FILE_NAME],"/")),
+    ?assertEqual(true, object_exists(Config, ?TEST_FILE_NAME)),
 
     %%------ list basic dir --------
     RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
@@ -522,8 +525,11 @@ init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     initializer:setup_storage(ConfigWithNodes).
 end_per_suite(Config) ->
+    tracer:start([]),
+    tracer:trace_calls(test_utils),
     initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    test_node_starter:clean_environment(Config),
+    tracer:stop().
 
 init_per_testcase(choose_adequate_handler, Config) ->
     Workers = ?config(op_worker_nodes, Config),
