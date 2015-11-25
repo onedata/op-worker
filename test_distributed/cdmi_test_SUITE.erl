@@ -66,7 +66,7 @@ list_basic_dir_test(Config) ->
     % then
     ?assertEqual(200, Code),
     ContentType = proplists:get_value(<<"content-type">>, ResponseHeaders),
-    {struct, CdmiResponse} = mochijson2:decode(Response),
+    CdmiResponse = json_utils:decode(Response),
     ObjectType = proplists:get_value(<<"objectType">>, CdmiResponse),
     ObjectName = proplists:get_value(<<"objectName">>, CdmiResponse),
     CompletionStatus = proplists:get_value(<<"completionStatus">>, CdmiResponse),
@@ -89,7 +89,7 @@ list_root_dir_test(Config) ->
 
     % then
     ?assertEqual(200, Code),
-    {struct, CdmiResponse} = mochijson2:decode(Response),
+    CdmiResponse = json_utils:decode(Response),
     ObjectName = proplists:get_value(<<"objectName">>, CdmiResponse),
     Children = proplists:get_value(<<"children">>, CdmiResponse),
     ?assertEqual(<<"/">>, ObjectName),
@@ -116,7 +116,7 @@ get_selective_params_of_dir_test(Config) ->
 
     % then
     ?assertEqual(200, Code),
-    {struct, CdmiResponse4} = mochijson2:decode(Response),
+    CdmiResponse4 = json_utils:decode(Response),
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>, CdmiResponse4)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>, CdmiResponse4)),
     ?assertEqual(2, length(CdmiResponse4)).
