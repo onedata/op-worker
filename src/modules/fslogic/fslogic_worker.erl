@@ -18,6 +18,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/event_manager/events.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -90,6 +91,8 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
+handle({proxyio_request, SessId, ProxyIORequest}) ->
+    handle_proxyio_request({session_id, SessId}, ProxyIORequest);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -155,7 +158,8 @@ report_error(FuseRequest, Error, LogLevel) ->
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
 %%         info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
-        warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
+        warning ->
+            ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
         error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,
     #fuse_response{status = Status}.
@@ -224,3 +228,16 @@ handle_events(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = Fi
         {error, Reason} ->
             {error, Reason}
     end.
+
+handle_proxyio_request({session_id, SessId}, Request) ->
+    Ctx = fslogic_context:new(SessId),
+    handle_proxyio_request(Ctx, Request);
+handle_proxyio_request(Ctx, #proxyio_request{storage_id = SID, file_id = FID,
+    proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
+    fslogic_proxyio:write(Ctx, SID, FID, Offset, Data);
+handle_proxyio_request(Ctx, #proxyio_request{storage_id = SID, file_id = FID,
+    proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
+    fslogic_proxyio:read(Ctx, SID, FID, Offset, Size);
+handle_proxyio_request(_Ctx, Req) ->
+    ?log_bad_request(Req),
+    erlang:error({invalid_request, Req}).

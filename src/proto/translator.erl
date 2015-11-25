@@ -20,6 +20,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -35,7 +36,7 @@
 %% traslate protobuf record to internal record
 %% @end
 %%--------------------------------------------------------------------
--spec translate_from_protobuf(tuple() | undefined) -> tuple() | undefined.
+-spec translate_from_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
 translate_from_protobuf(#'Event'{event = {_, Record}}) ->
@@ -98,6 +99,12 @@ translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
 translate_from_protobuf(#'Close'{uuid = UUID}) ->
     #close{uuid = UUID};
+translate_from_protobuf(#'ProxyIORequest'{storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
+    #proxyio_request{storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
+    #remote_read{offset = Offset, size = Size};
+translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
+    #remote_write{offset = Offset, data = Data};
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -106,7 +113,7 @@ translate_from_protobuf(undefined) ->
 %% translate internal record to protobuf record
 %% @end
 %%--------------------------------------------------------------------
--spec translate_to_protobuf(tuple() | undefined) -> tuple() | undefined.
+-spec translate_to_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
 translate_to_protobuf(#event_subscription_cancellation{id = Id}) ->
@@ -201,6 +208,16 @@ translate_to_protobuf(#file_location{} = Record) ->
                       }};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
+translate_to_protobuf(#proxyio_response{status = Status, proxyio_response = ProxyIOResponse}) ->
+    {status, StatProto} = translate_to_protobuf(Status),
+    {proxyio_response, #'ProxyIOResponse'{
+        status = StatProto,
+        proxyio_response = translate_to_protobuf(ProxyIOResponse)
+    }};
+translate_to_protobuf(#remote_data{data = Data}) ->
+    {remote_data, #'RemoteData'{data = Data}};
+translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
+    {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 translate_to_protobuf(undefined) ->
     undefined.
 
