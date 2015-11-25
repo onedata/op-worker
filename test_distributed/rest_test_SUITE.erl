@@ -105,7 +105,7 @@ custom_error_when_handler_throws_error(Config) ->
 
     % then
     ?assertEqual(400, Status),
-    ?assertEqual("{\"error\":\"badrequest\"}", Body).
+    ?assertEqual(<<"{\"error\":\"badrequest\"}">>, Body).
 
 
 %%%===================================================================

@@ -40,7 +40,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "global_registry_domain": "gr"
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
                 },
                 "worker2": {
@@ -54,7 +55,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "global_registry_domain": "gr"
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
                 }
             }
