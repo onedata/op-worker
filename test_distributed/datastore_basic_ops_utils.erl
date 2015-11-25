@@ -18,7 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 

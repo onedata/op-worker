@@ -15,7 +15,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
--include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 

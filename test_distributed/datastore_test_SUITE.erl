@@ -17,8 +17,8 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("annotations/include/annotations.hrl").
--include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore.hrl").
--include_lib("cluster_worker/include/cluster/worker/modules/datastore/datastore_common_internal.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 -define(TIMEOUT, timer:seconds(60)).
 -define(call_store(N, F, A), ?call(N, datastore, F, A)).
