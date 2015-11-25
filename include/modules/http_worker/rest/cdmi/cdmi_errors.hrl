@@ -23,5 +23,6 @@
   {400, [{<<"error_duplicated_body_fields">>, <<"Request body contains duplicates.">>}]}).
 -define(invalid_childrenrange,
   {400, [{<<"error_invalid_childrenrange">>, <<"Requested childrenrange is invalid.">>}]}).
-
+-define(invalid_range,
+  {400, [{<<"error_invalid_range">>, <<"Given range is invalid.">>}]}).
 -endif.

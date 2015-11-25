@@ -76,7 +76,7 @@ is_authorized(Req, State) ->
 %%--------------------------------------------------------------------
 -spec resource_exists(req(), #{}) -> {boolean(), req(), #{}}.
 resource_exists(Req, State) ->
-    cdmi_existence_checker:resource_exists(Req, State).
+    cdmi_existence_checker:container_resource_exists(Req, State).
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
@@ -165,8 +165,8 @@ put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs,
 %% @end
 %%--------------------------------------------------------------------
 -spec put_binary(req(), #{}) -> {term(), req(), #{}}.
-put_binary(Req, State = #{identity := Identity, path := Path}) ->
-    ok = onedata_file_api:mkdir(Identity, Path),
+put_binary(Req, State = #{auth := Auth, path := Path}) ->
+    ok = onedata_file_api:mkdir(Auth, Path),
     {true, Req, State}.
 
 %%%===================================================================

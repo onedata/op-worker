@@ -26,15 +26,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% This function authorizes user and inserts 'identity' field to
+%% This function authorizes user and inserts 'auth' field to
 %% request's State
 %% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
 is_authorized(Req, State) ->
     case authenticate(Req) of
-        {{ok, Iden}, NewReq} ->
-            {true, NewReq, State#{identity => Iden}};
+        {{ok, Auth}, NewReq} ->
+            {true, NewReq, State#{auth => Auth}};
         {{error, {not_found, _}}, NewReq} ->
             GrUrl = gr_plugin:get_gr_url(),
             ProviderId = oneprovider:get_provider_id(),
@@ -65,18 +65,13 @@ is_authorized(Req, State) ->
 %% Authenticates user basing on request headers
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Req :: req()) -> {{ok, #identity{}} | {error, term()}, req()}.
+-spec authenticate(Req :: req()) -> {{ok, session:id()} | {error, term()}, req()}.
 authenticate(Req) ->
-    case cowboy_req:header(<<"X-Auth-Token">>, Req) of
-        {undefined, NewReq} ->
-            case cowboy_req:header(<<"x-auth-token">>, NewReq) of
-                {undefined, NewReq2} ->
-                    authenticate_using_cert(NewReq2);
-                {Token, NewReq2}->
-                    authenticate_using_token(NewReq2, Token)
-            end;
-        {Token, NewReq} ->
-            authenticate_using_token(NewReq, Token)
+    case cowboy_req:header(<<"x-auth-token">>, Req) of
+        {undefined, Req2} ->
+            authenticate_using_cert(Req2);
+        {Token, Req2}->
+            authenticate_using_token(Req2, Token)
     end.
 
 %%--------------------------------------------------------------------
@@ -84,11 +79,15 @@ authenticate(Req) ->
 %% Athenticates user basing on provided token
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_token(req(), Token :: binary()) -> {{ok, #identity{}} | {error, term()}, req()}.
+-spec authenticate_using_token(req(), Token :: binary()) -> {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
-    case identity:get_or_fetch(#auth{macaroon = Token}) of
+    Auth = #auth{macaroon = Token},
+    case identity:get_or_fetch(Auth) of
         {ok, #document{value = Iden}} ->
-            {{ok, Iden}, Req};
+            {ok, _} = session_manager:reuse_or_create_rest_session(Iden),
+            SessionId = session:get_rest_session_id(Iden),
+            ok = session_manager:update_session_auth(SessionId, Auth),
+            {{ok, SessionId}, Req};
         Error ->
             {Error, Req}
     end.
@@ -98,14 +97,16 @@ authenticate_using_token(Req, Token) ->
 %% Athenticates user basing on onedata-internal certificate headers
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate_using_cert(req()) -> {{ok, #identity{}} | {error, term()}, req()}.
+-spec authenticate_using_cert(req()) -> {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_cert(Req) ->
     Socket = cowboy_req:get(socket, Req),
     {ok, Der} = ssl2:peercert(Socket),
     Certificate = public_key:pkix_decode_cert(Der, otp),
     case identity:get_or_fetch(Certificate) of
         {ok, #document{value = Iden}} ->
-            {{ok, Iden}, Req};
+            {ok, _} = session_manager:reuse_or_create_rest_session(Iden),
+            SessionId = session:get_rest_session_id(Iden),
+            {{ok, SessionId}, Req};
         Error ->
             {Error, Req}
     end.

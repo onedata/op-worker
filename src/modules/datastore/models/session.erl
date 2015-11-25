@@ -23,7 +23,8 @@
 
 %% API
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
-    get_sequencer_manager/1, get_communicator/1, get_auth/1]).
+    get_sequencer_manager/1, get_communicator/1, get_auth/1,
+    get_rest_session_id/1]).
 
 -type id() :: binary() | dummy_session_id().
 -type dummy_session_id() :: #identity{}.
@@ -219,5 +220,12 @@ get_auth(SessId) ->
             {error, Reason}
     end.
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns rest session id for given identity.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_rest_session_id(session:identity()) -> binary().
+get_rest_session_id(#identity{user_id = Uid}) ->
+    <<Uid/binary, "_rest_session">>.
 
