@@ -8,11 +8,14 @@ Brings up a set of oneprovider worker nodes. They can create separate clusters.
 import copy
 import json
 import os
+import subprocess
+import sys
 
 from . import common, docker, riak, couchbase, dns, globalregistry, provider_ccm
 
 PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
-
+# mounting point for op-worker-node docker
+DOCKER_BINDIR_PATH = '/root/build'
 
 def provider_domain(op_instance, uid):
     """Formats domain for a provider."""
@@ -80,7 +83,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         uid=os.geteuid(),
         gid=os.getegid())
 
-    volumes = [(bindir, '/root/build', 'ro')]
+    volumes = [(bindir, DOCKER_BINDIR_PATH, 'ro')]
     volumes += [common.volume_for_storage(s) for s in config['os_config']['storages']]
 
     if logdir:
@@ -94,7 +97,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         detach=True,
         interactive=True,
         tty=True,
-        workdir='/root/build',
+        workdir=DOCKER_BINDIR_PATH,
         volumes=volumes,
         dns_list=dns_servers,
         command=command)
@@ -224,6 +227,32 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
         }
         common.merge(output, domains)
 
+        # create storages
+        create_storages(config['os_configs'][os_config]['storages'],
+                        output['op_worker_nodes'],
+                        config['provider_domains'][op_instance]['op_worker'],
+                        bindir)
+
     # Make sure domains are added to the dns server.
     dns.maybe_restart_with_configuration(dns_server, uid, output)
     return output
+
+def create_storages(storages, op_nodes, op_config, bindir):
+    # copy escript to docker host
+    script_name = 'create_storage.escript'
+    pwd = common.get_script_dir()
+    command = ['cp', os.path.join(pwd, script_name), os.path.join(bindir, script_name)]
+    subprocess.check_call(command)
+    # execute escript
+    for node in op_nodes:
+        container = node.split("@")[1]
+        worker_name = container.split(".")[0]
+        cookie = op_config[worker_name]['vm.args']['setcookie']
+        script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
+        for st_path in storages:
+            st_name = st_path
+            command = ['escript', script_path, cookie, node, st_name, st_path]
+            assert 0 is docker.exec_(container, command, tty=True, stdout=sys.stdout, stderr=sys.stderr)
+    # clean-up
+    command = ['rm', os.path.join(bindir, script_name)]
+    subprocess.check_call(command)
