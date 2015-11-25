@@ -129,7 +129,8 @@ get_cdmi(Req, #{options := Options} = State) ->
 -spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
 put_cdmi(_, #{cdmi_version := undefined}) ->
     throw(?no_version_given);
-put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs, options := Opts}) ->
+put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs,
+         options := Opts}) ->
     {ok, Body, Req1} = parse_body(Req),
 
     % create dir using mkdir/cp/mv
@@ -151,13 +152,20 @@ put_cdmi(Req, State = #{identity := Identity, path := Path, attributes := Attrs,
     RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
     case OperationPerformed of
         none ->
-            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
-            ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
+            URIMetadataNames =
+                [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
+            ok = cdmi_metadata:update_user_metadata(
+                    Path, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
         _  ->
             {ok, NewAttrs} = onedata_file_api:stat(Identity, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
-            Answer = cdmi_container_answer:prepare(?default_get_dir_opts, State#{attributes => NewAttrs, opts => ?default_get_dir_opts}),
+            Answer =
+                cdmi_container_answer:prepare(
+                    ?default_get_dir_opts,
+                    State#{attributes => NewAttrs,
+                    opts => ?default_get_dir_opts}
+                ),
             Response = json:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}

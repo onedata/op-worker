@@ -82,16 +82,12 @@ prepare([{<<"children">>, From, To} | Tail], #{path := Path, identity := Identit
     {From1, To1} = normalize_childrenrange(From, To, ChildNum),
     {ok, List} = onedata_file_api:ls(Identity, {path, Path}, To1 - From1 + 1, From1),
     Children = lists:map(
-        fun({_Uuid, Name}) -> %todo distinguish dirs and files
-            utils:ensure_path_ends_with_slash(Name)
-        end, List),
+        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Identity) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([<<"children">> | Tail], #{path := Path, identity := Identity} = State) ->
     {ok, List} = onedata_file_api:ls(Identity, {path, Path}, ?infinity, 0),
     Children = lists:map(
-        fun({_Uuid, Name}) -> %todo distinguish dirs and files
-            utils:ensure_path_ends_with_slash(Name)
-        end, List),
+        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Identity) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([_Other | Tail], State) ->
     prepare(Tail, State).
@@ -101,7 +97,10 @@ prepare([_Other | Tail], State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Checks if given childrange is correct according to child number. Tries to correct the result
+%% @doc
+%% Checks if given childrange is correct according to child number.
+%% Tries to correct the result
+%% @end
 %%--------------------------------------------------------------------
 -spec normalize_childrenrange(From :: integer(), To :: integer(), ChildNum :: integer()) ->
     {NewFrom :: integer(), NewTo :: integer()} | no_return().
@@ -111,3 +110,18 @@ normalize_childrenrange(_From, To, ChildNum) when To >= ChildNum ->
     throw(?invalid_childrenrange);
 normalize_childrenrange(From, To, ChildNum) ->
     {From, min(ChildNum - 1, To)}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Distinguishes regular files from directories
+%% (for regular files returns path ending with slash)
+%% @end
+%%--------------------------------------------------------------------
+-spec distinguish_files(Uuid :: file_uuid(), Name :: file_name() ,
+        Identity :: onedata_auth_api:identity()) -> file_name().
+distinguish_files(Uuid, Name, Identity) ->
+    case onedata_file_api:stat(Identity, {uuid, Uuid}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            utils:ensure_path_ends_with_slash(Name);
+        {ok, _} -> Name
+    end.

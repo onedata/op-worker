@@ -438,5 +438,8 @@ update_encoding(Filepath, Encoding) ->
 -spec update_completion_status(string(), binary()) -> ok | no_return().
 update_completion_status(_Filepath, undefined) -> ok;
 update_completion_status(Filepath, CompletionStatus)
-    when CompletionStatus =:= <<"Complete">> orelse CompletionStatus =:= <<"Processing">> orelse CompletionStatus =:= <<"Error">> ->
-    ok = onedata_file_api:set_xattr(Filepath, ?COMPLETION_STATUS_XATTR_KEY, CompletionStatus).
+    when CompletionStatus =:= <<"Complete">>
+    orelse CompletionStatus =:= <<"Processing">>
+    orelse CompletionStatus =:= <<"Error">> ->
+        ok = onedata_file_api:set_xattr(
+            Filepath, ?COMPLETION_STATUS_XATTR_KEY, CompletionStatus).
