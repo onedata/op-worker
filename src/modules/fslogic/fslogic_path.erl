@@ -17,13 +17,24 @@
 
 %% API
 -export([verify_file_path/1, get_canonical_file_entry/2]).
--export([basename/1, split/1, join/1, is_space_dir/1]).
+-export([basename/1, split/1, join/1, is_space_dir/1, basename_and_parent/1]).
 -export([ensure_path_begins_with_slash/1]).
--export([spaces_uuid/1]).
+-export([spaces_uuid/1, to_uuid/2, dirname/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Returns path of parent directory for given path.
+%% @end
+%%--------------------------------------------------------------------
+-spec dirname(TokensOrPath :: [binary()] | file_meta:path()) -> file_meta:path().
+dirname(Tokens) when is_list(Tokens) ->
+    fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1));
+dirname(Path) when is_binary(Path) ->
+    dirname(split(Path)).
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns UUID of user's main 'spaces' directory.
@@ -131,17 +142,31 @@ verify_file_path(FileName) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Gives file basename from given path
+%% @doc Gives file's name based on its path.
+%% @end
+%%--------------------------------------------------------------------
 -spec basename(Path :: file_meta:path()) -> file_meta:path().
-%% ==================================================================
 basename(Path) ->
     case lists:reverse(split(Path)) of
         [Leaf | _] -> Leaf;
-        _ -> [<<?DIRECTORY_SEPARATOR>>]
+        _ -> <<?DIRECTORY_SEPARATOR>>
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Returns file's name and its parent's path.
+%% @end
+%%--------------------------------------------------------------------
+-spec basename_and_parent(Path :: file_meta:path()) -> {Name :: file_meta:name(), Parent :: file_meta:path()}.
+basename_and_parent(Path) ->
+    case lists:reverse(split(Path)) of
+        [Leaf | Tokens] ->
+            {Leaf, join([<<?DIRECTORY_SEPARATOR>> | lists:reverse(Tokens)])};
+        _ -> {<<"">>, <<?DIRECTORY_SEPARATOR>>}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Returns true when Path points to space directory (or space root directory)
+%% @end
 %%--------------------------------------------------------------------
 -spec is_space_dir(Path :: file_meta:path()) -> boolean().
 is_space_dir(Path) ->
@@ -160,3 +185,16 @@ is_space_dir(Path) ->
 ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) ->
     Path;
 ensure_path_begins_with_slash(Path) -> <<?DIRECTORY_SEPARATOR, Path/binary>>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given file path to UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_uuid(fslogic_worker:ctx(), file_meta:path()) -> file_meta:uuid().
+to_uuid(CTX, Path) ->
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    {ok, #document{key = UUID}} = file_meta:get(Entry),
+    UUID.

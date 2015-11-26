@@ -35,14 +35,15 @@ all() -> [nagios_test].
 -define(HEALTHCHECK_RETRY_PERIOD, 500).
 
 %%%===================================================================
-%%% Test function
+%%% Test functions
 %%%===================================================================
+
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
-    {ok, "200", _, XMLString} = rpc:call(Worker1, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]),
+    {ok, 200, _, XMLString} = rpc:call(Worker1, http_client, get, [?HEALTHCHECK_PATH, [], <<>>, [insecure]]),
 
-    {Xml, _} = xmerl_scan:string(XMLString),
+    {Xml, _} = xmerl_scan:string(str_utils:to_list(XMLString)),
 
     [MainStatus] = [X#xmlAttribute.value || X <- Xml#xmlElement.attributes, X#xmlAttribute.name == status],
     % Whole app status might become out_of_sync in some marginal cases when dns or dispatcher does
@@ -80,10 +81,6 @@ nagios_test(Config) ->
         end, NodeStatuses).
 
 %%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 init_per_suite(Config) ->
@@ -91,3 +88,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

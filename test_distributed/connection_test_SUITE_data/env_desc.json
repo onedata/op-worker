@@ -36,7 +36,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "protocol_handler_bind_addr": "all"
+                        "protocol_handler_bind_addr": "all",
+                        "verify_gr_cert": false
                     }
                 },
                 "worker2": {
@@ -50,7 +51,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "protocol_handler_bind_addr": "all"
+                        "protocol_handler_bind_addr": "all",
+                        "verify_gr_cert": false
                     }
                 }
             }

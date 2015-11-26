@@ -31,19 +31,22 @@ gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
 gen_status_message({not_found, file_meta}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
+gen_status_message(already_exists) ->
+    #status{code = ?EEXIST, description = describe_error(?EEXIST)};
 gen_status_message(Error) when is_atom(Error) ->
     case lists:member(Error, ?ERROR_CODES) of
         true -> #status{code = Error};
-        false -> #status{code = ?EREMOTEIO, description = describe_error(Error)}
+        false -> #status{code = ?EAGAIN, description = describe_error(Error)}
     end;
 gen_status_message({ErrorCode, ErrorDescription}) when
     is_atom(ErrorCode) and is_binary(ErrorDescription) ->
     case lists:member(ErrorCode, ?ERROR_CODES) of
         true -> #status{code = ErrorCode, description = ErrorDescription};
-        false -> #status{code = ?EREMOTEIO, description = ErrorDescription}
+        false -> #status{code = ?EAGAIN, description = ErrorDescription}
     end;
-gen_status_message(_) ->
-    #status{code = ?EREMOTEIO, description = <<"An unknown error occured.">>}.
+gen_status_message(Reason) ->
+    ?error("Unknown error occured: ~p", [Reason]),
+    #status{code = ?EAGAIN, description = <<"An unknown error occured.">>}.
 
 %%--------------------------------------------------------------------
 %% @doc Translates POSIX error code to internal error code.
@@ -70,7 +73,7 @@ posix_to_internal(39) ->
 posix_to_internal(95) ->
     ?ENOTSUP;
 posix_to_internal(_) ->
-    ?EREMOTEIO.
+    ?EAGAIN.
 
 %%--------------------------------------------------------------------
 %% @doc Translates internal error code to POSIX error code.

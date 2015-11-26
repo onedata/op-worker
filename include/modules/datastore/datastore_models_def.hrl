@@ -32,36 +32,40 @@
     onedata_user,
     identity,
     file_meta,
-    global_cache_controller,
-    local_cache_controller
+    cache_controller,
+    task_pool,
+    storage,
+    file_location,
+    file_watcher
 ]).
 
 %% List of all global caches
 -define(GLOBAL_CACHES, [
     some_record,
-    file_meta
+    file_meta,
+    storage,
+    file_location,
+    file_watcher
 ]).
 
 %% List of all local caches
 -define(LOCAL_CACHES, [
 ]).
 
-%% Model that controls utilization of global cache
--record(global_cache_controller, {
-    timestamp :: tuple(),
+%% Model that controls utilization of cache
+-record(cache_controller, {
+    timestamp = {0,0,0} :: tuple(),
     action = non :: atom(),
-    last_user = non :: pid() | non,
-    last_action_time :: tuple(),
+    last_user = non :: string() | non,
+    last_action_time = {0,0,0} :: tuple(),
     deleted_links = [] :: list()
 }).
 
-%% Model that controls utilization of local cache
--record(local_cache_controller, {
-    timestamp :: tuple(),
-    action = non :: atom(),
-    last_user = non :: pid() | non,
-    last_action_time :: tuple(),
-    deleted_links = [] :: list()
+%% sample model with example fields
+-record(task_pool, {
+    task :: task_manager:task(),
+    owner :: pid(),
+    node :: node()
 }).
 
 %% sample model with example fields
@@ -115,7 +119,37 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
+    version = 1,    %% Snaphot version
     is_scope = false :: boolean()
 }).
 
+
+%% Helper name and its arguments
+-record(helper_init, {
+    name :: helpers:name(),
+    args :: helpers:args()
+}).
+
+%% Model for storing storage information
+-record(storage, {
+    name :: storage:name(),
+    helpers :: [#helper_init{}]
+}).
+
+
+%% Model for storing file's location data
+-record(file_location, {
+    uuid :: file_meta:uuid(),
+    provider_id :: oneprovider:id(),
+    storage_id :: storage:id(),
+    file_id :: helpers:file(),
+    blocks = [] :: [fslogic_blocks:block()],
+    size = 0 :: non_neg_integer() | undefined
+}).
+
+%% Model for tracking open files and watched attributes
+-record(file_watcher, {
+    open_sessions = [] :: [session:id()], %% Sessions that opened the file
+    attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
+}).
 -endif.

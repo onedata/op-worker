@@ -169,10 +169,7 @@ start_rest_listener() ->
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
 
     RestDispatch = [
-        {'_', [
-            {"/rest/:version/[...]", rest_handler, []},
-            {"/cdmi/[...]", cdmi_handler, []}
-        ]}
+        {'_', rest_router:top_level_routing()}
     ],
 
     % Start the listener for REST handler

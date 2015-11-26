@@ -44,8 +44,8 @@
 all() -> [].
 
 %%%===================================================================
-%%% Test function
-%% ====================================================================
+%%% Test functions
+%%%===================================================================
 
 -performance(?create_delete_test_def).
 create_delete_db_test(Config) ->
@@ -155,16 +155,12 @@ get_local_cache_test(Config) ->
 exists_local_cache_test(Config) ->
     datastore_basic_ops_utils:exists_test(Config, locally_cached).
 
-%% ====================================================================
-
-
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [random]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

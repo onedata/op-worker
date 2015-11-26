@@ -18,11 +18,21 @@
 
 %% API
 -export([gen_global_session_id/2, read_global_session_id/1, is_global_session_id/1]).
--export([get_user_id/1]).
+-export([get_user_id/1, new/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%%  Returns newly created fslogic CTX for given session ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(session:id()) -> fslogic_worker:ctx() | no_return().
+new(SessId) ->
+    {ok, #document{value = Session}} = session:get(SessId),
+    #fslogic_ctx{session = Session, session_id = SessId}.
 
 
 %% gen_global_session_id/1
@@ -34,8 +44,8 @@
 gen_global_session_id(_, undefined) ->
     undefined;
 gen_global_session_id(ProviderId, SessionId) ->
-    ProviderId1 = utils:ensure_binary(ProviderId),
-    SessionId1 = utils:ensure_binary(SessionId),
+    ProviderId1 = str_utils:to_binary(ProviderId),
+    SessionId1 = str_utils:to_binary(SessionId),
     <<ProviderId1/binary, "::", SessionId1/binary>>.
 
 
@@ -46,7 +56,7 @@ gen_global_session_id(ProviderId, SessionId) ->
 %%--------------------------------------------------------------------
 -spec read_global_session_id(GlobalSessionId :: iolist()) -> {ProviderId :: binary(), SessionId :: binary()} | no_return().
 read_global_session_id(GlobalSessionId) ->
-    GlobalSessionId1 = utils:ensure_binary(GlobalSessionId),
+    GlobalSessionId1 = str_utils:to_binary(GlobalSessionId),
     [ProviderId, SessionId] = binary:split(GlobalSessionId1, <<"::">>),
     {ProviderId, SessionId}.
 
@@ -57,7 +67,7 @@ read_global_session_id(GlobalSessionId) ->
 %%-------------------------------------------------------------------- 
 -spec is_global_session_id(GlobalSessionId :: iolist()) -> boolean().
 is_global_session_id(GlobalSessionId) ->
-    GlobalSessionId1 = utils:ensure_binary(GlobalSessionId),
+    GlobalSessionId1 = str_utils:to_binary(GlobalSessionId),
     length(binary:split(GlobalSessionId1, <<"::">>)) =:= 2.
 
 %%--------------------------------------------------------------------

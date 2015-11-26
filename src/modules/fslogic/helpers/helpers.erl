@@ -12,9 +12,13 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/helpers.hrl").
+-include("modules/datastore/datastore.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+
 
 %% API
--export([new_handle/2]).
+-export([new_handle/1, new_handle/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
 -export([chown/4, truncate/3, open/3, read/4, write/4, release/2, flush/2, fsync/3]).
 
@@ -22,21 +26,38 @@
 -record(helper_handle, {instance, ctx, timeout = timer:seconds(30)}).
 
 -type file() :: binary().
+-type open_mode() :: write | read | rdwr.
 -type error_code() :: atom().
 -type handle() :: #helper_handle{}.
+-type name() :: binary().
+-type args() :: #{binary() => binary()}.
 
--export_type([file/0, error_code/0, handle/0]).
+-export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+%% new_handle/1
+%%--------------------------------------------------------------------
+%% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
+%%      @todo: maybe cache new_helper_obj result
+%% @end
+%%--------------------------------------------------------------------
+-spec new_handle(#helper_init{}) -> handle().
+new_handle(#helper_init{name = Name, args = Args}) ->
+    new_handle(Name, Args).
+
+
 %%--------------------------------------------------------------------
 %% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()]) -> handle().
+-spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()] | args()) -> handle().
+new_handle(HelperName, HelperArgs) when is_map(HelperArgs) ->
+    new_handle(HelperName, maps:values(HelperArgs));
 new_handle(HelperName, HelperArgs) ->
+    ?debug("helpers:new_handle ~p ~p", [HelperName, HelperArgs]),
     {ok, Instance} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
     {ok, CTX} = helpers_nif:new_helper_ctx(),
     #helper_handle{instance = Instance, ctx = CTX}.
@@ -154,14 +175,14 @@ truncate(#helper_handle{} = HelperHandle, File, Size) ->
 %%      First argument shall be #helper_handle{} from new_handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec open(handle(), File :: file(), OpenMode :: w | r | rw) -> {ok, FD :: non_neg_integer()} | {error, term()}.
-open(#helper_handle{} = HelperHandle, File, w) ->
+-spec open(handle(), File :: file(), OpenMode :: open_mode()) -> {ok, FD :: non_neg_integer()} | {error, term()}.
+open(#helper_handle{} = HelperHandle, File, write) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_WRONLY']),
     apply_helper_nif(HelperHandle, open, [File]);
-open(#helper_handle{} = HelperHandle, File, r) ->
+open(#helper_handle{} = HelperHandle, File, read) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDONLY']),
     apply_helper_nif(HelperHandle, open, [File]);
-open(#helper_handle{} = HelperHandle, File, rw) ->
+open(#helper_handle{} = HelperHandle, File, rdwr) ->
     helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDWR']),
     apply_helper_nif(HelperHandle, open, [File]).
 
@@ -171,7 +192,7 @@ open(#helper_handle{} = HelperHandle, File, rw) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read(handle(), File :: file(),  Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-    {ok, Data :: binary()} | {error, term()}.
+                  {ok, Data :: binary()} | {error, term()}.
 read(#helper_handle{} = HelperHandle, File, Offset, Size) ->
     apply_helper_nif(HelperHandle, read, [File, Offset, Size]).
 
@@ -181,7 +202,7 @@ read(#helper_handle{} = HelperHandle, File, Offset, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(handle(), File :: file(), Offset :: non_neg_integer(), Data :: binary()) ->
-    {ok, Size :: non_neg_integer()} | {error, term()}.
+                   {ok, Size :: non_neg_integer()} | {error, term()}.
 write(#helper_handle{} = HelperHandle, File, Offset, Data) ->
     apply_helper_nif(HelperHandle, write, [File, Offset, Data]).
 
@@ -233,7 +254,7 @@ apply_helper_nif(#helper_handle{instance = Instance, ctx = CTX, timeout = Timeou
         {Guard, Result} ->
             Result
     after Timeout ->
-        {error, nif_timeout}
+            {error, nif_timeout}
     end.
 
 

@@ -37,7 +37,7 @@ all() ->
 -define(REPEATS, 100).
 
 %%%===================================================================
-%%% Tests
+%%% Test functions
 %%%===================================================================
 
 -performance([
@@ -174,14 +174,14 @@ basic_operations_test_core(Config) ->
     {{A6, U6}, GetLevel2} = ?call_with_time(Worker2, get, [{path, <<"/spaces/Space 1">>}]),
     {A7, U7} = ?call(Worker1, get, [{path, <<"/spaces/Space 1/dir1">>}]),
     {A8, U8} = ?call(Worker2, get, [{path, <<"/spaces/Space 1/dir1/file1">>}]),
-    ?assertMatch({ok, #document{value = #file_meta{name = <<"">>}}},        {A14, U14}),
-    ?assertMatch({ok, #document{value = #file_meta{name = <<"spaces">>}}},  {A5, U5}),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"">>}}}, {A14, U14}),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"spaces">>}}}, {A5, U5}),
     ?assertMatch({ok, #document{value = #file_meta{name = <<"Space 1">>}}}, {A6, U6}),
-    ?assertMatch({ok, #document{value = #file_meta{name = <<"dir1">>}}},    {A7, U7}),
-    ?assertMatch({ok, #document{value = #file_meta{name = <<"file1">>}}},   {A8, U8}),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"dir1">>}}}, {A7, U7}),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"file1">>}}}, {A8, U8}),
 
     {{AL20, UL20}, GetLevel20} = ?call_with_time(Worker1, get, [{path, Level20Path}]),
-    ?assertMatch({ok, #document{value = #file_meta{name = <<"1">>}}},   {AL20, UL20}),
+    ?assertMatch({ok, #document{value = #file_meta{name = <<"1">>}}}, {AL20, UL20}),
     #document{key = Level20Key} = UL20,
 
 
@@ -205,19 +205,19 @@ basic_operations_test_core(Config) ->
     {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, gen_path, [UL20]),
     ?assertMatch({ok, Level20Path}, {AL20_2, UL20_2}),
 
-    {{A9, U9}, GetScopeLevel0} =   ?call_with_time(Worker1, get_scope, [U14]),
+    {{A9, U9}, GetScopeLevel0} = ?call_with_time(Worker1, get_scope, [U14]),
     {{A10, U10}, GetScopeLevel1} = ?call_with_time(Worker1, get_scope, [U5]),
     {{A11, U11}, GetScopeLevel2} = ?call_with_time(Worker2, get_scope, [U6]),
     {A12, U12} = ?call(Worker1, get_scope, [U7]),
     {A13, U13} = ?call(Worker2, get_scope, [U8]),
-    ?assertMatch({ok, #document{key = <<"">>}},         {A9, U9}),
-    ?assertMatch({ok, #document{key = U1}},             {A10, U10}),
-    ?assertMatch({ok, #document{key = U2}},             {A11, U11}),
-    ?assertMatch({ok, #document{key = U2}},             {A12, U12}),
-    ?assertMatch({ok, #document{key = U2}},             {A13, U13}),
+    ?assertMatch({ok, #document{key = <<"">>}}, {A9, U9}),
+    ?assertMatch({ok, #document{key = U1}}, {A10, U10}),
+    ?assertMatch({ok, #document{key = U2}}, {A11, U11}),
+    ?assertMatch({ok, #document{key = U2}}, {A12, U12}),
+    ?assertMatch({ok, #document{key = U2}}, {A13, U13}),
 
     {{AL20_3, UL20_3}, GetScopeLevel20} = ?call_with_time(Worker2, get_scope, [UL20]),
-    ?assertMatch({ok, #document{key = U2}},             {AL20_3, UL20_3}),
+    ?assertMatch({ok, #document{key = U2}}, {AL20_3, UL20_3}),
 
     ?assertMatch({ok, [#child_link{uuid = U2}]}, ?call(Worker1, list_children, [{path, <<"/spaces">>}, 0, 10])),
     ?assertMatch({ok, []}, ?call(Worker1, list_children, [{path, <<"/spaces/Space 1/dir2/file3">>}, 0, 10])),
@@ -377,13 +377,13 @@ create_deep_tree(Worker) ->
 create_deep_tree(Worker, Prefix, 1) ->
     {{A, U}, Time} = ?call_with_time(Worker, create, [{path, list_to_binary(Prefix)}, #file_meta{name = <<"1">>}]),
     ?assertMatch({ok, _}, {A, U}),
-    {list_to_binary(Prefix++"/1"), Time};
+    {list_to_binary(Prefix ++ "/1"), Time};
 
 create_deep_tree(Worker, Prefix, Num) ->
     StringNum = integer_to_list(Num),
     {A, U} = ?call(Worker, create, [{path, list_to_binary(Prefix)}, #file_meta{name = list_to_binary(StringNum)}]),
     ?assertMatch({ok, _}, {A, U}),
-    create_deep_tree(Worker, Prefix++"/"++StringNum, Num-1).
+    create_deep_tree(Worker, Prefix ++ "/" ++ StringNum, Num - 1).
 
 delete_deep_tree(Worker) ->
     delete_deep_tree(Worker, "/spaces/Space 1", 18).
@@ -393,5 +393,5 @@ delete_deep_tree(Worker, Prefix, 1) ->
 
 delete_deep_tree(Worker, Prefix, Num) ->
     StringNum = integer_to_list(Num),
-    delete_deep_tree(Worker, Prefix++"/"++StringNum, Num-1),
+    delete_deep_tree(Worker, Prefix ++ "/" ++ StringNum, Num - 1),
     ?call(Worker, delete, [{path, list_to_binary(Prefix)}]).

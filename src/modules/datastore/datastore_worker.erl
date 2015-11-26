@@ -35,7 +35,7 @@
 init(_Args) ->
 
     %% Get Riak nodes
-    RiakNodes =
+    DBNodes =
         case application:get_env(?APP_NAME, db_nodes) of
             {ok, Nodes} ->
                 lists:map(
@@ -53,7 +53,7 @@ init(_Args) ->
             maps:put(RecordName, ModelConfig, StateAcc)
         end, #{}, ?MODELS),
 
-    {ok, State#{riak_nodes => RiakNodes}}.
+    {ok, State#{db_nodes => DBNodes}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -72,11 +72,14 @@ handle(ping) ->
 
 handle(healthcheck) ->
     State = worker_host:state_to_map(?MODULE),
+    PersistenceModule = datastore:driver_to_module(?PERSISTENCE_DRIVER),
+    LocalCacheModule = datastore:driver_to_module(?LOCAL_CACHE_DRIVER),
+    GlobalCacheModule = datastore:driver_to_module(?DISTRIBUTED_CACHE_DRIVER),
     HC = #{
         datastore_state_init => datastore:healthcheck(),
-        ?PERSISTENCE_DRIVER => catch ?PERSISTENCE_DRIVER:healthcheck(State),
-        ?LOCAL_CACHE_DRIVER => catch ?LOCAL_CACHE_DRIVER:healthcheck(State),
-        ?DISTRIBUTED_CACHE_DRIVER => catch ?DISTRIBUTED_CACHE_DRIVER:healthcheck(State)
+        ?PERSISTENCE_DRIVER => catch PersistenceModule:healthcheck(State),
+        ?LOCAL_CACHE_DRIVER => catch LocalCacheModule:healthcheck(State),
+        ?DISTRIBUTED_CACHE_DRIVER => catch GlobalCacheModule:healthcheck(State)
     },
 
     maps:fold(

@@ -9,6 +9,7 @@
 #include <random>
 #include <tuple>
 #include <map>
+#include <sstream>
 #include <system_error>
 #include "nifpp.h"
 
@@ -92,9 +93,9 @@ std::map<nifpp::str_atom, int> atom_to_file_type = {
 
 /** @} */
 
-template <class T> std::error_code make_error_code(T code)
+template <class T> error_t make_sys_error_code(T code)
 {
-    return std::error_code(static_cast<int>(code), std::system_category());
+    return error_t(static_cast<int>(code), std::system_category());
 }
 
 /**
@@ -102,85 +103,85 @@ template <class T> std::error_code make_error_code(T code)
  *           POSIX-like code description as atom.
  * @{
  */
-std::map<std::error_code, nifpp::str_atom> error_to_atom = {
-    {make_error_code(std::errc::address_family_not_supported),        nifpp::str_atom("eafnosupport")},
-    {make_error_code(std::errc::address_in_use),                      nifpp::str_atom("eaddrinuse")},
-    {make_error_code(std::errc::address_not_available),               nifpp::str_atom("eaddrnotavail")},
-    {make_error_code(std::errc::already_connected),                   nifpp::str_atom("eisconn")},
-    {make_error_code(std::errc::argument_list_too_long),              nifpp::str_atom("e2big")},
-    {make_error_code(std::errc::argument_out_of_domain),              nifpp::str_atom("edom")},
-    {make_error_code(std::errc::bad_address),                         nifpp::str_atom("efault")},
-    {make_error_code(std::errc::bad_file_descriptor),                 nifpp::str_atom("ebadf")},
-    {make_error_code(std::errc::bad_message),                         nifpp::str_atom("ebadmsg")},
-    {make_error_code(std::errc::broken_pipe),                         nifpp::str_atom("epipe")},
-    {make_error_code(std::errc::connection_aborted),                  nifpp::str_atom("econnaborted")},
-    {make_error_code(std::errc::connection_already_in_progress),      nifpp::str_atom("ealready")},
-    {make_error_code(std::errc::connection_refused),                  nifpp::str_atom("econnrefused")},
-    {make_error_code(std::errc::connection_reset),                    nifpp::str_atom("econnreset")},
-    {make_error_code(std::errc::cross_device_link),                   nifpp::str_atom("exdev")},
-    {make_error_code(std::errc::destination_address_required),        nifpp::str_atom("edestaddrreq")},
-    {make_error_code(std::errc::device_or_resource_busy),             nifpp::str_atom("ebusy")},
-    {make_error_code(std::errc::directory_not_empty),                 nifpp::str_atom("enotempty")},
-    {make_error_code(std::errc::executable_format_error),             nifpp::str_atom("enoexec")},
-    {make_error_code(std::errc::file_exists),                         nifpp::str_atom("eexist")},
-    {make_error_code(std::errc::file_too_large),                      nifpp::str_atom("efbig")},
-    {make_error_code(std::errc::filename_too_long),                   nifpp::str_atom("enametoolong")},
-    {make_error_code(std::errc::function_not_supported),              nifpp::str_atom("enosys")},
-    {make_error_code(std::errc::host_unreachable),                    nifpp::str_atom("ehostunreach")},
-    {make_error_code(std::errc::identifier_removed),                  nifpp::str_atom("eidrm")},
-    {make_error_code(std::errc::illegal_byte_sequence),               nifpp::str_atom("eilseq")},
-    {make_error_code(std::errc::inappropriate_io_control_operation),  nifpp::str_atom("enotty")},
-    {make_error_code(std::errc::interrupted),                         nifpp::str_atom("eintr")},
-    {make_error_code(std::errc::invalid_argument),                    nifpp::str_atom("einval")},
-    {make_error_code(std::errc::invalid_seek),                        nifpp::str_atom("espipe")},
-    {make_error_code(std::errc::io_error),                            nifpp::str_atom("eio")},
-    {make_error_code(std::errc::is_a_directory),                      nifpp::str_atom("eisdir")},
-    {make_error_code(std::errc::message_size),                        nifpp::str_atom("emsgsize")},
-    {make_error_code(std::errc::network_down),                        nifpp::str_atom("enetdown")},
-    {make_error_code(std::errc::network_reset),                       nifpp::str_atom("enetreset")},
-    {make_error_code(std::errc::network_unreachable),                 nifpp::str_atom("enetunreach")},
-    {make_error_code(std::errc::no_buffer_space),                     nifpp::str_atom("enobufs")},
-    {make_error_code(std::errc::no_child_process),                    nifpp::str_atom("echild")},
-    {make_error_code(std::errc::no_link),                             nifpp::str_atom("enolink")},
-    {make_error_code(std::errc::no_lock_available),                   nifpp::str_atom("enolck")},
-    {make_error_code(std::errc::no_message_available),                nifpp::str_atom("enodata")},
-    {make_error_code(std::errc::no_message),                          nifpp::str_atom("enomsg")},
-    {make_error_code(std::errc::no_protocol_option),                  nifpp::str_atom("enoprotoopt")},
-    {make_error_code(std::errc::no_space_on_device),                  nifpp::str_atom("enospc")},
-    {make_error_code(std::errc::no_stream_resources),                 nifpp::str_atom("enosr")},
-    {make_error_code(std::errc::no_such_device_or_address),           nifpp::str_atom("enxio")},
-    {make_error_code(std::errc::no_such_device),                      nifpp::str_atom("enodev")},
-    {make_error_code(std::errc::no_such_file_or_directory),           nifpp::str_atom("enoent")},
-    {make_error_code(std::errc::no_such_process),                     nifpp::str_atom("esrch")},
-    {make_error_code(std::errc::not_a_directory),                     nifpp::str_atom("enotdir")},
-    {make_error_code(std::errc::not_a_socket),                        nifpp::str_atom("enotsock")},
-    {make_error_code(std::errc::not_a_stream),                        nifpp::str_atom("enostr")},
-    {make_error_code(std::errc::not_connected),                       nifpp::str_atom("enotconn")},
-    {make_error_code(std::errc::not_enough_memory),                   nifpp::str_atom("enomem")},
-    {make_error_code(std::errc::not_supported),                       nifpp::str_atom("enotsup")},
-    {make_error_code(std::errc::operation_canceled),                  nifpp::str_atom("ecanceled")},
-    {make_error_code(std::errc::operation_in_progress),               nifpp::str_atom("einprogress")},
-    {make_error_code(std::errc::operation_not_permitted),             nifpp::str_atom("eperm")},
-    {make_error_code(std::errc::operation_not_supported),             nifpp::str_atom("eopnotsupp")},
-    {make_error_code(std::errc::operation_would_block),               nifpp::str_atom("ewouldblock")},
-    {make_error_code(std::errc::owner_dead),                          nifpp::str_atom("eownerdead")},
-    {make_error_code(std::errc::permission_denied),                   nifpp::str_atom("eacces")},
-    {make_error_code(std::errc::protocol_error),                      nifpp::str_atom("eproto")},
-    {make_error_code(std::errc::protocol_not_supported),              nifpp::str_atom("eprotonosupport")},
-    {make_error_code(std::errc::read_only_file_system),               nifpp::str_atom("erofs")},
-    {make_error_code(std::errc::resource_deadlock_would_occur),       nifpp::str_atom("edeadlk")},
-    {make_error_code(std::errc::resource_unavailable_try_again),      nifpp::str_atom("eagain")},
-    {make_error_code(std::errc::result_out_of_range),                 nifpp::str_atom("erange")},
-    {make_error_code(std::errc::state_not_recoverable),               nifpp::str_atom("enotrecoverable")},
-    {make_error_code(std::errc::stream_timeout),                      nifpp::str_atom("etime")},
-    {make_error_code(std::errc::text_file_busy),                      nifpp::str_atom("etxtbsy")},
-    {make_error_code(std::errc::timed_out),                           nifpp::str_atom("etimedout")},
-    {make_error_code(std::errc::too_many_files_open_in_system),       nifpp::str_atom("enfile")},
-    {make_error_code(std::errc::too_many_files_open),                 nifpp::str_atom("emfile")},
-    {make_error_code(std::errc::too_many_links),                      nifpp::str_atom("emlink")},
-    {make_error_code(std::errc::too_many_symbolic_link_levels),       nifpp::str_atom("eloop")},
-    {make_error_code(std::errc::value_too_large),                     nifpp::str_atom("eoverflow")},
-    {make_error_code(std::errc::wrong_protocol_type),                 nifpp::str_atom("eprototype")}
+std::map<error_t, nifpp::str_atom> error_to_atom = {
+    {make_sys_error_code(std::errc::address_family_not_supported),        nifpp::str_atom("eafnosupport")},
+    {make_sys_error_code(std::errc::address_in_use),                      nifpp::str_atom("eaddrinuse")},
+    {make_sys_error_code(std::errc::address_not_available),               nifpp::str_atom("eaddrnotavail")},
+    {make_sys_error_code(std::errc::already_connected),                   nifpp::str_atom("eisconn")},
+    {make_sys_error_code(std::errc::argument_list_too_long),              nifpp::str_atom("e2big")},
+    {make_sys_error_code(std::errc::argument_out_of_domain),              nifpp::str_atom("edom")},
+    {make_sys_error_code(std::errc::bad_address),                         nifpp::str_atom("efault")},
+    {make_sys_error_code(std::errc::bad_file_descriptor),                 nifpp::str_atom("ebadf")},
+    {make_sys_error_code(std::errc::bad_message),                         nifpp::str_atom("ebadmsg")},
+    {make_sys_error_code(std::errc::broken_pipe),                         nifpp::str_atom("epipe")},
+    {make_sys_error_code(std::errc::connection_aborted),                  nifpp::str_atom("econnaborted")},
+    {make_sys_error_code(std::errc::connection_already_in_progress),      nifpp::str_atom("ealready")},
+    {make_sys_error_code(std::errc::connection_refused),                  nifpp::str_atom("econnrefused")},
+    {make_sys_error_code(std::errc::connection_reset),                    nifpp::str_atom("econnreset")},
+    {make_sys_error_code(std::errc::cross_device_link),                   nifpp::str_atom("exdev")},
+    {make_sys_error_code(std::errc::destination_address_required),        nifpp::str_atom("edestaddrreq")},
+    {make_sys_error_code(std::errc::device_or_resource_busy),             nifpp::str_atom("ebusy")},
+    {make_sys_error_code(std::errc::directory_not_empty),                 nifpp::str_atom("enotempty")},
+    {make_sys_error_code(std::errc::executable_format_error),             nifpp::str_atom("enoexec")},
+    {make_sys_error_code(std::errc::file_exists),                         nifpp::str_atom("eexist")},
+    {make_sys_error_code(std::errc::file_too_large),                      nifpp::str_atom("efbig")},
+    {make_sys_error_code(std::errc::filename_too_long),                   nifpp::str_atom("enametoolong")},
+    {make_sys_error_code(std::errc::function_not_supported),              nifpp::str_atom("enosys")},
+    {make_sys_error_code(std::errc::host_unreachable),                    nifpp::str_atom("ehostunreach")},
+    {make_sys_error_code(std::errc::identifier_removed),                  nifpp::str_atom("eidrm")},
+    {make_sys_error_code(std::errc::illegal_byte_sequence),               nifpp::str_atom("eilseq")},
+    {make_sys_error_code(std::errc::inappropriate_io_control_operation),  nifpp::str_atom("enotty")},
+    {make_sys_error_code(std::errc::interrupted),                         nifpp::str_atom("eintr")},
+    {make_sys_error_code(std::errc::invalid_argument),                    nifpp::str_atom("einval")},
+    {make_sys_error_code(std::errc::invalid_seek),                        nifpp::str_atom("espipe")},
+    {make_sys_error_code(std::errc::io_error),                            nifpp::str_atom("eio")},
+    {make_sys_error_code(std::errc::is_a_directory),                      nifpp::str_atom("eisdir")},
+    {make_sys_error_code(std::errc::message_size),                        nifpp::str_atom("emsgsize")},
+    {make_sys_error_code(std::errc::network_down),                        nifpp::str_atom("enetdown")},
+    {make_sys_error_code(std::errc::network_reset),                       nifpp::str_atom("enetreset")},
+    {make_sys_error_code(std::errc::network_unreachable),                 nifpp::str_atom("enetunreach")},
+    {make_sys_error_code(std::errc::no_buffer_space),                     nifpp::str_atom("enobufs")},
+    {make_sys_error_code(std::errc::no_child_process),                    nifpp::str_atom("echild")},
+    {make_sys_error_code(std::errc::no_link),                             nifpp::str_atom("enolink")},
+    {make_sys_error_code(std::errc::no_lock_available),                   nifpp::str_atom("enolck")},
+    {make_sys_error_code(std::errc::no_message_available),                nifpp::str_atom("enodata")},
+    {make_sys_error_code(std::errc::no_message),                          nifpp::str_atom("enomsg")},
+    {make_sys_error_code(std::errc::no_protocol_option),                  nifpp::str_atom("enoprotoopt")},
+    {make_sys_error_code(std::errc::no_space_on_device),                  nifpp::str_atom("enospc")},
+    {make_sys_error_code(std::errc::no_stream_resources),                 nifpp::str_atom("enosr")},
+    {make_sys_error_code(std::errc::no_such_device_or_address),           nifpp::str_atom("enxio")},
+    {make_sys_error_code(std::errc::no_such_device),                      nifpp::str_atom("enodev")},
+    {make_sys_error_code(std::errc::no_such_file_or_directory),           nifpp::str_atom("enoent")},
+    {make_sys_error_code(std::errc::no_such_process),                     nifpp::str_atom("esrch")},
+    {make_sys_error_code(std::errc::not_a_directory),                     nifpp::str_atom("enotdir")},
+    {make_sys_error_code(std::errc::not_a_socket),                        nifpp::str_atom("enotsock")},
+    {make_sys_error_code(std::errc::not_a_stream),                        nifpp::str_atom("enostr")},
+    {make_sys_error_code(std::errc::not_connected),                       nifpp::str_atom("enotconn")},
+    {make_sys_error_code(std::errc::not_enough_memory),                   nifpp::str_atom("enomem")},
+    {make_sys_error_code(std::errc::not_supported),                       nifpp::str_atom("enotsup")},
+    {make_sys_error_code(std::errc::operation_canceled),                  nifpp::str_atom("ecanceled")},
+    {make_sys_error_code(std::errc::operation_in_progress),               nifpp::str_atom("einprogress")},
+    {make_sys_error_code(std::errc::operation_not_permitted),             nifpp::str_atom("eperm")},
+    {make_sys_error_code(std::errc::operation_not_supported),             nifpp::str_atom("eopnotsupp")},
+    {make_sys_error_code(std::errc::operation_would_block),               nifpp::str_atom("ewouldblock")},
+    {make_sys_error_code(std::errc::owner_dead),                          nifpp::str_atom("eownerdead")},
+    {make_sys_error_code(std::errc::permission_denied),                   nifpp::str_atom("eacces")},
+    {make_sys_error_code(std::errc::protocol_error),                      nifpp::str_atom("eproto")},
+    {make_sys_error_code(std::errc::protocol_not_supported),              nifpp::str_atom("eprotonosupport")},
+    {make_sys_error_code(std::errc::read_only_file_system),               nifpp::str_atom("erofs")},
+    {make_sys_error_code(std::errc::resource_deadlock_would_occur),       nifpp::str_atom("edeadlk")},
+    {make_sys_error_code(std::errc::resource_unavailable_try_again),      nifpp::str_atom("eagain")},
+    {make_sys_error_code(std::errc::result_out_of_range),                 nifpp::str_atom("erange")},
+    {make_sys_error_code(std::errc::state_not_recoverable),               nifpp::str_atom("enotrecoverable")},
+    {make_sys_error_code(std::errc::stream_timeout),                      nifpp::str_atom("etime")},
+    {make_sys_error_code(std::errc::text_file_busy),                      nifpp::str_atom("etxtbsy")},
+    {make_sys_error_code(std::errc::timed_out),                           nifpp::str_atom("etimedout")},
+    {make_sys_error_code(std::errc::too_many_files_open_in_system),       nifpp::str_atom("enfile")},
+    {make_sys_error_code(std::errc::too_many_files_open),                 nifpp::str_atom("emfile")},
+    {make_sys_error_code(std::errc::too_many_links),                      nifpp::str_atom("emlink")},
+    {make_sys_error_code(std::errc::too_many_symbolic_link_levels),       nifpp::str_atom("eloop")},
+    {make_sys_error_code(std::errc::value_too_large),                     nifpp::str_atom("eoverflow")},
+    {make_sys_error_code(std::errc::wrong_protocol_type),                 nifpp::str_atom("eprototype")}
 };
 /** @} */
 
@@ -222,6 +223,12 @@ struct NifCTX {
         , helperObj(helperObj)
         , helperCTX(helperCTX)
     {
+    }
+
+    ~NifCTX()
+    {
+        // @todo: get valid file_id instead of empty one (its still works though since we are closing descriptor from CTX)
+        helperObj->ash_release(*helperCTX, "", [=](error_t e) {  });
     }
 
     ErlNifEnv *env;
@@ -436,7 +443,7 @@ ERL_NIF_TERM username_to_uid(
     if (uid != static_cast<uid_t>(-1))
         return nifpp::make(env, std::make_tuple(ok, uid));
 
-    auto einval = make_error_code(std::errc::invalid_argument);
+    auto einval = make_sys_error_code(std::errc::invalid_argument);
     return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
 }
 
@@ -448,7 +455,7 @@ ERL_NIF_TERM groupname_to_gid(
     if (gid != static_cast<gid_t>(-1))
         return nifpp::make(env, std::make_tuple(ok, gid));
 
-    auto einval = make_error_code(std::errc::invalid_argument);
+    auto einval = make_sys_error_code(std::errc::invalid_argument);
     return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
 }
 

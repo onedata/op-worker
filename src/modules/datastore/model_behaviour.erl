@@ -13,7 +13,7 @@
 
 -include("modules/datastore/datastore_common_internal.hrl").
 
--type model_action() :: save | get | delete | update | create | exists | list | add_links | delete_links |
+-type model_action() :: save | get | delete | update | create | create_or_update | exists | list | add_links | delete_links |
                         fetch_link | foreach_link | run_synchronized.
 -type model_type() :: atom().
 -type model_config() :: #model_config{}.
@@ -97,4 +97,4 @@
 %%--------------------------------------------------------------------
 -callback before(ModelName :: model_type(), Method :: model_action(),
                     Level :: datastore:store_level(), Context :: term()) ->
-                    ok | {ok, save, [datastore:document()]} | datastore:generic_error().
+                    ok | {task, task_manager:task()} | datastore:generic_error().

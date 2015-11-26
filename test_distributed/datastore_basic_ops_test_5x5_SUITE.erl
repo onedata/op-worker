@@ -69,8 +69,8 @@ all() ->
     ].
 
 %%%===================================================================
-%%% Test function
-%% ====================================================================
+%%% Test functions
+%%%===================================================================
 
 -performance(?create_delete_test_def).
 create_delete_db_test(Config) ->
@@ -243,7 +243,7 @@ mixed_local_cache_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [random]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
@@ -251,9 +251,9 @@ end_per_suite(Config) ->
 init_per_testcase(Case, Config) when
     Case =:= no_transactions_create_delete_global_store_test;
     Case =:= no_transactions_save_global_store_test;
-    Case =:= no_transactions_update_global_store_test  ->
+    Case =:= no_transactions_update_global_store_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, some_record, [passthrough]),
+    test_utils:mock_new(Workers, some_record),
     test_utils:mock_expect(Workers, some_record, model_init, fun() ->
         #model_config{name = some_record,
             size = record_info(size, some_record),
@@ -274,9 +274,10 @@ init_per_testcase(Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= no_transactions_create_delete_global_store_test;
     Case =:= no_transactions_save_global_store_test;
-    Case =:= no_transactions_update_global_store_test  ->
+    Case =:= no_transactions_update_global_store_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [some_record]),
+    test_utils:mock_validate(Workers, some_record),
+    test_utils:mock_unload(Workers, some_record),
     datastore_basic_ops_utils:unset_hooks(Case, Config);
 
 end_per_testcase(Case, Config) ->

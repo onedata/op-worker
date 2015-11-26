@@ -20,7 +20,8 @@
                         "ccm_nodes": [
                             "ccm"
                         ],
-                        "worker_num": 2
+                        "worker_num": 2,
+                        "verify_gr_cert": false
                     }
                 }
             },
@@ -35,7 +36,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 },
                 "worker2": {
@@ -48,7 +50,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 }
             }

@@ -14,6 +14,7 @@
 -define(SERVER_MESSAGES_HRL, 1).
 
 -include("stream_messages.hrl").
+-include("message_id.hrl").
 
 -record(server_message, {
     message_id :: message_id:id(),
