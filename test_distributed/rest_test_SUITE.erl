@@ -179,15 +179,27 @@ rest_endpoint(Node) ->
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
-    {ok, Key} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
-    {ok, Cert} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
-    [{KeyType, KeyEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Key]),
-    [{_, CertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Cert]),
-    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
-    SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
+
+    % save key and cert files on the workers
+    % read the files
+    {ok, KeyBin} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
+    {ok, CertBin} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
+    % choose paths for the files
+    KeyPath = "/tmp/user_auth_test_key.pem",
+    CertPath = "/tmp/user_auth_test_cert.pem",
+    % and save them on workers
+    lists:foreach(
+        fun(Node) ->
+            ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
+            ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
+        end, Workers),
+    % Use the cert paths on workers to mock gr_endpoint
+    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
     test_utils:mock_new(Workers, [oneprovider, gr_endpoint]),
+
+    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
+    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
 
     test_utils:mock_expect(Workers, oneprovider, get_provider_id,
         fun() -> <<"050fec8f157d6e4b31fd6d2924923c7a">> end),
@@ -199,22 +211,22 @@ mock_gr_certificates(Config) ->
             (provider, URN, Method, Headers, Body, Options) ->
                 do_request(Method, Url ++ URN,
                     [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOptions | Options]);
+                    Body, [SSLOpts | Options]);
             (client, URN, Method, Headers, Body, Options) ->
                 do_request(Method, Url ++ URN,
                     [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOptions | Options]);
+                    Body, [SSLOpts | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
                 do_request(Method, Url ++ URN,
                     [{<<"content-type">>,<< "application/json">>} | Headers],
-                    Body, [SSLOptions | Options]);
+                    Body, [SSLOpts | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
                 AuthorizationHeader = {<<"macaroon">>, Macaroon},
                 do_request(Method, Url ++ URN,
                     [{<<"content-type">>,<< "application/json">>},
                         AuthorizationHeader | Headers],
-                    Body, [SSLOptions | Options])
+                    Body, [SSLOpts | Options])
         end
     ).
 

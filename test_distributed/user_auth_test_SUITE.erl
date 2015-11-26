@@ -60,7 +60,7 @@ token_authentication(Config) ->
         rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
     ),
     unmock_gr_certificates(Config),
-    ok = ssl:close(Sock).
+    ok = ssl2:close(Sock).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -72,11 +72,11 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    ssl:start(),
+    application:start(ssl2),
     Config.
 
 end_per_testcase(_, _Config) ->
-    ssl:stop().
+    application:stop(ssl2).
 
 %%%===================================================================
 %%% Internal functions
@@ -100,8 +100,8 @@ connect_via_token(Node, TokenVal, SessionId) ->
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
 
     % when
-    {ok, Sock} = ssl:connect(utils:get_host(Node), Port, [{packet, 4}, {active, true}]),
-    ok = ssl:send(Sock, TokenAuthMessageRaw),
+    {ok, Sock} = ssl2:connect(utils:get_host(Node), Port, [binary, {packet, 4}, {active, true}]),
+    ok = ssl2:send(Sock, TokenAuthMessageRaw),
 
     % then
     HandshakeResponse = receive_server_message(),
@@ -129,12 +129,22 @@ receive_server_message(IgnoredMsgList) ->
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
-    KeyPath = ?TEST_FILE(Config, "grpkey.pem"),
-    CertPath = ?TEST_FILE(Config, "grpcert.pem"),
-    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
-    ct:print("KeyPath: ~p", [KeyPath]),
-    ct:print("CertPath: ~p", [CertPath]),
+    % save key and cert files on the workers
+    % read the files
+    {ok, KeyBin} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
+    {ok, CertBin} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
+    % choose paths for the files
+    KeyPath = "/tmp/user_auth_test_key.pem",
+    CertPath = "/tmp/user_auth_test_cert.pem",
+    % and save them on workers
+    lists:foreach(
+        fun(Node) ->
+            ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
+            ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
+        end, Workers),
+    % Use the cert paths on workers to mock gr_endpoint
+    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
     test_utils:mock_new(Workers, gr_endpoint),
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
