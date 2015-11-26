@@ -17,10 +17,20 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
--export([malformed_request/2, malformed_capability_request/2, get_ranges/2]).
+-export([malformed_request/2, malformed_capability_request/2, get_ranges/2, parse_content/1, set_completion_status_according_to_partial_flag/2, update_completion_status/2, update_encoding/2, update_mimetype/2, get_completion_status/1, get_encoding/1, get_mimetype/1, get_mimetype/1]).
 
 %% Test API
 -export([get_supported_version/1]).
+
+%% Keys of special cdmi attrs
+-define(mimetype_xattr_key, <<"cdmi_mimetype">>).
+-define(encoding_xattr_key, <<"cdmi_valuetransferencoding">>).
+-define(completion_status_xattr_key, <<"cdmi_completion_status">>).
+
+%% Default values of special cdmi attrs
+-define(mimetype_default_value, <<"application/octet-stream">>).
+-define(encoding_default_value, <<"base64">>).
+-define(completion_status_default_value, <<"Complete">>).
 
 %%%===================================================================
 %%% API
@@ -144,3 +154,92 @@ parse_byte_range(#{attributes := #file_attr{size = Size}} = State, [First | Rest
         {Begin, End} when Begin > End -> [invalid];
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses content-type header to mimetype and charset part, if charset
+%% is other than utf-8, function returns undefined
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_content(binary()) -> {Mimetype :: binary(), Encoding :: binary() | undefined}.
+parse_content(Content) ->
+    case binary:split(Content,<<";">>) of
+        [RawMimetype, RawEncoding] ->
+            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
+                [<<"charset">>, <<"utf-8">>] ->
+                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                _ ->
+                    {utils:trim_spaces(RawMimetype), undefined}
+            end;
+        [RawMimetype] ->
+            {utils:trim_spaces(RawMimetype), undefined}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Gets mimetype associated with file, returns default value if no mimetype
+%% could be found
+%% @end
+%%--------------------------------------------------------------------
+-spec get_mimetype(string()) -> binary().
+get_mimetype(Filepath) ->
+    {ok, Value} =
+        onedata_file_api:get_xattr(Filepath, ?mimetype_xattr_key),
+    Value.
+
+%%--------------------------------------------------------------------
+%% @doc Gets valuetransferencoding associated with file, returns default value if no valuetransferencoding
+%% could be found
+%% @end
+%%--------------------------------------------------------------------
+-spec get_encoding(string()) -> binary().
+get_encoding(Filepath) ->
+    {ok, Value} =
+        onedata_file_api:get_xattr(Filepath, ?encoding_xattr_key),
+    Value.
+
+%%--------------------------------------------------------------------
+%% @doc Gets completion status associated with file, returns default value if no completion status
+%% could be found. The result can be: binary("Complete") | binary("Processing") | binary("Error")
+%% @end
+%%--------------------------------------------------------------------
+-spec get_completion_status(string()) -> binary().
+get_completion_status(Filepath) ->
+    {ok, Value} =
+        onedata_file_api:get_xattr(Filepath, ?completion_status_xattr_key),
+    Value.
+
+%%--------------------------------------------------------------------
+%% @doc Updates mimetype associated with file
+%%--------------------------------------------------------------------
+-spec update_mimetype(string(), binary()) -> ok | no_return().
+update_mimetype(_Filepath, undefined) -> ok;
+update_mimetype(Filepath, Mimetype) ->
+    ok = onedata_file_api:set_xattr(Filepath, ?mimetype_xattr_key, Mimetype).
+
+%%--------------------------------------------------------------------
+%% @doc Updates valuetransferencoding associated with file
+%%--------------------------------------------------------------------
+-spec update_encoding(string(), binary()) -> ok | no_return().
+update_encoding(_Filepath, undefined) -> ok;
+update_encoding(Filepath, Encoding) ->
+    ok = onedata_file_api:set_xattr(Filepath, ?encoding_xattr_key, Encoding).
+
+%%--------------------------------------------------------------------
+%% @doc Updates completion status associated with file
+%%--------------------------------------------------------------------
+-spec update_completion_status(string(), binary()) -> ok | no_return().
+update_completion_status(_Filepath, undefined) -> ok;
+update_completion_status(Filepath, CompletionStatus)
+    when CompletionStatus =:= <<"Complete">>
+    orelse CompletionStatus =:= <<"Processing">>
+    orelse CompletionStatus =:= <<"Error">> ->
+        ok = onedata_file_api:set_xattr(
+            Filepath, ?completion_status_xattr_key, CompletionStatus).
+
+%%--------------------------------------------------------------------
+%% @doc Updates completion status associated with file,  according to X-CDMI-Partial flag
+%%--------------------------------------------------------------------
+-spec set_completion_status_according_to_partial_flag(string(), binary()) -> ok | no_return().
+set_completion_status_according_to_partial_flag(_Filepath, <<"true">>) -> ok;
+set_completion_status_according_to_partial_flag(Filepath, _) ->
+    ok = update_completion_status(Filepath, <<"Complete">>).

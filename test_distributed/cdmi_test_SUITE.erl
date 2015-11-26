@@ -499,7 +499,7 @@ capabilities_test(Config) ->
 
     ?assertEqual("application/cdmi-capability",
         proplists:get_value("content-type", Headers8)),
-    CdmiResponse8 = mochijson2:decode(Response8),
+    CdmiResponse8 = json:decode(Response8),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"objectName">>, CdmiResponse8)),
@@ -519,7 +519,7 @@ capabilities_test(Config) ->
     ?assertEqual("200", Code9),
 %%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
 
-    CdmiResponse9 = mochijson2:decode(Response9),
+    CdmiResponse9 = json:decode(Response9),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse9)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
@@ -537,7 +537,7 @@ capabilities_test(Config) ->
     ?assertEqual("200", Code10),
 %%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
 
-    CdmiResponse10 = mochijson2:decode(Response10),
+    CdmiResponse10 = json:decode(Response10),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse10)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),

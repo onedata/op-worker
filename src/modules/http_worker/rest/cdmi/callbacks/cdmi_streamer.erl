@@ -13,12 +13,14 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/http_worker/http_common.hrl").
+-include_lib("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([binary_stream_size/2, cdmi_stream_size/5,
-    stream_binary/2, stream_cdmi/5, stream_range/7]).
+-export([binary_stream_size/2, cdmi_stream_size/5, stream_binary/2,
+    stream_cdmi/5, stream_range/7, write_body_to_file/3, write_body_to_file/4]).
 
 %%%===================================================================
 %%% API
@@ -141,3 +143,34 @@ encode(Data, Encoding) when Encoding =:= <<"base64">> ->
     base64:encode(Data);
 encode(Data, _) ->
     Data.
+
+%%--------------------------------------------------------------------
+%% @doc @equiv write_body_to_file(Req, State, Offset, true)
+%%--------------------------------------------------------------------
+-spec write_body_to_file(req(), #{}, integer()) -> {boolean(), req(), #{}}.
+write_body_to_file(Req, State, Offset) ->
+    write_body_to_file(Req, State, Offset, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads request's body and writes it to file obtained from state.
+%% This callback return value is compatibile with put requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec write_body_to_file(req(), #{}, integer(), boolean()) -> {boolean(), req(), #{}}.
+write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset, RemoveIfFails) ->
+    {Status, Chunk, Req1} = cowboy_req:body(Req),
+    {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
+    case onedata_file_api:write(FileHandle, Offset, Chunk) of
+        {ok, _NewHandle, Bytes} when is_integer(Bytes) ->
+            case Status of
+                more -> write_body_to_file(Req1, State, Offset + Bytes);
+                ok -> {true, Req1, State}
+            end;
+        _ -> %todo handle write file forbidden
+            case RemoveIfFails of
+                true -> onedata_file_api:unlink(FileHandle);
+                false -> ok
+            end,
+            throw(?write_object_unknown_error)
+    end.

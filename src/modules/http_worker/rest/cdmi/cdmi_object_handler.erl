@@ -30,9 +30,24 @@
 
 -define(DEFAULT_FILE_PERMISSIONS, 8#664).
 
-%% the default json response for get/put cdmi_object will contain this entities, they can be choosed selectively by appending '?name1;name2' list to the request url
--define(DEFAULT_GET_FILE_OPTS, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
--define(DEFAULT_PUT_FILE_OPTS, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+%% the default json response for get/put cdmi_object will contain this entities,
+%% they can be choosed selectively by appending '?name1;name2' list to the
+%% request url
+-define(DEFAULT_GET_FILE_OPTS,
+    [
+        <<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>,
+        <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>,
+        <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>,
+        <<"valuerange">>, <<"value">>
+    ]
+).
+-define(DEFAULT_PUT_FILE_OPTS,
+    [
+        <<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>,
+        <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>,
+        <<"metadata">>, <<"mimetype">>
+    ]
+).
 
 %%%===================================================================
 %%% API
@@ -152,7 +167,7 @@ get_binary(Req, #{attributes := #file_attr{size = Size, mimetype = Mimetype}} = 
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path, attributes := #file_attr{size = Size, encoding = Encoding}}) ->
+get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path,attributes := #file_attr{size = Size, encoding = Encoding}}) ->
     NonEmptyOpts = case Opts of [] -> ?DEFAULT_GET_FILE_OPTS; _ -> Opts end,
     DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State),
 
@@ -189,59 +204,51 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path, attributes 
 -spec put_binary(req(), #{}) -> {term(), req(), #{}}.
 put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
     % prepare request data
-    {Content, Req} = cowboy_req:header(<<"content-type">>, ReqArg, ?MIMETYPE_DEFAULT_VALUE),
-    %%  TODO partial upload
-    %%  {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
-    {Mimetype, Encoding} = parse_content(Content),
+    {Content, Req0} = cowboy_req:header(<<"content-type">>, ReqArg, <<"application/octet-stream">>),
+    {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
+    {Mimetype, Encoding} = cdmi_arg_parser:parse_content(Content),
     case onedata_file_api:create(Auth, Path, ?DEFAULT_FILE_PERMISSIONS) of
         {ok, _} ->
-            update_completion_status(Path, <<"Processing">>),
-            update_mimetype(Path, Mimetype),
-            update_encoding(Path, Encoding),
-            Ans = write_body_to_file(Req, State, 0),
-            %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
+            cdmi_metadata:update_mimetype(Path, Mimetype),
+            cdmi_metadata:update_encoding(Path, Encoding),
+            Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                Path, CdmiPartialFlag, State),
             Ans;
 
-        {error, ?ENOENT} ->
+        {error, ?EEXIST} ->
             case onedata_file_api:check_perms(Path, write) of
                 {ok, true} -> ok;
                 {ok, false} -> throw(?forbidden);
                 _ -> throw(?write_object_unknown_error)
             end,
-            update_completion_status(Path, <<"Processing">>),
-            update_mimetype(Path, Mimetype),
-            update_encoding(Path, Encoding),
+            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
+            cdmi_metadata:update_mimetype(Path, Mimetype),
+            cdmi_metadata:update_encoding(Path, Encoding),
+            Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    case onedata_file_api:truncate(Auth, {path, Path}, 0) of
-                        ok -> ok;
-                        {error, Err} when Err =:= ?EPERM orelse Err =:= ?EACCES ->
-                        %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
-                            throw(?forbidden);
-                        Error ->
-                        %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
-                            throw({?put_object_unknown_error, Error})
-                    end,
-                    Ans = write_body_to_file(Req1, State, 0, false),
-                    %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    ok = onedata_file_api:truncate(Auth, {path, Path}, 0),
+                    Ans = cdmi_streamer:write_body_to_file(Req1, State, 0, false),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(
+                        Path, CdmiPartialFlag),
                     Ans;
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
-                    case parse_byte_range(State, RawRange) of
+                    case cdmi_arg_parser:parse_byte_range(State, RawRange) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            Ans = write_body_to_file(Req2, State, From, false),
-                            %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                            Ans = cdmi_streamer:write_body_to_file(Req2, State, From, false),
+                            cdmi_matadata:set_completion_status_according_to_partial_flag(
+                                Path, CdmiPartialFlag),
                             Ans;
                         _ ->
-                            %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                                Path, CdmiPartialFlag),
                             throw(?invalid_range)
                     end
-            end;
-        {error, Err} when Err =:= ?EPERM orelse Err =:= ?EACCES ->
-            throw(?forbidden);
-        _ ->
-            throw(?put_object_unknown_error)
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -256,37 +263,3 @@ put_cdmi(Req, State) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-%%--------------------------------------------------------------------
-%% @doc @equiv write_body_to_file(Req, State, Offset, true)
-%%--------------------------------------------------------------------
--spec write_body_to_file(req(), #{}, integer()) -> {boolean(), req(), #{}}.
-write_body_to_file(Req, State, Offset) ->
-    write_body_to_file(Req, State, Offset, true).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Reads request's body and writes it to file obtained from state.
-%% This callback return value is compatibile with put requests.
-%% @end
-%%--------------------------------------------------------------------
--spec write_body_to_file(req(), #{}, integer(), boolean()) -> {boolean(), req(), #{}}.
-write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset, RemoveIfFails) ->
-    {Status, Chunk, Req1} = cowboy_req:body(Req),
-    {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
-    case onedata_file_api:write(FileHandle, Offset, Chunk) of
-        {ok, _NewHandle, Bytes} when is_integer(Bytes) ->
-            case Status of
-                more -> write_body_to_file(Req1, State, Offset + Bytes);
-                ok -> {true, Req1, State}
-            end;
-        _ -> %todo handle write file forbidden
-            case RemoveIfFails of
-                true -> onedata_file_api:unlink(FileHandle);
-                false -> ok
-            end,
-            throw(?write_object_unknown_error)
-    end.
-
-
-
