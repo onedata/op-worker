@@ -71,17 +71,23 @@ list_dir_test(Config) ->
     create_dir(Config, ?TEST_DIR_NAME ++ "/"),
     ?assertEqual(true, object_exists(Config, ?TEST_DIR_NAME ++ "/")),
     create_file(Config, string:join([?TEST_DIR_NAME, ?TEST_FILE_NAME],"/")),
-    ?assertEqual(true, object_exists(Config, ?TEST_FILE_NAME)),
+    ?assertEqual(true,
+        object_exists(Config, string:join([?TEST_DIR_NAME, ?TEST_FILE_NAME],"/"))),
 
     %%------ list basic dir --------
-    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
-    {ok, Code1, Headers1, Response1} = 
+    tracer:start(Worker),
+    tracer:trace_calls(cdmi_container_handler, get_cdmi),
+    tracer:trace_calls(cdmi_container_answer, prepare),
+    tracer:trace_calls(json, encode),
+    {ok, Code1, Headers1, Response1} =
         do_request(Worker, ?TEST_DIR_NAME++"/", get,
-            [?USER_1_TOKEN_HEADER | RequestHeaders1], []),
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+    tracer:stop(),
+
     ?assertEqual("200", Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1),
         "application/cdmi-container"),
-    {struct,CdmiResponse1} = json:decode(Response1),
+    {struct, CdmiResponse1} = mochijson2:decode(Response1),
     ?assertEqual(<<"application/cdmi-container">>,
         proplists:get_value(<<"objectType">>,CdmiResponse1)),
     ?assertEqual(<<"dir/">>,
@@ -94,32 +100,29 @@ list_dir_test(Config) ->
     %%------------------------------
 
     %%------ list root dir ---------
-    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {ok, Code2, _Headers2, Response2} =
         do_request(Worker, [], get,
-            [?USER_1_TOKEN_HEADER | RequestHeaders2], []),
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
     ?assertEqual("200", Code2),
-    {struct,CdmiResponse2} = json:decode(Response2),
+    {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
     ?assertEqual([<<"dir/">>,<<"spaces/">>],
         proplists:get_value(<<"children">>,CdmiResponse2)),
     %%------------------------------
 
     %%--- list nonexisting dir -----
-    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "nonexisting_dir/",
-            get, [?USER_1_TOKEN_HEADER | RequestHeaders3], []),
+            get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
     ?assertEqual("404",Code3),
     %%------------------------------
 
     %%-- selective params list -----
-    RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {ok, Code4, _Headers4, Response4} =
         do_request(Worker, ?TEST_DIR_NAME ++ "/?children;objectName",
-            get, [?USER_1_TOKEN_HEADER | RequestHeaders4], []),
+            get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
     ?assertEqual("200", Code4),
-    {struct,CdmiResponse4} = json:decode(Response4),
+    {struct,CdmiResponse4} = mochijson2:decode(Response4),
     ?assertEqual(<<"dir/">>,
         proplists:get_value(<<"objectName">>,CdmiResponse4)),
     ?assertEqual([<<"file.txt">>],
@@ -137,12 +140,11 @@ list_dir_test(Config) ->
                 create_file(Worker, filename:join(ChildrangeDir, FileName))
               end, Childs),
 
-    RequestHeaders5 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {ok, Code5, _Headers5, Response5} =
         do_request(Worker, ChildrangeDir ++ "?children;childrenrange",
-            get, [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
+            get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
     ?assertEqual("200", Code5),
-    {struct,CdmiResponse5} = json:decode(Response5),
+    {struct,CdmiResponse5} = mochijson2:decode(Response5),
     ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
     ?assert(is_list(ChildrenResponse1)),
     lists:foreach(fun(Name) ->
@@ -153,19 +155,19 @@ list_dir_test(Config) ->
 
     {ok, Code6, _, Response6} =
         do_request(Worker, ChildrangeDir ++ "?children:2-13;childrenrange", get,
-            [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
     {ok, Code7, _, Response7} =
         do_request(Worker, ChildrangeDir ++ "?children:0-1;childrenrange", get,
-            [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
     {ok, Code8, _, Response8} =
         do_request(Worker, ChildrangeDir ++ "?children:14-14;childrenrange", get,
-            [?USER_1_TOKEN_HEADER | RequestHeaders5], []),
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
     ?assertEqual("200", Code6),
     ?assertEqual("200", Code7),
     ?assertEqual("200", Code8),
-    {struct,CdmiResponse6} = json:decode(Response6),
-    {struct,CdmiResponse7} = json:decode(Response7),
-    {struct,CdmiResponse8} = json:decode(Response8),
+    {struct,CdmiResponse6} = mochijson2:decode(Response6),
+    {struct,CdmiResponse7} = mochijson2:decode(Response7),
+    {struct,CdmiResponse8} = mochijson2:decode(Response8),
     ChildrenResponse6 = proplists:get_value(<<"children">>,CdmiResponse6),
     ChildrenResponse7 = proplists:get_value(<<"children">>,CdmiResponse7),
     ChildrenResponse8 = proplists:get_value(<<"children">>,CdmiResponse8),
@@ -250,9 +252,13 @@ create_file_test(Config) ->
     ?assert(not object_exists(Config, ToCreate5)),
 
     RequestHeaders5 = [{"content-type", "application/binary"}],
+    tracer:start(Worker),
+    tracer:trace_calls(cdmi_object_handler),
     {ok, Code5, _Headers5, _Response5} =
         do_request(Worker, ToCreate5, put,
             [?USER_1_TOKEN_HEADER | RequestHeaders5], FileContent),
+    tracer:stop(),
+
     ?assertEqual("201",Code5),
 
     ?assert(object_exists(Config, ToCreate5)),
@@ -468,7 +474,7 @@ capabilities_test(Config) ->
 
     ?assertEqual("application/cdmi-capability",
         proplists:get_value("content-type", Headers8)),
-    CdmiResponse8 = json:decode(Response8),
+    CdmiResponse8 = mochijson2:decode(Response8),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"objectName">>, CdmiResponse8)),
@@ -488,7 +494,7 @@ capabilities_test(Config) ->
     ?assertEqual("200", Code9),
 %%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
 
-    CdmiResponse9 = json:decode(Response9),
+    CdmiResponse9 = mochijson2:decode(Response9),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse9)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
@@ -506,7 +512,7 @@ capabilities_test(Config) ->
     ?assertEqual("200", Code10),
 %%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
 
-    CdmiResponse10 = json:decode(Response10),
+    CdmiResponse10 = mochijson2:decode(Response10),
     ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse10)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),

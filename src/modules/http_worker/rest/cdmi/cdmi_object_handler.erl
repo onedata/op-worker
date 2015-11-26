@@ -160,13 +160,13 @@ get_cdmi(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec put_binary(req(), #{}) -> {term(), req(), #{}}.
-put_binary(ReqArg, State = #{identity := Identity, path := Path}) ->
+put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
     % prepare request data
     {Content, Req} = cowboy_req:header(<<"content-type">>, ReqArg, ?MIMETYPE_DEFAULT_VALUE),
     %%  TODO partial upload
     %%  {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     {Mimetype, Encoding} = parse_content(Content),
-    case onedata_file_api:create(Identity, Path, ?DEFAULT_FILE_PERMISSIONS) of
+    case onedata_file_api:create(Auth, Path, ?DEFAULT_FILE_PERMISSIONS) of
         {ok, _} ->
             update_completion_status(Path, <<"Processing">>),
             update_mimetype(Path, Mimetype),
@@ -187,7 +187,7 @@ put_binary(ReqArg, State = #{identity := Identity, path := Path}) ->
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    case onedata_file_api:truncate(Identity, {path, Path}, 0) of
+                    case onedata_file_api:truncate(Auth, {path, Path}, 0) of
                         ok -> ok;
                         {error, Err} when Err =:= ?EPERM orelse Err =:= ?EACCES ->
                         %% set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
@@ -245,9 +245,9 @@ write_body_to_file(Req, State, Offset) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write_body_to_file(req(), #{}, integer(), boolean()) -> {boolean(), req(), #{}}.
-write_body_to_file(Req, #{path := Path, identity := Identity} = State, Offset, RemoveIfFails) ->
+write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset, RemoveIfFails) ->
     {Status, Chunk, Req1} = cowboy_req:body(Req),
-    {ok, FileHandle} = onedata_file_api:open(Identity, {path, Path}, write),
+    {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
     case onedata_file_api:write(FileHandle, Offset, Chunk) of
         {ok, _NewHandle, Bytes} when is_integer(Bytes) ->
             case Status of

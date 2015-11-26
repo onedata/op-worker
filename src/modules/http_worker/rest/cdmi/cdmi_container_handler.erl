@@ -120,7 +120,7 @@ get_cdmi(Req, #{options := Options} = State) ->
                      [] -> ?default_get_dir_opts;
                      _ -> Options
                  end,
-    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{optionss := NewOptions}),
+    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
     Response = json:encode({struct, DirCdmi}),
     {Response, Req, State}.
 
