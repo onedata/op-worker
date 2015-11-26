@@ -38,7 +38,7 @@
     },
     "provider_domains": {
         "p1": {
-            "db_driver": "riak",
+            "db_driver": "couchbase",
             "os_config": "cfg1",
             "op_ccm": {
                 "ccm1": {
