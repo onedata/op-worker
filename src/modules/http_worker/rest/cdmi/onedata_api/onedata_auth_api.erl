@@ -5,37 +5,32 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc
-%%% This mudule provides information about cdmi protocol plugin and it's used
-%%% by onedata during plugin registration process.
+%%% @doc Public api for authentication, available in
+%%% protocol plugins.
 %%% @end
 %%%--------------------------------------------------------------------
--module(cdmi_protocol_plugin).
--behaviour(protocol_plugin_behaviour).
+-module(onedata_auth_api).
 -author("Tomasz Lichon").
 
+-include("modules/http_worker/http_common.hrl").
+
 %% API
--export([routes/0]).
+-export([is_authorized/2]).
+
+-type identity() :: any().
+
+-export_type([identity/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns routes to cdmi protocol.
-%% @end
+%% @doc @equiv pre_handler:is_authorized/2, updates State
 %%--------------------------------------------------------------------
--spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
-routes() ->
-    [
-        {"/cdmi/cdmi_capabilities/", #{handler => cdmi_capabilities_handler}},
-        {"/cdmi/cdmi_capabilities/container/", #{handler => cdmi_container_capabilities_handler}},
-        {"/cdmi/cdmi_capabilities/dataobject/", #{handler => cdmi_dataobject_capabilities_handler}},
-        {"/cdmi/cdmi_objectid/:id/", #{handler => cdmi_objectid_handler}},
-        {"/cdmi/[...]", fun cdmi_handler_selector:choose_object_or_container_handler/1}
-    ].
-
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+is_authorized(Req, State) ->
+    rest_auth:is_authorized(Req, State).
 
 %%%===================================================================
 %%% Internal functions

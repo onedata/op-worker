@@ -12,8 +12,8 @@
 -module(storage_file_manager).
 
 -include("types.hrl").
--include("errors.hrl").
 -include("modules/datastore/datastore.hrl").
+-include_lib("storage_file_manager_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 

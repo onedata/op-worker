@@ -14,6 +14,10 @@
 
 %% HTTP error code 400 and request sent to client
 -define(unsupported_version,
-  {400, [{<<"error_unsupported_version">>, <<"Given CDMI version is not supported. Use 1.1.1 instead.">>}]}).
+    {400, [{<<"error_unsupported_version">>, <<"Given CDMI version is not supported. Use 1.1.1 instead.">>}]}).
+
+%% HTTP error code 400 and request sent to client
+-define(invalid_range,
+    {400, [{<<"error_invalid_range">>, <<"Given range is invalid">>}]}).
 
 -endif.
