@@ -12,10 +12,10 @@
 -module(cdmi_container_answer).
 -author("Tomasz Lichon").
 
+-include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
--define(container_capability_path, <<"cdmi_capabilities/container/">>).
 -define(infinity, 10000000000000).
 
 %% API
@@ -47,7 +47,7 @@ prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
 %%     prepare(Tail, State);
 %% prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
 %%     {ok, #file_attr{uuid = Uuid}} =
-%%         onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
+%%         onedata_file_api:stat(Auth, {path, filename:dirname(binary:part(Path, {0, byte_size(Path) - 1}))}),
 %%     [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare(Tail, State)];
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, ?container_capability_path} | prepare(Tail, State)];
