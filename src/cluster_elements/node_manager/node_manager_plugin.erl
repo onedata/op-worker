@@ -34,7 +34,7 @@
 %% List ccm nodes to be used by node manager.
 %% @end
 %%--------------------------------------------------------------------
--spec ccm_nodes() -> Nodes :: [atom()].
+-spec ccm_nodes() -> {ok, Nodes :: [atom()]} | undefined.
 ccm_nodes() ->
   application:get_env(?APP_NAME, ccm_nodes).
 
@@ -43,7 +43,7 @@ ccm_nodes() ->
 %% List db nodes to be used by node manager.
 %% @end
 %%--------------------------------------------------------------------
--spec db_nodes() -> Nodes :: [atom()].
+-spec db_nodes() -> {ok, Nodes :: [atom()]} | undefined.
 db_nodes() ->
   application:get_env(?APP_NAME, db_nodes).
 
@@ -101,14 +101,7 @@ modules_with_args() -> [
 %% {@link node_manager_plugin_behaviour}  callback on_init/0.
 %% @end
 %%--------------------------------------------------------------------
--spec on_init(Args :: term()) -> Result when
-  Result :: {ok, State}
-  | {ok, State, Timeout}
-  | {ok, State, hibernate}
-  | {stop, Reason :: term()}
-  | ignore,
-  State :: term(),
-  Timeout :: non_neg_integer() | infinity.
+-spec on_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
 on_init([]) ->
   try
     ensure_correct_hostname(),
@@ -162,7 +155,7 @@ handle_call_extension(_Request, _From, State) ->
 
 handle_cast_extension(_Request, State) ->
   ?log_bad_request(_Request),
-  {reply, wrong_request, State}.
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
