@@ -90,12 +90,13 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec healthcheck(Endpoint :: atom()) -> ok | {error, Reason :: atom()}.
 healthcheck(protocol_handler) ->
-    {ok, PrtoHlPort} = application:get_env(?APP_NAME, protocol_handler_port),
-    case ssl2:connect("127.0.0.1", PrtoHlPort, [{packet, 4}, {active, false}]) of
+    {ok, ProtoPort} = application:get_env(?APP_NAME, protocol_handler_port),
+    case ssl2:connect("127.0.0.1", ProtoPort, [{packet, 4}, {active, false}]) of
         {ok, Sock} ->
             ssl2:close(Sock),
             ok;
-        _ -> {error, no_protocol_handler}
+        _ ->
+            {error, no_protocol_handler}
     end;
 healthcheck(gui) ->
     {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),

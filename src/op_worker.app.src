@@ -19,7 +19,6 @@
             sasl,
             public_key,
             crypto,
-            web_client,
             % Meck is needed only for development purposes, should be removed before release.
             meck,
             % ctool already requires those apps below, but they are here
