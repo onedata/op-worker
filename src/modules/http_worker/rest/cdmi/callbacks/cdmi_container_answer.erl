@@ -75,19 +75,17 @@ prepare([<<"childrenrange">> | Tail], #{options := Opts, path := Path, auth := A
                 <<(integer_to_binary(From))/binary, "-", (integer_to_binary(To))/binary>>
         end,
     [{<<"childrenrange">>, BinaryRange} | prepare(Tail, State)];
-prepare([{<<"children">>, From, To} | Tail], #{path := Path, auth := Auth,
-        identity := Identity} = State) ->
+prepare([{<<"children">>, From, To} | Tail], #{path := Path, auth := Auth} = State) ->
     {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {path, Path}),
     {From1, To1} = normalize_childrenrange(From, To, ChildNum),
     {ok, List} = onedata_file_api:ls(Auth, {path, Path}, To1 - From1 + 1, From1),
     Children = lists:map(
-        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Identity) end, List),
+        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Auth) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
-prepare([<<"children">> | Tail], #{path := Path, auth := Auth,
-        identity := Identity} = State) ->
+prepare([<<"children">> | Tail], #{path := Path, auth := Auth} = State) ->
     {ok, List} = onedata_file_api:ls(Auth, {path, Path}, ?infinity, 0),
     Children = lists:map(
-        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Identity) end, List),
+        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Auth) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([_Other | Tail], State) ->
     prepare(Tail, State).
@@ -118,9 +116,9 @@ normalize_childrenrange(From, To, ChildNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec distinguish_files(Uuid :: binary(), Name :: binary() ,
-        Identity :: onedata_auth_api:identity()) -> binary().
-distinguish_files(Uuid, Name, Identity) ->
-    case onedata_file_api:stat(Identity, {uuid, Uuid}) of
+        Auth::session:id()) -> binary().
+distinguish_files(Uuid, Name, Auth) ->
+    case onedata_file_api:stat(Auth, {uuid, Uuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             utils:ensure_path_ends_with_slash(Name);
         {ok, _} -> Name
