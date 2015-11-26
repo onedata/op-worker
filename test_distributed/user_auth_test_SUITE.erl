@@ -38,33 +38,30 @@ all() -> [token_authentication].
 %%%===================================================================
 
 token_authentication(Config) ->
-    try
-        % given
-        [Worker1, _] = ?config(op_worker_nodes, Config),
-        mock_gr_certificates(Config),
-        SessionId = <<"SessionId">>,
+    % given
+    [Worker1, _] = ?config(op_worker_nodes, Config),
+    mock_gr_certificates(Config),
+    SessionId = <<"SessionId">>,
 
-        % when
-        {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
+    % when
+    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
 
-        % then
-        ?assertMatch(
-            {ok, #document{value = #onedata_user{name = ?USER_NAME}}},
-            rpc:call(Worker1, onedata_user, get, [?USER_ID])
-        ),
-        ?assertMatch(
-            {ok, #document{value = #session{identity = #identity{user_id = ?USER_ID}}}},
-            rpc:call(Worker1, session, get, [SessionId])
-        ),
-        ?assertMatch(
-            {ok, #document{value = #identity{user_id = ?USER_ID}}},
-            rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
-        ),
-        unmock_gr_certificates(Config),
-        ok = ssl2:close(Sock)
-    catch T:M ->
-        ct:print("ZOMG: ~p", [{T, M, erlang:get_stacktrace()}])
-    end.
+    % then
+    ?assertMatch(
+        {ok, #document{value = #onedata_user{name = ?USER_NAME}}},
+        rpc:call(Worker1, onedata_user, get, [?USER_ID])
+    ),
+    ?assertMatch(
+        {ok, #document{value = #session{identity = #identity{user_id = ?USER_ID}}}},
+        rpc:call(Worker1, session, get, [SessionId])
+    ),
+    ?assertMatch(
+        {ok, #document{value = #identity{user_id = ?USER_ID}}},
+        rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
+    ),
+    unmock_gr_certificates(Config),
+    ok = ssl:close(Sock).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -75,11 +72,11 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
+    ssl:start(),
     Config.
 
 end_per_testcase(_, _Config) ->
-    application:stop(ssl2).
+    ssl:stop().
 
 %%%===================================================================
 %%% Internal functions
@@ -103,40 +100,41 @@ connect_via_token(Node, TokenVal, SessionId) ->
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
 
     % when
-    {ok, Sock} = ssl2:connect(utils:get_host(Node), Port, [{packet, 4}]),
-    ct:print("~s", [TokenAuthMessageRaw]),
-    timer:sleep(10000),
-    ok = ssl2:send(Sock, TokenAuthMessageRaw),
-    {ok, Data} = ssl2:recv(Sock, 5000, 5000),
-    ct:print("Data2: ~p", [Data]),
+    {ok, Sock} = ssl:connect(utils:get_host(Node), Port, [{packet, 4}, {active, true}]),
+    ok = ssl:send(Sock, TokenAuthMessageRaw),
 
     % then
-    HandshakeResponse = receive_server_message(Sock),
+    HandshakeResponse = receive_server_message(),
     ?assertMatch(#'ServerMessage'{message_body = {handshake_response, #'HandshakeResponse'{}}}, HandshakeResponse),
     {ok, Sock}.
 
-receive_server_message(Sock) ->
-    receive_server_message(Sock, [message_stream_reset]).
+receive_server_message() ->
+    receive_server_message([message_stream_reset]).
 
-receive_server_message(Sock, IgnoredMsgList) ->
-    {ok, Data} = ssl2:recv(Sock, 5000, 5000),
-    ct:print("Data: ~p", [Data]),
-    % ignore listed messages
-    Msg = messages:decode_msg(Data, 'ServerMessage'),
-    MsgType = element(1, Msg#'ServerMessage'.message_body),
-    case lists:member(MsgType, IgnoredMsgList) of
-        true ->
-            receive_server_message(IgnoredMsgList);
-        false ->
-            Msg
+receive_server_message(IgnoredMsgList) ->
+    receive
+        {_, _, Data} ->
+            % ignore listed messages
+            Msg = messages:decode_msg(Data, 'ServerMessage'),
+            MsgType = element(1, Msg#'ServerMessage'.message_body),
+            case lists:member(MsgType, IgnoredMsgList) of
+                true ->
+                    receive_server_message(IgnoredMsgList);
+                false -> Msg
+            end
+    after timer:seconds(5) ->
+        {error, timeout}
     end.
 
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
-    {ok, KeyPath} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
-    {ok, CertPath} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
+    KeyPath = ?TEST_FILE(Config, "grpkey.pem"),
+    CertPath = ?TEST_FILE(Config, "grpcert.pem"),
     SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
+
+    ct:print("KeyPath: ~p", [KeyPath]),
+    ct:print("CertPath: ~p", [CertPath]),
 
     test_utils:mock_new(Workers, gr_endpoint),
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
@@ -155,11 +153,10 @@ mock_gr_certificates(Config) ->
                     Body, [SSLOpts, insecure | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
-                AuthHdr =
-                    http_client:request(Method, Url ++ URN, [
-                        {<<"content-type">>, <<"application/json">>},
-                        {<<"macaroon">>, Macaroon} | Headers
-                    ], Body, [SSLOpts, insecure | Options])
+                http_client:request(Method, Url ++ URN, [
+                    {<<"content-type">>, <<"application/json">>},
+                    {<<"macaroon">>, Macaroon} | Headers
+                ], Body, [SSLOpts, insecure | Options])
         end
     ).
 
