@@ -31,7 +31,8 @@
     lfm_create_and_access_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
-    lfm_truncate_test/1
+    lfm_truncate_test/1,
+    mkdir_test/1
 ]).
 
 -performance({test_cases, []}).
@@ -41,7 +42,8 @@ all() -> [
     lfm_create_and_access_test,
     lfm_write_test,
     lfm_stat_test,
-    lfm_truncate_test
+    lfm_truncate_test,
+    mkdir_test
 ].
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -51,6 +53,47 @@ all() -> [
 %%%====================================================================
 %%% Test function
 %%%====================================================================
+
+
+mkdir_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+
+    lists:foreach(
+        fun(N) ->
+                    D0 = gen_filename(),
+                    D1 = gen_filename(),
+                    D2 = gen_filename(),
+                    D3 = gen_filename(),
+
+                    F = gen_filename(),
+
+                    ct:print("~p: ~p", [N, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, D0, D1, D2, D3, F])]),
+
+                    mkdir(Worker, SessId1, <<"/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+                    mkdir(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+
+%%                    create(Worker, SessId1, <<"/", F/binary>>, 8#755),
+
+                    create(Worker, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
+
+                    ok
+        end, lists:seq(1, 10000)),
+    timer:sleep(20).
+
+gen_filename() ->
+    list_to_binary(ibrowse_lib:url_encode("helpers_test_" ++ binary_to_list(base64:encode(crypto:rand_bytes(20))))).
 
 
 fslogic_new_file_test(Config) ->
@@ -545,6 +588,14 @@ create(Worker, SessId, FilePath, Mode) ->
         Host ! {self(), Result}
     end).
 
+
+mkdir(Worker, SessId, FilePath, Mode) ->
+    exec(Worker, fun(Host) ->
+        Result =
+            logical_file_manager:mkdir(SessId, FilePath, Mode),
+        Host ! {self(), Result}
+                 end).
+
 unlink(Worker, SessId, File) ->
     exec(Worker, fun(Host) ->
         Result =
@@ -605,7 +656,7 @@ exec(Worker, Fun) ->
     end),
     receive
         {Pid, Result} -> Result
-    after timer:seconds(5) ->
+    after timer:seconds(30) ->
         {error, test_timeout}
     end.
 

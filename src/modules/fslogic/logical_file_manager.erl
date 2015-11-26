@@ -46,6 +46,7 @@
     end).
 
 
+-include("global_definitions.hrl").
 -include("types.hrl").
 -include("errors.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
@@ -57,7 +58,7 @@
 -export_type([handle/0]).
 
 %% Functions operating on directories
--export([mkdir/2, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
@@ -81,9 +82,25 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_path()) -> ok | error_reply().
 mkdir(SessId, Path) ->
-    lfm_dirs:mkdir(Path).
+    {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
+    mkdir(SessId, Path, Mode).
+
+-spec mkdir(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+    ok | error_reply().
+mkdir(SessId, Path, Mode) ->
+    try
+        CTX = fslogic_context:new(SessId),
+        {ok, Tokens} = fslogic_path:verify_file_path(Path),
+        Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+        {ok, CanonicalPath} = file_meta:gen_path(Entry),
+        lfm_dirs:mkdir(CTX, CanonicalPath, Mode)
+    catch
+        _:Reason ->
+            ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
+            {error, Reason}
+    end.
 
 
 %%--------------------------------------------------------------------

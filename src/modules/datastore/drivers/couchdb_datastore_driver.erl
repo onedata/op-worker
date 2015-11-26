@@ -24,10 +24,6 @@
 
 -define(LINKS_KEY_SUFFIX, "$$").
 
-%% Protocol driver module
--define(DRIVER, couchbeam).
-
-
 %% store_driver_behaviour callbacks
 -export([init_bucket/3, healthcheck/1, init_driver/1]).
 -export([save/2, create/2, update/3, create_or_update/3, exists/2, get/2, list/3, delete/3]).
@@ -80,7 +76,7 @@ gateway_loop(#{port_fd := PortFD, id := {_, N} = ID, db_hostname := Hostname, db
     NewState =
         receive
             {PortFD, {data, {_, Data}}} ->
-                ?info("[CouchBase Gateway ~p] ~p", [ID, Data]),
+%%                ?info("[CouchBase Gateway ~p] ~p", [ID, Data]),
                 State;
             {PortFD, closed} ->
                 State#{status => closed};

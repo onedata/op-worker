@@ -71,6 +71,7 @@ mkdir(Storage, FileId, Mode) ->
 -spec mkdir(Storage :: datastore:document(), FileId :: helpers:file(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | error_reply().
 mkdir(Storage, FileId, Mode, Recursive) ->
+    Noop = fun(_) -> ok end,
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     case helpers:mkdir(HelperHandle, FileId, Mode) of
@@ -84,7 +85,9 @@ mkdir(Storage, FileId, Mode, Recursive) ->
                     LeafLess = fslogic_path:dirname(Tokens),
                     ok = mkdir(Storage, LeafLess, ?AUTO_CREATED_PARENT_DIR_MODE, true)
             end,
-            mkdir(Storage, FileId, Mode, false);
+            R = mkdir(Storage, FileId, Mode, false),
+            Noop(HelperHandle),
+            R;
         {error, Reason} ->
             {error, Reason}
     end.
