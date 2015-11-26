@@ -23,7 +23,7 @@
 %% node_manager_plugin_behaviour callbacks
 -export([on_init/1, on_terminate/2, on_code_change/3,
   handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
-  modules/0, modules_with_args/0, listeners/0, ccm_nodes/0, db_nodes/0]).
+  modules/0, modules_with_args/0, listeners/0, ccm_nodes/0, db_nodes/0, check_node_ip_address/0]).
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
@@ -204,6 +204,24 @@ on_terminate(_Reason, _State) ->
   Vsn :: term().
 on_code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks IP address of this node by asking GR. If the check cannot be performed,
+%% it assumes a 127.0.0.1 address and logs an alert.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
+check_node_ip_address() ->
+  try
+    {ok, IPBin} = gr_providers:check_ip_address(provider),
+    {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
+    IP
+  catch T:M ->
+    ?alert_stacktrace("Cannot check external IP of node, defaulting to 127.0.0.1 - ~p:~p", [T, M]),
+    {127, 0, 0, 1}
+  end.
 
 %%%===================================================================
 %%% Internal functions
