@@ -22,26 +22,14 @@ def client_hostname(node_name, uid):
     return common.format_hostname(node_name, uid)
 
 
-def _tweak_config(config, os_config, name, uid):
+def _tweak_config(config, name, uid):
     cfg = copy.deepcopy(config)
     cfg = {'node': cfg[name]}
     node = cfg['node']
     node['name'] = client_hostname(name, uid)
-    os_config_name = cfg['node']['os_config']
-    cfg['os_config'] = os_config[os_config_name]
-    node['clients'] = []
-    clients = config[name]['clients']
-    for cl in clients:
-        client = clients[cl]
-        client_config = {'name': client['name'],
-                         'op_domain': provider_worker.provider_domain(client['op_domain'], uid),
-                         'gr_domain': globalregistry.gr_domain(client['gr_domain'], uid),
-                         'user_key': client['user_key'],
-                         'user_cert': client['user_cert'],
-                         'mounting_path': client['mounting_path'],
-                         'token_for': client['token_for']}
-
-        node['clients'].append(client_config)
+    node['op_domain'] = provider_worker.provider_domain(node['op_domain'],
+                                                        uid)
+    node['gr_domain'] = globalregistry.gr_domain(node['gr_domain'], uid)
 
     return cfg
 
@@ -49,10 +37,23 @@ def _tweak_config(config, os_config, name, uid):
 def _node_up(image, bindir, config, config_path, dns_servers):
     node = config['node']
     hostname = node['name']
-    shortname = hostname.split(".")[0]
-    os_config = config['os_config']
 
-    client_data = {}
+    cert_file_path = node['user_cert']
+    key_file_path = node['user_key']
+    # cert_file_path and key_file_path can both be an absolute path
+    # or relative to gen_dev_args.json
+    cert_file_path = os.path.join(common.get_file_dir(config_path),
+                                  cert_file_path)
+    key_file_path = os.path.join(common.get_file_dir(config_path),
+                                 key_file_path)
+
+    node['user_cert'] = '/tmp/cert'
+    node['user_key'] = '/tmp/key'
+
+    envs = {'X509_USER_CERT': node['user_cert'],
+            'X509_USER_KEY': node['user_key'],
+            'PROVIDER_HOSTNAME': node['op_domain'],
+            'GLOBAL_REGISTRY_URL': node['gr_domain']}
 
     # We want the binary from debug more than relwithdebinfo, and any of these
     # more than from release (ifs are in reverse order so it works when
@@ -61,52 +62,29 @@ def _node_up(image, bindir, config, config_path, dns_servers):
 [ -d /root/build/release ] && cp /root/build/release/oneclient /root/bin/oneclient
 [ -d /root/build/relwithdebinfo ] && cp /root/build/relwithdebinfo/oneclient /root/bin/oneclient
 [ -d /root/build/debug ] && cp /root/build/debug/oneclient /root/bin/oneclient
-mkdir /tmp/certs
-mkdir /tmp/keys
-'''
-
-    for client in node['clients']:
-        # for each client instance we want to have separated certs and keys
-        client_name = client["name"]
-        client_data[client_name] = {'client_name': client_name,
-                                    'op_domain': client['op_domain'],
-                                    'gr_domain': client['gr_domain'],
-                                    'mounting_path': client['mounting_path'],
-                                    'token_for': client['token_for']}
-        # cert_file_path and key_file_path can both be an absolute path
-        # or relative to gen_dev_args.json
-        cert_file_path = os.path.join(common.get_file_dir(config_path),
-                                      client['user_cert'])
-        key_file_path = os.path.join(common.get_file_dir(config_path),
-                                     client['user_key'])
-        command += '''mkdir /tmp/certs/{client_name}
-mkdir /tmp/keys/{client_name}
-cat <<"EOF" > /tmp/certs/{client_name}/cert
+cat <<"EOF" > /tmp/cert
 {cert_file}
 EOF
-cat <<"EOF" > /tmp/keys/{client_name}/key
+cat <<"EOF" > /tmp/key
 {key_file}
 EOF
-'''
-
-        command = command.format(
-            client_name=client_name,
-            cert_file=open(cert_file_path, 'r').read(),
-            key_file=open(key_file_path, 'r').read())
-
-        client_data[client_name]['user_cert'] = os.path.join('/tmp', 'certs', client_name, 'cert')
-        client_data[client_name]['user_key'] = os.path.join('/tmp', 'keys', client_name, 'key')
-
-    command += '''bash'''
+bash'''
+    command = command.format(
+        cert_file=open(cert_file_path, 'r').read(),
+        key_file=open(key_file_path, 'r').read())
 
     volumes = [(bindir, '/root/build', 'ro')]
-    volumes += [common.volume_for_storage(s) for s in os_config['storages']]
+    storages = node['storage']
+    for name in storages:
+        s = storages[name]
+        volumes.append((s['host_path'], s['volume_path'], 'rw'))
 
     container = docker.run(
         image=image,
         name=hostname,
         hostname=hostname,
         detach=True,
+        envs=envs,
         interactive=True,
         tty=True,
         workdir='/root/bin',
@@ -115,18 +93,17 @@ EOF
         run_params=["--privileged"],
         command=command)
 
-    # create system users and groups
-    common.create_users(container, os_config['users'])
-    common.create_groups(container, os_config['groups'])
+    for user in node['docker_users']:
+        command = "docker exec %s adduser --disabled-password --gecos '' %s" % (container, user)
+        # print command
+        subprocess.check_call(command, stdout=sys.stdout, shell=True)
 
-    return {'docker_ids': [container], 'client_nodes': [hostname], 'client_data': {shortname: client_data}}
+    return {'docker_ids': [container], 'client_nodes': [hostname]}
 
 
 def up(image, bindir, dns_server, uid, config_path):
-    json_config = common.parse_json_file(config_path)
-    config = json_config['oneclient']
-    os_config = json_config['os_configs']
-    configs = [_tweak_config(config, os_config, node, uid) for node in config]
+    config = common.parse_json_file(config_path)['oneclient']
+    configs = [_tweak_config(config, node, uid) for node in config]
 
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
