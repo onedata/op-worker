@@ -20,5 +20,5 @@
 
 page_init() ->
     {redirect_absolute,
-        g_str:to_binary(oneprovider:get_gr_login_page())}.
+        str_utils:to_binary(oneprovider:get_gr_login_page())}.
 
