@@ -29,9 +29,6 @@
 % GUI routing module
 -define(GUI_ROUTING_MODULE, gui_routes).
 
-% Paths in gui static directory
--define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/", "/html/"]).
-
 % Cowboy listener references
 -define(HTTPS_LISTENER, https).
 -define(REST_LISTENER, rest).
@@ -141,7 +138,7 @@ start_redirector_listener() ->
         application:get_env(?APP_NAME, gui_socket_timeout_seconds),
     RedirectDispatch = [
         {'_', [
-            {'_', opn_redirect_handler, []}
+            {'_', gui_https_redirect_handler, []}
         ]}
     ],
     {ok, _} = cowboy:start_http(?HTTP_REDIRECTOR_LISTENER, RedirectNbAcceptors,
@@ -222,18 +219,3 @@ stop_listeners() ->
                 ?error("Error on stopping listener ~p: ~p", [X, Error])
         end, Results).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates static file routing rules for cowboy.
-%% @end
-%%--------------------------------------------------------------------
--spec static_dispatches(DocRoot :: string(), StaticPaths :: [string()]) -> [term()].
-static_dispatches(DocRoot, StaticPaths) ->
-    _StaticDispatches = lists:map(fun(Dir) ->
-        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
-    end, StaticPaths).
