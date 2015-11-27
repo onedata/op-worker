@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/http_worker/http_common.hrl").
+-include("http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").

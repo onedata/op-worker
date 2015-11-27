@@ -12,7 +12,7 @@
 -module(cdmi_container_handler).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/http_common.hrl").
+-include("http_common.hrl").
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,

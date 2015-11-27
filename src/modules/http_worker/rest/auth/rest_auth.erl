@@ -12,7 +12,7 @@
 -module(rest_auth).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/http_common.hrl").
+-include("http_common.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").

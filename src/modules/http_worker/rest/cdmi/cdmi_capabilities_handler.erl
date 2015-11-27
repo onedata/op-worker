@@ -11,7 +11,7 @@
 %% ===================================================================
 -module(cdmi_capabilities_handler).
 
--include("modules/http_worker/http_common.hrl").
+-include("http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").

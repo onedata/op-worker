@@ -1,4 +1,4 @@
-  %%%--------------------------------------------------------------------
+%%%--------------------------------------------------------------------
 %%% @author Piotr Ociepka
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -12,7 +12,8 @@
 -module(cdmi_arg_parser).
 -author("Piotr Ociepka").
 
--include("modules/http_worker/http_common.hrl").
+
+-include("http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 
 -export([get_supported_version/1, parse_opts/1, malformed_request/2, malformed_capability_request/2]).
@@ -26,26 +27,26 @@
 %%--------------------------------------------------------------------
 -spec malformed_request(req(), #{}) -> {false, req(), #{}}.
 malformed_request(Req, State) ->
-  {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
-  Version = get_supported_version(RawVersion),
-  {Qs, Req3} = cowboy_req:qs(Req2),
-  Opts = parse_opts(Qs),
-  {RawPath, Req4} = cowboy_req:path(Req3),
-  <<"/cdmi", Path/binary>> = RawPath,
+    {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
+    Version = get_supported_version(RawVersion),
+    {Qs, Req3} = cowboy_req:qs(Req2),
+    Opts = parse_opts(Qs),
+    {RawPath, Req4} = cowboy_req:path(Req3),
+    <<"/cdmi", Path/binary>> = RawPath,
 
-  NewState = State#{cdmi_version => Version, options => Opts, path => Path},
-  {false, Req4, NewState}.
+    NewState = State#{cdmi_version => Version, options => Opts, path => Path},
+    {false, Req4, NewState}.
 
 %% ====================================================================
 %% @doc @equiv cdmi_arg_parser:malformed_request/2
 %% ====================================================================
 -spec malformed_capability_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
 malformed_capability_request(Req, State) ->
-  {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
-  case maps:find(cdmi_version, State2) of
-    {ok, _} -> {false, Req, State2};
-    _ -> throw(?unsupported_version)
-  end.
+    {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
+    case maps:find(cdmi_version, State2) of
+        {ok, _} -> {false, Req, State2};
+        _ -> throw(?unsupported_version)
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -55,11 +56,11 @@ malformed_capability_request(Req, State) ->
 %% @doc Extract the CDMI version from request arguments string.
 %%--------------------------------------------------------------------
 -spec get_supported_version(list() | binary()) ->
-  binary() | undefined.
+    binary() | undefined.
 get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
-  VersionList = lists:map(fun utils:trim_spaces/1, binary:split(VersionBinary,<<",">>,[global])),
-  get_supported_version(VersionList);
+    VersionList = lists:map(fun utils:trim_spaces/1, binary:split(VersionBinary, <<",">>, [global])),
+    get_supported_version(VersionList);
 get_supported_version([]) -> throw(?unsupported_version);
 get_supported_version([<<"1.1.1">> | _Rest]) -> <<"1.1.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
@@ -74,20 +75,20 @@ get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 %%--------------------------------------------------------------------
 -spec parse_opts(binary()) -> [binary() | {binary(), binary()} | {binary(), From :: integer(), To :: integer()}].
 parse_opts(<<>>) ->
-  [];
+    [];
 parse_opts(RawOpts) ->
-  Opts = binary:split(RawOpts, <<";">>, [global]),
-  lists:map(
-    fun(Opt) ->
-      case binary:split(Opt, <<":">>) of
-        [SimpleOpt] -> SimpleOpt;
-        [SimpleOpt, Range] ->
-          case binary:split(Range, <<"-">>) of
-            [SimpleVal] -> {SimpleOpt, SimpleVal};
-            [From, To] ->
-              {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
-          end
-      end
-    end,
-    Opts
-  ).
+    Opts = binary:split(RawOpts, <<";">>, [global]),
+    lists:map(
+        fun(Opt) ->
+            case binary:split(Opt, <<":">>) of
+                [SimpleOpt] -> SimpleOpt;
+                [SimpleOpt, Range] ->
+                    case binary:split(Range, <<"-">>) of
+                        [SimpleVal] -> {SimpleOpt, SimpleVal};
+                        [From, To] ->
+                            {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
+                    end
+            end
+        end,
+        Opts
+    ).
