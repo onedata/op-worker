@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
 -export([gen_name/0, gen_storage_dir/1]).
@@ -28,7 +29,7 @@
 %%--------------------------------------------------------------------
 -spec gen_storage_dir(Config :: list()) -> string().
 gen_storage_dir(_Config) ->
-    "/tmp/storage/" ++ erlang:binary_to_list(gen_name()).
+    filename:join([?TEMP_DIR, "/storage/", erlang:binary_to_list(gen_name())]).
 
 %%--------------------------------------------------------------------
 %% @doc
