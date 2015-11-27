@@ -6,16 +6,16 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This mudule provides information about cdmi protocol plugin and it's used
-%%% by onedata during plugin registration process.
+%%% Generates random names.
 %%% @end
 %%%--------------------------------------------------------------------
--module(cdmi_protocol_plugin).
--behaviour(protocol_plugin_behaviour).
+-module(generator).
 -author("Tomasz Lichon").
 
+-include_lib("ctool/include/test/test_utils.hrl").
+
 %% API
--export([routes/0]).
+-export([gen_name/0, gen_storage_dir/1]).
 
 %%%===================================================================
 %%% API
@@ -23,19 +23,21 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns routes to cdmi protocol.
+%% Generate random storage dir inside ct priv_dir.
 %% @end
 %%--------------------------------------------------------------------
--spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
-routes() ->
-    [
-        {"/cdmi/cdmi_capabilities/", #{handler => cdmi_capabilities_handler}},
-        {"/cdmi/cdmi_capabilities/container/", #{handler => cdmi_container_capabilities_handler}},
-        {"/cdmi/cdmi_capabilities/dataobject/", #{handler => cdmi_dataobject_capabilities_handler}},
-        {"/cdmi/cdmi_objectid/:id/", #{handler => cdmi_objectid_handler}},
-        {"/cdmi/[...]", fun cdmi_handler_selector:choose_object_or_container_handler/1}
-    ].
+-spec gen_storage_dir(Config :: list()) -> string().
+gen_storage_dir(_Config) ->
+    filename:join([?TEMP_DIR, "/storage/", erlang:binary_to_list(gen_name())]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Generate random name.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_name() -> binary().
+gen_name() ->
+    binary:replace(base64:encode(crypto:rand_bytes(12)), <<"/">>, <<"">>, [global]).
 
 %%%===================================================================
 %%% Internal functions

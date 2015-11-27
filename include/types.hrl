@@ -13,7 +13,7 @@
 % TODO or create many hrls and group the types
 % TODO those types might also be exported from .erl modules <----- +1
 
--include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %%--------------------------------------------------------------------
 %% IDs of entities
@@ -40,7 +40,7 @@
 -type share_id() :: binary().
 %%--------------------------------------------------------------------
 
-%% --------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% Misc
 -type error_reply() :: {error, term()}.
 %%--------------------------------------------------------------------
