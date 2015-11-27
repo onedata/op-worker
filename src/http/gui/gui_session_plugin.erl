@@ -141,7 +141,7 @@ delete_session(SessionId) ->
 %%--------------------------------------------------------------------
 -spec clear_expired_sessions() -> integer().
 clear_expired_sessions() ->
-    AllSessions = session:list(),
+    {ok, AllSessions} = session:list(),
     _DeletedSessions = lists:foldl(
         fun(#document{key = Key, value = #session{expires = Expires}}, Acc) ->
             case Expires > now_seconds() of
