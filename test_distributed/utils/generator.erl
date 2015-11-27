@@ -12,7 +12,6 @@
 -module(generator).
 -author("Tomasz Lichon").
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
