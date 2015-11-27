@@ -100,7 +100,7 @@ connect_via_token(Node, TokenVal, SessionId) ->
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
 
     % when
-    {ok, Sock} = ssl2:connect(utils:get_host(Node), Port, [binary, {packet, 4}, {active, true}]),
+    {ok, Sock} = ssl2:connect(utils:get_host(Node), Port, [{packet, 4}, {active, true}]),
     ok = ssl2:send(Sock, TokenAuthMessageRaw),
 
     % then

@@ -90,7 +90,7 @@
 %% identity - user identity
 -record(session, {
     identity :: #identity{},
-    type = fuse :: fuse | gui,
+    type = fuse :: fuse | gui | dummy,
     auth :: #auth{},
     % Timestamp when this session expires
     expires = 0 :: integer(),
