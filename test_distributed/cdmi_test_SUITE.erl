@@ -186,7 +186,7 @@ capabilities_test(Config) ->
     ?assertEqual(200, Code8),
 
     ?assertEqual(<<"application/cdmi-capability">>, proplists:get_value(<<"content-type">>, Headers8)),
-    CdmiResponse8 = json:decode(Response8),
+    CdmiResponse8 = json_utils:decode(Response8),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
     ?assertEqual(?root_capability_path, proplists:get_value(<<"objectName">>, CdmiResponse8)),
     ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
@@ -201,7 +201,7 @@ capabilities_test(Config) ->
     ?assertEqual(200, Code9),
 %%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
 
-    CdmiResponse9 = json:decode(Response9),
+    CdmiResponse9 = json_utils:decode(Response9),
     ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse9)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
 %%   ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
@@ -216,7 +216,7 @@ capabilities_test(Config) ->
     ?assertEqual(200, Code10),
 %%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
 
-    CdmiResponse10 = json:decode(Response10),
+    CdmiResponse10 = json_utils:decode(Response10),
     ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse10)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
 %%   ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
@@ -263,7 +263,7 @@ end_per_testcase(_, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-% Performs a single request using ibrowse
+% Performs a single request using http_client
 do_request(Node, RestSubpath, Method, Headers) ->
     do_request(Node, RestSubpath, Method, Headers, []).
 
@@ -274,7 +274,7 @@ do_request(Node, RestSubpath, Method, Headers, Body) ->
         cdmi_endpoint(Node) ++ RestSubpath,
         Headers,
         Body,
-        [insecure, {ssl_options, [{reuse_sessions, false}]}]
+        [insecure, {ssl_options}]
     ).
 
 cdmi_endpoint(Node) ->
@@ -313,7 +313,7 @@ object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:stat(Worker, SessionId, {path, utils:ensure_unicode_binary("/" ++ Path)}) of
+    case lfm_proxy:stat(Worker, SessionId, {path, str_utils:unicode_list_to_binary("/" ++ Path)}) of
         {ok, _} ->
             true;
         {error, ?ENOENT} ->
@@ -324,7 +324,7 @@ create_file(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:create(Worker, SessionId, utils:ensure_unicode_binary("/" ++ Path), ?FILE_PERMISSIONS) of
+    case lfm_proxy:create(Worker, SessionId, str_utils:unicode_list_to_binary("/" ++ Path), ?FILE_PERMISSIONS) of
         {ok, UUID} -> UUID;
         {error, Code} -> {error, Code}
     end.
@@ -333,7 +333,7 @@ open_file(Config, Path, OpenMode) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:open(Worker, SessionId, {path, utils:ensure_unicode_binary("/" ++ Path)}, OpenMode) of
+    case lfm_proxy:open(Worker, SessionId, {path, str_utils:unicode_list_to_binary("/" ++ Path)}, OpenMode) of
         {error, Error} -> {error, Error};
         FileHandle -> FileHandle
     end.
