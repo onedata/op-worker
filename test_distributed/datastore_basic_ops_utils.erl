@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
--define(REQUEST_TIMEOUT, timer:seconds(60)).
+-define(REQUEST_TIMEOUT, timer:seconds(30)).
 
 -export([create_delete_test/2, create_sync_delete_test/2, save_test/2, save_sync_test/2, update_test/2,
     update_sync_test/2, get_test/2, exists_test/2, mixed_test/2, set_hooks/2, unset_hooks/2]).
@@ -30,6 +30,7 @@
 -define(call_store(Fun, Level, CustomArgs), erlang:apply(datastore, Fun, [Level] ++ CustomArgs)).
 -define(call(N, M, F, A), rpc:call(N, M, F, A, ?TIMEOUT)).
 
+%%%===================================================================
 %%% API
 %%%===================================================================
 

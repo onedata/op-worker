@@ -253,7 +253,7 @@ stream(#{path := Path, identity := Identity} = State, Ranges) ->
 -spec get_mimetype(string()) -> binary().
 get_mimetype(Path) ->
     case onedata_file_api:get_xattr(Path, ?MIMETYPE_XATTR_KEY) of
-        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE %%TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
+        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE % TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
 %%         {ok, Value} -> Value
 %%         {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
     end.
@@ -262,7 +262,7 @@ get_mimetype(Path) ->
 %% @doc Encodes data according to given ecoding
 %%--------------------------------------------------------------------
 -spec encode(Data :: binary(), Encoding :: binary()) -> binary().
-%%TODO uncomment when cdmi operations are implemented
+%% TODO uncomment when cdmi operations are implemented
 %% encode(Data, Encoding) when Encoding =:= <<"base64">> ->
 %%     base64:encode(Data).
 encode(Data, _) ->
