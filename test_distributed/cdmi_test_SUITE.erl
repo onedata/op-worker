@@ -274,7 +274,7 @@ do_request(Node, RestSubpath, Method, Headers, Body) ->
         cdmi_endpoint(Node) ++ RestSubpath,
         Headers,
         Body,
-        [insecure, {ssl_options}]
+        [insecure]
     ).
 
 cdmi_endpoint(Node) ->
