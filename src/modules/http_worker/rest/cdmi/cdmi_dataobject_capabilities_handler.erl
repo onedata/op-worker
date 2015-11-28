@@ -94,7 +94,7 @@ prepare_capability_ans([<<"objectName">> | Tail]) ->
   [{<<"objectName">>, str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))}
     | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
-  [{<<"parentURI">>, str_utils:unicode_list_to_binary(?root_capability_path)} | prepare_capability_ans(Tail)];
+  [{<<"parentURI">>, ?root_capability_path} | prepare_capability_ans(Tail)];
 %% todo uncomment when ID'll be used
 prepare_capability_ans([<<"parentID">> | Tail]) ->
   prepare_capability_ans(Tail);
