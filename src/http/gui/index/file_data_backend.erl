@@ -29,7 +29,7 @@
 
 init() ->
     ?dump(websocket_init),
-    {ok, Pid} = data_backend:aync_process(fun() -> async_loop() end),
+    {ok, Pid} = data_backend:async_process(fun() -> async_loop() end),
     ensure_ets(self(), Pid),
     ok.
 
