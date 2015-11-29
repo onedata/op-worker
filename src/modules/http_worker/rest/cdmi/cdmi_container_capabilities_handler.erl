@@ -23,39 +23,39 @@
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), #{}} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
-  {ok, Req, #{}}.
+    {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), #{}) -> ok.
 terminate(_, _, _) ->
-  ok.
+    ok.
 
 %% ====================================================================
 %% @doc @equiv pre_handler:allowed_methods/2
 %% ====================================================================
 -spec allowed_methods(req(), #{}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-  {[<<"GET">>], Req, State}.
+    {[<<"GET">>], Req, State}.
 
 %% ====================================================================
 %% @doc @equiv pre_handler:malformed_request/2
 %% ====================================================================
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
 malformed_request(Req, State) ->
-  cdmi_arg_parser:malformed_capability_request(Req, State).
+    cdmi_arg_parser:malformed_capability_request(Req, State).
 
 %% ====================================================================
 %% @doc @equiv pre_handler:content_types_provided/2
 %% ====================================================================
 -spec content_types_provided(req(), #{}) -> {[{ContentType, Method}], req(), #{}} when
-  ContentType :: binary(),
-  Method :: atom().
+    ContentType :: binary(),
+    Method :: atom().
 content_types_provided(Req, State) ->
-  {[
-    {<<"application/cdmi-capability">>, get_cdmi_capability}
-  ], Req, State}.
+    {[
+        {<<"application/cdmi-capability">>, get_cdmi_capability}
+    ], Req, State}.
 
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -64,13 +64,14 @@ content_types_provided(Req, State) ->
 %% ====================================================================
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi_capability(Req, State) ->
-  #{options := Opts} = State,
-  RawCapabilities = case Opts of
-    [] -> prepare_capability_ans(?default_get_capability_opts);
-    X -> prepare_capability_ans(X)
-  end,
-  Capabilities = json_utils:encode(RawCapabilities),
-  {Capabilities, Req, State}.
+    #{options := Opts} = State,
+    RawCapabilities = case Opts of
+                          [] ->
+                              prepare_capability_ans(?default_get_capability_opts);
+                          X -> prepare_capability_ans(X)
+                      end,
+    Capabilities = json_utils:encode(RawCapabilities),
+    {Capabilities, Req, State}.
 
 %% ====================================================================
 %% Internal functions
@@ -81,26 +82,26 @@ get_cdmi_capability(Req, State) ->
 %% ====================================================================
 -spec prepare_capability_ans([Opt :: binary()]) -> [{Capability :: binary(), Value :: term()}].
 prepare_capability_ans([]) ->
-  [];
+    [];
 prepare_capability_ans([<<"objectType">> | Tail]) ->
-  [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
+    [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
 %% todo uncomment when ID'll be used
 prepare_capability_ans([<<"objectID">> | Tail]) ->
-  prepare_capability_ans(Tail);
+    prepare_capability_ans(Tail);
 %%   [{<<"objectID">>, ?container_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
-  [{<<"objectName">>, str_utils:ensure_ends_with_slash(filename:basename(?container_capability_path))}
-    | prepare_capability_ans(Tail)];
+    [{<<"objectName">>, str_utils:ensure_ends_with_slash(filename:basename(?container_capability_path))}
+        | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
-  [{<<"parentURI">>, str_utils:unicode_list_to_binary(?root_capability_path)} | prepare_capability_ans(Tail)];
+    [{<<"parentURI">>, ?root_capability_path} | prepare_capability_ans(Tail)];
 %% todo uncomment when ID'll be used
 prepare_capability_ans([<<"parentID">> | Tail]) ->
-  prepare_capability_ans(Tail);
+    prepare_capability_ans(Tail);
 %%   [{<<"parentID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"capabilities">> | Tail]) ->
-  [{<<"capabilities">>, ?container_capability_list} | prepare_capability_ans(Tail)];
+    [{<<"capabilities">>, ?container_capability_list} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"childrenrange">> | Tail]) ->
-  prepare_capability_ans(Tail);
+    prepare_capability_ans(Tail);
 prepare_capability_ans([<<"children">> | Tail]) ->
-  [{<<"children">>, []} | prepare_capability_ans(Tail)].
+    [{<<"children">>, []} | prepare_capability_ans(Tail)].
 

@@ -28,6 +28,7 @@
 -export([
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
+    lfm_create_and_access_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
     lfm_truncate_test/1
@@ -37,6 +38,7 @@
 all() -> [
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
+    lfm_create_and_access_test,
     lfm_write_test,
     lfm_stat_test,
     lfm_truncate_test
@@ -85,6 +87,65 @@ fslogic_new_file_test(Config) ->
     TestProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
     ?assertMatch(TestProviderId, ProviderId11),
     ?assertMatch(TestProviderId, ProviderId21).
+
+lfm_create_and_access_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+
+    FilePath1 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+    FilePath2 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+    FilePath3 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+    FilePath4 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath1, 8#240)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath2, 8#640)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath3, 8#670)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath4, 8#540)),
+
+    %% File #1
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath1}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath1}, read)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath1}, 10)),
+
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath1}, read)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath1}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath1}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath1}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId2, {path, FilePath1}, 10)),
+
+    %% File #2
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath2}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath2}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath2}, rdwr)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath2}, read)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath2}, 10)),
+
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath2}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath2}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId2, {path, FilePath2}, 10)),
+
+    %% File #3
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath3}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath3}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath3}, rdwr)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath3}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath3}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath3}, rdwr)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath3}, 10)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath3}, 10)),
+
+    %% File #4
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath4}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath4}, read)),
+
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath4}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath4}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath4}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath4}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId1, {path, FilePath4}, 10)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId2, {path, FilePath4}, 10)).
 
 lfm_create_and_unlink_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -286,3 +347,4 @@ for(From, To, Fun) ->
     for(From, To, 1, Fun).
 for(From, To, Step, Fun) ->
     [Fun(I) || I <- lists:seq(From, To, Step)].
+

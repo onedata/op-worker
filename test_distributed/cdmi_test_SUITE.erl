@@ -24,7 +24,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, 
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 -export([get_file_test/1, delete_file_test/1, choose_adequate_handler/1, use_supported_cdmi_version/1,
