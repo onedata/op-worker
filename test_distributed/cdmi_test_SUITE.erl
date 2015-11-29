@@ -1,229 +1,306 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
+%%% @author Rafal Slota
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% CDMI tests
+%%% This file contains tests of logical_file_manager API.
 %%% @end
 %%%-------------------------------------------------------------------
--module(cdmi_test_SUITE).
--author("Tomasz Lichon").
+-module(lfm_files_test_SUITE).
+-author("Rafal Slota").
 
--include("global_definitions.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
--include("modules/http_worker/rest/cdmi/cdmi.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+-include("modules/datastore/datastore.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("annotations/include/annotations.hrl").
 
-%% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, 
+%% export for ct
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([get_file_test/1, delete_file_test/1, choose_adequate_handler/1, use_supported_cdmi_version/1,
-    use_unsupported_cdmi_version/1, create_dir_test/1, capabilities_test/1]).
+%% tests
+-export([
+    fslogic_new_file_test/1,
+    lfm_create_and_unlink_test/1,
+    lfm_create_and_access_test/1,
+    lfm_write_test/1,
+    lfm_stat_test/1,
+    lfm_truncate_test/1
+]).
 
 -performance({test_cases, []}).
-all() ->
-    [
-%%         get_file_test,
-%%         TODO turn on this test after fixing:
-%%         TODO onedata_file_api:read/3 -> {error,{badmatch, {error, {not_found, event_manager}}}}
-        delete_file_test, choose_adequate_handler, use_supported_cdmi_version,
-        use_unsupported_cdmi_version, create_dir_test, capabilities_test
-    ].
+all() -> [
+    fslogic_new_file_test,
+    lfm_create_and_unlink_test,
+    lfm_create_and_access_test,
+    lfm_write_test,
+    lfm_stat_test,
+    lfm_truncate_test
+].
 
--define(MACAROON, "macaroon").
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(10)).
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).
+-define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
--define(USER_1_TOKEN_HEADER, {<<"X-Auth-Token">>, <<"1">>}).
--define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
+%%%====================================================================
+%%% Test function
+%%%====================================================================
 
--define(FILE_PERMISSIONS, 8#664).
-
--define(FILE_BEGINNING, 0).
-
-
-%%%===================================================================
-%%% Test functions
-%%%===================================================================
-
-%%  Tests cdmi object GET request. Request can be done without cdmi header (in that case
-%%  file conent is returned as response body), or with cdmi header (the response
-%%  contains json string of type: application/cdmi-object, and we can specify what
-%%  parameters we need by listing then as ';' separated list after '?' in URL )
-get_file_test(Config) ->
-    FileName = "toRead.txt",
-    FileContent = <<"Some content...">>,
-    Size = string:len(binary_to_list(FileContent)),
+fslogic_new_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    create_file(Config, FileName),
-    ?assert(object_exists(Config, FileName)),
-    write_to_file(Config, FileName,FileContent, ?FILE_BEGINNING),
-    ?assertEqual(FileContent,get_file_content(Config, FileName, Size, ?FILE_BEGINNING)),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    %%------- noncdmi read --------
+    RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
+    RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
 
-    {ok, Code4, Headers4, Response4} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
-    ?assertEqual(200,Code4),
+    Resp11 = ?req(Worker, SessId1, #get_new_file_location{parent_uuid = RootUUID1, name = <<"test">>}),
+    Resp21 = ?req(Worker, SessId2, #get_new_file_location{parent_uuid = RootUUID2, name = <<"test">>}),
 
-    ?assertEqual(binary_to_list(?MIMETYPE_DEFAULT_VALUE), proplists:get_value(<<"content-type">>,Headers4)),
-    ?assertEqual(binary_to_list(FileContent), Response4),
-    %%------------------------------
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp11),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp21),
 
-    %% selective value read non-cdmi
-    RequestHeaders7 = [{<<"Range">>,<<"1-3,5-5,-3">>}],
-    {ok, Code7, _Headers7, Response7} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders7]),
-    ?assertEqual(206,Code7),
-    ?assertEqual("omec...", Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
-    %%------------------------------
+    #fuse_response{fuse_response = #file_location{
+        file_id = FileId11,
+        storage_id = StorageId11,
+        provider_id = ProviderId11}} = Resp11,
 
-    %% selective value read non-cdmi error
-    RequestHeaders8 = [{<<"Range">>,<<"1-3,6-4,-3">>}],
-    {ok, Code8, _Headers8, _Response8} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
-    ?assertEqual(400,Code8).
-    %%------------------------------
+    #fuse_response{fuse_response = #file_location{
+        file_id = FileId21,
+        storage_id = StorageId21,
+        provider_id = ProviderId21}} = Resp21,
 
-% Tests cdmi object DELETE requests
-delete_file_test(Config) ->
-    FileName = "toDelete",
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, 1}, Config),
-    GroupFileName = string:join(["spaces", binary_to_list(SpaceName),"groupFile"], "/"),
+    ?assertNotMatch(undefined, FileId11),
+    ?assertNotMatch(undefined, FileId21),
 
-    %%----- basic delete -----------
-    create_file(Config, "/" ++ FileName),
-    ?assert(object_exists(Config, FileName)),
-    RequestHeaders1 = [?CDMI_VERSION_HEADER],
-    {ok, Code1, _Headers1, _Response1} = do_request(Worker, FileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders1]),
-    ?assertEqual(204,Code1),
+    TestStorageId = ?config(storage_id, Config),
+    ?assertMatch(TestStorageId, StorageId11),
+    ?assertMatch(TestStorageId, StorageId21),
 
-    ?assert(not object_exists(Config, FileName)),
+    TestProviderId = rpc:call(Worker, oneprovider, get_provider_id, []),
+    ?assertMatch(TestProviderId, ProviderId11),
+    ?assertMatch(TestProviderId, ProviderId21).
 
-    %%------------------------------
+lfm_create_and_access_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
 
-    %%----- delete group file ------
-    create_file(Config, GroupFileName),
-    ?assert(object_exists(Config, GroupFileName)),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    RequestHeaders2 = [?CDMI_VERSION_HEADER],
-    {ok, Code2, _Headers2, _Response2} = do_request(Worker, GroupFileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders2]),
-    ?assertEqual(204,Code2),
+    FilePath1 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+    FilePath2 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+    FilePath3 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
+    FilePath4 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
 
-    ?assert(not object_exists(Config, GroupFileName)).
-    %%------------------------------
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath1, 8#240)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath2, 8#640)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath3, 8#670)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath4, 8#540)),
 
+    %% File #1
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath1}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath1}, read)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath1}, 10)),
 
-choose_adequate_handler(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    File = "file",
-    Dir = "dir/",
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath1}, read)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath1}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath1}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath1}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId2, {path, FilePath1}, 10)),
 
-    % when
-    {ok, _, _, _} = do_request(Worker, File, get, [], []),
-    % then
-    ?assert(rpc:call(Worker, meck, called, [cdmi_object_handler, rest_init, '_'])),
+    %% File #2
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath2}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath2}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath2}, rdwr)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath2}, read)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath2}, 10)),
 
-    % when
-    {ok, _, _, _} = do_request(Worker, Dir, get, [], []),
-    % then
-    ?assert(rpc:call(Worker, meck, called, [cdmi_container_handler, rest_init, '_'])).
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath2}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath2}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId2, {path, FilePath2}, 10)),
 
-use_supported_cdmi_version(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    %% File #3
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath3}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath3}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath3}, rdwr)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath3}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath3}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath3}, rdwr)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath3}, 10)),
+    ?assertMatch(ok,      lfm_proxy:truncate(W, SessId1, {path, FilePath3}, 10)),
 
-    % when
-    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders),
+    %% File #4
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath4}, read)),
+    ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {path, FilePath4}, read)),
 
-    % then
-    ?assertEqual(404, Code).
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath4}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId1, {path, FilePath4}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath4}, write)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(W, SessId2, {path, FilePath4}, rdwr)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId1, {path, FilePath4}, 10)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:truncate(W, SessId2, {path, FilePath4}, 10)).
 
-use_unsupported_cdmi_version(Config) ->
-    % given
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
+lfm_create_and_unlink_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
 
-    % when
-    {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    % then
-    ?assertEqual(400, Code).
+    _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
+    _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
 
-% Tests dir creation (cdmi container PUT), remember that every container URI ends
-% with '/'
-create_dir_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    DirName = "toCreate/",
+    FilePath1 = <<"/", (generator:gen_name())/binary>>,
+    FilePath2 = <<"/", (generator:gen_name())/binary>>,
 
-    %%------ non-cdmi create -------
-    ?assert(not object_exists(Config, DirName)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath1, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath2, 8#755)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId1, FilePath1, 8#755)),
 
-    {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER]),
-    ?assertEqual(201,Code1),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath1, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath2, 8#755)),
+    ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W, SessId2, FilePath1, 8#755)),
 
-    ?assert(object_exists(Config, DirName)).
-    %%------------------------------
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath1})),
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId2, {path, FilePath2})),
 
-% tests if capabilities of objects, containers, and whole storage system are set properly
-capabilities_test(Config) ->
-%%   todo uncomment tests with IDs
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId1, {path, FilePath1})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:unlink(W, SessId2, {path, FilePath2})),
 
-    %%--- system capabilities ------
-    RequestHeaders8 = [?CDMI_VERSION_HEADER],
-    {ok, Code8, Headers8, Response8} = do_request(Worker, "cdmi_capabilities/", get, RequestHeaders8, []),
-    ?assertEqual(200, Code8),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath1, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath2, 8#755)).
 
-    ?assertEqual(<<"application/cdmi-capability">>, proplists:get_value(<<"content-type">>, Headers8)),
-    CdmiResponse8 = json_utils:decode(Response8),
-%%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
-    ?assertEqual(?root_capability_path, proplists:get_value(<<"objectName">>, CdmiResponse8)),
-    ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
-    ?assertEqual([<<"container/">>, <<"dataobject/">>], proplists:get_value(<<"children">>, CdmiResponse8)),
-    Capabilities = proplists:get_value(<<"capabilities">>, CdmiResponse8),
-    ?assertEqual(?root_capability_list, Capabilities),
-    %%------------------------------
+lfm_write_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
 
-    %%-- container capabilities ----
-    RequestHeaders9 = [?CDMI_VERSION_HEADER],
-    {ok, Code9, _Headers9, Response9} = do_request(Worker, "cdmi_capabilities/container/", get, RequestHeaders9, []),
-    ?assertEqual(200, Code9),
-%%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
 
-    CdmiResponse9 = json_utils:decode(Response9),
-    ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse9)),
-%%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
-%%   ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
-    ?assertEqual(<<"container/">>, proplists:get_value(<<"objectName">>, CdmiResponse9)),
-    Capabilities2 = proplists:get_value(<<"capabilities">>, CdmiResponse9),
-    ?assertEqual(?container_capability_list, Capabilities2),
-    %%------------------------------
+    _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
+    _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
 
-    %%-- dataobject capabilities ---
-    RequestHeaders10 = [?CDMI_VERSION_HEADER],
-    {ok, Code10, _Headers10, Response10} = do_request(Worker, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
-    ?assertEqual(200, Code10),
-%%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test3">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test4">>, 8#755)),
 
-    CdmiResponse10 = json_utils:decode(Response10),
-    ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse10)),
-%%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
-%%   ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
-    ?assertEqual(<<"dataobject/">>, proplists:get_value(<<"objectName">>, CdmiResponse10)),
-    Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
-    ?assertEqual(?dataobject_capability_list, Capabilities3).
-%%------------------------------
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/test3">>, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/test4">>, 8#755)),
+
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test3">>}, rdwr),
+    O12 = lfm_proxy:open(W, SessId1, {path, <<"/test4">>}, rdwr),
+
+    ?assertMatch({ok, _}, O11),
+    ?assertMatch({ok, _}, O12),
+
+    {ok, Handle11} = O11,
+    {ok, Handle12} = O12,
+
+    WriteAndTest =
+        fun(Worker, Handle, Offset, Bytes) ->
+            Size = size(Bytes),
+            ?assertMatch({ok, Size}, lfm_proxy:write(Worker, Handle, Offset, Bytes)),
+            for(Offset, Offset + Size - 1,
+                fun(I) ->
+                    for(1, Offset + Size - I,
+                        fun(J) ->
+                            SubBytes = binary:part(Bytes, I - Offset, J),
+                            ?assertMatch({ok, SubBytes}, lfm_proxy:read(Worker, Handle, I, J))
+                        end)
+                end)
+        end,
+
+    WriteAndTest(W, Handle11, 0, <<"abc">>),
+    WriteAndTest(W, Handle12, 0, <<"abc">>),
+
+    WriteAndTest(W, Handle11, 3, <<"def">>),
+    WriteAndTest(W, Handle12, 3, <<"def">>),
+
+    WriteAndTest(W, Handle11, 2, <<"qwerty">>),
+    WriteAndTest(W, Handle12, 2, <<"qwerty">>),
+
+    WriteAndTest(W, Handle11, 8, <<"zxcvbnm">>),
+    WriteAndTest(W, Handle12, 8, <<"zxcvbnm">>),
+
+    WriteAndTest(W, Handle11, 6, <<"qwerty">>),
+    WriteAndTest(W, Handle12, 6, <<"qwerty">>),
+
+    WriteAndTest(W, Handle11, 10, crypto:rand_bytes(100)),
+    WriteAndTest(W, Handle12, 10, crypto:rand_bytes(100)).
+
+lfm_stat_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
+
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test5">>}, rdwr),
+
+    ?assertMatch({ok, _}, O11),
+    {ok, Handle11} = O11,
+
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>})),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
+    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 3, <<"abc">>)),
+    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 2, <<"abc">>)),
+    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10),
+
+    ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10).
+
+lfm_truncate_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test6">>, 8#755)),
+
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test6">>}, rdwr),
+
+    ?assertMatch({ok, _}, O11),
+    {ok, Handle11} = O11,
+
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>})),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
+    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 1)),
+    ?assertMatch({ok, #file_attr{size = 1}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch({ok, <<"a">>}, lfm_proxy:read(W, Handle11, 0, 10)),
+
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 10)),
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch({ok, <<"a">>}, lfm_proxy:read(W, Handle11, 0, 1)),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 1, <<"abc">>)),
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+
+    ?assertMatch(ok, lfm_proxy:truncate(W, SessId1, {path, <<"/test6">>}, 5)),
+    ?assertMatch({ok, #file_attr{size = 5}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
+    ?assertMatch({ok, <<"aabc">>}, lfm_proxy:read(W, Handle11, 0, 4)).
+
+%% Get uuid of given by path file. Possible as root to bypass permissions checks.
+get_uuid_privileged(Worker, SessId, Path) ->
+    get_uuid(Worker, SessId, Path).
+
+get_uuid(Worker, SessId, Path) ->
+    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
+        #fuse_response{status = #status{code = ?OK}},
+        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+        30
+    ),
+    UUID.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -232,126 +309,41 @@ capabilities_test(Config) ->
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     initializer:setup_storage(ConfigWithNodes).
+
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
 
-init_per_testcase(choose_adequate_handler, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    application:start(ssl2),
-    hackney:start(),
+    Workers = ?config(op_worker_nodes, Config),
+    communicator_mock_setup(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
-    mock_user_auth(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
-end_per_testcase(choose_adequate_handler, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    unmock_user_auth(Config),
     initializer:clean_test_users_and_spaces(Config),
-    hackney:stop(),
-    application:stop(ssl2).
-
+    test_utils:mock_validate(Workers, [communicator]),
+    test_utils:mock_unload(Workers, [communicator]).
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-% Performs a single request using http_client
-do_request(Node, RestSubpath, Method, Headers) ->
-    do_request(Node, RestSubpath, Method, Headers, []).
-
-% Performs a single request using http_client
-do_request(Node, RestSubpath, Method, Headers, Body) ->
-    http_client:request(
-        Method,
-        cdmi_endpoint(Node) ++ RestSubpath,
-        Headers,
-        Body,
-        [insecure]
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks communicator module, so that it ignores all messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
+communicator_mock_setup(Workers) ->
+    test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send,
+        fun(_, _) -> ok end
     ).
 
-cdmi_endpoint(Node) ->
-    Port =
-        case get(port) of
-            undefined ->
-                {ok, P} = test_utils:get_env(Node, ?APP_NAME, http_worker_rest_port),
-                PStr = integer_to_list(P),
-                put(port, PStr),
-                PStr;
-            P -> P
-        end,
-    string:join(["https://", utils:get_host(Node), ":", Port, "/cdmi/"], "").
-
-mock_user_auth(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, rest_auth),
-    test_utils:mock_expect(Workers, rest_auth, is_authorized,
-        fun(Req, State) ->
-            case cowboy_req:header(<<"x-auth-token">>, Req) of
-                {undefined, NewReq} ->
-                    {{false, <<"authentication_error">>}, NewReq, State};
-                {Token, NewReq} ->
-                    UserId = ?config({user_id, binary_to_integer(Token)}, Config),
-                    {true, NewReq, State#{identity => #identity{user_id = UserId}}}
-            end
-        end
-    ).
-
-unmock_user_auth(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, rest_auth),
-    test_utils:mock_unload(Workers, rest_auth).
-
-object_exists(Config, Path) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, 1}, Config),
-
-    case lfm_proxy:stat(Worker, SessionId, {path, str_utils:unicode_list_to_binary("/" ++ Path)}) of
-        {ok, _} ->
-            true;
-        {error, ?ENOENT} ->
-            false
-    end.
-
-create_file(Config, Path) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, 1}, Config),
-
-    case lfm_proxy:create(Worker, SessionId, str_utils:unicode_list_to_binary("/" ++ Path), ?FILE_PERMISSIONS) of
-        {ok, UUID} -> UUID;
-        {error, Code} -> {error, Code}
-    end.
-
-open_file(Config, Path, OpenMode) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, 1}, Config),
-
-    case lfm_proxy:open(Worker, SessionId, {path, str_utils:unicode_list_to_binary("/" ++ Path)}, OpenMode) of
-        {error, Error} -> {error, Error};
-        FileHandle -> FileHandle
-    end.
-
-write_to_file(Config, Path, Data, Offset) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    {ok, FileHandle} = open_file(Config, Path, write),
-    case lfm_proxy:write(Worker, FileHandle, Offset, Data) of
-        {error, Error} -> {error, Error};
-        {ok, Bytes} -> Bytes
-    end.
-
-get_file_content(Config, Path, Size, Offset) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    {ok, FileHandle} = open_file(Config, Path, write),
-    case lfm_proxy:read(Worker, FileHandle, Offset, Size) of
-        {error, Error} -> {error, Error};
-        {ok, Content} -> Content
-    end.
+for(From, To, Fun) ->
+    for(From, To, 1, Fun).
+for(From, To, Step, Fun) ->
+    [Fun(I) || I <- lists:seq(From, To, Step)].
