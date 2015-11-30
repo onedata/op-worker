@@ -8,7 +8,7 @@
 %%% @doc Tests datastore basic operations at all levels.
 %%% @end
 %%%-------------------------------------------------------------------
--module('datastore_basic_ops_test_5x5_SUITE.erl').
+-module(datastore_basic_ops_test_5x5_SUITE).
 -author("Michal Wrzeszcz").
 
 -include_lib("ctool/include/test/test_utils.hrl").
