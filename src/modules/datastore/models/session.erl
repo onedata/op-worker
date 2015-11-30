@@ -30,7 +30,7 @@
 -type id() :: binary() | dummy_session_id().
 -type dummy_session_id() :: #identity{}.
 -type auth() :: #auth{}.
--type type() :: fuse | rest | gui.
+-type type() :: fuse | rest | gui | dummy.
 -type status() :: active | inactive | phantom.
 -type identity() :: #identity{}.
 

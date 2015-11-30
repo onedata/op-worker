@@ -33,10 +33,10 @@
 %% @equiv send(Msg, SessId, 1)
 %% @end
 %%--------------------------------------------------------------------
--spec send(Msg :: #server_message{} | term(), SessId :: session:id()) ->
+-spec send(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     ok | {error, Reason :: term()}.
-send(Msg, SessId) ->
-    communicator:send(Msg, SessId, 1).
+send(Msg, Ref) ->
+    communicator:send(Msg, Ref, 1).
 
 %%--------------------------------------------------------------------
 %% @doc

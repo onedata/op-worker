@@ -93,7 +93,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send(Msg :: #server_message{}, Ref :: ref()) ->
-    ok | {error, term()}.
+    ok | {error, Reason :: term()} | {exit, Reason :: term()}.
 send(Msg, Ref) when is_pid(Ref) ->
     try
         gen_server:call(Ref, {send, Msg})
@@ -112,7 +112,7 @@ send(Msg, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_async(Msg :: #server_message{}, Ref :: ref()) ->
-    ok | {error, term()}.
+    ok | {error, Reason :: term()}.
 send_async(Msg, Ref) when is_pid(Ref) ->
     try
         gen_server:cast(Ref, {send, Msg})
