@@ -95,7 +95,8 @@
                             "dbnode1",
                             "dbnode2"
                         ],
-                        "global_registry_domain": "gr"
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
                 }
             }
@@ -128,7 +129,8 @@
                         "db_nodes": [
                             "riaknode1"
                         ],
-                        "global_registry_domain": "gr"
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
                 },
                 "worker2": {
@@ -142,7 +144,8 @@
                         "db_nodes": [
                             "riaknode1"
                         ],
-                        "global_registry_domain": "gr"
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
                 }
             }

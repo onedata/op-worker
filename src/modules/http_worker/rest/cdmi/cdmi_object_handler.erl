@@ -250,9 +250,9 @@ stream(#{path := Path, identity := Identity} = State, Ranges) ->
 %% could be found
 %% @end
 %%--------------------------------------------------------------------
--spec get_mimetype(string()) -> binary().
+-spec get_mimetype(binary()) -> binary().
 get_mimetype(Path) ->
-    case onedata_file_api:get_xattr(Path, ?MIMETYPE_XATTR_KEY) of
+    case onedata_file_api:get_xattr({path, Path}, ?MIMETYPE_XATTR_KEY) of
         {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE % TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
 %%         {ok, Value} -> Value
 %%         {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE

@@ -24,7 +24,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, 
+-export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
 -export([get_file_test/1, delete_file_test/1, choose_adequate_handler/1, use_supported_cdmi_version/1,
@@ -43,8 +43,8 @@ all() ->
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
 
--define(USER_1_TOKEN_HEADER, {"X-Auth-Token", "1"}).
--define(CDMI_VERSION_HEADER, {"X-CDMI-Specification-Version", "1.1.1"}).
+-define(USER_1_TOKEN_HEADER, {<<"X-Auth-Token">>, <<"1">>}).
+-define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 
 -define(FILE_PERMISSIONS, 8#664).
 
@@ -73,23 +73,23 @@ get_file_test(Config) ->
     %%------- noncdmi read --------
 
     {ok, Code4, Headers4, Response4} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
-    ?assertEqual("200",Code4),
+    ?assertEqual(200,Code4),
 
-    ?assertEqual(binary_to_list(?MIMETYPE_DEFAULT_VALUE), proplists:get_value("content-type",Headers4)),
+    ?assertEqual(binary_to_list(?MIMETYPE_DEFAULT_VALUE), proplists:get_value(<<"content-type">>,Headers4)),
     ?assertEqual(binary_to_list(FileContent), Response4),
     %%------------------------------
 
     %% selective value read non-cdmi
-    RequestHeaders7 = [{"Range","1-3,5-5,-3"}],
+    RequestHeaders7 = [{<<"Range">>,<<"1-3,5-5,-3">>}],
     {ok, Code7, _Headers7, Response7} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders7]),
-    ?assertEqual("206",Code7),
+    ?assertEqual(206,Code7),
     ?assertEqual("omec...", Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
     %%------------------------------
 
     %% selective value read non-cdmi error
-    RequestHeaders8 = [{"Range","1-3,6-4,-3"}],
+    RequestHeaders8 = [{<<"Range">>,<<"1-3,6-4,-3">>}],
     {ok, Code8, _Headers8, _Response8} = do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
-    ?assertEqual("400",Code8).
+    ?assertEqual(400,Code8).
     %%------------------------------
 
 % Tests cdmi object DELETE requests
@@ -104,7 +104,7 @@ delete_file_test(Config) ->
     ?assert(object_exists(Config, FileName)),
     RequestHeaders1 = [?CDMI_VERSION_HEADER],
     {ok, Code1, _Headers1, _Response1} = do_request(Worker, FileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders1]),
-    ?assertEqual("204",Code1),
+    ?assertEqual(204,Code1),
 
     ?assert(not object_exists(Config, FileName)),
 
@@ -116,7 +116,7 @@ delete_file_test(Config) ->
 
     RequestHeaders2 = [?CDMI_VERSION_HEADER],
     {ok, Code2, _Headers2, _Response2} = do_request(Worker, GroupFileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders2]),
-    ?assertEqual("204",Code2),
+    ?assertEqual(204,Code2),
 
     ?assert(not object_exists(Config, GroupFileName)).
     %%------------------------------
@@ -147,18 +147,18 @@ use_supported_cdmi_version(Config) ->
     {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders),
 
     % then
-    ?assertEqual("404", Code).
+    ?assertEqual(404, Code).
 
 use_unsupported_cdmi_version(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
 
     % when
     {ok, Code, _ResponseHeaders, _Response} = do_request(Worker, "/random", get, RequestHeaders),
 
     % then
-    ?assertEqual("400", Code).
+    ?assertEqual(400, Code).
 
 % Tests dir creation (cdmi container PUT), remember that every container URI ends
 % with '/'
@@ -170,7 +170,7 @@ create_dir_test(Config) ->
     ?assert(not object_exists(Config, DirName)),
 
     {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER]),
-    ?assertEqual("201",Code1),
+    ?assertEqual(201,Code1),
 
     ?assert(object_exists(Config, DirName)).
     %%------------------------------
@@ -181,12 +181,12 @@ capabilities_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     %%--- system capabilities ------
-    RequestHeaders8 = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    RequestHeaders8 = [?CDMI_VERSION_HEADER],
     {ok, Code8, Headers8, Response8} = do_request(Worker, "cdmi_capabilities/", get, RequestHeaders8, []),
-    ?assertEqual("200", Code8),
+    ?assertEqual(200, Code8),
 
-    ?assertEqual("application/cdmi-capability", proplists:get_value("content-type", Headers8)),
-    CdmiResponse8 = json:decode(Response8),
+    ?assertEqual(<<"application/cdmi-capability">>, proplists:get_value(<<"content-type">>, Headers8)),
+    CdmiResponse8 = json_utils:decode(Response8),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
     ?assertEqual(?root_capability_path, proplists:get_value(<<"objectName">>, CdmiResponse8)),
     ?assertEqual(<<"0-1">>, proplists:get_value(<<"childrenrange">>, CdmiResponse8)),
@@ -196,12 +196,12 @@ capabilities_test(Config) ->
     %%------------------------------
 
     %%-- container capabilities ----
-    RequestHeaders9 = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    RequestHeaders9 = [?CDMI_VERSION_HEADER],
     {ok, Code9, _Headers9, Response9} = do_request(Worker, "cdmi_capabilities/container/", get, RequestHeaders9, []),
-    ?assertEqual("200", Code9),
+    ?assertEqual(200, Code9),
 %%   ?assertMatch({Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
 
-    CdmiResponse9 = json:decode(Response9),
+    CdmiResponse9 = json_utils:decode(Response9),
     ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse9)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
 %%   ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
@@ -211,12 +211,12 @@ capabilities_test(Config) ->
     %%------------------------------
 
     %%-- dataobject capabilities ---
-    RequestHeaders10 = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    RequestHeaders10 = [?CDMI_VERSION_HEADER],
     {ok, Code10, _Headers10, Response10} = do_request(Worker, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
-    ?assertEqual("200", Code10),
+    ?assertEqual(200, Code10),
 %%   ?assertMatch({Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
 
-    CdmiResponse10 = json:decode(Response10),
+    CdmiResponse10 = json_utils:decode(Response10),
     ?assertEqual(?root_capability_path, proplists:get_value(<<"parentURI">>, CdmiResponse10)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
 %%   ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
@@ -241,8 +241,8 @@ init_per_testcase(choose_adequate_handler, Config) ->
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler]),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    ssl:start(),
-    ibrowse:start(),
+    application:start(ssl2),
+    hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     mock_user_auth(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -256,25 +256,26 @@ end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
     unmock_user_auth(Config),
     initializer:clean_test_users_and_spaces(Config),
-    ibrowse:stop(),
-    ssl:stop().
+    hackney:stop(),
+    application:stop(ssl2).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-% Performs a single request using ibrowse
+% Performs a single request using http_client
 do_request(Node, RestSubpath, Method, Headers) ->
     do_request(Node, RestSubpath, Method, Headers, []).
 
+% Performs a single request using http_client
 do_request(Node, RestSubpath, Method, Headers, Body) ->
-    ibrowse:send_req(
-            cdmi_endpoint(Node) ++ RestSubpath,
-            Headers,
-            Method,
-            Body,
-            [{ssl_options, [{reuse_sessions, false}]}]
-        ).
+    http_client:request(
+        Method,
+        cdmi_endpoint(Node) ++ RestSubpath,
+        Headers,
+        Body,
+        [insecure]
+    ).
 
 cdmi_endpoint(Node) ->
     Port =
@@ -312,7 +313,7 @@ object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:stat(Worker, SessionId, {path, utils:ensure_unicode_binary("/" ++ Path)}) of
+    case lfm_proxy:stat(Worker, SessionId, {path, str_utils:unicode_list_to_binary("/" ++ Path)}) of
         {ok, _} ->
             true;
         {error, ?ENOENT} ->
@@ -323,7 +324,7 @@ create_file(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:create(Worker, SessionId, utils:ensure_unicode_binary("/" ++ Path), ?FILE_PERMISSIONS) of
+    case lfm_proxy:create(Worker, SessionId, str_utils:unicode_list_to_binary("/" ++ Path), ?FILE_PERMISSIONS) of
         {ok, UUID} -> UUID;
         {error, Code} -> {error, Code}
     end.
@@ -332,7 +333,7 @@ open_file(Config, Path, OpenMode) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:open(Worker, SessionId, {path, utils:ensure_unicode_binary("/" ++ Path)}, OpenMode) of
+    case lfm_proxy:open(Worker, SessionId, {path, str_utils:unicode_list_to_binary("/" ++ Path)}, OpenMode) of
         {error, Error} -> {error, Error};
         FileHandle -> FileHandle
     end.
