@@ -81,14 +81,14 @@ prepare([{<<"children">>, From, To} | Tail], #{path := Path, auth := Auth} = Sta
     {ok, List} = onedata_file_api:ls(Auth, {path, Path}, To1 - From1 + 1, From1),
     Children = lists:map(
         fun({_Uuid, Name}) -> %todo distinguish dirs and files
-            utils:ensure_path_ends_with_slash(Name)
+            str_utils:ensure_ends_with_slash(Name)
         end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([<<"children">> | Tail], #{path := Path, auth := Auth} = State) ->
     {ok, List} = onedata_file_api:ls(Auth, {path, Path}, ?infinity, 0),
     Children = lists:map(
         fun({_Uuid, Name}) -> %todo distinguish dirs and files
-            utils:ensure_path_ends_with_slash(Name)
+            str_utils:ensure_ends_with_slash(Name)
         end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([_Other | Tail], State) ->

@@ -70,8 +70,6 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(#identity{} = Identity) ->
-    {ok, #document{key = Identity, value = #session{type = dummy, identity = Identity}}};
 get(?ROOT_SESS_ID) ->
     {ok, #document{key = ?ROOT_SESS_ID, value = #session{identity = #identity{user_id = ?ROOT_USER_ID}}}};
 get(Key) ->
