@@ -192,7 +192,7 @@ gen_filename() ->
     list_to_binary(ibrowse_lib:url_encode("helpers_test_" ++ binary_to_list(base64:encode(crypto:rand_bytes(20))))).
 
 ctx_server(Config) ->
-    CTX = helpers:new_handle(<<"DirectIO">>, [?path(Config, "")]),
+    CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),
     ctx_server(Config, CTX).
 ctx_server(Config, CTX) ->
     receive

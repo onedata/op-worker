@@ -95,6 +95,7 @@ mkdir(Handle, Mode) ->
 -spec mkdir(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | error_reply().
 mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
+    Noop = fun(_) -> ok end,
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
@@ -109,11 +110,13 @@ mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
                     LeafLess = fslogic_path:dirname(Tokens),
                     ok = mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true)
             end,
-            case mkdir(SFMHandle, Mode, false) of
+            R = case mkdir(SFMHandle, Mode, false) of
                 ok ->
                     chmod(SFMHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
                 E -> E
-            end;
+            end,
+            Noop(HelperHandle),
+            R;
         {error, Reason} ->
             {error, Reason}
     end.
