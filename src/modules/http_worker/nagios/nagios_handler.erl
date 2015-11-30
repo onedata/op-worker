@@ -101,7 +101,7 @@ handle(Req, State) ->
                     end, NodeStatuses),
 
                 {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(now()),
-                DateString = gui_str:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
+                DateString = str_utils:format("~4..0w/~2..0w/~2..0w ~2..0w:~2..0w:~2..0w", [YY, MM, DD, Hour, Min, Sec]),
 
                 % Create the reply
                 Healthdata = {healthdata, [{date, DateString}, {status, atom_to_list(AppStatus)}], MappedClusterState},

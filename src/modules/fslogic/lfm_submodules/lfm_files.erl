@@ -11,7 +11,7 @@
 -module(lfm_files).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
@@ -97,7 +97,7 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%--------------------------------------------------------------------
 -spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
-    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID},
+    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID, flags = OpenType},
         fun(#file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, UUID}),

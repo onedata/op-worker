@@ -23,7 +23,7 @@
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
 
 -define(dio_root(Config), ?TEMP_DIR).
--define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), utils:ensure_list(File)))).
+-define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), str_utils:to_list(File)))).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -189,7 +189,7 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 gen_filename() ->
-    list_to_binary(ibrowse_lib:url_encode("helpers_test_" ++ binary_to_list(base64:encode(crypto:rand_bytes(20))))).
+    http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:rand_bytes(20)))/binary>>).
 
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),

@@ -9,8 +9,17 @@
             "target_dir": "rel/test_cluster"
         }
     },
+    "os_configs": {
+        "cfg1": {
+            "storages": [],
+            "users": [],
+            "groups": {}
+        }
+    },
     "provider_domains": {
         "p1": {
+            "db_driver": "couchbase",
+            "os_config": "cfg1",
             "op_ccm": {
                 "ccm": {
                     "vm.args": {
@@ -35,7 +44,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 },
                 "worker2": {
@@ -48,7 +58,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 },
                 "worker3": {
@@ -61,7 +72,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 },
                 "worker4": {
@@ -74,7 +86,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 },
                 "worker5": {
@@ -87,7 +100,8 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 }
             }

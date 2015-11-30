@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Functions delegating request to appripriate handlers.
+%%% Functions delegating request to appropriate handlers.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(request_delegator).
