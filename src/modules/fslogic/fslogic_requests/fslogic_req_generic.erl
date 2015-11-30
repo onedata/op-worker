@@ -35,8 +35,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
     {ok, _} = file_meta:update(FileEntry, UpdateMap1),
 
-    %% @todo: replace with events
-    spawn(fun() -> fslogic_event:attributes(FileEntry, [SessId]) end),
+    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, [SessId]) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -73,7 +72,7 @@ chmod(_CTX, FileEntry, Mode) ->
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
     %% @todo: replace with events
-    spawn(fun() -> fslogic_event:attributes(FileEntry, []) end),
+    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 

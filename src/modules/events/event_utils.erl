@@ -16,6 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([send_subscription_handler/0, send_subscription_cancellation_handler/0,
@@ -65,7 +66,6 @@ inject_event_stream_definition(#subscription{object = #file_location_subscriptio
     }}.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns handler which sends subscription to the remote client.
 %% @end
@@ -79,7 +79,6 @@ send_subscription_handler() ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns handler which sends subscription cancellation to the remote client.
 %% @end

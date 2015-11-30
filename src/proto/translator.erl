@@ -55,10 +55,10 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
         file_size = Record#'WriteEvent'.file_size,
         blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]
     };
-translate_from_protobuf(#'Subscription'{} = Record) ->
+translate_from_protobuf(#'Subscription'{id = Id, object = {_, Record}}) ->
     #subscription{
-        id = Record#'Subscription'.id,
-        object = translate_from_protobuf(Record#'Subscription'.object)
+        id = Id,
+        object = translate_from_protobuf(Record)
     };
 translate_from_protobuf(#'FileAttrSubscription'{} = Record) ->
     #file_attr_subscription{

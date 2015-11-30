@@ -136,9 +136,10 @@ check_clearing([], _Worker1, _Worker2) ->
 check_clearing([{K, TimeWindow} | R] = KeysWithTimes, Worker1, Worker2) ->
     lists:foreach(fun({K2, T}) ->
         Uuid = caches_controller:get_cache_uuid(K2, some_record),
-        UpdateFun = fun
-            (Record) ->
-                Record#cache_controller{timestamp = to_timestamp(from_timestamp(os:timestamp()) - T - timer:minutes(5))}
+        UpdateFun = fun(Record) ->
+            {ok, Record#cache_controller{
+                timestamp = to_timestamp(from_timestamp(os:timestamp()) - T - timer:minutes(5))
+            }}
         end,
         ?assertMatch({ok, _}, ?call(Worker1, cache_controller, update, [?GLOBAL_ONLY_LEVEL, Uuid, UpdateFun]), 10)
     end, KeysWithTimes),
@@ -288,7 +289,7 @@ global_cache_atomic_update_test(Config) ->
         ?call_store(Worker2, update, [Level,
             some_record, Key,
             fun(#some_record{field1 = 0} = Record) ->
-                Record#some_record{field2 = Pid}
+                {ok, Record#some_record{field2 = Pid}}
             end])),
 
     ?assertMatch({ok, #document{value = #some_record{field1 = 0, field2 = Pid}}},
@@ -296,7 +297,7 @@ global_cache_atomic_update_test(Config) ->
             some_record, Key])),
 
     UpdateFun = fun(#some_record{field1 = Value} = Record) ->
-        Record#some_record{field1 = Value + 1}
+        {ok, Record#some_record{field1 = Value + 1}}
     end,
 
     Self = self(),

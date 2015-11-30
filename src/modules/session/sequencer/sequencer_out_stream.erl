@@ -148,7 +148,7 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info({'EXIT', _, shutdown}, State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -219,7 +219,7 @@ store_and_forward_message(#server_message{message_stream = MsgStm} = Msg, #state
     NewMsg = Msg#server_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    communicator:send(NewMsg, SessId),
+    ensure_sent(NewMsg, SessId),
     State#state{sequence_number = SeqNum + 1, messages = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
@@ -270,7 +270,7 @@ resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
             NewMsg = Msg#server_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            communicator:send(NewMsg, SessId),
+            ensure_sent(NewMsg, SessId),
             resend_all_messages(NewMsgs, SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
         {empty, _} ->
             {SeqNum, MsgsAcc}
@@ -292,7 +292,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
         {{value, #server_message{message_stream = #message_stream{
             sequence_number = LowerSeqNum
         }} = Msg}, NewMsgs} ->
-            communicator:send(Msg, SessId),
+            ensure_sent(Msg, SessId),
             resend_messages(LowerSeqNum + 1, UpperSeqNum, NewMsgs, StmId, SessId);
         {{value, #server_message{message_stream = #message_stream{
             sequence_number = SeqNum}
@@ -301,4 +301,24 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
         {_, _} ->
             ?warning("Received request for messages unavailable in sequencer stream "
             "queue. Stream ID: ~p, range: [~p,~p].", [StmId, LowerSeqNum, UpperSeqNum])
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends a message. In case of error retries after specified timeout.
+%% This function does not return until message has been successfully sent.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_sent(Msg :: #server_message{}, SessId :: session:id()) -> ok.
+ensure_sent(Msg, SessId) ->
+    case communicator:send(Msg, SessId) of
+        ok -> ok;
+        {error, Reason} ->
+            Delay = timer:seconds(application:get_env(?APP_NAME,
+                sequencer_stream_msg_send_retry_delay_seconds, 5)),
+            ?warning("Cannot send message ~p due to: ~p. Retrying in ~p milliseconds...",
+                [Msg, Reason, Delay]),
+            timer:sleep(Delay),
+            ensure_sent(Msg, SessId)
     end.

@@ -27,7 +27,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--record(sock_state, {
+-record(state, {
     certificate :: #'OTPCertificate'{},
     % handler responses
     ok :: atom(),
@@ -41,42 +41,22 @@
 
 -define(TIMEOUT, timer:minutes(1)).
 -define(PACKET_VALUE, 4).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send server_message to client, returns sending result info.
-%% @equiv gen_server:call(Pid, {send, Req}).
-%% @end
-%%--------------------------------------------------------------------
--spec send(Pid :: pid(), Req :: #server_message{}) -> ok | {error, term()}.
-send(Pid, Req) ->
-    gen_server:call(Pid, {send, Req}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Send server_message to client, returns 'ok'.
-%% @equiv gen_server:cast(Pid, {send, Req}).
-%% @end
-%%--------------------------------------------------------------------
--spec send_async(Pid :: pid(), Req :: #server_message{}) -> ok.
-send_async(Pid, Req) ->
-    gen_server:cast(Pid, {send, Req}).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Starts the server.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: atom(), Socket :: ssl2:socket(), Transport :: atom(), Opts :: list()) ->
-    {ok, Pid :: pid()}.
+-spec start_link(Ref :: atom(), Socket :: ssl2:socket(), Transport :: atom(),
+    Opts :: list()) -> {ok, Pid :: pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Initializes the server.
 %% @end
@@ -94,7 +74,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
             {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
         end,
 
-    gen_server:enter_loop(?MODULE, [], #sock_state{
+    gen_server:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
         ok = Ok,
@@ -102,6 +82,34 @@ init(Ref, Socket, Transport, _Opts = []) ->
         error = Error,
         certificate = Certificate
     }, ?TIMEOUT).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Synchronously sends server message to client.
+%% @end
+%%--------------------------------------------------------------------
+-spec send(Msg :: #server_message{}, SessId :: session:id()) ->
+    ok | {error, term()}.
+send(Msg, SessId) ->
+    try
+        gen_server:call(get_random_connection(SessId), {send, Msg})
+    catch
+        _:Reason -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asynchronously sends server message to client.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_async(Msg :: #server_message{}, SessId :: session:id()) ->
+    ok | {error, term()}.
+send_async(Msg, SessId) ->
+    try
+        gen_server:cast(get_random_connection(SessId), {send, Msg})
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -112,7 +120,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
 %% @doc
 %% This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute. Init is handled by ranch
-%% init/4 function
+%% init/4 function.
 %% @end
 %%--------------------------------------------------------------------
 -spec init([]) -> {ok, undefined}.
@@ -125,14 +133,14 @@ init([]) -> {ok, undefined}.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #sock_state{}) ->
-    {reply, Reply :: term(), NewState :: #sock_state{}} |
-    {reply, Reply :: term(), NewState :: #sock_state{}, timeout() | hibernate} |
-    {noreply, NewState :: #sock_state{}} |
-    {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #sock_state{}} |
-    {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_call({send, ServerMsg}, _From, State = #sock_state{socket = Socket,
+    State :: #state{}) ->
+    {reply, Reply :: term(), NewState :: #state{}} |
+    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
+    {noreply, NewState :: #state{}} |
+    {noreply, NewState :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+handle_call({send, ServerMsg}, _From, State = #state{socket = Socket,
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {reply, ok, State};
@@ -147,14 +155,17 @@ handle_call(_Request, _From, State) ->
 %% Handles cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: #sock_state{}) ->
-    {noreply, NewState :: #sock_state{}} |
-    {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_cast({send, ServerMsg}, State = #sock_state{socket = Socket,
+-spec handle_cast(Request :: term(), State :: #state{}) ->
+    {noreply, NewState :: #state{}} |
+    {noreply, NewState :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+handle_cast({send, ServerMsg}, State = #state{socket = Socket,
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {noreply, State};
+
+handle_cast(disconnect, State) ->
+    {stop, normal, State};
 
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
@@ -167,23 +178,23 @@ handle_cast(_Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | {Ok :: atom(), Socket :: ssl2:socket(),
-    Data :: binary()} | term(), State :: #sock_state{}) ->
-    {noreply, NewState :: #sock_state{}} |
-    {noreply, NewState :: #sock_state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_info({Ok, Socket, Data}, State = #sock_state{socket = Socket, ok = Ok,
+    Data :: binary()} | term(), State :: #state{}) ->
+    {noreply, NewState :: #state{}} |
+    {noreply, NewState :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+handle_info({Ok, Socket, Data}, State = #state{socket = Socket, ok = Ok,
     transport = Transport}) ->
     activate_socket_once(Socket, Transport),
     handle_client_message(State, Data);
 
-handle_info({Closed, _}, State = #sock_state{closed = Closed}) ->
+handle_info({Closed, _}, State = #state{closed = Closed}) ->
     {stop, normal, State};
 
-handle_info({Error, Socket, Reason}, State = #sock_state{error = Error}) ->
+handle_info({Error, Socket, Reason}, State = #state{error = Error}) ->
     ?warning("Connection ~p error: ~p", [Socket, Reason]),
     {stop, Reason, State};
 
-handle_info(timeout, State = #sock_state{socket = Socket}) ->
+handle_info(timeout, State = #state{socket = Socket}) ->
     ?warning("Connection ~p timeout", [Socket]),
     {stop, normal, State};
 
@@ -201,12 +212,12 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #sock_state{}) -> term().
-terminate(Reason, #sock_state{session_id = Id, socket = Socket} = State) ->
+    State :: #state{}) -> term().
+terminate(Reason, #state{session_id = SessId, socket = Socket} = State) ->
     ?log_terminate(Reason, State),
+    session:remove_connection(SessId, self()),
     ssl2:close(Socket),
-    catch communicator:remove_connection(Id, self()),
-    ssl2:close(State#sock_state.socket),
+    ssl2:close(State#state.socket),
     ok.
 
 %%--------------------------------------------------------------------
@@ -215,8 +226,8 @@ terminate(Reason, #sock_state{session_id = Id, socket = Socket} = State) ->
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
--spec code_change(OldVsn :: term() | {down, term()}, State :: #sock_state{},
-    Extra :: term()) -> {ok, NewState :: #sock_state{}} | {error, Reason :: term()}.
+-spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
+    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -231,10 +242,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% functions
 %% @end
 %%--------------------------------------------------------------------
--spec handle_client_message(#sock_state{}, binary()) ->
-    {noreply, NewState :: #sock_state{}, timeout()} |
-    {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
+-spec handle_client_message(#state{}, binary()) ->
+    {noreply, NewState :: #state{}, timeout()} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+handle_client_message(State = #state{session_id = SessId}, Data) ->
     try serializator:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined ->
             handle_handshake(State, Msg);
@@ -253,16 +264,16 @@ handle_client_message(State = #sock_state{session_id = SessId}, Data) ->
 %% and obtain session
 %% @end
 %%--------------------------------------------------------------------
--spec handle_handshake(#sock_state{}, #client_message{}) ->
-    {noreply, NewState :: #sock_state{}, timeout()} |
-    {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_handshake(State = #sock_state{certificate = Cert, socket = Sock,
+-spec handle_handshake(#state{}, #client_message{}) ->
+    {noreply, NewState :: #state{}, timeout()} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+handle_handshake(State = #state{certificate = Cert, socket = Sock,
     transport = Transp}, Msg) ->
     try fuse_auth_manager:handle_handshake(Msg, Cert) of
         {ok, Response = #server_message{message_body =
         #handshake_response{session_id = NewSessId}}} ->
             send_server_message(Sock, Transp, Response),
-            {noreply, State#sock_state{session_id = NewSessId}, ?TIMEOUT}
+            {noreply, State#state{session_id = NewSessId}, ?TIMEOUT}
     catch
         _:Error ->
             ?warning_stacktrace("Handshake ~p, error ~p", [Msg, Error]),
@@ -275,17 +286,20 @@ handle_handshake(State = #sock_state{certificate = Cert, socket = Sock,
 %% Handle nomal client_message
 %% @end
 %%--------------------------------------------------------------------
--spec handle_normal_message(#sock_state{}, #client_message{}) ->
-    {noreply, NewState :: #sock_state{}, timeout()} |
-    {stop, Reason :: term(), NewState :: #sock_state{}}.
-handle_normal_message(State = #sock_state{session_id = SessId,
-    socket = _Sock, transport = _Transp}, Msg) ->
+-spec handle_normal_message(#state{}, #client_message{}) ->
+    {noreply, NewState :: #state{}, timeout()} |
+    {stop, Reason :: term(), NewState :: #state{}}.
+handle_normal_message(State = #state{session_id = SessId, socket = Sock,
+    transport = Transp}, Msg) ->
     case router:preroute_message(Msg, SessId) of
         ok ->
-            {noreply, State, ?TIMEOUT}
-%%         {error, Reason} ->
-%%             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-%%             {stop, {error, Reason}, State}
+            {noreply, State, ?TIMEOUT};
+        {ok, ServerMsg} ->
+            send_server_message(Sock, Transp, ServerMsg),
+            {noreply, State, ?TIMEOUT};
+        {error, Reason} ->
+            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+            {stop, {error, Reason}, State}
     end.
 
 %%--------------------------------------------------------------------
@@ -312,3 +326,16 @@ send_server_message(Socket, Transport, ServerMsg) ->
     {ok, Data} = serializator:serialize_server_message(ServerMsg),
     ok = Transport:send(Socket, Data).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns random connection associated with the session given by session ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_random_connection(SessId :: session:id()) -> Con :: pid() | no_return().
+get_random_connection(SessId) ->
+    case session:get_connections(SessId) of
+        {ok, []} -> error(empty_connection_pool);
+        {ok, Cons} -> utils:random_element(Cons);
+        {error, Reason} -> error(Reason)
+    end.

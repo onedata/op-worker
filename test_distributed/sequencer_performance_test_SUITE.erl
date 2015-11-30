@@ -225,7 +225,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user_id">>},
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self]
+        reuse_or_create_fuse_session, [SessId, Iden, Self]
     )),
     {ok, SessId}.
 
@@ -273,7 +273,7 @@ mock_communicator(Workers) ->
     Self = self(),
     test_utils:mock_new(Workers, [communicator]),
     test_utils:mock_expect(Workers, communicator, send, fun
-        (Msg, _) -> Self ! Msg
+        (Msg, _, _) -> Self ! Msg, ok
     end).
 
 %%--------------------------------------------------------------------

@@ -153,7 +153,10 @@ handle_sync_event(Event, From, StateName, State) ->
         timeout() | hibernate} |
     {stop, Reason :: normal | term(), NewStateData :: term()}).
 handle_info({'EXIT', _, shutdown}, _, State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
+
+handle_info({'EXIT', _, normal}, StateName, State) ->
+    {next_state, StateName, State};
 
 handle_info(Info, StateName, State) ->
     ?log_bad_request({Info, StateName}),
@@ -313,7 +316,7 @@ unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
 -spec send_message_stream_reset(StmId :: stream_id(),
     SessId :: session:id()) -> ok.
 send_message_stream_reset(StmId, SessId) ->
-    communicator:send(#message_stream_reset{stream_id = StmId}, SessId).
+    communicator:ensure_sent(#message_stream_reset{stream_id = StmId}, SessId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -329,7 +332,7 @@ send_message_acknowledgement(#state{sequence_number = SeqNum,
 
 send_message_acknowledgement(#state{stream_id = StmId, sequence_number = SeqNum,
     session_id = SessId} = State) ->
-    communicator:send(#message_acknowledgement{
+    communicator:ensure_sent(#message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum - 1
     }, SessId),
     State#state{sequence_number_ack = SeqNum - 1}.
@@ -361,7 +364,7 @@ maybe_send_message_acknowledgement(#state{sequence_number = SeqNum,
     State :: #state{}) -> ok.
 send_message_request(UpperSeqNum, #state{stream_id = StmId,
     sequence_number = LowerSeqNum, session_id = SessId}) ->
-    communicator:send(#message_request{
+    communicator:ensure_sent(#message_request{
         stream_id = StmId,
         lower_sequence_number = LowerSeqNum,
         upper_sequence_number = UpperSeqNum

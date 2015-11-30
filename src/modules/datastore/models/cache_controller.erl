@@ -339,7 +339,7 @@ get_hooks_config() ->
 update_usage_info(Key, ModelName, Level) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     UpdateFun = fun(Record) ->
-        Record#cache_controller{timestamp = os:timestamp()}
+        {ok, Record#cache_controller{timestamp = os:timestamp()}}
     end,
     TS = os:timestamp(),
     V = #cache_controller{timestamp = TS, last_action_time = TS},
@@ -459,8 +459,8 @@ end_disk_op(Uuid, Owner, ModelName, Op, Level) ->
                     (#cache_controller{last_user = LastUser} = Record) ->
                         case LastUser of
                             Owner ->
-                                Record#cache_controller{last_user = non, action = non,
-                                    last_action_time = os:timestamp()};
+                                {ok, Record#cache_controller{last_user = non, action = non,
+                                    last_action_time = os:timestamp()}};
                             _ ->
                                 throw(user_changed)
                         end
@@ -490,7 +490,7 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
         Pid = pid_to_list(self()),
 
         UpdateFun = fun(Record) ->
-            Record#cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
+            {ok, Record#cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
         TS = os:timestamp(),
@@ -537,7 +537,7 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                            case timer:now_diff(os:timestamp(), LAT) >= 1000 * ForceTime of
                                true ->
                                    UpdateFun2 = fun(Record) ->
-                                       Record#cache_controller{last_action_time = os:timestamp()}
+                                       {ok, Record#cache_controller{last_action_time = os:timestamp()}}
                                    end,
                                    update(Level, Uuid, UpdateFun2),
                                    case datastore:get(Level, ModelName, Key) of
@@ -590,7 +590,7 @@ before_del(Key, ModelName, Level) ->
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
 
         UpdateFun = fun(Record) ->
-            Record#cache_controller{action = delete}
+            {ok, Record#cache_controller{action = delete}}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
         V = #cache_controller{action = delete},
@@ -629,9 +629,9 @@ log_link_del(Key, ModelName, LinkNames, stop, _Args, Level) ->
         UpdateFun = fun(#cache_controller{deleted_links = DL} = Record) ->
             case LinkNames of
                 LNs when is_list(LNs) ->
-                    Record#cache_controller{deleted_links = DL -- LinkNames};
+                    {ok, Record#cache_controller{deleted_links = DL -- LinkNames}};
                 _ ->
-                    Record#cache_controller{deleted_links = DL -- [LinkNames]}
+                    {ok, Record#cache_controller{deleted_links = DL -- [LinkNames]}}
             end
         end,
         update(Level, Uuid, UpdateFun)
@@ -648,9 +648,9 @@ before_link_del(Key, ModelName, LinkNames, Level) ->
         UpdateFun = fun(#cache_controller{deleted_links = DL} = Record) ->
             case LinkNames of
                 LNs when is_list(LNs) ->
-                    Record#cache_controller{deleted_links = DL ++ LinkNames};
+                    {ok, Record#cache_controller{deleted_links = DL ++ LinkNames}};
                 _ ->
-                    Record#cache_controller{deleted_links = DL ++ [LinkNames]}
+                    {ok, Record#cache_controller{deleted_links = DL ++ [LinkNames]}}
             end
         end,
         V = case LinkNames of

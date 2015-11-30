@@ -32,7 +32,7 @@
     Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
 session_setup(Worker, SessId, Iden, Con, Config) ->
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Con])),
+        reuse_or_create_fuse_session, [SessId, Iden, Con])),
     [{session_id, SessId}, {identity, Iden} | Config].
 
 %%--------------------------------------------------------------------

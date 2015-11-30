@@ -150,7 +150,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info({'EXIT', EvtMan, shutdown}, #state{event_manager = EvtMan} = State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 handle_info({execute_event_handler, Ref}, #state{emission_ref = Ref} = State) ->
     {noreply, execute_event_handler(State)};

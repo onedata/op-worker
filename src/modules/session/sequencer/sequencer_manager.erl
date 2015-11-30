@@ -187,7 +187,10 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info({'EXIT', SeqManSup, shutdown}, #state{sequencer_manager_sup = SeqManSup} = State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
+
+handle_info({'EXIT', _, normal}, State) ->
+    {noreply, State};
 
 handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {ok, SeqInStmSup} = sequencer_manager_sup:get_sequencer_stream_sup(
@@ -243,7 +246,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec send_message_stream_reset(SessId :: session:id()) -> ok.
 send_message_stream_reset(SessId) ->
-    communicator:send(#message_stream_reset{}, SessId).
+    communicator:ensure_sent(#message_stream_reset{}, SessId).
 
 %%--------------------------------------------------------------------
 %% @private

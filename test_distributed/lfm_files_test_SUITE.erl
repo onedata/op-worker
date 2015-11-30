@@ -356,7 +356,7 @@ session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
     UserName = Name("username", UserNum),
 
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
+        reuse_or_create_fuse_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{

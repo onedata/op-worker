@@ -13,7 +13,6 @@
 -define(DATASTORE_MODELS_HRL, 1).
 
 -include("modules/events/subscriptions.hrl").
--include("proto/common/credentials.hrl").
 
 %% Wrapper for all models' records
 -record(document, {
@@ -53,21 +52,21 @@
 
 %% Model that controls utilization of cache
 -record(cache_controller, {
-    timestamp = {0, 0, 0} :: tuple(),
+    timestamp = {0, 0, 0} :: erlang:timestamp(),
     action = non :: atom(),
     last_user = non :: string() | non,
-    last_action_time = {0, 0, 0} :: tuple(),
+    last_action_time = {0, 0, 0} :: erlang:timestamp(),
     deleted_links = [] :: list()
 }).
 
-%% sample model with example fields
+%% Sample model with example fields
 -record(task_pool, {
     task :: task_manager:task(),
     owner :: pid(),
     node :: node()
 }).
 
-%% sample model with example fields
+%% Sample model with example fields
 -record(some_record, {
     field1 :: term(),
     field2 :: term(),
@@ -79,17 +78,19 @@
     user_id :: onedata_user:id()
 }).
 
-%% session:
-%% identity - user identity
+%% User session
 -record(session, {
-    identity :: #identity{},
-    type = fuse :: fuse | gui,
-    auth :: #auth{},
-    node = node() :: node(),
-    session_sup = undefined :: pid() | undefined,
-    event_manager = undefined :: pid() | undefined,
-    sequencer_manager = undefined :: pid() | undefined,
-    communicator = undefined :: pid() | undefined
+    status :: session:status(),
+    accessed :: erlang:timestamp(),
+    type :: session:type(),
+    identity :: session:identity(),
+    auth :: session:auth(),
+    node :: node(),
+    supervisor :: pid(),
+    watcher :: pid(),
+    event_manager :: pid(),
+    sequencer_manager :: pid(),
+    connections = [] :: [pid()]
 }).
 
 %% Local, cached version of globalregistry user

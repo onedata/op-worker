@@ -142,7 +142,7 @@ def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    couchbase_output = couchbase.up('couchbase/server:latest', dns, uid, cluster_name, len(db_node_mappings))
+    couchbase_output = couchbase.up('couchbase/server:enterprise-3.1.0', dns, uid, cluster_name, len(db_node_mappings))
 
     return db_node_mappings, couchbase_output
 

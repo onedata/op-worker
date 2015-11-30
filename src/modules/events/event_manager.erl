@@ -105,27 +105,27 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({register_stream, SubId, EvtStm}, #state{event_streams = Stms} = State) ->
-    {noreply, State#state{event_streams = maps:put(SubId, EvtStm, Stms)}};
+handle_cast({register_stream, SubId, EvtStm}, #state{event_streams = EvtStms} = State) ->
+    {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}};
 
-handle_cast({unregister_stream, SubId}, #state{event_streams = Stms} = State) ->
-    {noreply, State#state{event_streams = maps:remove(SubId, Stms)}};
+handle_cast({unregister_stream, SubId}, #state{event_streams = EvtStms} = State) ->
+    {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};
 
-handle_cast(#event{} = Evt, #state{event_streams = Stms} = State) ->
+handle_cast(#event{} = Evt, #state{event_streams = EvtStms} = State) ->
     {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
         gen_server:cast(EvtStm, Evt),
         EvtStm
-    end, Stms)}};
+    end, EvtStms)}};
 
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
-    session_id = SessId, event_streams = Stms} = State) ->
+    session_id = SessId, event_streams = EvtStms} = State) ->
     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-    {noreply, State#state{event_streams = maps:put(SubId, EvtStm, Stms)}};
+    {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}};
 
-handle_cast(#subscription_cancellation{id = SubId}, #state{event_streams = Stms} = State) ->
-    {ok, EvtStm} = maps:find(SubId, Stms),
+handle_cast(#subscription_cancellation{id = SubId}, #state{event_streams = EvtStms} = State) ->
+    {ok, EvtStm} = maps:find(SubId, EvtStms),
     erlang:exit(EvtStm, shutdown),
-    {noreply, State#state{event_streams = maps:remove(SubId, Stms)}};
+    {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};
 
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -142,7 +142,7 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info({'EXIT', EvtManSup, shutdown}, #state{event_manager_sup = EvtManSup} = State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 handle_info(timeout, #state{event_manager_sup = EvtManSup, session_id = SessId} = State) ->
     {ok, EvtStmSup} = event_manager_sup:get_event_stream_sup(EvtManSup),
