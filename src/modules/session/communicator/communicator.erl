@@ -37,7 +37,7 @@
 
 -record(state, {
     session_id :: session:id(),
-    connections = [] :: [pid()]
+    connections = [] :: [pid()] | undefined
 }).
 
 %%%===================================================================

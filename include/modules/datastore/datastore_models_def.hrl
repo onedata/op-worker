@@ -90,7 +90,7 @@
 %% identity - user identity
 -record(session, {
     identity :: #identity{},
-    type = fuse :: fuse | gui | dummy,
+    type = fuse :: fuse | gui | rest,
     auth :: #auth{},
     node = node() :: node(),
     session_sup = undefined :: pid() | undefined,
