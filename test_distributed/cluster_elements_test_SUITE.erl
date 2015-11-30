@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("modules_and_args.hrl").
 -include("cluster_elements/node_manager/task_manager.hrl").
 -include("modules/datastore/datastore_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -42,13 +43,20 @@ all() ->
 
 ccm_and_worker_test(Config) ->
     % given
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    % List of worker nodes
+    Workers = ?config(op_worker_nodes, Config),
+    % List of modules from modules_and_args.hrl
+    Modules = ?MODULES,
 
-    % then
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [fslogic_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker1, worker_proxy, call, [dns_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [fslogic_worker, ping])),
-    ?assertEqual(pong, rpc:call(Worker2, worker_proxy, call, [dns_worker, ping])).
+    % Check if all modules on all workers started
+    lists:foreach(
+        fun(Worker) ->
+            lists:foreach(
+                fun(Module) ->
+                    ?assertEqual(pong, rpc:call(Worker, worker_proxy, call, [Module, ping]))
+                end, Modules)
+        end, Workers).
+
 
 task_pool_test(Config) ->
     % given
