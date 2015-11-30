@@ -40,7 +40,7 @@ prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
 prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
     [{<<"parentURI">>, <<>>} | prepare(Tail, State)];
 prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
-    ParentURI = utils:ensure_path_ends_with_slash(
+    ParentURI = gui_str:ensure_ends_with_slash(
         filename:dirname(binary:part(Path, {0, byte_size(Path) - 1}))),
     [{<<"parentURI">>, ParentURI} | prepare(Tail, State)];
 %% prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) -> todo introduce objectid
