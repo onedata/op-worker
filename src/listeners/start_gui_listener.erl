@@ -44,7 +44,7 @@
 %% {@link listener_starter_behaviour} callback start_listener/1.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listener() -> {ok, pid()} | no_return().
+-spec start_listener() -> ok | {error, Reason :: term()}.
 start_listener() ->
   % Get params from env for gui
   {ok, DocRoot} =
@@ -93,7 +93,7 @@ start_listener() ->
     ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
 
   % Start the listener for web gui and nagios handler
-  {ok, _} = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
+  Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
     ranch_ssl2, [
       {ip, {127, 0, 0, 1}},
       {port, GuiPort},
@@ -104,7 +104,11 @@ start_listener() ->
       {timeout, timer:seconds(Timeout)},
       % On every request, add headers that improve security to the response
       {onrequest, fun gui_utils:onrequest_adjust_headers/1}
-    ]).
+    ]),
+  case Result of
+    {ok, _} -> ok;
+    _ -> Result
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc

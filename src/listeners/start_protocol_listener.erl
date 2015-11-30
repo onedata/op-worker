@@ -35,7 +35,7 @@
 %% {@link listener_starter_behaviour} callback start_listener/1.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listener() -> {ok, pid()} | no_return().
+-spec start_listener() -> ok | {error, Reason :: term()}.
 start_listener() ->
   {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
   {ok, DispatcherPoolSize} =
@@ -47,14 +47,18 @@ start_listener() ->
          {ok, all} -> {0, 0, 0, 0}
        end,
 
-  {ok, _} = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
+  Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
     ranch_ssl2, [
       {ip, Ip},
       {port, Port},
       {certfile, CertFile}
     ],
     connection, []
-  ).
+  ),
+  case Result of
+    {ok, _} -> ok;
+    _ -> Result
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc

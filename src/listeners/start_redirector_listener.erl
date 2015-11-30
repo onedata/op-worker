@@ -35,7 +35,7 @@
 %% {@link listener_starter_behaviour} callback start_listener/1.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listener() -> {ok, pid()} | no_return().
+-spec start_listener() -> ok | {error, Reason :: term()}.
 start_listener() ->
   {ok, RedirectPort} =
     application:get_env(?APP_NAME, http_worker_redirect_port),
@@ -53,7 +53,7 @@ start_listener() ->
         ]}
     ]}
   ],
-  {ok, _} = cowboy:start_http(?HTTP_REDIRECTOR_LISTENER, RedirectNbAcceptors,
+  Result = cowboy:start_http(?HTTP_REDIRECTOR_LISTENER, RedirectNbAcceptors,
     [
       {port, RedirectPort}
     ],
@@ -61,7 +61,11 @@ start_listener() ->
       {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
       {max_keepalive, 1},
       {timeout, timer:seconds(Timeout)}
-    ]).
+    ]),
+  case Result of
+    {ok, _} -> ok;
+    _ -> Result
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc

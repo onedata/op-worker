@@ -35,7 +35,7 @@
 %% {@link listener_starter_behaviour} callback start_listener/1.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listener() -> {ok, pid()} | no_return().
+-spec start_listener() -> ok | {error, Reason :: term()}.
 start_listener() ->
   {ok, NbAcceptors} =
     application:get_env(?APP_NAME, http_worker_number_of_acceptors),
@@ -49,7 +49,7 @@ start_listener() ->
   ],
 
   % Start the listener for REST handler
-  {ok, _} = ranch:start_listener(?REST_LISTENER, NbAcceptors,
+  Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
     ranch_ssl2, [
       {ip, {127, 0, 0, 1}},
       {port, RestPort},
@@ -58,7 +58,11 @@ start_listener() ->
       {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
       {max_keepalive, 1},
       {timeout, timer:seconds(Timeout)}
-    ]).
+    ]),
+  case Result of
+    {ok, _} -> ok;
+    _ -> Result
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc
