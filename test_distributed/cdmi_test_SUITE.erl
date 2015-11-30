@@ -281,7 +281,7 @@ cdmi_endpoint(Node) ->
     Port =
         case get(port) of
             undefined ->
-                {ok, P} = test_utils:get_env(Node, ?APP_NAME, http_worker_rest_port),
+                {ok, P} = test_utils:get_env(Node, ?APP_NAME, rest_port),
                 PStr = integer_to_list(P),
                 put(port, PStr),
                 PStr;
