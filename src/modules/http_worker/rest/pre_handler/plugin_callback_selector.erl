@@ -18,6 +18,8 @@
 
 -type content_type_params() :: '*' | [{binary(), binary()}].
 
+-export_type([content_type_callback/0, content_type_params/0]).
+
 -include("modules/http_worker/rest/http_status.hrl").
 
 %% API

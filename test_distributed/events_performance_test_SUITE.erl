@@ -109,7 +109,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
     EvtNum = ?config(evt_num, Config),
     EvtSize = ?config(evt_size, Config),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
@@ -173,7 +173,7 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
     EvtSize = ?config(evt_size, Config),
     FileNum = ?config(file_num, Config),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
@@ -247,7 +247,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
         fun(Meta) -> Meta >= CtrThr end,
@@ -303,7 +303,7 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
     EvtNum = ?config(evt_num, Config),
     EvtSize = ?config(evt_size, Config),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     {ok, SubId} = subscribe(Worker,
         infinity,
         fun(#event{object = #write_event{}}) -> true; (_) -> false end,
@@ -362,7 +362,7 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     SubsNum = ?config(sub_num, Config),
     EvtsNum = ?config(evt_num, Config),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     % Create subscriptions for events associated with different files.
     {SubIds, FileUuids} = lists:unzip(lists:map(fun(N) ->
         FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
@@ -429,7 +429,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
     CtrThr = ?config(ctr_thr, Config),
     EvtNum = ?config(evt_num, Config),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
@@ -479,7 +479,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
 init_per_suite(Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    op_test_utils:clear_models(Worker, [subscription]),
+    initializer:clear_models(Worker, [subscription]),
     NewConfig.
 
 end_per_suite(Config) ->
@@ -488,7 +488,7 @@ end_per_suite(Config) ->
 init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
         (#write_subscription{} = Msg, _) -> Self ! Msg, ok;
@@ -502,7 +502,7 @@ init_per_testcase(_, Config) ->
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok

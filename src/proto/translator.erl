@@ -121,9 +121,9 @@ translate_from_protobuf(#'ChangeMode'{uuid = UUID, mode = Mode}) ->
 translate_from_protobuf(#'Rename'{uuid = UUID, target_path = TargetPath}) ->
     #rename{uuid = UUID, target_path = TargetPath};
 translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = Flags}) ->
-    #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = Flags};
+    #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)};
 translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
-    #get_file_location{uuid = UUID, flags = Flags};
+    #get_file_location{uuid = UUID, flags = translate_open_flags(Flags)};
 translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
     #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
@@ -240,3 +240,17 @@ translate_to_protobuf(undefined) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates open flags for get[_new]_file_location requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec translate_open_flags('READ_WRITE' | 'READ' | 'WRITE') -> fslogic_worker:open_flags().
+translate_open_flags('READ_WRITE') ->
+    rdwr;
+translate_open_flags('READ') ->
+    read;
+translate_open_flags('WRITE') ->
+    write.

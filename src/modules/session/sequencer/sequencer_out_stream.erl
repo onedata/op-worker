@@ -45,8 +45,11 @@
     sequencer_manager :: pid(),
     stream_id :: stream_id(),
     sequence_number = 0 :: sequencer:sequence_number(),
-    messages = queue:new() :: messages()
+    inbox = queue:new() :: messages(),
+    outbox = queue:new() :: messages()
 }).
+
+-define(PROCESS_REQUEST_RETRY_DELAY, timer:seconds(5)).
 
 %%%===================================================================
 %%% API
@@ -112,26 +115,17 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(#message_stream_reset{}, #state{messages = Msgs,
-    session_id = SessId} = State) ->
-    {NewSeqNum, NewMsgs} = resend_all_messages(Msgs, SessId),
-    {noreply, State#state{sequence_number = NewSeqNum, messages = NewMsgs}};
+handle_cast(#message_stream_reset{} = Request, #state{} = State) ->
+    {noreply, handle_request(Request, State)};
 
-handle_cast(#message_request{lower_sequence_number = LowerSeqNum,
-    upper_sequence_number = UpperSeqNum}, #state{messages = Msgs,
-    stream_id = StmId, sequence_number = SeqNum, session_id = SessId} = State) ->
-    case LowerSeqNum < SeqNum of
-        true -> resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId);
-        false -> ok
-    end,
-    {noreply, State};
+handle_cast(#message_request{} = Request, #state{} = State) ->
+    {noreply, handle_request(Request, State)};
 
-handle_cast(#message_acknowledgement{sequence_number = SeqNum}, #state{
-    messages = Msgs} = State) ->
-    {noreply, State#state{messages = remove_messages(SeqNum, Msgs)}};
+handle_cast(#message_acknowledgement{} = Request, #state{} = State) ->
+    {noreply, handle_request(Request, State)};
 
-handle_cast(#server_message{} = Msg, State) ->
-    {noreply, store_and_forward_message(Msg, State)};
+handle_cast(#server_message{} = Request, State) ->
+    {noreply, handle_request(Request, State)};
 
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
@@ -147,6 +141,9 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_info(process_pending_requests, State) ->
+    {noreply, process_pending_requests(State)};
+
 handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
 
@@ -204,23 +201,94 @@ register_stream(SeqMan, StmId) ->
 unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
     gen_server:cast(SeqMan, {unregister_out_stream, StmId}).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes request if there are no pending requests, otherwise appends it to
+%% the queue of pending requests. If request fails with an exception it is saved
+%% as a pending request and will be handled again after timeout.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_request(Request :: term(), State :: #state{}) -> NewState :: #state{}.
+handle_request(Request, #state{inbox = Inbox} = State) ->
+    case queue:is_empty(Inbox) of
+        true ->
+            try
+                process_request(Request, State)
+            catch
+                _:Reason ->
+                    erlang:send_after(?PROCESS_REQUEST_RETRY_DELAY, self(),
+                        process_pending_requests),
+                    ?warning("Cannot process request ~p due to: ~p. "
+                    "Retring in ~p milliseconds...",
+                        [Request, Reason, ?PROCESS_REQUEST_RETRY_DELAY]),
+                    State#state{inbox = queue:in(Request, Inbox)}
+            end;
+        false ->
+            State#state{inbox = queue:in(Request, Inbox)}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Injects message stream details into the message, pushes it into the queue and
-%% forwards to the communicator.
+%% Processes all pending requests as long as there are no errors.
+%% If an error occurs, processing is stopped and will be restarted after timeout.
 %% @end
 %%--------------------------------------------------------------------
--spec store_and_forward_message(Msg :: #server_message{}, State :: #state{}) ->
-    NewState :: #state{}.
-store_and_forward_message(#server_message{message_stream = MsgStm} = Msg, #state{
-    sequence_number = SeqNum, session_id = SessId, messages = Msgs} = State) ->
+-spec process_pending_requests(State :: #state{}) -> NewState :: #state{}.
+process_pending_requests(#state{inbox = Inbox} = State) ->
+    case queue:peek(Inbox) of
+        {value, Request} ->
+            try
+                process_request(Request, State),
+                State#state{inbox = queue:drop(Inbox)}
+            catch
+                _:Reason ->
+                    erlang:send_after(?PROCESS_REQUEST_RETRY_DELAY, self(),
+                        process_pending_requests),
+                    ?warning("Cannot process request ~p due to: ~p. "
+                    "Retring in ~p milliseconds...",
+                        [Request, Reason, ?PROCESS_REQUEST_RETRY_DELAY]),
+                    State
+            end;
+        empty -> State
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes the request.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_request(Request :: term(), State :: #state{}) -> NewState :: #state{}.
+process_request(#message_stream_reset{}, #state{outbox = Msgs,
+    session_id = SessId} = State) ->
+    {NewSeqNum, NewMsgs} = resend_all_messages(Msgs, SessId),
+    State#state{sequence_number = NewSeqNum, outbox = NewMsgs};
+
+process_request(#message_request{lower_sequence_number = LowerSeqNum,
+    upper_sequence_number = UpperSeqNum}, #state{outbox = Msgs,
+    stream_id = StmId, sequence_number = SeqNum, session_id = SessId} = State) ->
+    case LowerSeqNum < SeqNum of
+        true ->
+            {ok, Con} = session:get_random_connection(SessId),
+            ok = resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con),
+            State;
+        false ->
+            State
+    end;
+
+process_request(#message_acknowledgement{sequence_number = SeqNum}, #state{
+    outbox = Msgs} = State) ->
+    State#state{outbox = remove_messages(SeqNum, Msgs)};
+
+process_request(#server_message{message_stream = MsgStm} = Msg, #state{
+    sequence_number = SeqNum, session_id = SessId, outbox = Msgs} = State) ->
     NewMsg = Msg#server_message{message_stream = MsgStm#message_stream{
         sequence_number = SeqNum
     }},
-    ensure_sent(NewMsg, SessId),
-    State#state{sequence_number = SeqNum + 1, messages = queue:in(NewMsg, Msgs)}.
+    ok = communicator:send(NewMsg, SessId),
+    State#state{sequence_number = SeqNum + 1, outbox = queue:in(NewMsg, Msgs)}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -251,7 +319,8 @@ remove_messages(SeqNum, Msgs) ->
 -spec resend_all_messages(Msgs :: messages(), SessId :: session:id()) ->
     {NewSeqNum :: sequence_number(), NewMsgs :: messages()}.
 resend_all_messages(Msgs, SessId) ->
-    resend_all_messages(Msgs, SessId, 0, queue:new()).
+    {ok, Con} = session:get_random_connection(SessId),
+    resend_all_messages(Msgs, Con, 0, queue:new()).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -261,18 +330,18 @@ resend_all_messages(Msgs, SessId) ->
 %% sequence number.
 %% @end
 %%--------------------------------------------------------------------
--spec resend_all_messages(Msgs :: messages(), SessId :: session:id(),
+-spec resend_all_messages(Msgs :: messages(), Con :: pid(),
     SeqNum :: sequence_number(), MsgsAcc :: messages()) ->
     {NewSeqNum :: sequence_number(), NewMsgs :: messages()}.
-resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
-    case queue:out(Msgs) of
-        {{value, #server_message{message_stream = MsgStm} = Msg}, NewMsgs} ->
+resend_all_messages(Msgs, Con, SeqNum, MsgsAcc) ->
+    case queue:peek(Msgs) of
+        {value, #server_message{message_stream = MsgStm} = Msg} ->
             NewMsg = Msg#server_message{
                 message_stream = MsgStm#message_stream{sequence_number = SeqNum}
             },
-            ensure_sent(NewMsg, SessId),
-            resend_all_messages(NewMsgs, SessId, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
-        {empty, _} ->
+            ok = communicator:send(NewMsg, Con),
+            resend_all_messages(queue:drop(Msgs), Con, SeqNum + 1, queue:in(NewMsg, MsgsAcc));
+        empty ->
             {SeqNum, MsgsAcc}
     end.
 
@@ -283,42 +352,22 @@ resend_all_messages(Msgs, SessId, SeqNum, MsgsAcc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resend_messages(LowerSeqNum :: sequence_number(), UpperSeqNum :: sequence_number(),
-    Msgs :: messages(), StmId :: stream_id(), SessId :: session:id()) -> ok.
+    Msgs :: messages(), StmId :: stream_id(), Con :: pid()) -> ok | {error, Reason :: term()}.
 resend_messages(LowerSeqNum, UpperSeqNum, _, _, _) when LowerSeqNum > UpperSeqNum ->
     ok;
 
-resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
-    case queue:out(Msgs) of
-        {{value, #server_message{message_stream = #message_stream{
+resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con) ->
+    case queue:peek(Msgs) of
+        {value, #server_message{message_stream = #message_stream{
             sequence_number = LowerSeqNum
-        }} = Msg}, NewMsgs} ->
-            ensure_sent(Msg, SessId),
-            resend_messages(LowerSeqNum + 1, UpperSeqNum, NewMsgs, StmId, SessId);
-        {{value, #server_message{message_stream = #message_stream{
-            sequence_number = SeqNum}
-        }}, NewMsgs} when SeqNum < LowerSeqNum ->
-            resend_messages(LowerSeqNum, UpperSeqNum, NewMsgs, StmId, SessId);
-        {_, _} ->
+        }} = Msg} ->
+            ok = communicator:send(Msg, Con),
+            resend_messages(LowerSeqNum + 1, UpperSeqNum, queue:drop(Msgs), StmId, Con);
+        {value, #server_message{message_stream = #message_stream{
+            sequence_number = SeqNum
+        }}} when SeqNum < LowerSeqNum ->
+            resend_messages(LowerSeqNum, UpperSeqNum, queue:drop(Msgs), StmId, Con);
+        _ ->
             ?warning("Received request for messages unavailable in sequencer stream "
             "queue. Stream ID: ~p, range: [~p,~p].", [StmId, LowerSeqNum, UpperSeqNum])
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends a message. In case of error retries after specified timeout.
-%% This function does not return until message has been successfully sent.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_sent(Msg :: #server_message{}, SessId :: session:id()) -> ok.
-ensure_sent(Msg, SessId) ->
-    case communicator:send(Msg, SessId) of
-        ok -> ok;
-        {error, Reason} ->
-            Delay = timer:seconds(application:get_env(?APP_NAME,
-                sequencer_stream_msg_send_retry_delay_seconds, 5)),
-            ?warning("Cannot send message ~p due to: ~p. Retrying in ~p milliseconds...",
-                [Msg, Reason, Delay]),
-            timer:sleep(Delay),
-            ensure_sent(Msg, SessId)
     end.

@@ -28,7 +28,7 @@
 %   - open mode
 %   - ??
 % 3) How to get rid of rubbish like not closed opens - check expired handles if a session connected with them has ended?
-% 4) All errors should be listed in one hrl -> errors.hrl
+% 4) All errors should be listed in one hrl -> ctool/include/posix/errors.hrl
 % 4) Common types should be listed in one hrl -> types.hrl
 % 5) chown is no longer featured in lfm as it is not needed by higher layers
 % 6) Blocks related functions should go to another module (synchronize, mark_as_truncated etc).
@@ -46,10 +46,11 @@
     end).
 
 
+-include("global_definitions.hrl").
 -include("types.hrl").
--include("errors.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type handle() :: #lfm_handle{}.
@@ -57,11 +58,12 @@
 -export_type([handle/0]).
 
 %% Functions operating on directories
--export([mkdir/2, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, get_block_map/1, unlink/1, unlink/2]).
+-export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
+    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
@@ -81,9 +83,25 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_path()) -> ok | error_reply().
 mkdir(SessId, Path) ->
-    lfm_dirs:mkdir(Path).
+    {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
+    mkdir(SessId, Path, Mode).
+
+-spec mkdir(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+ok | error_reply().
+mkdir(SessId, Path, Mode) ->
+    try
+        CTX = fslogic_context:new(SessId),
+        {ok, Tokens} = fslogic_path:verify_file_path(Path),
+        Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+        {ok, CanonicalPath} = file_meta:gen_path(Entry),
+        lfm_dirs:mkdir(CTX, CanonicalPath, Mode)
+    catch
+        _:Reason ->
+            ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
+            {error, Reason}
+    end.
 
 
 %%--------------------------------------------------------------------

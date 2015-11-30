@@ -158,7 +158,7 @@ multi_message_test(Config) ->
         }]}}}
     end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #events{events = [#event{
             counter = Counter, object = #read_event{}
@@ -289,7 +289,7 @@ multi_ping_pong_test(Config) ->
         #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
     end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Self = self(),
 
     T1 = os:timestamp(),
@@ -344,7 +344,7 @@ sequential_ping_pong_test(Config) ->
         #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
     end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
@@ -381,7 +381,7 @@ multi_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
 
     % when
     Connections = lists:map(fun(_) ->
@@ -419,7 +419,7 @@ bandwidth_test(Config) ->
     PacketRaw = messages:encode_msg(Packet),
 
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #ping{}}) ->
@@ -477,7 +477,7 @@ python_client_test(Config) ->
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #ping{}}) ->
@@ -548,7 +548,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(cert_connection_test, Config) ->
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Workers = ?config(op_worker_nodes, Config),
     application:ensure_started(ssl2),
     test_utils:mock_new(Workers, serializator),
@@ -562,7 +562,7 @@ init_per_testcase(Case, Config) when
     Case =:= bandwidth_test;
     Case =:= python_client_test ->
     Workers = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     application:ensure_started(ssl2),
     test_utils:mock_new(Workers, router),
     mock_identity(Workers),
@@ -570,7 +570,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     mock_identity(Workers),
     application:ensure_started(ssl2),
     Config.

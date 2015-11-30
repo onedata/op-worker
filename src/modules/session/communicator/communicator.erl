@@ -40,60 +40,61 @@ send(Msg, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a message to the client identified by session ID. No reply is expected.
-%% Waits until message is sent by one of connections from underlying connection
-%% pool. If an error occurs retries specified number of attempts unless session
-%% has been deleted in the meantime.
+%% Sends a message to the client using connection pool associated with client's
+%% session or chosen connection. No reply is expected. Waits until message is
+%% sent. If an error occurs retries specified number of attempts unless session
+%% has been deleted in the meantime or connection does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec send(Msg :: #server_message{} | term(), SessId :: session:id(),
+-spec send(Msg :: #server_message{} | term(), Ref :: connection:ref(),
     Retry :: non_neg_integer() | infinity) -> ok | {error, Reason :: term()}.
-send(#server_message{} = Msg, SessId, Retry) when Retry > 1; Retry == infinity ->
-    case connection:send(Msg, SessId) of
+send(#server_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
+    case connection:send(Msg, Ref) of
         ok -> ok;
         {error, {not_found, session}} -> {error, {not_found, session}};
+        {exit, {noproc, _}} -> {error, {not_found, connection}};
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of
-                infinity -> communicator:send(Msg, SessId, Retry);
-                _ -> communicator:send(Msg, SessId, Retry - 1)
+                infinity -> communicator:send(Msg, Ref, Retry);
+                _ -> communicator:send(Msg, Ref, Retry - 1)
             end
     end;
-send(#server_message{} = Msg, SessId, 1) ->
-    connection:send(Msg, SessId);
-send(Msg, SessId, Retry) ->
-    communicator:send(#server_message{message_body = Msg}, SessId, Retry).
+send(#server_message{} = Msg, Ref, 1) ->
+    connection:send(Msg, Ref);
+send(Msg, Ref, Retry) ->
+    communicator:send(#server_message{message_body = Msg}, Ref, Retry).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Similar to communicator:send/2, but does not wait until message is sent using
-%% underlying connection pool. Always returns 'ok' for non-empty connection pool.
+%% Similar to communicator:send/2, but does not wait until message is sent.
+%% Always returns 'ok' for non-empty connection pool or existing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec send_async(Msg :: #server_message{} | term(), SessId :: session:id()) ->
+-spec send_async(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     ok | {error, Reason :: term()}.
-send_async(#server_message{} = Msg, SessId) ->
-    connection:send_async(Msg, SessId);
-send_async(Msg, SessId) ->
-    communicator:send_async(#server_message{message_body = Msg}, SessId).
+send_async(#server_message{} = Msg, Ref) ->
+    connection:send_async(Msg, Ref);
+send_async(Msg, Ref) ->
+    communicator:send_async(#server_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends a message to the client and waits for a reply.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(Msg :: #server_message{} | term(), SessId :: session:id()) ->
+-spec communicate(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     {ok, #client_message{}} | {error, timeout}.
-communicate(#server_message{} = ServerMsg, SessId) ->
-    {ok, MsgId} = communicate_async(ServerMsg, SessId, self()),
+communicate(#server_message{} = ServerMsg, Ref) ->
+    {ok, MsgId} = communicate_async(ServerMsg, Ref, self()),
     receive
         #client_message{message_id = MsgId} = ClientMsg -> {ok, ClientMsg}
     after
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
     end;
-communicate(Msg, SessId) ->
-    communicate(#server_message{message_body = Msg}, SessId).
+communicate(Msg, Ref) ->
+    communicate(#server_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,10 +103,10 @@ communicate(Msg, SessId) ->
 %% @equiv communicate_async(Msg, SessId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #server_message{}, SessId :: session:id()) ->
+-spec communicate_async(Msg :: #server_message{}, Ref :: connection:ref()) ->
     {ok, #message_id{}}.
-communicate_async(Msg, SessId) ->
-    communicate_async(Msg, SessId, undefined).
+communicate_async(Msg, Ref) ->
+    communicate_async(Msg, Ref, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,16 +116,16 @@ communicate_async(Msg, SessId) ->
 %% answer will be send to ReplyPid process as: #client_message{message_id = MessageId}
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #server_message{} | term(), SessId :: session:id(),
+-spec communicate_async(Msg :: #server_message{} | term(), Ref :: connection:ref(),
     Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
-communicate_async(#server_message{} = Msg, SessId, Recipient) ->
+communicate_async(#server_message{} = Msg, Ref, Recipient) ->
     {ok, MsgId} = message_id:generate(Recipient),
-    case send(Msg#server_message{message_id = MsgId}, SessId) of
+    case send(Msg#server_message{message_id = MsgId}, Ref) of
         ok -> {ok, MsgId};
         {error, Reason} -> {error, Reason}
     end;
-communicate_async(Msg, SessId, Recipient) ->
-    communicate_async(#server_message{message_body = Msg}, SessId, Recipient).
+communicate_async(Msg, Ref, Recipient) ->
+    communicate_async(#server_message{message_body = Msg}, Ref, Recipient).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -133,10 +134,10 @@ communicate_async(Msg, SessId, Recipient) ->
 %% session has been deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_sent(Msg :: #server_message{} | term(), SessId :: session:id()) ->
+-spec ensure_sent(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     ok.
-ensure_sent(Msg, SessId) ->
-    spawn(?MODULE, send, [Msg, SessId, infinity]),
+ensure_sent(Msg, Ref) ->
+    spawn(?MODULE, send, [Msg, Ref, infinity]),
     ok.
 
 %%%===================================================================

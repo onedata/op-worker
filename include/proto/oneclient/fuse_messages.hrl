@@ -15,6 +15,7 @@
 
 -include("common_messages.hrl").
 -include("modules/datastore/datastore.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 -record(child_link, {
     uuid :: binary(),
@@ -100,19 +101,6 @@
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{}.
-
--record(file_attr, {
-    uuid :: file_meta:uuid(),
-    name :: file_meta:name(),
-    mode :: file_meta:mode(),
-    uid = 0 :: file_meta:uuid(),
-    gid = 0 :: file_meta:uuid(),
-    atime = 0 :: file_meta:time(),
-    mtime = 0 :: file_meta:time(),
-    ctime = 0 :: file_meta:time(),
-    type :: file_meta:type(),
-    size = 0 :: file_meta:size()
-}).
 
 -record(file_children, {
     child_links :: [#child_link{}]

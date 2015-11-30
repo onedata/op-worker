@@ -24,10 +24,11 @@
 
 %% API
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
-    get_event_managers/0, get_sequencer_manager/1, get_connections/1, get_auth/1,
-    remove_connection/2]).
+    get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
+    get_connections/1, get_auth/1, remove_connection/2]).
 
--type id() :: binary().
+-type id() :: binary() | dummy_session_id().
+-type dummy_session_id() :: #identity{}.
 -type auth() :: #auth{}.
 -type type() :: fuse | rest | gui.
 -type status() :: active | inactive | phantom.
@@ -88,6 +89,10 @@ create(#document{value = Sess} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
+get(#identity{} = Identity) ->
+    {ok, #document{key = Identity, value = #session{
+        type = dummy, identity = Identity
+    }}};
 get(?ROOT_SESS_ID) ->
     {ok, #document{key = ?ROOT_SESS_ID, value = #session{
         identity = #identity{user_id = ?ROOT_USER_ID}
@@ -248,6 +253,20 @@ get_sequencer_manager(SessId) ->
             {ok, SeqMan};
         {error, Reason} ->
             {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns random connection associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_random_connection(SessId :: session:id()) ->
+    {ok, Con :: pid()} | {error, Reason :: term()}.
+get_random_connection(SessId) ->
+    case get_connections(SessId) of
+        {ok, []} -> {error, empty_connection_pool};
+        {ok, Cons} -> {ok, utils:random_element(Cons)};
+        {error, Reason} -> {error, Reason}
     end.
 
 %%--------------------------------------------------------------------

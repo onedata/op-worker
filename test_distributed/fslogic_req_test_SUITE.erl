@@ -489,27 +489,14 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-
+    Workers = ?config(op_worker_nodes, Config),
     communicator_mock_setup(Workers),
-    file_meta_mock_setup(Workers),
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
-    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
-
-    User1 = {1, [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User2 = {2, [<<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
-    User4 = {4, [<<"space_id4">>]},
-
-    session_setup(Worker, [User1, User2, User3, User4], Config).
+    initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    session_teardown(Worker, Config),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, communicator]),
+    initializer:clean_test_users_and_spaces(Config),
+    test_utils:mock_validate_and_unload(Workers, communicator),
 
     ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [], timer:seconds(60))),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, timer:seconds(60))).
@@ -517,103 +504,6 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), [{UserNum :: non_neg_integer(), [SpaceIds :: binary()]}], Config :: term()) -> NewConfig :: term().
-session_setup(_Worker, [], Config) ->
-    Config;
-session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
-    Self = self(),
-
-    Name = fun(Text, Num) -> name(Text, Num) end,
-
-    SessId = Name("session_id", UserNum),
-    UserId = Name("user_id", UserNum),
-    Iden = #identity{user_id = UserId},
-    UserName = Name("username", UserNum),
-
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self])),
-    {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, create, [
-        #document{key = UserId, value = #onedata_user{
-            name = UserName, space_ids = SpaceIds
-        }}
-    ]),
-    ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
-    [
-        {{spaces, UserNum}, SpaceIds}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
-        {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
-        | session_setup(Worker, R, Config)
-    ].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes existing test session.
-%% @end
-%%--------------------------------------------------------------------
--spec session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
-session_teardown(Worker, Config) ->
-    lists:foldl(fun
-        ({{session_id, _}, SessId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
-            Acc;
-        ({{spaces, _}, SpaceIds}, Acc) ->
-            lists:foreach(fun(SpaceId) ->
-                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
-            end, SpaceIds),
-            Acc;
-        ({{user_id, _}, UserId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_path:spaces_uuid(UserId)])),
-            Acc;
-        ({{fslogic_ctx, _}, _}, Acc) ->
-            Acc;
-        (Elem, Acc) ->
-            [Elem | Acc]
-    end, [], Config).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks gr_spaces module, so that it returns default space details for default
-%% space ID.
-%% @end
-%%--------------------------------------------------------------------
--spec gr_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}]) -> ok.
-gr_spaces_mock_setup(Workers, Spaces) ->
-    test_utils:mock_new(Workers, gr_spaces),
-    test_utils:mock_expect(Workers, gr_spaces, get_details,
-        fun(provider, SpaceId) ->
-            {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
-            {ok, #space_details{name = SpaceName}}
-        end
-    ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks file_meta module, so that creation of onedata user sends notification.
-%% @end
-%%--------------------------------------------------------------------
--spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
-file_meta_mock_setup(Workers) ->
-    Self = self(),
-    test_utils:mock_new(Workers, file_meta),
-    test_utils:mock_expect(Workers, file_meta, 'after',
-        fun(onedata_user, create, _, _, {ok, UUID}) ->
-            file_meta:setup_onedata_user(UUID),
-            Self ! onedata_user_setup
-        end
-    ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -627,6 +517,3 @@ communicator_mock_setup(Workers) ->
     test_utils:mock_expect(Workers, communicator, send,
         fun(_, _) -> ok end
     ).
-
-name(Text, Num) ->
-    list_to_binary(Text ++ "_" ++ integer_to_list(Num)).

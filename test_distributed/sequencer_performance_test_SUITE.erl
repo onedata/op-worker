@@ -187,7 +187,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     mock_router(Workers),
     mock_communicator(Workers),
     {ok, SessId} = session_setup(Worker),

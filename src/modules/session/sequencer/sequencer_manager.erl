@@ -340,5 +340,6 @@ create_sequencer_in_stream(StmId, #state{sequencer_in_stream_sup = SeqStmSup,
 %%--------------------------------------------------------------------
 -spec generate_stream_id() -> StmId :: stream_id().
 generate_stream_id() ->
+    % @todo function erlang:now/0 is deprecated, change after migration to Erlang 18.0
     {MegaSecs, Secs, MicroSecs} = erlang:now(),
     MegaSecs * 1000000000000 + Secs * 1000000 + MicroSecs.

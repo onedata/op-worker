@@ -27,6 +27,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
+-type ref() :: pid() | session:id().
+
+-export_type([ref/0]).
+
 -record(state, {
     certificate :: #'OTPCertificate'{},
     % handler responses
@@ -88,13 +92,18 @@ init(Ref, Socket, Transport, _Opts = []) ->
 %% Synchronously sends server message to client.
 %% @end
 %%--------------------------------------------------------------------
--spec send(Msg :: #server_message{}, SessId :: session:id()) ->
+-spec send(Msg :: #server_message{}, Ref :: ref()) ->
     ok | {error, term()}.
-send(Msg, SessId) ->
+send(Msg, Ref) when is_pid(Ref) ->
     try
-        gen_server:call(get_random_connection(SessId), {send, Msg})
+        gen_server:call(Ref, {send, Msg})
     catch
         _:Reason -> {error, Reason}
+    end;
+send(Msg, Ref) ->
+    case session:get_random_connection(Ref) of
+        {ok, Con} -> send(Msg, Con);
+        {error, Reason} -> {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
@@ -102,13 +111,18 @@ send(Msg, SessId) ->
 %% Asynchronously sends server message to client.
 %% @end
 %%--------------------------------------------------------------------
--spec send_async(Msg :: #server_message{}, SessId :: session:id()) ->
+-spec send_async(Msg :: #server_message{}, Ref :: ref()) ->
     ok | {error, term()}.
-send_async(Msg, SessId) ->
+send_async(Msg, Ref) when is_pid(Ref) ->
     try
-        gen_server:cast(get_random_connection(SessId), {send, Msg})
+        gen_server:cast(Ref, {send, Msg})
     catch
         _:Reason -> {error, Reason}
+    end;
+send_async(Msg, Ref) ->
+    case session:get_random_connection(Ref) of
+        {ok, Con} -> send(Msg, Con);
+        {error, Reason} -> {error, Reason}
     end.
 
 %%%===================================================================
@@ -325,17 +339,3 @@ activate_socket_once(Socket, Transport) ->
 send_server_message(Socket, Transport, ServerMsg) ->
     {ok, Data} = serializator:serialize_server_message(ServerMsg),
     ok = Transport:send(Socket, Data).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns random connection associated with the session given by session ID.
-%% @end
-%%--------------------------------------------------------------------
--spec get_random_connection(SessId :: session:id()) -> Con :: pid() | no_return().
-get_random_connection(SessId) ->
-    case session:get_connections(SessId) of
-        {ok, []} -> error(empty_connection_pool);
-        {ok, Cons} -> utils:random_element(Cons);
-        {error, Reason} -> error(Reason)
-    end.

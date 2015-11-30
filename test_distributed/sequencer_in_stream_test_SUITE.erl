@@ -160,7 +160,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     mock_communicator(Worker),
     mock_router(Worker),
     set_sequencer_in_stream_timeouts(Worker),

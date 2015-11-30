@@ -30,7 +30,7 @@
 all() -> [token_auth, internal_error_when_handler_crashes,
     custom_code_when_handler_throws_code, custom_error_when_handler_throws_error].
 
--define(MACAROON, "macaroon").
+-define(MACAROON, <<"macaroon">>).
 
 %%%===================================================================
 %%% Test functions
@@ -42,12 +42,12 @@ token_auth(Config) ->
     Endpoint = rest_endpoint(Worker),
 
     % when
-    AuthFail = ibrowse:send_req(Endpoint ++ "random_path", [{"X-Auth-Token", "invalid"}], get),
-    AuthSuccess = ibrowse:send_req(Endpoint ++ "random_path", [{"X-Auth-Token", ?MACAROON}], get),
+    AuthFail = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, <<"invalid">>}]),
+    AuthSuccess = do_request(get, Endpoint ++ "random_path", [{<<"X-Auth-Token">>, ?MACAROON}]),
 
     % then
-    ?assertMatch({ok, "401", _, _}, AuthFail),
-    ?assertMatch({ok, "404", _, _}, AuthSuccess).
+    ?assertMatch({ok, 401, _, _}, AuthFail),
+    ?assertMatch({ok, 404, _, _}, AuthSuccess).
 
 cert_auth(Config) ->
     % given
@@ -59,16 +59,16 @@ cert_auth(Config) ->
     KnownCertOpt = {ssl_options, [{certfile, CertKnown}, {reuse_sessions, false}]},
 
     % then - unauthorized access
-    {ok, "307", Headers, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [UnknownCertOpt]),
-    Loc = proplists:get_value("location", Headers),
-    ?assertMatch({ok, "401", _, _}, ibrowse:send_req(Loc, [], get, [], [UnknownCertOpt])),
+    {ok, 307, Headers, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [UnknownCertOpt]),
+    Loc = proplists:get_value(<<"location">>, Headers),
+    ?assertMatch({ok, 401, _, _}, do_request(get, Loc, [], <<>>, [UnknownCertOpt])),
 
     % then - authorized access
-    {ok, "307", Headers2, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], [KnownCertOpt]),
-    Loc2 = proplists:get_value("location", Headers2),
-    {ok, "307", Headers3, _} = ibrowse:send_req(Loc2, [], get, [], [KnownCertOpt]),
-    Loc3 = proplists:get_value("location", Headers3),
-    ?assertMatch({ok, "404", _, _}, ibrowse:send_req(Loc3, [], get, [], [KnownCertOpt])).
+    {ok, 307, Headers2, _} = do_request(get, Endpoint ++ "random_path", [], <<>>, [KnownCertOpt]),
+    Loc2 = proplists:get_value(<<"location">>, Headers2),
+    {ok, 307, Headers3, _} = do_request(get, Loc2, [], <<>>, [KnownCertOpt]),
+    Loc3 = proplists:get_value(<<"location">>, Headers3),
+    ?assertMatch({ok, 404, _, _}, do_request(get, Loc3, [], <<>>, [KnownCertOpt])).
 
 internal_error_when_handler_crashes(Config) ->
     % given
@@ -77,10 +77,10 @@ internal_error_when_handler_crashes(Config) ->
     test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_crash/2),
 
     % when
-    {ok, Status, _, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+    {ok, Status, _, _} = do_request(get, Endpoint ++ "random_path"),
 
     % then
-    ?assertEqual("500", Status).
+    ?assertEqual(500, Status).
 
 custom_code_when_handler_throws_code(Config) ->
     % given
@@ -89,10 +89,10 @@ custom_code_when_handler_throws_code(Config) ->
     test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400/2),
 
     % when
-    {ok, Status, _, _} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+    {ok, Status, _, _} = do_request(get, Endpoint ++ "random_path"),
 
     % then
-    ?assertEqual("400", Status).
+    ?assertEqual(400, Status).
 
 custom_error_when_handler_throws_error(Config) ->
     % given
@@ -101,11 +101,11 @@ custom_error_when_handler_throws_error(Config) ->
     test_utils:mock_expect(Workers, rest_handler, is_authorized, fun test_throw_400_with_description/2),
 
     % when
-    {ok, Status, _, Body} = ibrowse:send_req(Endpoint ++ "random_path", [], get, [], []),
+    {ok, Status, _, Body} = do_request(get, Endpoint ++ "random_path"),
 
     % then
-    ?assertEqual("400", Status),
-    ?assertEqual("{\"error\":\"badrequest\"}", Body).
+    ?assertEqual(400, Status),
+    ?assertEqual(<<"{\"error\":\"badrequest\"}">>, Body).
 
 
 %%%===================================================================
@@ -115,7 +115,7 @@ custom_error_when_handler_throws_error(Config) ->
 init_per_suite(Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    op_test_utils:clear_models(Worker, [subscription]),
+    initializer:clear_models(Worker, [subscription]),
     NewConfig.
 
 end_per_suite(Config) ->
@@ -126,13 +126,13 @@ init_per_testcase(Case, Config) when
     Case =:= custom_code_when_handler_throws_code;
     Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
-    ssl:start(),
-    ibrowse:start(),
+    application:start(ssl2),
+    hackney:start(),
     test_utils:mock_new(Workers, rest_handler),
     Config;
 init_per_testcase(_, Config) ->
-    ssl:start(),
-    ibrowse:start(),
+    application:start(ssl2),
+    hackney:start(),
     mock_gr_certificates(Config),
     Config.
 
@@ -142,16 +142,27 @@ end_per_testcase(Case, Config) when
     Case =:= custom_error_when_handler_throws_error ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, rest_handler),
-    ibrowse:stop(),
-    ssl:stop();
+    hackney:stop(),
+    application:stop(ssl2);
 end_per_testcase(_, Config) ->
     unmock_gr_certificates(Config),
-    ibrowse:stop(),
-    ssl:stop().
+    hackney:stop(),
+    application:stop(ssl2).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+% Performs a single request using http_client
+do_request(Method, URL) ->
+    do_request(Method, URL, []).
+do_request(Method, URL, Headers) ->
+    do_request(Method, URL, Headers, <<>>).
+do_request(Method, URL, Headers, Body) ->
+    do_request(Method, URL, Headers, Body, []).
+do_request(Method, URL, Headers, Body, Opts) ->
+    http_client:request(Method, URL, Headers, Body, [insecure | Opts]).
+
 
 rest_endpoint(Node) ->
     Port =
@@ -168,15 +179,27 @@ rest_endpoint(Node) ->
 mock_gr_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
-    {ok, Key} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
-    {ok, Cert} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
-    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
-    [{KeyType, KeyEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Key]),
-    [{_, CertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [Cert]),
-    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
-    SSLOptions = {ssl_options, [{cacerts, [CACertEncoded]}, {key, {KeyType, KeyEncoded}}, {cert, CertEncoded}]},
+
+    % save key and cert files on the workers
+    % read the files
+    {ok, KeyBin} = file:read_file(?TEST_FILE(Config, "grpkey.pem")),
+    {ok, CertBin} = file:read_file(?TEST_FILE(Config, "grpcert.pem")),
+    % choose paths for the files
+    KeyPath = "/tmp/user_auth_test_key.pem",
+    CertPath = "/tmp/user_auth_test_cert.pem",
+    % and save them on workers
+    lists:foreach(
+        fun(Node) ->
+            ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
+            ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
+        end, Workers),
+    % Use the cert paths on workers to mock gr_endpoint
+    SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
     test_utils:mock_new(Workers, [oneprovider, gr_endpoint]),
+
+    {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
+    [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
 
     test_utils:mock_expect(Workers, oneprovider, get_provider_id,
         fun() -> <<"050fec8f157d6e4b31fd6d2924923c7a">> end),
@@ -186,15 +209,24 @@ mock_gr_certificates(Config) ->
     test_utils:mock_expect(Workers, gr_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>} | Headers],
+                    Body, [SSLOpts | Options]);
             (client, URN, Method, Headers, Body, Options) ->
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>} | Headers],
+                    Body, [SSLOpts | Options]);
             ({_, undefined}, URN, Method, Headers, Body, Options) ->
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"} | Headers], Method, Body, [SSLOptions | Options]);
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>} | Headers],
+                    Body, [SSLOpts | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {"macaroon", binary_to_list(Macaroon)},
-                ibrowse:send_req(Url ++ URN, [{"content-type", "application/json"}, AuthorizationHeader | Headers], Method, Body, [SSLOptions | Options])
+                AuthorizationHeader = {<<"macaroon">>, Macaroon},
+                do_request(Method, Url ++ URN,
+                    [{<<"content-type">>,<< "application/json">>},
+                        AuthorizationHeader | Headers],
+                    Body, [SSLOpts | Options])
         end
     ).
 
