@@ -28,7 +28,7 @@
 %%--------------------------------------------------------------------
 -spec get_user_metadata(Filepath :: onedata_file_api:file_path()) ->
     [{Name :: binary(), Value :: binary()}] | no_return().
-get_user_metadata(_Filepath) ->
+get_user_metadata(Filepath) when is_binary(Filepath) ->
     {ok, [{<<"key">>, <<"value">>}]}. %todo
 
 %%--------------------------------------------------------------------

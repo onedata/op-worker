@@ -64,8 +64,8 @@ prepare([<<"childrenrange">> | Tail], #{options := Opts, path := Path, auth := A
             {<<"children">>, Begin, End} ->
                 normalize_childrenrange(Begin, End, ChildNum);
             _ -> case ChildNum of
-                     0 -> {undefined, undefined};
-                     _ -> {0, ChildNum - 1}
+                     0 -> {undefined, undefined}
+%%                      _ -> {0, ChildNum - 1} % todo implement onedata_file_api:get_children_count and uncomment
                  end
         end,
     BinaryRange =
