@@ -110,9 +110,6 @@ find_config_location(ApplicationName, ReleaseRootPath) ->
 -spec replace_env(string(), atom(), atom(), term()) -> ok | no_return().
 replace_env(SysConfigPath, ApplicationName, EnvName, EnvValue) ->
     {ok, [SysConfig]} = file:consult(SysConfigPath),
-    io:format("~p ~p ~p ~p\n",[SysConfigPath, ApplicationName, EnvName, EnvValue]),
-    file:write_file("dupsko", io_lib:format("~p ~p ~p ~p\n",[SysConfigPath, ApplicationName, EnvName, EnvValue]), [write]),
-    ct:print("~p ~p ~p ~p\n",[SysConfigPath, ApplicationName, EnvName, EnvValue]),
     ApplicationEnvs = proplists:get_value(ApplicationName, SysConfig),
     UpdatedApplicationEnvs = [{EnvName, EnvValue} | proplists:delete(EnvName, ApplicationEnvs)],
     replace_application_config(SysConfigPath, ApplicationName, UpdatedApplicationEnvs).
