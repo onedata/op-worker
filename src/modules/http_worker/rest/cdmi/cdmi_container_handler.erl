@@ -156,7 +156,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
             {ok, NewAttrs} = onedata_file_api:stat(Auth, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?default_get_dir_opts, State#{attributes => NewAttrs, opts => ?default_get_dir_opts}),
-            Response = json:encode(Answer),
+            Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
     end.
@@ -181,7 +181,7 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
 -spec parse_body(cowboy_req:req()) -> {ok, list(), cowboy_req:req()}.
 parse_body(Req) ->
     {ok, RawBody, Req1} = cowboy_req:body(Req),
-    Body = json:decode(RawBody),
+    Body = json_utils:decode(RawBody),
     ok = validate_body(Body),
     {ok, Body, Req1}.
 

@@ -155,7 +155,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path, attributes 
             % prepare response
             BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
             ValueTransferEncoding = cdmi_object_answer:encoding_to_valuetransferencoding(Encoding),
-            JsonBodyWithoutValue = json:encode({struct, BodyWithoutValue}),
+            JsonBodyWithoutValue = json_utils:encode({struct, BodyWithoutValue}),
             JsonBodyPrefix =
                 case BodyWithoutValue of
                     [] -> <<"{\"value\":\"">>;
@@ -171,7 +171,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path, attributes 
             % reply
             {{stream, StreamSize, StreamFun}, Req, State};
         undefined ->
-            Response = json:encode({struct, DirCdmi}),
+            Response = json_utils:encode({struct, DirCdmi}),
             {Response, Req, State}
     end.
 
