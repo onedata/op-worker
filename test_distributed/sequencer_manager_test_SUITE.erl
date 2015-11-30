@@ -180,7 +180,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     mock_communicator(Worker),
     mock_sequencer_manager_sup(Worker),
     {ok, SeqMan} = start_sequencer_manager(Worker, SessId),

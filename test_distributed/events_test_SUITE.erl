@@ -125,7 +125,7 @@ emit_file_location_update_event_should_execute_handler(Config) ->
 init_per_suite(Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    op_test_utils:clear_models(Worker, [subscription]),
+    initializer:clear_models(Worker, [subscription]),
     NewConfig.
 
 end_per_suite(Config) ->

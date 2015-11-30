@@ -271,7 +271,7 @@ session_supervisor_child_crash_test(Config) ->
 init_per_suite(Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    op_test_utils:clear_models(Worker, [subscription]),
+    initializer:clear_models(Worker, [subscription]),
     NewConfig.
 
 end_per_suite(Config) ->
@@ -288,7 +288,7 @@ init_per_testcase(session_getters_test, Config) ->
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
     communicator_mock_setup(Worker),
-    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config);
+    initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -323,7 +323,7 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    op_test_utils:session_teardown(Worker, Config),
+    initializer:basic_session_teardown(Worker, Config),
     test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->
