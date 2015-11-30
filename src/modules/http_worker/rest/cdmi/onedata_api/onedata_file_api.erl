@@ -68,14 +68,11 @@
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates a directory.
-%%
-%% @end
+%% @doc Creates a directory.
 %%--------------------------------------------------------------------
+-spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path()) -> ok | error_reply().
 mkdir(SessId, Path) ->
     logical_file_manager:mkdir(SessId, Path).
-
 -spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
 mkdir(Auth, Path, Mode) ->
     logical_file_manager:mkdir(Auth, Path, Mode).
@@ -85,7 +82,6 @@ mkdir(Auth, Path, Mode) ->
 %% @doc
 %% Lists some contents of a directory.
 %% Returns up to Limit of entries, starting with Offset-th entry.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
@@ -94,10 +90,7 @@ ls(Auth, FileKey, Limit, Offset) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns number of children of a directory.
-%%
-%% @end
+%% @doc Returns number of children of a directory.
 %%--------------------------------------------------------------------
 -spec get_children_count(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
 get_children_count(Auth, FileKey) ->
@@ -105,40 +98,28 @@ get_children_count(Auth, FileKey) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Checks if a file or directory exists.
-%%
-%% @end
+%% @doc Checks if a file or directory exists.
 %%--------------------------------------------------------------------
 -spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
 exists(FileKey) ->
     logical_file_manager:exists(FileKey).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Moves a file or directory to a new location.
-%%
-%% @end
+%% @doc Moves a file or directory to a new location.
 %%--------------------------------------------------------------------
 -spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
 mv(FileKeyFrom, PathTo) ->
     logical_file_manager:mv(FileKeyFrom, PathTo).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Copies a file or directory to given location.
-%%
-%% @end
+%% @doc Copies a file or directory to given location.
 %%--------------------------------------------------------------------
 -spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
 cp(PathFrom, PathTo) ->
     logical_file_manager:cp(PathFrom, PathTo).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Removes a file or an empty directory.
-%%
-%% @end
+%% @doc Removes a file or an empty directory.
 %%--------------------------------------------------------------------
 -spec unlink(file_handle()) -> ok | error_reply().
 unlink(Handle) ->
@@ -149,10 +130,7 @@ unlink(Auth, FileEntry) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates a new file.
-%%
-%% @end
+%% @doc Creates a new file.
 %%--------------------------------------------------------------------
 -spec create(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
     {ok, file_uuid()} | error_reply().
@@ -161,10 +139,7 @@ create(Auth, Path, Mode) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Opens a file in selected mode and returns a file handle used to read or write.
-%%
-%% @end
+%% @doc Opens a file in selected mode and returns a file handle used to read or write.
 %%--------------------------------------------------------------------
 -spec open(onedata_auth_api:auth(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(Auth, FileKey, OpenType) ->
@@ -172,10 +147,7 @@ open(Auth, FileKey, OpenType) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Writes data to a file. Returns number of written bytes.
-%%
-%% @end
+%% @doc Writes data to a file. Returns number of written bytes.
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: file_handle(), Offset :: integer(), Buffer :: binary()) ->
     {ok, NewHandle :: file_handle(), integer()} | error_reply().
@@ -184,10 +156,7 @@ write(FileHandle, Offset, Buffer) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Reads requested part of a file.
-%%
-%% @end
+%% @doc Reads requested part of a file.
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: file_handle(), binary()} | error_reply().
@@ -196,10 +165,7 @@ read(FileHandle, Offset, MaxSize) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Truncates a file.
-%%
-%% @end
+%% @doc Truncates a file.
 %%--------------------------------------------------------------------
 -spec truncate(FileHandle :: file_handle(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(Handle, Size) ->
@@ -210,10 +176,7 @@ truncate(Auth, FileKey, Size) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns block map for a file.
-%%
-%% @end
+%% @doc Returns block map for a file.
 %%--------------------------------------------------------------------
 
 -spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
@@ -225,50 +188,35 @@ get_block_map(Auth, FileKey) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Changes the permissions of a file.
-%%
-%% @end
+%% @doc Changes the permissions of a file.
 %%--------------------------------------------------------------------
 -spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) -> ok | error_reply().
 set_perms(Path, NewPerms) ->
     logical_file_manager:set_perms(Path, NewPerms).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Checks if current user has given permissions for given file.
-%%
-%% @end
+%% @doc Checks if current user has given permissions for given file.
 %%--------------------------------------------------------------------
 -spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
 check_perms(Path, PermType) ->
     logical_file_manager:check_perms(Path, PermType).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns file's Access Control List.
-%%
-%% @end
+%% @doc Returns file's Access Control List.
 %%--------------------------------------------------------------------
 -spec get_acl(FileKey :: file_key()) -> {ok, [access_control_entity()]} | error_reply().
 get_acl(Path) ->
     logical_file_manager:get_acl(Path).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Updates file's Access Control List.
-%%
-%% @end
+%% @doc Updates file's Access Control List.
 %%--------------------------------------------------------------------
 -spec set_acl(FileKey :: file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
 set_acl(Path, EntityList) ->
     logical_file_manager:set_acl(Path, EntityList).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes.
-%%
-%% @end
+%% @doc Returns file attributes.
 %%--------------------------------------------------------------------
 -spec stat(file_handle()) -> {ok, file_attributes()} | error_reply().
 stat(Handle) ->
@@ -279,70 +227,49 @@ stat(Auth, FileKey) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns file's extended attribute by key.
-%%
-%% @end
+%% @doc Returns file's extended attribute by key.
 %%--------------------------------------------------------------------
 -spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
 get_xattr(Path, Key) ->
     logical_file_manager:get_xattr(Path, Key).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Updates file's extended attribute by key.
-%%
-%% @end
+%% @doc Updates file's extended attribute by key.
 %%--------------------------------------------------------------------
 -spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
 set_xattr(Path, Key, Value) ->
     logical_file_manager:set_xattr(Path, Key, Value).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Removes file's extended attribute by key.
-%%
-%% @end
+%% @doc Removes file's extended attribute by key.
 %%--------------------------------------------------------------------
 -spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
 remove_xattr(Path, Key) ->
     logical_file_manager:remove_xattr(Path, Key).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns complete list of extended attributes of a file.
-%%
-%% @end
+%% @doc Returns complete list of extended attributes of a file.
 %%--------------------------------------------------------------------
 -spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
 list_xattr(Path) ->
     logical_file_manager:list_xattr(Path).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates a symbolic link.
-%%
-%% @end
+%% @doc Creates a symbolic link.
 %%--------------------------------------------------------------------
 -spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_uuid()} | error_reply().
 create_symlink(Path, TargetFileKey) ->
     logical_file_manager:create_symlink(Path, TargetFileKey).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns the symbolic link's target file.
-%%
-%% @end
+%% @doc Returns the symbolic link's target file.
 %%--------------------------------------------------------------------
 -spec read_symlink(FileKey :: file_key()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 read_symlink(FileKey) ->
     logical_file_manager:read_symlink(FileKey).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Removes a symbolic link.
-%%
-%% @end
+%% @doc Removes a symbolic link.
 %%--------------------------------------------------------------------
 -spec remove_symlink(FileKey :: file_key()) -> ok | error_reply().
 remove_symlink(FileKey) ->
@@ -352,7 +279,6 @@ remove_symlink(FileKey) ->
 %% @doc
 %% Creates a share for given file. File can be shared with anyone or
 %% only specified group of users.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
@@ -361,20 +287,14 @@ create_share(Path, ShareWith) ->
     logical_file_manager:create_share(Path, ShareWith).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns shared file by share_id.
-%%
-%% @end
+%% @doc Returns shared file by share_id.
 %%--------------------------------------------------------------------
 -spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 get_share(ShareID) ->
     logical_file_manager:get_share(ShareID).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Removes file share by ShareID.
-%%
-%% @end
+%% @doc Removes file share by ShareID.
 %%--------------------------------------------------------------------
 -spec remove_share(ShareID :: share_id()) -> ok | error_reply().
 remove_share(ShareID) ->

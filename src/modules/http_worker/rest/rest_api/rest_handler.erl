@@ -97,7 +97,7 @@ handle_json_data(Req, State = #{auth := Auth}) ->
             case cowboy_req:path_info(Req) of
                 {[<<"auth">>], _}  ->
                     {ok, Body, Req2} = cowboy_req:body(Req),
-                    Json = jiffy:decode(Body),
+                    Json = json_utils:decode(Body),
                     User = proplists:get_value(<<"user">>, Json),
                     Cert = proplists:get_value(<<"cert">>, Json),
 

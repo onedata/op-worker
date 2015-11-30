@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Urility functions for initializing things like session or storage configuration.
+%%% Utility functions for initializing things like session or storage configuration.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(initializer).
@@ -27,6 +27,9 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc Setup and mocking related with users and spaces
+%%--------------------------------------------------------------------
 -spec create_test_users_and_spaces(Config :: list()) -> list().
 create_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -45,6 +48,9 @@ create_test_users_and_spaces(Config) ->
 
     initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
 
+%%--------------------------------------------------------------------
+%% @doc Cleanup and unmocking related with users and spaces
+%%--------------------------------------------------------------------
 -spec clean_test_users_and_spaces(Config :: list()) -> term().
 clean_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -52,11 +58,13 @@ clean_test_users_and_spaces(Config) ->
     initializer:teardown_sesion(Worker, Config),
     mocks_teardown(Workers, [file_meta, gr_spaces]).
 
+%%--------------------------------------------------------------------
+%% @doc Setup test users' sessions on server
+%%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
     [Spaces :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-
 setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     Self = self(),
 
@@ -84,6 +92,9 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
         | setup_session(Worker, R, Config)
     ].
 
+%%--------------------------------------------------------------------
+%% @doc Removes test users' sessions from server.
+%%--------------------------------------------------------------------
 -spec teardown_sesion(Worker :: node(), Config :: term()) -> NewConfig :: term().
 teardown_sesion(Worker, Config) ->
     lists:foldl(fun
@@ -107,6 +118,9 @@ teardown_sesion(Worker, Config) ->
             [Elem | Acc]
     end, [], Config).
 
+%%--------------------------------------------------------------------
+%% @doc Setups test storage on server and creates test storage dir
+%%--------------------------------------------------------------------
 -spec setup_storage(Config :: list()) -> list().
 setup_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -117,7 +131,9 @@ setup_storage(Config) ->
         [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(TmpDir)})])}]),
     [{storage_id, StorageId}, {storage_dir, TmpDir} | Config].
 
-
+%%--------------------------------------------------------------------
+%% @doc Removes test storage dir
+%%--------------------------------------------------------------------
 -spec teardown_storage(Config :: list()) -> string().
 teardown_storage(Config) ->
     TmpDir = ?config(storage_dir, Config),
@@ -128,6 +144,11 @@ teardown_storage(Config) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Appends Num to Text and converts it to binary.
+%%--------------------------------------------------------------------
+-spec name(Text :: string(), Num :: integer()) -> binary().
 name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
 
@@ -151,9 +172,7 @@ gr_spaces_mock_setup(Workers, Spaces) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Mocks file_meta module, so that creation of onedata user sends notification.
-%% @end
+%% @doc Mocks file_meta module, so that creation of onedata user sends notification.
 %%--------------------------------------------------------------------
 -spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
 file_meta_mock_setup(Workers) ->
@@ -168,9 +187,7 @@ file_meta_mock_setup(Workers) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
+%% @doc Validates and unloads mocks.
 %%--------------------------------------------------------------------
 -spec mocks_teardown(Workers :: node() | [node()],
   Modules :: module() | [module()]) -> ok.

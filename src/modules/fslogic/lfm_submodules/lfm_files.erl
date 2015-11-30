@@ -97,7 +97,7 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%--------------------------------------------------------------------
 -spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
-    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID},
+    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID, flags = OpenType},
         fun(#file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             case storage_file_manager:open(Storage, FileId, OpenType) of
