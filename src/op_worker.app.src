@@ -19,7 +19,6 @@
             sasl,
             public_key,
             crypto,
-            ssl2,
             % Meck is needed only for development purposes, should be removed before release.
             meck,
             % ctool already requires those apps below, but they are here
@@ -27,7 +26,9 @@
             % to make sure they are started before the application.
             gproc,
             lager,
-            ibrowse,
+            ssl2,
+            hackney,
+            web_client,
             cowboy,
             cluster_worker
         ]},

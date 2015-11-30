@@ -16,6 +16,7 @@
 -include("common_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 -record(child_link, {
     uuid :: binary(),
@@ -57,19 +58,6 @@
 -record(rename, {
     uuid :: file_meta:uuid(),
     target_path :: file_meta:path()
-}).
-
--record(file_attr, {
-    uuid :: file_meta:uuid(),
-    name :: file_meta:name(),
-    mode :: file_meta:mode(),
-    uid = 0 :: file_meta:uuid(),
-    gid = 0 :: file_meta:uuid(),
-    atime = 0 :: file_meta:time(),
-    mtime = 0 :: file_meta:time(),
-    ctime = 0 :: file_meta:time(),
-    type :: file_meta:type(),
-    size = 0 :: file_meta:size()
 }).
 
 -record(file_children, {

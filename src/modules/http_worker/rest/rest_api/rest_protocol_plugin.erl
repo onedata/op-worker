@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This mudule provides information about rest protocol plugin and it's used
+%%% This module provides information about rest protocol plugin and it's used
 %%% by onedata during plugin registration process.
 %%% @end
 %%%--------------------------------------------------------------------

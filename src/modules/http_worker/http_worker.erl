@@ -90,30 +90,39 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec healthcheck(Endpoint :: atom()) -> ok | {error, Reason :: atom()}.
 healthcheck(protocol_handler) ->
-    {ok, ProtocolHandlerPort} = application:get_env(?APP_NAME, protocol_handler_port),
-    case ssl:connect("127.0.0.1", ProtocolHandlerPort, [{packet, 4}, {active, false}]) of
+    {ok, ProtoPort} = application:get_env(?APP_NAME, protocol_handler_port),
+    case ssl2:connect("127.0.0.1", ProtoPort, [{packet, 4}, {active, false}]) of
         {ok, Sock} ->
-            ssl:close(Sock),
+            ssl2:close(Sock),
             ok;
-        _ -> {error, no_protocol_handler}
+        _ ->
+            {error, no_protocol_handler}
     end;
 healthcheck(gui) ->
     {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
-    case ibrowse:send_req("https://127.0.0.1:" ++ integer_to_list(GuiPort), [], get) of
+    case http_client:get("https://127.0.0.1:" ++ integer_to_list(GuiPort),
+        [], <<>>, [insecure]) of
         {ok, _, _, _} ->
             ok;
-        _ -> {error, no_gui}
+        _ ->
+            {error, no_gui}
     end;
 healthcheck(redirector) ->
-    {ok, RedirectPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
-    case ibrowse:send_req("http://127.0.0.1:" ++ integer_to_list(RedirectPort), [], get) of
-        {ok, _, _, _} -> ok;
-        _ -> {error, no_http_redirector}
+    {ok, RdrctPort} = application:get_env(?APP_NAME, http_worker_redirect_port),
+    case http_client:get("http://127.0.0.1:" ++ integer_to_list(RdrctPort),
+        [], <<>>, [insecure]) of
+        {ok, _, _, _} ->
+            ok;
+        _ ->
+            {error, no_http_redirector}
     end;
 healthcheck(rest) ->
     {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
-    case ibrowse:send_req("https://127.0.0.1:" ++ integer_to_list(RestPort), [], get) of
-        {ok, _, _, _} -> ok;
-        _ -> {error, no_rest}
+    case http_client:get("https://127.0.0.1:" ++ integer_to_list(RestPort),
+        [], <<>>, [insecure]) of
+        {ok, _, _, _} ->
+            ok;
+        _ ->
+            {error, no_rest}
     end.
 
