@@ -51,7 +51,6 @@ all() ->
 -define(TEST_FILE_NAME, "file.txt").
 -define(TEST_FILE_CONTENT, <<"test_file_content">>).
 
--define(FILE_PERMISSIONS, 8#664).
 
 -define(FILE_BEGINNING, 0).
 
@@ -65,19 +64,14 @@ list_dir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     create_dir(Config, ?TEST_DIR_NAME ++ "/"),
     ?assertEqual(true, object_exists(Config, ?TEST_DIR_NAME ++ "/")),
-    create_file(Config, string:join([?TEST_DIR_NAME, ?TEST_FILE_NAME],"/")),
+    create_file(Config, filename:join(?TEST_DIR_NAME, ?TEST_FILE_NAME)),
     ?assertEqual(true,
-        object_exists(Config, string:join([?TEST_DIR_NAME, ?TEST_FILE_NAME],"/"))),
+        object_exists(Config, filename:join(?TEST_DIR_NAME, ?TEST_FILE_NAME))),
 
     %%------ list basic dir --------
-    tracer:start(Worker),
-    tracer:trace_calls(cdmi_container_handler, get_cdmi),
-    tracer:trace_calls(cdmi_container_answer, prepare),
-    tracer:trace_calls(json, encode),
     {ok, Code1, Headers1, Response1} =
         do_request(Worker, ?TEST_DIR_NAME++"/", get,
             [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
-    tracer:stop(),
 
     ?assertEqual("200", Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1),
@@ -101,7 +95,7 @@ list_dir_test(Config) ->
     ?assertEqual("200", Code2),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
-    ?assertEqual([<<"dir/">>,<<"spaces/">>],
+    ?assertEqual([<<"spaces/">>,<<"dir/">>],
         proplists:get_value(<<"children">>,CdmiResponse2)),
     %%------------------------------
 
@@ -127,17 +121,22 @@ list_dir_test(Config) ->
 
     %%---- childrenrange list ------
     ChildrangeDir = "childrange/",
-    create_dir(Worker, ChildrangeDir),
+    create_dir(Config, ChildrangeDir),
     Childs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
               "12", "13", "14"],
     ChildsBinaries = lists:map(fun(X) -> list_to_binary(X) end, Childs),
     lists:map(fun(FileName) ->
-                create_file(Worker, filename:join(ChildrangeDir, FileName))
+                create_file(Config, filename:join(ChildrangeDir, FileName))
               end, Childs),
 
+    tracer:start(Worker),
+    tracer:trace_calls(cdmi_container_handler, get_cdmi),
+    tracer:trace_calls(cdmi_container_answer, prepare),
+    tracer:trace_calls(onedata_file_api, ls),
     {ok, Code5, _Headers5, Response5} =
         do_request(Worker, ChildrangeDir ++ "?children;childrenrange",
             get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
+    tracer:stop(),
     ?assertEqual("200", Code5),
     {struct,CdmiResponse5} = mochijson2:decode(Response5),
     ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
@@ -272,7 +271,7 @@ create_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, 1}, Config),
     GroupFileName =
-        string:join(["spaces", binary_to_list(SpaceName),"groupFile"], "/"),
+        filename:join(["spaces", binary_to_list(SpaceName),"groupFile"]),
     ToCreate = "file.txt",
     ToCreate2 = filename:join(["spaces", GroupFileName, "file1.txt"]),
     ToCreate4 = "file2",
@@ -308,19 +307,15 @@ update_file_test(Config) ->
     NewSize = get_content_size(NewValue),
     UpdatedSize = get_content_size(UpdatedValue),
 
-    %% TODO below create and write are for compliance with testcases for cdmi
-    %% TODO delete after adding tests for cdmi cases
-    create_file(Config, FullName),
-    ?assert(object_exists(Config, FullName)),
-    write_to_file(Config, FullName, UpdatedValue, ?FILE_BEGINNING),
-    ?assertEqual(UpdatedValue,
-        get_file_content(Config, FullName, UpdatedSize, ?FILE_BEGINNING)),
+    create_dir(Config, ?TEST_DIR_NAME ++"/"),
+    ?assert(object_exists(Config, ?TEST_DIR_NAME ++"/")),
 
     %%--- value replace, http ------
     RequestBody3 = ?TEST_FILE_CONTENT,
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, FullName, put, [?USER_1_TOKEN_HEADER ], RequestBody3),
-    ?assertEqual("204",Code3),
+    %%TODO change code to 204 after adding tests for cdmi cases
+    ?assertEqual("201",Code3),
 
     ?assert(object_exists(Config, FullName)),
     ?assertEqual(?TEST_FILE_CONTENT,
@@ -330,9 +325,17 @@ update_file_test(Config) ->
     %%---- value update, http ------
     UpdateValue = <<"123">>,
     RequestHeaders4 = [{"content-range", "0-2"}],
+    tracer:start(Worker),
+    tracer:trace_calls(cdmi_object_handler, put_binary),
+    tracer:trace_calls(onedata_file_api, create),
+    tracer:trace_calls(cdmi_metadata),
+    tracer:trace_calls(cdmi_streamer, write_body_to_file),
+    tracer:trace_calls(onedata_file_api, write),
+    tracer:trace_calls(cdmi_arg_parser),
     {ok, Code4, _Headers4, _Response4} =
         do_request(Worker, FullName,
             put, [?USER_1_TOKEN_HEADER |RequestHeaders4], UpdateValue),
+    tracer:stop(),
     ?assertEqual("204",Code4),
 
     ?assert(object_exists(Config, FullName)),
@@ -361,7 +364,7 @@ delete_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, 1}, Config),
     GroupFileName =
-        string:join(["spaces", binary_to_list(SpaceName),"groupFile"], "/"),
+        filename:join(["spaces", binary_to_list(SpaceName),"groupFile"]),
 
     %%----- basic delete -----------
     create_file(Config, "/" ++ FileName),
@@ -453,6 +456,7 @@ create_dir_test(Config) ->
 
     RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
     {ok, Code2, _Headers2, Response2} = do_request(Worker, DirName2, put, RequestHeaders2, []),
+
     ?assertEqual("201",Code2),
     {struct,CdmiResponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
@@ -645,7 +649,8 @@ create_file(Config, Path) ->
     SessionId = ?config({session_id, 1}, Config),
 
     case lfm_proxy:create(Worker, SessionId,
-            utils:ensure_unicode_binary("/" ++ Path), ?FILE_PERMISSIONS) of
+            utils:ensure_unicode_binary("/" ++ Path),
+            application:get_env(?APP_NAME, default_file_mode))of
         {ok, UUID} -> UUID;
         {error, Code} -> {error, Code}
     end.

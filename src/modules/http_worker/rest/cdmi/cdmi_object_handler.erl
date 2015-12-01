@@ -213,16 +213,10 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
             cdmi_metadata:update_mimetype(Path, Mimetype),
             cdmi_metadata:update_encoding(Path, Encoding),
             Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
-            cdmi_metadata:set_completion_status_according_to_partial_flag(
-                Path, CdmiPartialFlag, State),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
             Ans;
 
         {error, ?EEXIST} ->
-            case onedata_file_api:check_perms(Path, write) of
-                {ok, true} -> ok;
-                {ok, false} -> throw(?forbidden);
-                _ -> throw(?write_object_unknown_error)
-            end,
             cdmi_metadata:update_completion_status(Path, <<"Processing">>),
             cdmi_metadata:update_mimetype(Path, Mimetype),
             cdmi_metadata:update_encoding(Path, Encoding),
@@ -240,7 +234,7 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                     case cdmi_arg_parser:parse_byte_range(State, RawRange) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
                             Ans = cdmi_streamer:write_body_to_file(Req2, State, From, false),
-                            cdmi_matadata:set_completion_status_according_to_partial_flag(
+                            cdmi_metadata:set_completion_status_according_to_partial_flag(
                                 Path, CdmiPartialFlag),
                             Ans;
                         _ ->

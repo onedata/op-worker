@@ -11,12 +11,13 @@
 -module(lfm_dirs).
 
 -include("types.hrl").
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([mkdir/3, ls/3, get_children_count/1]).
+-export([mkdir/3, ls/4, get_children_count/2]).
 
 %%%===================================================================
 %%% API
@@ -44,9 +45,14 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls(_FileKey, _Limit, _Offset) ->
-    {ok, []}.
+-spec ls(SessId :: session:id(), FileKey :: {uuid, file_uuid()}, Limit :: integer(), Offset :: integer()) ->
+    {ok, [{file_uuid(), file_name()}]} | error_reply().
+ls(SessId, {uuid, UUID}, Limit, Offset) ->
+    {ok, {file_children, List}} =
+        lfm_utils:call_fslogic(SessId,
+            #get_file_children{uuid=UUID, offset=Offset, size=Limit},
+            fun(X) -> {ok, X} end),
+    {ok, [{UUID, FileName} || {_, UUID, FileName} <- List]}.
 
 
 %%--------------------------------------------------------------------
@@ -55,6 +61,31 @@ ls(_FileKey, _Limit, _Offset) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
-get_children_count(_FileKey) ->
-    {ok, 0}.
+-spec get_children_count(SessId :: session:id(), FileKey :: {uuid, file_uuid()})
+        -> {ok, integer()} | error_reply().
+get_children_count(SessId, {uuid, UUID}) ->
+    {ok, count_children(SessId, UUID, 0, 0)}.
+
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Counts all children of a directory, by listing them in chunks as long
+%% as possible
+%% @end
+%%--------------------------------------------------------------------
+-spec count_children(SessId :: session:id(), FileKey :: {uuid, file_uuid()},
+    Acc :: non_neg_integer(), Offset :: non_neg_integer()) -> non_neg_integer() | error_reply().
+count_children(SessId, UUID, Acc, Offset) ->
+    Chunk = get_env(?APP_NAME, ls_chunk_size),
+    {ok, List} = ls(SessId, {uuid, UUID}, Chunk, Offset),
+    case length(List) of
+        Chunk ->
+            count_children(SessId, UUID, Acc + Chunk,
+                Offset + Chunk);
+        N -> Acc + N
+    end.
+

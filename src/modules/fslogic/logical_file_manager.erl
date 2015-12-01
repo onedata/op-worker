@@ -112,7 +112,8 @@ mkdir(SessId, Path, Mode) ->
 %%--------------------------------------------------------------------
 -spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, FileKey, Limit, Offset) ->
-    lfm_dirs:ls(FileKey, Limit, Offset).
+    CTX = fslogic_context:new(SessId),
+    lfm_dirs:ls(SessId, ensure_uuid(CTX, FileKey), Limit, Offset).
 
 
 %%--------------------------------------------------------------------
@@ -122,7 +123,8 @@ ls(SessId, FileKey, Limit, Offset) ->
 %%--------------------------------------------------------------------
 -spec get_children_count(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
-    lfm_dirs:get_children_count(FileKey).
+    CTX = fslogic_context:new(SessId),
+    lfm_dirs:get_children_count(SessId, ensure_uuid(CTX, FileKey)).
 
 
 %%--------------------------------------------------------------------
