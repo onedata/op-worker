@@ -42,6 +42,10 @@ message FuseRequest {
         GetHelperParams get_helper_params = 10;
         Close close = 11;
         Truncate truncate = 12;
+        GetXattr get_xattr = 13;
+        SetXattr set_xattr = 14;
+        RemoveXattr remove_xattr = 15;
+        ListXattr list_xattr = 16;
     }
 }
 
@@ -118,6 +122,8 @@ message FuseResponse {
         FileChildren file_children = 3;
         FileLocation file_location = 4;
         HelperParams helper_params = 5;
+        Xattr xattr = 6;
+        XattrList xattr_list = 7;
     }
 }
 
