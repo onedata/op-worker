@@ -61,7 +61,7 @@
 -type error_reply() :: {error, term()}.
 %%--------------------------------------------------------------------
 
--export_type([file_handle/0]).
+-export_type([file_handle/0, file_attributes/0, file_path/0, file_uuid/0]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -70,9 +70,9 @@
 %%--------------------------------------------------------------------
 %% @doc Creates a directory.
 %%--------------------------------------------------------------------
--spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path()) -> ok | error_reply().
-mkdir(SessId, Path) ->
-    logical_file_manager:mkdir(SessId, Path).
+-spec mkdir(Identity :: onedata_auth_api:auth(), Path :: file_path()) -> ok | error_reply().
+mkdir(Auth, Path) ->
+    logical_file_manager:mkdir(Auth, Path).
 -spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
 mkdir(Auth, Path, Mode) ->
     logical_file_manager:mkdir(Auth, Path, Mode).

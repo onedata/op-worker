@@ -268,7 +268,7 @@ remove_session(SessId) ->
 %% worker supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_sup(SessId :: session:id(), Con :: pid()) ->
+-spec start_session_sup(SessId :: session:id(), Con :: pid() | undefined) ->
     supervisor:startchild_ret().
 start_session_sup(SessId, Con) ->
     supervisor:start_child(?SESSION_WORKER_SUP, [SessId, Con]).
