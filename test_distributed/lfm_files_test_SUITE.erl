@@ -325,8 +325,8 @@ end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate(Workers, [communicator]),
-    test_utils:mock_unload(Workers, [communicator]).
+    test_utils:mock_validate_and_unload(Workers, communicator).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================

@@ -12,6 +12,7 @@
 -ifndef(DATASTORE_SPECIFIC_MODELS_HRL).
 -define(DATASTORE_SPECIFIC_MODELS_HRL, 1).
 
+-include("modules/events/subscriptions.hrl").
 -include("proto/common/credentials.hrl").
 
 %% event manager model:

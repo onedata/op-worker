@@ -272,7 +272,7 @@ session_supervisor_child_crash_test(Config) ->
 init_per_suite(Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    op_test_utils:clear_models(Worker, [subscription]),
+    initializer:clear_models(Worker, [subscription]),
     NewConfig.
 
 end_per_suite(Config) ->
@@ -280,16 +280,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    Self = self(),
-
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, fun
-        (_, _) -> ok
-    end),
-    test_utils:mock_expect(Workers, communicator, add_connection, fun
-        (_, _) -> Self ! add_connection, ok
-    end),
-
+    communicator_mock_setup(Workers),
     Config;
 
 init_per_testcase(session_getters_test, Config) ->
@@ -297,11 +288,13 @@ init_per_testcase(session_getters_test, Config) ->
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
-    op_test_utils:session_setup(Worker, SessId, Iden, Self, Config);
+    communicator_mock_setup(Worker),
+    initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
+    communicator_mock_setup(Worker),
     test_utils:mock_new(Worker, logger),
     test_utils:mock_expect(Worker, logger, dispatch_log, fun
         (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
@@ -321,36 +314,28 @@ init_per_testcase(Case, Config) when
     Iden1 = #identity{user_id = <<"user_id_1">>},
     Iden2 = #identity{user_id = <<"user_id_2">>},
 
+    communicator_mock_setup(Workers),
     ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_session, [SessId1, Iden1, Self])),
     ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_session, [SessId2, Iden2, Self])),
 
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, fun
-        (_, _) -> ok
-    end),
-    test_utils:mock_expect(Workers, communicator, add_connection, fun
-        (_, _) -> ok
-    end),
-
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
 
 end_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    op_test_utils:session_teardown(Worker, Config);
+    initializer:basic_session_teardown(Worker, Config),
+    test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Worker, logger),
-    test_utils:mock_unload(Worker, logger);
+    test_utils:mock_validate_and_unload(Worker, logger);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_creation_and_reuse_test;
     Case =:= session_manager_session_removal_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, communicator),
-    test_utils:mock_unload(Workers, communicator);
+    test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
@@ -361,8 +346,7 @@ end_per_testcase(Case, Config) when
         ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
             remove_session, [SessId]))
     end, SessIds),
-    test_utils:mock_validate(Workers, communicator),
-    test_utils:mock_unload(Workers, communicator).
+    test_utils:mock_validate_and_unload(Workers, communicator).
 
 %%%===================================================================
 %%% Internal functions
@@ -397,3 +381,20 @@ get_child(Sup, ChildId) ->
         {ChildId, Child, _, _} -> {ok, Child};
         false -> {error, not_found}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks communicator module, so that it ignores all messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
+communicator_mock_setup(Workers) ->
+    Self = self(),
+    test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send,
+        fun(_, _) -> ok end
+    ),
+    test_utils:mock_expect(Workers, communicator, add_connection,
+        fun(_, _) -> Self ! add_connection, ok end
+    ).

@@ -40,7 +40,7 @@ all() -> [token_authentication].
 
 token_authentication(Config) ->
     % given
-    [Worker1, _] = ?config(op_worker_nodes, Config),
+    [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     mock_gr_certificates(Config),
     SessionId = <<"SessionId">>,
 
@@ -60,7 +60,7 @@ token_authentication(Config) ->
         {ok, #document{value = #identity{user_id = ?USER_ID}}},
         rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
     ),
-    unmock_gr_certificates(Config),
+    test_utils:mock_validate_and_unload(Workers, gr_endpoint),
     ok = ssl2:close(Sock).
 
 %%%===================================================================
@@ -170,8 +170,3 @@ mock_gr_certificates(Config) ->
                 ], Body, [SSLOpts, insecure | Options])
         end
     ).
-
-unmock_gr_certificates(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, gr_endpoint),
-    test_utils:mock_unload(Workers, gr_endpoint).

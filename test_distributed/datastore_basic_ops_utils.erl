@@ -685,8 +685,7 @@ unset_hooks(Case, Config) ->
                 ?assertMatch(ok, ?call(Wr, caches_controller, wait_for_cache_dump, [])),
                 ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Wr}, clear_mem_synch, 60000))
             end, Workers),
-            test_utils:mock_validate(Workers, [caches_controller]),
-            test_utils:mock_unload(Workers, [caches_controller]);
+            test_utils:mock_validate_and_unload(Workers, caches_controller);
         _ ->
             lists:foreach(fun(Wr) ->
                 lists:foreach(fun(MC) ->

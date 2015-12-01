@@ -125,7 +125,7 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTy
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
-            ok = event_manager:emit(#write_event{
+            ok = event:emit(#write_event{
                 file_uuid = UUID, blocks = [#file_block{
                     file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
                 }]
@@ -150,7 +150,7 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTyp
 
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
-            ok = event_manager:emit(#read_event{
+            ok = event:emit(#read_event{
                 file_uuid = UUID, blocks = [#file_block{
                     file_id = FileId, storage_id = StorageId, offset = Offset,
                     size = size(Data)
@@ -170,9 +170,9 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTyp
 -spec truncate(fslogic_worker:ctx(), FileUUID :: file_uuid(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(#fslogic_ctx{session_id = SessId}, FileUUID, Size) ->
     lfm_utils:call_fslogic(SessId, #truncate{uuid = FileUUID, size = Size},
-        fun(_) ->
-            event_manager:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId)
-        end).
+    fun(_) ->
+        event:emit(#write_event{file_uuid = FileUUID, blocks = [], file_size = Size}, SessId)
+    end).
 
 
 %%--------------------------------------------------------------------
