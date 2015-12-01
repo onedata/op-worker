@@ -17,7 +17,8 @@
     dns_worker,
     session_manager_worker,
     http_worker,
-    fslogic_worker
+    fslogic_worker,
+    dbsync_worker
 ]).
 
 -define(MODULES_WITH_ARGS, [
@@ -28,7 +29,8 @@
         {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
     ]},
     {http_worker, []},
-    {fslogic_worker, []}
+    {fslogic_worker, []},
+    {dbsync_worker, []}
 ]).
 
 -endif.

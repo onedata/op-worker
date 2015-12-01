@@ -42,8 +42,7 @@ all() -> [
     lfm_create_and_access_test,
     lfm_write_test,
     lfm_stat_test,
-    lfm_truncate_test,
-    mkdir_test
+    lfm_truncate_test
 ].
 
 -define(TIMEOUT, timer:seconds(10)).

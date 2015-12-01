@@ -31,6 +31,14 @@
 
 -export([start_gateway/4]).
 
+-export([changes_start_link/3]).
+-export([init/1, handle_call/3, handle_info/2, handle_change/2, handle_cast/2, terminate/2]).
+
+-record(links, {
+    model,
+    mappings
+}).
+
 %%%===================================================================
 %%% store_driver_behaviour callbacks
 %%%===================================================================
@@ -56,7 +64,7 @@ start_gateway(Parent, N, Hostname, Port) ->
     ?info("Statring couchbase gateway #~p: localhost:~p => ~p:~p", [N, GWPort, Hostname, Port]),
 
     BinPath = "/opt/couchbase-sync-gateway/bin/sync_gateway",
-    PortFD = erlang:open_port({spawn_executable, BinPath}, [stderr_to_stdout, {line, 4 * 1024}, {args, [
+    PortFD = erlang:open_port({spawn_executable, BinPath}, [binary, stderr_to_stdout, {line, 4 * 1024}, {args, [
         "-bucket", "default",
         "-url", "http://" ++ binary_to_list(Hostname) ++ ":" ++ integer_to_list(Port),
         "-adminInterface", "127.0.0.1:" ++ integer_to_list(GWAdminPort),
@@ -73,20 +81,35 @@ start_gateway(Parent, N, Hostname, Port) ->
 
 
 gateway_loop(#{port_fd := PortFD, id := {_, N} = ID, db_hostname := Hostname, db_port := Port} = State) ->
+    try port_command(PortFD, <<"ping">>) of
+        true -> ok
+    catch
+        _:Reason0 ->
+            self() ! {port_comm_error, Reason0}
+
+    end,
+
     NewState =
         receive
             {PortFD, {data, {_, Data}}} ->
-%%                ?info("[CouchBase Gateway ~p] ~p", [ID, Data]),
+                case binary:matches(Data, <<"HTTP:">>) of
+                    [] ->
+                        ?info("[CouchBase Gateway ~p] ~s", [ID, Data]);
+                    _ -> ok
+                end,
                 State;
             {PortFD, closed} ->
                 State#{status => closed};
             {'EXIT', PortFD, Reason} ->
                 ?error("CouchBase gateway's port ~p exited with reason: ~p", [State, Reason]),
                 State#{status => failed};
+            {port_comm_error, Reason} ->
+                ?error("[CouchBase Gateway ~p] Unable to communicate with port due to: ~p", [ID, Reason]),
+                State#{status => failed};
             Other ->
                 ?warning("[CouchBase Gateway ~p] ~p", [ID, Other]),
                 State
-        after timer:seconds(5) ->
+        after timer:seconds(1) ->
             gateway_loop(State)
         end,
     case NewState of
@@ -95,6 +118,7 @@ gateway_loop(#{port_fd := PortFD, id := {_, N} = ID, db_hostname := Hostname, db
         #{status := closed} ->
             ok;
         #{status := failed} ->
+            timer:sleep(500),
             start_gateway(self(), N, Hostname, Port)
     end.
 
@@ -217,12 +241,11 @@ create_or_update(#model_config{} = _ModelConfig, #document{key = _Key, value = _
     {ok, datastore:document()} | datastore:get_error().
 get(#model_config{bucket = Bucket, name = ModelName} = _ModelConfig, Key) ->
     {ok, DB} = get_db(),
-    
     case couchbeam:open_doc(DB, to_driver_key(Bucket, Key)) of
         {ok, {Proplist} = Doc} ->
             {_, Rev} = lists:keyfind(<<"_rev">>, 1, Proplist),
-            Proplist1 = lists:keydelete(<<"_id">>, 1, Proplist),
-            Proplist2 = lists:keydelete(<<"_rev">>, 1, Proplist1),
+            Proplist1 = [KV || {<<"_", _/binary>>, _} = KV <- Proplist],
+            Proplist2 = Proplist -- Proplist1,
             {ok, #document{key = Key, value = from_json_term({Proplist2}), rev = Rev}};
         {error, {not_found, _}} ->
             {error, {not_found, ModelName}};
@@ -310,7 +333,7 @@ exists(#model_config{bucket = _Bucket} = ModelConfig, Key) ->
     ok | datastore:generic_error().
 add_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = LinkMap}} ->
+        {ok, #document{value = #links{mappings = LinkMap}}} ->
             add_links4(ModelConfig, Key, Links, LinkMap);
         {error, {not_found, _}} ->
             add_links4(ModelConfig, Key, Links, #{});
@@ -320,8 +343,8 @@ add_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) when is_lis
 
 -spec add_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()], InternalCtx :: term()) ->
     ok | datastore:generic_error().
-add_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [], Ctx) ->
-    case save(ModelConfig, #document{key = links_doc_key(Key), value = Ctx}) of
+add_links4(#model_config{bucket = _Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
+    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{model = ModelName, mappings = Ctx}}) of
         {ok, _} -> ok;
         {error, Reason} ->
             {error, Reason}
@@ -341,7 +364,7 @@ delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, all) ->
     delete(ModelConfig, links_doc_key(Key), ?PRED_ALWAYS);
 delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = LinkMap}} ->
+        {ok, #document{value = #links{mappings = LinkMap}}} ->
             delete_links4(ModelConfig, Key, Links, LinkMap);
         {error, {not_found, _}} ->
             ok;
@@ -351,8 +374,8 @@ delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) ->
 
 -spec delete_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()] | all, InternalCtx :: term()) ->
     ok | datastore:generic_error().
-delete_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [], Ctx) ->
-    case save(ModelConfig, #document{key = links_doc_key(Key), value = Ctx}) of
+delete_links4(#model_config{bucket = _Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
+    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{model = ModelName, mappings = Ctx}}) of
         {ok, _} -> ok;
         {error, Reason} ->
             {error, Reason}
@@ -370,7 +393,7 @@ delete_links4(#model_config{} = ModelConfig, Key, [Link | R], Ctx) ->
     {ok, datastore:link_target()} | datastore:link_error().
 fetch_link(#model_config{bucket = _Bucket} = ModelConfig, Key, LinkName) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = LinkMap}} ->
+        {ok, #document{value = #links{mappings = LinkMap}}} ->
             case maps:get(LinkName, LinkMap, undefined) of
                 undefined ->
                     {error, link_not_found};
@@ -394,7 +417,7 @@ fetch_link(#model_config{bucket = _Bucket} = ModelConfig, Key, LinkName) ->
     {ok, Acc :: term()} | datastore:link_error().
 foreach_link(#model_config{bucket = _Bucket} = ModelConfig, Key, Fun, AccIn) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = LinkMap}} ->
+        {ok, #document{value = #links{mappings = LinkMap}}} ->
             {ok, maps:fold(Fun, AccIn, LinkMap)};
         {error, {not_found, _}} ->
             {ok, AccIn};
@@ -538,6 +561,10 @@ links_doc_key(Key) ->
 to_driver_key(Bucket, Key) ->
     base64:encode(term_to_binary({Bucket, Key})).
 
+-spec from_driver_key(RawKey :: binary()) -> {Bucket :: datastore:bucket(), Key :: datastore:key()}.
+from_driver_key(RawKey) ->
+    binary_to_term(base64:decode(RawKey)).
+
 
 -spec get_db() -> {ok, term()} | {error, term()}.
 get_db() ->
@@ -554,3 +581,88 @@ get_db() ->
             couchbeam:open_db(Server, <<"default">>)
     end.
 
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%                                    CHANGES                                         %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%% API
+
+-record(state, {
+    callback,
+    until,
+    last_seq
+}).
+
+changes_start_link(Callback, Since, Until) ->
+    {ok, Db} = get_db(),
+    Opts = [{<<"include_docs">>, <<"true">>}, {since, Since}],
+    gen_changes:start_link(?MODULE, Db, Opts, [Callback, Until]).
+
+
+init([Callback, Until]) ->
+    ?info("INIT CHANGES ~p", [Until]),
+    {ok, #state{callback = Callback, until = Until}}.
+
+handle_change({done, _LastSeq}, State) ->
+    {noreply, State};
+
+
+handle_change(Change, #state{callback = Callback, until = Until, last_seq = LastSeq} = State) when Until > LastSeq; Until =:= infinity ->
+    NewChanges =
+        try
+            RawDoc = doc(Change),
+            Seq = seq(Change),
+            RawDocOnceAgian = jiffy:decode(jsx:encode(RawDoc)),
+            Document = process_raw_doc(RawDocOnceAgian),
+            ?info("Got change 2 ~p ~p", [RawDocOnceAgian, Document]),
+            catch Callback(Seq, Document),
+            State#state{last_seq = Seq}
+        catch
+            _:Reason ->
+                ?error_stacktrace("ZOMG ~p", [Reason]),
+                State
+        end,
+    {noreply, NewChanges};
+handle_change(Change, #state{callback = Callback, until = Until, last_seq = LastSeq} = State) ->
+    ?info("[ STOPPED ] Until ~p, LastSeq ~p", [Until, LastSeq]),
+    {stop, normal, State}.
+
+handle_call(_Req, _From, State) ->
+    {reply, _Req, State}.
+
+handle_cast(_Msg, State) -> {noreply, State}.
+
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
+    {noreply, State}.
+
+terminate(Reason, _State) ->
+    ?info("~p terminating with reason ~p~n", [?MODULE, Reason]),
+    ok.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+process_raw_doc({RawDoc}) ->
+    {_, Rev} = lists:keyfind(<<"_rev">>, 1, RawDoc),
+    {_, RawKey} = lists:keyfind(<<"_id">>, 1, RawDoc),
+    {_, Key} = from_driver_key(RawKey),
+    RawDoc1 = [KV || {<<"_", _/binary>>, _} = KV <- RawDoc],
+    RawDoc2 = RawDoc -- RawDoc1,
+    #document{key = Key, rev = Rev, value = from_json_term({RawDoc2})}.
+
+doc({change,{Props}}) ->
+    {_, Doc} = lists:keyfind(<<"doc">>, 1, Props),
+    Doc.
+
+seq({change, {Props}}) ->
+    {_, LastSeq} = lists:keyfind(<<"seq">>, 1, Props),
+    LastSeq.
