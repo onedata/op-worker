@@ -6,11 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% todo
+%%% Plugin for DNS worker. Accepts urls according to op-worker requirements.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dns_worker_plugin).
 -author("Michal Zmuda").
+
+- behavior(dns_worker_plugin_behaviour).
 
 -export([parse_domain/1]).
 
