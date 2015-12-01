@@ -19,7 +19,9 @@
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
-    create_test_users_and_spaces/1, clean_test_users_and_spaces/1]).
+    create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
+    basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
+    remove_pending_messages/1, clear_models/2]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -56,7 +58,66 @@ clean_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     initializer:teardown_sesion(Worker, Config),
-    mocks_teardown(Workers, [file_meta, gr_spaces]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates basic test session.
+%% @end
+%%--------------------------------------------------------------------
+-spec basic_session_setup(Worker :: node(), SessId :: session:id(),
+    Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
+basic_session_setup(Worker, SessId, Iden, Con, Config) ->
+    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+        reuse_or_create_session, [SessId, Iden, Con])),
+    [{session_id, SessId}, {identity, Iden} | Config].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes basic test session.
+%% @end
+%%--------------------------------------------------------------------
+-spec basic_session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
+basic_session_teardown(Worker, Config) ->
+    SessId = proplists:get_value(session_id, Config),
+    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv remove_pending_messages(0)
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages() -> ok.
+remove_pending_messages() ->
+    remove_pending_messages(0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes messages for process queue. Waits 'Timeout' milliseconds for the
+%% next message.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages(Timeout :: timeout()) -> ok.
+remove_pending_messages(Timeout) ->
+    receive
+        _ -> remove_pending_messages(Timeout)
+    after
+        Timeout -> ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all records from models.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_models(Worker :: node(), Names :: [atom()]) -> ok.
+clear_models(Worker, Names) ->
+    lists:foreach(fun(Name) ->
+        {ok, Docs} = ?assertMatch({ok, _}, rpc:call(Worker, Name, list, [])),
+        lists:foreach(fun(#document{key = Key}) ->
+            ?assertEqual(ok, rpc:call(Worker, Name, delete, [Key]))
+        end, Docs)
+    end, Names).
 
 %%--------------------------------------------------------------------
 %% @doc Setup test users' sessions on server
@@ -160,7 +221,7 @@ name(Text, Num) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gr_spaces_mock_setup(Workers :: node() | [node()],
-  [{binary(), binary()}]) -> ok.
+    [{binary(), binary()}]) -> ok.
 gr_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_new(Workers, gr_spaces),
     test_utils:mock_expect(Workers, gr_spaces, get_details,
@@ -184,13 +245,3 @@ file_meta_mock_setup(Workers) ->
             Self ! onedata_user_setup
         end
     ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Validates and unloads mocks.
-%%--------------------------------------------------------------------
--spec mocks_teardown(Workers :: node() | [node()],
-  Modules :: module() | [module()]) -> ok.
-mocks_teardown(Workers, Modules) ->
-    test_utils:mock_validate(Workers, Modules),
-    test_utils:mock_unload(Workers, Modules).
