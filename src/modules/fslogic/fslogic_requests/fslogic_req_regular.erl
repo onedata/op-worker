@@ -32,11 +32,13 @@
 -spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
                       FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{write, 2}]).
-truncate(_Ctx, Entry, Size) ->
+truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry),
     Results = lists:map(
                 fun({SID, FID} = Loc) ->
                         {ok, Storage} = storage:get(SID),
-                        {Loc, storage_file_manager:truncate(Storage, FID, Size)}
+                        SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FID),
+                        {Loc, storage_file_manager:truncate(SFMHandle, Size)}
                 end, fslogic_utils:get_local_storage_file_locations(Entry)),
 
     case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
@@ -103,7 +105,7 @@ get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
     get_new_file_location(CTX, DefaultSpaceUUID, Name, Mode, _Flags);
 get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name, Mode, _Flags) ->
-
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
@@ -127,14 +129,16 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
 
     LeafLess = fslogic_path:dirname(FileId),
-    case storage_file_manager:mkdir(Storage, LeafLess, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, Storage, LeafLess),
+    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
 
-    storage_file_manager:unlink(Storage, FileId),
-    ok = storage_file_manager:create(Storage, FileId, Mode),
+    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FileId),
+    storage_file_manager:unlink(SFMHandle1),
+    ok = storage_file_manager:create(SFMHandle1, Mode),
 
     #fuse_response{status = #status{code = ?OK}, fuse_response =
                        #file_location{uuid = UUID, provider_id = oneprovider:get_provider_id(), storage_id = StorageId, file_id = FileId, blocks = []}}.
