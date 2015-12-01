@@ -80,7 +80,7 @@ get_children_count(SessId, {uuid, UUID}) ->
 -spec count_children(SessId :: session:id(), FileKey :: {uuid, file_uuid()},
     Acc :: non_neg_integer(), Offset :: non_neg_integer()) -> non_neg_integer() | error_reply().
 count_children(SessId, UUID, Acc, Offset) ->
-    Chunk = get_env(?APP_NAME, ls_chunk_size),
+    Chunk = application:get_env(?APP_NAME, ls_chunk_size),
     {ok, List} = ls(SessId, {uuid, UUID}, Chunk, Offset),
     case length(List) of
         Chunk ->
