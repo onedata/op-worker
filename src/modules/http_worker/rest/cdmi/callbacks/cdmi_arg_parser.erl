@@ -16,8 +16,13 @@
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+% exclusive body fields
+-define(KEYS_REQUIRED_TO_BE_EXCLUSIVE, [<<"deserialize">>, <<"copy">>,
+    <<"move">>, <<"reference">>, <<"deserializevalue">>, <<"value">>]).
+
 %% API
--export([malformed_request/2, malformed_capability_request/2, get_ranges/2]).
+-export([malformed_request/2, malformed_capability_request/2, get_ranges/2,
+    parse_body/1]).
 
 %% Test API
 -export([get_supported_version/1]).
@@ -67,6 +72,16 @@ get_ranges(Req, State) ->
                 Ranges -> {Ranges, Req1}
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Reads whole body and decodes it as json.
+%%--------------------------------------------------------------------
+-spec parse_body(cowboy_req:req()) -> {ok, list(), cowboy_req:req()}.
+parse_body(Req) ->
+    {ok, RawBody, Req1} = cowboy_req:body(Req),
+    Body = json_utils:decode(RawBody),
+    ok = validate_body(Body),
+    {ok, Body, Req1}.
 
 %%%===================================================================
 %%% Internal functions
@@ -143,4 +158,21 @@ parse_byte_range(#{attributes := #file_attr{size = Size}} = State, [First | Rest
         invalid -> [invalid];
         {Begin, End} when Begin > End -> [invalid];
         ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Validates correctness of request's body.
+%%--------------------------------------------------------------------
+-spec validate_body(list()) -> ok | no_return().
+validate_body(Body) ->
+    Keys = proplists:get_keys(Body),
+    KeySet = sets:from_list(Keys),
+    ExclusiveRequiredKeysSet = sets:from_list(?KEYS_REQUIRED_TO_BE_EXCLUSIVE),
+    case length(Keys) =:= length(Body) of
+        true ->
+            case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
+                N when N > 1 -> throw(?conflicting_body_fields);
+                _ -> ok
+            end;
+        false -> throw(?duplicated_body_fields)
     end.

@@ -122,22 +122,13 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
     case ToRead > BufferSize of
         true ->
             {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
-            Transport:send(Socket, encode(Data, Encoding)),
+            Transport:send(Socket, cdmi_encoder:encode(Data, Encoding)),
             stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, NewFileHandle);
         false ->
             {ok, _NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ToRead),
-            Transport:send(Socket, encode(Data, Encoding))
+            Transport:send(Socket, cdmi_encoder:encode(Data, Encoding))
     end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc Encodes data according to given ecoding
-%%--------------------------------------------------------------------
--spec encode(Data :: binary(), Encoding :: binary()) -> binary().
-encode(Data, Encoding) when Encoding =:= <<"base64">> ->
-    base64:encode(Data);
-encode(Data, _) ->
-    Data.

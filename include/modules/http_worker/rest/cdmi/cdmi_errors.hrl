@@ -25,4 +25,6 @@
   {400, [{<<"error_invalid_childrenrange">>, <<"Requested childrenrange is invalid.">>}]}).
 -define(invalid_range,
   {400, [{<<"error_invalid_range">>, <<"Given range is invalid.">>}]}).
+-define(invalid_base64,
+  {400, [{<<"error_invalid_base64">>, <<"Given base64 value could not be docoded.">>}]}).
 -endif.
