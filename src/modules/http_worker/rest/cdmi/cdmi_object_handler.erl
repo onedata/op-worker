@@ -122,9 +122,10 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
-get_binary(Req, #{attributes := #file_attr{size = Size, mimetype = Mimetype}} = State) ->
+get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) ->
     % prepare response
     {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, State),
+    Mimetype = cdmi_metadata:get_mimetype(Path),
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
         case Ranges of
