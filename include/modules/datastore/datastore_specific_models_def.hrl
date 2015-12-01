@@ -15,12 +15,6 @@
 -include("modules/events/subscriptions.hrl").
 -include("proto/common/credentials.hrl").
 
-%% event manager model:
-%% value - mapping from subscription ID to subscription
--record(subscription, {
-    value :: event_manager:subscription()
-}).
-
 %% Identity containing user_id
 -record(identity, {
     user_id :: onedata_user:id()
