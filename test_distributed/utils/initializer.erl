@@ -14,7 +14,7 @@
 
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
--include("modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
