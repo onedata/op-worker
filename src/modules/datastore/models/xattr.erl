@@ -43,7 +43,7 @@ get_by_name(FileUuid, XattrName) ->
 %%--------------------------------------------------------------------
 %% @doc Deletes extended attribute with given name
 %%--------------------------------------------------------------------
--spec get_by_name(file_meta:uuid(), xattr:name()) ->
+-spec delete_by_name(file_meta:uuid(), xattr:name()) ->
     ok | datastore:generic_error().
 delete_by_name(FileUuid, XattrName) ->
     xattr:delete({FileUuid, XattrName}).
@@ -66,8 +66,7 @@ save(FileUuid, Xattr = #xattr{name = XattrKey}) ->
 %%--------------------------------------------------------------------
 %% @doc Lists names of all extended attributes associated with given file
 %%--------------------------------------------------------------------
--spec exists_by_name(file_meta:uuid(), xattr:name()) ->
-    {ok, [xattr:name()]} | datastore:generic_error().
+-spec list(file_meta:uuid()) -> {ok, [xattr:name()]} | datastore:generic_error().
 list(FileUuid) ->
     datastore:foreach_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME,
         fun(Name, _, Acc) ->

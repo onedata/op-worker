@@ -25,16 +25,12 @@
     end_per_testcase/2]).
 
 %% tests
--export([lfm_empty_xattr_test/1]).
+-export([lfm_empty_xattr_test/1, lfm_set_and_get_xattr_test/1]).
 
 -performance({test_cases, []}).
 all() -> [
-    lfm_empty_xattr_test
+    lfm_empty_xattr_test, lfm_set_and_get_xattr_test
 ].
-
--define(TIMEOUT, timer:seconds(10)).
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).
--define(lfm_req(W, Method, Args), rpc:call(W, file_manager, Method, Args, ?TIMEOUT)).
 
 %%%====================================================================
 %%% Test function
@@ -44,12 +40,23 @@ lfm_empty_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     Path = <<"/file">>,
-    Key1 = <<"key1">>,
+    Name1 = <<"name1">>,
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Key1)),
+    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
 
+lfm_set_and_get_xattr_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    Path = <<"/file">>,
+    Name1 = <<"name1">>,
+    Value1 = <<"value1">>,
+    Xattr1 = #xattr{name = Name1, value = Value1},
+    {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
+    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -75,6 +82,7 @@ end_per_testcase(_, Config) ->
     initializer:clean_test_users_and_spaces(Config),
     test_utils:mock_validate(Workers, [communicator]),
     test_utils:mock_unload(Workers, [communicator]).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
