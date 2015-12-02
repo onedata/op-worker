@@ -164,7 +164,7 @@ message HelperParams {
 
 message GetXattr {
     required bytes uuid = 1;
-    required bytes key = 2;
+    required bytes name = 2;
 }
 
 message SetXattr {
@@ -174,7 +174,7 @@ message SetXattr {
 
 message RemoveXattr {
     required bytes uuid = 1;
-    required bytes key = 2;
+    required bytes name = 2;
 }
 
 message ListXattr {
@@ -182,10 +182,10 @@ message ListXattr {
 }
 
 message Xattr {
-    required bytes key = 1;
+    required bytes name = 1;
     required bytes value = 2;
 }
 
 message XattrList {
-    repeated bytes keys = 1;
+    repeated bytes names = 1;
 }
