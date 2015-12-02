@@ -253,4 +253,6 @@ translate_open_flags('READ_WRITE') ->
 translate_open_flags('READ') ->
     read;
 translate_open_flags('WRITE') ->
-    write.
+    write;
+translate_open_flags(undefined) ->
+    rdwr.
