@@ -22,6 +22,9 @@ all: test_rel
 ## Rebar targets
 ##
 
+recompile:
+	./rebar compile skip_deps=true
+
 compile:
 	./rebar compile
 
