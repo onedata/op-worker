@@ -469,6 +469,8 @@ end_disk_op(Uuid, Owner, ModelName, Op, Level) ->
         end,
         ok
     catch
+        throw:user_changed ->
+            ok;
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller end_disk_op. Args: ~p. Error: ~p:~p.",
                 [{Uuid, Owner, ModelName, Op, Level}, E1, E2]),
@@ -527,7 +529,7 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                                        {ok, SavedValue} ->
                                            {ok, save, [SavedValue]};
                                        {error, {not_found, _}} ->
-                                           {error, deleted};
+                                           {ok, delete, [Key, ?PRED_ALWAYS]};
                                        GetError ->
                                            {get_error, GetError}
                                    end
@@ -540,13 +542,25 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                                        {ok, Record#cache_controller{last_action_time = os:timestamp()}}
                                    end,
                                    update(Level, Uuid, UpdateFun2),
-                                   case datastore:get(Level, ModelName, Key) of
-                                       {ok, SavedValue} ->
-                                           {ok, save, [SavedValue]};
-                                       {error, {not_found, _}} ->
-                                           ok;
-                                       GetError ->
-                                           {get_error, GetError}
+                                   case Op of
+                                       delete ->
+                                           case datastore:get(Level, ModelName, Key) of
+                                               {ok, SavedValue} ->
+                                                   {ok, save, [SavedValue]};
+                                               {error, {not_found, _}} ->
+                                                   ok;
+                                               GetError ->
+                                                   {get_error, GetError}
+                                           end;
+                                       _ ->
+                                           case datastore:get(Level, ModelName, Key) of
+                                               {ok, SavedValue} ->
+                                                   {ok, save, [SavedValue]};
+                                               {error, {not_found, _}} ->
+                                                   {ok, delete, [Key, ?PRED_ALWAYS]};
+                                               GetError ->
+                                                   {get_error, GetError}
+                                           end
                                    end;
                                _ ->
                                    {error, not_last_user}
@@ -557,8 +571,9 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
             Ans = case ToDo of
                       {ok, NewMethod, NewArgs} ->
                           FullArgs = [ModelConfig | NewArgs],
-                          worker_proxy:call(datastore_worker, {driver_call,
-                              datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, ?DISK_OP_TIMEOUT);
+                          CallAns = worker_proxy:call(datastore_worker, {driver_call,
+                              datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, ?DISK_OP_TIMEOUT),
+                          {op_change, NewMethod, CallAns};
                       ok ->
                           FullArgs = [ModelConfig | Args],
                           worker_proxy:call(datastore_worker, {driver_call,
@@ -572,8 +587,10 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                      {ok, _} ->
                          end_disk_op(Uuid, Pid, ModelName, Op, Level);
                      {error, not_last_user} -> ok;
-                     {error, deleted} ->
-                         delete_dump_info(Uuid, Pid, Level);
+                     {op_change, NewOp, ok} ->
+                         end_disk_op(Uuid, Pid, ModelName, NewOp, Level);
+                     {op_change, NewOp, {ok, _}} ->
+                         end_disk_op(Uuid, Pid, ModelName, NewOp, Level);
                      WrongAns -> WrongAns
                  end
         end,
