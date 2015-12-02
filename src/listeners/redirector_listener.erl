@@ -8,7 +8,7 @@
 %%% @doc redirector listener starting & stopping
 %%% @end
 %%%--------------------------------------------------------------------
--module(start_redirector_listener).
+-module(redirector_listener).
 -author("Tomasz Lichon").
 -author("Michal Zmuda").
 
@@ -21,10 +21,10 @@
 % Cowboy listener references
 -define(HTTP_REDIRECTOR_LISTENER, http).
 
--behaviour(listener_starter_behaviour).
+-behaviour(listener_behaviour).
 
 %% listener_starter_behaviour callbacks
--export([start_listener/0, stop_listener/0]).
+-export([start/0, stop/0]).
 
 %%%===================================================================
 %%% listener_starter_behaviour callbacks
@@ -32,11 +32,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback start_listener/1.
+%% {@link listener_starter_behaviour} callback start/1.
 %% @end
 %%--------------------------------------------------------------------
--spec start_listener() -> ok | {error, Reason :: term()}.
-start_listener() ->
+-spec start() -> ok | {error, Reason :: term()}.
+start() ->
   {ok, RedirectPort} =
     application:get_env(?APP_NAME, http_worker_redirect_port),
   {ok, RedirectNbAcceptors} =
@@ -69,11 +69,11 @@ start_listener() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback stop_listener/1.
+%% {@link listener_starter_behaviour} callback stop/1.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_listener() -> ok | {error, Reason :: term()}.
-stop_listener() ->
+-spec stop() -> ok | {error, Reason :: term()}.
+stop() ->
   case catch cowboy:stop_listener(?HTTP_REDIRECTOR_LISTENER) of
     (ok) -> ok;
     (Error) -> ?error("Error on stopping listener ~p: ~p", [?HTTP_REDIRECTOR_LISTENER, Error])
