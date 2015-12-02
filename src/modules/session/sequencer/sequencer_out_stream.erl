@@ -50,6 +50,7 @@
 }).
 
 -define(PROCESS_REQUEST_RETRY_DELAY, timer:seconds(5)).
+-define(LOG_FAILED_ATTEMPTS_THRESHOLD, 3).
 
 %%%===================================================================
 %%% API
@@ -79,6 +80,7 @@ start_link(SeqMan, StmId, SessId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SeqMan, StmId, SessId]) ->
+    ?debug("Initializing sequencer out stream for session ~p", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
     {ok, #state{
@@ -219,13 +221,11 @@ handle_request(Request, #state{inbox = Inbox} = State) ->
                 _:Reason ->
                     erlang:send_after(?PROCESS_REQUEST_RETRY_DELAY, self(),
                         process_pending_requests),
-                    ?warning("Cannot process request ~p due to: ~p. "
-                    "Retring in ~p milliseconds...",
-                        [Request, Reason, ?PROCESS_REQUEST_RETRY_DELAY]),
-                    State#state{inbox = queue:in(Request, Inbox)}
+                    maybe_log_failure(Request, Reason, 1),
+                    State#state{inbox = queue:in({Request, 1}, Inbox)}
             end;
         false ->
-            State#state{inbox = queue:in(Request, Inbox)}
+            State#state{inbox = queue:in({Request, 0}, Inbox)}
     end.
 
 %%--------------------------------------------------------------------
@@ -238,7 +238,7 @@ handle_request(Request, #state{inbox = Inbox} = State) ->
 -spec process_pending_requests(State :: #state{}) -> NewState :: #state{}.
 process_pending_requests(#state{inbox = Inbox} = State) ->
     case queue:peek(Inbox) of
-        {value, Request} ->
+        {value, {Request, Attempts}} ->
             try
                 process_request(Request, State),
                 State#state{inbox = queue:drop(Inbox)}
@@ -246,10 +246,8 @@ process_pending_requests(#state{inbox = Inbox} = State) ->
                 _:Reason ->
                     erlang:send_after(?PROCESS_REQUEST_RETRY_DELAY, self(),
                         process_pending_requests),
-                    ?warning("Cannot process request ~p due to: ~p. "
-                    "Retring in ~p milliseconds...",
-                        [Request, Reason, ?PROCESS_REQUEST_RETRY_DELAY]),
-                    State
+                    maybe_log_failure(Request, Reason, Attempts + 1),
+                    State#state{inbox = queue:in_r({Request, Attempts + 1}, queue:drop(Inbox))}
             end;
         empty -> State
     end.
@@ -370,4 +368,23 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con) ->
         _ ->
             ?warning("Received request for messages unavailable in sequencer stream "
             "queue. Stream ID: ~p, range: [~p,~p].", [StmId, LowerSeqNum, UpperSeqNum])
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Logs request failure if processing of the request failed more than
+%% 'LOG_FAILED_ATTEMPTS_THRESHOLD' times in a row.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_log_failure(Request :: term(), Reason :: term(),
+    Attempt :: non_neg_integer()) -> ok.
+maybe_log_failure(Request, Reason, Attempt) ->
+    case Attempt > ?LOG_FAILED_ATTEMPTS_THRESHOLD of
+        true ->
+            ?error("Cannot process request ~p due to: ~p. "
+            "There has been ~p unsuccessful attempts so far. Retring in ~p milliseconds...",
+                [Request, Reason, Attempt, ?PROCESS_REQUEST_RETRY_DELAY]);
+        false ->
+            ok
     end.

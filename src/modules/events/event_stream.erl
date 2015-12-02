@@ -46,14 +46,16 @@
 
 %% event stream state:
 %% subscription_id - ID of an event subscription
+%% session_id      - ID of a session associated with this event manager
 %% event_manager   - pid of an event manager that controls this event stream
-%% definition      - event stream definiton
+%% definition      - event stream definition
 %% init_result     - result of init handler execution
 %% metadata        - event stream metadata
 %% events          - mapping form an event key to an aggregated event
 %% emission_ref    - reference associated with the last 'periodic_emission' message
 -record(state, {
     subscription_id :: subscription:id(),
+    session_id :: session:id(),
     event_manager :: pid(),
     definition :: definition(),
     init_result :: term(),
@@ -90,10 +92,12 @@ start_link(EvtMan, Sub, SessId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, SessId]) ->
+    ?debug("Initializing event stream for subscription ~p in session ~p", [SubId, SessId]),
     process_flag(trap_exit, true),
     register_stream(EvtMan, SubId),
     {ok, #state{
         subscription_id = SubId,
+        session_id = SessId,
         event_manager = EvtMan,
         init_result = execute_init_handler(StmDef, Sub, SessId),
         metadata = get_initial_metadata(StmDef),
@@ -129,9 +133,13 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(#event{} = Evt, #state{definition = StmDef} = State) ->
+handle_cast(#event{} = Evt, #state{subscription_id = SubId, session_id = SessId,
+    definition = StmDef} = State) ->
     case apply_admission_rule(Evt, StmDef) of
-        true -> {noreply, process_event(Evt, State)};
+        true ->
+            ?debug("Handling event ~p in event stream for subscription ~p and "
+            "session ~p", [Evt, SubId, SessId]),
+            {noreply, process_event(Evt, State)};
         false -> {noreply, State}
     end;
 
@@ -246,8 +254,11 @@ execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
 %% @end
 %%--------------------------------------------------------------------
 -spec execute_event_handler(State :: #state{}) -> NewState :: #state{}.
-execute_event_handler(#state{events = Evts, definition = #event_stream_definition{
-    event_handler = Handler} = StmDef, init_result = InitResult} = State) ->
+execute_event_handler(#state{subscription_id = SubId, session_id = SessId,
+    events = Evts, definition = #event_stream_definition{event_handler = Handler
+    } = StmDef, init_result = InitResult} = State) ->
+    ?debug("Executing event handler on events ~p in event stream for subscription "
+    "~p and session ~p", [Evts, SubId, SessId]),
     Handler(maps:values(Evts), InitResult),
     State#state{
         events = #{},

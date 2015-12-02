@@ -89,6 +89,7 @@ start_link(SeqMan, StmId, SessId) ->
     {ok, StateName :: atom(), StateData :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([SeqMan, StmId, SessId]) ->
+    ?debug("Initializing sequencer in stream for session ~p", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
     send_message_stream_reset(StmId, SessId),

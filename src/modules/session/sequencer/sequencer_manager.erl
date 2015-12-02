@@ -82,6 +82,7 @@ start_link(SeqManSup, SessId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SeqManSup, SessId]) ->
+    ?debug("Initializing sequencer manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{sequencer_manager => self()}),
     send_message_stream_reset(SessId),
@@ -101,8 +102,9 @@ init([SeqManSup, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call(open_stream, _From, State) ->
+handle_call(open_stream, _From, #state{session_id = SessId} = State) ->
     StmId = generate_stream_id(),
+    ?debug("Opening stream ~p in sequencer manager for session ~p", [StmId, SessId]),
     {reply, {ok, StmId}, create_sequencer_out_stream(StmId, State)};
 
 handle_call(Request, _From, State) ->
@@ -132,6 +134,7 @@ handle_cast({unregister_out_stream, StmId}, #state{sequencer_out_streams = Stms}
     {noreply, State#state{sequencer_out_streams = maps:remove(StmId, Stms)}};
 
 handle_cast({close_stream, StmId}, State) ->
+    ?debug("Closing stream ~p in sequencer manager for session ~p", [StmId, SessId]),
     forward_to_sequencer_out_stream(#server_message{
         message_stream = #message_stream{stream_id = StmId},
         message_body = #end_of_message_stream{}
@@ -139,24 +142,29 @@ handle_cast({close_stream, StmId}, State) ->
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_stream_reset{
-    stream_id = undefined} = Msg}, #state{sequencer_out_streams = Stms} = State) ->
+    stream_id = undefined} = Msg}, #state{sequencer_out_streams = Stms,
+    session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     maps:map(fun(_, SeqStm) ->
         gen_server:cast(SeqStm, Msg)
     end, Stms),
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_stream_reset{
-    stream_id = StmId} = Msg}, State) ->
+    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     forward_to_sequencer_out_stream(Msg, StmId, State),
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_request{
-    stream_id = StmId} = Msg}, State) ->
+    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     forward_to_sequencer_out_stream(Msg, StmId, State),
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_acknowledgement{
-    stream_id = StmId} = Msg}, State) ->
+    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     forward_to_sequencer_out_stream(Msg, StmId, State),
     {noreply, State};
 

@@ -73,6 +73,7 @@ start_link(EvtManSup, SessId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([EvtManSup, SessId]) ->
+    ?debug("Initializing event manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{event_manager => self()}),
     {ok, #state{event_manager_sup = EvtManSup, session_id = SessId}, 0}.
@@ -111,7 +112,8 @@ handle_cast({register_stream, SubId, EvtStm}, #state{event_streams = EvtStms} = 
 handle_cast({unregister_stream, SubId}, #state{event_streams = EvtStms} = State) ->
     {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};
 
-handle_cast(#event{} = Evt, #state{event_streams = EvtStms} = State) ->
+handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms} = State) ->
+    ?debug("Handling event ~p in session ~p", [Evt, SessId]),
     {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
         gen_server:cast(EvtStm, Evt),
         EvtStm
@@ -119,10 +121,13 @@ handle_cast(#event{} = Evt, #state{event_streams = EvtStms} = State) ->
 
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms} = State) ->
+    ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
     {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
     {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}};
 
-handle_cast(#subscription_cancellation{id = SubId}, #state{event_streams = EvtStms} = State) ->
+handle_cast(#subscription_cancellation{id = SubId}, #state{
+    event_streams = EvtStms, session_id = SessId} = State) ->
+    ?debug("Removing subscription ~p from session ~p", [SubId, SessId]),
     {ok, EvtStm} = maps:find(SubId, EvtStms),
     erlang:exit(EvtStm, shutdown),
     {noreply, State#state{event_streams = maps:remove(SubId, EvtStms)}};

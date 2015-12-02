@@ -59,7 +59,6 @@ init(_Args) ->
         },
         event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
             metadata = 0,
-            emission_time = 500,
             emission_rule = fun(_) -> true end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, InitResult) ->
