@@ -23,6 +23,8 @@
   {400, [{<<"error_duplicated_body_fields">>, <<"Request body contains duplicates.">>}]}).
 -define(invalid_childrenrange,
   {400, [{<<"error_invalid_childrenrange">>, <<"Requested childrenrange is invalid.">>}]}).
+-define(too_large_childrenrange(MaxChildren),
+  {400, [{<<"error_too_large_childrenrange">>, <<"Requested childrenrange exceeds the limit of ", MaxChildren/integer, " entries.">>}]}).
 -define(invalid_range,
   {400, [{<<"error_invalid_range">>, <<"Given range is invalid.">>}]}).
 -define(invalid_base64,

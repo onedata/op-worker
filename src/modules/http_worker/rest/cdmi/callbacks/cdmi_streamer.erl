@@ -50,7 +50,8 @@ cdmi_stream_size(Range, FileSize, ValueTransferEncoding, JsonBodyPrefix, JsonBod
         end,
     case ValueTransferEncoding of
         <<"base64">> ->
-            byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + trunc(4 * utils:ceil(DataSize / 3.0));
+            byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix)
+                + cdmi_encoder:base64_encoded_data_size(DataSize);
         <<"utf-8">> ->
             byte_size(JsonBodyPrefix) + byte_size(JsonBodySuffix) + DataSize
     end.
@@ -70,10 +71,13 @@ stream_binary(#{path := Path, auth := Auth} = State, Ranges) ->
         try
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
             lists:foreach(fun(Rng) ->
-                stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize, FileHandle) end, Ranges)
+                stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize, FileHandle)
+            end, Ranges)
         catch Type:Message ->
-            % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
-            ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
+            % Any exceptions that occur during file streaming must be caught
+            % here for cowboy to close the connection cleanly
+            ?error_stacktrace("Error while streaming file '~p' - ~p:~p",
+                [Path, Type, Message])
         end
     end.
 
@@ -86,16 +90,19 @@ stream_binary(#{path := Path, auth := Auth} = State, Ranges) ->
 -spec stream_cdmi(Stata ::#{}, Range :: {non_neg_integer(), non_neg_integer()},
   ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
   JsonBodySuffix :: binary()) -> function().
-stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix) ->
+stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
+  JsonBodyPrefix, JsonBodySuffix) ->
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
     fun(Socket, Transport) ->
         try
             Transport:send(Socket, JsonBodyPrefix),
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-            cdmi_streamer:stream_range(Socket, Transport, State, Range, ValueTransferEncoding, BufferSize, FileHandle),
+            cdmi_streamer:stream_range(Socket, Transport, State, Range,
+                ValueTransferEncoding, BufferSize, FileHandle),
             Transport:send(Socket,JsonBodySuffix)
         catch Type:Message ->
-            % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
+            % Any exceptions that occur during file streaming must be caught
+            % here for cowboy to close the connection cleanly
             ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
         end
     end.
@@ -111,10 +118,12 @@ stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
   BufferSize :: integer(), FileHandle :: onedata_file_api:file_handle()) -> Result when
     Range :: default | {From :: integer(), To :: integer()},
     Result :: ok | no_return().
-stream_range(Socket, Transport, State, Range, Encoding, BufferSize, FileHandle) when (BufferSize rem 3) =/= 0 ->
+stream_range(Socket, Transport, State, Range, Encoding, BufferSize, FileHandle)
+    when (BufferSize rem 3) =/= 0 ->
     %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
     stream_range(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3), FileHandle);
-stream_range(Socket, Transport, #{attributes := #file_attr{size = Size}} = State, default, Encoding, BufferSize, FileHandle) ->
+stream_range(Socket, Transport, #{attributes := #file_attr{size = Size}} = State,
+  default, Encoding, BufferSize, FileHandle) ->
     %default range should remain consistent with parse_object_ans/2 valuerange clause
     stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
 stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHandle) ->
@@ -123,7 +132,8 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
         true ->
             {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
             Transport:send(Socket, cdmi_encoder:encode(Data, Encoding)),
-            stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, NewFileHandle);
+            stream_range(Socket, Transport, State, {From + BufferSize, To},
+                Encoding, BufferSize, NewFileHandle);
         false ->
             {ok, _NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ToRead),
             Transport:send(Socket, cdmi_encoder:encode(Data, Encoding))

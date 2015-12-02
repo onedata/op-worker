@@ -29,7 +29,7 @@
 %% Starts the supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), Con :: pid()) ->
+-spec start_link(SessId :: session:id(), Con :: pid() | none) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SessId, Con) ->
     supervisor:start_link(?MODULE, [SessId, Con]).

@@ -15,7 +15,7 @@
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 
 %% API
--export([encode/2, decode/2, decode/3]).
+-export([encode/2, decode/2, decode/3, base64_encoded_data_size/1]).
 
 %%%===================================================================
 %%% API
@@ -54,6 +54,13 @@ decode(Data, Encoding) when Encoding =:= <<"base64">> ->
     end;
 decode(Data, _) ->
     Data.
+
+%%--------------------------------------------------------------------
+%% @doc Retrns size of base64 encoded data.
+%%--------------------------------------------------------------------
+-spec base64_encoded_data_size(DataSize :: non_neg_integer()) -> non_neg_integer().
+base64_encoded_data_size(DataSize) ->
+    trunc(4 * utils:ceil(DataSize / 3.0)).
 
 %%%===================================================================
 %%% Internal functions
