@@ -15,7 +15,7 @@
 -behaviour(datastore_config_behaviour).
 
 %% datastore_config_behaviour callbacks
--export([models/0, global_caches/0, local_caches/0]).
+-export([models/0]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -34,27 +34,3 @@ models() -> [
   file_location,
   file_watcher
 ].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% {@link datastore_config_behaviour} callback global_caches/0.
-%% @end
-%%--------------------------------------------------------------------
--spec global_caches() -> Models :: [model_behaviour:model_type()].
-global_caches() -> [
-  file_meta,
-  storage,
-  file_location,
-  file_watcher
-].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% {@link datastore_config_behaviour} callback local_caches/0.
-%% @end
-%%--------------------------------------------------------------------
--spec local_caches() -> Models :: [model_behaviour:model_type()].
-local_caches() ->
-  [].
