@@ -105,7 +105,7 @@ public:
 
         /**
          * @return Sequence number of expected message, i.e. message that can be
-         * forwarded by sequencer.
+         * immediately forwarded by sequencer.
          */
         const uint64_t sequenceNumber() const { return m_seqNum; }
 
