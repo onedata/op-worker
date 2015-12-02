@@ -70,11 +70,11 @@ modules() -> [
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
 listeners() -> [
-  start_dns_listener,
-  start_gui_listener,
-  start_protocol_listener,
-  start_redirector_listener,
-  start_rest_listener
+  dns_listener,
+  gui_listener,
+  protocol_listener,
+  redirector_listener,
+  rest_listener
 ].
 
 %%--------------------------------------------------------------------
