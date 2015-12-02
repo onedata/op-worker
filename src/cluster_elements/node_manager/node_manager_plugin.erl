@@ -10,7 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(node_manager_plugin).
--author("Michal Wrzeszcz").
+-author("Michal Zmuda").
 
 -behaviour(node_manager_plugin_behaviour).
 
