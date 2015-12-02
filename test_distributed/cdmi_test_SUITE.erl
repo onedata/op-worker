@@ -427,7 +427,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(choose_adequate_handler, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
+    test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),

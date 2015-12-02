@@ -138,7 +138,7 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     Iden = #identity{user_id = UserId},
     UserName = Name("username", UserNum),
 
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
