@@ -129,14 +129,9 @@ list_dir_test(Config) ->
                 create_file(Config, filename:join(ChildrangeDir, FileName))
               end, Childs),
 
-    tracer:start(Worker),
-    tracer:trace_calls(cdmi_container_handler, get_cdmi),
-    tracer:trace_calls(cdmi_container_answer, prepare),
-    tracer:trace_calls(onedata_file_api, ls),
     {ok, Code5, _Headers5, Response5} =
         do_request(Worker, ChildrangeDir ++ "?children;childrenrange",
             get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
-    tracer:stop(),
     ?assertEqual("200", Code5),
     {struct,CdmiResponse5} = mochijson2:decode(Response5),
     ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
@@ -283,12 +278,9 @@ create_file_test(Config) ->
     ?assert(not object_exists(Config, ToCreate5)),
 
     RequestHeaders5 = [{"content-type", "application/binary"}],
-    tracer:start(Worker),
-    tracer:trace_calls(cdmi_object_handler),
     {ok, Code5, _Headers5, _Response5} =
         do_request(Worker, ToCreate5, put,
             [?USER_1_TOKEN_HEADER | RequestHeaders5], FileContent),
-    tracer:stop(),
 
     ?assertEqual("201",Code5),
 
@@ -331,6 +323,7 @@ update_file_test(Config) ->
     tracer:trace_calls(cdmi_metadata),
     tracer:trace_calls(cdmi_streamer, write_body_to_file),
     tracer:trace_calls(onedata_file_api, write),
+    tracer:trace_calls(onedata_file_api, open),
     tracer:trace_calls(cdmi_arg_parser),
     {ok, Code4, _Headers4, _Response4} =
         do_request(Worker, FullName,

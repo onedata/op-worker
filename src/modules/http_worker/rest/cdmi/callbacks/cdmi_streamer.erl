@@ -159,7 +159,9 @@ write_body_to_file(Req, State, Offset) ->
 %%--------------------------------------------------------------------
 -spec write_body_to_file(req(), #{}, integer(), boolean()) -> {boolean(), req(), #{}}.
 write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset, RemoveIfFails) ->
+    ?critical("1"),
     {Status, Chunk, Req1} = cowboy_req:body(Req),
+    ?critical("2"),
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
     case onedata_file_api:write(FileHandle, Offset, Chunk) of
         {ok, _NewHandle, Bytes} when is_integer(Bytes) ->

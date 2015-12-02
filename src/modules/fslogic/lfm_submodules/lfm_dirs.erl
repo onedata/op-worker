@@ -64,7 +64,7 @@ ls(SessId, {uuid, UUID}, Limit, Offset) ->
 -spec get_children_count(SessId :: session:id(), FileKey :: {uuid, file_uuid()})
         -> {ok, integer()} | error_reply().
 get_children_count(SessId, {uuid, UUID}) ->
-    {ok, count_children(SessId, UUID, 0, 0)}.
+    {ok, count_children(SessId, UUID, 0)}.
 
 
 
@@ -78,14 +78,13 @@ get_children_count(SessId, {uuid, UUID}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec count_children(SessId :: session:id(), FileKey :: {uuid, file_uuid()},
-    Acc :: non_neg_integer(), Offset :: non_neg_integer()) -> non_neg_integer() | error_reply().
-count_children(SessId, UUID, Acc, Offset) ->
-    Chunk = application:get_env(?APP_NAME, ls_chunk_size),
-    {ok, List} = ls(SessId, {uuid, UUID}, Chunk, Offset),
+    Acc :: non_neg_integer()) -> non_neg_integer() | error_reply().
+count_children(SessId, UUID, Acc) ->
+    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
+    {ok, List} = ls(SessId, {uuid, UUID}, Chunk, Acc),
     case length(List) of
         Chunk ->
-            count_children(SessId, UUID, Acc + Chunk,
-                Offset + Chunk);
+            count_children(SessId, UUID, Acc + Chunk);
         N -> Acc + N
     end.
 
