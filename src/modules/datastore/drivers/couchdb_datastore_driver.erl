@@ -34,11 +34,6 @@
 -export([changes_start_link/3]).
 -export([init/1, handle_call/3, handle_info/2, handle_change/2, handle_cast/2, terminate/2]).
 
--record(links, {
-    model,
-    mappings
-}).
-
 %%%===================================================================
 %%% store_driver_behaviour callbacks
 %%%===================================================================
@@ -333,7 +328,7 @@ exists(#model_config{bucket = _Bucket} = ModelConfig, Key) ->
     ok | datastore:generic_error().
 add_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = #links{mappings = LinkMap}}} ->
+        {ok, #document{value = #links{link_map = LinkMap}}} ->
             add_links4(ModelConfig, Key, Links, LinkMap);
         {error, {not_found, _}} ->
             add_links4(ModelConfig, Key, Links, #{});
@@ -344,7 +339,7 @@ add_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) when is_lis
 -spec add_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()], InternalCtx :: term()) ->
     ok | datastore:generic_error().
 add_links4(#model_config{bucket = _Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
-    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{model = ModelName, mappings = Ctx}}) of
+    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{key = Key, model = ModelName, link_map = Ctx}}) of
         {ok, _} -> ok;
         {error, Reason} ->
             {error, Reason}
@@ -364,7 +359,7 @@ delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, all) ->
     delete(ModelConfig, links_doc_key(Key), ?PRED_ALWAYS);
 delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = #links{mappings = LinkMap}}} ->
+        {ok, #document{value = #links{link_map = LinkMap}}} ->
             delete_links4(ModelConfig, Key, Links, LinkMap);
         {error, {not_found, _}} ->
             ok;
@@ -375,7 +370,7 @@ delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) ->
 -spec delete_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()] | all, InternalCtx :: term()) ->
     ok | datastore:generic_error().
 delete_links4(#model_config{bucket = _Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
-    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{model = ModelName, mappings = Ctx}}) of
+    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{key = Key, model = ModelName, link_map = Ctx}}) of
         {ok, _} -> ok;
         {error, Reason} ->
             {error, Reason}
@@ -393,7 +388,7 @@ delete_links4(#model_config{} = ModelConfig, Key, [Link | R], Ctx) ->
     {ok, datastore:link_target()} | datastore:link_error().
 fetch_link(#model_config{bucket = _Bucket} = ModelConfig, Key, LinkName) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = #links{mappings = LinkMap}}} ->
+        {ok, #document{value = #links{link_map = LinkMap}}} ->
             case maps:get(LinkName, LinkMap, undefined) of
                 undefined ->
                     {error, link_not_found};
@@ -417,7 +412,7 @@ fetch_link(#model_config{bucket = _Bucket} = ModelConfig, Key, LinkName) ->
     {ok, Acc :: term()} | datastore:link_error().
 foreach_link(#model_config{bucket = _Bucket} = ModelConfig, Key, Fun, AccIn) ->
     case get(ModelConfig, links_doc_key(Key)) of
-        {ok, #document{value = #links{mappings = LinkMap}}} ->
+        {ok, #document{value = #links{link_map = LinkMap}}} ->
             {ok, maps:fold(Fun, AccIn, LinkMap)};
         {error, {not_found, _}} ->
             {ok, AccIn};

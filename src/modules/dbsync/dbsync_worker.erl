@@ -21,6 +21,8 @@
 -export([init/1, handle/1, cleanup/0]).
 -export([state_get/1, state_put/2]).
 
+-define(MODELS_TO_SYNC, [file_meta, file_location]).
+
 -record(change, {
     seq,
     doc
@@ -69,9 +71,20 @@ handle(healthcheck) ->
     ok;
 
 
-handle({Queue, #change{seq = Seq, doc = Doc}}) ->
+handle({Queue, #change{seq = Seq, doc = #document{key = Key} = Doc}}) ->
     ?info("[ DBSync ]: Received change on queue ~p with seq ~p: ~p", [Queue, Seq, Doc]),
-    ok;
+    case is_file_scope(Doc) of
+        true ->
+            case get_space_id(Doc) of
+                {ok, SpaceId} ->
+                    ?info("Document ~p assigned to space ~p", [Key, SpaceId]);
+                {error, Reason} ->
+                    ?error("Unable to find space id for document ~p", [Doc]),
+                    {error, Reason}
+            end ;
+        false ->
+            ok
+    end;
 
 %% Unknown request
 handle(_Request) ->
@@ -104,3 +117,41 @@ state_put(Key, Value) ->
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
     worker_host:state_get(?MODULE, Key).
+
+
+is_file_scope(#document{value = #links{model = ModelName}}) ->
+    lists:member(ModelName, ?MODELS_TO_SYNC);
+is_file_scope(#document{value = Value}) when is_tuple(Value) ->
+    ModelName = element(1, Value),
+    lists:member(ModelName, ?MODELS_TO_SYNC).
+
+
+get_file_scope(#document{key = Key, value = #file_meta{}}) ->
+    Key;
+get_file_scope(#document{value = #links{key = DocKey, model = file_meta}}) ->
+    DocKey;
+get_file_scope(#document{value = #links{key = DocKey, model = file_location}}) ->
+    #model_config{store_level = StoreLevel} = file_location:model_init(),
+    {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
+    get_file_scope(Doc);
+get_file_scope(#document{value = #file_location{uuid = FileUUID}}) ->
+    FileUUID.
+
+
+get_space_id(#document{key = Key} = Doc) ->
+    case state_get({space_id, Key}) of
+        undefined ->
+            get_space_id_not_cached(Key, Doc);
+        SpaceId ->
+            {ok, SpaceId}
+    end.
+
+get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
+    FileUUID = get_file_scope(Doc),
+    case file_meta:get_scope({uuid, FileUUID}) of
+        {ok, #document{key = SpaceId}} ->
+            state_put({space_id, KeyToCache}, SpaceId),
+            {ok, SpaceId};
+        {error, Reason} ->
+            {error, Reason}
+    end.

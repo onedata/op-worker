@@ -24,8 +24,6 @@
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 -export([run_synchronized/3]).
 
--record(links, {key, link_map = #{}}).
-
 %% Batch size for list operation
 -define(LIST_BATCH_SIZE, 100).
 
