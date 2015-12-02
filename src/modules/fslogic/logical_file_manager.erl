@@ -67,7 +67,8 @@
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+-export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
+    remove_xattr/2, list_xattr/1, list_xattr/2]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -364,9 +365,16 @@ stat(SessId, FileKey) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
-get_xattr(Path, Key) ->
-    lfm_attrs:get_xattr(Path, Key).
+-spec get_xattr(Handle :: handle(), XattrName :: xattr_name()) ->
+    {ok, xattr_value()} | error_reply().
+get_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
+    get_xattr(SessId, {uuid, UUID}, XattrName).
+
+-spec get_xattr(session:id(), file_key(), xattr_name()) -> {ok, xattr_value()} | error_reply().
+get_xattr(SessId, FileKey, XattrName) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:get_xattr(CTX, FileUUID, XattrName).
 
 
 %%--------------------------------------------------------------------
@@ -374,9 +382,15 @@ get_xattr(Path, Key) ->
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
-set_xattr(Path, Key, Value) ->
-    lfm_attrs:set_xattr(Path, Key, Value).
+-spec set_xattr(handle(), #xattr{}) -> ok | error_reply().
+set_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Xattr) ->
+    set_xattr(SessId, {uuid, UUID}, Xattr).
+
+-spec set_xattr(session:id(), file_key(), #xattr{}) -> ok | error_reply().
+set_xattr(SessId, FileKey, Xattr) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:set_xattr(CTX, FileUUID, Xattr).
 
 
 %%--------------------------------------------------------------------
@@ -384,19 +398,30 @@ set_xattr(Path, Key, Value) ->
 %% Removes file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
-remove_xattr(Path, Key) ->
-    lfm_attrs:remove_xattr(Path, Key).
+-spec remove_xattr(handle(), xattr_name()) -> ok | error_reply().
+remove_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
+    remove_xattr(SessId, {uuid, UUID}, XattrName).
 
+-spec remove_xattr(session:id(), file_key(), xattr_name()) -> ok | error_reply().
+remove_xattr(SessId, FileKey, XattrName) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:remove_xattr(CTX, FileUUID, XattrName).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns complete list of extended attributes of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
-list_xattr(Path) ->
-    lfm_attrs:list_xattr(Path).
+-spec list_xattr(handle()) -> ok | error_reply().
+list_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    list_xattr(SessId, {uuid, UUID}).
+
+-spec list_xattr(session:id(), file_key()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:list_xattr(CTX, FileUUID).
 
 
 %%--------------------------------------------------------------------

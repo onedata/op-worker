@@ -14,6 +14,7 @@
 
 -include("modules/events/subscriptions.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Wrapper for all models' records
 -record(document, {
@@ -37,7 +38,8 @@
     task_pool,
     storage,
     file_location,
-    file_watcher
+    file_watcher,
+    xattr
 ]).
 
 %% List of all global caches

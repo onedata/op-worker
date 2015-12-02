@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([stat/2, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+-export([stat/2, get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2]).
 
 %%%===================================================================
 %%% API
@@ -28,7 +28,8 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(fslogic_worker:ctx(), FileKey :: file_id_or_path()) -> {ok, file_attributes()} | error_reply().
+-spec stat(fslogic_worker:ctx(), FileEntry :: file_key()) ->
+    {ok, file_attributes()} | error_reply().
 stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
     lfm_utils:call_fslogic(SessId, #get_file_attr{entry = FileEntry},
         fun(#file_attr{} = Attrs) ->
@@ -42,9 +43,13 @@ stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
-get_xattr(_Path, _Key) ->
-    {ok, <<"">>}.
+-spec get_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr_name()) ->
+    {ok, xattr_value()} | error_reply().
+get_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
+    lfm_utils:call_fslogic(SessId, #get_xattr{uuid = FileUuid, name = XattrName},
+        fun(#xattr{} = Xattr) ->
+            {ok, Xattr}
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -53,9 +58,11 @@ get_xattr(_Path, _Key) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
-set_xattr(_Path, _Key, _Value) ->
-    ok.
+-spec set_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), Xattr :: #xattr{}) ->
+    ok | error_reply().
+set_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, Xattr) ->
+    lfm_utils:call_fslogic(SessId, #set_xattr{uuid = FileUuid, xattr = Xattr},
+        fun(_) -> ok end).
 
 
 %%--------------------------------------------------------------------
@@ -64,10 +71,11 @@ set_xattr(_Path, _Key, _Value) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
-remove_xattr(_Path, _Key) ->
-    ok.
-
+-spec remove_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr_name()) ->
+    ok | error_reply().
+remove_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
+    lfm_utils:call_fslogic(SessId, #remove_xattr{uuid = FileUuid, name = XattrName},
+        fun(_) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -75,8 +83,11 @@ remove_xattr(_Path, _Key) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
-list_xattr(_Path) ->
-    {ok, []}.
-
+-spec list_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid()) ->
+    {ok, [xattr_name()]} | error_reply().
+list_xattr(#fslogic_ctx{session_id = SessId}, FileUuid) ->
+    lfm_utils:call_fslogic(SessId, #list_xattr{uuid = FileUuid},
+        fun(#xattr_list{names = Names}) ->
+            {ok, Names}
+        end).
 

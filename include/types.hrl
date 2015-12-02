@@ -33,7 +33,7 @@
 -type perms_octal() :: non_neg_integer().
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
 -type file_attributes() :: #file_attr{}.
--type xattr_key() :: binary().
+-type xattr_name() :: binary().
 -type xattr_value() :: binary().
 -type access_control_entity() :: term(). % TODO should be a proper record
 -type block_range() :: term(). % TODO should be a proper record
