@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Session management model, frequently invoked by incomming tcp
+%%% Session management model, frequently invoked by incoming tcp
 %%% connections in connection
 %%% @end
 %%%-------------------------------------------------------------------
@@ -23,8 +23,8 @@
 
 %% API
 -export([get_session_supervisor_and_node/1, get_event_manager/1,
-    get_sequencer_manager/1, get_communicator/1, get_auth/1,
-    get_rest_session_id/1]).
+    get_event_managers/0, get_sequencer_manager/1, get_communicator/1,
+    get_auth/1, get_rest_session_id/1]).
 
 -type id() :: binary() | dummy_session_id().
 -type dummy_session_id() :: #identity{}.
@@ -70,8 +70,6 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(#identity{} = Identity) ->
-    {ok, #document{key = Identity, value = #session{type = dummy, identity = Identity}}};
 get(?ROOT_SESS_ID) ->
     {ok, #document{key = ?ROOT_SESS_ID, value = #session{identity = #identity{user_id = ?ROOT_USER_ID}}}};
 get(Key) ->
@@ -165,9 +163,29 @@ get_session_supervisor_and_node(SessId) ->
 get_event_manager(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{event_manager = undefined}}} ->
-            {error, {not_found, event_manager}};
+            {error, {not_found, missing}};
         {ok, #document{value = #session{event_manager = EvtMan}}} ->
             {ok, EvtMan};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all event managers associated with any session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_event_managers() -> {ok, [{ok, EvtMan :: pid()} | {error, {not_found,
+    SessId :: session:id()}}]} | {error, Reason :: term()}.
+get_event_managers() ->
+    case session:list() of
+        {ok, Docs} ->
+            {ok, lists:map(fun
+                (#document{key = SessId, value = #session{event_manager = undefined}}) ->
+                    {error, {not_found, SessId}};
+                (#document{value = #session{event_manager = EvtMan}}) ->
+                    {ok, EvtMan}
+            end, Docs)};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -208,10 +226,10 @@ get_communicator(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns #auth{] record associated with session.
+%% Returns #auth{} record associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(SessId :: id()) -> {ok, #auth{}} |{error, Reason :: term()}.
+-spec get_auth(SessId :: id()) -> {ok, Auth :: #auth{}} |{error, Reason :: term()}.
 get_auth(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} ->

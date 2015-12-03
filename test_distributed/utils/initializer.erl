@@ -19,7 +19,9 @@
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
-    create_test_users_and_spaces/1, clean_test_users_and_spaces/1]).
+    create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
+    basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
+    remove_pending_messages/1, clear_models/2]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -27,6 +29,9 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc Setup and mocking related with users and spaces
+%%--------------------------------------------------------------------
 -spec create_test_users_and_spaces(Config :: list()) -> list().
 create_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -45,18 +50,82 @@ create_test_users_and_spaces(Config) ->
 
     initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
 
+%%--------------------------------------------------------------------
+%% @doc Cleanup and unmocking related with users and spaces
+%%--------------------------------------------------------------------
 -spec clean_test_users_and_spaces(Config :: list()) -> term().
 clean_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     initializer:teardown_sesion(Worker, Config),
-    mocks_teardown(Workers, [file_meta, gr_spaces]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates basic test session.
+%% @end
+%%--------------------------------------------------------------------
+-spec basic_session_setup(Worker :: node(), SessId :: session:id(),
+    Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
+basic_session_setup(Worker, SessId, Iden, Con, Config) ->
+    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+        reuse_or_create_session, [SessId, Iden, Con])),
+    [{session_id, SessId}, {identity, Iden} | Config].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes basic test session.
+%% @end
+%%--------------------------------------------------------------------
+-spec basic_session_teardown(Worker :: node(), Config :: term()) -> NewConfig :: term().
+basic_session_teardown(Worker, Config) ->
+    SessId = proplists:get_value(session_id, Config),
+    ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv remove_pending_messages(0)
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages() -> ok.
+remove_pending_messages() ->
+    remove_pending_messages(0).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes messages for process queue. Waits 'Timeout' milliseconds for the
+%% next message.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_pending_messages(Timeout :: timeout()) -> ok.
+remove_pending_messages(Timeout) ->
+    receive
+        _ -> remove_pending_messages(Timeout)
+    after
+        Timeout -> ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all records from models.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_models(Worker :: node(), Names :: [atom()]) -> ok.
+clear_models(Worker, Names) ->
+    lists:foreach(fun(Name) ->
+        {ok, Docs} = ?assertMatch({ok, _}, rpc:call(Worker, Name, list, [])),
+        lists:foreach(fun(#document{key = Key}) ->
+            ?assertEqual(ok, rpc:call(Worker, Name, delete, [Key]))
+        end, Docs)
+    end, Names).
+
+%%--------------------------------------------------------------------
+%% @doc Setup test users' sessions on server
+%%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
     [Spaces :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-
 setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     Self = self(),
 
@@ -69,7 +138,7 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     Iden = #identity{user_id = UserId},
     UserName = Name("username", UserNum),
 
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
@@ -85,6 +154,9 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
         | setup_session(Worker, R, Config)
     ].
 
+%%--------------------------------------------------------------------
+%% @doc Removes test users' sessions from server.
+%%--------------------------------------------------------------------
 -spec teardown_sesion(Worker :: node(), Config :: term()) -> NewConfig :: term().
 teardown_sesion(Worker, Config) ->
     lists:foldl(fun
@@ -112,6 +184,9 @@ teardown_sesion(Worker, Config) ->
             [Elem | Acc]
     end, [], Config).
 
+%%--------------------------------------------------------------------
+%% @doc Setups test storage on server and creates test storage dir
+%%--------------------------------------------------------------------
 -spec setup_storage(Config :: list()) -> list().
 setup_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -129,7 +204,9 @@ setup_storage(Config) ->
             )}]),
     [{storage_id, StorageId}, {storage_dir, TmpDir} | Config].
 
-
+%%--------------------------------------------------------------------
+%% @doc Removes test storage dir
+%%--------------------------------------------------------------------
 -spec teardown_storage(Config :: list()) -> string().
 teardown_storage(Config) ->
     TmpDir = ?config(storage_dir, Config),
@@ -140,6 +217,11 @@ teardown_storage(Config) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Appends Num to Text and converts it to binary.
+%%--------------------------------------------------------------------
+-spec name(Text :: string(), Num :: integer()) -> binary().
 name(Text, Num) ->
     list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
 
@@ -163,9 +245,7 @@ gr_spaces_mock_setup(Workers, Spaces) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Mocks file_meta module, so that creation of onedata user sends notification.
-%% @end
+%% @doc Mocks file_meta module, so that creation of onedata user sends notification.
 %%--------------------------------------------------------------------
 -spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
 file_meta_mock_setup(Workers) ->
@@ -177,15 +257,3 @@ file_meta_mock_setup(Workers) ->
             Self ! onedata_user_setup
         end
     ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Validates and unloads mocks.
-%% @end
-%%--------------------------------------------------------------------
--spec mocks_teardown(Workers :: node() | [node()],
-    Modules :: module() | [module()]) -> ok.
-mocks_teardown(Workers, Modules) ->
-    test_utils:mock_validate(Workers, Modules),
-    test_utils:mock_unload(Workers, Modules).

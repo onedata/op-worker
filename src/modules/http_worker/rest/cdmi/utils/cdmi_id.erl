@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
--export([uuid_to_objectid/1,objectid_to_uuid/1]).
+-export([uuid_to_objectid/1, objectid_to_uuid/1]).
 
 %% The SNMP Enterprise Number for your organization in network byte
 %% order. See RFC 2578 and
@@ -76,7 +76,7 @@
         16#8801, 16#48C0, 16#4980, 16#8941, 16#4B00, 16#8BC1, 16#8A81, 16#4A40,
         16#4E00, 16#8EC1, 16#8F81, 16#4F40, 16#8D01, 16#4DC0, 16#4C80, 16#8C41,
         16#4400, 16#84C1, 16#8581, 16#4540, 16#8701, 16#47C0, 16#4680, 16#8641,
-        16#8201, 16#42C0, 16#4380, 16#8341, 16#4100, 16#81C1, 16#8081, 16#4040 ]).
+        16#8201, 16#42C0, 16#4380, 16#8341, 16#4100, 16#81C1, 16#8081, 16#4040]).
 
 %%%===================================================================
 %%% API
@@ -85,20 +85,21 @@
 %%--------------------------------------------------------------------
 %% @doc Converts uuid to cdmi objectid format
 %%--------------------------------------------------------------------
--spec uuid_to_objectid(onedata_file_api:file_uuid()) -> binary() | {error,atom()}.
-uuid_to_objectid(Uuid)->
+-spec uuid_to_objectid(onedata_file_api:file_uuid()) -> binary() | {error, atom()}.
+uuid_to_objectid(Uuid) ->
     case build_objectid(Uuid) of
-        {error,Error} -> {error, Error};
+        {error, Error} -> {error, Error};
         Id -> list_to_binary(to_base16(Id))
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Converts cdmi objectid format to uuid
 %%--------------------------------------------------------------------
--spec objectid_to_uuid(binary()) -> onedata_file_api:file_uuid() | {error,atom()}.
+-spec objectid_to_uuid(binary()) -> onedata_file_api:file_uuid() | {error, atom()}.
 objectid_to_uuid(ObjectId) ->
     case from_base16(binary_to_list(ObjectId)) of
-        <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> -> binary_to_list(Data);
+        <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> ->
+            binary_to_list(Data);
         _Other -> {error, badarg}
     end.
 
@@ -111,7 +112,7 @@ objectid_to_uuid(ObjectId) ->
 %% expected to be whether a string or a binary.
 %% @end
 %%--------------------------------------------------------------------
--spec build_objectid(Data::string() | binary()) -> binary() | {error, atom()}.
+-spec build_objectid(Data :: binary()) -> binary() | {error, atom()}.
 build_objectid(Data) ->
     build_objectid(?ENTERPRISENUM, Data).
 
@@ -128,7 +129,7 @@ build_objectid(Data) ->
 %% +----------+------------+-----------+--------+-------+-----------+
 %% @end
 %%--------------------------------------------------------------------
--spec build_objectid(Enum::integer(), Data::string()|binary()) -> binary() | {error, atom()}.
+-spec build_objectid(Enum :: integer(), Data :: binary()) -> binary() | {error, atom()}.
 build_objectid(Enum, Data) when is_binary(Data) ->
     Length = size(Data),
     case (Length =< 32) of
@@ -143,7 +144,7 @@ build_objectid(Enum, Data) when is_binary(Data) ->
 %%--------------------------------------------------------------------
 %% @doc Convert an object ID to a Base16 encoded string.
 %%--------------------------------------------------------------------
--spec to_base16(Bin::binary()) -> string().
+-spec to_base16(Bin :: binary()) -> string().
 to_base16(Bin) ->
     lists:flatten([io_lib:format("~2.16.0B", [X]) ||
         X <- binary_to_list(Bin)]).
@@ -151,19 +152,19 @@ to_base16(Bin) ->
 %%--------------------------------------------------------------------
 %% @doc Convert an encoded object ID to its binary form.
 %%--------------------------------------------------------------------
--spec from_base16(Encoded::string()) -> binary().
+-spec from_base16(Encoded :: string()) -> binary().
 from_base16(Encoded) ->
     from_base16(Encoded, []).
 from_base16([], Acc) ->
     list_to_binary(lists:reverse(Acc));
-from_base16([X,Y | T], Acc) ->
-    {ok, [V], []} = io_lib:fread("~16u", [X,Y]),
+from_base16([X, Y | T], Acc) ->
+    {ok, [V], []} = io_lib:fread("~16u", [X, Y]),
     from_base16(T, [V | Acc]).
 
 %%--------------------------------------------------------------------
 %% @doc Computes CRC sum for given string
 %%--------------------------------------------------------------------
--spec crc16(Data::string()) -> integer().
+-spec crc16(Data :: string()) -> integer().
 crc16(Data) ->
     crc16(Data, 0).
 crc16([], Crc) ->

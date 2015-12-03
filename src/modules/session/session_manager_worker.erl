@@ -223,7 +223,7 @@ create_rest_session(Iden) ->
             value = #session{type = rest, identity = Iden}
     }) of
         {ok, SessId} ->
-            {ok, _} = start_session_sup(SessId, undefined),
+            {ok, _} = start_session_sup(SessId, none),
             {ok, created};
         {error, already_exists} ->
             reuse_or_create_rest_session(Iden);
@@ -268,7 +268,7 @@ remove_session(SessId) ->
 %% worker supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_sup(SessId :: session:id(), Con :: pid()) ->
+-spec start_session_sup(SessId :: session:id(), Con :: pid() | none) ->
     supervisor:startchild_ret().
 start_session_sup(SessId, Con) ->
     supervisor:start_child(?SESSION_WORKER_SUP, [SessId, Con]).

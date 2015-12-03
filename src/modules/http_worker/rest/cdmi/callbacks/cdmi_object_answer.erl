@@ -17,7 +17,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
--export([prepare/2, encoding_to_valuetransferencoding/1]).
+-export([prepare/2]).
 
 %%%===================================================================
 %%% API
@@ -39,7 +39,7 @@ prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
 prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
     [{<<"parentURI">>, <<>>} | prepare(Tail, State)];
 prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
-    ParentURI = utils:ensure_path_ends_with_slash(filename:dirname(Path)),
+    ParentURI = str_utils:ensure_ends_with_slash(filename:dirname(Path)),
     [{<<"parentURI">>, ParentURI} | prepare(Tail, State)];
 %% prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) -> todo introduce objectid
 %%     [{<<"parentID">>, <<>>} | prepare(Tail, State)];
@@ -49,16 +49,19 @@ prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
 %%     [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare(Tail, State)];
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, ?dataobject_capability_path} | prepare(Tail, State)];
-prepare([<<"completionStatus">> | Tail], #{attributes := #file_attr{completion_status = CompletionStatus}} = State) ->
-    [{<<"completionStatus">>, completion_status_to_binary(CompletionStatus)} | prepare(Tail, State)];
-prepare([<<"mimetype">> | Tail], #{attributes := #file_attr{mimetype = Mimetype}} = State) ->
+prepare([<<"completionStatus">> | Tail], #{path := Path} = State) ->
+    CompletionStatus = cdmi_metadata:get_completion_status(Path),
+    [{<<"completionStatus">>, CompletionStatus} | prepare(Tail, State)];
+prepare([<<"mimetype">> | Tail], #{path := Path} = State) ->
+    Mimetype = cdmi_metadata:get_mimetype(Path),
     [{<<"mimetype">>, Mimetype} | prepare(Tail, State)];
 prepare([<<"metadata">> | Tail], #{path := Path, attributes := Attrs} = State) ->
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Path, Attrs)} | prepare(Tail, State)];
 prepare([{<<"metadata">>, Prefix} | Tail], #{path := Path, attributes := Attrs} = State) ->
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Path, Prefix, Attrs)} | prepare(Tail, State)];
-prepare([<<"valuetransferencoding">> | Tail], #{attributes := #file_attr{encoding = Encoding}} = State) ->
-    [{<<"valuetransferencoding">>, encoding_to_valuetransferencoding(Encoding)} | prepare(Tail, State)];
+prepare([<<"valuetransferencoding">> | Tail], #{path := Path} = State) ->
+    Encoding = cdmi_metadata:get_encoding(Path),
+    [{<<"valuetransferencoding">>, Encoding} | prepare(Tail, State)];
 prepare([<<"value">> | Tail], State) ->
     [{<<"value">>, {range, default}} | prepare(Tail, State)];
 prepare([{<<"value">>, From, To} | Tail], State) ->
@@ -73,26 +76,6 @@ prepare([<<"valuerange">> | Tail], #{options := Opts, attributes := Attrs} = Sta
 prepare([_Other | Tail], State) ->
     prepare(Tail, State).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Converts file encoding to valuetransferencoding that will be used by cdmi
-%% to transfer file.
-%% @end
-%%--------------------------------------------------------------------
--spec encoding_to_valuetransferencoding(atom()) -> binary().
-encoding_to_valuetransferencoding(binary) -> <<"base64">>; % binary files are transfered as base64
-encoding_to_valuetransferencoding('utf-8') -> <<"utf-8">>.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Converts completion status in atom format to binary format.
-%% @end
-%%--------------------------------------------------------------------
--spec completion_status_to_binary(atom()) -> binary().
-completion_status_to_binary(complete) -> <<"Complete">>;
-completion_status_to_binary(processing) -> <<"Processing">>;
-completion_status_to_binary(error) -> <<"Error">>.

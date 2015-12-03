@@ -254,7 +254,7 @@ delete_resource(Req, State) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles incomming resources. Defined in content_types_accepted/2.
+%% Handles incoming resources. Defined in content_types_accepted/2.
 %% pre_handler stores user defined callbacks in its context, and this
 %% function delegates request to them.
 %% @end

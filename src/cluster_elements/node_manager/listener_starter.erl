@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% Path (relative to domain) on which cowboy expects incomming websocket connections with client and provider
+%% Path (relative to domain) on which cowboy expects incoming websocket connections with client and provider
 -define(ONECLIENT_URI_PATH, "/oneclient").
 -define(ONEPROVIDER_URI_PATH, "/oneprovider").
 

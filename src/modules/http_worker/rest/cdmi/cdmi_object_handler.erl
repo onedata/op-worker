@@ -26,7 +26,7 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi/2, put_cdmi/2, get_binary/2, put_binary/2]).
+-export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2]).
 
 -define(DEFAULT_FILE_PERMISSIONS, 8#664).
 
@@ -143,9 +143,10 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
-get_binary(Req, #{attributes := #file_attr{size = Size, mimetype = Mimetype}} = State) ->
+get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) ->
     % prepare response
     {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, State),
+    Mimetype = cdmi_metadata:get_mimetype(Path),
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
         case Ranges of
@@ -167,7 +168,7 @@ get_binary(Req, #{attributes := #file_attr{size = Size, mimetype = Mimetype}} = 
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path,attributes := #file_attr{size = Size, encoding = Encoding}}) ->
+get_cdmi(Req, State = #{options := Opts, path := Path, attributes := #file_attr{size = Size}}) ->
     NonEmptyOpts = case Opts of [] -> ?DEFAULT_GET_FILE_OPTS; _ -> Opts end,
     DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State),
 
@@ -175,8 +176,8 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path,attributes :
         {range, Range} ->
             % prepare response
             BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
-            ValueTransferEncoding = cdmi_object_answer:encoding_to_valuetransferencoding(Encoding),
-            JsonBodyWithoutValue = json:encode({struct, BodyWithoutValue}),
+            ValueTransferEncoding = cdmi_metadata:get_encoding(Path),
+            JsonBodyWithoutValue = json_utils:encode({struct, BodyWithoutValue}),
             JsonBodyPrefix =
                 case BodyWithoutValue of
                     [] -> <<"{\"value\":\"">>;
@@ -192,7 +193,7 @@ get_cdmi(Req, State = #{options := Opts, auth := Auth, path := Path,attributes :
             % reply
             {{stream, StreamSize, StreamFun}, Req, State};
         undefined ->
-            Response = json:encode({struct, DirCdmi}),
+            Response = json_utils:encode({struct, DirCdmi}),
             {Response, Req, State}
     end.
 
@@ -250,9 +251,118 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
-put_cdmi(Req, State) ->
-    {true, Req, State}.
+put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
+    % parse body
+    {ok, Body, Req0} = cdmi_arg_parser:parse_body(Req),
+
+    % prepare necessary data
+    {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
+    RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
+    RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
+    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
+    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
+    Value = proplists:get_value(<<"value">>, Body),
+    Range = get_range(Opts),
+    RawValue = cdmi_encoder:decode(Value, RequestedValueTransferEncoding, Range),
+    RawValueSize = byte_size(RawValue),
+    Attrs = get_attr(Auth, Path),
+
+    % create object using create/cp/mv
+    {ok, OperationPerformed} =
+        case {Attrs, RequestedCopyURI, RequestedMoveURI} of
+            {undefined, undefined, undefined} ->
+                {ok, _} = onedata_file_api:create(Auth, Path, 8#777),
+                {ok, created};
+            {#file_attr{}, undefined, undefined} ->
+                {ok, none};
+            {undefined, CopyURI, undefined} ->
+                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+            {undefined, undefined, MoveURI} ->
+                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+        end,
+
+    % update value and metadata depending on creation type
+    case OperationPerformed of
+        created ->
+            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
+            {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+            {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+
+            % return response
+            {ok, NewAttrs} = onedata_file_api:stat(Auth, {path, Path}),
+            cdmi_metadata:update_encoding(Path, ensure_encoding_defined(RequestedValueTransferEncoding)),
+            cdmi_metadata:update_mimetype(Path, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+            Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{attributes => NewAttrs}),
+            Response = json_utils:encode(Answer),
+            Req2 = cowboy_req:set_resp_body(Response, Req1),
+            {true, Req2, State};
+        CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
+            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
+            cdmi_metadata:update_encoding(Path, RequestedValueTransferEncoding),
+            cdmi_metadata:update_mimetype(Path, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+            {true, Req1, State};
+        none ->
+            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
+            cdmi_metadata:update_encoding(Path, RequestedValueTransferEncoding),
+            cdmi_metadata:update_mimetype(Path, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
+            case Range of
+            {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
+                    {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    {true, Req1, State};
+                undefined when is_binary(Value) ->
+                    {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+                    ok = onedata_file_api:truncate(FileHandler, 0),
+                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    {true, Req1, State};
+                undefined ->
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    {true, Req1, State};
+                _MalformedRange ->
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    throw(?invalid_range)
+            end
+    end.
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Same as lists:keyfind/3, but returns Default when key is undefined
+%%--------------------------------------------------------------------
+-spec get_range(Opts :: list()) -> {non_neg_integer(), non_neg_integer()} | undefined.
+get_range(Opts) ->
+    case lists:keyfind(<<"value">>, 1, Opts) of
+        {<<"value">>, From_, To_} -> {From_,To_};
+        false -> undefined
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Gets attributes of file, returns undefined when file does not exist
+%%--------------------------------------------------------------------
+-spec get_attr(onedata_auth_api:auth(), onedata_file_api:file_path()) ->
+    onedata_file_api:file_attributes() | undefined.
+get_attr(Auth, Path) ->
+    case onedata_file_api:stat(Auth, {path, Path}) of
+        {ok, Attrs} -> Attrs;
+        {error, ?ENOENT} -> undefined
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Returns given encoding or default value if it's undefined
+%%--------------------------------------------------------------------
+-spec ensure_encoding_defined(undefined | binary()) -> bianary().
+ensure_encoding_defined(undefined) ->
+    <<"utf-8">>;
+ensure_encoding_defined(Encoding) ->
+    Encoding.

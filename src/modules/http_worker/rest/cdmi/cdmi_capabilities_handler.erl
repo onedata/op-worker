@@ -70,7 +70,7 @@ get_cdmi_capability(Req, #{options := Opts} = State) ->
                       [] -> prepare_capability_ans(?default_get_capability_opts);
                       X -> prepare_capability_ans(X)
                     end,
-  Capabilities = json:encode(RawCapabilities),
+  Capabilities = json_utils:encode(RawCapabilities),
   {Capabilities, Req, State}.
 
 %% ====================================================================
@@ -102,6 +102,6 @@ prepare_capability_ans([<<"childrenrange">> | Tail]) ->
   [{<<"childrenrange">>, <<"0-1">>} | prepare_capability_ans(Tail)]; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
 prepare_capability_ans([<<"children">> | Tail]) ->
   [{<<"children">>, [
-    utils:ensure_path_ends_with_slash(filename:basename(?container_capability_path)),
-    utils:ensure_path_ends_with_slash(filename:basename(?dataobject_capability_path))
+    str_utils:ensure_ends_with_slash(filename:basename(?container_capability_path)),
+    str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))
   ]} | prepare_capability_ans(Tail)].
