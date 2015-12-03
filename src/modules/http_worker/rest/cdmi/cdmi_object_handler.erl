@@ -223,7 +223,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 
             % return response
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
-            cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end),
+            cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, ensure_encoding_defined(RequestedValueTransferEncoding)),
             cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
             cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {uuid, Uuid}, CdmiPartialFlag),
@@ -288,3 +288,12 @@ get_attr(Auth, Path) ->
         {ok, Attrs} -> Attrs;
         {error, ?ENOENT} -> undefined
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Returns given encoding or default value if it's undefined
+%%--------------------------------------------------------------------
+-spec ensure_encoding_defined(undefined | binary()) -> binary().
+ensure_encoding_defined(undefined) ->
+    <<"utf-8">>;
+ensure_encoding_defined(Encoding) ->
+    Encoding.
