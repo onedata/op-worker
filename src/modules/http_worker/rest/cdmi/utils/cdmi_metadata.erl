@@ -49,10 +49,15 @@
 get_user_metadata(Auth, FileKey) ->
     {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey),
     Metadata = lists:map(fun(Name) ->
-            {ok, #xattr{value = XattrValue}} = onedata_file_api:get_xattr(Auth, FileKey, Name),
-            {Name, XattrValue}
+            case onedata_file_api:get_xattr(Auth, FileKey, Name) of
+                {ok, #xattr{value = XattrValue}} ->
+                    {Name, XattrValue};
+                {error, ?ENOATTR} ->
+                    undefined
+            end
         end, Names),
-    filter_user_metadata(Metadata).
+    FilteredMetadata = lists:filter(fun(Name) -> Name =/= undefined end, Metadata),
+    filter_user_metadata(FilteredMetadata).
 
 %%--------------------------------------------------------------------
 %% @equiv update_user_metadata(Auth, FileKey, UserMetadata, []).
@@ -264,7 +269,7 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Attrs, Prefix) ->
                 <<"cdmi_mtime">> ->
                     [{<<"cdmi_mtime">>, integer_to_binary(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
                 <<"cdmi_owner">> ->
-                    [{<<"cdmi_owner">>, Attrs#file_attr.uid} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
+                    [{<<"cdmi_owner">>, integer_to_binary(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
                 <<"cdmi_acl">> ->
                     prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)
 %%                     case onedata_file_api:get_acl(FileKey) of %todo integrate with new acls

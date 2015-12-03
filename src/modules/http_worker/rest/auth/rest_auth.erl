@@ -100,14 +100,18 @@ authenticate_using_token(Req, Token) ->
 -spec authenticate_using_cert(req()) -> {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_cert(Req) ->
     Socket = cowboy_req:get(socket, Req),
-    {ok, Der} = ssl2:peercert(Socket),
-    Certificate = public_key:pkix_decode_cert(Der, otp),
-    case identity:get_or_fetch(Certificate) of
-        {ok, #document{value = Iden}} ->
-            {ok, _} = session_manager:reuse_or_create_rest_session(Iden),
-            SessionId = session:get_rest_session_id(Iden),
-            {{ok, SessionId}, Req};
+    case ssl2:peercert(Socket) of
+        {ok, Der} ->
+            Certificate = public_key:pkix_decode_cert(Der, otp),
+            case identity:get_or_fetch(Certificate) of
+                {ok, #document{value = Iden}} ->
+                    {ok, _} = session_manager:reuse_or_create_rest_session(Iden),
+                    SessionId = session:get_rest_session_id(Iden),
+                    {{ok, SessionId}, Req};
+                Error ->
+                    {Error, Req}
+            end;
         Error ->
-            {Error, Req}
+            Error
     end.
 
