@@ -220,7 +220,6 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
             cdmi_metadata:update_completion_status(Path, <<"Processing">>),
             cdmi_metadata:update_mimetype(Path, Mimetype),
             cdmi_metadata:update_encoding(Path, Encoding),
-            Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->

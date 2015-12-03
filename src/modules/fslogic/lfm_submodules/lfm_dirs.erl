@@ -77,7 +77,7 @@ get_children_count(SessId, {uuid, UUID}) ->
 %% as possible
 %% @end
 %%--------------------------------------------------------------------
--spec count_children(SessId :: session:id(), FileKey :: {uuid, file_uuid()},
+-spec count_children(SessId :: session:id(), UUID :: file_uuid(),
     Acc :: non_neg_integer()) -> non_neg_integer() | error_reply().
 count_children(SessId, UUID, Acc) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),

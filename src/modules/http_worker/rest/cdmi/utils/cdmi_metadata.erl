@@ -40,7 +40,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_user_metadata(Filepath :: onedata_file_api:file_path()) ->
-    [{Name :: binary(), Value :: binary()}] | no_return().
+    {ok, [{Name :: binary(), Value :: binary()}]} | no_return().
 get_user_metadata(_Filepath) ->
     {ok, [{<<"key">>, <<"value">>}]}. %todo
 
@@ -132,14 +132,14 @@ update_encoding(Filepath, Encoding) ->
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %%--------------------------------------------------------------------
--spec update_completion_status(string(), binary()) -> ok | no_return().
+-spec update_completion_status(binary(), binary()) -> ok | no_return().
 update_completion_status(_Filepath, undefined) -> ok;
 update_completion_status(Filepath, CompletionStatus)
     when CompletionStatus =:= <<"Complete">>
     orelse CompletionStatus =:= <<"Processing">>
     orelse CompletionStatus =:= <<"Error">> ->
     ok = onedata_file_api:set_xattr(
-        Filepath, ?completion_status_xattr_key, CompletionStatus).
+        {path, Filepath}, ?completion_status_xattr_key, CompletionStatus).
 
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file,  according to X-CDMI-Partial flag

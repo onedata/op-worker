@@ -111,7 +111,7 @@ objectid_to_uuid(ObjectId) ->
 %% expected to be whether a string or a binary.
 %% @end
 %%--------------------------------------------------------------------
--spec build_objectid(Data::{string() | binary()}) -> binary() | {error, atom()}.
+-spec build_objectid(Data::string() | binary()) -> binary() | {error, atom()}.
 build_objectid(Data) ->
     build_objectid(?ENTERPRISENUM, Data).
 
