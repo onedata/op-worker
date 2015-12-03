@@ -412,8 +412,7 @@ update_file_test(Config) ->
     RequestBody3 = ?TEST_FILE_CONTENT,
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, FullName, put, [?USER_1_TOKEN_HEADER ], RequestBody3),
-    %%TODO change code to 204 after adding tests for cdmi cases
-    ?assertEqual(201,Code3),
+    ?assertEqual(204,Code3),
 
     ?assert(object_exists(Config, FullName)),
     ?assertEqual(?TEST_FILE_CONTENT,
@@ -700,7 +699,10 @@ object_exists(Config, Path) ->
 create_file(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
-    {ok, Mode} = application:get_env(?APP_NAME, default_file_mode),
+
+%%     TODO application:get_env doesn't work in ct_test
+%%     {ok, Mode} = application:get_env(?APP_NAME, default_file_mode),
+    Mode = 8#664,
     lfm_proxy:create(Worker, SessionId, absolute_binary_path(Path), Mode).
 
 open_file(Config, Path, OpenMode) ->

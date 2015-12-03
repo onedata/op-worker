@@ -117,7 +117,7 @@ get_cdmi(Req, #{options := Options} = State) ->
                      _ -> Options
                  end,
     DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
-    Response = json:encode({struct, DirCdmi}),
+    Response = json_utils:encode({struct, DirCdmi}),
     {Response, Req, State}.
 
 %%--------------------------------------------------------------------
