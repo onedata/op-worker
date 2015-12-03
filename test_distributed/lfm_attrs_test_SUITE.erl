@@ -25,11 +25,12 @@
     end_per_testcase/2]).
 
 %% tests
--export([empty_xattr_test/1, crud_xattr_test/1]).
+-export([empty_xattr_test/1, crud_xattr_test/1, list_xattr_test/1, remove_file_test/1]).
 
 -performance({test_cases, []}).
 all() -> [
-    empty_xattr_test, crud_xattr_test
+    empty_xattr_test, crud_xattr_test, list_xattr_test
+%%     remove_file_test % todo fix removal of datastore links and enable this
 ].
 
 %%%====================================================================
@@ -67,6 +68,40 @@ crud_xattr_test(Config) ->
 
     WholeCRUD(),
     WholeCRUD().
+
+list_xattr_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    Path = <<"/file">>,
+    Name1 = <<"name1">>,
+    Value1 = <<"value1">>,
+    Xattr1 = #xattr{name = Name1, value = Value1},
+    Name2 = <<"name2">>,
+    Value2 = <<"value2">>,
+    Xattr2 = #xattr{name = Name2, value = Value2},
+    {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr2)),
+    ?assertEqual({ok, [Name2, Name1]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
+%%     ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {uuid, Uuid}, Name1)), todo fix removal of datastore links and enable this
+%%     timer:sleep(5000),
+%%     ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
+
+remove_file_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    Path = <<"/file">>,
+    Name1 = <<"name1">>,
+    Value1 = <<"value1">>,
+    Xattr1 = #xattr{name = Name1, value = Value1},
+    {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
+    ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {uuid, Uuid})),
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

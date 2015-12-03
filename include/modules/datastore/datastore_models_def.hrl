@@ -48,7 +48,8 @@
     file_meta,
     storage,
     file_location,
-    file_watcher
+    file_watcher,
+    xattr
 ]).
 
 %% List of all local caches

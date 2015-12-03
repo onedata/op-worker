@@ -120,7 +120,7 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document = #document{key = {Uuid, Name}}) ->
+create(Document = #document{key = {Uuid, Name} = Key}) ->
     case datastore:create(?STORE_LEVEL, Document) of
         {ok, Key}->
             ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
@@ -147,7 +147,7 @@ get(Key) ->
 delete({Uuid, Name} = Key) ->
     case datastore:delete(?STORE_LEVEL, ?MODULE, Key) of
         ok ->
-            datastore:delete_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}});
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}});
         Error ->
             Error
     end.
