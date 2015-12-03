@@ -361,7 +361,7 @@ get_attr(Auth, Path) ->
 %%--------------------------------------------------------------------
 %% @doc Returns given encoding or default value if it's undefined
 %%--------------------------------------------------------------------
--spec ensure_encoding_defined(undefined | binary()) -> bianary().
+-spec ensure_encoding_defined(undefined | binary()) -> binary().
 ensure_encoding_defined(undefined) ->
     <<"utf-8">>;
 ensure_encoding_defined(Encoding) ->
