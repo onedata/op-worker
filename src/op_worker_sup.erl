@@ -64,6 +64,7 @@ init([]) ->
     MaxRestarts = 5,
     RestartTimeWindowSecs = 10,
     {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+        cluster_worker_specs:main_worker_sup_spec()
     ]}}.
 
 
