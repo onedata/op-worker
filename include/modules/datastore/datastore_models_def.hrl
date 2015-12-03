@@ -59,7 +59,7 @@
     deleted_links = [] :: list()
 }).
 
-%% Sample model with example fields
+%% Description of task to be done
 -record(task_pool, {
     task :: task_manager:task(),
     owner :: pid(),

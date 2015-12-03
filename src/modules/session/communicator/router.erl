@@ -77,22 +77,27 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 -spec route_and_ignore_answer(#client_message{}) -> ok.
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #event{} = Evt}) ->
-    event:emit(Evt, SessId);
+    event:emit(Evt, SessId),
+    ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #events{events = Evts}}) ->
-    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, SessId) end, Evts);
+    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, SessId) end, Evts),
+    ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription{} = Sub}) ->
-    event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId);
+    event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId),
+    ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription_cancellation{} = SubCan}) ->
-    event:unsubscribe(SubCan, SessId);
+    event:unsubscribe(SubCan, SessId),
+    ok;
 % Message that updates the #auth{} record in given session (originates from
 % #'Token' client message).
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #auth{} = Auth}) ->
     % This function performs an async call to session manager worker.
-    {ok, SessId} = session:update(SessId, #{auth => Auth}).
+    {ok, SessId} = session:update(SessId, #{auth => Auth}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc

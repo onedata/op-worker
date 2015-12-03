@@ -52,7 +52,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server.
+%% Starts the connection.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(Ref :: atom(), Socket :: ssl2:socket(), Transport :: atom(),
@@ -62,7 +62,7 @@ start_link(Ref, Socket, Transport, Opts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes the server.
+%% Initializes the connection.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term(), Socket :: ssl2:socket(), Transport :: atom(), Opts :: list()) ->

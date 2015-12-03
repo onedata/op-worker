@@ -71,7 +71,7 @@ start_link(SeqManSup, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the server. Returns timeout equal to zero, so that
+%% Initializes the sequencer manager. Returns timeout equal to zero, so that
 %% sequencer manager receives 'timeout' message in handle_info immediately after
 %% initialization. This mechanism is introduced in order to avoid deadlock
 %% when asking sequencer manager supervisor for sequencer stream supervisor pid
@@ -133,7 +133,7 @@ handle_cast({unregister_in_stream, StmId}, #state{sequencer_in_streams = Stms} =
 handle_cast({unregister_out_stream, StmId}, #state{sequencer_out_streams = Stms} = State) ->
     {noreply, State#state{sequencer_out_streams = maps:remove(StmId, Stms)}};
 
-handle_cast({close_stream, StmId}, State) ->
+handle_cast({close_stream, StmId}, #state{session_id = SessId} = State) ->
     ?debug("Closing stream ~p in sequencer manager for session ~p", [StmId, SessId]),
     forward_to_sequencer_out_stream(#server_message{
         message_stream = #message_stream{stream_id = StmId},
@@ -196,9 +196,6 @@ handle_cast(Request, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info({'EXIT', SeqManSup, shutdown}, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {stop, normal, State};
-
-handle_info({'EXIT', _, normal}, State) ->
-    {noreply, State};
 
 handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {ok, SeqInStmSup} = sequencer_manager_sup:get_sequencer_stream_sup(

@@ -85,7 +85,7 @@ start_link(EvtMan, Sub, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the server.
+%% Initializes the event stream.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
@@ -157,7 +157,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info({'EXIT', EvtMan, shutdown}, #state{event_manager = EvtMan} = State) ->
+handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
 
 handle_info({execute_event_handler, Ref}, #state{emission_ref = Ref} = State) ->

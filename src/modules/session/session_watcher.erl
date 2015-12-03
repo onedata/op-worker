@@ -38,7 +38,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the sequencer manager.
+%% Starts the session watcher.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(SessId :: session:id(), SessType :: session:type()) ->
@@ -53,11 +53,7 @@ start_link(SessId, SessType) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the server. Returns timeout equal to zero, so that
-%% sequencer manager receives 'timeout' message in handle_info immediately after
-%% initialization. This mechanism is introduced in order to avoid deadlock
-%% when asking sequencer manager supervisor for sequencer stream supervisor pid
-%% during supervision tree creation.
+%% Initializes the session watcher.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->

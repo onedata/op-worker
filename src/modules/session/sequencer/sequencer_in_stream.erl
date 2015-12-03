@@ -156,9 +156,6 @@ handle_sync_event(Event, From, StateName, State) ->
 handle_info({'EXIT', _, shutdown}, _, State) ->
     {stop, normal, State};
 
-handle_info({'EXIT', _, normal}, StateName, State) ->
-    {next_state, StateName, State};
-
 handle_info(Info, StateName, State) ->
     ?log_bad_request({Info, StateName}),
     {next_state, StateName, State}.
