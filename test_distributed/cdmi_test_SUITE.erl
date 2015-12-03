@@ -74,8 +74,8 @@ list_dir_test(Config) ->
             [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
 
     ?assertEqual(200, Code1),
-    ?assertEqual(proplists:get_value("content-type", Headers1),
-        "application/cdmi-container"),
+    ?assertEqual(proplists:get_value(<<"content-type">>, Headers1),
+        <<"application/cdmi-container">>),
     CdmiResponse1 = json_utils:decode(Response1),
     ?assertEqual(<<"application/cdmi-container">>,
         proplists:get_value(<<"objectType">>,CdmiResponse1)),
