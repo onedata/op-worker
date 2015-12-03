@@ -36,7 +36,7 @@
 %% @doc Gets extended attribute with given name
 %%--------------------------------------------------------------------
 -spec get_by_name(file_meta:uuid(), xattr:name()) ->
-    {ok, #xattr{}} | datastore:generic_error().
+    {ok, datastore:document()} | datastore:get_error().
 get_by_name(FileUuid, XattrName) ->
     xattr:get({FileUuid, XattrName}).
 

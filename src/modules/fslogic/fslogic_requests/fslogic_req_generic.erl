@@ -198,7 +198,7 @@ rename_file(_CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
-get_xattr(_CTX, FileUuid, XattrName) ->
+get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:get_by_name(FileUuid, XattrName) of
         {ok, #document{value = Xattr}} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Xattr};
@@ -215,9 +215,9 @@ get_xattr(_CTX, FileUuid, XattrName) ->
 %%--------------------------------------------------------------------
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
     #fuse_response{} | no_return().
-set_xattr(_CTX, FileUuid, Xattr) ->
+set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
-        ok ->
+        {ok, _} ->
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -230,7 +230,7 @@ set_xattr(_CTX, FileUuid, Xattr) ->
 %%--------------------------------------------------------------------
 -spec remove_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
-remove_xattr(_CTX, FileUuid, XattrName) ->
+remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
             #fuse_response{status = #status{code = ?OK}};
@@ -245,7 +245,7 @@ remove_xattr(_CTX, FileUuid, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
-list_xattr(_CTX, FileUuid) ->
+list_xattr(_CTX, {uuid, FileUuid}) ->
     case xattr:list(FileUuid) of
         {ok, List} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = #xattr_list{names = List}};

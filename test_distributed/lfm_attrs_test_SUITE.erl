@@ -25,18 +25,18 @@
     end_per_testcase/2]).
 
 %% tests
--export([lfm_empty_xattr_test/1, lfm_set_and_get_xattr_test/1]).
+-export([empty_xattr_test/1, set_and_get_xattr_test/1]).
 
 -performance({test_cases, []}).
 all() -> [
-    lfm_empty_xattr_test, lfm_set_and_get_xattr_test
+    empty_xattr_test, set_and_get_xattr_test
 ].
 
 %%%====================================================================
 %%% Test function
 %%%====================================================================
 
-lfm_empty_xattr_test(Config) ->
+empty_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     Path = <<"/file">>,
@@ -46,7 +46,7 @@ lfm_empty_xattr_test(Config) ->
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
 
-lfm_set_and_get_xattr_test(Config) ->
+set_and_get_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     Path = <<"/file">>,
