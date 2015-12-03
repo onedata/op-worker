@@ -64,7 +64,7 @@ prepare([<<"childrenrange">> | Tail], #{options := Opts, path := Path, auth := A
                 {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
                 normalize_childrenrange(Begin, End, ChildNum, MaxChildren);
             _ -> case ChildNum of
-                     0 -> {undefined, undefined}
+                     0 -> {undefined, undefined};
                      _ -> {0, ChildNum - 1}
                  end
         end,

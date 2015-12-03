@@ -113,7 +113,7 @@ delete_resource(Req, State) ->
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, #{options := Options} = State) ->
     NewOptions = case Options of
-                     [] -> ?default_get_dir_opts;
+                     [] -> ?DEFAULT_GET_DIR_OPTS;
                      _ -> Options
                  end,
     DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
