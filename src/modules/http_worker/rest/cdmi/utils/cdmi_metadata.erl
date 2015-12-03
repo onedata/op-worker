@@ -38,8 +38,8 @@
 %% without "cdmi_" prefix.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_metadata(Filepath :: any()) -> % todo change Filepath to onedata_file_api:file_path()
-    [{Name :: binary(), Value :: binary()}].
+-spec get_user_metadata(Filepath :: onedata_file_api:file_path()) ->
+    {ok, [{Name :: binary(), Value :: binary()}]}.
 get_user_metadata(_Filepath) ->
     {ok, [{<<"key">>, <<"value">>}]}. %todo
 
@@ -88,11 +88,11 @@ prepare_metadata(_Filepath, _Prefix, _Attrs) ->
 get_mimetype(Filepath) ->
     case onedata_file_api:get_xattr(Filepath, ?MIMETYPE_XATTR_KEY) of
         {ok, <<"">>} ->
-            ?MIMETYPE_DEFAULT_VALUE;
-        {ok, Value} ->
-            Value;
-        {error, ?ENOENT} ->
             ?MIMETYPE_DEFAULT_VALUE
+%%         {ok, Value} -> todo uncomment when xattrs are implemented
+%%             Value;
+%%         {error, ?ENOENT} ->
+%%             ?MIMETYPE_DEFAULT_VALUE
     end.
 
 %%--------------------------------------------------------------------
@@ -104,11 +104,11 @@ get_mimetype(Filepath) ->
 get_encoding(Filepath) ->
     case onedata_file_api:get_xattr(Filepath, ?ENCODING_XATTR_KEY) of
         {ok, <<"">>} ->
-            ?ENCODING_DEFAULT_VALUE;
-        {ok, Value} ->
-            Value;
-        {error, ?ENOENT} ->
             ?ENCODING_DEFAULT_VALUE
+%%         {ok, Value} -> todo uncomment when xattrs are implemented
+%%             Value;
+%%         {error, ?ENOENT} ->
+%%             ?ENCODING_DEFAULT_VALUE
     end.
 
 %%--------------------------------------------------------------------
@@ -121,17 +121,18 @@ get_encoding(Filepath) ->
 get_completion_status(Filepath) ->
     case onedata_file_api:get_xattr(Filepath, ?COMPLETION_STATUS_XATTR_KEY) of
         {ok, <<"">>} ->
-            ?COMPLETION_STATUS_DEFAULT_VALUE;
-        {ok, Value} ->
-            Value;
-        {error, ?ENOENT} ->
             ?COMPLETION_STATUS_DEFAULT_VALUE
+%%         {ok, Value} -> todo uncomment when xattrs are implemented
+%%             Value;
+%%         {error, ?ENOENT} ->
+%%             ?COMPLETION_STATUS_DEFAULT_VALUE
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Updates mimetype associated with file
 %%--------------------------------------------------------------------
--spec update_mimetype(onedata_file_api:file_path(), binary()) -> ok | no_return().
+-spec update_mimetype(onedata_file_api:file_path(), binary() | undefined) ->
+    ok | no_return().
 update_mimetype(_Filepath, undefined) -> ok;
 update_mimetype(Filepath, Mimetype) ->
     ok = onedata_file_api:set_xattr(Filepath, ?MIMETYPE_XATTR_KEY, Mimetype).
@@ -139,7 +140,8 @@ update_mimetype(Filepath, Mimetype) ->
 %%--------------------------------------------------------------------
 %% @doc Updates valuetransferencoding associated with file
 %%--------------------------------------------------------------------
--spec update_encoding(onedata_file_api:file_path(), binary()) -> ok | no_return().
+-spec update_encoding(onedata_file_api:file_path(), binary() | undefined) ->
+    ok | no_return().
 update_encoding(_Filepath, undefined) -> ok;
 update_encoding(Filepath, Encoding) ->
     ok = onedata_file_api:set_xattr(Filepath, ?ENCODING_XATTR_KEY, Encoding).
@@ -147,7 +149,7 @@ update_encoding(Filepath, Encoding) ->
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %%--------------------------------------------------------------------
--spec update_completion_status(onedata_file_api:file_path(), binary()) ->
+-spec update_completion_status(onedata_file_api:file_path(), binary() | undefined) ->
     ok | no_return().
 update_completion_status(_Filepath, undefined) -> ok;
 update_completion_status(Filepath, CompletionStatus)
