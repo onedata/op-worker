@@ -62,7 +62,7 @@ all() ->
 % Tests cdmi container GET request (also refered as LIST)
 list_dir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    create_dir(Config, ?TEST_DIR_NAME ++ "/"),
+    mkdir(Config, ?TEST_DIR_NAME ++ "/"),
     ?assertEqual(true, object_exists(Config, ?TEST_DIR_NAME ++ "/")),
     create_file(Config, filename:join(?TEST_DIR_NAME, ?TEST_FILE_NAME)),
     ?assertEqual(true,
@@ -73,10 +73,10 @@ list_dir_test(Config) ->
         do_request(Worker, ?TEST_DIR_NAME++"/", get,
             [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
 
-    ?assertEqual("200", Code1),
+    ?assertEqual(200, Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1),
         "application/cdmi-container"),
-    {struct, CdmiResponse1} = mochijson2:decode(Response1),
+    CdmiResponse1 = json_utils:decode(Response1),
     ?assertEqual(<<"application/cdmi-container">>,
         proplists:get_value(<<"objectType">>,CdmiResponse1)),
     ?assertEqual(<<"dir/">>,
@@ -92,8 +92,8 @@ list_dir_test(Config) ->
     {ok, Code2, _Headers2, Response2} =
         do_request(Worker, [], get,
             [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
-    ?assertEqual("200", Code2),
-    {struct,CdmiResponse2} = mochijson2:decode(Response2),
+    ?assertEqual(200, Code2),
+    CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiResponse2)),
     ?assertEqual([<<"spaces/">>,<<"dir/">>],
         proplists:get_value(<<"children">>,CdmiResponse2)),
@@ -103,15 +103,15 @@ list_dir_test(Config) ->
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "nonexisting_dir/",
             get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
-    ?assertEqual("404",Code3),
+    ?assertEqual(404,Code3),
     %%------------------------------
 
     %%-- selective params list -----
     {ok, Code4, _Headers4, Response4} =
         do_request(Worker, ?TEST_DIR_NAME ++ "/?children;objectName",
             get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
-    ?assertEqual("200", Code4),
-    {struct,CdmiResponse4} = mochijson2:decode(Response4),
+    ?assertEqual(200, Code4),
+    CdmiResponse4 = json_utils:decode(Response4),
     ?assertEqual(<<"dir/">>,
         proplists:get_value(<<"objectName">>,CdmiResponse4)),
     ?assertEqual([<<"file.txt">>],
@@ -121,7 +121,7 @@ list_dir_test(Config) ->
 
     %%---- childrenrange list ------
     ChildrangeDir = "childrange/",
-    create_dir(Config, ChildrangeDir),
+    mkdir(Config, ChildrangeDir),
     Childs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
               "12", "13", "14"],
     ChildsBinaries = lists:map(fun(X) -> list_to_binary(X) end, Childs),
@@ -132,8 +132,8 @@ list_dir_test(Config) ->
     {ok, Code5, _Headers5, Response5} =
         do_request(Worker, ChildrangeDir ++ "?children;childrenrange",
             get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
-    ?assertEqual("200", Code5),
-    {struct,CdmiResponse5} = mochijson2:decode(Response5),
+    ?assertEqual(200, Code5),
+    CdmiResponse5 = json_utils:decode(Response5),
     ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
     ?assert(is_list(ChildrenResponse1)),
     lists:foreach(fun(Name) ->
@@ -151,12 +151,12 @@ list_dir_test(Config) ->
     {ok, Code8, _, Response8} =
         do_request(Worker, ChildrangeDir ++ "?children:14-14;childrenrange", get,
             [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER ], []),
-    ?assertEqual("200", Code6),
-    ?assertEqual("200", Code7),
-    ?assertEqual("200", Code8),
-    {struct,CdmiResponse6} = mochijson2:decode(Response6),
-    {struct,CdmiResponse7} = mochijson2:decode(Response7),
-    {struct,CdmiResponse8} = mochijson2:decode(Response8),
+    ?assertEqual(200, Code6),
+    ?assertEqual(200, Code7),
+    ?assertEqual(200, Code8),
+    CdmiResponse6 = json_utils:decode(Response6),
+    CdmiResponse7 = json_utils:decode(Response7),
+    CdmiResponse8 = json_utils:decode(Response8),
     ChildrenResponse6 = proplists:get_value(<<"children">>,CdmiResponse6),
     ChildrenResponse7 = proplists:get_value(<<"children">>,CdmiResponse7),
     ChildrenResponse8 = proplists:get_value(<<"children">>,CdmiResponse8),
@@ -296,6 +296,7 @@ create_file_test(Config) ->
     ToCreate = "file.txt",
     ToCreate2 = filename:join(["spaces", binary_to_list(SpaceName), "file1.txt"]),
     ToCreate4 = "file2",
+    ToCreate5 = "file3",
     FileContent = <<"File content!">>,
 
     %%-------- basic create --------
@@ -412,39 +413,37 @@ update_file_test(Config) ->
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, FullName, put, [?USER_1_TOKEN_HEADER ], RequestBody3),
     %%TODO change code to 204 after adding tests for cdmi cases
-    ?assertEqual("201",Code3),
+    ?assertEqual(201,Code3),
 
     ?assert(object_exists(Config, FullName)),
     ?assertEqual(?TEST_FILE_CONTENT,
-        get_file_content(Config, FullName, TestSize, ?FILE_BEGINNING)),
+        get_file_content(Config, FullName)),
     %%------------------------------
 
     %%---- value update, http ------
     UpdateValue = <<"123">>,
-    RequestHeaders4 = [{"content-range", "0-2"}],
+    RequestHeaders4 = [{<<"content-range">>, <<"0-2">>}],
     {ok, Code4, _Headers4, _Response4} =
         do_request(Worker, FullName,
             put, [?USER_1_TOKEN_HEADER | RequestHeaders4], UpdateValue),
-    ?assertEqual("204",Code4),
+    ?assertEqual(204,Code4),
 
     ?assert(object_exists(Config, FullName)),
     ?assertEqual(<<"123t_file_content">>,
-        get_file_content(
-            Config, FullName, get_content_size(<<"123t_file_content">>), ?FILE_BEGINNING)),
+        get_file_content(Config, FullName)),
     %%------------------------------
 
     %%---- value update, http error ------
     UpdateValue = <<"123">>,
-    RequestHeaders5 = [{"content-range", "0-2,3-4"}],
+    RequestHeaders5 = [{<<"content-range">>, <<"0-2,3-4">>}],
     {ok, Code5, _Headers5, _Response5} =
         do_request(Worker, FullName, put, [?USER_1_TOKEN_HEADER | RequestHeaders5],
             UpdateValue),
-    ?assertEqual("400",Code5),
+    ?assertEqual(400,Code5),
 
     ?assert(object_exists(Config, FullName)),
     ?assertEqual(<<"123t_file_content">>,
-        get_file_content(
-            Config, FullName, get_content_size(<<"123t_file_content">>), ?FILE_BEGINNING)).
+        get_file_content(Config, FullName)).
     %%------------------------------
 
 choose_adequate_handler(Config) ->
