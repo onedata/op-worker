@@ -150,7 +150,7 @@ mkdir(Worker, SessId, Path) ->
             Host ! {self(), Result}
         end).
 
--spec get_xattr(node(), session:id(), file_id_or_path(), binary()) ->
+-spec get_xattr(node(), session:id(), file_id_or_path(), xattr:name()) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey) ->
     exec(Worker,
@@ -169,7 +169,7 @@ set_xattr(Worker, SessId, FileKey, Xattr) ->
             Host ! {self(), Result}
         end).
 
--spec remove_xattr(node(), session:id(), file_id_or_path(), xattr_name()) -> ok | error_reply().
+-spec remove_xattr(node(), session:id(), file_id_or_path(), xattr:name()) -> ok | error_reply().
 remove_xattr(Worker, SessId, FileKey, XattrKey) ->
     exec(Worker,
         fun(Host) ->
@@ -178,7 +178,7 @@ remove_xattr(Worker, SessId, FileKey, XattrKey) ->
             Host ! {self(), Result}
         end).
 
--spec list_xattr(node(), session:id(), file_id_or_path()) -> ok | error_reply().
+-spec list_xattr(node(), session:id(), file_id_or_path()) -> {ok, [xattr:name()]} | error_reply().
 list_xattr(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->

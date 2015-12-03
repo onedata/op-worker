@@ -365,12 +365,12 @@ stat(SessId, FileKey) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(Handle :: handle(), XattrName :: xattr_name()) ->
-    {ok, xattr_value()} | error_reply().
+-spec get_xattr(Handle :: handle(), XattrName :: xattr:name()) ->
+    {ok, #xattr{}} | error_reply().
 get_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
     get_xattr(SessId, {uuid, UUID}, XattrName).
 
--spec get_xattr(session:id(), file_key(), xattr_name()) -> {ok, xattr_value()} | error_reply().
+-spec get_xattr(session:id(), file_key(), xattr:name()) -> {ok, #xattr{}} | error_reply().
 get_xattr(SessId, FileKey, XattrName) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
@@ -398,11 +398,11 @@ set_xattr(SessId, FileKey, Xattr) ->
 %% Removes file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(handle(), xattr_name()) -> ok | error_reply().
+-spec remove_xattr(handle(), xattr:name()) -> ok | error_reply().
 remove_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
     remove_xattr(SessId, {uuid, UUID}, XattrName).
 
--spec remove_xattr(session:id(), file_key(), xattr_name()) -> ok | error_reply().
+-spec remove_xattr(session:id(), file_key(), xattr:name()) -> ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
@@ -413,11 +413,11 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %% Returns complete list of extended attributes of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(handle()) -> ok | error_reply().
+-spec list_xattr(handle()) -> {ok, [xattr:name()]} | error_reply().
 list_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     list_xattr(SessId, {uuid, UUID}).
 
--spec list_xattr(session:id(), file_key()) -> {ok, [xattr_name()]} | error_reply().
+-spec list_xattr(session:id(), file_key()) -> {ok, [xattr:name()]} | error_reply().
 list_xattr(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUUID} = ensure_uuid(CTX, FileKey),

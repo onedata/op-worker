@@ -43,8 +43,8 @@ stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr_name()) ->
-    {ok, xattr_value()} | error_reply().
+-spec get_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr:name()) ->
+    {ok, xattr:value()} | error_reply().
 get_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
     lfm_utils:call_fslogic(SessId, #get_xattr{uuid = FileUuid, name = XattrName},
         fun(#xattr{} = Xattr) ->
@@ -71,7 +71,7 @@ set_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, Xattr) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr_name()) ->
+-spec remove_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr:name()) ->
     ok | error_reply().
 remove_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
     lfm_utils:call_fslogic(SessId, #remove_xattr{uuid = FileUuid, name = XattrName},
@@ -84,7 +84,7 @@ remove_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid()) ->
-    {ok, [xattr_name()]} | error_reply().
+    {ok, [xattr:name()]} | error_reply().
 list_xattr(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #list_xattr{uuid = FileUuid},
         fun(#xattr_list{names = Names}) ->

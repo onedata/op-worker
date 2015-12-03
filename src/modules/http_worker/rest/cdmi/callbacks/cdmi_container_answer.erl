@@ -53,12 +53,12 @@ prepare([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, ?container_capability_path} | prepare(Tail, State)];
 prepare([<<"completionStatus">> | Tail], State) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare(Tail, State)];
-prepare([<<"metadata">> | Tail], #{path := Path, attributes := Attrs} = State) ->
-    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Path, Attrs)} | prepare(Tail, State)];
-prepare([{<<"metadata">>, Prefix} | Tail], #{path := Path, attributes := Attrs} = State) ->
-    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Path, Prefix, Attrs)} | prepare(Tail, State)];
-prepare([<<"childrenrange">> | Tail], #{options := Opts, path := Path, auth := Auth} = State) ->
-    {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {path, Path}),
+prepare([<<"metadata">> | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Auth, {uuid, Uuid}, Attrs)} | prepare(Tail, State)];
+prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
+    [{<<"metadata">>, cdmi_metadata:prepare_metadata(Auth, {uuid, Uuid}, Prefix, Attrs)} | prepare(Tail, State)];
+prepare([<<"childrenrange">> | Tail], #{options := Opts, attributes := #file_attr{uuid = Uuid}, auth := Auth} = State) ->
+    {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {uuid, Uuid}),
     {From, To} =
         case lists:keyfind(<<"children">>, 1, Opts) of
             {<<"children">>, Begin, End} ->
@@ -75,17 +75,17 @@ prepare([<<"childrenrange">> | Tail], #{options := Opts, path := Path, auth := A
                 <<(integer_to_binary(From))/binary, "-", (integer_to_binary(To))/binary>>
         end,
     [{<<"childrenrange">>, BinaryRange} | prepare(Tail, State)];
-prepare([{<<"children">>, From, To} | Tail], #{path := Path, auth := Auth} = State) ->
-    {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {path, Path}),
+prepare([{<<"children">>, From, To} | Tail], #{attributes := #file_attr{uuid = Uuid}, auth := Auth} = State) ->
+    {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {uuid, Uuid}),
     {From1, To1} = normalize_childrenrange(From, To, ChildNum),
-    {ok, List} = onedata_file_api:ls(Auth, {path, Path}, To1 - From1 + 1, From1),
+    {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, To1 - From1 + 1, From1),
     Children = lists:map(
         fun({_Uuid, Name}) -> %todo distinguish dirs and files
             str_utils:ensure_ends_with_slash(Name)
         end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
-prepare([<<"children">> | Tail], #{path := Path, auth := Auth} = State) ->
-    {ok, List} = onedata_file_api:ls(Auth, {path, Path}, ?infinity, 0),
+prepare([<<"children">> | Tail], #{attributes := #file_attr{uuid = Uuid}, auth := Auth} = State) ->
+    {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, ?infinity, 0),
     Children = lists:map(
         fun({_Uuid, Name}) -> %todo distinguish dirs and files
             str_utils:ensure_ends_with_slash(Name)

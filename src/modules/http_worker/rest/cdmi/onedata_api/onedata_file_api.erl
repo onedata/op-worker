@@ -25,7 +25,8 @@
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+-export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
+    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -49,8 +50,7 @@
 -type perms_octal() :: non_neg_integer().
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
 -type file_attributes() :: #file_attr{}.
--type xattr_key() :: binary().
--type xattr_value() :: binary().
+-type xattr_name() :: binary().
 -type access_control_entity() :: term(). % TODO should be a proper record
 -type block_range() :: term(). % TODO should be a proper record
 -type share_id() :: binary().
@@ -61,7 +61,7 @@
 -type error_reply() :: {error, term()}.
 %%--------------------------------------------------------------------
 
--export_type([file_handle/0, file_attributes/0, file_path/0, file_uuid/0]).
+-export_type([file_handle/0, file_attributes/0, file_path/0, file_uuid/0, file_key/0]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -225,34 +225,48 @@ stat(Handle) ->
 stat(Auth, FileKey) ->
     logical_file_manager:stat(Auth, FileKey).
 
-
 %%--------------------------------------------------------------------
 %% @doc Returns file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
-get_xattr(Path, Key) ->
-    logical_file_manager:get_xattr(Path, Key).
+-spec get_xattr(Handle :: file_handle(), XattrName :: xattr_name()) ->
+    {ok, #xattr{}} | error_reply().
+get_xattr(Handle, XattrName) ->
+    logical_file_manager:get_xattr(Handle, XattrName).
+-spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) -> {ok, #xattr{}} | error_reply().
+get_xattr(Auth, FileKey, XattrName) ->
+    logical_file_manager:get_xattr(Auth, FileKey, XattrName).
+
 
 %%--------------------------------------------------------------------
 %% @doc Updates file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
-set_xattr(Path, Key, Value) ->
-    logical_file_manager:set_xattr(Path, Key, Value).
+-spec set_xattr(file_handle(), #xattr{}) -> ok | error_reply().
+set_xattr(Handle, Xattr) ->
+    logical_file_manager:set_xattr(Handle, Xattr).
+-spec set_xattr(onedata_auth_api:auth(), file_key(), #xattr{}) -> ok | error_reply().
+set_xattr(Auth, FileKey, Xattr) ->
+    logical_file_manager:set_xattr(Auth, FileKey, Xattr).
 
 %%--------------------------------------------------------------------
 %% @doc Removes file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
-remove_xattr(Path, Key) ->
-    logical_file_manager:remove_xattr(Path, Key).
+-spec remove_xattr(file_handle(), xattr_name()) -> ok | error_reply().
+remove_xattr(Handle, XattrName) ->
+    logical_file_manager:remove_xattr(Handle, XattrName).
+
+-spec remove_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) -> ok | error_reply().
+remove_xattr(Auth, FileKey, XattrName) ->
+    logical_file_manager:remove_xattr(Auth, FileKey, XattrName).
 
 %%--------------------------------------------------------------------
-%% @doc Returns complete list of extended attributes of a file.
+%% @doc Returns complete list of extended attribute names of a file.
 %%--------------------------------------------------------------------
--spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
-list_xattr(Path) ->
-    logical_file_manager:list_xattr(Path).
+-spec list_xattr(file_handle()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Handle) ->
+    logical_file_manager:list_xattr(Handle).
+-spec list_xattr(onedata_auth_api:auth(), file_key()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Auth, FileKey) ->
+    logical_file_manager:list_xattr(Auth, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Creates a symbolic link.

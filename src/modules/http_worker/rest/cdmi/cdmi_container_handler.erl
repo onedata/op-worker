@@ -146,11 +146,11 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     case OperationPerformed of
         none ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
-            ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
+            ok = cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
         _  ->
-            {ok, NewAttrs} = onedata_file_api:stat(Auth, {path, Path}),
-            ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
+            {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
+            ok = cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, opts => ?DEFAULT_GET_DIR_OPTS}),
             Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
