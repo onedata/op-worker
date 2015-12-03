@@ -68,7 +68,7 @@
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
-    remove_xattr/2, list_xattr/1, list_xattr/2]).
+    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares

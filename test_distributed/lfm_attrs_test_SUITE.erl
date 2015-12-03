@@ -25,11 +25,11 @@
     end_per_testcase/2]).
 
 %% tests
--export([empty_xattr_test/1, set_and_get_xattr_test/1]).
+-export([empty_xattr_test/1, crud_xattr_test/1]).
 
 -performance({test_cases, []}).
 all() -> [
-    empty_xattr_test, set_and_get_xattr_test
+    empty_xattr_test, crud_xattr_test
 ].
 
 %%%====================================================================
@@ -46,17 +46,27 @@ empty_xattr_test(Config) ->
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
 
-set_and_get_xattr_test(Config) ->
+crud_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     Path = <<"/file">>,
     Name1 = <<"name1">>,
     Value1 = <<"value1">>,
+    Value2 = <<"value2">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
+    UpdatedXattr1 = #xattr{name = Name1, value = Value2},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    WholeCRUD = fun() ->
+        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
+        ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
+        ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, UpdatedXattr1)),
+        ?assertEqual({ok, UpdatedXattr1}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
+        ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
+        ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1))
+    end,
 
-    ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
-    ?assertEqual({ok, Xattr1}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)).
+    WholeCRUD(),
+    WholeCRUD().
 
 %%%===================================================================
 %%% SetUp and TearDown functions
