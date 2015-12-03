@@ -322,19 +322,9 @@ update_file_test(Config) ->
     %%---- value update, http ------
     UpdateValue = <<"123">>,
     RequestHeaders4 = [{"content-range", "0-2"}],
-%%     tracer:start(Worker),
-%%     tracer:trace_calls(cdmi_object_handler, put_binary),
-%%     tracer:trace_calls(onedata_file_api, create),
-%%     tracer:trace_calls(cdmi_metadata),
-%%     tracer:trace_calls(cdmi_streamer, write_body_to_file),
-%%     tracer:trace_calls(onedata_file_api, write),
-%%     tracer:trace_calls(onedata_file_api, open),
-%%     tracer:trace_calls(cdmi_arg_parser),
-%%     tracer:trace_calls(cowboy_req, body),
     {ok, Code4, _Headers4, _Response4} =
         do_request(Worker, FullName,
             put, [?USER_1_TOKEN_HEADER | RequestHeaders4], UpdateValue),
-%%     tracer:stop(),
     ?assertEqual("204",Code4),
 
     ?assert(object_exists(Config, FullName)),
@@ -346,12 +336,9 @@ update_file_test(Config) ->
     %%---- value update, http error ------
     UpdateValue = <<"123">>,
     RequestHeaders5 = [{"content-range", "0-2,3-4"}],
-    tracer:start(Worker),
-    tracer:trace_calls(cdmi_object_handler),
     {ok, Code5, _Headers5, _Response5} =
         do_request(Worker, FullName, put, [?USER_1_TOKEN_HEADER | RequestHeaders5],
             UpdateValue),
-    tracer:stop(),
     ?assertEqual("400",Code5),
 
     ?assert(object_exists(Config, FullName)),
@@ -650,8 +637,7 @@ object_exists(Config, Path) ->
 create_file(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
-
-    {ok, Mode} = application:get_env(?APP_NAME, default_file_mode).
+    {ok, Mode} = application:get_env(?APP_NAME, default_file_mode),
 
     case lfm_proxy:create(Worker, SessionId,
             utils:ensure_unicode_binary("/" ++ Path), Mode)of
