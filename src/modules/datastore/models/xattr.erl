@@ -147,7 +147,7 @@ get(Key) ->
 delete({Uuid, Name} = Key) ->
     case datastore:delete(?STORE_LEVEL, ?MODULE, Key) of
         ok ->
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}});
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, Name);
         Error ->
             Error
     end.

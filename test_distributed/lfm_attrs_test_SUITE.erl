@@ -83,10 +83,9 @@ list_xattr_test(Config) ->
 
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr2)),
-    ?assertEqual({ok, [Name2, Name1]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
-%%     ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {uuid, Uuid}, Name1)), todo fix removal of datastore links and enable this
-%%     timer:sleep(5000),
-%%     ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
+    ?assertEqual({ok, [Name2, Name1]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})),
+    ?assertEqual(ok, lfm_proxy:remove_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
+    ?assertEqual({ok, [Name2]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
 
 remove_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
