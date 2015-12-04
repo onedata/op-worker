@@ -103,8 +103,8 @@ prepare([_Other | Tail], State) ->
 %% (for regular files returns path ending with slash)
 %% @end
 %%--------------------------------------------------------------------
--spec distinguish_files(Uuid :: binary(), Name :: binary() ,
-    Auth::session:id()) -> binary().
+-spec distinguish_files(Uuid :: onedata_file_api:file_uuid(), Name :: binary() ,
+    Auth::onedata_auth_api:auth()) -> binary().
 distinguish_files(Uuid, Name, Auth) ->
     case onedata_file_api:stat(Auth, {uuid, Uuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->

@@ -50,8 +50,7 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 ls(SessId, {uuid, UUID}, Limit, Offset) ->
     lfm_utils:call_fslogic(SessId,
         #get_file_children{uuid=UUID, offset=Offset, size=Limit},
-        fun(X) ->
-            {file_children, List} = X,
+        fun({file_children, List}) ->
             {ok, [{UUID, FileName} || {_, UUID, FileName} <- List]}
         end).
 

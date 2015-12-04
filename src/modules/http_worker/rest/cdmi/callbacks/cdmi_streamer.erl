@@ -162,16 +162,8 @@ write_body_to_file(Req, State, Offset) ->
 write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset, RemoveIfFails) ->
     {Status, Chunk, Req1} = cowboy_req:body(Req),
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
-    case onedata_file_api:write(FileHandle, Offset, Chunk) of
-        {ok, _NewHandle, Bytes} when is_integer(Bytes) ->
-            case Status of
-                more -> write_body_to_file(Req1, State, Offset + Bytes);
-                ok -> {true, Req1, State}
-            end;
-        _ -> %todo handle write file forbidden
-            case RemoveIfFails of
-                true -> onedata_file_api:unlink(FileHandle);
-                false -> ok
-            end,
-            throw(?write_object_unknown_error)
+    {ok, _NewHandle, Bytes} = onedata_file_api:write(FileHandle, Offset, Chunk),
+    case Status of
+        more -> write_body_to_file(Req1, State, Offset + Bytes);
+        ok -> {true, Req1, State}
     end.
