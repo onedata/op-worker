@@ -65,9 +65,10 @@ ls(SessId, {uuid, UUID}, Limit, Offset) ->
 -spec get_children_count(SessId :: session:id(), FileKey :: {uuid, file_uuid()})
         -> {ok, integer()} | error_reply().
 get_children_count(SessId, {uuid, UUID}) ->
-    {ok, count_children(SessId, UUID, 0)}.
-
-
+    case count_children(SessId, UUID, 0) of
+        {error, Err} -> {error, Err};
+        ChildrenNum -> {ok, ChildrenNum}
+    end.
 
 %%%===================================================================
 %%% Internal functions
