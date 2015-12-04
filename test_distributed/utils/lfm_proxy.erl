@@ -17,7 +17,7 @@
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4,
-    read/4, write/4, mkdir/3]).
+    read/4, write/4, mkdir/3, get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3]).
 
 %%%===================================================================
 %%% API
@@ -147,6 +147,43 @@ mkdir(Worker, SessId, Path) ->
         fun(Host) ->
             Result =
                 logical_file_manager:mkdir(SessId, Path),
+            Host ! {self(), Result}
+        end).
+
+-spec get_xattr(node(), session:id(), file_id_or_path(), xattr:name()) ->
+    {ok, #xattr{}} | error_reply().
+get_xattr(Worker, SessId, FileKey, XattrKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:get_xattr(SessId, FileKey, XattrKey),
+            Host ! {self(), Result}
+        end).
+
+-spec set_xattr(node(), session:id(), file_id_or_path(), #xattr{}) -> ok | error_reply().
+set_xattr(Worker, SessId, FileKey, Xattr) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_xattr(SessId, FileKey, Xattr),
+            Host ! {self(), Result}
+        end).
+
+-spec remove_xattr(node(), session:id(), file_id_or_path(), xattr:name()) -> ok | error_reply().
+remove_xattr(Worker, SessId, FileKey, XattrKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:remove_xattr(SessId, FileKey, XattrKey),
+            Host ! {self(), Result}
+        end).
+
+-spec list_xattr(node(), session:id(), file_id_or_path()) -> {ok, [xattr:name()]} | error_reply().
+list_xattr(Worker, SessId, FileKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:list_xattr(SessId, FileKey),
             Host ! {self(), Result}
         end).
 

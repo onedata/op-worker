@@ -26,14 +26,14 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, delete_file_test/1, create_file_test/1, 
+-export([list_dir_test/1, get_file_test/1, metadata_test/1, delete_file_test/1, create_file_test/1, 
     update_file_test/1, create_dir_test/1, capabilities_test/1, choose_adequate_handler/1,
     use_supported_cdmi_version/1, use_unsupported_cdmi_version/1]).
 
 -performance({test_cases, []}).
 all() ->
     [
-        list_dir_test, get_file_test, delete_file_test, create_file_test, 
+        list_dir_test, get_file_test, metadata_test, delete_file_test, create_file_test, 
         update_file_test, create_dir_test, capabilities_test, 
         choose_adequate_handler, use_supported_cdmi_version, 
         use_unsupported_cdmi_version
@@ -254,6 +254,136 @@ get_file_test(Config) ->
     {ok, Code8, _Headers8, _Response8} = 
         do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
     ?assertEqual(400, Code8).
+    %%------------------------------
+
+% Tests cdmi metadata read on object GET request.
+metadata_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    FileName = "metadataTest.txt",
+    FileContent = <<"Some content...">>,
+    DirName = "metadataTestDir/",
+    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+
+    %%-------- create file with user metadata --------
+    ?assert(not object_exists(Config, FileName)),
+
+    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestBody1 = [
+        {<<"value">>, FileContent}, {<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>},
+        {<<"metadata">>, [{<<"my_metadata">>, <<"my_value">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}]}],
+    RawRequestBody1 = json_utils:encode(RequestBody1),
+    Before = now_in_secs(),
+    {ok, Code1, _Headers1, Response1} = do_request(Worker, FileName, put, RequestHeaders1, RawRequestBody1),
+    After = now_in_secs(),
+
+    ?assertEqual(201, Code1),
+    CdmiResponse1 = json_utils:decode(Response1),
+    Metadata1 = proplists:get_value(<<"metadata">>, CdmiResponse1),
+%%     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)), todo fix wrong size (0) in attrs
+    CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
+    ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
+    MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
+    ?assert(Before =< CTime1),
+    ?assert(CTime1 =< After),
+    ?assert(CTime1 =< ATime1),
+    ?assert(CTime1 =< MTime1),
+    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
+    ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
+    ?assertEqual(6, length(Metadata1)),
+
+    %%-- selective metadata read -----
+    {ok, 200, _Headers2, Response2} = do_request(Worker, FileName ++ "?metadata", get, RequestHeaders1, []),
+    CdmiResponse2 = json_utils:decode(Response2),
+    ?assertEqual(1, length(CdmiResponse2)),
+    Metadata2 = proplists:get_value(<<"metadata">>, CdmiResponse2),
+    ?assertEqual(6, length(Metadata2)),
+
+    %%-- selective metadata read with prefix -----
+    {ok, 200, _Headers3, Response3} = do_request(Worker, FileName ++ "?metadata:cdmi_", get, RequestHeaders1, []),
+    CdmiResponse3 = json_utils:decode(Response3),
+    ?assertEqual(1, length(CdmiResponse3)),
+    Metadata3 = proplists:get_value(<<"metadata">>, CdmiResponse3),
+    ?assertEqual(5, length(Metadata3)),
+
+    {ok, 200, _Headers4, Response4} = do_request(Worker, FileName ++ "?metadata:cdmi_o", get, RequestHeaders1, []),
+    CdmiResponse4 = json_utils:decode(Response4),
+    ?assertEqual(1, length(CdmiResponse4)),
+    Metadata4 = proplists:get_value(<<"metadata">>, CdmiResponse4),
+    ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata4)),
+    ?assertEqual(1, length(Metadata4)),
+
+    {ok, 200, _Headers5, Response5} = do_request(Worker, FileName ++ "?metadata:cdmi_size", get, RequestHeaders1, []),
+    CdmiResponse5 = json_utils:decode(Response5),
+    ?assertEqual(1, length(CdmiResponse5)),
+    Metadata5 = proplists:get_value(<<"metadata">>, CdmiResponse5),
+    ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata5)),
+    ?assertEqual(1, length(Metadata5)),
+
+    {ok, 200, _Headers6, Response6} = do_request(Worker, FileName ++ "?metadata:cdmi_no_such_metadata", get, RequestHeaders1, []),
+    CdmiResponse6 = json_utils:decode(Response6),
+    ?assertEqual(1, length(CdmiResponse6)),
+    ?assertEqual([], proplists:get_value(<<"metadata">>, CdmiResponse6)),
+
+    %%------ update user metadata of a file ----------
+    RequestBody7 = [{<<"metadata">>, [{<<"my_new_metadata">>, <<"my_new_value">>}]}],
+    RawRequestBody7 = json_utils:encode(RequestBody7),
+    {ok, 204, _, _} = do_request(Worker, FileName, put, RequestHeaders1, RawRequestBody7),
+    {ok, 200, _Headers7, Response7} = do_request(Worker, FileName ++ "?metadata:my", get, RequestHeaders1, []),
+    CdmiResponse7 = json_utils:decode(Response7),
+    ?assertEqual(1, length(CdmiResponse7)),
+    Metadata7 = proplists:get_value(<<"metadata">>, CdmiResponse7),
+    ?assertEqual(<<"my_new_value">>, proplists:get_value(<<"my_new_metadata">>, Metadata7)),
+    ?assertEqual(1, length(Metadata7)),
+
+    RequestBody8 = [{<<"metadata">>, [{<<"my_new_metadata_add">>, <<"my_new_value_add">>},
+        {<<"my_new_metadata">>, <<"my_new_value_update">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}]}],
+    RawRequestBody8 = json_utils:encode(RequestBody8),
+    {ok, 204, _, _} = do_request(Worker, FileName ++ "?metadata:my_new_metadata_add;metadata:my_new_metadata;metadata:cdmi_not_allowed",
+        put, RequestHeaders1, RawRequestBody8),
+    {ok, 200, _Headers8, Response8} = do_request(Worker, FileName ++ "?metadata:my", get, RequestHeaders1, []),
+    CdmiResponse8 = json_utils:decode(Response8),
+    ?assertEqual(1, length(CdmiResponse8)),
+    Metadata8 = proplists:get_value(<<"metadata">>, CdmiResponse8),
+    ?assertEqual(<<"my_new_value_add">>, proplists:get_value(<<"my_new_metadata_add">>, Metadata8)),
+    ?assertEqual(<<"my_new_value_update">>, proplists:get_value(<<"my_new_metadata">>, Metadata8)),
+    ?assertEqual(2, length(Metadata8)),
+    {ok, 200, _Headers9, Response9} = do_request(Worker, FileName ++ "?metadata:cdmi_", get, RequestHeaders1, []),
+    CdmiResponse9 = json_utils:decode(Response9),
+    ?assertEqual(1, length(CdmiResponse9)),
+    Metadata9 = proplists:get_value(<<"metadata">>, CdmiResponse9),
+    ?assertEqual(5, length(Metadata9)),
+
+    RequestBody10 = [{<<"metadata">>, [{<<"my_new_metadata">>, <<"my_new_value_ignore">>}]}],
+    RawRequestBody10 = json_utils:encode(RequestBody10),
+    {ok, 204, _, _} = do_request(Worker, FileName ++ "?metadata:my_new_metadata_add", put, RequestHeaders1,
+        RawRequestBody10),
+    {ok, 200, _Headers10, Response10} = do_request(Worker, FileName ++ "?metadata:my", get, RequestHeaders1, []),
+    CdmiResponse10 = json_utils:decode(Response10),
+    ?assertEqual(1, length(CdmiResponse10)),
+    Metadata10 = proplists:get_value(<<"metadata">>, CdmiResponse10),
+    ?assertEqual(<<"my_new_value_update">>, proplists:get_value(<<"my_new_metadata">>, Metadata10)),
+    ?assertEqual(1, length(Metadata10)),
+
+    %%------ create directory with user metadata  ----------
+    RequestHeaders2 =[?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestBody11 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value">>}]}],
+    RawRequestBody11 = json_utils:encode(RequestBody11),
+    {ok, 201, _Headers11, Response11} = do_request(Worker, DirName, put, RequestHeaders2, RawRequestBody11),
+    ct:print("~p", [Response11]),
+    CdmiResponse11 = json_utils:decode(Response11),
+    Metadata11 = proplists:get_value(<<"metadata">>, CdmiResponse11),
+    ?assertEqual(<<"my_dir_value">>, proplists:get_value(<<"my_metadata">>, Metadata11)),
+
+    %%------ update user metadata of a directory ----------
+    RequestBody12 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value_update">>}]}],
+    RawRequestBody12 = json_utils:encode(RequestBody12),
+    {ok, 204, _, _} = do_request(Worker, DirName, put, RequestHeaders2, RawRequestBody12).
+%%     {ok, 200, _Headers13, Response13} = do_request(Worker, DirName ++ "?metadata:my", get, RequestHeaders1, []), todo uncomment when cdmi get will be implemented
+%%     CdmiResponse13 = json_utils:decode(Response13),
+%%     ?assertEqual(1, length(CdmiResponse13)),
+%%     Metadata13 = proplists:get_value(<<"metadata">>, CdmiResponse13),
+%%     ?assertEqual(<<"my_dir_value_update">>, proplists:get_value(<<"my_metadata">>, Metadata13)),
+%%     ?assertEqual(1, length(Metadata13)).
     %%------------------------------
 
 % Tests cdmi object DELETE requests
@@ -700,8 +830,6 @@ create_file(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-%%     TODO application:get_env doesn't work in ct_test
-%%     {ok, Mode} = application:get_env(?APP_NAME, default_file_mode),
     Mode = 8#664,
     lfm_proxy:create(Worker, SessionId, absolute_binary_path(Path), Mode).
 
@@ -734,3 +862,8 @@ absolute_binary_path(Path) ->
 ensure_begins_with_slash(Path) ->
     ReversedBinary = list_to_binary(lists:reverse(Path)),
     lists:reverse(binary_to_list(str_utils:ensure_ends_with_slash(ReversedBinary))).
+
+% Returns current time in seconds
+now_in_secs() ->
+    {MegaSecs, Secs, _MicroSecs} = erlang:now(),
+    MegaSecs * 1000000 + Secs.
