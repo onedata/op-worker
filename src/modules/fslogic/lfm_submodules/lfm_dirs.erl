@@ -48,11 +48,12 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 -spec ls(SessId :: session:id(), FileKey :: {uuid, file_uuid()}, Limit :: integer(), Offset :: integer()) ->
     {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, {uuid, UUID}, Limit, Offset) ->
-    {ok, {file_children, List}} =
-        lfm_utils:call_fslogic(SessId,
-            #get_file_children{uuid=UUID, offset=Offset, size=Limit},
-            fun(X) -> {ok, X} end),
-    {ok, [{UUID, FileName} || {_, UUID, FileName} <- List]}.
+    lfm_utils:call_fslogic(SessId,
+        #get_file_children{uuid=UUID, offset=Offset, size=Limit},
+        fun(X) ->
+            {file_children, List} = X,
+            {ok, [{UUID, FileName} || {_, UUID, FileName} <- List]}
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -81,10 +82,11 @@ get_children_count(SessId, {uuid, UUID}) ->
     Acc :: non_neg_integer()) -> non_neg_integer() | error_reply().
 count_children(SessId, UUID, Acc) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
-    {ok, List} = ls(SessId, {uuid, UUID}, Chunk, Acc),
-    case length(List) of
-        Chunk ->
-            count_children(SessId, UUID, Acc + Chunk);
-        N -> Acc + N
+    case ls(SessId, {uuid, UUID}, Chunk, Acc) of
+        {ok, List} -> case length(List) of
+                          Chunk -> count_children(SessId, UUID, Acc + Chunk);
+                          N -> Acc + N
+                      end;
+        {error, Err} -> {error, Err}
     end.
 
