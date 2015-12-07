@@ -17,5 +17,5 @@
 %% API
 -export([callback/3]).
 
-callback(<<"global">>, <<"user_name">>, _) ->
+callback(<<"global">>, <<"userName">>, _) ->
     {ok, op_gui_utils:get_user_id()}.

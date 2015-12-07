@@ -8,6 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(validate_login_backend).
 -author("lopiola").
+-behaviour(page_backend_behaviour).
 
 -compile([export_all]).
 

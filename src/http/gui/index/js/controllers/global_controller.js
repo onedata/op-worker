@@ -1,6 +1,6 @@
 App.GlobalController = Ember.Controller.extend({
     // Static values that are available globally
-    user_name: null,
+    userName: null,
 
     getAdapter: function () {
         return App.__container__.lookup('adapter:application')
@@ -8,13 +8,13 @@ App.GlobalController = Ember.Controller.extend({
 
     initializeValue: function (key) {
         var controller = this;
-        controller.getAdapter().callback(key)
+        controller.getAdapter().callback('global', key)
             .then(function (returnedValue) {
                 controller.set(key, returnedValue);
             });
     },
 
     init: function () {
-        this.initializeValue('user_name');
+        this.initializeValue('userName');
     }
 });
