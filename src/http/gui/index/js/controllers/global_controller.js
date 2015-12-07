@@ -6,6 +6,7 @@ App.GlobalController = Ember.Controller.extend({
         return App.__container__.lookup('adapter:application')
     },
 
+    // @todo controller dla callbackow
     initializeValue: function (key) {
         var controller = this;
         controller.getAdapter().callback('global', key)
