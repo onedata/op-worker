@@ -28,7 +28,7 @@
 
 -export([list_dir_test/1, get_file_test/1, metadata_test/1, delete_file_test/1, create_file_test/1, 
     update_file_test/1, create_dir_test/1, capabilities_test/1, choose_adequate_handler/1,
-    use_supported_cdmi_version/1, use_unsupported_cdmi_version/1]).
+    use_supported_cdmi_version/1, use_unsupported_cdmi_version/1, errors_test/1]).
 
 -performance({test_cases, []}).
 all() ->
@@ -36,7 +36,7 @@ all() ->
         list_dir_test, get_file_test, metadata_test, delete_file_test, create_file_test, 
         update_file_test, create_dir_test, capabilities_test, 
         choose_adequate_handler, use_supported_cdmi_version, 
-        use_unsupported_cdmi_version
+        use_unsupported_cdmi_version, errors_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -732,6 +732,69 @@ capabilities_test(Config) ->
         proplists:get_value(<<"objectName">>, CdmiResponse10)),
     Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
     ?assertEqual(?dataobject_capability_list, Capabilities3).
+%%------------------------------
+
+% test error handling
+errors_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    %%---- unauthorized access -----
+    {ok, Code1, _Headers1, Response1} =
+        do_request(Worker, ?TEST_DIR_NAME, get, [], []),
+    Error1 = json_utils:decode(Response1),
+    ?assertEqual(401, Code1),
+
+    %test if error responses are returned
+    ?assertMatch([{<<"CertificateError">>, _}],Error1),
+    %%------------------------------
+
+    %%----- wrong create path ------
+    RequestHeaders2 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code2, _Headers2, _Response2} =
+        do_request(Worker, "dir", put, RequestHeaders2, []),
+    ?assertEqual(400, Code2),
+    %%------------------------------
+
+    %%---- wrong create path 2 -----
+    RequestHeaders3 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code3, _Headers3, _Response3} =
+        do_request(Worker, "dir/", put, RequestHeaders3, []),
+    ?assertEqual(400, Code3),
+    %%------------------------------
+
+    %%-------- wrong base64 --------
+    RequestHeaders4 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    RequestBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
+    {ok, Code4, _Headers4, _Response4} =
+        do_request(Worker, "some_file_b64", put, RequestHeaders4, RequestBody4),
+    ?assertEqual(400, Code4),
+    %%------------------------------
+
+    %%-- duplicated body fields ----
+    RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
+    RequestBody5 = json_utils:encode(RawBody5),
+    RequestHeaders5 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code5, _Headers5, Response5} =
+        do_request(Worker, "dir_dupl/", put, RequestHeaders5, RequestBody5),
+    ?assertEqual(400, Code5),
+    CdmiResponse5 = json_utils:decode(Response5),
+    ?assertMatch([{<<"BodyFieldsDuplicationError">>, _}], CdmiResponse5).
 %%------------------------------
 
 %%%===================================================================
