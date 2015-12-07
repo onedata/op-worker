@@ -14,7 +14,7 @@ var PULL_RESULT = "result";
 var PUSH_REQ = "pushReq";
 
 DS.WebsocketAdapter = DS.RESTAdapter.extend({
-    callbacks: {},
+    promises: {},
     socket: null,
     beforeOpenQueue: [],
 
@@ -157,7 +157,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
             var error = function (json) {
                 Ember.run(null, reject, json);
             };
-            adapter.callbacks[uuid] = {
+            adapter.promises[uuid] = {
                 success: success,
                 error: error,
                 type: type,
@@ -235,16 +235,16 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         var json = JSON.parse(event.data);
         if (json.msgType == PULL_RESP) {
             if (json.result == 'ok') {
-                var callback = adapter.callbacks[json.uuid];
+                var callback = adapter.promises[json.uuid];
                 console.log('success: ' + json.data);
                 var transformed_data = adapter.transformResponse(json.data,
                     callback.type, callback.operation);
                 callback.success(transformed_data);
             } else {
                 console.log('error: ' + json.data);
-                adapter.callbacks[json.uuid].error(json.data);
+                adapter.promises[json.uuid].error(json.data);
             }
-            delete adapter.callbacks[json.uuid];
+            delete adapter.promises[json.uuid];
         } else if (json.msgType = PUSH_REQ) {
             Todos.Todo.store.pushPayload('todo', {
                 todo: json.data

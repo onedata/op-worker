@@ -10,14 +10,14 @@ var DELETE_RECORD = 'deleteRecord';
 
 var PULL_RESP = 'pullResp';
 var PULL_REQ = 'pullReq';
-var STATIC_DATA_REQ = 'staticDataReq';
-var STATIC_DATA_RESP = 'staticDataResp';
+var CALLBACK_REQ = 'staticDataReq';
+var CALLBACK_RESP = 'staticDataResp';
 var PULL_RESULT = "result";
 var MSG_TYPE_PUSH_UPDATED = "pushUpdated";
 var MSG_TYPE_PUSH_DELETED = "pushDeleted";
 
 DS.WebsocketAdapter = DS.RESTAdapter.extend({
-    callbacks: {},
+    promises: {},
     socket: null,
     beforeOpenQueue: [],
 
@@ -160,7 +160,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
             var error = function (json) {
                 Ember.run(null, reject, json);
             };
-            adapter.callbacks[uuid] = {
+            adapter.promises[uuid] = {
                 success: success,
                 error: error,
                 type: type,
@@ -170,9 +170,9 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
             var payload = {
                 msgType: PULL_REQ,
                 uuid: uuid,
+                resourceType: type,
                 operation: operation,
-                entityType: type,
-                entityIds: ids,
+                resourceIds: ids,
                 data: adapter.transformRequest(data, type, operation)
             };
 
@@ -238,16 +238,16 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         var json = JSON.parse(event.data);
         if (json.msgType == PULL_RESP) {
             if (json.result == 'ok') {
-                var callback = adapter.callbacks[json.uuid];
+                var callback = adapter.promises[json.uuid];
                 console.log('success: ' + json.data);
                 var transformed_data = adapter.transformResponse(json.data,
                     callback.type, callback.operation);
                 callback.success(transformed_data);
             } else {
                 console.log('error: ' + json.data);
-                adapter.callbacks[json.uuid].error(json.data);
+                adapter.promises[json.uuid].error(json.data);
             }
-            delete adapter.callbacks[json.uuid];
+            delete adapter.promises[json.uuid];
         } else if (json.msgType == MSG_TYPE_PUSH_UPDATED) {
             App.File.store.pushPayload('file', {
                 file: json.data
@@ -256,8 +256,8 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
             App.File.store.find('file', json.data).then(function(post) {
                 App.File.store.unloadRecord(post);
             });
-        } else if (json.msgType == STATIC_DATA_RESP) {
-            var callback = adapter.callbacks[json.uuid];
+        } else if (json.msgType == CALLBACK_RESP) {
+            var callback = adapter.promises[json.uuid];
             callback.success(json.data);
         }
     },
@@ -266,11 +266,15 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         alert(event.data);
     },
 
-    // Static (read-only) data handling. Useful for getting information like
-    // user name etc. from the server.
-    getStaticData: function (type) {
+    // Calls back to the server. Useful for getting information like
+    // user name etc. from the server or performing some operation that
+    // are not model-based.
+    // type - an identifier of resource, e.g. 'global' for global data
+    // operation - function identifier
+    // data - json data
+    callback: function (type, operation, data) {
         var adapter = this;
-        adapter.logToConsole('getStaticData', [type]);
+        adapter.logToConsole('callback', [type, operation, data]);
         var uuid = adapter.generateUuid();
 
         return new Ember.RSVP.Promise(function (resolve, reject) {
@@ -280,16 +284,18 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
             var error = function (json) {
                 Ember.run(null, reject, json);
             };
-            adapter.callbacks[uuid] = {
+            adapter.promises[uuid] = {
                 success: success,
                 error: error,
-                type: type
+                type: type,
+                operation: operation
             };
 
             var payload = {
-                msgType: STATIC_DATA_REQ,
+                msgType: CALLBACK_REQ,
                 uuid: uuid,
-                entityType: type
+                resourceType: type,
+                operation: operation
             };
 
             console.log('JSON payload: ' + JSON.stringify(payload));

@@ -8,7 +8,7 @@ App.GlobalController = Ember.Controller.extend({
 
     initializeValue: function (key) {
         var controller = this;
-        controller.getAdapter().getStaticData(key)
+        controller.getAdapter().callback(key)
             .then(function (returnedValue) {
                 controller.set(key, returnedValue);
             });

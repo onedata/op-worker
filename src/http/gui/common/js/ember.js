@@ -26439,21 +26439,21 @@ enifed("ember-routing/system/router",
             router._triggerWillLeave = Ember.K;
           
 
-          router.callbacks = [];
+          router.promises = [];
           router.triggerEvent = triggerEvent;
           this.reopenClass({ router: router });
         }
 
         var dsl = EmberRouterDSL.map(function() {
           this.resource('application', { path: "/" }, function() {
-            for (var i=0; i < router.callbacks.length; i++) {
-              router.callbacks[i].call(this);
+            for (var i=0; i < router.promises.length; i++) {
+              router.promises[i].call(this);
             }
             callback.call(this);
           });
         });
 
-        router.callbacks.push(callback);
+        router.promises.push(callback);
         router.map(dsl.generate());
         return router;
       },

@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 20. Aug 2015 15:25
 %%%-------------------------------------------------------------------
--module(static_data_backend).
+-module(global_callback_backend).
 -author("lopiola").
 
 -compile([export_all]).
@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 
 %% API
--export([find/1]).
+-export([callback/3]).
 
-find(<<"user_name">>) ->
+callback(<<"global">>, <<"user_name">>, _) ->
     {ok, op_gui_utils:get_user_id()}.

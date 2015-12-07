@@ -5,7 +5,7 @@
 -include_lib("gui/include/gui.hrl").
 
 
--export([route/1, data_backend/1, static_data_backend/0]).
+-export([route/1, data_backend/1, callback_backend/1]).
 -export([login_page_path/0, default_page_path/0]).
 -export([error_404_html_file/0, error_500_html_file/0]).
 
@@ -60,4 +60,4 @@ route(<<"/index.html">>) -> ?INDEX.
 
 data_backend(<<"file">>) -> file_data_backend.
 
-static_data_backend() -> static_data_backend.
+callback_backend(<<"global">>) -> global_callback_backend.
