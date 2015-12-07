@@ -209,26 +209,28 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
     case onedata_file_api:create(Auth, Path, DefaultMode) of
         {ok, _} ->
-            cdmi_metadata:update_completion_status(Auth, Path, <<"Processing">>),
-            cdmi_metadata:update_mimetype(Auth, Path, Mimetype),
-            cdmi_metadata:update_encoding(Auth, Path, Encoding),
+            cdmi_metadata:update_completion_status(
+                Auth, {path, Path}, <<"Processing">>
+            ),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
             Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
             cdmi_metadata:set_completion_status_according_to_partial_flag(
-                Auth, Path, CdmiPartialFlag
+                Auth, {path, Path}, CdmiPartialFlag
             ),
             Ans;
 
         {error, ?EEXIST} ->
-            cdmi_metadata:update_completion_status(Auth, Path, <<"Processing">>),
-            cdmi_metadata:update_mimetype(Auth, Path, Mimetype),
-            cdmi_metadata:update_encoding(Auth, Path, Encoding),
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
                     ok = onedata_file_api:truncate(Auth, {path, Path}, 0),
                     Ans = cdmi_streamer:write_body_to_file(Req1, State, 0),
                     cdmi_metadata:set_completion_status_according_to_partial_flag(
-                        Auth, Path, CdmiPartialFlag
+                        Auth, {path, Path}, CdmiPartialFlag
                     ),
                     Ans;
                 _ ->
@@ -237,12 +239,12 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
                             Ans = cdmi_streamer:write_body_to_file(Req2, State, From),
                             cdmi_metadata:set_completion_status_according_to_partial_flag(
-                                Auth, Path, CdmiPartialFlag
+                                Auth, {path, Path}, CdmiPartialFlag
                             ),
                             Ans;
                         _ ->
                             cdmi_metadata:set_completion_status_according_to_partial_flag(
-                                Auth, Path, CdmiPartialFlag
+                                Auth, {path, Path}, CdmiPartialFlag
                             ),
                             throw(?invalid_range)
                     end
