@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module decides where to send incomming client messages.
+%%% This module decides where to send incoming client messages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(router).
@@ -35,12 +35,16 @@
 %%--------------------------------------------------------------------
 -spec preroute_message(Msg :: #client_message{}, SessId :: session:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
+preroute_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
+preroute_message(#client_message{message_body = #message_acknowledgement{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
+preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
+    sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
-    ?debug("preroute_message fuse msg ~p", [Msg]),
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    ?debug("preroute_message fuse msg ~p", [Msg]),
-    sequencer_manager:route_message(Msg, SessId).
+    sequencer:route_message(Msg, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,9 +75,18 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 %% @end
 %%--------------------------------------------------------------------
 -spec route_and_ignore_answer(#client_message{}) -> ok.
-route_and_ignore_answer(#client_message{session_id = SessionId,
-    message_body = #event{event = Evt}}) ->
-    event_manager:emit(Evt, SessionId);
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #event{} = Evt}) ->
+    event:emit(Evt, SessId);
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #events{events = Evts}}) ->
+    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, SessId) end, Evts);
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #subscription{} = Sub}) ->
+    event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId);
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #subscription_cancellation{} = SubCan}) ->
+    event:unsubscribe(SubCan, SessId);
 % Message that updates the #auth{} record in given session (originates from
 % #'Token' client message).
 route_and_ignore_answer(#client_message{session_id = SessionId,

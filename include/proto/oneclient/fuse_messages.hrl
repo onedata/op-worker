@@ -59,10 +59,6 @@
     target_path :: file_meta:path()
 }).
 
--record(file_children, {
-    child_links :: [#child_link{}]
-}).
-
 -record(get_new_file_location, {
     name :: file_meta:name(),
     parent_uuid :: file_meta:uuid(),
@@ -101,17 +97,19 @@
     value :: binary()
 }).
 
+-type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
+                        #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
+                        #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
+                        #get_file_location{}.
+
+-record(file_children, {
+    child_links :: [#child_link{}]
+}).
 
 -record(helper_params, {
     helper_name :: binary(),
     helper_args :: [#helper_arg{}]
 }).
-
-
--type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
-                        #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
-                        #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
-                        #get_file_location{}.
 
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} | #file_location{}.
 

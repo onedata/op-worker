@@ -115,7 +115,7 @@ custom_error_when_handler_throws_error(Config) ->
 init_per_suite(Config) ->
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
-    op_test_utils:clear_models(Worker, [subscription]),
+    initializer:clear_models(Worker, [subscription]),
     NewConfig.
 
 end_per_suite(Config) ->
@@ -232,8 +232,7 @@ mock_gr_certificates(Config) ->
 
 unmock_gr_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [gr_endpoint, oneprovider]),
-    test_utils:mock_unload(Workers, [gr_endpoint, oneprovider]).
+    test_utils:mock_validate_and_unload(Workers, [gr_endpoint, oneprovider]).
 
 -spec test_crash(term(), term()) -> no_return().
 test_crash(_, _) ->

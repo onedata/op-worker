@@ -17,8 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include("modules/event_manager/events.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -50,22 +49,28 @@ init(_Args) ->
     {ok, CounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
     {ok, TimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
     {ok, SizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
-    Sub = #write_event_subscription{
-        producer = all,
-        producer_counter_threshold = CounterThreshold,
-        producer_time_threshold = TimeThreshold,
-        producer_size_threshold = SizeThreshold,
-        event_stream = ?WRITE_EVENT_STREAM#event_stream{
+    SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
+    Sub = #subscription{
+        id = SubId,
+        object = #write_subscription{
+            counter_threshold = CounterThreshold,
+            time_threshold = TimeThreshold,
+            size_threshold = SizeThreshold
+        },
+        event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
             metadata = 0,
             emission_time = 500,
             emission_rule = fun(_) -> true end,
-            handlers = [fun(Evts) -> handle_events(Evts) end]
+            init_handler = event_utils:send_subscription_handler(),
+            event_handler = fun(Evts, InitResult) ->
+                handle_events(Evts, InitResult)
+            end,
+            terminate_handler = event_utils:send_subscription_cancellation_handler()
         }
     },
-    SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
 
-    case event_manager:subscribe(SubId, Sub) of
-        ok ->
+    case event:subscribe(Sub) of
+        {ok, SubId} ->
             ok;
         {error, already_exists} ->
             ok
@@ -154,7 +159,7 @@ report_error(FuseRequest, Error, LogLevel) ->
     MsgFormat = "Cannot process request ~p due to error: ~p (code: ~p)",
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-%%         info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
+%%      info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
         warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
         error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,
@@ -203,24 +208,21 @@ handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
-handle_events([]) ->
+handle_events([], _) ->
     [];
-handle_events([Event | T]) ->
-    [handle_events(Event) | handle_events(T)];
-handle_events(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize, source = Source} = T) ->
+handle_events([Event | T], InitResult) ->
+    handle_events(Event, InitResult),
+    handle_events(T, InitResult);
+handle_events(#event{object = #write_event{blocks = Blocks, file_uuid = FileUUID,
+    file_size = FileSize}} = T, {_, _, SessId}) ->
     ?debug("fslogic handle_events: ~p", [T]),
-    ExcludedSessions =
-        case Source of
-            {session, SessionId} ->
-                [SessionId]
-        end,
 
     case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
         {ok, size_changed} ->
-            fslogic_notify:attributes({uuid, FileUUID}, ExcludedSessions),
-            fslogic_notify:blocks({uuid, FileUUID}, Blocks, ExcludedSessions);
+            fslogic_notify:attributes({uuid, FileUUID}, [SessId]),
+            fslogic_notify:blocks({uuid, FileUUID}, Blocks, [SessId]);
         {ok, size_not_changed} ->
-            fslogic_notify:blocks({uuid, FileUUID}, Blocks, ExcludedSessions);
+            fslogic_notify:blocks({uuid, FileUUID}, Blocks, [SessId]);
         {error, Reason} ->
             {error, Reason}
     end.

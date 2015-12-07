@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Sequencer model.
+%%% @doc Event stream definition model.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(subscription).
@@ -13,12 +13,38 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(BATCH_SIZE, 100).
+
+%% API
+-export([generate_id/0]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
+
+-export_type([id/0, object/0, cancellation/0]).
+
+-type id() :: integer().
+-type object() :: #file_attr_subscription{} | #file_location_subscription{} |
+#read_subscription{} | #write_subscription{}.
+-type cancellation() :: #subscription_cancellation{}.
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns increasing subscription IDs based on the timestamp.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_id() -> SubId :: id().
+generate_id() ->
+    % @todo function erlang:now/0 is deprecated, change after migration to Erlang 18.0
+    {MegaSecs, Secs, MicroSecs} = erlang:now(),
+    MegaSecs * 1000000000000 + Secs * 1000000 + MicroSecs.
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -72,7 +98,6 @@ get(Key) ->
 list() ->
     datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback delete/1.
@@ -98,7 +123,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(event_manager_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(event_stream_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

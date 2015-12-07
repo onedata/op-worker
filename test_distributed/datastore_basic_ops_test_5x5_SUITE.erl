@@ -276,8 +276,7 @@ end_per_testcase(Case, Config) when
     Case =:= no_transactions_save_global_store_test;
     Case =:= no_transactions_update_global_store_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, some_record),
-    test_utils:mock_unload(Workers, some_record),
+    test_utils:mock_validate_and_unload(Workers, some_record),
     datastore_basic_ops_utils:unset_hooks(Case, Config);
 
 end_per_testcase(Case, Config) ->

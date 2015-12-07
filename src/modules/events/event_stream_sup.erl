@@ -16,10 +16,10 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_event_stream/4, stop_event_stream/2]).
+-export([start_link/0]).
 
 %% Supervisor callbacks
--export([init/1]).
+-export([init/1, start_event_stream/4]).
 
 %%%===================================================================
 %%% API functions
@@ -27,33 +27,24 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the supervisor
+%% Starts the event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
+-spec start_link() ->
+    {ok, EvtStmSup :: pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
     supervisor:start_link(?MODULE, []).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts event stream supervised by event stream supervisor.
+%% Starts the event stream supervised by event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_event_stream(EvtStmSup :: pid(), EvtMan :: pid(),
-    SubId :: event_manager:subscription_id(),
-    EvtStmSpec :: event_stream:event_stream()) -> ok | {error, Reason :: term()}.
-start_event_stream(EvtStmSup, EvtMan, SubId, EvtStmSpec) ->
-    supervisor:start_child(EvtStmSup, [EvtMan, SubId, EvtStmSpec]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Stops event stream supervised by event stream supervisor.
-%% @end
-%%--------------------------------------------------------------------
--spec stop_event_stream(EvtStmSup :: pid(), EvtStm :: pid()) ->
-    ok | {error, Reason :: term()}.
-stop_event_stream(EvtStmSup, EvtStm) ->
-    supervisor:terminate_child(EvtStmSup, EvtStm).
+    Sub :: event:subscription(), SessId :: session:id()) ->
+    supervisor:startchild_ret().
+start_event_stream(EvtStmSup, EvtMan, Sub, SessId) ->
+    supervisor:start_child(EvtStmSup, [EvtMan, Sub, SessId]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -69,16 +60,16 @@ stop_event_stream(EvtStmSup, EvtStm) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-        [ChildSpec :: supervisor:child_spec()]
-    }} |
-    ignore.
+    {ok, {SupFlags :: {
+        RestartStrategy :: supervisor:strategy(),
+        Intensity :: non_neg_integer(),
+        Period :: non_neg_integer()
+    }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
 init([]) ->
     RestartStrategy = simple_one_for_one,
-    MaxRestarts = 3,
-    RestartTimeWindowSecs = 1,
-    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+    Intensity = 3,
+    Period = 1,
+    {ok, {{RestartStrategy, Intensity, Period}, [
         event_stream_spec()
     ]}}.
 
