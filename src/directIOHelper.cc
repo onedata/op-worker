@@ -21,7 +21,10 @@
 #include <errno.h>
 #include <fuse.h>
 #include <sys/stat.h>
+
+#ifdef linux
 #include <sys/fsuid.h>
+#endif
 
 #include <string>
 
@@ -49,19 +52,11 @@ inline boost::filesystem::path DirectIOHelper::root(
 }
 
 class UserCTX {
-    uid_t uid;
-    gid_t gid;
-
-    uid_t prev_uid;
-    gid_t prev_gid;
-
-    uid_t current_uid;
-    gid_t current_gid;
-
+#ifdef linux
 public:
     UserCTX(CTXConstRef helperCTX)
-      : uid(helperCTX.uid)
-      , gid(helperCTX.gid)
+        : uid(helperCTX.uid)
+        , gid(helperCTX.gid)
     {
         prev_uid = setfsuid(uid);
         prev_gid = setfsgid(gid);
@@ -70,10 +65,7 @@ public:
         current_gid = setfsgid(-1);
     }
 
-    bool valid()
-    {
-        return current_uid == uid && current_gid == gid;
-    }
+    bool valid() { return current_uid == uid && current_gid == gid; }
 
     ~UserCTX()
     {
@@ -81,6 +73,23 @@ public:
         setfsgid(prev_gid);
     }
 
+private:
+    // Requested uid / gid
+    uid_t uid;
+    gid_t gid;
+
+    // Previous uid / gid to be restored
+    uid_t prev_uid;
+    gid_t prev_gid;
+
+    // Current uid / gid
+    uid_t current_uid;
+    gid_t current_gid;
+#else
+public:
+    UserCTX(CTXConstRef) {};
+    bool valid() { return true; }
+#endif
 };
 
 void DirectIOHelper::ash_getattr(CTXRef ctx, const boost::filesystem::path &p,
@@ -90,7 +99,7 @@ void DirectIOHelper::ash_getattr(CTXRef ctx, const boost::filesystem::path &p,
         struct stat stbuf;
 
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(std::move(stbuf), makePosixError(EDOM));
             return;
         }
@@ -104,12 +113,12 @@ void DirectIOHelper::ash_getattr(CTXRef ctx, const boost::filesystem::path &p,
     });
 }
 
-void DirectIOHelper::ash_access(
-    CTXRef ctx, const boost::filesystem::path &p, int mask, VoidCallback callback)
+void DirectIOHelper::ash_access(CTXRef ctx, const boost::filesystem::path &p,
+    int mask, VoidCallback callback)
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -123,7 +132,7 @@ void DirectIOHelper::ash_readlink(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(std::string(), makePosixError(EDOM));
             return;
         }
@@ -154,7 +163,7 @@ void DirectIOHelper::ash_mknod(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -190,7 +199,7 @@ void DirectIOHelper::ash_mkdir(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -204,7 +213,7 @@ void DirectIOHelper::ash_unlink(
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -218,7 +227,7 @@ void DirectIOHelper::ash_rmdir(
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -227,12 +236,13 @@ void DirectIOHelper::ash_rmdir(
     });
 }
 
-void DirectIOHelper::ash_symlink(CTXRef ctx, const boost::filesystem::path &from,
-    const boost::filesystem::path &to, VoidCallback callback)
+void DirectIOHelper::ash_symlink(CTXRef ctx,
+    const boost::filesystem::path &from, const boost::filesystem::path &to,
+    VoidCallback callback)
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -246,7 +256,7 @@ void DirectIOHelper::ash_rename(CTXRef ctx, const boost::filesystem::path &from,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -260,7 +270,7 @@ void DirectIOHelper::ash_link(CTXRef ctx, const boost::filesystem::path &from,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -274,7 +284,7 @@ void DirectIOHelper::ash_chmod(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -288,7 +298,7 @@ void DirectIOHelper::ash_chown(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -297,12 +307,12 @@ void DirectIOHelper::ash_chown(CTXRef ctx, const boost::filesystem::path &p,
     });
 }
 
-void DirectIOHelper::ash_truncate(
-    CTXRef ctx, const boost::filesystem::path &p, off_t size, VoidCallback callback)
+void DirectIOHelper::ash_truncate(CTXRef ctx, const boost::filesystem::path &p,
+    off_t size, VoidCallback callback)
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -316,7 +326,7 @@ void DirectIOHelper::ash_open(
 {
     m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(-1, makePosixError(EDOM));
             return;
         }
@@ -338,11 +348,10 @@ void DirectIOHelper::ash_read(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(asio::mutable_buffer(), makePosixError(EDOM));
             return;
         }
-
 
         try {
             auto res = sh_read(ctx, p, buf, offset);
@@ -359,7 +368,7 @@ void DirectIOHelper::ash_write(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(0, makePosixError(EDOM));
             return;
         }
@@ -379,7 +388,7 @@ void DirectIOHelper::ash_release(
 {
     m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -399,7 +408,7 @@ void DirectIOHelper::ash_flush(
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -413,7 +422,7 @@ void DirectIOHelper::ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
 {
     m_workerService.post([ =, callback = std::move(callback) ]() {
         UserCTX userCTX(ctx);
-        if(!userCTX.valid()) {
+        if (!userCTX.valid()) {
             callback(makePosixError(EDOM));
             return;
         }
@@ -426,7 +435,7 @@ std::size_t DirectIOHelper::sh_write(CTXRef ctx,
     const boost::filesystem::path &p, asio::const_buffer buf, off_t offset)
 {
     UserCTX userCTX(ctx);
-    if(!userCTX.valid()) {
+    if (!userCTX.valid()) {
         throw std::system_error(makePosixError(EDOM));
     }
 
@@ -453,7 +462,7 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXRef ctx,
     const boost::filesystem::path &p, asio::mutable_buffer buf, off_t offset)
 {
     UserCTX userCTX(ctx);
-    if(!userCTX.valid()) {
+    if (!userCTX.valid()) {
         throw std::system_error(makePosixError(EDOM));
     }
 
