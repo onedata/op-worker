@@ -112,10 +112,7 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, #{options := Options} = State) ->
-    NewOptions = case Options of
-                     [] -> ?DEFAULT_GET_DIR_OPTS;
-                     _ -> Options
-                 end,
+    NewOptions = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
     DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
     Response = json_utils:encode({struct, DirCdmi}),
     {Response, Req, State}.

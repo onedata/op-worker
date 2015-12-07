@@ -20,7 +20,7 @@
 
 %% API
 -export([binary_stream_size/2, cdmi_stream_size/5, stream_binary/2,
-    stream_cdmi/5, stream_range/7, write_body_to_file/3, write_body_to_file/4]).
+    stream_cdmi/5, stream_range/7, write_body_to_file/3]).
 
 %%%===================================================================
 %%% API
@@ -145,12 +145,6 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc @equiv write_body_to_file(Req, State, Offset, true)
-%%--------------------------------------------------------------------
--spec write_body_to_file(req(), #{}, integer()) -> {boolean(), req(), #{}}.
-write_body_to_file(Req, State, Offset) ->
-    write_body_to_file(Req, State, Offset, true).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -158,12 +152,17 @@ write_body_to_file(Req, State, Offset) ->
 %% This callback return value is compatibile with put requests.
 %% @end
 %%--------------------------------------------------------------------
--spec write_body_to_file(req(), #{}, integer(), boolean()) -> {boolean(), req(), #{}}.
-write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset, RemoveIfFails) ->
-    {Status, Chunk, Req1} = cowboy_req:body(Req),
+-spec write_body_to_file(req(), #{}, integer()) -> {boolean(), req(), #{}}.
+write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset) ->
+
+    WriteFun = fun Write(Req, State, Offset, FileHandle) ->
+        {Status, Chunk, Req1} = cowboy_req:body(Req),
+        {ok, _NewHandle, Bytes} = onedata_file_api:write(FileHandle, Offset, Chunk),
+        case Status of
+            more -> Write(Req1, State, Offset + Bytes, FileHandle);
+            ok -> {true, Req1, State}
+        end
+    end,
+
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
-    {ok, _NewHandle, Bytes} = onedata_file_api:write(FileHandle, Offset, Chunk),
-    case Status of
-        more -> write_body_to_file(Req1, State, Offset + Bytes);
-        ok -> {true, Req1, State}
-    end.
+    WriteFun(Req, State, Offset, FileHandle).
