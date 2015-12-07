@@ -109,11 +109,10 @@ class CommunicatorProxy {
 public:
     CommunicatorProxy(const std::size_t connectionsNumber, std::string host,
         const unsigned short port)
-        : m_scheduler{std::make_shared<Scheduler>(1)}
-        , m_communicator{
+        : m_communicator{
               connectionsNumber, std::move(host), port, false, createConnection}
     {
-        m_communicator.setScheduler(m_scheduler);
+        m_communicator.setScheduler(std::make_shared<Scheduler>(1));
     }
 
     void connect() { m_communicator.connect(); }
@@ -163,7 +162,6 @@ public:
     }
 
 private:
-    std::shared_ptr<Scheduler> m_scheduler;
     CustomCommunicator m_communicator;
     std::future<ExampleServerMessage> m_future;
 };

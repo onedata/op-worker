@@ -36,6 +36,7 @@ public:
               one::communication::createConnection}
         , m_helper{{{"storage_id", storageId}}, m_communicator}
     {
+        m_communicator.setScheduler(std::make_shared<one::Scheduler>(1));
         m_communicator.connect();
     }
 
