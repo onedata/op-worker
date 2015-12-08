@@ -111,7 +111,8 @@
     helper_args :: [#helper_arg{}]
 }).
 
--type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} | #file_location{}.
+-type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
+    #file_location{} | #xattr{} | #xattr_list{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
