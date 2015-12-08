@@ -30,10 +30,10 @@ namespace helpers {
  */
 class DirectIOHelper : public IStorageHelper {
 public:
-
     /**
      * The UserCTX abstract class
-     * Subclasses shall implement context setter based on CTXConstRef that persists
+     * Subclasses shall implement context setter based on CTXConstRef that
+     * persists
      * as long as the object exists.
      */
     class UserCTX {
@@ -45,7 +45,8 @@ public:
         virtual ~UserCTX();
     };
 
-    /// Type of factory function that returns user's context setter (UserCTX instance).
+    /// Type of factory function that returns user's context setter (UserCTX
+    /// instance).
     using user_ctx_factory_t =
         std::function<std::unique_ptr<UserCTX>(CTXConstRef)>;
 
@@ -53,7 +54,8 @@ public:
     /// Factory of user's context setter for linux systems
     static user_ctx_factory_t linux_user_ctx_factory;
 #endif
-    /// Factory of user's context setter that doesn't set context and is always valid.
+    /// Factory of user's context setter that doesn't set context and is always
+    /// valid.
     static user_ctx_factory_t noop_user_ctx_factory;
 
     /**
@@ -131,8 +133,8 @@ protected:
 #ifdef __linux__
     /**
      * The LinuxUserCTX class
-     * User's context setter for linux systems. Uses linux-specific setfsuid / setfsgid
-     * functions.
+     * User's context setter for linux systems. Uses linux-specific setfsuid /
+     * setfsgid functions.
      */
     class LinuxUserCTX : public UserCTX {
     public:
@@ -162,7 +164,6 @@ protected:
      */
     class NoopUserCTX : public UserCTX {
     public:
-        NoopUserCTX(CTXConstRef);
         bool valid();
     };
 
