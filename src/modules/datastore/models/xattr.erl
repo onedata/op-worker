@@ -28,6 +28,8 @@
 
 -export_type([name/0, value/0]).
 
+-define(XATTR_LINK_NAME(XattrName), {<<"xattr">>, XattrName}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -38,7 +40,7 @@
 -spec get_by_name(file_meta:uuid(), xattr:name()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_by_name(FileUuid, XattrName) ->
-    xattr:get({FileUuid, XattrName}).
+    xattr:get(encode_key(FileUuid, XattrName)).
 
 %%--------------------------------------------------------------------
 %% @doc Deletes extended attribute with given name
@@ -46,22 +48,22 @@ get_by_name(FileUuid, XattrName) ->
 -spec delete_by_name(file_meta:uuid(), xattr:name()) ->
     ok | datastore:generic_error().
 delete_by_name(FileUuid, XattrName) ->
-    xattr:delete({FileUuid, XattrName}).
+    xattr:delete(encode_key(FileUuid, XattrName)).
 
 %%--------------------------------------------------------------------
 %% @doc Checks existence of extended attribute with given name
 %%--------------------------------------------------------------------
 -spec exists_by_name(file_meta:uuid(), xattr:name()) -> datastore:exists_return().
 exists_by_name(FileUuid, XattrName) ->
-    xattr:exists({FileUuid, XattrName}).
+    xattr:exists(encode_key(FileUuid, XattrName)).
 
 %%--------------------------------------------------------------------
 %% @doc Saves extended attribute
 %%--------------------------------------------------------------------
 -spec save(file_meta:uuid(), #xattr{}) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(FileUuid, Xattr = #xattr{name = XattrKey}) ->
-    save(#document{key = {FileUuid, XattrKey}, value = Xattr}).
+save(FileUuid, Xattr = #xattr{name = XattrName}) ->
+    save(#document{key = encode_key(FileUuid, XattrName), value = Xattr}).
 
 %%--------------------------------------------------------------------
 %% @doc Lists names of all extended attributes associated with given file
@@ -69,8 +71,11 @@ save(FileUuid, Xattr = #xattr{name = XattrKey}) ->
 -spec list(file_meta:uuid()) -> {ok, [xattr:name()]} | datastore:generic_error().
 list(FileUuid) ->
     datastore:foreach_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME,
-        fun(Name, _, Acc) ->
-            [Name | Acc]
+        fun
+            (?XATTR_LINK_NAME(Name), _, Acc) ->
+                [Name | Acc];
+            (_, _, Acc) ->
+                Acc
         end, []).
 
 %%%===================================================================
@@ -94,10 +99,11 @@ run_synchronized(ResourceId, Fun) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(Document = #document{key = {Uuid, Name}}) ->
+save(Document) ->
     case datastore:save(?STORE_LEVEL, Document) of
-        {ok, Key}->
-            ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
+    {ok, Key}->
+        {Uuid, Name} = decode_key(Key),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
             {ok, Key};
         Error ->
             Error
@@ -120,10 +126,11 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(Document = #document{key = {Uuid, Name} = Key}) ->
+create(Document) ->
     case datastore:create(?STORE_LEVEL, Document) of
         {ok, Key}->
-            ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {Name, {Key, ?MODEL_NAME}}),
+            {Uuid, Name} = decode_key(Key),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
             {ok, Key};
         Error ->
             Error
@@ -144,10 +151,11 @@ get(Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
-delete({Uuid, Name} = Key) ->
+delete(Key) ->
     case datastore:delete(?STORE_LEVEL, ?MODULE, Key) of
         ok ->
-            ok = datastore:delete_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, Name);
+            {Uuid, Name} = decode_key(Key),
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, ?XATTR_LINK_NAME(Name));
         Error ->
             Error
     end.
@@ -193,3 +201,21 @@ model_init() ->
     ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Decodes xattr key to file uuid and xattr name
+%%--------------------------------------------------------------------
+-spec decode_key(binary()) -> {file_meta:uuid(), xattr:name()}.
+decode_key(Key) ->
+    binary_to_term(Key).
+
+%%--------------------------------------------------------------------
+%% @doc Creates xattr key from file uuid and xattr name
+%%--------------------------------------------------------------------
+-spec encode_key(file_meta:uuid(), xattr:name()) -> binary().
+encode_key(FileUuid, XattrName) ->
+    term_to_binary({FileUuid, XattrName}).
