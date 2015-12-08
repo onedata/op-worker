@@ -18,7 +18,7 @@
 
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
--export([reuse_or_create_rest_session/1]).
+-export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
 -export([create_gui_session/1]).
 -export([remove_session/1]).
 
@@ -77,14 +77,24 @@ reuse_or_create_fuse_session(SessId, Iden, Auth, Con) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates REST session or if session exists reuses it.
+%% @equiv reuse_or_create_rest_session(Iden, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_rest_session(Iden :: session:identity()) ->
-    {ok, reused | created} | {error, Reason :: term()}.
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_rest_session(Iden) ->
+    reuse_or_create_rest_session(Iden, undefined).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates REST session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_rest_session(Iden :: session:identity(), Auth :: session:auth()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_rest_session(Iden, Auth) ->
     SessId = session:get_rest_session_id(Iden),
-    Sess = #session{status = active, identity = Iden, type = rest},
+    Sess = #session{status = active, identity = Iden, auth = Auth, type = rest},
     Diff = fun
         (#session{status = phantom}) ->
             {error, {not_found, session}};
@@ -98,12 +108,12 @@ reuse_or_create_rest_session(Iden) ->
     end,
     case session:update(SessId, Diff) of
         {ok, SessId} ->
-            {ok, reused};
+            {ok, SessId};
         {error, {not_found, _}} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, rest]),
-                    {ok, created};
+                    {ok, SessId};
                 {error, already_exists} ->
                     reuse_or_create_rest_session(Iden);
                 {error, Reason} ->

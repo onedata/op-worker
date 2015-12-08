@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -262,7 +263,7 @@ metadata_test(Config) ->
     FileName = "metadataTest.txt",
     FileContent = <<"Some content...">>,
     DirName = "metadataTestDir/",
-    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {_SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
 
     %%-------- create file with user metadata --------
     ?assert(not object_exists(Config, FileName)),
@@ -739,7 +740,7 @@ capabilities_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
     initializer:clear_models(Worker, [subscription]),
     initializer:setup_storage(ConfigWithNodes).

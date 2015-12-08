@@ -131,15 +131,13 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
 
     {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
 
-    Name = fun(Text, Num) -> name(Text, Num) end,
-
-    SessId = Name("session_id", UserNum),
-    UserId = Name("user_id", UserNum),
+    SessId = name("session_id", UserNum),
+    UserId = name("user_id", UserNum),
     Iden = #identity{user_id = UserId},
-    UserName = Name("username", UserNum),
+    UserName = name("username", UserNum),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
+        reuse_or_create_fuse_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{
