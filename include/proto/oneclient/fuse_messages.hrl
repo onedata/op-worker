@@ -97,6 +97,29 @@
     value :: binary()
 }).
 
+-record(get_xattr, {
+    uuid :: file_meta:uuid(),
+    name :: xattr:name()
+}).
+
+-record(set_xattr, {
+    uuid :: file_meta:uuid(),
+    xattr :: #xattr{}
+}).
+
+-record(remove_xattr, {
+    uuid :: file_meta:uuid(),
+    name :: xattr:name()
+}).
+
+-record(list_xattr, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(xattr_list, {
+    names :: [xattr:name()]
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
@@ -121,29 +144,6 @@
 -record(fuse_response, {
     status :: #status{},
     fuse_response :: fuse_response()
-}).
-
--record(get_xattr, {
-    uuid :: file_meta:uuid(),
-    name :: xattr:name()
-}).
-
--record(set_xattr, {
-    uuid :: file_meta:uuid(),
-    xattr :: #xattr{}
-}).
-
--record(remove_xattr, {
-    uuid :: file_meta:uuid(),
-    name :: xattr:name()
-}).
-
--record(list_xattr, {
-    uuid :: file_meta:uuid()
-}).
-
--record(xattr_list, {
-    names :: [xattr:name()]
 }).
 
 -endif.
