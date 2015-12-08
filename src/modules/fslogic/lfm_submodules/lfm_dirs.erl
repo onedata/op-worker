@@ -33,9 +33,14 @@
     ok | error_reply().
 mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
-    lfm_utils:call_fslogic(SessId, #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode},
-        fun(_) -> ok end).
+    case file_meta:resolve_path(ParentPath) of
+    {ok, {#document{key = ParentUUID}, _}} ->
+        lfm_utils:call_fslogic(SessId, #create_dir{
+            parent_uuid = ParentUUID, name = Name, mode = Mode
+            }, fun(_) -> ok end
+        );
+    {error, Error} -> {error, Error}
+    end.
 
 
 %%--------------------------------------------------------------------

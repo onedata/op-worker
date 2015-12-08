@@ -21,6 +21,7 @@
 -author("Jakub Kudzia").
 
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
 
 %% Function that translates handler exception to cowboy format
@@ -43,21 +44,20 @@ fun((Req :: cowboy_req:req(), State :: term(), Type :: atom(), Error :: term()) 
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(cowboy_req:req(), term(), atom(), term()) -> no_return().
-handle(Req, State, _Type, Status) when is_integer(Status) ->
-    {ok, Req2} = cowboy_req:reply(Status, [], [], Req),
+handle(Req, State, error, {case_clause, {error, no_peer_certificate}}) ->
+    {ok, Req2} = cowboy_req:reply(?NOT_AUTHORIZED, [], [], Req),
     {halt, Req2, State};
-handle(Req, State, _Type, {Status, BodyBinary})
-    when is_integer(Status) andalso is_binary(BodyBinary) ->
-    {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
+%% TODO wrong error pattern below?
+handle(Req, State, _Type, {error, ?ENOENT}) ->
+    {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], [], Req),
     {halt, Req2, State};
-handle(Req, State, _Type, {Status, Body}) when is_integer(Status) ->
-    BodyBinary = json_utils:encode(Body),
-    {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
+handle(Req, State, error, {badmatch,{{error,{not_found,file_meta}},created}}) ->
+    BodyBinary = json_utils:encode([{<<"Error when creating file">>, <<"not found file meta">>}]),
+    {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, Type, Error) ->
-    ?error_stacktrace("Unhandled exception in rest request ~p:~p", [Type, Error]),
-    {ok, Req2} = cowboy_req:reply(?INTERNAL_SERVER_ERROR, [], [], Req),
-    {halt, Req2, State}.
+    ?error_stacktrace("Unhandled exception in cdmi request ~p:~p", [Type, Error]),
+    request_exception_handler:handle(Req, State, Type, Error).
 
 %%%===================================================================
 %%% Internal functions

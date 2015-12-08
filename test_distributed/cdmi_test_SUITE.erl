@@ -26,16 +26,16 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, metadata_test/1, delete_file_test/1, create_file_test/1, 
+-export([list_dir_test/1, get_file_test/1, metadata_test/1, delete_file_test/1, create_file_test/1,
     update_file_test/1, create_dir_test/1, capabilities_test/1, choose_adequate_handler/1,
     use_supported_cdmi_version/1, use_unsupported_cdmi_version/1, errors_test/1]).
 
 -performance({test_cases, []}).
 all() ->
     [
-        list_dir_test, get_file_test, metadata_test, delete_file_test, create_file_test, 
-        update_file_test, create_dir_test, capabilities_test, 
-        choose_adequate_handler, use_supported_cdmi_version, 
+        list_dir_test, get_file_test, metadata_test, delete_file_test, create_file_test,
+        update_file_test, create_dir_test, capabilities_test,
+        choose_adequate_handler, use_supported_cdmi_version,
         use_unsupported_cdmi_version, errors_test
     ].
 
@@ -51,6 +51,7 @@ all() ->
 -define(TEST_FILE_NAME, "file.txt").
 -define(TEST_FILE_CONTENT, <<"test_file_content">>).
 
+-define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
 -define(INFINITY, 9999).
 
@@ -233,17 +234,19 @@ get_file_test(Config) ->
     %%------------------------------
 
     %%------- noncdmi read --------
-    {ok, Code4, Headers4, Response4} = 
+    {ok, Code4, Headers4, Response4} =
         do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
     ?assertEqual(200,Code4),
 
     ?assertEqual(<<"application/octet-stream">>, proplists:get_value(<<"content-type">>, Headers4)),
+    ct:pal("FileContent: ~p~n", [FileContent]),
+    ct:pal("Response4: ~p~n", [Response4]),
     ?assertEqual(FileContent, Response4),
     %%------------------------------
 
     %% selective value read non-cdmi
     RequestHeaders7 = [{<<"Range">>,<<"1-3,5-5,-3">>}],
-    {ok, Code7, _Headers7, Response7} = 
+    {ok, Code7, _Headers7, Response7} =
         do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders7]),
     ?assertEqual(206,Code7),
     ?assertEqual(<<"omec...">>, Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
@@ -251,7 +254,7 @@ get_file_test(Config) ->
 
     %% selective value read non-cdmi error
     RequestHeaders8 = [{<<"Range">>,<<"1-3,6-4,-3">>}],
-    {ok, Code8, _Headers8, _Response8} = 
+    {ok, Code8, _Headers8, _Response8} =
         do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
     ?assertEqual(400, Code8).
     %%------------------------------
@@ -398,7 +401,7 @@ delete_file_test(Config) ->
     {ok, _} = create_file(Config, "/" ++ FileName),
     ?assert(object_exists(Config, FileName)),
     RequestHeaders1 = [?CDMI_VERSION_HEADER],
-    {ok, Code1, _Headers1, _Response1} = 
+    {ok, Code1, _Headers1, _Response1} =
         do_request(
             Worker, FileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders1]),
     ?assertEqual(204,Code1),
@@ -410,8 +413,8 @@ delete_file_test(Config) ->
     {ok, _} = create_file(Config, GroupFileName),
 
     RequestHeaders2 = [?CDMI_VERSION_HEADER],
-    {ok, Code2, _Headers2, _Response2} = 
-        do_request(Worker, GroupFileName, delete, 
+    {ok, Code2, _Headers2, _Response2} =
+        do_request(Worker, GroupFileName, delete,
             [?USER_1_TOKEN_HEADER | RequestHeaders2]),
     ?assertEqual(204,Code2),
 
@@ -456,8 +459,9 @@ create_file_test(Config) ->
     RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
     RequestBody2 = [{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, base64:encode(FileContent)}],
     RawRequestBody2 = json_utils:encode(RequestBody2),
-    {ok, Code2, _Headers2, Response2} = do_request(Worker, ToCreate2, put, RequestHeaders2, RawRequestBody2),
 
+    {ok, Code2, _Headers2, Response2} =
+        do_request(Worker, ToCreate2, put, RequestHeaders2, RawRequestBody2),
     ?assertEqual(201, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
@@ -532,7 +536,7 @@ update_file_test(Config) ->
     RequestBody2 = [{<<"value">>, base64:encode(UpdateValue)}],
     RawRequestBody2 = json_utils:encode(RequestBody2),
     {ok, Code2, _Headers2, _Response2} = do_request(Worker, FullName ++ "?value:0-2", put, RequestHeaders2, RawRequestBody2),
-    ?assertEqual(204, Code2),
+    ?assertEqual(204, Code2), % tu sie wywalilo
 
     ?assert(object_exists(Config, FullName)),
     ?assertEqual(UpdatedValue, get_file_content(Config, FullName)),
@@ -627,7 +631,7 @@ create_dir_test(Config) ->
     %%------ non-cdmi create -------
     ?assert(not object_exists(Config, DirName)),
 
-    {ok, Code1, _Headers1, _Response1} = 
+    {ok, Code1, _Headers1, _Response1} =
         do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER]),
     ?assertEqual(201,Code1),
 
@@ -639,7 +643,7 @@ create_dir_test(Config) ->
 
     RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
     {ok, Code2, _Headers2, Response2} = do_request(Worker, DirName2, put, RequestHeaders2, []),
-    
+
     ?assertEqual(201,Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiResponse2)),
@@ -658,9 +662,10 @@ create_dir_test(Config) ->
     RequestHeaders3 = [
         ?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER
     ],
-    {ok, Code3, _Headers3, _Response3} = 
+    {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, DirName, put, RequestHeaders3, []),
     ?assertEqual(204,Code3),
+
 
     ?assert(object_exists(Config, DirName)),
     %%------------------------------
@@ -668,9 +673,14 @@ create_dir_test(Config) ->
     %%----- missing parent ---------
     ?assert(not object_exists(Config, MissingParentName)),
 
-    RequestHeaders4 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    {ok, Code4, _Headers4, _Response4} = do_request(Worker, DirWithoutParentName, put, RequestHeaders4, []),
-    ?assertEqual(500,Code4). %todo handle this error in lfm
+    RequestHeaders4 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code4, _Headers4, _Response4} =
+        do_request(Worker, DirWithoutParentName, put, RequestHeaders4, []),
+    ?assertEqual(404, Code4).
     %%------------------------------
 
 % tests if capabilities of objects, containers, and whole storage system are set properly
@@ -680,11 +690,11 @@ capabilities_test(Config) ->
 
     %%--- system capabilities ------
     RequestHeaders8 = [?CDMI_VERSION_HEADER],
-    {ok, Code8, Headers8, Response8} = 
+    {ok, Code8, Headers8, Response8} =
         do_request(Worker, "cdmi_capabilities/", get, RequestHeaders8, []),
     ?assertEqual(200, Code8),
 
-    ?assertEqual(<<"application/cdmi-capability">>, 
+    ?assertEqual(<<"application/cdmi-capability">>,
         proplists:get_value(<<"content-type">>, Headers8)),
     CdmiResponse8 = json_utils:decode(Response8),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse8)),
@@ -700,13 +710,13 @@ capabilities_test(Config) ->
 
     %%-- container capabilities ----
     RequestHeaders9 = [?CDMI_VERSION_HEADER],
-    {ok, Code9, _Headers9, Response9} = 
+    {ok, Code9, _Headers9, Response9} =
         do_request(Worker, "cdmi_capabilities/container/", get, RequestHeaders9, []),
     ?assertEqual(200, Code9),
 %%   ?assertMatch({ok, Code9, _, Response9},do_request("cdmi_objectid/"++binary_to_list(?container_capability_id)++"/", get, RequestHeaders9, [])),
 
     CdmiResponse9 = json_utils:decode(Response9),
-    ?assertEqual(?root_capability_path, 
+    ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse9)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse9)),
 %%   ?assertEqual(?container_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse9)),
@@ -718,13 +728,13 @@ capabilities_test(Config) ->
 
     %%-- dataobject capabilities ---
     RequestHeaders10 = [?CDMI_VERSION_HEADER],
-    {ok, Code10, _Headers10, Response10} = 
+    {ok, Code10, _Headers10, Response10} =
         do_request(Worker, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
     ?assertEqual(200, Code10),
 %%   ?assertMatch({ok, Code10, _, Response10},do_request("cdmi_objectid/"++binary_to_list(?dataobject_capability_id)++"/", get, RequestHeaders10, [])),
 
     CdmiResponse10 = json_utils:decode(Response10),
-    ?assertEqual(?root_capability_path, 
+    ?assertEqual(?root_capability_path,
         proplists:get_value(<<"parentURI">>, CdmiResponse10)),
 %%   ?assertEqual(?root_capability_id, proplists:get_value(<<"parentID">>,CdmiResponse10)),
 %%   ?assertEqual(?dataobject_capability_id, proplists:get_value(<<"objectID">>,CdmiResponse10)),
@@ -739,13 +749,11 @@ errors_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     %%---- unauthorized access -----
-    {ok, Code1, _Headers1, Response1} =
+
+    {ok, Code1, _Headers1, _Response1} =
         do_request(Worker, ?TEST_DIR_NAME, get, [], []),
-    Error1 = json_utils:decode(Response1),
     ?assertEqual(401, Code1),
 
-    %test if error responses are returned
-    ?assertMatch([{<<"CertificateError">>, _}],Error1),
     %%------------------------------
 
     %%----- wrong create path ------
@@ -756,7 +764,7 @@ errors_test(Config) ->
     ],
     {ok, Code2, _Headers2, _Response2} =
         do_request(Worker, "dir", put, RequestHeaders2, []),
-    ?assertEqual(400, Code2),
+    ?assertEqual(415, Code2),
     %%------------------------------
 
     %%---- wrong create path 2 -----
@@ -767,7 +775,8 @@ errors_test(Config) ->
     ],
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "dir/", put, RequestHeaders3, []),
-    ?assertEqual(400, Code3),
+    ?assertEqual(415, Code3),
+
     %%------------------------------
 
     %%-------- wrong base64 --------
@@ -794,7 +803,7 @@ errors_test(Config) ->
         do_request(Worker, "dir_dupl/", put, RequestHeaders5, RequestBody5),
     ?assertEqual(400, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
-    ?assertMatch([{<<"BodyFieldsDuplicationError">>, _}], CdmiResponse5).
+    ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5).
 %%------------------------------
 
 %%%===================================================================
@@ -881,7 +890,7 @@ object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:stat(Worker, SessionId, 
+    case lfm_proxy:stat(Worker, SessionId,
         {path, absolute_binary_path(Path)}) of
         {ok, _} ->
             true;
@@ -892,9 +901,7 @@ object_exists(Config, Path) ->
 create_file(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
-
-    Mode = 8#664,
-    lfm_proxy:create(Worker, SessionId, absolute_binary_path(Path), Mode).
+    lfm_proxy:create(Worker, SessionId, absolute_binary_path(Path), ?DEFAULT_FILE_MODE).
 
 open_file(Config, Path, OpenMode) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

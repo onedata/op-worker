@@ -90,10 +90,13 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
     {[{binary(), atom()}], req(), #{}}.
+content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put_cdmi},
-        {'*', put_binary}
+        {<<"application/cdmi-container">>, put_cdmi}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
