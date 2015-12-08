@@ -12,7 +12,14 @@
 -module(cdmi_container_handler).
 -author("Tomasz Lichon").
 
--include("http_common.hrl").
+-include("modules/http_worker/http_common.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
+
+-define(DEFAULT_GET_DIR_OPTS, [<<"objectType">>, <<"objectID">>,
+    <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>,
+    <<"completionStatus">>, <<"metadata">>, <<"childrenrange">>, <<"children">>]).
 
 %% API
 -export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
@@ -101,22 +108,55 @@ delete_resource(Req, State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Handles GET with "application/cdmi-container" content-type
-%% @end
+%% @doc Handles GET with "application/cdmi-container" content-type
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(Req, State) ->
-    {<<"ok">>, Req, State}.
+get_cdmi(Req, #{options := Options} = State) ->
+    NewOptions = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
+    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
+    Response = json_utils:encode({struct, DirCdmi}),
+    {Response, Req, State}.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Handles PUT with "application/cdmi-container" content-type
-%% @end
+%% @doc Handles PUT with "application/cdmi-container" content-type
 %%--------------------------------------------------------------------
 -spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
-put_cdmi(Req, State) ->
-    {true, Req, State}.
+put_cdmi(_, #{cdmi_version := undefined}) ->
+    throw(?no_version_given);
+put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
+    {ok, Body, Req1} = cdmi_arg_parser:parse_body(Req),
+    Attrs = get_attr(Auth, Path),
+
+    % create dir using mkdir/cp/mv
+    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
+    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
+    {ok, OperationPerformed} =
+        case {Attrs, RequestedCopyURI, RequestedMoveURI} of
+            {undefined, undefined, undefined} ->
+                {onedata_file_api:mkdir(Auth, Path), created};
+            {#file_attr{}, undefined, undefined} ->
+                {ok, none};
+            {undefined, CopyURI, undefined} ->
+                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+            {undefined, undefined, MoveURI} ->
+                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+        end,
+
+    %update metadata and return result
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    case OperationPerformed of
+        none ->
+            URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
+            ok = cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
+            {true, Req1, State};
+        _  ->
+            {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
+            ok = cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
+            Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, opts => ?DEFAULT_GET_DIR_OPTS}),
+            Response = json_utils:encode(Answer),
+            Req2 = cowboy_req:set_resp_body(Response, Req1),
+            {true, Req2, State}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,6 +164,21 @@ put_cdmi(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec put_binary(req(), #{}) -> {term(), req(), #{}}.
-put_binary(Req, State = #{identity := Identity, path := Path}) ->
-    ok = onedata_file_api:mkdir(Identity, Path),
+put_binary(Req, State = #{auth := Auth, path := Path}) ->
+    ok = onedata_file_api:mkdir(Auth, Path),
     {true, Req, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Gets attributes of file, returns undefined when file does not exist
+%%--------------------------------------------------------------------
+-spec get_attr(onedata_auth_api:auth(), onedata_file_api:file_path()) ->
+    onedata_file_api:file_attributes() | undefined.
+get_attr(Auth, Path) ->
+    case onedata_file_api:stat(Auth, {path, Path}) of
+        {ok, Attrs} -> Attrs;
+        {error, ?ENOENT} -> undefined
+    end.

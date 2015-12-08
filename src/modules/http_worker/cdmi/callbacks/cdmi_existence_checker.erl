@@ -70,8 +70,8 @@ redirect_to_container(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
 %%--------------------------------------------------------------------
-resource_exists(Req, State = #{path := Path, identity := Identity}, Type) ->
-    case logical_file_manager:stat(Identity, {path, Path}) of
+resource_exists(Req, State = #{path := Path, auth := Auth}, Type) ->
+    case logical_file_manager:stat(Auth, {path, Path}) of
         {ok, Attr = #file_attr{type = ?DIRECTORY_TYPE}} when Type == container ->
             {true, Req, State#{attributes => Attr}};
         {ok, Attr = #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == object ->

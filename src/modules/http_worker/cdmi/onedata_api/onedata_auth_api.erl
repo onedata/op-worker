@@ -12,23 +12,24 @@
 -module(onedata_auth_api).
 -author("Tomasz Lichon").
 
--include("http_common.hrl").
+-include("modules/http_worker/http_common.hrl").
 
 %% API
 -export([is_authorized/2]).
 
--type identity() :: any().
+% opaque type of auth token that is neccessary to perform operations on files.
+-type auth() :: any().
 
--export_type([identity/0]).
+-export_type([auth/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2, updates State
+%% @doc @equiv pre_handler:is_authorized/2, adds auth to state
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+-spec is_authorized(req(), #{}) -> {boolean(), req(), #{auth => auth()}}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
 

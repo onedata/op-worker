@@ -16,8 +16,9 @@
 -include("modules/datastore/datastore.hrl").
 
 %% API
--export([reuse_or_create_session/3, update_session_auth/2, remove_session/1]).
--export([create_gui_session/3]).
+-export([reuse_or_create_session/3, reuse_or_create_rest_session/1,
+    update_session_auth/2, remove_session/1]).
+-export([create_gui_session/1]).
 
 -define(TIMEOUT, timer:seconds(20)).
 -define(SESSION_WORKER, session_manager_worker).
@@ -37,6 +38,20 @@ reuse_or_create_session(SessId, Iden, Con) ->
     worker_proxy:call(
         ?SESSION_WORKER,
         {reuse_or_create_session, SessId, Iden, Con},
+        ?TIMEOUT
+    ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reuses active rest session or creates one for user with given identity.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_rest_session(Iden :: session:identity()) ->
+    {ok, reused | created} | {error, Reason :: term()}.
+reuse_or_create_rest_session(Iden) ->
+    worker_proxy:call(
+        ?SESSION_WORKER,
+        {reuse_or_create_rest_session, Iden},
         ?TIMEOUT
     ).
 

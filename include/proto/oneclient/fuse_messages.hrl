@@ -122,4 +122,27 @@
     fuse_response :: fuse_response()
 }).
 
+-record(get_xattr, {
+    uuid :: file_meta:uuid(),
+    name :: xattr:name()
+}).
+
+-record(set_xattr, {
+    uuid :: file_meta:uuid(),
+    xattr :: #xattr{}
+}).
+
+-record(remove_xattr, {
+    uuid :: file_meta:uuid(),
+    name :: xattr:name()
+}).
+
+-record(list_xattr, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(xattr_list, {
+    names :: [xattr:name()]
+}).
+
 -endif.

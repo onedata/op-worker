@@ -63,6 +63,9 @@ handle(healthcheck) ->
 handle({reuse_or_create_session, SessId, Iden, Con}) ->
     reuse_or_create_session(SessId, Iden, Con);
 
+handle({reuse_or_create_rest_session, Iden}) ->
+    reuse_or_create_rest_session(Iden);
+
 handle({update_session_auth, SessId, Auth}) ->
     update_session_auth(SessId, Auth);
 
@@ -136,6 +139,21 @@ reuse_or_create_session(SessId, Iden, Con) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Tries to reuse active rest session. If session does not exist it is created.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_rest_session(Iden :: session:identity()) ->
+    {ok, reused | created} | {error, Reason :: term()}.
+reuse_or_create_rest_session(Iden) ->
+    case reuse_rest_session(Iden) of
+        {ok, reused} -> {ok, reused};
+        {error, {not_found, _}} -> create_rest_session(Iden);
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Reuses active session or returns with an error.
 %% @end
 %%--------------------------------------------------------------------
@@ -147,6 +165,24 @@ reuse_session(SessId, Iden, Con) ->
             reuse_session(SessId, Iden, Con);
         {ok, #document{value = #session{identity = Iden, communicator = Comm}}} ->
             ok = communicator:add_connection(Comm, Con),
+            {ok, reused};
+        {ok, #document{}} ->
+            {error, invalid_identity};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Reuses active rest session or returns with an error.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_rest_session(Iden :: session:identity()) ->
+    {ok, reused} |{error, Reason :: invalid_identity | term()}.
+reuse_rest_session(Iden) ->
+    case session:get(session:get_rest_session_id(Iden)) of
+        {ok, #document{value = #session{identity = Iden}}} ->
             {ok, reused};
         {ok, #document{}} ->
             {error, invalid_identity};
@@ -169,6 +205,28 @@ create_session(SessId, Iden, Con) ->
             {ok, created};
         {error, already_exists} ->
             reuse_or_create_session(SessId, Iden, Con);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates new rest session or if session exists tries to reuse it.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_rest_session(Iden :: session:identity()) ->
+    {ok, created} | {error, Reason :: term()}.
+create_rest_session(Iden) ->
+    case session:create(#document{
+            key = session:get_rest_session_id(Iden),
+            value = #session{type = rest, identity = Iden}
+    }) of
+        {ok, SessId} ->
+            {ok, _} = start_session_sup(SessId, none),
+            {ok, created};
+        {error, already_exists} ->
+            reuse_or_create_rest_session(Iden);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -210,7 +268,7 @@ remove_session(SessId) ->
 %% worker supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_sup(SessId :: session:id(), Con :: pid()) ->
+-spec start_session_sup(SessId :: session:id(), Con :: pid() | none) ->
     supervisor:startchild_ret().
 start_session_sup(SessId, Con) ->
     supervisor:start_child(?SESSION_WORKER_SUP, [SessId, Con]).
