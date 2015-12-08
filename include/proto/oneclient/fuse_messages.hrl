@@ -111,6 +111,10 @@
     helper_args :: [#helper_arg{}]
 }).
 
+-record(xattr_list, {
+    names :: [xattr:name()]
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{}.
 
@@ -140,10 +144,6 @@
 
 -record(list_xattr, {
     uuid :: file_meta:uuid()
-}).
-
--record(xattr_list, {
-    names :: [xattr:name()]
 }).
 
 -endif.
