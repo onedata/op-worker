@@ -73,7 +73,7 @@ get_node_ip() ->
 -spec get_provider_domain() -> string().
 get_provider_domain() ->
     {ok, Domain} = application:get_env(?APP_NAME, provider_domain),
-    gui_str:to_list(Domain).
+    str_utils:to_list(Domain).
 
 
 %%--------------------------------------------------------------------
@@ -84,7 +84,7 @@ get_provider_domain() ->
 -spec get_gr_domain() -> string().
 get_gr_domain() ->
     {ok, Hostname} = application:get_env(?APP_NAME, global_registry_domain),
-    gui_str:to_list(Hostname).
+    str_utils:to_list(Hostname).
 
 
 %%--------------------------------------------------------------------
@@ -143,7 +143,7 @@ register_in_gr_dev(NodeList, KeyFilePassword, ProviderName) ->
         {ok, Key} = file:read_file(GRPKeyPath),
         % Send signing request to GR
         IPAddresses = get_all_nodes_ips(NodeList),
-        ProviderDomain = gui_str:to_binary(oneprovider:get_provider_domain()),
+        ProviderDomain = str_utils:to_binary(oneprovider:get_provider_domain()),
         RedirectionPoint = <<"https://", ProviderDomain/binary>>,
         Parameters = [
             {<<"urls">>, IPAddresses},
@@ -233,12 +233,12 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
         case Attribute#'AttributeTypeAndValue'.type of
             ?'id-at-commonName' ->
                 {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                {true, utils:ensure_binary(Id)};
+                {true, str_utils:to_binary(Id)};
             _ -> false
         end
     end, Attrs),
 
-    utils:ensure_binary(ProviderId).
+    str_utils:to_binary(ProviderId).
 
 
 %%--------------------------------------------------------------------

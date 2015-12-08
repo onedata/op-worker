@@ -43,10 +43,10 @@ main() ->
     DMacsString = lists:foldl(
         fun(DM, Acc) ->
             % Padding for pretty print
-            gui_str:format_bin("~s~s~n                     ",
+            str_utils:format_bin("~s~s~n                     ",
                 [Acc, binary_to_list(Trim(DM))])
         end, "", DMacaroons),
-    gui_str:format_bin(
+    str_utils:format_bin(
         "Macaroon: ~s~n~n"
         "Discharge macaroons: ~s~n"
         "SessionId: ~s~n~n"

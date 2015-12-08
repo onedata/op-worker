@@ -11,6 +11,7 @@
 -module(fslogic_errors).
 -author("Rafal Slota").
 
+-include("storage_file_manager_errors.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").

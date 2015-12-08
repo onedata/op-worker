@@ -14,6 +14,7 @@
 -define(FSLOGIC_COMMON_HRL, 1).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% helper macro for not implemented functions
@@ -31,11 +32,6 @@
 
 %% Stub record
 -record(space_info, {}).
-
-%% File types
--define(REGULAR_FILE_TYPE, 'REG').
--define(DIRECTORY_TYPE, 'DIR').
--define(LINK_TYPE, 'LNK').
 
 %% root user definitions
 -define(ROOT_USER_ID, <<"0">>).

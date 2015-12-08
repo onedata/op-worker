@@ -53,7 +53,7 @@ header(Name, Value, Req) -> cowboy_req:set_resp_header(Name, Value, Req).
 response(Html, Req) -> cowboy_req:set_resp_body(Html, Req).
 reply(StatusCode, Req) -> opn_cowboy_bridge:apply(cowboy_req, reply, [StatusCode, Req]).
 cookies(Req) -> element(1, cowboy_req:cookies(Req)).
-cookie(Cookie, Req) -> gui_ctx:cookie(gui_str:to_binary(Cookie), Req).  % cowboy_req:cookie has a bug
+cookie(Cookie, Req) -> gui_ctx:cookie(str_utils:to_binary(Cookie), Req).  % cowboy_req:cookie has a bug
 cookie(Cookie, Value, Req) -> cookie(Cookie, Value, <<"/">>, 0, Req).
 cookie(Name, Value, Path, TTL, Req) ->
     Options = [{path, Path}, {max_age, TTL}],
