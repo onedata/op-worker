@@ -49,14 +49,15 @@ start() ->
   % Get params from env for gui
   {ok, DocRoot} =
     application:get_env(?APP_NAME, http_worker_static_files_root),
-  {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
   {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
+
+  {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
   {ok, GuiNbAcceptors} =
-    application:get_env(?APP_NAME, http_worker_number_of_acceptors),
+    application:get_env(?WORKER_APP_NAME, http_worker_number_of_acceptors),
   {ok, MaxKeepAlive} =
-    application:get_env(?APP_NAME, http_worker_max_keepalive),
+    application:get_env(?WORKER_APP_NAME, http_worker_max_keepalive),
   {ok, Timeout} =
-    application:get_env(?APP_NAME, http_worker_socket_timeout_seconds),
+    application:get_env(?WORKER_APP_NAME, http_worker_socket_timeout_seconds),
 
   % Setup GUI dispatch opts for cowboy
   GUIDispatch = [
@@ -73,12 +74,6 @@ start() ->
     ]},
     % Proper requests are routed to handler modules
     {'_', static_dispatches(DocRoot, ?STATIC_PATHS) ++ [
-      {"/nagios/[...]", opn_cowboy_bridge,
-        [
-          {delegation, true},
-          {handler_module, nagios_handler},
-          {handler_opts, []}
-        ]},
       {'_', opn_cowboy_bridge,
         [
           {delegation, true},

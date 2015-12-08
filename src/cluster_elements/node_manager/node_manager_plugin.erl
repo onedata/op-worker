@@ -57,6 +57,7 @@ db_nodes() ->
 listeners() -> [
   dns_listener,
   gui_listener,
+  nagios_listener,
   protocol_listener,
   redirector_listener,
   rest_listener

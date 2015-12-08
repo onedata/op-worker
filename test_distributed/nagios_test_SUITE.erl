@@ -27,7 +27,7 @@
 all() -> [nagios_test].
 
 % Path to nagios endpoint
--define(HEALTHCHECK_PATH, "https://127.0.0.1:443/nagios").
+-define(HEALTHCHECK_PATH, "http://127.0.0.1:6666/nagios").
 % How many retries should be performed if nagios endpoint is not responding
 -define(HEALTHCHECK_RETRIES, 10).
 % How often should the retries be performed
