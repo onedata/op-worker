@@ -139,7 +139,7 @@ get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) 
 
     % reply
     {ok, Req3} = apply(cowboy_req, reply, [HttpStatus, [], {StreamSize, StreamFun}, Req2]),
-    {halt, Req3, State}.
+        {halt, Req3, State}.
 
 %%--------------------------------------------------------------------
 %% @doc

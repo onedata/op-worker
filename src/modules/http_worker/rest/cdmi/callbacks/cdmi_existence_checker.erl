@@ -49,11 +49,10 @@ object_resource_exists(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec redirect_to_object(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
-redirect_to_object(Req, State) ->
-    Location = <<"location">>, %todo prepare
-    Req2 = cowboy_req:set_resp_header(<<"Location">>, Location, Req),
-    {ok, Req3} = cowboy_req:reply(?MOVED_PERMANENTLY, [], [], Req2),
-    {halt, Req3, State}.
+redirect_to_object(Req, #{path := Path} = State) ->
+    Location = cdmi_path:remove_trailing_slash(Path),
+    {ok, Req2} = cowboy_req:reply(?MOVED_PERMANENTLY, [{<<"Location">>, Location}], Req),
+    {halt, Req2, State}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,11 +60,10 @@ redirect_to_object(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec redirect_to_container(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
-redirect_to_container(Req, State) ->
-    Location = <<"location">>, %todo prepare
-    Req2 = cowboy_req:set_resp_header(<<"Location">>, Location, Req),
-    {ok, Req3} = cowboy_req:reply(?MOVED_PERMANENTLY, [], [], Req2),
-    {halt, Req3, State}.
+redirect_to_container(Req, #{path := Path} = State) ->
+    Location = cdmi_path:add_trailing_slash(Path),
+    {ok, Req2} = cowboy_req:reply(?MOVED_PERMANENTLY, [{<<"Location">>, Location}], Req),
+    {halt, Req2, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2
@@ -77,9 +75,9 @@ resource_exists(Req, State = #{path := Path, auth := Auth}, Type) ->
         {ok, Attr = #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == object ->
             {true, Req, State#{attributes => Attr}};
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == object ->
-            redirect_to_object(Req, State);
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == container ->
             redirect_to_container(Req, State);
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} when Type == container ->
+            redirect_to_object(Req, State);
         {ok, #file_attr{type = ?LINK_TYPE}} ->
             {false, Req, State};
         {error, ?ENOENT} ->

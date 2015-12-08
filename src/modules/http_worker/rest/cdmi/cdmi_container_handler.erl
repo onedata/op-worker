@@ -113,7 +113,7 @@ delete_resource(Req, State) ->
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(_, #{cdmi_version := undefined}) ->
     throw(?no_version_given);
-get_cdmi(Req, State) ->
+get_cdmi(Req, #{path := Path} = State) ->
     {<<"ok">>, Req, State}.
 
 %%--------------------------------------------------------------------

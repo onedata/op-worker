@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+-include("modules/http_worker/rest/http_status.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -28,14 +29,14 @@
 
 -export([get_file_test/1, delete_file_test/1, create_file_test/1, update_file_test/1,
     create_dir_test/1, capabilities_test/1, choose_adequate_handler/1,
-    use_supported_cdmi_version/1, use_unsupported_cdmi_version/1]).
+    use_supported_cdmi_version/1, use_unsupported_cdmi_version/1, moved_pemanently_test/1]).
 
 -performance({test_cases, []}).
 all() ->
     [
         get_file_test, delete_file_test, create_file_test, update_file_test,
         create_dir_test, capabilities_test, choose_adequate_handler,
-        use_supported_cdmi_version, use_unsupported_cdmi_version
+        use_supported_cdmi_version, use_unsupported_cdmi_version, moved_pemanently_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -401,7 +402,33 @@ capabilities_test(Config) ->
     ?assertEqual(<<"dataobject/">>, proplists:get_value(<<"objectName">>, CdmiResponse10)),
     Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
     ?assertEqual(?dataobject_capability_list, Capabilities3).
-%%------------------------------
+    %%------------------------------
+
+% tests if cdmi returns 'moved pemanently' code when we forget about '/' in path
+moved_pemanently_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    DirName = "somedir/",
+    DirNameWithoutSlash = "somedir",
+    FileName = "somedir/somefile.txt",
+    FileNameWithSlash = "somedir/somefile.txt/",
+    mkdir(Config, DirName),
+    ?assert(object_exists(Config, DirName)),
+    create_file(Config, FileName),
+    ?assert(object_exists(Config, FileName)),
+
+    %%--------- dir test -----------
+    RequestHeaders1 = [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    {ok, Code1, Headers1, _Response1} = do_request(Worker, DirNameWithoutSlash, get, RequestHeaders1, []),
+    ?assertEqual(?MOVED_PERMANENTLY, Code1),
+    ?assertEqual(iolist_to_binary(["/", DirName]), proplists:get_value(<<"Location">>, Headers1)),
+    %%------------------------------
+
+    %%--------- file test ----------
+    RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    {ok, Code2, Headers2, _Response2} = do_request(Worker, FileNameWithSlash, get, RequestHeaders2, []),
+    ?assertEqual(?MOVED_PERMANENTLY,Code2),
+    ?assertEqual(iolist_to_binary(["/", FileName]), proplists:get_value("Location",Headers2)).
+    %%------------------------------
 
 %%%===================================================================
 %%% SetUp and TearDown functions
