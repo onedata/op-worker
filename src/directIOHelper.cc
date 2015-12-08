@@ -51,8 +51,6 @@ inline boost::filesystem::path DirectIOHelper::root(
     return m_rootPath / path;
 }
 
-DirectIOHelper::UserCTX::~UserCTX() {}
-
 #ifdef __linux__
 DirectIOHelper::LinuxUserCTX::LinuxUserCTX(CTXConstRef helperCTX)
     : uid(helperCTX.uid)

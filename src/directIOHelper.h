@@ -33,8 +33,7 @@ public:
     /**
      * The UserCTX abstract class
      * Subclasses shall implement context setter based on CTXConstRef that
-     * persists
-     * as long as the object exists.
+     * persists as long as the object exists.
      */
     class UserCTX {
     public:
@@ -42,11 +41,13 @@ public:
          * Returns whether context setup was successful.
          */
         virtual bool valid() = 0;
-        virtual ~UserCTX();
+        virtual ~UserCTX() = default;
     };
 
-    /// Type of factory function that returns user's context setter (UserCTX
-    /// instance).
+    /**
+     * Type of factory function that returns user's context setter (UserCTX
+     * instance).
+     */
     using UserCTXFactory =
         std::function<std::unique_ptr<UserCTX>(CTXConstRef)>;
 
@@ -54,8 +55,10 @@ public:
     /// Factory of user's context setter for linux systems
     static UserCTXFactory linuxUserCTXFactory;
 #endif
-    /// Factory of user's context setter that doesn't set context and is always
-    /// valid.
+    /**
+     * Factory of user's context setter that doesn't set context and is always
+     * valid.
+     */
     static UserCTXFactory noopUserCTXFactory;
 
     /**
@@ -64,11 +67,7 @@ public:
      * root mount point.
      */
     DirectIOHelper(const std::unordered_map<std::string, std::string> &,
-        asio::io_service &service, UserCTXFactory userCTXFactory
-#ifdef __linux__
-        = linuxUserCTXFactory
-#endif
-        );
+        asio::io_service &service, UserCTXFactory);
 
     void ash_getattr(CTXRef ctx, const boost::filesystem::path &p,
         GeneralCallback<struct stat>);
@@ -173,7 +172,7 @@ private:
     const boost::filesystem::path m_rootPath;
     asio::io_service &m_workerService;
     static const error_t SuccessCode;
-    std::function<std::unique_ptr<UserCTX>(CTXConstRef)> m_userCTXFactory;
+    UserCTXFactory m_userCTXFactory;
 };
 
 } // namespace helpers

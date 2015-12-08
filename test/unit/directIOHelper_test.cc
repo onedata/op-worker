@@ -91,7 +91,7 @@ protected:
         proxy = std::make_shared<DirectIOHelper>(
             std::unordered_map<std::string, std::string>{
                 {"root_path", std::string(DIO_TEST_ROOT)}},
-            io_service);
+            io_service, DirectIOHelper::linuxUserCTXFactory);
 
         // remove all files that are used in tests
         unlinkOnDIO("to");
@@ -150,21 +150,17 @@ public:
 
 class InvalidUserCTX : public DirectIOHelper::UserCTX {
 public:
-    InvalidUserCTX(CTXConstRef) {}
     bool valid() { return false; }
 };
 
 TEST_F(DirectIOHelperTest, shouldFaileWithInvalidUserCTX)
 {
-    proxy = std::make_shared<DirectIOHelper>(
-        std::unordered_map<std::string, std::string>{
-            {"root_path", std::string(DIO_TEST_ROOT)}},
-        io_service, [](CTXConstRef uctx) {
-            return std::make_unique<InvalidUserCTX>(uctx);
-        });
+    DirectIOHelper helper({{"root_path", DIO_TEST_ROOT}}, io_service,
+        [](CTXConstRef) { return std::make_unique<InvalidUserCTX>(); });
 
-    proxy->ash_open(ctx, testFileId,
+    helper.ash_open(ctx, testFileId,
         std::bind(&DirectIOHelperTest::set_promise<int>, this, pi1, _1, _2));
+
     EXPECT_THROW_POSIX_CODE(pi1->get_future().get(), EDOM);
 }
 
