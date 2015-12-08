@@ -203,6 +203,14 @@ handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_prox
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
 handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
     fslogic_req_generic:delete_file(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
+    fslogic_req_generic:get_xattr(Ctx, {uuid, UUID}, XattrName);
+handle_fuse_request(Ctx, #set_xattr{uuid = UUID, xattr = Xattr}) ->
+    fslogic_req_generic:set_xattr(Ctx, {uuid, UUID}, Xattr);
+handle_fuse_request(Ctx, #remove_xattr{uuid = UUID, name = XattrName}) ->
+    fslogic_req_generic:remove_xattr(Ctx, {uuid, UUID}, XattrName);
+handle_fuse_request(Ctx, #list_xattr{uuid = UUID}) ->
+    fslogic_req_generic:list_xattr(Ctx, {uuid, UUID});
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

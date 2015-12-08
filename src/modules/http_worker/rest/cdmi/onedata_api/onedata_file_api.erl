@@ -25,7 +25,8 @@
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+-export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
+    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -49,8 +50,7 @@
 -type perms_octal() :: non_neg_integer().
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
 -type file_attributes() :: #file_attr{}.
--type xattr_key() :: binary().
--type xattr_value() :: binary().
+-type xattr_name() :: binary().
 -type access_control_entity() :: term(). % TODO should be a proper record
 -type block_range() :: term(). % TODO should be a proper record
 -type share_id() :: binary().
@@ -61,7 +61,7 @@
 -type error_reply() :: {error, term()}.
 %%--------------------------------------------------------------------
 
--export_type([file_handle/0]).
+-export_type([file_handle/0, file_attributes/0, file_path/0, file_uuid/0, file_key/0]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -70,12 +70,12 @@
 %%--------------------------------------------------------------------
 %% @doc Creates a directory.
 %%--------------------------------------------------------------------
--spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path()) -> ok | error_reply().
-mkdir(SessId, Path) ->
-    logical_file_manager:mkdir(SessId, Path).
--spec mkdir(Identity :: onedata_auth_api:identity(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
-mkdir(Identity, Path, Mode) ->
-    logical_file_manager:mkdir(Identity, Path, Mode).
+-spec mkdir(Identity :: onedata_auth_api:auth(), Path :: file_path()) -> ok | error_reply().
+mkdir(Auth, Path) ->
+    logical_file_manager:mkdir(Auth, Path).
+-spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
+mkdir(Auth, Path, Mode) ->
+    logical_file_manager:mkdir(Auth, Path, Mode).
 
 
 %%--------------------------------------------------------------------
@@ -84,17 +84,17 @@ mkdir(Identity, Path, Mode) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls(Identity, FileKey, Limit, Offset) ->
-    logical_file_manager:ls(Identity, FileKey, Limit, Offset).
+-spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+ls(Auth, FileKey, Limit, Offset) ->
+    logical_file_manager:ls(Auth, FileKey, Limit, Offset).
 
 
 %%--------------------------------------------------------------------
 %% @doc Returns number of children of a directory.
 %%--------------------------------------------------------------------
--spec get_children_count(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
-get_children_count(Identity, FileKey) ->
-    logical_file_manager:get_children_count(Identity, FileKey).
+-spec get_children_count(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
+get_children_count(Auth, FileKey) ->
+    logical_file_manager:get_children_count(Auth, FileKey).
 
 
 %%--------------------------------------------------------------------
@@ -124,26 +124,26 @@ cp(PathFrom, PathTo) ->
 -spec unlink(file_handle()) -> ok | error_reply().
 unlink(Handle) ->
     logical_file_manager:unlink(Handle).
--spec unlink(onedata_auth_api:identity(), fslogic_worker:file()) -> ok | error_reply().
-unlink(Identity, FileEntry) ->
-    logical_file_manager:unlink(Identity, FileEntry).
+-spec unlink(onedata_auth_api:auth(), fslogic_worker:file()) -> ok | error_reply().
+unlink(Auth, FileEntry) ->
+    logical_file_manager:unlink(Auth, FileEntry).
 
 
 %%--------------------------------------------------------------------
 %% @doc Creates a new file.
 %%--------------------------------------------------------------------
--spec create(Identity :: onedata_auth_api:identity(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+-spec create(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
     {ok, file_uuid()} | error_reply().
-create(Identity, Path, Mode) ->
-    logical_file_manager:create(Identity, Path, Mode).
+create(Auth, Path, Mode) ->
+    logical_file_manager:create(Auth, Path, Mode).
 
 
 %%--------------------------------------------------------------------
 %% @doc Opens a file in selected mode and returns a file handle used to read or write.
 %%--------------------------------------------------------------------
--spec open(onedata_auth_api:identity(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
-open(Identity, FileKey, OpenType) ->
-    logical_file_manager:open(Identity, FileKey, OpenType).
+-spec open(onedata_auth_api:auth(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
+open(Auth, FileKey, OpenType) ->
+    logical_file_manager:open(Auth, FileKey, OpenType).
 
 
 %%--------------------------------------------------------------------
@@ -170,9 +170,9 @@ read(FileHandle, Offset, MaxSize) ->
 -spec truncate(FileHandle :: file_handle(), Size :: non_neg_integer()) -> ok | error_reply().
 truncate(Handle, Size) ->
     logical_file_manager:truncate(Handle, Size).
--spec truncate(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
-truncate(Identity, FileKey, Size) ->
-    logical_file_manager:truncate(Identity, FileKey, Size).
+-spec truncate(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
+truncate(Auth, FileKey, Size) ->
+    logical_file_manager:truncate(Auth, FileKey, Size).
 
 
 %%--------------------------------------------------------------------
@@ -182,9 +182,9 @@ truncate(Identity, FileKey, Size) ->
 -spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
 get_block_map(Handle) ->
     logical_file_manager:get_block_map(Handle).
--spec get_block_map(Identity :: onedata_auth_api:identity(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
-get_block_map(Identity, FileKey) ->
-    logical_file_manager:get_block_map(Identity, FileKey).
+-spec get_block_map(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+get_block_map(Auth, FileKey) ->
+    logical_file_manager:get_block_map(Auth, FileKey).
 
 
 %%--------------------------------------------------------------------
@@ -221,38 +221,52 @@ set_acl(Path, EntityList) ->
 -spec stat(file_handle()) -> {ok, file_attributes()} | error_reply().
 stat(Handle) ->
     logical_file_manager:stat(Handle).
--spec stat(onedata_auth_api:identity(), file_key()) -> {ok, file_attributes()} | error_reply().
-stat(Identity, FileKey) ->
-    logical_file_manager:stat(Identity, FileKey).
-
+-spec stat(onedata_auth_api:auth(), file_key()) -> {ok, file_attributes()} | error_reply().
+stat(Auth, FileKey) ->
+    logical_file_manager:stat(Auth, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Returns file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
-get_xattr(Path, Key) ->
-    logical_file_manager:get_xattr(Path, Key).
+-spec get_xattr(Handle :: file_handle(), XattrName :: xattr_name()) ->
+    {ok, #xattr{}} | error_reply().
+get_xattr(Handle, XattrName) ->
+    logical_file_manager:get_xattr(Handle, XattrName).
+-spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) -> {ok, #xattr{}} | error_reply().
+get_xattr(Auth, FileKey, XattrName) ->
+    logical_file_manager:get_xattr(Auth, FileKey, XattrName).
+
 
 %%--------------------------------------------------------------------
 %% @doc Updates file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
-set_xattr(Path, Key, Value) ->
-    logical_file_manager:set_xattr(Path, Key, Value).
+-spec set_xattr(file_handle(), #xattr{}) -> ok | error_reply().
+set_xattr(Handle, Xattr) ->
+    logical_file_manager:set_xattr(Handle, Xattr).
+-spec set_xattr(onedata_auth_api:auth(), file_key(), #xattr{}) -> ok | error_reply().
+set_xattr(Auth, FileKey, Xattr) ->
+    logical_file_manager:set_xattr(Auth, FileKey, Xattr).
 
 %%--------------------------------------------------------------------
 %% @doc Removes file's extended attribute by key.
 %%--------------------------------------------------------------------
--spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
-remove_xattr(Path, Key) ->
-    logical_file_manager:remove_xattr(Path, Key).
+-spec remove_xattr(file_handle(), xattr_name()) -> ok | error_reply().
+remove_xattr(Handle, XattrName) ->
+    logical_file_manager:remove_xattr(Handle, XattrName).
+
+-spec remove_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) -> ok | error_reply().
+remove_xattr(Auth, FileKey, XattrName) ->
+    logical_file_manager:remove_xattr(Auth, FileKey, XattrName).
 
 %%--------------------------------------------------------------------
-%% @doc Returns complete list of extended attributes of a file.
+%% @doc Returns complete list of extended attribute names of a file.
 %%--------------------------------------------------------------------
--spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
-list_xattr(Path) ->
-    logical_file_manager:list_xattr(Path).
+-spec list_xattr(file_handle()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Handle) ->
+    logical_file_manager:list_xattr(Handle).
+-spec list_xattr(onedata_auth_api:auth(), file_key()) -> {ok, [xattr_name()]} | error_reply().
+list_xattr(Auth, FileKey) ->
+    logical_file_manager:list_xattr(Auth, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Creates a symbolic link.

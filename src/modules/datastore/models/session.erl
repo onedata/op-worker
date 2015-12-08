@@ -25,12 +25,11 @@
 %% API
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
-    get_connections/1, get_auth/1, remove_connection/2]).
+    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1]).
 
--type id() :: binary() | dummy_session_id().
--type dummy_session_id() :: #identity{}.
+-type id() :: binary().
 -type auth() :: #auth{}.
--type type() :: fuse | rest | gui | dummy.
+-type type() :: fuse | rest | gui.
 -type status() :: active | inactive | phantom.
 -type identity() :: #identity{}.
 
@@ -89,10 +88,6 @@ create(#document{value = Sess} = Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(#identity{} = Identity) ->
-    {ok, #document{key = Identity, value = #session{
-        type = dummy, identity = Identity
-    }}};
 get(?ROOT_SESS_ID) ->
     {ok, #document{key = ?ROOT_SESS_ID, value = #session{
         identity = #identity{user_id = ?ROOT_USER_ID}
@@ -320,6 +315,15 @@ get_auth(SessId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns rest session id for given identity.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_rest_session_id(session:identity()) -> id().
+get_rest_session_id(#identity{user_id = Uid}) ->
+    <<Uid/binary, "_rest_session">>.
 
 %%%===================================================================
 %%% Internal functions

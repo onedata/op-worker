@@ -109,6 +109,7 @@ supervisor_child_spec() ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Removes session from cache, stops session supervisor and disconnects remote
 %% client.

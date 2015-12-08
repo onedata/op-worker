@@ -16,7 +16,8 @@
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
 
 %% API
--export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2, content_types_provided/2]).
+-export([rest_init/2, terminate/3, allowed_methods/2, malformed_request/2,
+  content_types_provided/2]).
 -export([get_cdmi_capability/2]).
 
 %%--------------------------------------------------------------------
@@ -51,9 +52,9 @@ malformed_request(Req, State) ->
 %% ====================================================================
 %% @doc @equiv pre_handler:content_types_provided/2
 %% ====================================================================
--spec content_types_provided(req(), #{}) -> {[{ContentType, Method}], req(), #{}} when
-  ContentType :: binary(),
-  Method :: atom().
+-spec content_types_provided(req(), #{}) ->
+    {[{ContentType, Method}], req(), #{}} when ContentType :: binary(),
+    Method :: atom().
 content_types_provided(Req, State) ->
   {[
     {<<"application/cdmi-capability">>, get_cdmi_capability}
@@ -85,16 +86,25 @@ get_cdmi_capability(Req, State) ->
 prepare_capability_ans([]) ->
   [];
 prepare_capability_ans([<<"objectType">> | Tail]) ->
-  [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
+  [
+      {<<"objectType">>, <<"application/cdmi-capability">>}
+      | prepare_capability_ans(Tail)
+  ];
 %% todo uncomment when ID'll be used
 prepare_capability_ans([<<"objectID">> | Tail]) ->
   prepare_capability_ans(Tail);
 %%   [{<<"objectID">>, ?dataobject_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
-  [{<<"objectName">>, str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))}
-    | prepare_capability_ans(Tail)];
+  [
+    {<<"objectName">>, 
+      str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))}
+    | prepare_capability_ans(Tail)
+  ];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
-  [{<<"parentURI">>, ?root_capability_path} | prepare_capability_ans(Tail)];
+  [
+    {<<"parentURI">>, ?root_capability_path} 
+    | prepare_capability_ans(Tail)
+  ];
 %% todo uncomment when ID'll be used
 prepare_capability_ans([<<"parentID">> | Tail]) ->
   prepare_capability_ans(Tail);

@@ -138,8 +138,8 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     Iden = #identity{user_id = UserId},
     UserName = Name("username", UserNum),
 
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self])),
+    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
+        reuse_or_create_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{
@@ -148,7 +148,8 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     ]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
-        {{spaces, UserNum}, Spaces}, {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
+        {{spaces, UserNum}, Spaces},
+        {{user_id, UserNum}, UserId}, {{session_id, UserNum}, SessId},
         {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
         | setup_session(Worker, R, Config)
     ].
@@ -160,7 +161,8 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
 teardown_sesion(Worker, Config) ->
     lists:foldl(fun
         ({{session_id, _}, SessId}, Acc) ->
-            ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId])),
+            ?assertEqual(ok,
+                rpc:call(Worker, session_manager, remove_session, [SessId])),
             Acc;
         ({{spaces, _}, Spaces}, Acc) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
@@ -171,7 +173,10 @@ teardown_sesion(Worker, Config) ->
         ({{user_id, _}, UserId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
             ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_path:spaces_uuid(UserId)])),
+            ?assertEqual(ok,
+                rpc:call(Worker, file_meta, delete,
+                    [fslogic_path:spaces_uuid(UserId)]
+                )),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
             Acc;
@@ -188,8 +193,15 @@ setup_storage(Config) ->
     TmpDir = generator:gen_storage_dir(Config),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
-    {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
-        [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(TmpDir)})])}]),
+    {ok, StorageId} = rpc:call(
+        Worker, storage, create, [
+            #document{value = fslogic_storage:new_storage(
+                <<"Test">>,
+                [fslogic_storage:new_helper_init(
+                    <<"DirectIO">>,
+                    #{<<"root_path">> => list_to_binary(TmpDir)}
+                )]
+            )}]),
     [{storage_id, StorageId}, {storage_dir, TmpDir} | Config].
 
 %%--------------------------------------------------------------------

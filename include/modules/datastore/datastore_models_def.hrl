@@ -13,6 +13,7 @@
 -define(DATASTORE_MODELS_HRL, 1).
 
 -include("modules/events/subscriptions.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Wrapper for all models' records
 -record(document, {
@@ -35,7 +36,8 @@
     cache_controller,
     task_pool,
     storage,
-    file_location
+    file_location,
+    xattr
 ]).
 
 %% List of all global caches
@@ -43,7 +45,8 @@
     some_record,
     file_meta,
     storage,
-    file_location
+    file_location,
+    xattr
 ]).
 
 %% List of all local caches
