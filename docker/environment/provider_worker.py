@@ -114,7 +114,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 
 def _ready(container):
     ip = docker.inspect(container)['NetworkSettings']['IPAddress']
-    return common.nagios_up(ip)
+    return common.nagios_up(ip, port='6666', protocol='http')
 
 
 def _riak_up(cluster_name, db_nodes, dns_servers, uid):
