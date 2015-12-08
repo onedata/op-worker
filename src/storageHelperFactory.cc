@@ -25,10 +25,10 @@ std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(
     if (sh_name == "DirectIO")
 #ifdef __linux__
         return std::make_shared<DirectIOHelper>(args, m_dioService,
-                                                      DirectIOHelper::linux_user_ctx_factory);
+                                                      DirectIOHelper::linuxUserCTXFactory);
 #else
         return std::make_shared<DirectIOHelper>(args, m_dioService,
-                                                      DirectIOHelper::noop_user_ctx_factory);
+                                                      DirectIOHelper::noopUserCTXFactory);
 #endif
 
     return {};
