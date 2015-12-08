@@ -23,7 +23,13 @@ std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(
     const std::unordered_map<std::string, std::string> &args)
 {
     if (sh_name == "DirectIO")
-        return std::make_shared<DirectIOHelper>(args, m_dioService);
+#ifdef __linux__
+        return std::make_shared<DirectIOHelper>(args, m_dioService,
+                                                      DirectIOHelper::linux_user_ctx_factory);
+#else
+        return std::make_shared<DirectIOHelper>(args, m_dioService,
+                                                      DirectIOHelper::noop_user_ctx_factory);
+#endif
 
     return {};
 }

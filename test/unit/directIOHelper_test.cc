@@ -148,6 +148,26 @@ public:
     }
 };
 
+class InvalidUserCTX : public DirectIOHelper::UserCTX {
+public:
+    InvalidUserCTX(CTXConstRef) {}
+    bool valid() { return false; }
+};
+
+TEST_F(DirectIOHelperTest, shouldFaileWithInvalidUserCTX)
+{
+    proxy = std::make_shared<DirectIOHelper>(
+        std::unordered_map<std::string, std::string>{
+            {"root_path", std::string(DIO_TEST_ROOT)}},
+        io_service, [](CTXConstRef uctx) {
+            return std::make_unique<InvalidUserCTX>(uctx);
+        });
+
+    proxy->ash_open(ctx, testFileId,
+        std::bind(&DirectIOHelperTest::set_promise<int>, this, pi1, _1, _2));
+    EXPECT_THROW_POSIX_CODE(pi1->get_future().get(), EDOM);
+}
+
 TEST_F(DirectIOHelperTest, shouldWriteBytes)
 {
     std::string stmp("000");
