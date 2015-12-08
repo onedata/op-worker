@@ -62,7 +62,6 @@ list_dir_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     TestDirName = "dir",
     TestFileName = "file.txt",
-    TestFileContent = <<"test_file_content">>,
     mkdir(Config, TestDirName ++ "/"),
     ?assertEqual(true, object_exists(Config, TestDirName ++ "/")),
     create_file(Config, filename:join(TestDirName, TestFileName)),
@@ -263,7 +262,6 @@ metadata_test(Config) ->
     FileName = "metadataTest.txt",
     FileContent = <<"Some content...">>,
     DirName = "metadataTestDir/",
-    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
 
     %%-------- create file with user metadata --------
     ?assert(not object_exists(Config, FileName)),
@@ -539,13 +537,13 @@ update_file_test(Config) ->
     %%------------------------------
 
     %%--- value replace, http ------
-    RequestBody3 = ?TEST_FILE_CONTENT,
+    RequestBody3 = TestFileContent,
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, FullName, put, [?USER_1_TOKEN_HEADER ], RequestBody3),
     ?assertEqual(204,Code3),
 
     ?assert(object_exists(Config, FullName)),
-    ?assertEqual(?TEST_FILE_CONTENT,
+    ?assertEqual(TestFileContent,
         get_file_content(Config, FullName)),
     %%------------------------------
 
