@@ -41,7 +41,7 @@ start() ->
     application:get_env(?WORKER_APP_NAME, http_worker_number_of_acceptors),
   {ok, Timeout} =
     application:get_env(?WORKER_APP_NAME, http_worker_socket_timeout_seconds),
-  {ok, Cert} = application:get_env(?WORKER_APP_NAME, web_ssl_cert_path),
+  {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
   {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
 
   RestDispatch = [
