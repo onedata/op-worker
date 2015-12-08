@@ -70,14 +70,14 @@
 %% todo uncomment IDs
 
 % Fake datastore uuids, necessary for objectid generation
-%% -define(root_capability_uuid,"0000000000000001").
-%% -define(container_capability_uuid,"0000000000000002").
-%% -define(dataobject_capability_uuid,"0000000000000003").
+-define(root_capability_uuid, <<"0000000000000001">>).
+-define(container_capability_uuid,<<"0000000000000002">>).
+-define(dataobject_capability_uuid,<<"0000000000000003">>).
 
 % Cdmi objectIDs for all cdmi capability containers
-%% -define(root_capability_id,cdmi_id:uuid_to_objectid(?root_capability_uuid)).
-%% -define(container_capability_id,cdmi_id:uuid_to_objectid(?container_capability_uuid)).
-%% -define(dataobject_capability_id,cdmi_id:uuid_to_objectid(?dataobject_capability_uuid)).
+-define(root_capability_id, begin {ok, Id} = cdmi_id:uuid_to_objectid(?root_capability_uuid), Id end).
+-define(container_capability_id, begin {ok, Id} = cdmi_id:uuid_to_objectid(?container_capability_uuid), Id end).
+-define(dataobject_capability_id, begin {ok, Id} = cdmi_id:uuid_to_objectid(?dataobject_capability_uuid), Id end).
 
 %% Proplist that provides mapping between path and capability name
 -define(CapabilityNameByPath, [
@@ -86,9 +86,9 @@
   {?dataobject_capability_path, dataobject}]).
 
 %% Proplist that provides mapping between objectid and capability path
-%% -define(CapabilityPathById, [
-%%   {?root_capability_id, ?root_capability_path},
-%%   {?container_capability_id, ?container_capability_path},
-%%   {?dataobject_capability_id, ?dataobject_capability_path}
-%% ]).
+-define(CapabilityPathById, [
+  {?root_capability_id, ?root_capability_path},
+  {?container_capability_id, ?container_capability_path},
+  {?dataobject_capability_id, ?dataobject_capability_path}
+]).
 

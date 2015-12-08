@@ -32,8 +32,9 @@ prepare([], _State) ->
     [];
 prepare([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-container">>} | prepare(Tail, State)];
-%% prepare([<<"objectID">> | Tail], #{attributes := #file_attr{uuid = Uuid}} = State) -> todo introduce objectid
-%%     [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare(Tail, State)];
+prepare([<<"objectID">> | Tail], #{attributes := #file_attr{uuid = Uuid}} = State) ->
+    {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
+    [{<<"objectID">>, Id} | prepare(Tail, State)];
 prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
     [{<<"objectName">>, <<(filename:basename(Path))/binary, "/">>} | prepare(Tail, State)];
 prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
@@ -42,12 +43,13 @@ prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
     ParentURI = str_utils:ensure_ends_with_slash(
         filename:dirname(binary:part(Path, {0, byte_size(Path) - 1}))),
     [{<<"parentURI">>, ParentURI} | prepare(Tail, State)];
-%% prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) -> todo introduce objectid
-%%     prepare(Tail, State);
-%% prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
-%%     {ok, #file_attr{uuid = Uuid}} =
-%%         onedata_file_api:stat(Auth, {path, filename:dirname(binary:part(Path, {0, byte_size(Path) - 1}))}),
-%%     [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare(Tail, State)];
+prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
+    prepare(Tail, State);
+prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
+    {ok, #file_attr{uuid = Uuid}} =
+        onedata_file_api:stat(Auth, {path, filename:dirname(binary:part(Path, {0, byte_size(Path) - 1}))}),
+    {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
+    [{<<"parentID">>, Id} | prepare(Tail, State)];
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, ?container_capability_path} | prepare(Tail, State)];
 prepare([<<"completionStatus">> | Tail], State) ->

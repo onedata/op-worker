@@ -112,6 +112,6 @@ authenticate_using_cert(Req) ->
                     {Error, Req}
             end;
         Error ->
-            Error
+            {Error, Req}
     end.
 

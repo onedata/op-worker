@@ -85,21 +85,21 @@
 %%--------------------------------------------------------------------
 %% @doc Converts uuid to cdmi objectid format
 %%--------------------------------------------------------------------
--spec uuid_to_objectid(onedata_file_api:file_uuid()) -> binary() | {error, atom()}.
+-spec uuid_to_objectid(onedata_file_api:file_uuid()) -> {ok, binary()} | {error, atom()}.
 uuid_to_objectid(Uuid) ->
-    case build_objectid(Uuid) of
+    case build_objectid(base64:decode(Uuid)) of
         {error, Error} -> {error, Error};
-        Id -> list_to_binary(to_base16(Id))
+        Id -> {ok, list_to_binary(to_base16(Id))}
     end.
 
 %%--------------------------------------------------------------------
 %% @doc Converts cdmi objectid format to uuid
 %%--------------------------------------------------------------------
--spec objectid_to_uuid(binary()) -> onedata_file_api:file_uuid() | {error, atom()}.
+-spec objectid_to_uuid(binary()) -> {ok, onedata_file_api:file_uuid()} | {error, atom()}.
 objectid_to_uuid(ObjectId) ->
     case from_base16(binary_to_list(ObjectId)) of
         <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> ->
-            binary_to_list(Data);
+            {ok, base64:encode(Data)};
         _Other -> {error, badarg}
     end.
 

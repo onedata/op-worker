@@ -14,6 +14,7 @@
 
 -include("modules/http_worker/http_common.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 % exclusive body fields
@@ -21,8 +22,8 @@
     <<"move">>, <<"reference">>, <<"deserializevalue">>, <<"value">>]).
 
 %% API
--export([malformed_request/2, malformed_capability_request/2, get_ranges/2,
-    parse_body/1]).
+-export([malformed_request/2, malformed_capability_request/2,
+    malformed_objectid_request/2, get_ranges/2, parse_body/1]).
 
 %% Test API
 -export([get_supported_version/1]).
@@ -47,7 +48,10 @@ malformed_request(Req, State) ->
     {false, Req4, NewState}.
 
 %%--------------------------------------------------------------------
-%% @doc @equiv cdmi_arg_parser:malformed_request/2
+%% @doc
+%% Extract the CDMI version and options and put it in State. Throw when
+%% version is not supportet
+%% @end
 %%--------------------------------------------------------------------
 -spec malformed_capability_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
 malformed_capability_request(Req, State) ->
@@ -55,6 +59,76 @@ malformed_capability_request(Req, State) ->
     case maps:find(cdmi_version, State2) of
         {ok, _} -> {false, Req, State2};
         _ -> throw(?unsupported_version)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check format of objectid request. Prepare version, options and path.
+%% Add them to request state and change handler to object/container/capability
+%% @end
+%%--------------------------------------------------------------------
+-spec malformed_capability_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
+malformed_objectid_request(Req, State) ->
+    % get objectid
+    {Id, Req1} = cowboy_req:binding(id, Req),
+    {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req1),
+    Version = get_supported_version(RawVersion),
+    {Qs, Req3} = cowboy_req:qs(Req2),
+    Opts = parse_opts(Qs),
+    {RawPath, Req4} = cowboy_req:path(Req3),
+    {Id, Req5} = cowboy_req:binding(id, Req4),
+    IdSize = byte_size(Id),
+    <<"/cdmi_objectid/", Id:IdSize, Path/binary>> = RawPath,
+
+    % get uuid from objectid
+    Uuid = case cdmi_id:objectid_to_uuid(Id) of
+               {ok, Uuid_} -> Uuid_;
+               _ -> throw(?invalid_objectid)
+           end,
+
+    % get path of object with that uuid
+    BasePath = case is_capability_object(Req2) of
+                   true -> proplists:get_value(Id, ?CapabilityPathById);
+                   false ->
+                       {ok, Path} = file_meta:gen_path({uuid, Uuid}), % todo implement in onedata_file_api
+                       Path
+               end,
+
+    % join base name with the rest of filepath
+    FullPath = <<BasePath/binary, Path/binary>>,
+    {RawVersion, Req6} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req5),
+    Version = get_supported_version(RawVersion),
+    {Qs, Req7} = cowboy_req:qs(Req6),
+    Opts = parse_opts(Qs),
+
+    % delegate request to cdmi_container/cdmi_object/cdmi_capability (depending on filepath)
+    case binary:last(Path) =:= $/ of
+        true ->
+            case is_capability_object(Req7) of %todo update req
+                false ->
+                    onedata_handler_management_api:set_handler(cdmi_container_handler),
+                    NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
+                    {false, Req7, NewState};
+                true ->
+                    case BasePath of
+                        ?root_capability_path ->
+                            onedata_handler_management_api:set_handler(cdmi_capabilities_handler),
+                            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
+                            {false, Req7, NewState};
+                        ?dataobject_capability_path ->
+                            onedata_handler_management_api:set_handler(cdmi_dataobject_capabilities_handler),
+                            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
+                            {false, Req7, NewState};
+                        ?container_capability_path ->
+                            onedata_handler_management_api:set_handler(cdmi_container_capabilities_handler),
+                            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
+                            {false, Req7, NewState}
+                    end
+            end;
+        false ->
+            onedata_handler_management_api:set_handler(cdmi_object_handler),
+            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
+            {false, Req7, NewState}
     end.
 
 %%--------------------------------------------------------------------
@@ -175,4 +249,16 @@ validate_body(Body) ->
                 _ -> ok
             end;
         false -> throw(?duplicated_body_fields)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Checks if this objectid request points to capability object
+%%--------------------------------------------------------------------
+-spec is_capability_object(req()) -> boolean().
+is_capability_object(Req) -> %todo return req object
+    {PathInfo, _} = cowboy_req:path_info(Req),
+    case PathInfo of
+        [<<"cdmi_objectid">>, Id | _Rest] ->
+            proplists:is_defined(Id, ?CapabilityPathById);
+        _ -> false
     end.
