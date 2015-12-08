@@ -181,7 +181,7 @@ update_mimetype(Auth, FileKey, Mimetype) ->
 %%--------------------------------------------------------------------
 %% @doc Updates valuetransferencoding associated with file
 %%--------------------------------------------------------------------
--spec update_encoding(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) -> ok | no_return().
+-spec update_encoding(onedata_auth_api:auth(), onedata_file_api:file_key(), binary() | undefined) -> ok | no_return().
 update_encoding(_Auth, _FileKey, undefined) -> ok;
 update_encoding(Auth, FileKey, Encoding) ->
     ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = ?ENCODING_XATTR_KEY, value = Encoding}).
