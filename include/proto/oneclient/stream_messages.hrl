@@ -14,25 +14,26 @@
 -define(COMMUNICATION_MESSAGES_HRL, 1).
 
 -record(message_stream, {
-    stream_id :: non_neg_integer(),
-    sequence_number :: non_neg_integer()
+    stream_id :: sequencer:stream_id(),
+    sequence_number :: sequencer:sequence_number()
 }).
 
 -record(message_stream_reset, {
+    stream_id :: sequencer:stream_id()
 }).
 
 -record(end_of_message_stream, {
 }).
 
 -record(message_request, {
-    stream_id :: non_neg_integer(),
-    lower_sequence_number :: non_neg_integer(),
-    upper_sequence_number :: non_neg_integer()
+    stream_id :: sequencer:stream_id(),
+    lower_sequence_number :: sequencer:sequence_number(),
+    upper_sequence_number :: sequencer:sequence_number()
 }).
 
 -record(message_acknowledgement, {
-    stream_id :: non_neg_integer(),
-    sequence_number :: non_neg_integer()
+    stream_id :: sequencer:stream_id(),
+    sequence_number :: sequencer:sequence_number()
 }).
 
 -endif.

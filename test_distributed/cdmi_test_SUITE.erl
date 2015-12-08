@@ -508,8 +508,7 @@ mock_user_auth(Config) ->
 
 unmock_user_auth(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, identity),
-    test_utils:mock_unload(Workers, identity).
+    test_utils:mock_validate_and_unload(Workers, identity).
 
 object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

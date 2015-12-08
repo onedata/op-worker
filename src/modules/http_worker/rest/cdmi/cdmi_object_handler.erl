@@ -139,7 +139,7 @@ get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) 
 
     % reply
     {ok, Req3} = apply(cowboy_req, reply, [HttpStatus, [], {StreamSize, StreamFun}, Req2]),
-        {halt, Req3, State}.
+    {halt, Req3, State}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -223,7 +223,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 
             % return response
             {ok, NewAttrs} = onedata_file_api:stat(Auth, {path, Path}),
-            cdmi_metadata:update_encoding(Path, case RequestedValueTransferEncoding of undefined -> <<"utf-8">>; _ -> RequestedValueTransferEncoding end),
+            cdmi_metadata:update_encoding(Path, ensure_encoding_defined(RequestedValueTransferEncoding)),
             cdmi_metadata:update_mimetype(Path, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
             cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
@@ -288,3 +288,12 @@ get_attr(Auth, Path) ->
         {ok, Attrs} -> Attrs;
         {error, ?ENOENT} -> undefined
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Returns given encoding or default value if it's undefined
+%%--------------------------------------------------------------------
+-spec ensure_encoding_defined(undefined | binary()) -> binary().
+ensure_encoding_defined(undefined) ->
+    <<"utf-8">>;
+ensure_encoding_defined(Encoding) ->
+    Encoding.
