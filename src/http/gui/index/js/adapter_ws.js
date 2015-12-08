@@ -10,8 +10,8 @@ var DELETE_RECORD = 'deleteRecord';
 
 var PULL_RESP = 'pullResp';
 var PULL_REQ = 'pullReq';
-var CALLBACK_REQ = 'staticDataReq';
-var CALLBACK_RESP = 'staticDataResp';
+var CALLBACK_REQ = 'callbackReq';
+var CALLBACK_RESP = 'callbackResp';
 var PULL_RESULT = "result";
 var MSG_TYPE_PUSH_UPDATED = "pushUpdated";
 var MSG_TYPE_PUSH_DELETED = "pushDeleted";
