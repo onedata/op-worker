@@ -64,8 +64,8 @@ prepare([<<"childrenrange">> | Tail], #{options := Opts, attributes := #file_att
                 {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
                 normalize_childrenrange(Begin, End, ChildNum, MaxChildren);
             _ -> case ChildNum of
-                     0 -> {undefined, undefined}
-%%                      _ -> {0, ChildNum - 1} % todo implement onedata_file_api:get_children_count and uncomment
+                     0 -> {undefined, undefined};
+                     _ -> {0, ChildNum - 1}
                  end
         end,
     BinaryRange =
@@ -81,18 +81,14 @@ prepare([{<<"children">>, From, To} | Tail], #{attributes := #file_attr{uuid = U
     {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
     {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, To1 - From1 + 1, From1),
     Children = lists:map(
-        fun({_Uuid, Name}) -> %todo distinguish dirs and files
-            str_utils:ensure_ends_with_slash(Name)
-        end, List),
+        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Auth) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([<<"children">> | Tail], #{attributes := #file_attr{uuid = Uuid}, auth := Auth} = State) ->
     {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
     {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, MaxChildren + 1, 0),
     terminate_if_too_many_children(List, MaxChildren),
     Children = lists:map(
-        fun({_Uuid, Name}) -> %todo distinguish dirs and files
-            str_utils:ensure_ends_with_slash(Name)
-        end, List),
+        fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Auth) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([_Other | Tail], State) ->
     prepare(Tail, State).
@@ -102,7 +98,25 @@ prepare([_Other | Tail], State) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Checks if given childrange is correct according to child number. Tries to correct the result
+%% @doc
+%% Distinguishes regular files from directories
+%% (for regular files returns path ending with slash)
+%% @end
+%%--------------------------------------------------------------------
+-spec distinguish_files(Uuid :: onedata_file_api:file_uuid(), Name :: binary() ,
+    Auth::onedata_auth_api:auth()) -> binary().
+distinguish_files(Uuid, Name, Auth) ->
+    case onedata_file_api:stat(Auth, {uuid, Uuid}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            str_utils:ensure_ends_with_slash(Name);
+        {ok, _} -> Name
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given childrange is correct according to child number.
+%% Tries to correct the result
+%% @end
 %%--------------------------------------------------------------------
 -spec normalize_childrenrange(From :: integer(), To :: integer(),
   ChildNum :: integer(), MaxChildren :: integer()) ->

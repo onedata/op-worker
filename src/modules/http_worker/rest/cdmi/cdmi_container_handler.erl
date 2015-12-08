@@ -111,10 +111,11 @@ delete_resource(Req, State) ->
 %% @doc Handles GET with "application/cdmi-container" content-type
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(_, #{cdmi_version := undefined}) ->
-    throw(?no_version_given);
-get_cdmi(Req, State) ->
-    {<<"ok">>, Req, State}.
+get_cdmi(Req, #{options := Options} = State) ->
+    NewOptions = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
+    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
+    Response = json_utils:encode({struct, DirCdmi}),
+    {Response, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc Handles PUT with "application/cdmi-container" content-type
