@@ -49,9 +49,11 @@ rel: generate
 test_rel: generate ccm_rel appmock_rel
 
 ccm_rel:
+	ln -sf deps/cluster_worker/op_ccm/
 	make -C op_ccm/ rel
 
 appmock_rel:
+	ln -sf deps/cluster_worker/appmock/
 	make -C appmock/ rel
 
 relclean:
