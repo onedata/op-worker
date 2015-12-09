@@ -6,14 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements gen_server behaviour and is responsible
-%%% for managing connections.
+%%% This module provides communication API between remote client and server.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(communicator).
 -author("Krzysztof Trzepla").
-
--behaviour(gen_server).
 
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -21,24 +18,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
--export([send/2, communicate/2, communicate_async/2, communicate_async/3]).
--export([add_connection/2, remove_connection/2]).
+-export([send/2, send/3, send_async/2, communicate/2, communicate_async/2,
+    communicate_async/3, ensure_sent/2]).
 
-%% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
-
--define(SERVER, ?MODULE).
-
+-define(SEND_RETRY_DELAY, timer:seconds(5)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(30)).
-
--define(MSG_RETRANSMISSION_INTERVAL, timer:seconds(5)).
-
--record(state, {
-    session_id :: session:id(),
-    connections = [] :: [pid()] | none
-}).
 
 %%%===================================================================
 %%% API
@@ -46,239 +30,116 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the server.
+%% @equiv send(Msg, SessId, 1)
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), Con :: pid()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessId, Con) ->
-    gen_server:start_link(?MODULE, [SessId, Con], []).
+-spec send(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
+    ok | {error, Reason :: term()}.
+send(Msg, Ref) ->
+    communicator:send(Msg, Ref, 1).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a message to the client identified by given session_id.
-%% No reply is expected.
+%% Sends a message to the client using connection pool associated with client's
+%% session or chosen connection. No reply is expected. Waits until message is
+%% sent. If an error occurs retries specified number of attempts unless session
+%% has been deleted in the meantime or connection does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec send(Msg :: #server_message{} | term(), SessId :: session:id()) -> ok.
-send(#server_message{} = Msg, SessId) ->
-    {ok, CommPid} = session:get_communicator(SessId),
-    gen_server:cast(CommPid, {send, Msg});
-send(Msg, SessId) ->
-    send(#server_message{message_body = Msg}, SessId).
+-spec send(Msg :: #server_message{} | term(), Ref :: connection:ref(),
+    Retry :: non_neg_integer() | infinity) -> ok | {error, Reason :: term()}.
+send(#server_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
+    case connection:send(Msg, Ref) of
+        ok -> ok;
+        {error, {not_found, session}} -> {error, {not_found, session}};
+        {exit, {noproc, _}} -> {error, {not_found, connection}};
+        {error, _} ->
+            timer:sleep(?SEND_RETRY_DELAY),
+            case Retry of
+                infinity -> communicator:send(Msg, Ref, Retry);
+                _ -> communicator:send(Msg, Ref, Retry - 1)
+            end
+    end;
+send(#server_message{} = Msg, Ref, 1) ->
+    connection:send(Msg, Ref);
+send(Msg, Ref, Retry) ->
+    communicator:send(#server_message{message_body = Msg}, Ref, Retry).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a message to the server and waits for a reply.
+%% Similar to communicator:send/2, but does not wait until message is sent.
+%% Always returns 'ok' for non-empty connection pool or existing connection.
 %% @end
 %%--------------------------------------------------------------------
--spec communicate(Msg :: #server_message{}, SessId :: session:id()) ->
+-spec send_async(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
+    ok | {error, Reason :: term()}.
+send_async(#server_message{} = Msg, Ref) ->
+    connection:send_async(Msg, Ref);
+send_async(Msg, Ref) ->
+    communicator:send_async(#server_message{message_body = Msg}, Ref).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a message to the client and waits for a reply.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
     {ok, #client_message{}} | {error, timeout}.
-communicate(ServerMsg, SessId) ->
-    {ok, MsgId} = communicate_async(ServerMsg, SessId, self()),
+communicate(#server_message{} = ServerMsg, Ref) ->
+    {ok, MsgId} = communicate_async(ServerMsg, Ref, self()),
     receive
         #client_message{message_id = MsgId} = ClientMsg -> {ok, ClientMsg}
     after
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
-    end.
+    end;
+communicate(Msg, Ref) ->
+    communicate(#server_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends message and expects answer (with generated id) in message's default worker.
+%% Sends a message and expects to handle a reply (with generated message ID)
+%% by default worker associated with the reply type.
 %% @equiv communicate_async(Msg, SessId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #server_message{}, SessId :: session:id()) ->
+-spec communicate_async(Msg :: #server_message{}, Ref :: connection:ref()) ->
     {ok, #message_id{}}.
-communicate_async(Msg, SessId) ->
-    communicate_async(Msg, SessId, undefined).
+communicate_async(Msg, Ref) ->
+    communicate_async(Msg, Ref, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends server_message to client, identified by given session_id.
-%% This function overrides message_id of request.
-%% When ReplyPid is undefined, the answer will be routed to default handler worker.
-%% Otherwise the client answer will be send to ReplyPid process as:
-%% #client_message{message_id = MessageId}
+%% Sends server message to client, identified by session ID.
+%% This function overrides message ID of request. When 'Recipient' is undefined,
+%% the answer will be routed to default handler worker. Otherwise the client
+%% answer will be send to ReplyPid process as: #client_message{message_id = MessageId}
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #server_message{}, SessId :: session:id(),
-    Recipient :: pid() | undefined) -> {ok, #message_id{}}.
-communicate_async(Msg, SessId, Recipient) ->
-    {ok, GeneratedId} = message_id:generate(Recipient),
-    MsgWithId = Msg#server_message{message_id = GeneratedId},
-    {ok, CommPid} = session:get_communicator(SessId),
-    ok = gen_server:cast(CommPid, {send, MsgWithId}),
-    {ok, GeneratedId}.
+-spec communicate_async(Msg :: #server_message{} | term(), Ref :: connection:ref(),
+    Recipient :: pid() | undefined) -> {ok, #message_id{}} | {error, Reason :: term()}.
+communicate_async(#server_message{} = Msg, Ref, Recipient) ->
+    {ok, MsgId} = message_id:generate(Recipient),
+    case send(Msg#server_message{message_id = MsgId}, Ref) of
+        ok -> {ok, MsgId};
+        {error, Reason} -> {error, Reason}
+    end;
+communicate_async(Msg, Ref, Recipient) ->
+    communicate_async(#server_message{message_body = Msg}, Ref, Recipient).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds connection to the communicator given by pid or session_id
+%% Spawns a process that is responsible for sending provided message.
+%% The process terminates when the message has been successfully sent or
+%% session has been deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec add_connection(session:id() | pid(), ConnectionPid :: pid()) -> ok.
-add_connection(CommPid, ConnectionPid) when is_pid(CommPid) ->
-    gen_server:call(CommPid, {add_connection, ConnectionPid});
-add_connection(SessId, ConnectionPid) ->
-    {ok, CommPid} = session:get_communicator(SessId),
-    add_connection(CommPid, ConnectionPid).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes connection from the communicator associated with given session
-%% @end
-%%--------------------------------------------------------------------
--spec remove_connection(SessId :: session:id(), ConnectionPid :: pid()) -> ok.
-remove_connection(SessId, ConnectionPid) ->
-    {ok, CommPid} = session:get_communicator(SessId),
-    gen_server:call(CommPid, {remove_connection, ConnectionPid}).
-
-%%%===================================================================
-%%% gen_server callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server.
-%% @end
-%%--------------------------------------------------------------------
--spec init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore.
-init([SessId, undefined]) ->
-    process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{communicator => self()}),
-    {ok, #state{session_id = SessId, connections = none}};
-init([SessId, Con]) ->
-    process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{communicator => self()}),
-    {ok, #state{session_id = SessId, connections = [Con]}}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles call messages.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
-handle_call({add_connection, Con}, _From, #state{connections = Cons} = State) ->
-    {reply, ok, State#state{connections = [Con | Cons]}};
-
-handle_call({remove_connection, Con}, _From, #state{connections = Cons} = State) ->
-    {reply, ok, State#state{connections = lists:delete(Con, Cons)}};
-
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
-    {reply, ok, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles cast messages.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast({send, #server_message{}}, State = #state{connections = none}) ->
-    {noreply, State};
-
-handle_cast({send, #server_message{} = Msg}, State = #state{connections = ConnList}) ->
-    try_send(Msg, ConnList),
-    {noreply, State};
-
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles all non call/cast messages.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
-handle_info({timer, Msg}, State) ->
-    gen_server:cast(self(), Msg),
-    {noreply, State};
-
-handle_info({'EXIT', _, normal}, State) ->
-    {noreply, State};
-
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%% @end
-%%--------------------------------------------------------------------
--spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term().
-terminate(Reason, #state{session_id = SessId} = State) ->
-    ?log_terminate(Reason, State),
-    session_manager:remove_session(SessId).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts process state when code is changed.
-%% @end
-%%--------------------------------------------------------------------
--spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+-spec ensure_sent(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
+    ok.
+ensure_sent(Msg, Ref) ->
+    spawn(?MODULE, send, [Msg, Ref, infinity]),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Send Msg to random connection.
-%% @end
-%%--------------------------------------------------------------------
--spec try_send(Msg :: #server_message{}, Connections :: [pid()]) ->
-    ok | {error, Reason :: term()}.
-try_send(Msg, Connections) ->
-    RandomConnection =
-        try utils:random_element(Connections)
-        catch _:_ -> error_empty_connection_pool
-        end,
-    CommunicatorPid = self(),
-    spawn_link( %todo test performance of spawning vs notifying about each message
-        fun() ->
-            try connection:send(RandomConnection, Msg) of
-                ok -> ok;
-                Error ->
-                    ?warning("Could not send message ~p, due to error: ~p, retrying in ~p seconds.",
-                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
-                    erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
-            catch
-                _:Error ->
-                    ?warning_stacktrace("Could not send message ~p, due error: ~p, retrying in ~p seconds.",
-                        [Msg,  Error, ?MSG_RETRANSMISSION_INTERVAL]),
-                    erlang:send_after(?MSG_RETRANSMISSION_INTERVAL, CommunicatorPid, {timer, {send, Msg}})
-            end
-        end),
-    ok.

@@ -15,6 +15,7 @@
 
 -behaviour(worker_plugin_behaviour).
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -23,8 +24,6 @@
 
 %% API
 -export([supervisor_spec/0, supervisor_child_spec/0]).
-
--define(SESSION_WORKER_SUP, session_manager_worker_sup).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -46,10 +45,8 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: ping | healthcheck |
-    {get_or_create_session, SessId :: session:id(), Iden :: session:identity(),
-        Con :: pid()} |
-    {remove_session, SessId :: session:id()},
+    Request :: ping | healthcheck | {remove_session, SessId :: session:id()} |
+    {remove_session_if_inactive, SessId :: session:id()},
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -59,15 +56,6 @@ handle(ping) ->
 
 handle(healthcheck) ->
     ok;
-
-handle({reuse_or_create_session, SessId, Iden, Con}) ->
-    reuse_or_create_session(SessId, Iden, Con);
-
-handle({reuse_or_create_rest_session, Iden}) ->
-    reuse_or_create_rest_session(Iden);
-
-handle({update_session_auth, SessId, Auth}) ->
-    update_session_auth(SessId, Auth);
 
 handle({remove_session, SessId}) ->
     remove_session(SessId);
@@ -92,7 +80,7 @@ cleanup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a supervisor spec for a event manager worker supervisor.
+%% Returns a supervisor spec for a session manager worker supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec supervisor_spec() ->
@@ -105,7 +93,7 @@ supervisor_spec() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a supervisor child_spec for a event dispatcher supervisor.
+%% Returns a supervisor child_spec for a session supervisor.
 %% @end
 %%--------------------------------------------------------------------
 -spec supervisor_child_spec() -> [supervisor:child_spec()].
@@ -123,140 +111,20 @@ supervisor_child_spec() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Tries to reuse active session. If session does not exist it is created.
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_or_create_session(SessId :: session:id(),
-    Iden :: session:identity(), Con :: pid()) ->
-    {ok, reused | created} | {error, Reason :: term()}.
-reuse_or_create_session(SessId, Iden, Con) ->
-    case reuse_session(SessId, Iden, Con) of
-        {ok, reused} -> {ok, reused};
-        {error, {not_found, _}} -> create_session(SessId, Iden, Con);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Tries to reuse active rest session. If session does not exist it is created.
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_or_create_rest_session(Iden :: session:identity()) ->
-    {ok, reused | created} | {error, Reason :: term()}.
-reuse_or_create_rest_session(Iden) ->
-    case reuse_rest_session(Iden) of
-        {ok, reused} -> {ok, reused};
-        {error, {not_found, _}} -> create_rest_session(Iden);
-        {error, Reason} -> {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Reuses active session or returns with an error.
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_session(SessId :: session:id(), Iden :: session:identity(),
-    Con :: pid()) -> {ok, reused} |{error, Reason :: invalid_identity | term()}.
-reuse_session(SessId, Iden, Con) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{identity = Iden, communicator = undefined}}} ->
-            reuse_session(SessId, Iden, Con);
-        {ok, #document{value = #session{identity = Iden, communicator = Comm}}} ->
-            ok = communicator:add_connection(Comm, Con),
-            {ok, reused};
-        {ok, #document{}} ->
-            {error, invalid_identity};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Reuses active rest session or returns with an error.
-%% @end
-%%--------------------------------------------------------------------
--spec reuse_rest_session(Iden :: session:identity()) ->
-    {ok, reused} |{error, Reason :: invalid_identity | term()}.
-reuse_rest_session(Iden) ->
-    case session:get(session:get_rest_session_id(Iden)) of
-        {ok, #document{value = #session{identity = Iden}}} ->
-            {ok, reused};
-        {ok, #document{}} ->
-            {error, invalid_identity};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new session or if session exists tries to reuse it.
-%% @end
-%%--------------------------------------------------------------------
--spec create_session(SessId :: session:id(), Iden :: session:identity(),
-    Con :: pid()) -> {ok, created} | {error, Reason :: term()}.
-create_session(SessId, Iden, Con) ->
-    case session:create(#document{key = SessId, value = #session{identity = Iden}}) of
-        {ok, SessId} ->
-            {ok, _} = start_session_sup(SessId, Con),
-            {ok, created};
-        {error, already_exists} ->
-            reuse_or_create_session(SessId, Iden, Con);
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new rest session or if session exists tries to reuse it.
-%% @end
-%%--------------------------------------------------------------------
--spec create_rest_session(Iden :: session:identity()) ->
-    {ok, created} | {error, Reason :: term()}.
-create_rest_session(Iden) ->
-    case session:create(#document{
-            key = session:get_rest_session_id(Iden),
-            value = #session{type = rest, identity = Iden}
-    }) of
-        {ok, SessId} ->
-            {ok, _} = start_session_sup(SessId, none),
-            {ok, created};
-        {error, already_exists} ->
-            reuse_or_create_rest_session(Iden);
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates the #auth{} record in given session.
-%% @end
-%%--------------------------------------------------------------------
-update_session_auth(SessId, #auth{} = Auth) ->
-    {ok, Doc = #document{
-        value = #session{} = Session}} = session:get(SessId),
-    {ok, _} = session:save(Doc#document{
-        value = Session#session{auth = Auth}}),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes session from cache and stops session supervisor.
+%% Removes session from cache, stops session supervisor and disconnects remote
+%% client.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_session(SessId :: session:id()) -> ok | {error, Reason :: term()}.
 remove_session(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{session_sup = undefined}}} ->
-            session:delete(SessId);
-        {ok, #document{value = #session{session_sup = SessSup, node = Node}}} ->
-            ok = session:delete(SessId),
-            stop_session_sup(Node, SessSup);
+    case session:const_get(SessId) of
+        {ok, #document{value = #session{supervisor = undefined, connections = Cons}}} ->
+            session:delete(SessId),
+            close_connections(Cons);
+        {ok, #document{value = #session{supervisor = Sup, node = Node, connections = Cons}}} ->
+            supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup),
+            session:delete(SessId),
+            close_connections(Cons);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -264,22 +132,11 @@ remove_session(SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Starts session supervisor supervised by event manager
-%% worker supervisor.
+%% Closes connections to remote client.
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_sup(SessId :: session:id(), Con :: pid() | none) ->
-    supervisor:startchild_ret().
-start_session_sup(SessId, Con) ->
-    supervisor:start_child(?SESSION_WORKER_SUP, [SessId, Con]).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Stops event dispatcher supervisor and its children.
-%% @end
-%%--------------------------------------------------------------------
--spec stop_session_sup(Node :: node(), SessSup :: pid()) ->
-    ok | {error, Reason :: term()}.
-stop_session_sup(Node, SessSup) ->
-    supervisor:terminate_child({?SESSION_WORKER_SUP, Node}, SessSup).
+-spec close_connections(Cons :: [pid()]) -> ok.
+close_connections(Cons) ->
+    lists:foreach(fun(Con) ->
+        gen_server:cast(Con, disconnect)
+    end, Cons).

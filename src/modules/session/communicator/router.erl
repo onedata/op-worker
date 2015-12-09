@@ -77,22 +77,27 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) 
 -spec route_and_ignore_answer(#client_message{}) -> ok.
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #event{} = Evt}) ->
-    event:emit(Evt, SessId);
+    event:emit(Evt, SessId),
+    ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #events{events = Evts}}) ->
-    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, SessId) end, Evts);
+    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, SessId) end, Evts),
+    ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription{} = Sub}) ->
-    event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId);
+    event:subscribe(event_utils:inject_event_stream_definition(Sub), SessId),
+    ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #subscription_cancellation{} = SubCan}) ->
-    event:unsubscribe(SubCan, SessId);
+    event:unsubscribe(SubCan, SessId),
+    ok;
 % Message that updates the #auth{} record in given session (originates from
 % #'Token' client message).
-route_and_ignore_answer(#client_message{session_id = SessionId,
+route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #auth{} = Auth}) ->
     % This function performs an async call to session manager worker.
-    ok = session_manager:update_session_auth(SessionId, Auth).
+    {ok, SessId} = session:update(SessId, #{auth => Auth}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,21 +105,20 @@ route_and_ignore_answer(#client_message{session_id = SessionId,
 %% repack it into server_message and send to the client
 %% @end
 %%--------------------------------------------------------------------
--spec route_and_send_answer(#client_message{}) -> ok.
+-spec route_and_send_answer(#client_message{}) ->
+    ok | {ok, #server_message{}} | {error, term()}.
 route_and_send_answer(#client_message{message_id = Id,
-    message_body = #ping{data = Data}, session_id = SessId}) ->
-    Pong = #server_message{message_id = Id, message_body = #pong{data = Data}},
-    communicator:send(Pong, SessId);
+    message_body = #ping{data = Data}}) ->
+    {ok, #server_message{message_id = Id, message_body = #pong{data = Data}}};
 route_and_send_answer(#client_message{message_id = Id,
-    message_body = #get_protocol_version{}, session_id = SessId}) ->
-    ProtoV = #server_message{message_id = Id, message_body = #protocol_version{}},
-    communicator:send(ProtoV, SessId);
+    message_body = #get_protocol_version{}}) ->
+    {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{fuse_request = FuseRequest}}) ->
-    ?debug("Fuse request ~p", [FuseRequest]),
+    ?debug("Fuse request: ~p", [FuseRequest]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, SessId, FuseRequest}),
-        ?debug("Fuse response ~p", [FuseResponse]),
+        ?debug("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, SessId)

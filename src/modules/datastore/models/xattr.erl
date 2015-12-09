@@ -28,7 +28,7 @@
 
 -export_type([name/0, value/0]).
 
--define(XATTR_LINK_NAME(XattrName), {<<"xattr">>, XattrName}).
+-define(XATTR_LINK_NAME(XattrName), <<"xattr_", XattrName/binary>>).
 
 %%%===================================================================
 %%% API
@@ -101,9 +101,9 @@ run_synchronized(ResourceId, Fun) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     case datastore:save(?STORE_LEVEL, Document) of
-    {ok, Key}->
-        {Uuid, Name} = decode_key(Key),
-        ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
+        {ok, Key} ->
+            {Uuid, Name} = decode_key(Key),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
             {ok, Key};
         Error ->
             Error

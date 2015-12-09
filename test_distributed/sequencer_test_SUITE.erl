@@ -145,7 +145,7 @@ init_per_testcase(Case, Config) when
     Case =:= route_message_should_forward_messages_to_different_streams ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_router(Worker),
-    mock_communicator(Worker, fun(_, _) -> ok end),
+    mock_communicator(Worker, fun(_, _, _) -> ok end),
     {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config];
 
@@ -202,7 +202,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user_id">>},
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self]
+        reuse_or_create_fuse_session, [SessId, Iden, Self]
     )),
     {ok, SessId}.
 
@@ -281,7 +281,7 @@ client_message(StmId, SeqNum) ->
 -spec mock_communicator(Worker :: node()) -> ok.
 mock_communicator(Worker) ->
     Self = self(),
-    mock_communicator(Worker, fun(Msg, _) -> Self ! Msg end).
+    mock_communicator(Worker, fun(Msg, _, _) -> Self ! Msg, ok end).
 
 %%--------------------------------------------------------------------
 %% @private
