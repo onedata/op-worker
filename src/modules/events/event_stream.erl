@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -32,7 +32,9 @@
 
 -type definition() :: #event_stream_definition{}.
 -type metadata() :: term().
--type init_handler() :: fun((#subscription{}, session:id()) -> init_result()).
+-type init_handler() :: fun((#subscription{}, session:id(), session:type()) ->
+    init_result()
+).
 -type terminate_handler() :: fun((init_result()) -> term()).
 -type event_handler() :: fun(([#event{}], init_result()) -> ok).
 -type admission_rule() :: fun((#event{}) -> true | false).
@@ -56,6 +58,7 @@
 -record(state, {
     subscription_id :: subscription:id(),
     session_id :: session:id(),
+    session_type :: session:type(),
     event_manager :: pid(),
     definition :: definition(),
     init_result :: term(),
@@ -73,10 +76,10 @@
 %% Starts the event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(EvtMan :: pid(), Sub :: #subscription{}, SessId :: session:id()) ->
-    {ok, Pid :: pid()} | ignore |{error, Reason :: term()}.
-start_link(EvtMan, Sub, SessId) ->
-    gen_server:start_link(?MODULE, [EvtMan, Sub, SessId], []).
+-spec start_link(SessType :: session:type(), EvtMan :: pid(), Sub :: #subscription{},
+    SessId :: session:id()) -> {ok, Pid :: pid()} | ignore |{error, Reason :: term()}.
+start_link(SessType, EvtMan, Sub, SessId) ->
+    gen_server:start_link(?MODULE, [SessType, EvtMan, Sub, SessId], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -91,15 +94,16 @@ start_link(EvtMan, Sub, SessId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, SessId]) ->
+init([SessType, EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, SessId]) ->
     ?debug("Initializing event stream for subscription ~p in session ~p", [SubId, SessId]),
     process_flag(trap_exit, true),
     register_stream(EvtMan, SubId),
     {ok, #state{
         subscription_id = SubId,
         session_id = SessId,
+        session_type = SessType,
         event_manager = EvtMan,
-        init_result = execute_init_handler(StmDef, Sub, SessId),
+        init_result = execute_init_handler(StmDef, Sub, SessId, SessType),
         metadata = get_initial_metadata(StmDef),
         definition = StmDef,
         emission_ref = schedule_event_handler_execution(StmDef)
@@ -230,9 +234,10 @@ unregister_stream(EvtMan, SubId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec execute_init_handler(StmDef :: definition(), Sub :: #subscription{},
-    SessId :: session:id()) -> InitResult :: init_result().
-execute_init_handler(#event_stream_definition{init_handler = Handler}, Sub, SessId) ->
-    Handler(Sub, SessId).
+    SessId :: session:id(), SessType :: session:type()) -> InitResult :: init_result().
+execute_init_handler(#event_stream_definition{init_handler = Handler}, Sub, SessId,
+    SessType) ->
+    Handler(Sub, SessId, SessType).
 
 %%--------------------------------------------------------------------
 %% @private

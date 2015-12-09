@@ -60,11 +60,19 @@ init([SessId, SessType]) ->
 
     {ok, SessId} = session:update(SessId, #{supervisor => self(), node => node()}),
 
-    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
-        session_watcher_spec(SessId, SessType),
-        sequencer_manager_sup_spec(SessId),
-        event_manager_sup_spec(SessId)
-    ]}}.
+    case SessType of
+        fuse ->
+            {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+                session_watcher_spec(SessId, SessType),
+                sequencer_manager_sup_spec(SessId),
+                event_manager_sup_spec(SessId, SessType)
+            ]}};
+        _ ->
+            {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+                session_watcher_spec(SessId, SessType),
+                event_manager_sup_spec(SessId, SessType)
+            ]}}
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -106,11 +114,11 @@ sequencer_manager_sup_spec(SessId) ->
 %% Creates a supervisor child_spec for a event manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec event_manager_sup_spec(SessId :: session:id()) ->
+-spec event_manager_sup_spec(SessId :: session:id(), SessType :: session:type()) ->
     supervisor:child_spec().
-event_manager_sup_spec(SessId) ->
+event_manager_sup_spec(SessId, SessType) ->
     Id = Module = event_manager_sup,
     Restart = transient,
     Shutdown = infinity,
     Type = supervisor,
-    {Id, {Module, start_link, [SessId]}, Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [SessId, SessType]}, Restart, Shutdown, Type, [Module]}.

@@ -190,7 +190,7 @@ start_event_stream(Worker, EmRule, EmTime) ->
         id = 1,
         object = #read_subscription{},
         event_stream = ?READ_EVENT_STREAM#event_stream_definition{
-            init_handler = fun(Sub, SessId) ->
+            init_handler = fun(Sub, SessId, _) ->
                 EvtMan ! {init_handler, Sub, SessId}
             end,
             terminate_handler = fun(InitResult) ->
