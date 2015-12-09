@@ -37,6 +37,7 @@
 -type proxyio_response() :: #remote_data{} | #remote_write_result{}.
 
 -record(proxyio_request, {
+    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     proxyio_request :: proxyio_request()

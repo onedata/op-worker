@@ -12,6 +12,7 @@
 -ifndef(DATASTORE_MODELS_HRL).
 -define(DATASTORE_MODELS_HRL, 1).
 
+-include("modules/events/subscriptions.hrl").
 -include("proto/common/credentials.hrl").
 
 %% Wrapper for all models' records
@@ -54,10 +55,10 @@
 
 %% Model that controls utilization of cache
 -record(cache_controller, {
-    timestamp = {0,0,0} :: tuple(),
+    timestamp = {0, 0, 0} :: tuple(),
     action = non :: atom(),
     last_user = non :: string() | non,
-    last_action_time = {0,0,0} :: tuple(),
+    last_action_time = {0, 0, 0} :: tuple(),
     deleted_links = [] :: list()
 }).
 
@@ -73,12 +74,6 @@
     field1 :: term(),
     field2 :: term(),
     field3 :: term()
-}).
-
-%% event manager model:
-%% value - mapping from subscription ID to subscription
--record(subscription, {
-    value :: event_manager:subscription()
 }).
 
 %% Identity containing user_id
@@ -137,6 +132,7 @@
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: oneprovider:id(),
+    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],

@@ -15,7 +15,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 
 %% API
--export([write/5, read/5]).
+-export([write/6, read/6]).
 
 %%%===================================================================
 %%% API functions
@@ -27,14 +27,18 @@
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec write(Ctx :: fslogic_worker:ctx(), StorageId :: storage:id(),
-    FileId :: helpers:file(), Offset :: non_neg_integer(), Data :: binary()) ->
+-spec write(SessId :: session:id(), SpaceId :: file_meta:uuid(),
+    StorageId :: storage:id(), FileId :: helpers:file(),
+    Offset :: non_neg_integer(), Data :: binary()) ->
     #proxyio_response{}.
-write(_Ctx, StorageId, FileId, Offset, Data) ->
+write(SessionId, SpaceId, StorageId, FileId, Offset, Data) ->
     {ok, Storage} = storage:get(StorageId),
 
+    SFMHandle =
+        storage_file_manager:new_handle(SessionId, SpaceId, Storage, FileId),
+
     {Status, Response} =
-        case storage_file_manager:open(Storage, FileId, read) of
+        case storage_file_manager:open(SFMHandle, write) of
             {ok, Handle} ->
                 case storage_file_manager:write(Handle, Offset, Data) of
                     {ok, Wrote} ->
@@ -60,14 +64,18 @@ write(_Ctx, StorageId, FileId, Offset, Data) ->
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(Ctx :: fslogic_worker:ctx(), StorageId :: storage:id(),
-    FileId :: helpers:file(), Offset :: non_neg_integer(),
-    Size :: pos_integer()) ->
+-spec read(SessId :: session:id(), SpaceId :: file_meta:uuid(),
+    StorageId :: storage:id(), FileId :: helpers:file(),
+    Offset :: non_neg_integer(), Size :: pos_integer()) ->
     #proxyio_response{}.
-read(_Ctx, StorageId, FileId, Offset, Size) ->
+read(SessionId, SpaceId, StorageId, FileId, Offset, Size) ->
     {ok, Storage} = storage:get(StorageId),
+
+    SFMHandle =
+        storage_file_manager:new_handle(SessionId, SpaceId, Storage, FileId),
+
     {Status, Response} =
-        case storage_file_manager:open(Storage, FileId, write) of
+        case storage_file_manager:open(SFMHandle, read) of
             {ok, Handle} ->
                 case storage_file_manager:read(Handle, Offset, Size) of
                     {ok, Data} ->
