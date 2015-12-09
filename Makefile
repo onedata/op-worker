@@ -32,7 +32,9 @@ deps:
 	./rebar get-deps
 
 generate: deps compile
+	mv deps/cluster_worker/rel deps/cluster_worker/rel.bak || true
 	./rebar generate $(OVERLAY_VARS)
+	mv deps/cluster_worker/rel.bak deps/cluster_worker/rel || true
 
 clean: relclean pkgclean
 	./rebar clean
