@@ -44,7 +44,7 @@ stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr:name()) ->
-    {ok, xattr:value()} | error_reply().
+    {ok, #xattr{}} | error_reply().
 get_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
     lfm_utils:call_fslogic(SessId, #get_xattr{uuid = FileUuid, name = XattrName},
         fun(#xattr{} = Xattr) ->

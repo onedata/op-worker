@@ -90,7 +90,8 @@ reuse_or_create_rest_session(Iden) ->
 %% Creates REST session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_rest_session(Iden :: session:identity(), Auth :: session:auth()) ->
+-spec reuse_or_create_rest_session(Iden :: session:identity(),
+    Auth :: session:auth() | undefined) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_rest_session(Iden, Auth) ->
     SessId = session:get_rest_session_id(Iden),

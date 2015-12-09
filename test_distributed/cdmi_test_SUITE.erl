@@ -370,7 +370,6 @@ metadata_test(Config) ->
     RequestBody11 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value">>}]}],
     RawRequestBody11 = json_utils:encode(RequestBody11),
     {ok, 201, _Headers11, Response11} = do_request(Worker, DirName, put, RequestHeaders2, RawRequestBody11),
-    ct:print("~p", [Response11]),
     CdmiResponse11 = json_utils:decode(Response11),
     Metadata11 = proplists:get_value(<<"metadata">>, CdmiResponse11),
     ?assertEqual(<<"my_dir_value">>, proplists:get_value(<<"my_metadata">>, Metadata11)),
@@ -742,7 +741,6 @@ capabilities_test(Config) ->
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     [Worker | _] = ?config(op_worker_nodes, ConfigWithNodes),
-    initializer:clear_models(Worker, [subscription]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
