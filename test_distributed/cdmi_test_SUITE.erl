@@ -738,32 +738,35 @@ capabilities_test(Config) ->
 % tests if cdmi returns 'moved pemanently' code when we forget about '/' in path
 moved_pemanently_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    DirName = "somedir/",
+    DirName = <<"somedir/">>,
     DirNameWithoutSlash = <<"somedir">>,
-    FileName = "somedir/somefile.txt",
+    FileName = <<"somedir/somefile.txt">>,
     FileNameWithSlash = <<"somedir/somefile.txt/">>,
     mkdir(Config, DirName),
     ?assert(object_exists(Config, DirName)),
     create_file(Config, FileName),
     ?assert(object_exists(Config, FileName)),
 
+    CDMIEndpoint = list_to_binary(cdmi_endpoint(Worker)),
     %%--------- dir test -----------
     RequestHeaders1 =
         [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    Location1 = <<CDMIEndpoint/binary, DirName/binary>>,
     {ok, Code1, Headers1, _Response1} =
         do_request(Worker, DirNameWithoutSlash, get, RequestHeaders1, []),
     ?assertEqual(?MOVED_PERMANENTLY, Code1),
-    ?assertEqual(iolist_to_binary(["/", DirName]),
+    ?assertEqual(Location1,
         proplists:get_value(<<"Location">>, Headers1)),
     %%------------------------------
 
     %%--------- file test ----------
     RequestHeaders2 =
         [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    Location2 = <<CDMIEndpoint/binary, FileName/binary>>,
     {ok, Code2, Headers2, _Response2} =
         do_request(Worker, FileNameWithSlash, get, RequestHeaders2, []),
     ?assertEqual(?MOVED_PERMANENTLY,Code2),
-    ?assertEqual(iolist_to_binary(["/", FileName]),
+    ?assertEqual(Location2,
         proplists:get_value(<<"Location">>, Headers2)).
     %%------------------------------
 

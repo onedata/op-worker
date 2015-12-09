@@ -12,6 +12,7 @@
 -module(cdmi_existence_checker).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
@@ -50,9 +51,8 @@ object_resource_exists(Req, State) ->
 %%--------------------------------------------------------------------
 -spec redirect_to_object(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
 redirect_to_object(Req, #{path := Path} = State) ->
-    Location = cdmi_path:remove_trailing_slash(Path),
-    {ok, Req2} = cowboy_req:reply(?MOVED_PERMANENTLY, [{<<"Location">>, Location}], Req),
-    {halt, Req2, State}.
+    CorrectPath = cdmi_path:remove_trailing_slash(Path),
+    redirect_to(Req, State, CorrectPath).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,9 +61,26 @@ redirect_to_object(Req, #{path := Path} = State) ->
 %%--------------------------------------------------------------------
 -spec redirect_to_container(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
 redirect_to_container(Req, #{path := Path} = State) ->
-    Location = cdmi_path:add_trailing_slash(Path),
+    CorrectPath = cdmi_path:add_trailing_slash(Path),
+    redirect_to(Req, State, CorrectPath).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Redirect a request to the given path.
+%% @end
+%%--------------------------------------------------------------------
+-spec redirect_to(cowboy_req:req(), #{}, binary()) -> {halt, cowboy_req:req(), #{}}.
+redirect_to(Req, State, Path) ->
+    Port = application:get_env(?APP_NAME, http_worker_rest_port),
+    BinPort = integer_to_binary(Port),
+    {Hostname, _} = cowboy_req:header(<<"host">>, Req),
+
+    {QS, _} = cowboy_req:qs(Req),
+    Location = <<"https://", Hostname/binary, ":", BinPort/binary,
+        "/cdmi/", Path/binary, "?", QS/binary>>,
     {ok, Req2} = cowboy_req:reply(?MOVED_PERMANENTLY, [{<<"Location">>, Location}], Req),
     {halt, Req2, State}.
+
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:resource_exists/2

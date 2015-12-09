@@ -45,7 +45,7 @@ call_fslogic(SessId, Request, OKHandle) ->
 %%--------------------------------------------------------------------
 -spec ls_all(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls_all(CTX, UUID) ->
-    Chunk = application:get_env(?APP_NAME, cdmi_ls_chunk),
+    Chunk = application:get_env(?APP_NAME, max_children_per_request),
     {ok, ls_all(CTX, UUID, 0, Chunk)}.
 
 -spec ls_all(CTX :: #fslogic_ctx{}, UUID :: file_uuid(), Offset :: integer(), Chunk :: integer()) ->
