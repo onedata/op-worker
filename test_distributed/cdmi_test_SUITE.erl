@@ -27,17 +27,18 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, metadata_test/1, delete_file_test/1, create_file_test/1, 
-    update_file_test/1, create_dir_test/1, capabilities_test/1, choose_adequate_handler/1,
-    use_supported_cdmi_version/1, use_unsupported_cdmi_version/1, moved_pemanently_test/1]).
+-export([list_dir_test/1, get_file_test/1, metadata_test/1, delete_file_test/1, delete_dir_test/1,
+    create_file_test/1, update_file_test/1, create_dir_test/1, capabilities_test/1,
+    choose_adequate_handler/1, use_supported_cdmi_version/1, use_unsupported_cdmi_version/1,
+    moved_pemanently_test/1]).
 
 -performance({test_cases, []}).
 all() ->
     [
-        list_dir_test, get_file_test, metadata_test, delete_file_test, create_file_test, 
-        update_file_test, create_dir_test, capabilities_test, 
-        choose_adequate_handler, use_supported_cdmi_version, 
-        use_unsupported_cdmi_version, moved_pemanently_test
+        list_dir_test, get_file_test, metadata_test, delete_file_test, delete_dir_test,
+        create_file_test, update_file_test, create_dir_test, capabilities_test,
+        choose_adequate_handler, use_supported_cdmi_version, use_unsupported_cdmi_version,
+        moved_pemanently_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -417,6 +418,49 @@ delete_file_test(Config) ->
     ?assertEqual(204,Code2),
 
     ?assert(not object_exists(Config, GroupFileName)).
+    %%------------------------------
+
+% Tests cdmi container DELETE requests
+delete_dir_test(Config) ->
+%%   todo uncomment tests with IDs
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    DirName = <<"/toDelete/">>,
+    ChildDirName = <<"/toDelete/child/">>,
+    SpacesDirName = <<"/spaces/">>,
+
+    %%----- basic delete -----------
+    mkdir(Config, DirName),
+    ?assert(object_exists(Config, DirName)),
+
+    RequestHeaders1 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, delete, RequestHeaders1, []),
+    ?assertEqual("204",Code1),
+
+    ?assert(not object_exists(Config, DirName)),
+    %%------------------------------
+
+    %%------ recursive delete ------
+    mkdir(Config, DirName),
+    ?assert(object_exists(Config, DirName)),
+    mkdir(Config, list_to_binary(ChildDirName)),
+    ?assert(object_exists(Config, DirName)),
+
+    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    {ok, Code2, _Headers2, _Response2} = do_request(Worker, DirName, delete, RequestHeaders2, []),
+    ?assertEqual("204",Code2),
+
+    ?assert(not object_exists(Config, DirName)),
+    ?assert(not object_exists(Config, ChildDirName)),
+    %%------------------------------
+
+    %%----- delete group dir -------
+    ?assert(object_exists(Config, SpacesDirName)),
+
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.1.1"}],
+    {ok, Code3, _Headers3, _Response3} = do_request(Worker, SpacesDirName, delete, RequestHeaders3, []),
+    ?assertEqual("403",Code3),
+
+    ?assert(object_exists(Config, SpacesDirName)).
     %%------------------------------
 
 % Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
