@@ -40,63 +40,26 @@ call_fslogic(SessId, Request, OKHandle) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Lists all contents of a directory.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec ls_all(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls_all(CTX, UUID) ->
     Chunk = application:get_env(?APP_NAME, max_children_per_request),
-    {ok, ls_all(CTX, UUID, 0, Chunk)}.
-
--spec ls_all(CTX :: #fslogic_ctx{}, UUID :: file_uuid(), Offset :: integer(), Chunk :: integer()) ->
-    [{file_uuid(), file_name()}] | error_reply().
-ls_all(CTX, UUID, Offset, Chunk) ->
-    #fslogic_ctx{session_id = SessId} = CTX,
-    case lfm_dirs:ls(SessId, {uuid, UUID}, Chunk, Offset) of
-        {ok, LsResult} when length(LsResult =:= Chunk) ->
-            {ok, LsAll} = ls_all(CTX, UUID, Offset+Chunk, Chunk),
-            {ok, LsResult ++ LsAll};
-        {ok, LsResult} ->
-            {ok, LsResult};
-%%         {ok, LS} ->
-%%             case length(LS) of
-%%                 Chunk ->
-%%                     LS ++ ls_all(CTX, UUID, Offset+Chunk, Chunk);
-%%                 _ ->
-%%                     LS
-%%             end;
-        Error -> Error
-    end.
+    ls_all(CTX, UUID, 0, Chunk).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes a directory with all its children.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec rmdir(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> ok | error_reply().
 rmdir(CTX, UUID) ->
-    try
-        {ok, Children} = ls_all(CTX, UUID),
-        ChildUUIDs = [Uuid || {Uuid, _Path} <- Children],
-        ChildDirs = lists:filter(fun(X) -> isdir(CTX, X) end, ChildUUIDs),
-        ChildFiles = lists:subtract(ChildUUIDs, ChildDirs),
-        %% recursively delete all subdirectories
-        [rmdir(CTX, U) || U <- ChildDirs],
-        %% delete regular children
-        [lfm_files:unlink(CTX, U) || U <- ChildFiles],
-        %% delete directory itself
-        ok = lfm_files:unlink(CTX, UUID)
-    catch
-        %% return error reply from lfm
-        error:{badmatch, X}  -> X
-    end.
+    rm(CTX, UUID).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if a file is directory.
-%%
 %% @end
 %%--------------------------------------------------------------------
 -spec isdir(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> true | false | error_reply().
@@ -105,4 +68,51 @@ isdir(CTX, UUID) ->
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
         {ok, _} -> false;
         X -> X
+    end.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists all contents of a directory from given offset.
+%% @end
+%%--------------------------------------------------------------------
+-spec ls_all(CTX :: #fslogic_ctx{}, UUID :: file_uuid(), Offset :: integer(), Chunk :: integer()) ->
+    {ok, [{file_uuid(), file_name()}]} | error_reply().
+ls_all(CTX = #fslogic_ctx{session_id = SessId}, UUID, Offset, Chunk) ->
+    case lfm_dirs:ls(SessId, {uuid, UUID}, Chunk, Offset) of
+        {ok, LsResult} when length(LsResult =:= Chunk) ->
+            case ls_all(CTX, UUID, Offset+Chunk, Chunk) of
+                {ok, LsAll} -> {ok, LsResult ++ LsAll};
+                Error -> Error
+            end;
+        {ok, LsResult} ->
+            {ok, LsResult};
+        Error -> Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes an object with all its children.
+%% @end
+%%--------------------------------------------------------------------
+
+-spec rm(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> ok | error_reply().
+rm(CTX, UUID) ->
+    try
+        case isdir(CTX, UUID) of
+            true ->
+                %% delete all children
+                {ok, Children} = ls_all(CTX, UUID),
+                [rm(CTX, Child) || Child <- Children];
+
+            false -> ok
+        end,
+        %% delete an object
+        ok = lfm_files:unlink(CTX, UUID)
+    catch
+        %% return error reply from lfm
+        error:{badmatch, X}  -> X
     end.
