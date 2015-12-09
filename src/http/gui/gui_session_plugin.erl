@@ -15,14 +15,16 @@
 
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("gui/include/gui.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
 %% session_logic_behaviour API
 -export([init/0, cleanup/0]).
--export([create_session/2, update_session/3, lookup_session/1, delete_session/1]).
--export([clear_expired_sessions/0, get_cookie_ttl/0]).
+-export([create_session/1, update_session/2, lookup_session/1]).
+-export([delete_session/1]).
+-export([get_cookie_ttl/0]).
 
 
 %%%===================================================================
@@ -57,11 +59,11 @@ cleanup() ->
 %% they are application specific arguments that are needed to create a session.
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(Expires, CustomArgs) ->
+-spec create_session(CustomArgs) ->
     {ok, SessionId} | {error, term()} when
-    Expires :: integer(), CustomArgs :: [term()], SessionId :: binary().
-create_session(Expires, [#auth{} = Auth]) ->
-    case session_manager:create_gui_session(random_id(), Auth, Expires) of
+    CustomArgs :: [term()], SessionId :: binary().
+create_session([#auth{} = Auth]) ->
+    case session_manager:create_gui_session(Auth) of
         {ok, SessionId} ->
             {ok, SessionId};
         {error, Error} ->
@@ -78,12 +80,11 @@ create_session(Expires, [#auth{} = Auth]) ->
 %% Expires is expressed in number of seconds since epoch.
 %% @end
 %%--------------------------------------------------------------------
--spec update_session(SessionID, Memory, Expires) -> ok | {error, term()}
+-spec update_session(SessionID, Memory) -> ok | {error, term()}
     when SessionID :: binary(),
-    Memory :: [{Key :: binary(), Value :: binary}],
-    Expires :: integer().
-update_session(SessionId, Expires, Memory) ->
-    case session:update(SessionId, #{memory => Memory, expires => Expires}) of
+    Memory :: [{Key :: binary(), Value :: binary}].
+update_session(SessionId, Memory) ->
+    case session:update(SessionId, #{memory => Memory}) of
         {ok, _} ->
             ok;
         {error, Error} ->
@@ -98,17 +99,16 @@ update_session(SessionId, Expires, Memory) ->
 %% or undefined if given session does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec lookup_session(SessionId :: binary()) -> {Expires, Memory} | undefined
-    when Expires :: integer(), Memory :: [{Key :: binary(), Value :: binary}].
+-spec lookup_session(SessionId :: binary()) -> {ok, Memory} | undefined
+    when Memory :: [{Key :: binary(), Value :: binary}].
 lookup_session(SessionId) ->
     case SessionId of
         undefined ->
             undefined;
         _ ->
             case session:get(SessionId) of
-                {ok, #document{value = #session{
-                    expires = Expires, memory = Memory}}} ->
-                    {Expires, Memory};
+                {ok, #document{value = #session{memory = Memory}}} ->
+                    {ok, Memory};
                 _ ->
                     undefined
             end
@@ -133,52 +133,14 @@ delete_session(SessionId) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Deletes all sessions that have expired. Every session is saved with a
-%% Expires arg, that marks when it expires (in secs since epoch).
-%% The clearing should be performed based on this.
-%% Returns number of expired sessions.
-%% @end
-%%--------------------------------------------------------------------
--spec clear_expired_sessions() -> integer().
-clear_expired_sessions() ->
-    {ok, AllSessions} = session:list(),
-    _DeletedSessions = lists:foldl(
-        fun(#document{key = Key, value = #session{expires = Expires}}, Acc) ->
-            case Expires > now_seconds() of
-                true ->
-                    session:delete(Key),
-                    Acc + 1;
-                false ->
-                    Acc
-            end
-        end, 0, AllSessions).
-
-
-%%--------------------------------------------------------------------
 %% @doc Returns cookies time to live in seconds.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cookie_ttl() -> integer() | no_return().
+-spec get_cookie_ttl() -> integer() | {error, term()}.
 get_cookie_ttl() ->
     case application:get_env(?APP_NAME, gui_cookie_ttl) of
         {ok, Val} when is_integer(Val) ->
             Val;
         _ ->
-            throw("No cookie TTL specified in env")
+            {error, missing_env}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc Generates a random, 44 chars long, base64 encoded session id.
-%% @end
-%%--------------------------------------------------------------------
--spec random_id() -> binary().
-random_id() ->
-    base64:encode(
-        <<(erlang:md5(term_to_binary(now())))/binary,
-        (erlang:md5(term_to_binary(make_ref())))/binary>>).
-
-
-now_seconds() ->
-    {Megaseconds, Seconds, _} = now(),
-    Megaseconds * 1000000 + Seconds.

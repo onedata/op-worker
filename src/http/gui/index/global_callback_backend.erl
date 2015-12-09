@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 
 %% API
--export([callback/3]).
+-export([callback/2]).
 
-callback(<<"global">>, <<"userName">>, _) ->
+callback(<<"userName">>, _) ->
     {ok, op_gui_utils:get_user_id()}.

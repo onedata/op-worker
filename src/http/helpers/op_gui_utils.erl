@@ -16,5 +16,5 @@
 
 get_user_id() ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(g_ctx:get_session_id()),
+        session:get(g_session:get_session_id()),
     UserId.
