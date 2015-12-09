@@ -111,10 +111,11 @@ delete_resource(Req, State) ->
 %% @doc Handles GET with "application/cdmi-container" content-type
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(_, #{cdmi_version := undefined}) ->
-    throw(?no_version_given);
-get_cdmi(Req, #{path := Path} = State) ->
-    {<<"ok">>, Req, State}.
+get_cdmi(Req, #{options := Options} = State) ->
+    NewOptions = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
+    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
+    Response = json_utils:encode({struct, DirCdmi}),
+    {Response, Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc Handles PUT with "application/cdmi-container" content-type
@@ -146,11 +147,11 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     case OperationPerformed of
         none ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
-            ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
+            ok = cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
         _  ->
-            {ok, NewAttrs} = onedata_file_api:stat(Auth, {path, Path}),
-            ok = cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
+            {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
+            ok = cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, opts => ?DEFAULT_GET_DIR_OPTS}),
             Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),

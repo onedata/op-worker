@@ -16,7 +16,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod/3, get_file_attr/2, delete_file/2, rename_file/3, update_times/5]).
+-export([chmod/3, get_file_attr/2, delete_file/2, rename_file/3, update_times/5,
+    get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2]).
 
 %%--------------------------------------------------------------------
 %% API functions
@@ -188,6 +189,68 @@ rename_file(_CTX, SourceEntry, TargetPath) ->
         false ->
             ok = file_meta:rename(SourceEntry, {path, TargetPath}),
             #fuse_response{status = #status{code = ?OK}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's extended attribute by key.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
+    #fuse_response{} | no_return().
+get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
+    case xattr:get_by_name(FileUuid, XattrName) of
+        {ok, #document{value = Xattr}} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = Xattr};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}};
+        {error, {not_found, _}} ->
+            #fuse_response{status = #status{code = ?ENOATTR}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates file's extended attribute by key.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
+    #fuse_response{} | no_return().
+set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
+    case xattr:save(FileUuid, Xattr) of
+        {ok, _} ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes file's extended attribute by key.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
+    #fuse_response{} | no_return().
+remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
+    case xattr:delete_by_name(FileUuid, XattrName) of
+        ok ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns complete list of extended attributes' keys of a file.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
+    #fuse_response{} | no_return().
+list_xattr(_CTX, {uuid, FileUuid}) ->
+    case xattr:list(FileUuid) of
+        {ok, List} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #xattr_list{names = List}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
     end.
 
 %%--------------------------------------------------------------------

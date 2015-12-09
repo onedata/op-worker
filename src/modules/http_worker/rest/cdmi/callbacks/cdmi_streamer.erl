@@ -13,12 +13,14 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/http_worker/http_common.hrl").
+-include_lib("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([binary_stream_size/2, cdmi_stream_size/5,
-    stream_binary/2, stream_cdmi/5, stream_range/7]).
+-export([binary_stream_size/2, cdmi_stream_size/5, stream_binary/2,
+    stream_cdmi/5, stream_range/7, write_body_to_file/3]).
 
 %%%===================================================================
 %%% API
@@ -142,3 +144,25 @@ stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHan
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads request's body and writes it to file obtained from state.
+%% This callback return value is compatibile with put requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec write_body_to_file(req(), #{}, integer()) -> {boolean(), req(), #{}}.
+write_body_to_file(Req, #{path := Path, auth := Auth} = State, Offset) ->
+
+    WriteFun = fun Write(Req, State, Offset, FileHandle) ->
+        {Status, Chunk, Req1} = cowboy_req:body(Req),
+        {ok, _NewHandle, Bytes} = onedata_file_api:write(FileHandle, Offset, Chunk),
+        case Status of
+            more -> Write(Req1, State, Offset + Bytes, FileHandle);
+            ok -> {true, Req1, State}
+        end
+    end,
+
+    {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
+    WriteFun(Req, State, Offset, FileHandle).

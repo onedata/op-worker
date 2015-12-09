@@ -22,7 +22,7 @@
 
 %% API
 -export([malformed_request/2, malformed_capability_request/2, get_ranges/2,
-    parse_body/1]).
+    parse_content/1, parse_byte_range/2,  parse_body/1]).
 
 %% Test API
 -export([get_supported_version/1]).
@@ -175,4 +175,24 @@ validate_body(Body) ->
                 _ -> ok
             end;
         false -> throw(?duplicated_body_fields)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses content-type header to mimetype and charset part, if charset
+%% is other than utf-8, function returns undefined
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_content(binary()) -> {Mimetype :: binary(), Encoding :: binary() | undefined}.
+parse_content(Content) ->
+    case binary:split(Content,<<";">>) of
+        [RawMimetype, RawEncoding] ->
+            case binary:split(utils:trim_spaces(RawEncoding),<<"=">>) of
+                [<<"charset">>, <<"utf-8">>] ->
+                    {utils:trim_spaces(RawMimetype), <<"utf-8">>};
+                _ ->
+                    {utils:trim_spaces(RawMimetype), undefined}
+            end;
+        [RawMimetype] ->
+            {utils:trim_spaces(RawMimetype), undefined}
     end.

@@ -26,11 +26,26 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi/2, get_binary/2, put_cdmi/2]).
+-export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2]).
 
-%% the default json response for get/put cdmi_object will contain this entities, they can be choosed selectively by appending '?name1;name2' list to the request url
--define(DEFAULT_GET_FILE_OPTS, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>, <<"valuerange">>, <<"value">>]).
--define(DEFAULT_PUT_FILE_OPTS, [<<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>, <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+%% the default json response for get/put cdmi_object will contain this entities,
+%% they can be choosed selectively by appending '?name1;name2' list to the
+%% request url
+-define(DEFAULT_GET_FILE_OPTS,
+    [
+        <<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>,
+        <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>,
+        <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>,
+        <<"valuerange">>, <<"value">>
+    ]
+).
+-define(DEFAULT_PUT_FILE_OPTS,
+    [
+        <<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>,
+        <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>,
+        <<"metadata">>, <<"mimetype">>
+    ]
+).
 
 %%%===================================================================
 %%% API
@@ -98,6 +113,10 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
     {[{binary(), atom()}], req(), #{}}.
+content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-object">>, put_cdmi}
@@ -122,10 +141,10 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
-get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) ->
+get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}} = State) ->
     % prepare response
     {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, State),
-    Mimetype = cdmi_metadata:get_mimetype(Path),
+    Mimetype = cdmi_metadata:get_mimetype(Auth, {uuid, Uuid}),
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
         case Ranges of
@@ -147,15 +166,15 @@ get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) 
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(Req, State = #{options := Opts, path := Path, attributes := #file_attr{size = Size}}) ->
-    NonEmptyOpts = case Opts of [] -> ?DEFAULT_GET_FILE_OPTS; _ -> Opts end,
+get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}}) ->
+    NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
     DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State),
 
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
             % prepare response
             BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
-            ValueTransferEncoding = cdmi_metadata:get_encoding(Path),
+            ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {uuid, Uuid}),
             JsonBodyWithoutValue = json_utils:encode({struct, BodyWithoutValue}),
             JsonBodyPrefix =
                 case BodyWithoutValue of
@@ -174,6 +193,62 @@ get_cdmi(Req, State = #{options := Opts, path := Path, attributes := #file_attr{
         undefined ->
             Response = json_utils:encode({struct, DirCdmi}),
             {Response, Req, State}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT without cdmi content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_binary(req(), #{}) -> {term(), req(), #{}}.
+put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
+    % prepare request data
+    {Content, Req0} = cowboy_req:header(<<"content-type">>, ReqArg, <<"application/octet-stream">>),
+    {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
+    {Mimetype, Encoding} = cdmi_arg_parser:parse_content(Content),
+    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+    case onedata_file_api:create(Auth, Path, DefaultMode) of
+        {ok, _} ->
+            cdmi_metadata:update_completion_status(
+                Auth, {path, Path}, <<"Processing">>
+            ),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
+            Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                Auth, {path, Path}, CdmiPartialFlag
+            ),
+            Ans;
+
+        {error, ?EEXIST} ->
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
+            {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
+            case RawRange of
+                undefined ->
+                    ok = onedata_file_api:truncate(Auth, {path, Path}, 0),
+                    Ans = cdmi_streamer:write_body_to_file(Req1, State, 0),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(
+                        Auth, {path, Path}, CdmiPartialFlag
+                    ),
+                    Ans;
+                _ ->
+                    {Length, Req2} = cowboy_req:body_length(Req1),
+                    case cdmi_arg_parser:parse_byte_range(State, RawRange) of
+                        [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
+                            Ans = cdmi_streamer:write_body_to_file(Req2, State, From),
+                            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                                Auth, {path, Path}, CdmiPartialFlag
+                            ),
+                            Ans;
+                        _ ->
+                            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                                Auth, {path, Path}, CdmiPartialFlag
+                            ),
+                            throw(?invalid_range)
+                    end
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -217,49 +292,52 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
     % update value and metadata depending on creation type
     case OperationPerformed of
         created ->
-            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
             {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
             {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
 
             % return response
-            {ok, NewAttrs} = onedata_file_api:stat(Auth, {path, Path}),
-            cdmi_metadata:update_encoding(Path, ensure_encoding_defined(RequestedValueTransferEncoding)),
-            cdmi_metadata:update_mimetype(Path, RequestedMimetype),
-            cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata),
-            cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+            {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
+            cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, utils:ensure_defined(
+                    RequestedValueTransferEncoding, undefined, <<"utf-8">>
+                )
+            ),
+            cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {uuid, Uuid}, CdmiPartialFlag),
             Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{attributes => NewAttrs}),
             Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State};
         CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
-            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
-            cdmi_metadata:update_encoding(Path, RequestedValueTransferEncoding),
-            cdmi_metadata:update_mimetype(Path, RequestedMimetype),
-            cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
-            cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, RequestedValueTransferEncoding),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
             {true, Req1, State};
         none ->
-            cdmi_metadata:update_completion_status(Path, <<"Processing">>),
-            cdmi_metadata:update_encoding(Path, RequestedValueTransferEncoding),
-            cdmi_metadata:update_mimetype(Path, RequestedMimetype),
-            cdmi_metadata:update_user_metadata(Path, RequestedUserMetadata, URIMetadataNames),
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, RequestedValueTransferEncoding),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
             case Range of
             {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 undefined when is_binary(Value) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
                     ok = onedata_file_api:truncate(FileHandler, 0),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 undefined ->
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 _MalformedRange ->
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Path, CdmiPartialFlag),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     throw(?invalid_range)
             end
     end.
@@ -288,12 +366,3 @@ get_attr(Auth, Path) ->
         {ok, Attrs} -> Attrs;
         {error, ?ENOENT} -> undefined
     end.
-
-%%--------------------------------------------------------------------
-%% @doc Returns given encoding or default value if it's undefined
-%%--------------------------------------------------------------------
--spec ensure_encoding_defined(undefined | binary()) -> binary().
-ensure_encoding_defined(undefined) ->
-    <<"utf-8">>;
-ensure_encoding_defined(Encoding) ->
-    Encoding.
