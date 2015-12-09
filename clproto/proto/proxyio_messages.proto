@@ -16,8 +16,8 @@ message ProxyIORequest {
     required bytes space_id   = 3;
 
     oneof proxyio_request {
-        RemoteRead  remote_read  = 3;
-        RemoteWrite remote_write = 4;
+        RemoteRead  remote_read  = 4;
+        RemoteWrite remote_write = 5;
     }
 }
 
