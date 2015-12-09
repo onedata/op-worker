@@ -72,10 +72,13 @@ inject_event_stream_definition(#subscription{object = #file_location_subscriptio
 %%--------------------------------------------------------------------
 -spec send_subscription_handler() -> Handler :: event_stream:init_handler().
 send_subscription_handler() ->
-    fun(#subscription{id = SubId} = Sub, SessId) ->
-        {ok, StmId} = sequencer:open_stream(SessId),
-        sequencer:send_message(Sub, StmId, SessId),
-        {SubId, StmId, SessId}
+    fun
+        (#subscription{id = SubId} = Sub, SessId, fuse) ->
+            {ok, StmId} = sequencer:open_stream(SessId),
+            sequencer:send_message(Sub, StmId, SessId),
+            {SubId, StmId, SessId};
+        (_, _, _) ->
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -86,9 +89,12 @@ send_subscription_handler() ->
 -spec send_subscription_cancellation_handler() ->
     Handler :: event_stream:terminate_handler().
 send_subscription_cancellation_handler() ->
-    fun({SubId, StmId, SessId}) ->
-        sequencer:send_message(#subscription_cancellation{id = SubId}, StmId, SessId),
-        sequencer:close_stream(StmId, SessId)
+    fun
+        ({SubId, StmId, SessId}) ->
+            sequencer:send_message(#subscription_cancellation{id = SubId}, StmId, SessId),
+            sequencer:close_stream(StmId, SessId);
+        (_) ->
+            ok
     end.
 
 %%%===================================================================
@@ -103,9 +109,12 @@ send_subscription_cancellation_handler() ->
 %%--------------------------------------------------------------------
 -spec open_sequencer_stream_handler() -> Handler :: event_stream:init_handler().
 open_sequencer_stream_handler() ->
-    fun(_, SessId) ->
-        {ok, StmId} = sequencer:open_stream(SessId),
-        {StmId, SessId}
+    fun
+        (_, SessId, fuse) ->
+            {ok, StmId} = sequencer:open_stream(SessId),
+            {StmId, SessId};
+        (_, _, _) ->
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -116,8 +125,9 @@ open_sequencer_stream_handler() ->
 %%--------------------------------------------------------------------
 -spec close_sequencer_stream_handler() -> Handler :: event_stream:terminate_handler().
 close_sequencer_stream_handler() ->
-    fun({StmId, SessId}) ->
-        sequencer:close_stream(StmId, SessId)
+    fun
+        ({StmId, SessId}) -> sequencer:close_stream(StmId, SessId);
+        (_) -> ok
     end.
 
 %%--------------------------------------------------------------------
@@ -132,7 +142,9 @@ send_events_handler() ->
         ([], _) ->
             ok;
         (Evts, {StmId, SessId}) ->
-            sequencer:send_message(#events{events = Evts}, StmId, SessId)
+            sequencer:send_message(#events{events = Evts}, StmId, SessId);
+        (_, _) ->
+            ok
     end.
 
 %%--------------------------------------------------------------------

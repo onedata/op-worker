@@ -383,7 +383,8 @@ maybe_log_failure(Request, Reason, Attempt) ->
     case Attempt > ?LOG_FAILED_ATTEMPTS_THRESHOLD of
         true ->
             ?error("Cannot process request ~p due to: ~p. "
-            "There has been ~p unsuccessful attempts so far. Retring in ~p milliseconds...",
+            "There has been ~p unsuccessful attempts so far. "
+            "Retrying in ~p milliseconds...",
                 [Request, Reason, Attempt, ?PROCESS_REQUEST_RETRY_DELAY]);
         false ->
             ok
