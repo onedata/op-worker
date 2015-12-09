@@ -136,13 +136,16 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, OperationPerformed} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {onedata_file_api:mkdir(Auth, Path), created};
+                ok = onedata_file_api:mkdir(Auth, Path),
+                {ok, created};
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
             {undefined, CopyURI, undefined} ->
-                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+                ok = onedata_file_api:cp({path, CopyURI}, Path),
+                {ok, copied};
             {undefined, undefined, MoveURI} ->
-                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+                ok = onedata_file_api:mv({path, MoveURI}, Path),
+                {ok, moved}
         end,
 
     %update metadata and return result

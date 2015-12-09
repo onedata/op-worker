@@ -284,9 +284,11 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
             {undefined, CopyURI, undefined} ->
-                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+                ok = onedata_file_api:cp({path, CopyURI}, Path),
+                {ok, copied};
             {undefined, undefined, MoveURI} ->
-                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+                ok = onedata_file_api:mv({path, MoveURI}, Path),
+                {ok, moved}
         end,
 
     % update value and metadata depending on creation type

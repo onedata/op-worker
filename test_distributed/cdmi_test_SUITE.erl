@@ -762,9 +762,11 @@ errors_test(Config) ->
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
+
     {ok, Code2, _Headers2, _Response2} =
         do_request(Worker, "dir", put, RequestHeaders2, []),
     ?assertEqual(415, Code2),
+
     %%------------------------------
 
     %%---- wrong create path 2 -----
@@ -773,10 +775,10 @@ errors_test(Config) ->
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
+
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "dir/", put, RequestHeaders3, []),
     ?assertEqual(415, Code3),
-
     %%------------------------------
 
     %%-------- wrong base64 --------
@@ -803,8 +805,56 @@ errors_test(Config) ->
         do_request(Worker, "dir_dupl/", put, RequestHeaders5, RequestBody5),
     ?assertEqual(400, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
-    ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5).
-%%------------------------------
+    ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5),
+
+    %%-- reding non-existing file --
+    RequestHeaders6 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code6, _Headers6, _Response6} =
+        do_request(Worker, "nonexistent_file", get, RequestHeaders6),
+
+
+    ?assertMatch(404, Code6),
+    %%------------------------------
+
+    %%--- list nonexisting dir -----
+    RequestHeaders7 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code7, _Headers7, _Response7} =
+        do_request(Worker, "nonexisting_dir/", get, RequestHeaders7),
+
+    ?assertEqual(404, Code7),
+    %%------------------------------
+
+    %%--- read file without permission -----
+
+    File8 = "file8",
+    create_file(Config, File8),
+    ?assertEqual(object_exists(Config, File8), true),
+
+    RequestHeaders8 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+
+    mock_reading_file_without_perms(Config),
+    tracer:start(Worker),
+    tracer:trace_calls(cdmi_exception_handler),
+    tracer:trace_calls(request_exception_handler),
+    {ok, Code8, _Headers8, _Response8} =
+        do_request(Worker, File8, get, RequestHeaders8),
+    tracer:stop(),
+    unmock_reading_file_without_perms(Config),
+
+    ?assertEqual(403, Code8).
+    %%------------------------------
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -937,3 +987,13 @@ ensure_begins_with_slash(Path) ->
 now_in_secs() ->
     {MegaSecs, Secs, _MicroSecs} = erlang:now(),
     MegaSecs * 1000000 + Secs.
+
+mock_reading_file_without_perms(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, onedata_file_api),
+    test_utils:mock_expect(
+        Worker, onedata_file_api, read, fun (_, _ ,_) -> {error, ?EACCES} end).
+
+unmock_reading_file_without_perms(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Worker, onedata_file_api).

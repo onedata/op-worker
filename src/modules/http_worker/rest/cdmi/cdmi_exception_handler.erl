@@ -8,13 +8,11 @@
 %%% @doc
 %%% Exception handler for cdmi operations.
 %%% It behaves as follows:
-%% TODO describe handler behaviour, so far it's copied from requeste_exception_handler
-%%% * for exception of integer type terminates request with given integer as
-%%%   http status
-%%% * for exception of {integer, term()} type terminates request with given
-%%%   integer as http status, and given term converted to json as body
-%%% * for any other exception terminates request with 500 http code and logs
-%%%   error with stacktrace
+%%% * for badmatch or case_clause errors it strips parts "badmatch" and
+%%%   "case_clause" from tuples and returns the actual error
+%%%   e.g for error: {badmatch, {case_clause, {error, ENOENT}}}
+%%%   it will terminate request with http status and message suitable to ENOENT
+%%% * for any other exception it calls request_exception_handler:handle()
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_exception_handler).
@@ -44,16 +42,24 @@ fun((Req :: cowboy_req:req(), State :: term(), Type :: atom(), Error :: term()) 
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(cowboy_req:req(), term(), atom(), term()) -> no_return().
-handle(Req, State, error, {case_clause, {error, no_peer_certificate}}) ->
+handle(Req, State, error, {badmatch, Badmatch}) ->
+    handle(Req, State, error, Badmatch);
+handle(Req, State, error, {case_clause, CaseClause}) ->
+    handle(Req, State, error, CaseClause);
+handle(Req, State, error, {error, no_peer_certificate}) ->
     {ok, Req2} = cowboy_req:reply(?NOT_AUTHORIZED, [], [], Req),
     {halt, Req2, State};
-%% TODO wrong error pattern below?
-handle(Req, State, _Type, {error, ?ENOENT}) ->
-    {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], [], Req),
-    {halt, Req2, State};
-handle(Req, State, error, {badmatch,{{error,{not_found,file_meta}},created}}) ->
-    BodyBinary = json_utils:encode([{<<"Error when creating file">>, <<"not found file meta">>}]),
+handle(Req, State, error, {error,{not_found,file_meta}}) ->
+    BodyBinary = json_utils:encode([{<<"Error when creating file">>, <<"Not found file meta">>}]),
     {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], BodyBinary, Req),
+    {halt, Req2, State};
+handle(Req, State, error, {error, ?ENOENT}) ->
+    BodyBinary = json_utils:encode([{<<"ENOENT">>, <<"No such entity">>}]),
+    {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], BodyBinary, Req),
+    {halt, Req2, State};
+handle(Req, State, error, {error, ?EACCES}) ->
+    BodyBinary = json_utils:encode([{<<"EACCES">>, <<"Permission denied">>}]),
+    {ok, Req2} = cowboy_req:reply(?FORBIDDEN, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, Type, Error) ->
     ?error_stacktrace("Unhandled exception in cdmi request ~p:~p", [Type, Error]),
