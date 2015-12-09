@@ -100,9 +100,9 @@ get_children_count(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Deletes a directory with all its children.
 %%--------------------------------------------------------------------
--spec rmdir(Identity :: onedata_auth_api:identity(), Path :: file_path()) -> ok | error_reply().
-rmdir(Identity, Path) ->
-    logical_file_manager:rmdir(Identity, Path).
+-spec rmdir(Auth :: onedata_auth_api:auth(), Path :: file_path()) -> ok | error_reply().
+rmdir(Auth, Path) ->
+    logical_file_manager:rmdir(Auth, Path).
 
 
 %%--------------------------------------------------------------------
