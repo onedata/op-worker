@@ -100,7 +100,8 @@ content_types_accepted(Req, State) ->
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
-delete_resource(Req, State) ->
+delete_resource(Req, State = #{identity := Identity, path := Path}) ->
+    ok = onedata_file_api:rmdir(Identity, Path),
     {true, Req, State}.
 
 %%%===================================================================

@@ -748,17 +748,23 @@ moved_pemanently_test(Config) ->
     ?assert(object_exists(Config, FileName)),
 
     %%--------- dir test -----------
-    RequestHeaders1 = [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
-    {ok, Code1, Headers1, _Response1} = do_request(Worker, DirNameWithoutSlash, get, RequestHeaders1, []),
+    RequestHeaders1 =
+        [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    {ok, Code1, Headers1, _Response1} =
+        do_request(Worker, DirNameWithoutSlash, get, RequestHeaders1, []),
     ?assertEqual(?MOVED_PERMANENTLY, Code1),
-    ?assertEqual(iolist_to_binary(["/", DirName]), proplists:get_value(<<"Location">>, Headers1)),
+    ?assertEqual(iolist_to_binary(["/", DirName]),
+        proplists:get_value(<<"Location">>, Headers1)),
     %%------------------------------
 
     %%--------- file test ----------
-    RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
-    {ok, Code2, Headers2, _Response2} = do_request(Worker, FileNameWithSlash, get, RequestHeaders2, []),
+    RequestHeaders2 =
+        [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    {ok, Code2, Headers2, _Response2} =
+        do_request(Worker, FileNameWithSlash, get, RequestHeaders2, []),
     ?assertEqual(?MOVED_PERMANENTLY,Code2),
-    ?assertEqual(iolist_to_binary(["/", FileName]), proplists:get_value(<<"Location">>, Headers2)).
+    ?assertEqual(iolist_to_binary(["/", FileName]),
+        proplists:get_value(<<"Location">>, Headers2)).
     %%------------------------------
 
 %%%===================================================================

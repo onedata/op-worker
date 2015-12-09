@@ -58,7 +58,7 @@
 -export_type([handle/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2, rmdir/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
@@ -127,6 +127,15 @@ get_children_count(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_dirs:get_children_count(SessId, ensure_uuid(CTX, FileKey)).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a directory with all its children.
+%% @end
+%%--------------------------------------------------------------------
+-spec rmdir(SessId :: session:id(), Path :: file_path()) -> ok | error_reply().
+rmdir(SessId, Path) ->
+    CTX = fslogic_context:new(SessId),
+    lfm_utils:rmdir(CTX, Path).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -500,4 +509,3 @@ ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
     {uuid, fslogic_path:to_uuid(CTX, Path)}.
-
