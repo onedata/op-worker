@@ -111,6 +111,17 @@ handle_cast({register_stream, SubId, EvtStm}, #state{event_streams = Stms} = Sta
 handle_cast({unregister_stream, SubId}, #state{event_streams = Stms} = State) ->
     {noreply, State#state{event_streams = maps:remove(SubId, Stms)}};
 
+handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
+    session_id = SessId} = State) ->
+    case maps:find(SubId, Stms) of
+        {ok, Stm} ->
+            gen_server:cast(Stm, {flush, Notify});
+        error ->
+            ?warning("Event stream flush error: stream for subscription ~p and "
+            "session ~p not found", [SubId, SessId])
+    end,
+    {noreply, State};
+
 handle_cast(#event{} = Evt, #state{event_streams = Stms} = State) ->
     {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
         gen_server:cast(EvtStm, Evt),

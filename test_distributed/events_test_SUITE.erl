@@ -35,7 +35,8 @@
     emit_read_event_should_execute_handler/1,
     emit_write_event_should_execute_handler/1,
     emit_file_attr_update_event_should_execute_handler/1,
-    emit_file_location_update_event_should_execute_handler/1
+    emit_file_location_update_event_should_execute_handler/1,
+    flush_should_notify_awaiting_process/1
 ]).
 
 -performance({test_cases, []}).
@@ -47,7 +48,8 @@ all() -> [
     emit_read_event_should_execute_handler,
     emit_write_event_should_execute_handler,
     emit_file_attr_update_event_should_execute_handler,
-    emit_file_location_update_event_should_execute_handler
+    emit_file_location_update_event_should_execute_handler,
+    flush_should_notify_awaiting_process
 ].
 
 -define(TIMEOUT, timer:seconds(15)).
@@ -118,6 +120,14 @@ emit_file_location_update_event_should_execute_handler(Config) ->
         key = <<"file_uuid">>, object = Evt
     }]}, ?TIMEOUT).
 
+flush_should_notify_awaiting_process(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Evt = read_event(1, [{0, 1}]),
+    SessId = ?config(session_id, Config),
+    emit(Worker, SessId, Evt),
+    flush(Worker, ?config(subscription_id, Config), self(), SessId),
+    ?assertReceivedEqual(event_handler, ?TIMEOUT).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -139,6 +149,15 @@ init_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
     init_per_testcase(default, [{subscription_id, SubId} | Config]);
+
+init_per_testcase(Case, Config) when
+    Case =:= flush_should_notify_awaiting_process ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    NewConfig = init_per_testcase(default, Config),
+    SessId = ?config(session_id, NewConfig),
+    {ok, SubId} = subscribe(Worker, SessId, ?READ_EVENT_STREAM,
+        notify_event_handler(), fun(_) -> false end, infinity),
+    [{subscription_id, SubId} | NewConfig];
 
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_event_manager ->
@@ -175,6 +194,7 @@ end_per_testcase(Case, Config) when
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config) when
+    Case =:= flush_should_notify_awaiting_process;
     Case =:= subscribe_should_notify_event_manager ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(session_id, Config), ?config(subscription_id, Config)),
@@ -300,13 +320,26 @@ create_dafault_subscription(Case, Worker) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns event handler that forward all events to this process.
+%% Returns event handler that forwards all events to this process.
 %% @end
 %%--------------------------------------------------------------------
 -spec forward_events_event_handler() -> Handler :: event_stream:event_handler().
 forward_events_event_handler() ->
     Self = self(),
     fun(Evts, _) -> Self ! {event_handler, Evts} end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns event handler that notifies process found in context.
+%% @end
+%%--------------------------------------------------------------------
+-spec notify_event_handler() -> Handler :: event_stream:event_handler().
+notify_event_handler() ->
+    fun
+        (_, #{notify := Notify}) -> Notify ! event_handler;
+        (_, _) -> ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -348,6 +381,17 @@ emit(Worker, Evt) ->
 -spec emit(Worker :: node(), SessId :: session:id(), Evt :: event:object()) -> ok.
 emit(Worker, SessId, Evt) ->
     ?assertEqual(ok, rpc:call(Worker, event, emit, [Evt, SessId])).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Flushes event stream associated with session and subscription.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush(Worker :: node(), SubId :: subscription:id(), Notify :: pid(),
+    SessId :: session:id()) -> ok.
+flush(Worker, SubId, Notify, SessId) ->
+    ?assertEqual(ok, rpc:call(Worker, event, flush, [SubId, Notify, SessId])).
 
 %%--------------------------------------------------------------------
 %% @private

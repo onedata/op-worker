@@ -62,8 +62,8 @@ init(_Args) ->
             emission_time = 500,
             emission_rule = fun(_) -> true end,
             init_handler = event_utils:send_subscription_handler(),
-            event_handler = fun(Evts, InitResult) ->
-                handle_events(Evts, InitResult)
+            event_handler = fun(Evts, Ctx) ->
+                handle_events(Evts, Ctx)
             end,
             terminate_handler = event_utils:send_subscription_cancellation_handler()
         }
@@ -210,19 +210,28 @@ handle_fuse_request(_Ctx, Req) ->
 
 handle_events([], _) ->
     [];
-handle_events([Event | T], InitResult) ->
-    handle_events(Event, InitResult),
-    handle_events(T, InitResult);
+handle_events([Event | T], Ctx) ->
+    handle_events(Event, Ctx),
+    handle_events(T, Ctx);
 handle_events(#event{object = #write_event{blocks = Blocks, file_uuid = FileUUID,
-    file_size = FileSize}} = T, {_, _, SessId}) ->
+    file_size = FileSize}} = T, #{session_id := SessId} = Ctx) ->
     ?debug("fslogic handle_events: ~p", [T]),
 
-    case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
+    Result = case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
         {ok, size_changed} ->
-            fslogic_notify:attributes({uuid, FileUUID}, [SessId]),
-            fslogic_notify:blocks({uuid, FileUUID}, Blocks, [SessId]);
+            case fslogic_notify:attributes({uuid, FileUUID}, [SessId]) of
+                ok -> fslogic_notify:blocks({uuid, FileUUID}, Blocks, [SessId]);
+                {error, Reason} -> {error, Reason}
+            end;
         {ok, size_not_changed} ->
             fslogic_notify:blocks({uuid, FileUUID}, Blocks, [SessId]);
         {error, Reason} ->
             {error, Reason}
-    end.
+    end,
+
+    case Ctx of
+        #{notify := Pid} -> Pid ! {handler_executed, Result};
+        _ -> ok
+    end,
+
+    Result.
