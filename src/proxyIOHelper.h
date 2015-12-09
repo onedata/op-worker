@@ -35,6 +35,7 @@ public:
 private:
     communication::Communicator &m_communicator;
     std::string m_storageId;
+    std::string m_spaceId;
 };
 
 } // namespace helpers

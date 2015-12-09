@@ -24,6 +24,7 @@ ProxyIOHelper::ProxyIOHelper(
     communication::Communicator &communicator)
     : m_communicator{communicator}
     , m_storageId{args.at("storage_id")}
+    , m_spaceId{args.at("space_id")}
 {
 }
 
@@ -32,8 +33,8 @@ void ProxyIOHelper::ash_read(CTXRef /*ctx*/, const boost::filesystem::path &p,
     GeneralCallback<asio::mutable_buffer> callback)
 {
     auto fileId = p.string();
-    messages::proxyio::RemoteRead msg{
-        m_storageId, std::move(fileId), offset, asio::buffer_size(buf)};
+    messages::proxyio::RemoteRead msg{m_spaceId, m_storageId, std::move(fileId),
+        offset, asio::buffer_size(buf)};
 
     auto wrappedCallback = [ callback = std::move(callback), buf ](
         const std::error_code &ec,
@@ -57,7 +58,7 @@ void ProxyIOHelper::ash_write(CTXRef /*ctx*/, const boost::filesystem::path &p,
 {
     auto fileId = p.string();
     messages::proxyio::RemoteWrite msg{
-        m_storageId, std::move(fileId), offset, buf};
+        m_spaceId, m_storageId, std::move(fileId), offset, buf};
 
     auto wrappedCallback = [ callback = std::move(callback), buf ](
         const std::error_code &ec,
