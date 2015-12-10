@@ -26,15 +26,17 @@ recompile:
 	./rebar compile skip_deps=true
 
 compile:
+	sed -i "s/ \"deps\/ctool\/annotations\/performance\.erl\"/%%\"deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
 	./rebar compile
+	sed -i "s/%%\"deps\/ctool\/annotations\/performance\.erl\"/\ "deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
 
 deps:
 	./rebar get-deps
 
 generate: deps compile
-	mv deps/cluster_worker/rel deps/cluster_worker/rel.bak || true
+	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	./rebar generate $(OVERLAY_VARS)
-	mv deps/cluster_worker/rel.bak deps/cluster_worker/rel || true
+	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
 clean: relclean pkgclean
 	./rebar clean
