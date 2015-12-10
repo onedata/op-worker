@@ -13,10 +13,13 @@
 -author("Tomasz Lichon").
 
 -include_lib("common_test/include/ct.hrl").
+-include("modules/fslogic/lfm_internal.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("types.hrl").
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, read/4, write/4]).
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4,
+    read/4, write/4, write_and_check/4]).
 
 %%%===================================================================
 %%% API
@@ -135,6 +138,31 @@ write(Worker, TestHandle, Offset, Bytes) ->
                     {ok, NewHandle, Res}  ->
                         ets:insert(lfm_handles, {TestHandle, NewHandle}),
                         {ok, Res};
+                    Other -> Other
+                end,
+            Host ! {self(), Result}
+        end).
+
+-spec write_and_check(node(), logical_file_manager:handle(), integer(), binary()) ->
+    {ok, integer(), StatAns} | error_reply() when
+    StatAns :: {ok, file_attributes()} | error_reply().
+write_and_check(Worker, TestHandle, Offset, Bytes) ->
+    exec(Worker,
+        fun(Host) ->
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            #lfm_handle{file_uuid = UUID,
+                fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
+            Result =
+                case logical_file_manager:write(Handle, Offset, Bytes) of
+                    {ok, NewHandle, Res}  ->
+                        ets:insert(lfm_handles, {TestHandle, NewHandle}),
+                        case logical_file_manager:fsync(NewHandle) of
+                            ok ->
+                                {ok, Res, logical_file_manager:stat(SessId, {uuid, UUID})};
+                            Other2 ->
+                                Other2
+                        end,
+                        {ok, Res, logical_file_manager:stat(SessId, {uuid, UUID})};
                     Other -> Other
                 end,
             Host ! {self(), Result}

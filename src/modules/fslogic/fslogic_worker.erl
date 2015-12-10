@@ -49,7 +49,7 @@ init(_Args) ->
     {ok, CounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
     {ok, TimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
     {ok, SizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
-    SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
+    SubId = ?FSLOGIC_SUB_ID,
     Sub = #subscription{
         id = SubId,
         object = #write_subscription{

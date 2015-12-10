@@ -23,9 +23,11 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/3, get_block_map/2, unlink/2]).
+-export([create/3, open/3, fsync/1, write/3, read/3, truncate/3, get_block_map/2, unlink/2]).
 
 -compile({no_auto_import, [unlink/1]}).
+
+-define(FSYNC_TIMEOUT, timer:seconds(2)).
 
 %%%===================================================================
 %%% API
@@ -112,6 +114,27 @@ open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
             end
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes waiting events for session connected with handler.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(FileHandle :: file_handle()) -> ok | {error, Reason :: term()}.
+fsync(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    case event:flush(?FSLOGIC_SUB_ID, self(), SessId) of
+        ok ->
+            receive
+                {handler_executed, {ok, _}} ->
+                    ok;
+                {handler_executed, HandlerResult} ->
+                    {error, {handler_error, HandlerResult}}
+            after
+                ?FSYNC_TIMEOUT ->
+                    {error, handler_timeout}
+            end;
+        Other ->
+            Other
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
