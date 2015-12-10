@@ -21,11 +21,15 @@
 %% File handle used by the module
 -record(sfm_handle, {
     helper_handle :: helpers:handle(),
-    file :: helpers:file()
+    file :: helpers:file(),
+    session_id = session:id(),
+    space_uuid = file_meta:uuid(),
+    storage :: datastore:document()
 }).
 
--export([mkdir/3, mkdir/4, mv/2, chmod/3, chown/3, link/2]).
--export([stat/1, read/3, write/3, create/3, create/4, open/3, truncate/3, unlink/2]).
+-export([new_handle/4]).
+-export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
+-export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1]).
 
 -type handle() :: #sfm_handle{}.
 
@@ -35,6 +39,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Opens the file. To used opened descriptor, pass returned handle to other functions.
@@ -42,14 +47,33 @@
 %% when handle goes out of scope (term will be released by Erlang's GC).
 %% @end
 %%--------------------------------------------------------------------
--spec open(Storage :: datastore:document(), FileId :: helpers:file(), OpenMode :: helpers:open_mode()) ->
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), Storage :: datastore:document(), FileId :: helpers:file()) ->
+    handle().
+new_handle(SessionId, SpaceUUID, Storage, FileId) ->
+    #sfm_handle{
+        session_id = SessionId,
+        space_uuid = SpaceUUID,
+        file = FileId,
+        storage = Storage
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens the file. To used opened descriptor, pass returned handle to other functions.
+%% File may and should be closed with release/1, but file will be closed automatically
+%% when handle goes out of scope (term will be released by Erlang's GC).
+%% @end
+%%--------------------------------------------------------------------
+-spec open(handle(), OpenMode :: helpers:open_mode()) ->
     {ok, handle()} | error_reply().
-open(Storage, FileId, OpenMode) ->
+open(#sfm_handle{storage = Storage, file = FileId, session_id = SessionId, space_uuid = SpaceUUID} = SFMHandle, OpenMode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
     case helpers:open(HelperHandle, FileId, OpenMode) of
         {ok, _} ->
-            {ok, #sfm_handle{helper_handle = HelperHandle, file = FileId}};
+            {ok, SFMHandle#sfm_handle{helper_handle = HelperHandle}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -59,21 +83,23 @@ open(Storage, FileId, OpenMode) ->
 %% Creates a directory on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(Storage :: datastore:document(), FileId :: helpers:file(), Mode :: non_neg_integer()) ->
+-spec mkdir(handle(), Mode :: non_neg_integer()) ->
     ok | error_reply().
-mkdir(Storage, FileId, Mode) ->
-    mkdir(Storage, FileId, Mode, false).
+mkdir(Handle, Mode) ->
+    mkdir(Handle, Mode, false).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a directory on storage. Recursive states whether parent directories shall be also created.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(Storage :: datastore:document(), FileId :: helpers:file(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
+-spec mkdir(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | error_reply().
-mkdir(Storage, FileId, Mode, Recursive) ->
+mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
+    Noop = fun(_) -> ok end,
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
     case helpers:mkdir(HelperHandle, FileId, Mode) of
         ok ->
             ok;
@@ -83,9 +109,15 @@ mkdir(Storage, FileId, Mode, Recursive) ->
                 [_] -> ok;
                 [_ | _]  ->
                     LeafLess = fslogic_path:dirname(Tokens),
-                    ok = mkdir(Storage, LeafLess, ?AUTO_CREATED_PARENT_DIR_MODE, true)
+                    ok = mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true)
             end,
-            mkdir(Storage, FileId, Mode, false);
+            R = case mkdir(SFMHandle, Mode, false) of
+                ok ->
+                    chmod(SFMHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
+                E -> E
+            end,
+            Noop(HelperHandle), %% @todo: check why NIF crashes when this term is destroyed before recursive call
+            R;
         {error, Reason} ->
             {error, Reason}
     end.
@@ -108,11 +140,12 @@ mv(_FileHandleFrom, _PathOnStorageTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(Storage :: datastore:document(), File :: helpers:file(), NewMode :: perms_octal()) -> ok | error_reply().
-chmod(Storage, File, Mode) ->
+-spec chmod(handle(), NewMode :: perms_octal()) -> ok | error_reply().
+chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Mode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    helpers:chmod(HelperHandle, File, Mode).
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:chmod(HelperHandle, FileId, Mode).
 
 
 %%--------------------------------------------------------------------
@@ -176,29 +209,30 @@ read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create(Storage :: datastore:document(), Path :: helpers:file(), Mode :: non_neg_integer()) ->
+-spec create(handle(), Mode :: non_neg_integer()) ->
     ok | error_reply().
-create(Storage, Path, Mode) ->
-    create(Storage, Path, Mode, false).
+create(Handle, Mode) ->
+    create(Handle, Mode, false).
 
--spec create(Storage :: datastore:document(), Path :: helpers:file(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
+-spec create(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | error_reply().
-create(Storage, Path, Mode, Recursive) ->
+create(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    case helpers:mknod(HelperHandle, Path, Mode, reg) of
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    case helpers:mknod(HelperHandle, FileId, Mode, reg) of
         ok ->
             ok;
         {error, enoent} when Recursive ->
-            Tokens = fslogic_path:split(Path),
+            Tokens = fslogic_path:split(FileId),
             LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
             ok =
-                case mkdir(Storage, LeafLess, 8#333, true) of
+                case mkdir(SFMHandle#sfm_handle{file = LeafLess}, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
                     ok -> ok;
                     {error, eexist} -> ok;
                     E0 -> E0
                 end,
-            create(Storage, Path, Mode, false);
+            create(SFMHandle, Mode, false);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -210,11 +244,12 @@ create(Storage, Path, Mode, Recursive) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(Storage :: #document{}, Path :: helpers:file(), Size :: integer()) -> ok | error_reply().
-truncate(Storage, Path, Size) ->
+-spec truncate(handle(), Size :: integer()) -> ok | error_reply().
+truncate(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Size) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    helpers:truncate(HelperHandle, Path, Size).
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:truncate(HelperHandle, FileId, Size).
 
 
 %%--------------------------------------------------------------------
@@ -223,8 +258,9 @@ truncate(Storage, Path, Size) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(Storage :: #document{}, Path :: file_path()) -> ok | error_reply().
-unlink(Storage, Path) ->
+-spec unlink(handle()) -> ok | error_reply().
+unlink(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    helpers:unlink(HelperHandle, Path).
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
+    helpers:unlink(HelperHandle, FileId).

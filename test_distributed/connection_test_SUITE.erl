@@ -189,7 +189,7 @@ client_send_test(Config) ->
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, {Sock, SessionId}} = connect_via_token(Worker1),
-    Code = 'VOK',
+    Code = ?OK,
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
         code = Code,
@@ -213,7 +213,7 @@ client_send_test(Config) ->
 client_communicate_test(Config) ->
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    Status = #status{code = 'VOK', description = <<"desc">>},
+    Status = #status{code = ?OK, description = <<"desc">>},
     ServerMsgInternal = #server_message{message_body = Status},
 
     % when
@@ -229,7 +229,7 @@ client_communicate_async_test(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Status = #status{
-        code = 'VOK',
+        code = ?OK,
         description = <<"desc">>
     },
     ServerMsgInternal = #server_message{message_body = Status},

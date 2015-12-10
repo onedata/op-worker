@@ -78,6 +78,7 @@
 
 
 -record(get_helper_params, {
+    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     force_cluster_proxy = false :: boolean()
 }).
