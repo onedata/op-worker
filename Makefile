@@ -28,7 +28,7 @@ recompile:
 compile:
 	sed -i "s/ \"deps\/ctool\/annotations\/performance\.erl\"/%%\"deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
 	./rebar compile
-	sed -i "s/%%\"deps\/ctool\/annotations\/performance\.erl\"/\ "deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
+	sed -i "s/%%\"deps\/ctool\/annotations\/performance\.erl\"/ \"deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
 
 deps:
 	./rebar get-deps
