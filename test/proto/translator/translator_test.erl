@@ -26,6 +26,7 @@
 -include_lib("proto/oneclient/event_messages.hrl").
 -include_lib("proto/oneclient/handshake_messages.hrl").
 -include_lib("proto/oneclient/stream_messages.hrl").
+-include_lib("proto/oneclient/proxyio_messages.hrl").
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -39,7 +40,7 @@
 %%--------------------------------------------------------------------
 
 translate_status_from_protobuf_test() ->
-    {Internal, Protobuf} = get_status('VOK', <<1, 2, 3>>),
+    {Internal, Protobuf} = get_status(?OK, <<1,2,3>>),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_file_block_from_protobuf_test() ->
@@ -84,6 +85,28 @@ translate_ping_from_protobuf_test() ->
     {Internal, Protobuf} = get_ping(1),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
+translate_proxyio_request_remote_read_from_protobuf_test() ->
+    ?assertEqual(#proxyio_request{
+        storage_id = <<"StorageID">>,
+        file_id = <<"FileID">>,
+        proxyio_request = #remote_read{offset = 2, size = 40}},
+        translator:translate_from_protobuf(#'ProxyIORequest'{
+            storage_id = <<"StorageID">>,
+            file_id = <<"FileID">>,
+            proxyio_request = {remote_read, #'RemoteRead'{offset = 2, size = 40}}
+        })).
+
+translate_proxyio_request_remote_write_from_protobuf_test() ->
+    ?assertEqual(#proxyio_request{
+        storage_id = <<"StorageID">>,
+        file_id = <<"FileID">>,
+        proxyio_request = #remote_write{offset = 2, data = <<"data">>}},
+        translator:translate_from_protobuf(#'ProxyIORequest'{
+            storage_id = <<"StorageID">>,
+            file_id = <<"FileID">>,
+            proxyio_request = {remote_write, #'RemoteWrite'{offset = 2, data = <<"data">>}}
+        })).
+
 translate_get_protocol_version_from_protobuf_test() ->
     {Internal, Protobuf} = get_get_protocol_version(),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
@@ -93,11 +116,11 @@ translate_get_protocol_version_from_protobuf_test() ->
 %%--------------------------------------------------------------------
 
 translate_status_to_protobuf_test() ->
-    ?assertEqual({status, #'Status'{code = 'VOK', description = "It's fine"}},
-        translator:translate_to_protobuf(#status{code = 'VOK', description = "It's fine"})
+    ?assertEqual({status, #'Status'{code = ?OK, description = <<"It's fine">>}},
+        translator:translate_to_protobuf(#status{code = ?OK, description = <<"It's fine">>})
     ),
-    ?assertEqual({status, #'Status'{code = 'VEIO'}},
-        translator:translate_to_protobuf(#status{code = 'VEIO'})
+    ?assertEqual({status, #'Status'{code = ?EIO}},
+        translator:translate_to_protobuf(#status{code = ?EIO})
     ).
 
 translate_events_to_protobuf_test() ->
@@ -222,6 +245,29 @@ translate_protocol_version_to_protobuf_test() ->
         minor = none
     })).
 
+translate_proxyio_response_remote_data_to_protobuf_test() ->
+    ?assertEqual(
+        {proxyio_response, #'ProxyIOResponse'{
+            status = #'Status'{code = ?OK, description = <<"It's fine">>},
+            proxyio_response = {remote_data, #'RemoteData'{data = <<"data">>}}
+        }},
+        translator:translate_to_protobuf(#proxyio_response{
+            status = #status{code = ?OK, description = <<"It's fine">>},
+            proxyio_response = #remote_data{data = <<"data">>}
+        })).
+
+translate_proxyio_response_remote_write_result_to_protobuf_test() ->
+    ?assertEqual(
+        {proxyio_response, #'ProxyIOResponse'{
+            status = #'Status'{code = ?OK, description = <<"It's fine">>},
+            proxyio_response = {remote_write_result, #'RemoteWriteResult'{wrote = 42}}
+        }},
+        translator:translate_to_protobuf(#proxyio_response{
+            status = #status{code = ?OK, description = <<"It's fine">>},
+            proxyio_response = #remote_write_result{wrote = 42}
+        })).
+
+%% tests 'undefined' atom translation
 translate_undefined_to_protobuf_test() ->
     ?assertEqual(undefined, translator:translate_to_protobuf(undefined)).
 
