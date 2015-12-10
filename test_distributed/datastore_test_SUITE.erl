@@ -545,11 +545,12 @@ global_access(Config, Level) ->
 
 
 generic_links_test(Config, Level) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+   try  [Worker1, Worker2] = ?config(op_worker_nodes, Config),
 
     Key1 = rand_key(),
     Key2 = rand_key(),
     Key3 = rand_key(),
+    Key4 = rand_key(),
 
     Doc1 = #document{
         key = Key1,
@@ -566,12 +567,38 @@ generic_links_test(Config, Level) ->
         value = #some_record{field1 = 3}
     },
 
+    Doc4 = #document{
+        key = Key4,
+        value = #some_record{field1 = 4}
+    },
+
     %% Create some documents and links
     ?assertMatch({ok, _}, ?call(Worker1, some_record, create, [Doc1])),
 
     ?assertMatch({ok, _}, ?call(Worker2, some_record, create, [Doc2])),
 
     ?assertMatch({ok, _}, ?call(Worker1, some_record, create, [Doc3])),
+
+    ?assertMatch({ok, _}, ?call(Worker1, some_record, create, [Doc4])),
+
+    ?assertMatch(ok, ?call_store(Worker2, add_links, [
+        Level, Doc4, [{link1, Doc1}, {link2, Doc2}, {link3, Doc3}]
+    ])),
+
+    ?assertMatch({ok, _}, ?call(Worker1, some_record, delete, [Key4])),
+
+    ?assertMatch({error, link_not_found}, ?call_store(
+        Worker2, fetch_link, [Level, Doc4, link1]
+    ), 10),
+    ?assertMatch({error, link_not_found}, ?call_store(
+        Worker2, fetch_link, [Level, Doc4, link2]
+    ), 10),
+    ?assertMatch({error, link_not_found}, ?call_store(
+        Worker2, fetch_link, [Level, Doc4, link3]
+    ), 10),
+
+
+%%   io:format(user, "Key4: ~p~n", [Key4]),
 
     ?assertMatch(ok, ?call_store(Worker2, add_links, [
         Level, Doc1, [{link2, Doc2}, {link3, Doc3}]
@@ -629,8 +656,9 @@ generic_links_test(Config, Level) ->
 
     ok = ?call_store(Worker2, delete, [Level, some_record, Key1]),
     ok = ?call_store(Worker2, delete, [Level, some_record, Key2]),
-    ok = ?call_store(Worker2, delete, [Level, some_record, Key3]),
-
+    ok = ?call_store(Worker2, delete, [Level, some_record, Key3])
+catch _:OMG -> io:format(user, "WTF ~p~p~n",[OMG, erlang:get_stacktrace()])
+end,
     ok.
 
 

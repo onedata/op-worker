@@ -20,12 +20,28 @@
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
 -export([state_get/1, state_put/2]).
+-export([apply_batch_changes/2]).
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 
 -record(change, {
     seq,
-    doc
+    doc,
+    model
+}).
+
+-record(batch, {
+    changes = #{},
+    since,
+    until
+}).
+
+
+-record(queue, {
+    key,
+    current_batch,
+    last_send,
+    removed = false
 }).
 
 %%%===================================================================
@@ -42,14 +58,18 @@
 init(_Args) ->
     timer:sleep(5000),
     ?info("[ DBSync ]: Starting dbsync..."),
-    {ok, ChangesStream} = init_stream(0, infinity, global),
-    {ok, #{changes_stream => ChangesStream}}.
+    Since = 0,
+    {ok, ChangesStream} = init_stream(Since, infinity, global),
+    {ok, #{changes_stream => ChangesStream, {queue, global} => #queue{last_send = now(), current_batch = #batch{since = Since}}}}.
 
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
-    couchdb_datastore_driver:changes_start_link(
-        fun(Seq, Doc) ->
-            worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc}})
+    timer:send_after(100, dbsync_worker, {timer, {flush_queue, Queue}}),
+    couchdb_datastore_driver:changes_start_link(fun
+        (_, stream_ended, _) ->
+            worker_proxy:call(dbsync_worker, {Queue, cleanup});
+        (Seq, Doc, Model) ->
+            worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
         end, Since, Until).
 
 %%--------------------------------------------------------------------
@@ -71,20 +91,46 @@ handle(healthcheck) ->
     ok;
 
 
-handle({Queue, #change{seq = Seq, doc = #document{key = Key} = Doc}}) ->
-    ?info("[ DBSync ]: Received change on queue ~p with seq ~p: ~p", [Queue, Seq, Doc]),
+handle({QueueKey, cleanup}) ->
+    queue_remove(QueueKey);
+handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}) ->
+%%    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     case is_file_scope(Doc) of
         true ->
             case get_space_id(Doc) of
+                {ok, <<"spaces">>} ->
+                    ?info("Skipping1 doc ~p", [Doc]),
+                    skip;
+                {ok, <<"">>} ->
+                    ?info("Skipping2 doc ~p", [Doc]),
+                    skip;
                 {ok, SpaceId} ->
-                    ?info("Document ~p assigned to space ~p", [Key, SpaceId]);
+%%                    ?info("Document ~p assigned to space ~p", [Key, SpaceId]),
+                    queue_push(QueueKey, Change, SpaceId);
                 {error, Reason} ->
-                    ?error("Unable to find space id for document ~p", [Doc]),
+                    ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
             end ;
         false ->
+            ?info("Skipping3 doc ~p", [Doc]),
             ok
     end;
+
+handle({flush_queue, QueueKey}) ->
+    ?info("[ DBSync ] Flush queue ~p", [QueueKey]),
+    worker_host:state_update(dbsync_worker, {queue, QueueKey},
+        fun(#queue{current_batch = #batch{until = Until} = BatchToSend, removed = IsRemoved} = Queue) ->
+%%            ?info("[ DBSync ] Flush queue ~p ~p", [QueueKey, BatchToSend]),
+            dbsync_proto:send_batch(QueueKey, BatchToSend),
+            case IsRemoved of
+                true ->
+                    ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
+                    undefined;
+                false ->
+                    timer:send_after(200, dbsync_worker, {timer, {flush_queue, QueueKey}}),
+                    Queue#queue{current_batch = #batch{since = Until, until = Until}}
+            end
+        end);
 
 %% Unknown request
 handle(_Request) ->
@@ -98,6 +144,55 @@ handle(_Request) ->
 -spec cleanup() -> Result when
     Result :: ok.
 cleanup() ->
+    ok.
+
+queue_remove(QueueKey) ->
+    worker_host:state_update(dbsync_worker, {queue, QueueKey},
+        fun(Queue) ->
+            case Queue of
+                undefined ->
+                    undefined;
+                #queue{} = Q -> Q#queue{removed = true}
+            end
+        end).
+
+queue_push(QueueKey, #change{seq = Since} = Change, SpaceId) ->
+    worker_host:state_update(dbsync_worker, {queue, QueueKey},
+        fun(Queue) ->
+            Queue1 =
+                case Queue of
+                    undefined ->
+                        #queue{last_send = now(), current_batch = #batch{since = Since, until = Since}};
+                    #queue{} = Q -> Q
+                end,
+            CurrentBatch = Queue1#queue.current_batch,
+            ChangesList = maps:get(SpaceId, CurrentBatch#batch.changes, []),
+            Queue1#queue{current_batch = CurrentBatch#batch{until = Since, changes = maps:put(SpaceId, [Change | ChangesList], CurrentBatch#batch.changes)}}
+        end).
+
+
+apply_batch_changes(_FromProvider, #batch{changes = Changes}) ->
+    lists:foreach(fun({SpaceId, ChangeList}) ->
+        ok = apply_changes(SpaceId, ChangeList)
+    end, maps:to_list(Changes)).
+
+apply_changes(SpaceId, [#change{doc = #document{key = Key} = Doc, model = ModelName} = Change | T]) ->
+%%    ?info("Apply in ~p change ~p", [SpaceId, Change]),
+    try
+        ModelConfig = ModelName:model_init(),
+        caches_controller:safe_delete(?GLOBAL_ONLY_LEVEL, ModelName, Key),
+        caches_controller:safe_delete(?LOCAL_ONLY_LEVEL, ModelName, Key),
+        caches_controller:delete_old_keys(globally_cached, 0),
+        caches_controller:delete_old_keys(locally_cached, 0),
+        mnesia_cache_driver:delete(ModelConfig, Key, ?PRED_ALWAYS),
+        {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+        apply_changes(SpaceId, T)
+    catch
+        _:Reason ->
+            ?error_stacktrace("Unable to apply change ~p due to: ~p", [Change, Reason]),
+            {error, Reason}
+    end;
+apply_changes(_, []) ->
     ok.
 
 %%--------------------------------------------------------------------

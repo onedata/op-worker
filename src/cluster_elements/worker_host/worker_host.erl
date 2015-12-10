@@ -178,8 +178,8 @@ handle_info({'EXIT', Pid, Reason}, State) ->
     gen_server:cast(Plugin, #worker_request{req = {'EXIT', Pid, Reason}}),
     {noreply, State};
 
-handle_info({timer, Msg}, State) ->
-    gen_server:cast(self(), Msg),
+handle_info({timer, Msg}, State = #host_state{plugin = Plugin}) ->
+    spawn(fun() -> proc_request(Plugin, #worker_request{req = Msg}) end),
     {noreply, State};
 
 handle_info(Msg, State) ->

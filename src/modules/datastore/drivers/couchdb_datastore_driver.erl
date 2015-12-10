@@ -29,7 +29,7 @@
 -export([save/2, create/2, update/3, create_or_update/3, exists/2, get/2, list/3, delete/3]).
 -export([add_links/3, delete_links/3, fetch_link/3, foreach_link/4]).
 
--export([start_gateway/4]).
+-export([start_gateway/4, force_save/2]).
 
 -export([changes_start_link/3]).
 -export([init/1, handle_call/3, handle_info/2, handle_change/2, handle_cast/2, terminate/2]).
@@ -145,7 +145,7 @@ save(#model_config{name = ModelName} = ModelConfig, #document{rev = undefined, k
                 {ok, #document{rev = undefined}} ->
                     create(ModelConfig, Doc);
                 {ok, #document{rev = Rev}} ->
-                    ?info("Resave with rev: ~p", [Rev]),
+%%                    ?info("Resave with rev: ~p", [Rev]),
                     save(ModelConfig, Doc#document{rev = Rev})
             end
         end);
@@ -159,8 +159,28 @@ save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = R
     
     {Props} = to_json_term(Value),
     Doc = {[{<<"_rev">>, Rev}, {<<"_id">>, to_driver_key(Bucket, Key)} | Props]},
-    ?info("Save ~p with rev: ~p", [Key, Rev]),
+%%    ?info("Save ~p with rev: ~p", [Key, Rev]),
     case couchbeam:save_doc(DB, Doc) of
+        {ok, {_}} ->
+            {ok, Key};
+        {error, conflict} ->
+            {error, already_exists};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+force_save(#model_config{bucket = Bucket} = _ModelConfig, #document{key = Key, rev = {Start, Ids} = Revs, value = Value}) ->
+    case byte_size(term_to_binary(Value)) > 512 * 1024 of
+        true -> error(term_to_big);
+        false -> ok
+    end,
+
+    {ok, DB} = get_db(),
+
+    {Props} = to_json_term(Value),
+    Doc = {[{<<"_revisions">>, {[{<<"ids">>, Ids}, {<<"start">>, Start}]}}, {<<"_rev">>, rev_info_to_rev(Revs)}, {<<"_id">>, to_driver_key(Bucket, Key)} | Props]},
+    ?info("Save ~p with rev: ~p", [Key, Doc]),
+    case couchbeam:save_doc(DB, Doc, [{<<"new_edits">>, <<"false">>}]) of
         {ok, {_}} ->
             {ok, Key};
         {error, conflict} ->
@@ -326,8 +346,8 @@ exists(#model_config{bucket = _Bucket} = ModelConfig, Key) ->
 %%--------------------------------------------------------------------
 -spec add_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()]) ->
     ok | datastore:generic_error().
-add_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
-    case get(ModelConfig, links_doc_key(Key)) of
+add_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) when is_list(Links) ->
+    case get(ModelConfig, links_doc_key(Bucket, Key)) of
         {ok, #document{value = #links{link_map = LinkMap}}} ->
             add_links4(ModelConfig, Key, Links, LinkMap);
         {error, {not_found, _}} ->
@@ -338,8 +358,8 @@ add_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) when is_lis
 
 -spec add_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()], InternalCtx :: term()) ->
     ok | datastore:generic_error().
-add_links4(#model_config{bucket = _Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
-    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{key = Key, model = ModelName, link_map = Ctx}}) of
+add_links4(#model_config{bucket = Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
+    case save(ModelConfig, #document{key = links_doc_key(Bucket, Key), value = #links{key = Key, model = ModelName, link_map = Ctx}}) of
         {ok, _} -> ok;
         {error, Reason} ->
             {error, Reason}
@@ -355,10 +375,10 @@ add_links4(#model_config{bucket = _Bucket} = ModelConfig, Key, [{LinkName, LinkT
 %%--------------------------------------------------------------------
 -spec delete_links(model_behaviour:model_config(), datastore:ext_key(), [datastore:link_name()] | all) ->
     ok | datastore:generic_error().
-delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, all) ->
-    delete(ModelConfig, links_doc_key(Key), ?PRED_ALWAYS);
-delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) ->
-    case get(ModelConfig, links_doc_key(Key)) of
+delete_links(#model_config{bucket = Bucket} = ModelConfig, Key, all) ->
+    delete(ModelConfig, links_doc_key(Bucket, Key), ?PRED_ALWAYS);
+delete_links(#model_config{bucket = Bucket} = ModelConfig, Key, Links) ->
+    case get(ModelConfig, links_doc_key(Bucket, Key)) of
         {ok, #document{value = #links{link_map = LinkMap}}} ->
             delete_links4(ModelConfig, Key, Links, LinkMap);
         {error, {not_found, _}} ->
@@ -369,8 +389,8 @@ delete_links(#model_config{bucket = _Bucket} = ModelConfig, Key, Links) ->
 
 -spec delete_links4(model_behaviour:model_config(), datastore:ext_key(), [datastore:normalized_link_spec()] | all, InternalCtx :: term()) ->
     ok | datastore:generic_error().
-delete_links4(#model_config{bucket = _Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
-    case save(ModelConfig, #document{key = links_doc_key(Key), value = #links{key = Key, model = ModelName, link_map = Ctx}}) of
+delete_links4(#model_config{bucket = Bucket, name = ModelName} = ModelConfig, Key, [], Ctx) ->
+    case save(ModelConfig, #document{key = links_doc_key(Bucket, Key), value = #links{key = Key, model = ModelName, link_map = Ctx}}) of
         {ok, _} -> ok;
         {error, Reason} ->
             {error, Reason}
@@ -386,8 +406,8 @@ delete_links4(#model_config{} = ModelConfig, Key, [Link | R], Ctx) ->
 %%--------------------------------------------------------------------
 -spec fetch_link(model_behaviour:model_config(), datastore:ext_key(), datastore:link_name()) ->
     {ok, datastore:link_target()} | datastore:link_error().
-fetch_link(#model_config{bucket = _Bucket} = ModelConfig, Key, LinkName) ->
-    case get(ModelConfig, links_doc_key(Key)) of
+fetch_link(#model_config{bucket = Bucket} = ModelConfig, Key, LinkName) ->
+    case get(ModelConfig, links_doc_key(Bucket, Key)) of
         {ok, #document{value = #links{link_map = LinkMap}}} ->
             case maps:get(LinkName, LinkMap, undefined) of
                 undefined ->
@@ -410,8 +430,8 @@ fetch_link(#model_config{bucket = _Bucket} = ModelConfig, Key, LinkName) ->
 -spec foreach_link(model_behaviour:model_config(), Key :: datastore:ext_key(),
     fun((datastore:link_name(), datastore:link_target(), Acc :: term()) -> Acc :: term()), AccIn :: term()) ->
     {ok, Acc :: term()} | datastore:link_error().
-foreach_link(#model_config{bucket = _Bucket} = ModelConfig, Key, Fun, AccIn) ->
-    case get(ModelConfig, links_doc_key(Key)) of
+foreach_link(#model_config{bucket = Bucket} = ModelConfig, Key, Fun, AccIn) ->
+    case get(ModelConfig, links_doc_key(Bucket, Key)) of
         {ok, #document{value = #links{link_map = LinkMap}}} ->
             {ok, maps:fold(Fun, AccIn, LinkMap)};
         {error, {not_found, _}} ->
@@ -547,10 +567,9 @@ from_json_term(Term) when is_binary(Term) ->
     from_binary(Term).
 
 
--spec links_doc_key(Key :: datastore:key()) -> BinKey :: binary().
-links_doc_key(Key) ->
-    BinKey = to_binary(Key),
-    <<BinKey/binary, ?LINKS_KEY_SUFFIX>>.
+-spec links_doc_key(Bucket :: atom(), Key :: datastore:key()) -> BinKey :: binary().
+links_doc_key(_Bucket, Key) ->
+    <<Key/binary, ?LINKS_KEY_SUFFIX>>.
 
 -spec to_driver_key(Bucket :: datastore:bucket(), Key :: datastore:key()) -> BinKey :: binary().
 to_driver_key(Bucket, Key) ->
@@ -596,7 +615,7 @@ get_db() ->
 
 changes_start_link(Callback, Since, Until) ->
     {ok, Db} = get_db(),
-    Opts = [{<<"include_docs">>, <<"true">>}, {since, Since}],
+    Opts = [{<<"include_docs">>, <<"true">>}, {since, Since}, {<<"revs_info">>, <<"true">>}],
     gen_changes:start_link(?MODULE, Db, Opts, [Callback, Until]).
 
 
@@ -615,8 +634,8 @@ handle_change(Change, #state{callback = Callback, until = Until, last_seq = Last
             Seq = seq(Change),
             RawDocOnceAgian = jiffy:decode(jsx:encode(RawDoc)),
             Document = process_raw_doc(RawDocOnceAgian),
-            ?info("Got change 2 ~p ~p", [RawDocOnceAgian, Document]),
-            catch Callback(Seq, Document),
+%%            ?info("Got change 2 ~p ~p", [model(Document), Document]),
+            catch Callback(Seq, Document, model(Document)),
             State#state{last_seq = Seq}
         catch
             _:Reason ->
@@ -626,6 +645,7 @@ handle_change(Change, #state{callback = Callback, until = Until, last_seq = Last
     {noreply, NewChanges};
 handle_change(Change, #state{callback = Callback, until = Until, last_seq = LastSeq} = State) ->
     ?info("[ STOPPED ] Until ~p, LastSeq ~p", [Until, LastSeq]),
+    Callback(LastSeq, stream_ended, undefined),
     {stop, normal, State}.
 
 handle_call(_Req, _From, State) ->
@@ -647,12 +667,21 @@ terminate(Reason, _State) ->
 %%%===================================================================
 
 process_raw_doc({RawDoc}) ->
+    {ok, DB} = get_db(),
     {_, Rev} = lists:keyfind(<<"_rev">>, 1, RawDoc),
     {_, RawKey} = lists:keyfind(<<"_id">>, 1, RawDoc),
     {_, Key} = from_driver_key(RawKey),
     RawDoc1 = [KV || {<<"_", _/binary>>, _} = KV <- RawDoc],
     RawDoc2 = RawDoc -- RawDoc1,
-    #document{key = Key, rev = Rev, value = from_json_term({RawDoc2})}.
+    RevInfo = rev_to_rev_info(Rev),
+    {ok, {RawRichDoc}} = couchbeam:open_doc(DB, RawKey, [{<<"revs">>, <<"true">>}, {<<"rev">>, Rev}]),
+
+%%    ?info("RawRichDoc ~p", [RawRichDoc]),
+    {_, {RevsRaw}} = lists:keyfind(<<"_revisions">>, 1, RawRichDoc),
+    {_, Revs} = lists:keyfind(<<"ids">>, 1, RevsRaw),
+    {_, Start} = lists:keyfind(<<"start">>, 1, RevsRaw),
+
+    #document{key = Key, rev = {Start, Revs}, value = from_json_term({RawDoc2})}.
 
 doc({change,{Props}}) ->
     {_, Doc} = lists:keyfind(<<"doc">>, 1, Props),
@@ -661,3 +690,19 @@ doc({change,{Props}}) ->
 seq({change, {Props}}) ->
     {_, LastSeq} = lists:keyfind(<<"seq">>, 1, Props),
     LastSeq.
+
+
+model(#document{value = #links{model = ModelName}}) ->
+    ModelName;
+model(#document{value = Value}) ->
+    element(1, Value).
+
+
+rev_to_rev_info(Rev) ->
+    [NumBin, Hash] = binary:split(Rev, <<"-">>),
+    {binary_to_integer(NumBin), [Hash]}.
+
+rev_info_to_rev({Num, [_Hash | _] = Revs}) when is_integer(Num) ->
+    rev_info_to_rev({integer_to_binary(Num), Revs});
+rev_info_to_rev({NumBin, [Hash | _]}) when is_binary(NumBin) ->
+    <<NumBin/binary, "-", Hash/binary>>.

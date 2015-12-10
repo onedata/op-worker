@@ -111,7 +111,8 @@ mkdir(SessId, Path, Mode) ->
 %%--------------------------------------------------------------------
 -spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, FileKey, Limit, Offset) ->
-    lfm_dirs:ls(FileKey, Limit, Offset).
+    CTX = fslogic_context:new(SessId),
+    lfm_dirs:ls(SessId, ensure_uuid(CTX, FileKey), Limit, Offset).
 
 
 %%--------------------------------------------------------------------

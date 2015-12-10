@@ -24,6 +24,7 @@
 -export([clear_local_cache/1, clear_global_cache/1, clear_local_cache/2, clear_global_cache/2]).
 -export([clear_cache/2, clear_cache/3, should_clear_cache/1, get_hooks_config/1, wait_for_cache_dump/0]).
 -export([delete_old_keys/2, get_cache_uuid/2, decode_uuid/1, cache_to_datastore_level/1, cache_to_task_level/1]).
+-export([safe_delete/3, delete_old_keys/2]).
 
 %%%===================================================================
 %%% API

@@ -59,7 +59,7 @@
 -record(links, {
     key,
     model,
-    link_map
+    link_map = #{}
 }).
 
 -endif.

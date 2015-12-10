@@ -213,12 +213,9 @@ delete(Level, ModelName, Key) ->
 delete_sync(Level, ModelName, Key, Pred) ->
     case exec_driver(ModelName, level_to_driver(Level), delete, [Key, Pred]) of
         ok ->
+            ?info("WUT1 ~p", [Key]),
             spawn(fun() ->
-                catch delete_links(?DISK_ONLY_LEVEL, Key, ModelName, all) end),
-            spawn(fun() ->
-                catch delete_links(?GLOBAL_ONLY_LEVEL, Key, ModelName, all) end),
-            %% @todo: uncomment following line when local cache will support links
-            % spawn(fun() -> catch delete_links(?LOCAL_ONLY_LEVEL, Key, ModelName, all) end),
+                catch delete_links(Level, Key, ModelName, all) end),
             ok;
         {error, Reason} ->
             {error, Reason}
@@ -668,6 +665,8 @@ exec_driver(ModelName, [Driver | Rest], Method, Args) when is_atom(Driver) ->
         {error, {not_found, _}} when Method =:= get ->
             exec_driver(ModelName, Rest, Method, Args);
         {error, link_not_found} when Method =:= fetch_link ->
+            exec_driver(ModelName, Rest, Method, Args);
+        {error, link_not_found} when Method =:= foreach_link ->
             exec_driver(ModelName, Rest, Method, Args);
         {error, Reason} ->
             {error, Reason};
