@@ -17,7 +17,9 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/events/definitions.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -95,6 +97,8 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
+handle({proxyio_request, SessId, ProxyIORequest}) ->
+    handle_proxyio_request(SessId, ProxyIORequest);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -200,8 +204,8 @@ handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
+handle_fuse_request(Ctx, #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
+    fslogic_req_regular:get_helper_params(Ctx, SPID, SID, ForceCL);
 handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
     fslogic_req_generic:delete_file(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
@@ -234,3 +238,19 @@ handle_events(#event{object = #write_event{blocks = Blocks, file_uuid = FileUUID
         {error, Reason} ->
             {error, Reason}
     end.
+
+handle_proxyio_request(SessionId, #proxyio_request{
+    space_id = SPID, storage_id = SID, file_id = FID,
+    proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
+
+    fslogic_proxyio:write(SessionId, SPID, SID, FID, Offset, Data);
+
+handle_proxyio_request(SessionId, #proxyio_request{
+    space_id = SPID, storage_id = SID, file_id = FID,
+    proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
+
+    fslogic_proxyio:read(SessionId, SPID, SID, FID, Offset, Size);
+
+handle_proxyio_request(_SessionId, Req) ->
+    ?log_bad_request(Req),
+    erlang:error({invalid_request, Req}).

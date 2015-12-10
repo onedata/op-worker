@@ -21,4 +21,14 @@
     st_ctime, st_blksize, st_blocks
 }).
 
+
+%% Names of helpers
+-define(DIRECTIO_HELPER_NAME, <<"DirectIO">>).
+
+%% Record holding user's identity that may be used on POSIX compilant systems
+-record(posix_user_ctx, {
+    uid :: non_neg_integer(),
+    gid :: non_neg_integer()
+}).
+
 -endif.
