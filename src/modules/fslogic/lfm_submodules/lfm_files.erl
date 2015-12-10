@@ -21,7 +21,7 @@
 
 %% API
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2]).
+-export([exists/1, mv/2, cp/2, get_parent/2]).
 %% Functions operating on files
 -export([create/3, open/3, write/3, read/3, truncate/3, get_block_map/2, unlink/2]).
 
@@ -59,6 +59,20 @@ mv(_FileKeyFrom, _PathTo) ->
 -spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
 cp(_PathFrom, _PathTo) ->
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns uuid of parent for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+    {ok, file_meta:uuid()} | error_reply().
+get_parent(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
+    lfm_utils:call_fslogic(SessId, #get_parent{uuid = UUID},
+        fun(#parent{uuid = ParentUUID}) ->
+            {ok, ParentUUID}
+        end).
 
 
 %%--------------------------------------------------------------------

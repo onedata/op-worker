@@ -58,7 +58,7 @@
 -export_type([handle/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
@@ -126,6 +126,19 @@ ls(SessId, FileKey, Limit, Offset) ->
 get_children_count(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_dirs:get_children_count(SessId, ensure_uuid(CTX, FileKey)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns uuid of parent for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+    {ok, file_meta:uuid()} | error_reply().
+get_parent(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    lfm_files:get_parent(CTX, ensure_uuid(CTX, FileKey)).
+
 
 
 %%--------------------------------------------------------------------

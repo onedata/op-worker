@@ -1,5 +1,7 @@
 App.File = DS.Model.extend({
     name: DS.attr('string'),
-    attribute: DS.attr()
+    parentId: DS.attr('string'),
+    parent: DS.belongsTo('file', {inverse: 'children', async: true}),
+    children: DS.hasMany('file', {inverse: 'parent', async: true})
     //selected: DS.attr('boolean')
 });

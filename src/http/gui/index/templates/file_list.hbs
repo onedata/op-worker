@@ -32,7 +32,13 @@
             <b>File name</b>
         </td>
         <td>
-            <b>Attribute</b>
+            <b>ID</b>
+        </td>
+        <td>
+            <b>Parent</b>
+        </td>
+        <td>
+            <b>Children</b>
         </td>
     </tr>
     </thead>
@@ -46,7 +52,15 @@
                 {{f.name}}
             </td>
             <td  {{action 'selectRow' f}}>
-                {{f.attribute}}
+                {{f.id}}
+            </td>
+            <td  {{action 'selectRow' f}}>
+                {{f.parent.name}}
+            </td>
+            <td  {{action 'selectRow' f}}>
+                {{#each child in f.children}}
+                    <span style="margin: 5px;">{{child.name}}</span>
+                {{/each}}
             </td>
         </tr>
     {{/each}}

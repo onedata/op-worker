@@ -12,6 +12,7 @@
 -compile([export_all]).
 
 -include_lib("ctool/include/logging.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([init/0]).
@@ -54,18 +55,31 @@ async_loop() ->
 %% {<<"name">>, <<"Dynamiczny">>},
 %% {<<"attribute">>, begin random:seed(now()), random:uniform(9999999) end},
 %% {<<"selected">>, false}]),
-%% %%     throw(dupa),
+%% %%     throw(erorroror),
 %% async_loop().
 
 
 find([Id]) ->
-    case get_files_by(<<"id">>, Id) of
-        [File] -> {ok, [File]};
-        _ -> {error, <<"File not found">>}
-    end;
+    ?dump({find, Id}),
+    SessionID = g_session:get_session_id(),
+    {ok, #file_attr{name = Name}} = logical_file_manager:stat(
+        SessionID, {uuid, Id}),
+    {ok, Children} = logical_file_manager:ls(SessionID, {uuid, Id}, 10, 0),
+    ChildrenIds = [ChId || {ChId, _} <- Children],
+    ParentUUID = get_parent(Id),
+    Res = [
+        {<<"id">>, Id},
+        {<<"name">>, Name},
+        {<<"parentId">>, ParentUUID},
+        {<<"parent">>, ParentUUID},
+        {<<"children">>, ChildrenIds}
+    ],
+    ?dump({find, Res}),
+    {ok, Res};
 
 
 find(Ids) ->
+    ?dump({find, Ids}),
     Files = lists:foldl(
         fun(Id, Acc) ->
             case Acc of
@@ -85,10 +99,27 @@ find(Ids) ->
 
 
 find_all() ->
-    {ok, get_files()}.
+    SessionID = g_session:get_session_id(),
+    ?dump(find_all),
+    {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
+        SessionID, {path, <<"/spaces">>}),
+    {ok, Children} = logical_file_manager:ls(SessionID,
+        {uuid, SpacesDirUUID}, 10, 0),
+    ChildrenIds = [ChId || {ChId, _} <- Children],
+    Res = [
+        {<<"id">>, SpacesDirUUID},
+        {<<"name">>, <<"spaces">>},
+        {<<"parentId">>, null},
+        {<<"parent">>, null},
+        {<<"children">>, ChildrenIds}
+    ],
+%%     Res = [begin {ok, R} = find([Id]), R end || {Id, _Name} <- Files],
+    ?dump({find_all, [Res]}),
+    {ok, [Res]}.
 
 
 find_query(Data) ->
+    ?dump({find_query, Data}),
     Result = lists:foldl(
         fun({Attr, Val}, Acc) ->
             get_files_by(Attr, Val, Acc)
@@ -139,6 +170,21 @@ delete_record(Id) ->
 % ------------------------------------------------------------
 %
 % ------------------------------------------------------------
+
+get_parent(UUID) ->
+    SessionID = g_session:get_session_id(),
+    case UUID of
+        <<"spaces">> ->
+            null;
+        _ ->
+            {ok, ParentUUID} = logical_file_manager:get_parent(
+                SessionID, {uuid, UUID}),
+            ParentUUID
+    end.
+
+
+
+
 
 -define(FILE_ETS, file_ets).
 

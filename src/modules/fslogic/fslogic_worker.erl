@@ -184,6 +184,8 @@ handle_fuse_request(Ctx, #create_dir{parent_uuid = ParentUUID, name = Name, mode
     fslogic_req_special:mkdir(Ctx, ParentUUID, Name, Mode);
 handle_fuse_request(Ctx, #get_file_children{uuid = UUID, offset = Offset, size = Size}) ->
     fslogic_req_special:read_dir(Ctx, {uuid, UUID}, Offset, Size);
+handle_fuse_request(Ctx, #get_parent{uuid = UUID}) ->
+    fslogic_req_regular:get_parent(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #change_mode{uuid = UUID, mode = Mode}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, UUID}, Mode);
 handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
