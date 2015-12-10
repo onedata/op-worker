@@ -239,8 +239,6 @@ get_file_test(Config) ->
     ?assertEqual(200,Code4),
 
     ?assertEqual(<<"application/octet-stream">>, proplists:get_value(<<"content-type">>, Headers4)),
-    ct:pal("FileContent: ~p~n", [FileContent]),
-    ct:pal("Response4: ~p~n", [Response4]),
     ?assertEqual(FileContent, Response4),
     %%------------------------------
 
@@ -832,28 +830,46 @@ errors_test(Config) ->
     ?assertEqual(404, Code7),
     %%------------------------------
 
-    %%--- read file without permission -----
+    %%--- open binary file without permission -----
 
-    File8 = "file8",
+    File8 = "file",
+    FileContent8 = <<"File content...">>,
     create_file(Config, File8),
     ?assertEqual(object_exists(Config, File8), true),
+    write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
+    ?assertEqual(get_file_content(Config, File8),FileContent8),
 
-    RequestHeaders8 = [
+    RequestHeaders8 = [?USER_1_TOKEN_HEADER],
+
+    mock_opening_file_without_perms(Config),
+    {ok, Code8, _Headers8, _Response8} =
+        do_request(Worker, File8, get, RequestHeaders8),
+    unmock_opening_file_without_perms(Config),
+
+    ?assertEqual(403, Code8),
+%%------------------------------
+    
+    %%--- open cdmi file without permission -----
+
+    File9 = "file",
+    FileContent9 = <<"File content...">>,
+    create_file(Config, File9),
+    ?assertEqual(object_exists(Config, File9), true),
+    write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
+    ?assertEqual(get_file_content(Config, File9),FileContent9),
+
+    RequestHeaders9 = [
         ?USER_1_TOKEN_HEADER,
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
 
-    mock_reading_file_without_perms(Config),
-    tracer:start(Worker),
-    tracer:trace_calls(cdmi_exception_handler),
-    tracer:trace_calls(request_exception_handler),
-    {ok, Code8, _Headers8, _Response8} =
-        do_request(Worker, File8, get, RequestHeaders8),
-    tracer:stop(),
-    unmock_reading_file_without_perms(Config),
+    mock_opening_file_without_perms(Config),
+    {ok, Code9, _Headers9, _Response9} =
+        do_request(Worker, File9, get, RequestHeaders9),
+    unmock_opening_file_without_perms(Config),
 
-    ?assertEqual(403, Code8).
+    ?assertEqual(403, Code9).
     %%------------------------------
 
 %%%===================================================================
@@ -988,12 +1004,12 @@ now_in_secs() ->
     {MegaSecs, Secs, _MicroSecs} = erlang:now(),
     MegaSecs * 1000000 + Secs.
 
-mock_reading_file_without_perms(Config) ->
+mock_opening_file_without_perms(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, onedata_file_api),
     test_utils:mock_expect(
-        Worker, onedata_file_api, read, fun (_, _ ,_) -> {error, ?EACCES} end).
+        Worker, onedata_file_api, open, fun (_, _ ,_) -> {error, ?EACCES} end).
 
-unmock_reading_file_without_perms(Config) ->
+unmock_opening_file_without_perms(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Worker, onedata_file_api).
