@@ -99,7 +99,7 @@ stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
         try
             Transport:send(Socket, JsonBodyPrefix),
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-            cdmi_streamer:stream_range(Socket, Transport, State, Range,
+            stream_range(Socket, Transport, State, Range,
                 ValueTransferEncoding, BufferSize, FileHandle),
             Transport:send(Socket,JsonBodySuffix)
         catch Type:Message ->
