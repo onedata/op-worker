@@ -90,6 +90,11 @@
     uuid :: file_meta:uuid()
 }).
 
+-record(helper_arg, {
+    key :: binary(),
+    value :: binary()
+}).
+
 -record(get_xattr, {
     uuid :: file_meta:uuid(),
     name :: xattr:name()
@@ -115,17 +120,8 @@
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
                         #list_xattr{}.
 
--record(fuse_request, {
-    fuse_request :: fuse_request()
-}).
-
 -record(file_children, {
     child_links :: [#child_link{}]
-}).
-
--record(helper_arg, {
-    key :: binary(),
-    value :: binary()
 }).
 
 -record(helper_params, {
@@ -138,7 +134,11 @@
 }).
 
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
-                         #file_location{} | #xattr{} | #xattr_list{}.
+    #file_location{} | #xattr{} | #xattr_list{}.
+
+-record(fuse_request, {
+    fuse_request :: fuse_request()
+}).
 
 -record(fuse_response, {
     status :: #status{},
