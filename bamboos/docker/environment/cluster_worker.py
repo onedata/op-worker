@@ -2,7 +2,7 @@
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
-Brings up a set of onecluster worker nodes. They can create separate clusters.
+Brings up a set of cluster-worker nodes. They can create separate clusters.
 """
 
 import os
