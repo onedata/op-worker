@@ -10,7 +10,6 @@ import os
 import copy
 import subprocess
 import json
-
 from . import appmock, client, common, globalregistry, provider_ccm, \
     provider_worker, cluster_worker, docker, dns
 
@@ -76,8 +75,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
         common.merge(output, op_ccm_output)
 
         # Start op_worker instances
-        op_worker_output = provider_worker.up(image, bin_op_worker, dns_server,
-                                              uid, config_path, logdir)
+        op_worker_output = provider_worker.up(image, bin_op_worker, dns_server, uid, config_path, logdir)
         common.merge(output, op_worker_output)
         # Make sure OP domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
@@ -92,8 +90,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
         common.merge(output, op_ccm_output)
 
         # Start op_worker instances
-        cluster_worker_output = cluster_worker.up(image, bin_cluster_worker, dns_server,
-                                              uid, config_path, logdir)
+        cluster_worker_output = cluster_worker.up(image, bin_cluster_worker, dns_server, uid, config_path, logdir)
         common.merge(output, cluster_worker_output)
         # Make sure OP domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
