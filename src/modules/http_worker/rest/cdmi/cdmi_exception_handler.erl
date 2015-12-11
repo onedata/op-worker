@@ -22,15 +22,8 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
 
-%% Function that translates handler exception to cowboy format
--type exception_handler() ::
-fun((Req :: cowboy_req:req(), State :: term(), Type :: atom(), Error :: term()) -> term()).
-
--export_type([exception_handler/0]).
-
 %% API
 -export([handle/4]).
-
 
 %%%===================================================================
 %%% API
@@ -50,15 +43,15 @@ handle(Req, State, error, {error, no_peer_certificate}) ->
     {ok, Req2} = cowboy_req:reply(?NOT_AUTHORIZED, [], [], Req),
     {halt, Req2, State};
 handle(Req, State, error, {error,{not_found,file_meta}}) ->
-    BodyBinary = json_utils:encode([{<<"Error when creating file">>, <<"Not found file meta">>}]),
+    BodyBinary = json_utils:encode([{<<"error_not_found">>, <<"The resource could not be found">>}]),
     {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, error, {error, ?ENOENT}) ->
-    BodyBinary = json_utils:encode([{<<"ENOENT">>, <<"No such entity">>}]),
+    BodyBinary = json_utils:encode([{<<"error_not_found">>, <<"The resource could not be found">>}]),
     {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, error, {error, ?EACCES}) ->
-    BodyBinary = json_utils:encode([{<<"EACCES">>, <<"Permission denied">>}]),
+    BodyBinary = json_utils:encode([{<<"error_forbidden">>, <<"Permission denied">>}]),
     {ok, Req2} = cowboy_req:reply(?FORBIDDEN, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, Type, Error) ->

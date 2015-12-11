@@ -14,8 +14,6 @@
 -module(cdmi_handler_selector).
 -author("Tomasz Lichon").
 
--define(CDMI_EXCEPTION_HANDLER, fun cdmi_exception_handler:handle/4).
-
 %% API
 -export([choose_object_or_container_handler/1]).
 
@@ -29,11 +27,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec choose_object_or_container_handler(cowboy_req:req()) ->
-    {#{handler => module()}, cowboy_req:req()}.
+    {#{handler => module(),
+       exception_handler => protocol_plugin_behaviour:exception_handler()
+    }, cowboy_req:req()}.
 choose_object_or_container_handler(Req) ->
     {Path, Req2} = cowboy_req:path(Req),
     Handler = choose_object_or_container_handler_module(Path),
-    {#{handler => Handler, exception_handler => ?CDMI_EXCEPTION_HANDLER}, Req2}.
+    {#{handler => Handler,
+        exception_handler => fun cdmi_exception_handler:handle/4
+    }, Req2}.
 
 %%%===================================================================
 %%% Internal functions

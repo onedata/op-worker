@@ -534,7 +534,7 @@ update_file_test(Config) ->
     RequestBody2 = [{<<"value">>, base64:encode(UpdateValue)}],
     RawRequestBody2 = json_utils:encode(RequestBody2),
     {ok, Code2, _Headers2, _Response2} = do_request(Worker, FullName ++ "?value:0-2", put, RequestHeaders2, RawRequestBody2),
-    ?assertEqual(204, Code2), % tu sie wywalilo
+    ?assertEqual(204, Code2),
 
     ?assert(object_exists(Config, FullName)),
     ?assertEqual(UpdatedValue, get_file_content(Config, FullName)),
@@ -747,11 +747,9 @@ errors_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     %%---- unauthorized access -----
-
     {ok, Code1, _Headers1, _Response1} =
         do_request(Worker, ?TEST_DIR_NAME, get, [], []),
     ?assertEqual(401, Code1),
-
     %%------------------------------
 
     %%----- wrong create path ------
@@ -760,11 +758,9 @@ errors_test(Config) ->
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
-
     {ok, Code2, _Headers2, _Response2} =
         do_request(Worker, "dir", put, RequestHeaders2, []),
     ?assertEqual(415, Code2),
-
     %%------------------------------
 
     %%---- wrong create path 2 -----
@@ -773,7 +769,6 @@ errors_test(Config) ->
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
-
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "dir/", put, RequestHeaders3, []),
     ?assertEqual(415, Code3),
@@ -813,8 +808,6 @@ errors_test(Config) ->
     ],
     {ok, Code6, _Headers6, _Response6} =
         do_request(Worker, "nonexistent_file", get, RequestHeaders6),
-
-
     ?assertMatch(404, Code6),
     %%------------------------------
 
@@ -826,38 +819,32 @@ errors_test(Config) ->
     ],
     {ok, Code7, _Headers7, _Response7} =
         do_request(Worker, "nonexisting_dir/", get, RequestHeaders7),
-
     ?assertEqual(404, Code7),
     %%------------------------------
 
     %%--- open binary file without permission -----
-
     File8 = "file",
     FileContent8 = <<"File content...">>,
     create_file(Config, File8),
     ?assertEqual(object_exists(Config, File8), true),
     write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
     ?assertEqual(get_file_content(Config, File8),FileContent8),
-
     RequestHeaders8 = [?USER_1_TOKEN_HEADER],
 
     mock_opening_file_without_perms(Config),
     {ok, Code8, _Headers8, _Response8} =
         do_request(Worker, File8, get, RequestHeaders8),
     unmock_opening_file_without_perms(Config),
-
     ?assertEqual(403, Code8),
-%%------------------------------
+    %%------------------------------
     
     %%--- open cdmi file without permission -----
-
     File9 = "file",
     FileContent9 = <<"File content...">>,
     create_file(Config, File9),
     ?assertEqual(object_exists(Config, File9), true),
     write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
     ?assertEqual(get_file_content(Config, File9),FileContent9),
-
     RequestHeaders9 = [
         ?USER_1_TOKEN_HEADER,
         ?CDMI_VERSION_HEADER,
@@ -868,7 +855,6 @@ errors_test(Config) ->
     {ok, Code9, _Headers9, _Response9} =
         do_request(Worker, File9, get, RequestHeaders9),
     unmock_opening_file_without_perms(Config),
-
     ?assertEqual(403, Code9).
     %%------------------------------
 

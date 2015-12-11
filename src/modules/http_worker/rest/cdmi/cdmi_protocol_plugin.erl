@@ -14,8 +14,6 @@
 -behaviour(protocol_plugin_behaviour).
 -author("Tomasz Lichon").
 
--define(CDMI_EXCEPTION_HANDLER, fun cdmi_exception_handler:handle/4).
-
 %% API
 -export([routes/0]).
 
@@ -33,19 +31,19 @@ routes() ->
     [
         {"/cdmi/cdmi_capabilities/", #{
             handler => cdmi_capabilities_handler,
-            exception_handler => ?CDMI_EXCEPTION_HANDLER
+            exception_handler => fun cdmi_exception_handler:handle/4
         }},
         {"/cdmi/cdmi_capabilities/container/", #{
             handler => cdmi_container_capabilities_handler,
-            exception_handler => ?CDMI_EXCEPTION_HANDLER
+            exception_handler => fun cdmi_exception_handler:handle/4
         }},
         {"/cdmi/cdmi_capabilities/dataobject/", #{
             handler => cdmi_dataobject_capabilities_handler,
-            exception_handler => ?CDMI_EXCEPTION_HANDLER
+            exception_handler => fun cdmi_exception_handler:handle/4
         }},
         {"/cdmi/cdmi_objectid/:id/", #{
             handler => cdmi_objectid_handler,
-            exception_handler => ?CDMI_EXCEPTION_HANDLER
+            exception_handler => fun cdmi_exception_handler:handle/4
         }},
         {"/cdmi/[...]",
             fun cdmi_handler_selector:choose_object_or_container_handler/1
