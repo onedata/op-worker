@@ -211,7 +211,7 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Xattr};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}};
-        {error, {not_found, _}} ->
+        {error, {not_found, xattr}} ->
             #fuse_response{status = #status{code = ?ENOATTR}}
     end.
 
