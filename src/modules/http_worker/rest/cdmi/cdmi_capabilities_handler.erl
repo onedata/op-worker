@@ -86,10 +86,8 @@ prepare_capability_ans([]) ->
   [];
 prepare_capability_ans([<<"objectType">> | Tail]) ->
   [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
-%% todo uncomment when ID'll be used
 prepare_capability_ans([<<"objectID">> | Tail]) ->
-  prepare_capability_ans(Tail);
-%%   [{<<"objectID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
+  [{<<"objectID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
   [{<<"objectName">>, ?root_capability_path} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->

@@ -16,6 +16,7 @@
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % exclusive body fields
 -define(KEYS_REQUIRED_TO_BE_EXCLUSIVE, [<<"deserialize">>, <<"copy">>,
@@ -68,7 +69,7 @@ malformed_capability_request(Req, State) ->
 %% Add them to request state and change handler to object/container/capability
 %% @end
 %%--------------------------------------------------------------------
--spec malformed_capability_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
+-spec malformed_objectid_request(req(), #{}) -> {false, req(), #{}} | no_return().
 malformed_objectid_request(Req, State) ->
     % get objectid
     {Id, Req1} = cowboy_req:binding(id, Req),
@@ -79,57 +80,64 @@ malformed_objectid_request(Req, State) ->
     {RawPath, Req4} = cowboy_req:path(Req3),
     {Id, Req5} = cowboy_req:binding(id, Req4),
     IdSize = byte_size(Id),
-    <<"/cdmi_objectid/", Id:IdSize, Path/binary>> = RawPath,
+    <<"/cdmi/cdmi_objectid/", Id:IdSize/binary, Path/binary>> = RawPath,
 
     % get uuid from objectid
-    Uuid = case cdmi_id:objectid_to_uuid(Id) of
-               {ok, Uuid_} -> Uuid_;
-               _ -> throw(?invalid_objectid)
-           end,
+    Uuid =
+        case cdmi_id:objectid_to_uuid(Id) of
+            {ok, Uuid_} -> Uuid_;
+            _ -> throw(?invalid_objectid)
+        end,
 
     % get path of object with that uuid
-    BasePath = case is_capability_object(Req2) of
-                   true -> proplists:get_value(Id, ?CapabilityPathById);
-                   false ->
-                       {ok, Path} = file_meta:gen_path({uuid, Uuid}), % todo implement in onedata_file_api
-                       Path
-               end,
+    {BasePath, Req6} =
+        case is_capability_object(Req5) of
+            true -> {proplists:get_value(Id, ?CapabilityPathById), Req5};
+            false ->
+                {{ok, Auth}, Req6_} = onedata_auth_api:authenticate(Req5), %todo check for no permission
+                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Uuid),
+                {NewPath, Req6_}
+        end,
 
     % join base name with the rest of filepath
-    FullPath = <<BasePath/binary, Path/binary>>,
-    {RawVersion, Req6} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req5),
+    FullPath =
+        case BasePath of
+            <<"/">> -> Path;
+            _ -> <<BasePath/binary, Path/binary>>
+        end,
+    {RawVersion, Req7} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req6),
     Version = get_supported_version(RawVersion),
-    {Qs, Req7} = cowboy_req:qs(Req6),
+    {Qs, Req8} = cowboy_req:qs(Req7),
     Opts = parse_opts(Qs),
 
     % delegate request to cdmi_container/cdmi_object/cdmi_capability (depending on filepath)
-    case binary:last(Path) =:= $/ of
+    case Path =/= <<"">> andalso binary:last(Path) =:= $/ of
         true ->
-            case is_capability_object(Req7) of %todo update req
+            case is_capability_object(Req8) of %todo update req
                 false ->
                     onedata_handler_management_api:set_handler(cdmi_container_handler),
                     NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                    {false, Req7, NewState};
+                    {false, Req8, NewState};
                 true ->
                     case BasePath of
                         ?root_capability_path ->
                             onedata_handler_management_api:set_handler(cdmi_capabilities_handler),
                             NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                            {false, Req7, NewState};
+                            {false, Req8, NewState};
                         ?dataobject_capability_path ->
                             onedata_handler_management_api:set_handler(cdmi_dataobject_capabilities_handler),
                             NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                            {false, Req7, NewState};
+                            {false, Req8, NewState};
                         ?container_capability_path ->
                             onedata_handler_management_api:set_handler(cdmi_container_capabilities_handler),
                             NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                            {false, Req7, NewState}
+                            {false, Req8, NewState}
                     end
             end;
         false ->
             onedata_handler_management_api:set_handler(cdmi_object_handler),
             NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-            {false, Req7, NewState}
+            {false, Req8, NewState}
     end.
 
 %%--------------------------------------------------------------------
@@ -277,9 +285,9 @@ validate_body(Body) ->
 %%--------------------------------------------------------------------
 -spec is_capability_object(req()) -> boolean().
 is_capability_object(Req) -> %todo return req object
-    {PathInfo, _} = cowboy_req:path_info(Req),
-    case PathInfo of
-        [<<"cdmi_objectid">>, Id | _Rest] ->
+    {Path, _} = cowboy_req:path(Req),
+    case binary:split(Path, <<"/">>, [global]) of
+        [<<"">>, <<"cdmi">>, <<"cdmi_objectid">>, Id | _Rest] ->
             proplists:is_defined(Id, ?CapabilityPathById);
         _ -> false
     end.

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_authorized/2]).
+-export([is_authorized/2, authenticate/1]).
 
 %%%===================================================================
 %%% API
@@ -56,10 +56,6 @@ is_authorized(Req, State) ->
             {{false, <<"authentication_error">>}, NewReq, State}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Authenticates user basing on request headers
@@ -73,6 +69,10 @@ authenticate(Req) ->
         {Token, Req2}->
             authenticate_using_token(Req2, Token)
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc

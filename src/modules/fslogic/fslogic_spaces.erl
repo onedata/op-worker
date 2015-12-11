@@ -36,7 +36,7 @@ get_default_space(CTX = #fslogic_ctx{}) ->
 get_default_space(UserId) ->
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
         onedata_user:get(UserId),
-    file_meta:get({uuid, DefaultSpaceId}).
+    file_meta:get_space_dir(DefaultSpaceId).
 
 %%%===================================================================
 %%% Internal functions

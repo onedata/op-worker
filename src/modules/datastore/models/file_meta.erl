@@ -51,8 +51,8 @@
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
--export([get_ancestors/1, attach_location/3, get_locations/1]).
--export([snapshot_name/2]).
+-export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
+-export([snapshot_name/2, space_dir_uuid_to_spaceid/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -478,7 +478,7 @@ setup_onedata_user(UUID) ->
                 {ok, #document{key = Key}} -> {ok, Key};
                 {error, {not_found, _}} ->
                     create({uuid, ?ROOT_DIR_UUID},
-                        #document{key = ?SPACES_BASE_DIR_NAME,
+                        #document{key = ?SPACES_BASE_DIR_UUID,
                             value = #file_meta{
                                 name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1711,
                                 mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
@@ -487,13 +487,14 @@ setup_onedata_user(UUID) ->
             end,
 
         lists:foreach(fun(SpaceId) ->
-            case exists({uuid, SpaceId}) of
+            SpaceDirUuid = spaceid_to_space_dir_uuid(SpaceId),
+            case exists({uuid, SpaceDirUuid}) of
                 true -> ok;
                 false ->
                     {ok, #space_details{name = SpaceName}} =
                         gr_spaces:get_details(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
-                        #document{key = SpaceId,
+                        #document{key = SpaceDirUuid,
                             value = #file_meta{
                                 name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#1770,
                                 mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
@@ -503,7 +504,7 @@ setup_onedata_user(UUID) ->
         end, Spaces),
 
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
-            #document{key = UUID,
+            #document{key = fslogic_path:default_space_uuid(UUID),
                 value = #file_meta{
                     name = UUID, type = ?DIRECTORY_TYPE, mode = 8#1770,
                     mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
@@ -537,6 +538,9 @@ attach_location(Entry, LocId, ProviderId) ->
     {ok, #document{key = FileId} = FDoc} = get(Entry),
     ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
     ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}}).
+
+get_space_dir(SpaceId) ->
+    get(spaceid_to_space_dir_uuid(SpaceId)).
 
 %%%===================================================================
 %%% Internal functions
@@ -775,3 +779,9 @@ is_snapshot(FileName) ->
 -spec location_ref(oneprovider:id()) -> binary().
 location_ref(ProviderId) ->
     <<?LOCATION_PREFIX, ProviderId/binary>>.
+
+spaceid_to_space_dir_uuid(SpaceId) ->
+    base64:encode(SpaceId).
+
+space_dir_uuid_to_spaceid(SpaceUuid) ->
+    base64:decode(SpaceUuid).
