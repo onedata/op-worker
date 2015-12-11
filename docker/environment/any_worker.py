@@ -1,8 +1,9 @@
-"""Author: Konrad Zemek Michal Zmuda
+"""Author: Konrad Zemek, Michal Zmuda
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
-Brings up a set of onecluster worker nodes. They can create separate clusters.
+Brings up a set of worker nodes. They can create separate clusters.
+Script is parametrised by worker type related configurator.
 """
 
 import copy

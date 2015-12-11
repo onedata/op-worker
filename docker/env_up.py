@@ -13,7 +13,9 @@ from __future__ import print_function
 import argparse
 import json
 import os
+
 from environment import env
+
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -83,8 +85,8 @@ parser.add_argument(
 args = parser.parse_args()
 
 output = env.up(args.config_path, image=args.image, bin_am=args.bin_am,
-                bin_gr=args.bin_gr, bin_op_ccm=args.bin_op_ccm,
-                bin_op_worker=args.bin_op_worker, bin_cluster_worker=args.bin_cluster_worker,
-                bin_oc=args.bin_oc, logdir=args.logdir)
+       bin_gr=args.bin_gr, bin_op_ccm=args.bin_op_ccm,
+       bin_op_worker=args.bin_op_worker, bin_cluster_worker=args.bin_cluster_worker,
+       bin_oc=args.bin_oc, logdir=args.logdir)
 
 print(json.dumps(output))
