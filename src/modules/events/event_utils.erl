@@ -77,8 +77,8 @@ send_subscription_handler() ->
             {ok, StmId} = sequencer:open_stream(SessId),
             sequencer:send_message(Sub, StmId, SessId),
             {SubId, StmId, SessId};
-        (_, _, _) ->
-            ok
+        (#subscription{id = SubId}, SessId, _) ->
+            {SubId, undefined, SessId}
     end.
 
 %%--------------------------------------------------------------------
@@ -90,11 +90,11 @@ send_subscription_handler() ->
     Handler :: event_stream:terminate_handler().
 send_subscription_cancellation_handler() ->
     fun
+        ({_SubId, undefined, _SessId}) ->
+            ok;
         ({SubId, StmId, SessId}) ->
             sequencer:send_message(#subscription_cancellation{id = SubId}, StmId, SessId),
-            sequencer:close_stream(StmId, SessId);
-        (_) ->
-            ok
+            sequencer:close_stream(StmId, SessId)
     end.
 
 %%%===================================================================
@@ -113,8 +113,8 @@ open_sequencer_stream_handler() ->
         (_, SessId, fuse) ->
             {ok, StmId} = sequencer:open_stream(SessId),
             {StmId, SessId};
-        (_, _, _) ->
-            ok
+        (_, SessId, _) ->
+            {undefined, SessId}
     end.
 
 %%--------------------------------------------------------------------
@@ -126,8 +126,8 @@ open_sequencer_stream_handler() ->
 -spec close_sequencer_stream_handler() -> Handler :: event_stream:terminate_handler().
 close_sequencer_stream_handler() ->
     fun
-        ({StmId, SessId}) -> sequencer:close_stream(StmId, SessId);
-        (_) -> ok
+        ({undefined, _}) -> ok;
+        ({StmId, SessId}) -> sequencer:close_stream(StmId, SessId)
     end.
 
 %%--------------------------------------------------------------------
@@ -141,10 +141,10 @@ send_events_handler() ->
     fun
         ([], _) ->
             ok;
+        (_, {undefined, _}) ->
+            ok;
         (Evts, {StmId, SessId}) ->
-            sequencer:send_message(#events{events = Evts}, StmId, SessId);
-        (_, _) ->
-            ok
+            sequencer:send_message(#events{events = Evts}, StmId, SessId)
     end.
 
 %%--------------------------------------------------------------------

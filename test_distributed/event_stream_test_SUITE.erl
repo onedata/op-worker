@@ -205,7 +205,7 @@ start_event_stream(Worker, EmRule, EmTime) ->
     },
     SessId = <<"session_id">>,
     ?assertMatch({ok, _}, rpc:call(Worker, gen_server, start, [
-        event_stream, [EvtMan, Sub, SessId], []
+        event_stream, [fuse, EvtMan, Sub, SessId], []
     ])).
 
 %%--------------------------------------------------------------------
