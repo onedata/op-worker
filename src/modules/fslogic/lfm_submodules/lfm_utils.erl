@@ -18,7 +18,7 @@
 -include("types.hrl").
 
 %% API
--export([call_fslogic/3, ls_all/2, rmdir/2, isdir/2]).
+-export([call_fslogic/3, rmdir/2, isdir/2]).
 
 
 %%--------------------------------------------------------------------
@@ -36,16 +36,6 @@ call_fslogic(SessId, Request, OKHandle) ->
         #fuse_response{status = #status{code = Code}} ->
             {error, Code}
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Lists all contents of a directory.
-%% @end
-%%--------------------------------------------------------------------
--spec ls_all(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls_all(CTX, UUID) ->
-    Chunk = application:get_env(?APP_NAME, max_children_per_request),
-    ls_all(CTX, UUID, 0, Chunk).
 
 
 %%--------------------------------------------------------------------
@@ -76,29 +66,9 @@ isdir(CTX, UUID) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists all contents of a directory from given offset.
-%% @end
-%%--------------------------------------------------------------------
--spec ls_all(CTX :: #fslogic_ctx{}, UUID :: file_uuid(), Offset :: integer(), Chunk :: integer()) ->
-    {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls_all(CTX = #fslogic_ctx{session_id = SessId}, UUID, Offset, Chunk) ->
-    case lfm_dirs:ls(SessId, {uuid, UUID}, Chunk, Offset) of
-        {ok, LsResult} when length(LsResult =:= Chunk) ->
-            case ls_all(CTX, UUID, Offset + Chunk, Chunk) of
-                {ok, LsAll} -> {ok, LsResult ++ LsAll};
-                Error -> Error
-            end;
-        {ok, LsResult} ->
-            {ok, LsResult};
-        Error -> Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Deletes an object with all its children.
 %% @end
 %%--------------------------------------------------------------------
-
 -spec rm(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> ok | error_reply().
 rm(CTX, UUID) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
@@ -113,7 +83,12 @@ rm(CTX, UUID) ->
         error:Error -> {error, Error}
     end.
 
-%% TODO ls_all jest nieuzywana
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes all children of directory with given UUID.
+%% @end
+%%--------------------------------------------------------------------
 -spec rm_children(CTX :: #fslogic_ctx{}, UUID :: file_uuid(), Chunk :: non_neg_integer())
         -> ok | error_reply().
 rm_children(#fslogic_ctx{session_id = SessId} = CTX, UUID, Chunk) ->
