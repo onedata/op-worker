@@ -51,7 +51,7 @@ object_resource_exists(Req, State) ->
 %%--------------------------------------------------------------------
 -spec redirect_to_object(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
 redirect_to_object(Req, #{path := Path} = State) ->
-    redirect_to(Req, State, <<Path/binary, "/">>).
+    redirect_to(Req, State, binary_part(Path, {0, byte_size(Path) - 1})).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,7 +60,7 @@ redirect_to_object(Req, #{path := Path} = State) ->
 %%--------------------------------------------------------------------
 -spec redirect_to_container(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
 redirect_to_container(Req, #{path := Path} = State) ->
-    redirect_to(Req, State, binary_part(Path, {0, byte_size(Path) - 1})).
+    redirect_to(Req, State, <<Path/binary, "/">>).
 
 %%--------------------------------------------------------------------
 %% @doc
