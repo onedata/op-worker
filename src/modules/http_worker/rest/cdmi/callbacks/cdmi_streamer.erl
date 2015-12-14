@@ -32,9 +32,9 @@
 -spec binary_stream_size(Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined,
   FileSize :: non_neg_integer()) -> non_neg_integer().
 binary_stream_size(undefined, FileSize) -> FileSize;
-binary_stream_size(Ranges, _FileSize) ->
+binary_stream_size(Ranges, FileSize) ->
     lists:foldl(fun
-        ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
+        ({From, To}, Acc) when To >= From -> max(0, Acc + min(FileSize - 1, To) - From + 1);
         ({_, _}, Acc)  -> Acc
     end, 0, Ranges).
 
@@ -47,7 +47,7 @@ binary_stream_size(Ranges, _FileSize) ->
 cdmi_stream_size(Range, FileSize, ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix) ->
     DataSize =
         case Range of
-            {From, To} when To >= From -> To - From + 1;
+            {From, To} when To >= From -> min(FileSize - 1, To) - From + 1;
             default -> FileSize
         end,
     case ValueTransferEncoding of
