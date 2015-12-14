@@ -51,7 +51,8 @@ object_resource_exists(Req, State) ->
 %%--------------------------------------------------------------------
 -spec redirect_to_object(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
 redirect_to_object(Req, #{path := Path} = State) ->
-    CorrectPath = cdmi_path:remove_trailing_slash(Path),
+%%     TODO dodac str_utils:ensure_not_ends_with_slash(Path) do ctoola
+    CorrectPath = str_utils:ensure_not_ends_with_slash(Path),
     redirect_to(Req, State, CorrectPath).
 
 %%--------------------------------------------------------------------
@@ -61,7 +62,7 @@ redirect_to_object(Req, #{path := Path} = State) ->
 %%--------------------------------------------------------------------
 -spec redirect_to_container(cowboy_req:req(), #{}) -> {halt, cowboy_req:req(), #{}}.
 redirect_to_container(Req, #{path := Path} = State) ->
-    CorrectPath = cdmi_path:add_trailing_slash(Path),
+    CorrectPath = str_utils:ensure_ends_with_slash(Path),
     redirect_to(Req, State, CorrectPath).
 
 %%--------------------------------------------------------------------

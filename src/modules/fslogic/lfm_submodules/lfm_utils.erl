@@ -84,7 +84,7 @@ isdir(CTX, UUID) ->
 ls_all(CTX = #fslogic_ctx{session_id = SessId}, UUID, Offset, Chunk) ->
     case lfm_dirs:ls(SessId, {uuid, UUID}, Chunk, Offset) of
         {ok, LsResult} when length(LsResult =:= Chunk) ->
-            case ls_all(CTX, UUID, Offset+Chunk, Chunk) of
+            case ls_all(CTX, UUID, Offset + Chunk, Chunk) of
                 {ok, LsAll} -> {ok, LsResult ++ LsAll};
                 Error -> Error
             end;
@@ -101,18 +101,32 @@ ls_all(CTX = #fslogic_ctx{session_id = SessId}, UUID, Offset, Chunk) ->
 
 -spec rm(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> ok | error_reply().
 rm(CTX, UUID) ->
+    {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     try
         case isdir(CTX, UUID) of
-            true ->
-                %% delete all children
-                {ok, Children} = ls_all(CTX, UUID),
-                [rm(CTX, Child) || Child <- Children];
-
+            true -> ok = rm_children(CTX, UUID, Chunk);
             false -> ok
         end,
         %% delete an object
-        ok = lfm_files:unlink(CTX, UUID)
+        lfm_files:unlink(CTX, {uuid, UUID})
     catch
-        %% return error reply from lfm
-        error:{badmatch, X}  -> X
+        error:Error -> {error, Error}
+    end.
+
+%% TODO ls_all jest nieuzywana
+-spec rm_children(CTX :: #fslogic_ctx{}, UUID :: file_uuid(), Chunk :: non_neg_integer())
+        -> ok | error_reply().
+rm_children(#fslogic_ctx{session_id = SessId} = CTX, UUID, Chunk) ->
+    RemoveChild = fun({ChildUUID, _ChildName}) -> ok = rm(CTX, ChildUUID) end,
+    case lfm_dirs:ls(SessId, {uuid, UUID}, Chunk, 0) of
+        {ok, Children} ->
+            case length(Children) of
+                Chunk ->
+                    lists:foreach(RemoveChild, Children),
+                    rm_children(CTX, UUID, Chunk);
+                _ -> %length of Children list is smaller then ls_chunk so there are no more children
+                    lists:foreach(RemoveChild, Children),
+                     ok
+            end;
+        {error, Error} -> {error, Error}
     end.

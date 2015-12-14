@@ -432,10 +432,15 @@ delete_dir_test(Config) ->
     mkdir(Config, DirName),
     ?assert(object_exists(Config, DirName)),
 
-    RequestHeaders1 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    {ok, Code1, _Headers1, _Response1} = do_request(Worker, DirName, delete, RequestHeaders1, []),
-    ?assertEqual("204",Code1),
+    RequestHeaders1 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code1, _Headers1, _Response1} =
+        do_request(Worker, DirName, delete, RequestHeaders1, []),
 
+    ?assertEqual(204,Code1),
     ?assert(not object_exists(Config, DirName)),
     %%------------------------------
 
@@ -445,10 +450,15 @@ delete_dir_test(Config) ->
     mkdir(Config, list_to_binary(ChildDirName)),
     ?assert(object_exists(Config, DirName)),
 
-    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    {ok, Code2, _Headers2, _Response2} = do_request(Worker, DirName, delete, RequestHeaders2, []),
-    ?assertEqual("204",Code2),
+    RequestHeaders2 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code2, _Headers2, _Response2} =
+        do_request(Worker, DirName, delete, RequestHeaders2, []),
 
+    ?assertEqual(204,Code2),
     ?assert(not object_exists(Config, DirName)),
     ?assert(not object_exists(Config, ChildDirName)),
     %%------------------------------
@@ -456,10 +466,11 @@ delete_dir_test(Config) ->
     %%----- delete group dir -------
     ?assert(object_exists(Config, SpacesDirName)),
 
-    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.1.1"}],
-    {ok, Code3, _Headers3, _Response3} = do_request(Worker, SpacesDirName, delete, RequestHeaders3, []),
-    ?assertEqual("403",Code3),
+    RequestHeaders3 = [?CDMI_VERSION_HEADER],
+    {ok, Code3, _Headers3, _Response3} =
+        do_request(Worker, SpacesDirName, delete, RequestHeaders3, []),
 
+    ?assertEqual(403,Code3),
     ?assert(object_exists(Config, SpacesDirName)).
     %%------------------------------
 
@@ -779,7 +790,7 @@ capabilities_test(Config) ->
     ?assertEqual(?dataobject_capability_list, Capabilities3).
     %%------------------------------
 
-% tests if cdmi returns 'moved pemanently' code when we forget about '/' in path
+% tests if cdmi returns 'moved permanently' code when we forget about '/' in path
 moved_pemanently_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     DirName = <<"somedir/">>,
