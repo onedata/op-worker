@@ -166,7 +166,7 @@ cp(PathFrom, PathTo) ->
     {ok, file_meta:path()}.
 get_file_path(SessId, Uuid) ->
     CTX = fslogic_context:new(SessId),
-    {ok, fslogic_path:from_uuid(CTX, Uuid)}.
+    {ok, fslogic_uuid:uuid_to_path(CTX, Uuid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -509,5 +509,5 @@ ensure_uuid(_CTX, {uuid, UUID}) ->
 ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
-    {uuid, fslogic_path:to_uuid(CTX, Path)}.
+    {uuid, fslogic_uuid:path_to_uuid(CTX, Path)}.
 

@@ -70,8 +70,8 @@ read_dir(CTX, File, Offset, Size) ->
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
-    SpacesKey = fslogic_path:spaces_uuid(UserId),
-    DefaultSpaceKey = fslogic_path:default_space_uuid(UserId),
+    SpacesKey = fslogic_uuid:spaces_uuid(UserId),
+    DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
     case Key of
         DefaultSpaceKey ->
             {ok, DefaultSpace} = fslogic_spaces:get_default_space(CTX),

@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+#####################################################################
+# @author Tomasz Lichon
+# @copyright (C): 2015 ACK CYFRONET AGH
+# This software is released under the MIT license
+# cited in 'LICENSE.txt'.
+#####################################################################
+# usage:
+# ./erl_compile.sh [MODULE]...
+#
+# This script compiles modules selected as arguments, and replaces them in
+# release: rel/op_worker.
+#####################################################################
+
 set -e
 
 # for each given module, find its location, compile and copy to releases

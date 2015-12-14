@@ -51,11 +51,3 @@ allowed_methods(Req, State) ->
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}}.
 malformed_request(Req, State) ->
     cdmi_arg_parser:malformed_objectid_request(Req, State).
-
-%%%===================================================================
-%%% Content type handler functions
-%%%===================================================================
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
