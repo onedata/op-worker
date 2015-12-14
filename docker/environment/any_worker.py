@@ -75,14 +75,16 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 EOF
 set -e
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-/root/bin/node/bin/''' + '{0} console'.format(configurator.app_name())
+/root/bin/node/bin/{executable} console'''
     command = command.format(
         gen_dev_args=json.dumps({configurator.app_name(): config}),
         uid=os.geteuid(),
-        gid=os.getegid())
+        gid=os.getegid(),
+        executable=configurator.app_name()
+    )
 
     volumes = [(bindir, DOCKER_BINDIR_PATH, 'ro')]
-    volumes = configurator.tweak_run_parameters(config, volumes)
+    volumes += configurator.extra_volumes(config)
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
