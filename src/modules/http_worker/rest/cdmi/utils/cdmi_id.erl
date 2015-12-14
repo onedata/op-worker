@@ -25,6 +25,9 @@
 %% API
 -export([uuid_to_objectid/1, objectid_to_uuid/1]).
 
+%% test API
+-export([crc16/1, build_objectid/1, build_objectid/2, to_base16/1, from_base16/1]).
+
 %% The SNMP Enterprise Number for your organization in network byte
 %% order. See RFC 2578 and
 %% http://www.iana.org/assignments/enterprise-numbers
