@@ -58,7 +58,6 @@ ccm_rel:
 	make -C op_ccm/ rel
 
 appmock_rel:
-	ln -sf deps/cluster_worker/appmock/
 	make -C appmock/ rel
 
 relclean:
