@@ -6,25 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Globalregistry user data cache
+%%% Globalregistry group data cache
 %%% @end
 %%%-------------------------------------------------------------------
--module(onedata_user).
+-module(onedata_group).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_model.hrl").
-
--include("proto/oneclient/handshake_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
+-include_lib("ctool/include/global_registry/gr_groups.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2]).
+-export([fetch/2, get_or_fetch/2]).
 
 -export_type([id/0]).
 
@@ -68,8 +65,6 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -127,26 +122,18 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch group from globalregistry and save it in cache.
+%% Fetch user from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons} = Auth) ->
+-spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}, GroupId) ->
     try
-        {ok, #user_details{id = Id, name = Name}} =
-            gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            gr_users:get_spaces({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-        {ok, GroupIds} = gr_users:get_groups({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-        [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
-        OnedataUser = #onedata_user{
-            name = Name,
-            space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
-            group_ids = GroupIds
-        },
-        OnedataUserDoc = #document{key = Id, value = OnedataUser},
-        {ok, _} = onedata_user:save(OnedataUserDoc),
-        {ok, OnedataUserDoc}
+        {ok, #group_details{id = Id, name = Name}} =
+            gr_groups:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}, GroupId),
+        %todo consider getting user_details for each group member and storing it as onedata_user
+        OnedataGroupDoc = #document{key = Id, value = #onedata_group{name = Name}},
+        {ok, _} = onedata_user:save(OnedataGroupDoc),
+        {ok, OnedataGroupDoc}
     catch
         _:Reason ->
             {error, Reason}
@@ -154,14 +141,14 @@ fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons} = Auth)
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get group from cache or fetch from globalregistry and save in cache.
+%% Get user from cache or fetch from globalregistry and save in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(datastore:key(), #auth{}) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Key, Token) ->
-    case onedata_user:get(Key) of
+    case onedata_group:get(Key) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Token);
+        {error, {not_found, _}} -> fetch(Token, Key);
         Error -> Error
     end.
