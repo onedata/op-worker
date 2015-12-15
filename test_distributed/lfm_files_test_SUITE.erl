@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -31,7 +32,8 @@
     lfm_create_and_access_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
-    lfm_truncate_test/1
+    lfm_truncate_test/1,
+    lfm_acl_test/1
 ]).
 
 -performance({test_cases, []}).
@@ -41,7 +43,8 @@ all() -> [
     lfm_create_and_access_test,
     lfm_write_test,
     lfm_stat_test,
-    lfm_truncate_test
+    lfm_truncate_test,
+    lfm_acl_test
 ].
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -290,17 +293,33 @@ lfm_truncate_test(Config) ->
     ?assertMatch({ok, #file_attr{size = 5}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"aabc">>}, lfm_proxy:read(W, Handle11, 0, 4)).
 
-%% Get uuid of given by path file. Possible as root to bypass permissions checks.
-get_uuid_privileged(Worker, SessId, Path) ->
-    get_uuid(Worker, SessId, Path).
+lfm_acl_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
 
-get_uuid(Worker, SessId, Path) ->
-    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
-        #fuse_response{status = #status{code = ?OK}},
-        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
-        30
-    ),
-    UUID.
+    SessId1 = ?config({session_id, 1}, Config),
+    UserId1 = ?config({user_id, 1}, Config),
+    UserName1 = ?config({user_name, 1}, Config),
+    SessId2 = ?config({session_id, 2}, Config),
+    UserId2 = ?config({user_id, 2}, Config),
+    UserName2 = ?config({user_name, 2}, Config),
+    [{GroupId1, GroupName1}, {GroupId2, GroupName2}, {GroupId3, GroupName3}, {GroupId4, GroupName4}] =
+        ?config({groups, 1}, Config),
+    FileName = <<"/test_file_acl">>,
+    DirName = <<"/test_dir_acl">>,
+
+    {ok, FileUuid} = lfm_proxy:create(W, SessId1, FileName, 8#755),
+    ok = lfm_proxy:mkdir(W, SessId1, DirName),
+
+    % test setting and getting acl
+    Acl = [
+        #accesscontrolentity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ],
+    Ans1 = lfm_proxy:set_acl(W, SessId1, {uuid, FileUuid}, Acl),
+    ?assertEqual(ok, Ans1),
+    Ans2 = lfm_proxy:get_acl(W, SessId1, {uuid, FileUuid}),
+    ?assertEqual({ok, Acl}, Ans2).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -329,6 +348,18 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% Get uuid of given by path file. Possible as root to bypass permissions checks.
+get_uuid_privileged(Worker, SessId, Path) ->
+    get_uuid(Worker, SessId, Path).
+
+get_uuid(Worker, SessId, Path) ->
+    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
+        #fuse_response{status = #status{code = ?OK}},
+        ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+        30
+    ),
+    UUID.
 
 %%--------------------------------------------------------------------
 %% @private

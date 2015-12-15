@@ -65,7 +65,7 @@
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
--export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
+-export([set_perms/2, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
@@ -308,8 +308,8 @@ truncate(SessId, FileKey, Size) ->
 %%--------------------------------------------------------------------
 
 -spec get_block_map(FileHandle :: handle()) -> {ok, [block_range()]} | error_reply().
-get_block_map(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    get_block_map(SessId, {uuid, FileUUID}).
+get_block_map(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
+    lfm_files:get_block_map(CTX, UUID).
 
 -spec get_block_map(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
 get_block_map(SessId, FileKey) ->
@@ -342,9 +342,16 @@ check_perms(Path, PermType) ->
 %% Returns file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec get_acl(FileKey :: file_key()) -> {ok, [access_control_entity()]} | error_reply().
-get_acl(Path) ->
-    lfm_perms:get_acl(Path).
+-spec get_acl(handle()) -> {ok, [access_control_entity()]} | error_reply().
+get_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
+    lfm_perms:get_acl(CTX, UUID).
+
+-spec get_acl(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+    {ok, [access_control_entity()]} | error_reply().
+get_acl(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_perms:get_acl(CTX, UUID).
 
 
 %%--------------------------------------------------------------------
@@ -352,9 +359,16 @@ get_acl(Path) ->
 %% Updates file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(FileKey :: file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
-set_acl(Path, EntityList) ->
-    lfm_perms:set_acl(Path, EntityList).
+-spec set_acl(handle(), EntityList :: [access_control_entity()]) -> ok | error_reply().
+set_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}, EntityList) ->
+    lfm_perms:set_acl(CTX, UUID, EntityList).
+
+-spec set_acl(SessId :: session:id(), FileKey :: file_id_or_path(), EntityList :: [access_control_entity()]) ->
+    ok | error_reply().
+set_acl(SessId, FileKey, EntityList) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_perms:set_acl(CTX, UUID, EntityList).
 
 
 %%--------------------------------------------------------------------
@@ -363,8 +377,8 @@ set_acl(Path, EntityList) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(handle()) -> {ok, file_attributes()} | error_reply().
-stat(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    stat(SessId, {uuid, UUID}).
+stat(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
+    lfm_attrs:stat(CTX, {uuid, UUID}).
 
 -spec stat(session:id(), file_key()) -> {ok, file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
@@ -379,14 +393,14 @@ stat(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(Handle :: handle(), XattrName :: xattr:name()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
-    get_xattr(SessId, {uuid, UUID}, XattrName).
+get_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}, XattrName) ->
+    lfm_attrs:get_xattr(CTX, UUID, XattrName).
 
 -spec get_xattr(session:id(), file_key(), xattr:name()) -> {ok, #xattr{}} | error_reply().
 get_xattr(SessId, FileKey, XattrName) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
-    lfm_attrs:get_xattr(CTX, FileUUID, XattrName).
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:get_xattr(CTX, UUID, XattrName).
 
 
 %%--------------------------------------------------------------------
@@ -395,14 +409,14 @@ get_xattr(SessId, FileKey, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_xattr(handle(), #xattr{}) -> ok | error_reply().
-set_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Xattr) ->
-    set_xattr(SessId, {uuid, UUID}, Xattr).
+set_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}, Xattr) ->
+    lfm_attrs:set_xattr(CTX, UUID, Xattr).
 
 -spec set_xattr(session:id(), file_key(), #xattr{}) -> ok | error_reply().
 set_xattr(SessId, FileKey, Xattr) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
-    lfm_attrs:set_xattr(CTX, FileUUID, Xattr).
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:set_xattr(CTX, UUID, Xattr).
 
 
 %%--------------------------------------------------------------------
@@ -411,14 +425,14 @@ set_xattr(SessId, FileKey, Xattr) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(handle(), xattr:name()) -> ok | error_reply().
-remove_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
-    remove_xattr(SessId, {uuid, UUID}, XattrName).
+remove_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}, XattrName) ->
+    lfm_attrs:remove_xattr(CTX, UUID, XattrName).
 
 -spec remove_xattr(session:id(), file_key(), xattr:name()) -> ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
-    lfm_attrs:remove_xattr(CTX, FileUUID, XattrName).
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:remove_xattr(CTX, UUID, XattrName).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -426,14 +440,14 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(handle()) -> {ok, [xattr:name()]} | error_reply().
-list_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    list_xattr(SessId, {uuid, UUID}).
+list_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
+    list_xattr(CTX, UUID).
 
 -spec list_xattr(session:id(), file_key()) -> {ok, [xattr:name()]} | error_reply().
 list_xattr(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
-    lfm_attrs:list_xattr(CTX, FileUUID).
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:list_xattr(CTX, UUID).
 
 
 %%--------------------------------------------------------------------

@@ -155,6 +155,7 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
             name = UserName, space_ids = SpaceIds, group_ids = GroupIds
         }}
     ]),
+    [{ok, _} = rpc:call(Worker, onedata_group, get_or_fetch, [Id, #auth{}]) || Id <- GroupIds],
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserNum}, Spaces},

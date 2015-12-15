@@ -14,7 +14,7 @@
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
--include("modules/fslogic/fslogic_acl.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 

@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore.hrl").
--include("modules/fslogic/fslogic_acl.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
@@ -122,7 +122,7 @@ ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifie
     [
         {<<"acetype">>, bitmask_to_type(Type)},
         {<<"identifier">>,
-            case ?has_flag(Type, ?identifier_group_mask) of
+            case ?has_flag(Flags, ?identifier_group_mask) of
                 true -> gid_to_ace_name(Who);
                 false -> uid_to_ace_name(Who)
             end},

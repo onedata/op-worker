@@ -17,7 +17,8 @@
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4,
-    read/4, write/4, mkdir/3, get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3]).
+    read/4, write/4, mkdir/3, get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3,
+    get_acl/3, set_acl/4]).
 
 %%%===================================================================
 %%% API
@@ -184,6 +185,26 @@ list_xattr(Worker, SessId, FileKey) ->
         fun(Host) ->
             Result =
                 logical_file_manager:list_xattr(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec get_acl(node(), session:id(), file_id_or_path()) ->
+    {ok, [access_control_entity()]} | error_reply().
+get_acl(Worker, SessId, FileKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:get_acl(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec set_acl(node(), session:id(), file_id_or_path(), [access_control_entity()]) ->
+    ok | error_reply().
+set_acl(Worker, SessId, FileKey, EntityList) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_acl(SessId, FileKey, EntityList),
             Host ! {self(), Result}
         end).
 
