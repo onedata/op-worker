@@ -26,7 +26,8 @@ namespace helpers {
  */
 class StorageHelperFactory {
 public:
-    StorageHelperFactory(asio::io_service &dio_service,
+    StorageHelperFactory(asio::io_service &ceph_service,
+        asio::io_service &dio_service,
         communication::Communicator &communicator);
 
     virtual ~StorageHelperFactory() = default;
@@ -43,6 +44,7 @@ public:
         const std::unordered_map<std::string, std::string> &args);
 
 private:
+    asio::io_service &m_cephService;
     asio::io_service &m_dioService;
     communication::Communicator &m_communicator;
 };
