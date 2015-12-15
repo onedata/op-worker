@@ -23,16 +23,15 @@ build_with_enum_test() ->
     Crc = 27447,
     Length = size(TestString),
     Obj = cdmi_id:build_objectid(TestNum, TestString),
-    CmpString = list_to_binary(TestString),
     ?assertEqual(Obj, <<0:8, TestNum:24,
-    0:8, Length:8, Crc:16, CmpString/binary>>).
+    0:8, Length:8, Crc:16, TestString/binary>>).
 
 build_without_enum_test() ->
     TestString = <<"data string">>,
     Crc = 17183,
     Length = size(TestString),
     Obj = cdmi_id:build_objectid(TestString),
-    CmpString = list_to_binary(TestString),
+    CmpString = TestString,
     ?assertEqual(Obj, <<0:8, ?ENTERPRISENUM:24,
     0:8, Length:8, Crc:16, CmpString/binary>>).
 
@@ -53,6 +52,6 @@ base16_test() ->
     ?assertEqual(Obj, cdmi_id:from_base16(Encode)).
 
 uuid_to_objectid_test() ->
-    Uuid = <<"123456789123456">>,
-    ObjectId = cdmi_id:uuid_to_objectid(Uuid),
-    ?assertEqual(Uuid, cdmi_id:objectid_to_uuid(ObjectId)).
+    Uuid = base64:encode(<<"123456789123456">>),
+    {ok, ObjectId} = cdmi_id:uuid_to_objectid(Uuid),
+    ?assertEqual({ok, Uuid}, cdmi_id:objectid_to_uuid(ObjectId)).
