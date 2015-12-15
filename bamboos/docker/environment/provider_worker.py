@@ -13,7 +13,7 @@ import sys
 
 from . import common, docker, riak, couchbase, dns, globalregistry, provider_ccm
 
-PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 5
+PROVIDER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 # mounting point for op-worker-node docker
 DOCKER_BINDIR_PATH = '/root/build'
 
