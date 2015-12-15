@@ -50,6 +50,8 @@
     sequencer_out_streams = #{} :: streams()
 }).
 
+-define(SEND_RETRY_DELAY, timer:seconds(5)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -209,6 +211,10 @@ handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
         sequencer_out_stream_sup = SeqOutStmSup
     }};
 
+handle_info({send, Msg, SessId}, State) ->
+    ensure_sent(Msg, SessId),
+    {noreply, State};
+
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -251,7 +257,26 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec send_message_stream_reset(SessId :: session:id()) -> ok.
 send_message_stream_reset(SessId) ->
-    communicator:ensure_sent(#message_stream_reset{}, SessId).
+    ensure_sent(#message_stream_reset{}, SessId).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends a message to client associated with session. If an error occurs retries
+%% after delay.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_sent(Msg ::term(), SessId :: session:id()) -> ok.
+ensure_sent(Msg, SessId) ->
+    case communicator:send(Msg, SessId) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ?error("Cannot send message ~p due to: ~p", [Msg, Reason]),
+            erlang:send_after(?SEND_RETRY_DELAY, self(), {send, Msg, SessId}),
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
