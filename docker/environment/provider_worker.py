@@ -2,7 +2,7 @@
 Copyright (C) 2015 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
-Brings up a set of onecluster worker nodes. They can create separate clusters.
+Brings up a set of oneprovider worker nodes. They can create separate clusters.
 """
 
 import os
@@ -30,9 +30,8 @@ class ProviderWorkerConfigurator:
                         output[self.nodes_list_attribute()],
                         config[self.domains_attribute()][instance][self.app_name()], bindir)
 
-    def tweak_run_parameters(self, config, volumes):
-        volumes += [common.volume_for_storage(s) for s in config['os_config']['storages']]
-        return volumes
+    def extra_volumes(self, config):
+        return [common.volume_for_storage(s) for s in config['os_config']['storages']]
 
     def app_name(self):
         return "op_worker"
