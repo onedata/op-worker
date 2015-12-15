@@ -23,8 +23,8 @@ class ClusterWorkerConfigurator:
     def configure_started_instance(self, bindir, instance, config, os_config, output):
         pass
 
-    def tweak_run_parameters(self, config, volumes):
-        return volumes
+    def extra_volumes(self, config):
+        return []
 
     def app_name(self):
         return "cluster_worker"
