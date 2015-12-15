@@ -8,13 +8,13 @@ Brings up a set of onecluster worker nodes. They can create separate clusters.
 import os
 import subprocess
 import sys
-from . import common, docker, any_worker, globalregistry
+from . import common, docker, worker, globalregistry
 
 DOCKER_BINDIR_PATH = '/root/build'
 
 
 def up(image, bindir, dns_server, uid, config_path, logdir=None):
-    return any_worker.up(image, bindir, dns_server, uid, config_path, ProviderWorkerConfigurator(), logdir)
+    return worker.up(image, bindir, dns_server, uid, config_path, ProviderWorkerConfigurator(), logdir)
 
 
 class ProviderWorkerConfigurator:
