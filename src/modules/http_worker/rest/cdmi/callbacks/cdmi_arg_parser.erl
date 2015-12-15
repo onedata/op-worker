@@ -16,7 +16,7 @@
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
-% exclusive body fields
+% keys that are forbidden to appear simultaneously in a request's body
 -define(KEYS_REQUIRED_TO_BE_EXCLUSIVE, [<<"deserialize">>, <<"copy">>,
     <<"move">>, <<"reference">>, <<"deserializevalue">>, <<"value">>]).
 

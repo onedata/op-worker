@@ -13,6 +13,8 @@
 #include <system_error>
 #include "nifpp.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <pwd.h>
 #include <grp.h>
 
@@ -29,24 +31,25 @@ using helper_ptr = std::shared_ptr<one::helpers::IStorageHelper>;
 using helper_ctx_ptr = std::shared_ptr<one::helpers::StorageHelperCTX>;
 using reqid_t = std::tuple<int, int, int>;
 using one::helpers::error_t;
+using helper_args_t = std::unordered_map<std::string, std::string>;
 
 /**
  * Static resource holder.
  */
 struct HelpersNIF {
-    std::shared_ptr<one::communication::Communicator> nullCommunicator =
-        nullptr;
-    one::helpers::BufferLimits limits = one::helpers::BufferLimits();
     asio::io_service dioService;
-    asio::io_service cproxyService;
     asio::executor_work<asio::io_service::executor_type> dio_work =
         asio::make_work(dioService);
 
     std::vector<std::thread> workers;
 
     one::helpers::StorageHelperFactory SHFactory =
-        one::helpers::StorageHelperFactory(
-            nullCommunicator, limits, dioService, cproxyService);
+        one::helpers::StorageHelperFactory(dioService);
+
+    HelpersNIF()
+    {
+        umask(0);
+    }
 
     ~HelpersNIF()
     {
@@ -104,84 +107,84 @@ template <class T> error_t make_sys_error_code(T code)
  * @{
  */
 std::map<error_t, nifpp::str_atom> error_to_atom = {
-    {make_sys_error_code(std::errc::address_family_not_supported),        nifpp::str_atom("eafnosupport")},
-    {make_sys_error_code(std::errc::address_in_use),                      nifpp::str_atom("eaddrinuse")},
-    {make_sys_error_code(std::errc::address_not_available),               nifpp::str_atom("eaddrnotavail")},
-    {make_sys_error_code(std::errc::already_connected),                   nifpp::str_atom("eisconn")},
-    {make_sys_error_code(std::errc::argument_list_too_long),              nifpp::str_atom("e2big")},
-    {make_sys_error_code(std::errc::argument_out_of_domain),              nifpp::str_atom("edom")},
-    {make_sys_error_code(std::errc::bad_address),                         nifpp::str_atom("efault")},
-    {make_sys_error_code(std::errc::bad_file_descriptor),                 nifpp::str_atom("ebadf")},
-    {make_sys_error_code(std::errc::bad_message),                         nifpp::str_atom("ebadmsg")},
-    {make_sys_error_code(std::errc::broken_pipe),                         nifpp::str_atom("epipe")},
-    {make_sys_error_code(std::errc::connection_aborted),                  nifpp::str_atom("econnaborted")},
-    {make_sys_error_code(std::errc::connection_already_in_progress),      nifpp::str_atom("ealready")},
-    {make_sys_error_code(std::errc::connection_refused),                  nifpp::str_atom("econnrefused")},
-    {make_sys_error_code(std::errc::connection_reset),                    nifpp::str_atom("econnreset")},
-    {make_sys_error_code(std::errc::cross_device_link),                   nifpp::str_atom("exdev")},
-    {make_sys_error_code(std::errc::destination_address_required),        nifpp::str_atom("edestaddrreq")},
-    {make_sys_error_code(std::errc::device_or_resource_busy),             nifpp::str_atom("ebusy")},
-    {make_sys_error_code(std::errc::directory_not_empty),                 nifpp::str_atom("enotempty")},
-    {make_sys_error_code(std::errc::executable_format_error),             nifpp::str_atom("enoexec")},
-    {make_sys_error_code(std::errc::file_exists),                         nifpp::str_atom("eexist")},
-    {make_sys_error_code(std::errc::file_too_large),                      nifpp::str_atom("efbig")},
-    {make_sys_error_code(std::errc::filename_too_long),                   nifpp::str_atom("enametoolong")},
-    {make_sys_error_code(std::errc::function_not_supported),              nifpp::str_atom("enosys")},
-    {make_sys_error_code(std::errc::host_unreachable),                    nifpp::str_atom("ehostunreach")},
-    {make_sys_error_code(std::errc::identifier_removed),                  nifpp::str_atom("eidrm")},
-    {make_sys_error_code(std::errc::illegal_byte_sequence),               nifpp::str_atom("eilseq")},
-    {make_sys_error_code(std::errc::inappropriate_io_control_operation),  nifpp::str_atom("enotty")},
-    {make_sys_error_code(std::errc::interrupted),                         nifpp::str_atom("eintr")},
-    {make_sys_error_code(std::errc::invalid_argument),                    nifpp::str_atom("einval")},
-    {make_sys_error_code(std::errc::invalid_seek),                        nifpp::str_atom("espipe")},
-    {make_sys_error_code(std::errc::io_error),                            nifpp::str_atom("eio")},
-    {make_sys_error_code(std::errc::is_a_directory),                      nifpp::str_atom("eisdir")},
-    {make_sys_error_code(std::errc::message_size),                        nifpp::str_atom("emsgsize")},
-    {make_sys_error_code(std::errc::network_down),                        nifpp::str_atom("enetdown")},
-    {make_sys_error_code(std::errc::network_reset),                       nifpp::str_atom("enetreset")},
-    {make_sys_error_code(std::errc::network_unreachable),                 nifpp::str_atom("enetunreach")},
-    {make_sys_error_code(std::errc::no_buffer_space),                     nifpp::str_atom("enobufs")},
-    {make_sys_error_code(std::errc::no_child_process),                    nifpp::str_atom("echild")},
-    {make_sys_error_code(std::errc::no_link),                             nifpp::str_atom("enolink")},
-    {make_sys_error_code(std::errc::no_lock_available),                   nifpp::str_atom("enolck")},
-    {make_sys_error_code(std::errc::no_message_available),                nifpp::str_atom("enodata")},
-    {make_sys_error_code(std::errc::no_message),                          nifpp::str_atom("enomsg")},
-    {make_sys_error_code(std::errc::no_protocol_option),                  nifpp::str_atom("enoprotoopt")},
-    {make_sys_error_code(std::errc::no_space_on_device),                  nifpp::str_atom("enospc")},
-    {make_sys_error_code(std::errc::no_stream_resources),                 nifpp::str_atom("enosr")},
-    {make_sys_error_code(std::errc::no_such_device_or_address),           nifpp::str_atom("enxio")},
-    {make_sys_error_code(std::errc::no_such_device),                      nifpp::str_atom("enodev")},
-    {make_sys_error_code(std::errc::no_such_file_or_directory),           nifpp::str_atom("enoent")},
-    {make_sys_error_code(std::errc::no_such_process),                     nifpp::str_atom("esrch")},
-    {make_sys_error_code(std::errc::not_a_directory),                     nifpp::str_atom("enotdir")},
-    {make_sys_error_code(std::errc::not_a_socket),                        nifpp::str_atom("enotsock")},
-    {make_sys_error_code(std::errc::not_a_stream),                        nifpp::str_atom("enostr")},
-    {make_sys_error_code(std::errc::not_connected),                       nifpp::str_atom("enotconn")},
-    {make_sys_error_code(std::errc::not_enough_memory),                   nifpp::str_atom("enomem")},
-    {make_sys_error_code(std::errc::not_supported),                       nifpp::str_atom("enotsup")},
-    {make_sys_error_code(std::errc::operation_canceled),                  nifpp::str_atom("ecanceled")},
-    {make_sys_error_code(std::errc::operation_in_progress),               nifpp::str_atom("einprogress")},
-    {make_sys_error_code(std::errc::operation_not_permitted),             nifpp::str_atom("eperm")},
-    {make_sys_error_code(std::errc::operation_not_supported),             nifpp::str_atom("eopnotsupp")},
-    {make_sys_error_code(std::errc::operation_would_block),               nifpp::str_atom("ewouldblock")},
-    {make_sys_error_code(std::errc::owner_dead),                          nifpp::str_atom("eownerdead")},
-    {make_sys_error_code(std::errc::permission_denied),                   nifpp::str_atom("eacces")},
-    {make_sys_error_code(std::errc::protocol_error),                      nifpp::str_atom("eproto")},
-    {make_sys_error_code(std::errc::protocol_not_supported),              nifpp::str_atom("eprotonosupport")},
-    {make_sys_error_code(std::errc::read_only_file_system),               nifpp::str_atom("erofs")},
-    {make_sys_error_code(std::errc::resource_deadlock_would_occur),       nifpp::str_atom("edeadlk")},
-    {make_sys_error_code(std::errc::resource_unavailable_try_again),      nifpp::str_atom("eagain")},
-    {make_sys_error_code(std::errc::result_out_of_range),                 nifpp::str_atom("erange")},
-    {make_sys_error_code(std::errc::state_not_recoverable),               nifpp::str_atom("enotrecoverable")},
-    {make_sys_error_code(std::errc::stream_timeout),                      nifpp::str_atom("etime")},
-    {make_sys_error_code(std::errc::text_file_busy),                      nifpp::str_atom("etxtbsy")},
-    {make_sys_error_code(std::errc::timed_out),                           nifpp::str_atom("etimedout")},
-    {make_sys_error_code(std::errc::too_many_files_open_in_system),       nifpp::str_atom("enfile")},
-    {make_sys_error_code(std::errc::too_many_files_open),                 nifpp::str_atom("emfile")},
-    {make_sys_error_code(std::errc::too_many_links),                      nifpp::str_atom("emlink")},
-    {make_sys_error_code(std::errc::too_many_symbolic_link_levels),       nifpp::str_atom("eloop")},
-    {make_sys_error_code(std::errc::value_too_large),                     nifpp::str_atom("eoverflow")},
-    {make_sys_error_code(std::errc::wrong_protocol_type),                 nifpp::str_atom("eprototype")}
+    {make_sys_error_code(std::errc::address_family_not_supported),        "eafnosupport"},
+    {make_sys_error_code(std::errc::address_in_use),                      "eaddrinuse"},
+    {make_sys_error_code(std::errc::address_not_available),               "eaddrnotavail"},
+    {make_sys_error_code(std::errc::already_connected),                   "eisconn"},
+    {make_sys_error_code(std::errc::argument_list_too_long),              "e2big"},
+    {make_sys_error_code(std::errc::argument_out_of_domain),              "edom"},
+    {make_sys_error_code(std::errc::bad_address),                         "efault"},
+    {make_sys_error_code(std::errc::bad_file_descriptor),                 "ebadf"},
+    {make_sys_error_code(std::errc::bad_message),                         "ebadmsg"},
+    {make_sys_error_code(std::errc::broken_pipe),                         "epipe"},
+    {make_sys_error_code(std::errc::connection_aborted),                  "econnaborted"},
+    {make_sys_error_code(std::errc::connection_already_in_progress),      "ealready"},
+    {make_sys_error_code(std::errc::connection_refused),                  "econnrefused"},
+    {make_sys_error_code(std::errc::connection_reset),                    "econnreset"},
+    {make_sys_error_code(std::errc::cross_device_link),                   "exdev"},
+    {make_sys_error_code(std::errc::destination_address_required),        "edestaddrreq"},
+    {make_sys_error_code(std::errc::device_or_resource_busy),             "ebusy"},
+    {make_sys_error_code(std::errc::directory_not_empty),                 "enotempty"},
+    {make_sys_error_code(std::errc::executable_format_error),             "enoexec"},
+    {make_sys_error_code(std::errc::file_exists),                         "eexist"},
+    {make_sys_error_code(std::errc::file_too_large),                      "efbig"},
+    {make_sys_error_code(std::errc::filename_too_long),                   "enametoolong"},
+    {make_sys_error_code(std::errc::function_not_supported),              "enosys"},
+    {make_sys_error_code(std::errc::host_unreachable),                    "ehostunreach"},
+    {make_sys_error_code(std::errc::identifier_removed),                  "eidrm"},
+    {make_sys_error_code(std::errc::illegal_byte_sequence),               "eilseq"},
+    {make_sys_error_code(std::errc::inappropriate_io_control_operation),  "enotty"},
+    {make_sys_error_code(std::errc::interrupted),                         "eintr"},
+    {make_sys_error_code(std::errc::invalid_argument),                    "einval"},
+    {make_sys_error_code(std::errc::invalid_seek),                        "espipe"},
+    {make_sys_error_code(std::errc::io_error),                            "eio"},
+    {make_sys_error_code(std::errc::is_a_directory),                      "eisdir"},
+    {make_sys_error_code(std::errc::message_size),                        "emsgsize"},
+    {make_sys_error_code(std::errc::network_down),                        "enetdown"},
+    {make_sys_error_code(std::errc::network_reset),                       "enetreset"},
+    {make_sys_error_code(std::errc::network_unreachable),                 "enetunreach"},
+    {make_sys_error_code(std::errc::no_buffer_space),                     "enobufs"},
+    {make_sys_error_code(std::errc::no_child_process),                    "echild"},
+    {make_sys_error_code(std::errc::no_link),                             "enolink"},
+    {make_sys_error_code(std::errc::no_lock_available),                   "enolck"},
+    {make_sys_error_code(std::errc::no_message_available),                "enodata"},
+    {make_sys_error_code(std::errc::no_message),                          "enomsg"},
+    {make_sys_error_code(std::errc::no_protocol_option),                  "enoprotoopt"},
+    {make_sys_error_code(std::errc::no_space_on_device),                  "enospc"},
+    {make_sys_error_code(std::errc::no_stream_resources),                 "enosr"},
+    {make_sys_error_code(std::errc::no_such_device_or_address),           "enxio"},
+    {make_sys_error_code(std::errc::no_such_device),                      "enodev"},
+    {make_sys_error_code(std::errc::no_such_file_or_directory),           "enoent"},
+    {make_sys_error_code(std::errc::no_such_process),                     "esrch"},
+    {make_sys_error_code(std::errc::not_a_directory),                     "enotdir"},
+    {make_sys_error_code(std::errc::not_a_socket),                        "enotsock"},
+    {make_sys_error_code(std::errc::not_a_stream),                        "enostr"},
+    {make_sys_error_code(std::errc::not_connected),                       "enotconn"},
+    {make_sys_error_code(std::errc::not_enough_memory),                   "enomem"},
+    {make_sys_error_code(std::errc::not_supported),                       "enotsup"},
+    {make_sys_error_code(std::errc::operation_canceled),                  "ecanceled"},
+    {make_sys_error_code(std::errc::operation_in_progress),               "einprogress"},
+    {make_sys_error_code(std::errc::operation_not_permitted),             "eperm"},
+    {make_sys_error_code(std::errc::operation_not_supported),             "eopnotsupp"},
+    {make_sys_error_code(std::errc::operation_would_block),               "ewouldblock"},
+    {make_sys_error_code(std::errc::owner_dead),                          "eownerdead"},
+    {make_sys_error_code(std::errc::permission_denied),                   "eacces"},
+    {make_sys_error_code(std::errc::protocol_error),                      "eproto"},
+    {make_sys_error_code(std::errc::protocol_not_supported),              "eprotonosupport"},
+    {make_sys_error_code(std::errc::read_only_file_system),               "erofs"},
+    {make_sys_error_code(std::errc::resource_deadlock_would_occur),       "edeadlk"},
+    {make_sys_error_code(std::errc::resource_unavailable_try_again),      "eagain"},
+    {make_sys_error_code(std::errc::result_out_of_range),                 "erange"},
+    {make_sys_error_code(std::errc::state_not_recoverable),               "enotrecoverable"},
+    {make_sys_error_code(std::errc::stream_timeout),                      "etime"},
+    {make_sys_error_code(std::errc::text_file_busy),                      "etxtbsy"},
+    {make_sys_error_code(std::errc::timed_out),                           "etimedout"},
+    {make_sys_error_code(std::errc::too_many_files_open_in_system),       "enfile"},
+    {make_sys_error_code(std::errc::too_many_files_open),                 "emfile"},
+    {make_sys_error_code(std::errc::too_many_links),                      "emlink"},
+    {make_sys_error_code(std::errc::too_many_symbolic_link_levels),       "eloop"},
+    {make_sys_error_code(std::errc::value_too_large),                     "eoverflow"},
+    {make_sys_error_code(std::errc::wrong_protocol_type),                 "eprototype"}
 };
 /** @} */
 
@@ -238,26 +241,6 @@ struct NifCTX {
     helper_ptr helperObj;
     helper_ctx_ptr helperCTX;
 };
-
-/**
- * Converts NIF term to one::helpers::IStorageHelper::ArgsMap structure.
- */
-one::helpers::IStorageHelper::ArgsMap get_helper_args(
-    ErlNifEnv *env, ERL_NIF_TERM term)
-{
-    one::helpers::IStorageHelper::ArgsMap args;
-
-    if (enif_is_list(env, term) && !enif_is_empty_list(env, term)) {
-        int i = 0;
-        ERL_NIF_TERM list, head, tail;
-        for (list = term; enif_get_list_cell(env, list, &head, &tail);
-             list = tail, ++i)
-            args.emplace(
-                one::helpers::srvArg(i), nifpp::get<std::string>(env, head));
-    }
-
-    return args;
-}
 
 /**
  * Runs given function and returns result or error term.
@@ -423,7 +406,7 @@ void handle_result(NifCTX ctx, error_t e, T... value)
 ERL_NIF_TERM new_helper_obj(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     auto helperName = nifpp::get<std::string>(env, argv[0]);
-    auto helperArgs = get_helper_args(env, argv[1]);
+    auto helperArgs = nifpp::get<helper_args_t>(env, argv[1]);
     auto helperObj =
         application.SHFactory.getStorageHelper(helperName, helperArgs);
     if (!helperObj)
@@ -521,14 +504,14 @@ ERL_NIF_TERM get_flags(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
     std::vector<nifpp::str_atom> flags;
     for (auto &flag : atom_to_flag) {
-        if (ctx->m_ffi.flags & flag.second) {
+        if (ctx->flags & flag.second) {
             flags.push_back(flag.first);
         }
     }
 
     for (auto &flag : atom_to_open_mode) {
         // Mask only open mode (ACCMODE) and compare by value
-        if ((ctx->m_ffi.flags & O_ACCMODE) == flag.second) {
+        if ((ctx->flags & O_ACCMODE) == flag.second) {
             flags.push_back(flag.first);
         }
     }
@@ -539,11 +522,11 @@ ERL_NIF_TERM get_flags(ErlNifEnv *env, helper_ctx_ptr ctx)
 ERL_NIF_TERM set_flags(
     ErlNifEnv *env, helper_ctx_ptr ctx, std::vector<nifpp::str_atom> flagAtoms)
 {
-    ctx->m_ffi.flags = 0;
+    ctx->flags = 0;
     for (auto &atom : flagAtoms) {
         auto flagTerm = get_flag_value(env, atom);
         auto flag = nifpp::get<int>(env, flagTerm);
-        ctx->m_ffi.flags |= flag;
+        ctx->flags |= flag;
     }
 
     return nifpp::make(env, ok);
@@ -551,12 +534,12 @@ ERL_NIF_TERM set_flags(
 
 ERL_NIF_TERM get_fd(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
-    return nifpp::make(env, std::make_tuple(ok, ctx->m_ffi.fh));
+    return nifpp::make(env, std::make_tuple(ok, ctx->fh));
 }
 
 ERL_NIF_TERM set_fd(ErlNifEnv *env, helper_ctx_ptr ctx, int fh)
 {
-    ctx->m_ffi.fh = fh;
+    ctx->fh = fh;
     return nifpp::make(env, ok);
 }
 

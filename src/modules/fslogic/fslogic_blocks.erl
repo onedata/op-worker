@@ -133,17 +133,35 @@ get_file_size(Entry) ->
 %%--------------------------------------------------------------------
 -spec update(FileUUID :: file_meta:uuid(), Blocks :: blocks(), FileSize :: non_neg_integer() | undefined) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update(FileUUID, Blocks, FileSize) ->
+update(FileUUID, Blocks0, FileSize) ->
     file_location:run_synchronized(FileUUID, fun() ->
         try
             LProviderId = oneprovider:get_provider_id(),
             {ok, LocIds} = file_meta:get_locations({uuid, FileUUID}),
             Locations = [file_location:get(LocId) || LocId <- LocIds],
             Locations1 = [Loc || {ok, Loc} <- Locations],
-            [LocalLocation] = [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations1, LProviderId =:= ProviderId],
+            [LocalLocation = #document{value = #file_location{storage_id = DSID, file_id = DFID}}] =
+                [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations1, LProviderId =:= ProviderId],
             RemoteLocations = Locations1 -- [LocalLocation],
 
-            BlocksSorted = consolidate(lists:usort(Blocks)),
+            %% Make sure that storage_id and file_id are set (assume defaults form location if not)
+            Blocks1 = lists:map(
+                fun(#file_block{storage_id = SID, file_id = FID} = B) ->
+                    NewSID =
+                        case SID of
+                            undefined   ->  DSID;
+                            _           ->  SID
+                        end,
+                    NewFID =
+                        case FID of
+                            undefined   ->  DFID;
+                            _           ->  FID
+                        end,
+
+                    B#file_block{storage_id = NewSID, file_id = NewFID}
+                end, Blocks0),
+
+            BlocksSorted = consolidate(lists:usort(Blocks1)),
 
             ok = invalidate(RemoteLocations, BlocksSorted),
             ok = append([LocalLocation], BlocksSorted),
@@ -160,7 +178,7 @@ update(FileUUID, Blocks, FileSize) ->
             end
         catch
             _:Reason ->
-                ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),
+                ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks0, FileSize, Reason]),
                 {error, Reason}
         end
                                              end).

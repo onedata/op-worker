@@ -18,21 +18,28 @@
 
 
 %% API
--export([new_handle/1, new_handle/2]).
+-export([new_handle/1, new_handle/2, set_user_ctx/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
 -export([chown/4, truncate/3, open/3, read/4, write/4, release/2, flush/2, fsync/3]).
 
 %% Internal context record.
--record(helper_handle, {instance, ctx, timeout = timer:seconds(30)}).
+-record(helper_handle, {
+    instance,
+    ctx,
+    timeout = timer:seconds(30),
+    helper_name :: name()
+}).
 
 -type file() :: binary().
 -type open_mode() :: write | read | rdwr.
 -type error_code() :: atom().
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
--type args() :: #{binary() => binary()}.
+-type args() :: helpers_nif:helper_args().
+-type user_ctx() :: #posix_user_ctx{}.
+-type init() :: #helper_init{}.
 
--export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0]).
+-export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0, user_ctx/0, init/0]).
 
 %%%===================================================================
 %%% API
@@ -44,7 +51,7 @@
 %%      @todo: maybe cache new_helper_obj result
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(#helper_init{}) -> handle().
+-spec new_handle(init()) -> handle().
 new_handle(#helper_init{name = Name, args = Args}) ->
     new_handle(Name, Args).
 
@@ -53,14 +60,26 @@ new_handle(#helper_init{name = Name, args = Args}) ->
 %% @doc Creates new helper object along with helper context object. Valid within local Erlang-VM.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(HelperName :: helpers_nif:nif_string(), [Arg :: helpers_nif:nif_string()] | args()) -> handle().
-new_handle(HelperName, HelperArgs) when is_map(HelperArgs) ->
-    new_handle(HelperName, maps:values(HelperArgs));
+-spec new_handle(HelperName :: helpers_nif:nif_string(), args()) -> handle().
 new_handle(HelperName, HelperArgs) ->
-    ?debug("helpers:new_handle ~p ~p", [HelperName, HelperArgs]),
+    ?debug("helpers:new_handle~p ~p", [HelperName, HelperArgs]),
     {ok, Instance} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
     {ok, CTX} = helpers_nif:new_helper_ctx(),
-    #helper_handle{instance = Instance, ctx = CTX}.
+    #helper_handle{instance = Instance, ctx = CTX, helper_name = HelperName}.
+
+
+%%--------------------------------------------------------------------
+%% @doc Calls the corresponding helper_nif method and receives result.
+%%      First argument shall be #helper_handle{} from new_handle/2.
+%%      This method uses abstract user_ctx() to set correct user context in lower layers.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_user_ctx(handle(), user_ctx()) -> ok.
+set_user_ctx(#helper_handle{ctx = CTX}, #posix_user_ctx{uid = UID, gid = GID}) ->
+    ok = helpers_nif:set_user_ctx(CTX, UID, GID);
+set_user_ctx(_, Unknown) ->
+    ?error("Unknown user context ~p", [Unknown]),
+    erlang:error({unknown_user_ctx_type, erlang:element(1, Unknown)}).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
