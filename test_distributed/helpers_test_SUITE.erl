@@ -25,7 +25,7 @@
 -define(dio_root(Config), ?TEMP_DIR).
 -define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), str_utils:to_list(File)))).
 
--define(CALL_TIMEOUT_MILLIS, 3 * 60 * 1000).
+-define(CALL_TIMEOUT_MILLIS, timer:minutes(3)).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,

@@ -72,6 +72,9 @@ start() ->
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
   case catch cowboy:stop_listener(?REST_LISTENER) of
-    (ok) -> ok;
-    (Error) -> ?error("Error on stopping listener ~p: ~p", [?REST_LISTENER, Error])
+    (ok) ->
+      ok;
+    (Error) ->
+      ?error("Error on stopping listener ~p: ~p", [?REST_LISTENER, Error]),
+      {error, rest_stop_error}
   end.

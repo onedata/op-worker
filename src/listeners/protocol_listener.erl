@@ -68,6 +68,9 @@ start() ->
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
   case catch cowboy:stop_listener(?TCP_PROTO_LISTENER) of
-    (ok) -> ok;
-    (Error) -> ?error("Error on stopping listener ~p: ~p", [?TCP_PROTO_LISTENER, Error])
+    (ok) ->
+      ok;
+    (Error) ->
+      ?error("Error on stopping listener ~p: ~p", [?TCP_PROTO_LISTENER, Error]),
+      {error, protocol_listener_stop_error}
   end.

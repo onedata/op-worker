@@ -25,6 +25,11 @@ all: test_rel
 recompile:
 	./rebar compile skip_deps=true
 
+##
+## If performance is compiled in cluster_worker ten annotations do not work.
+## Make sure they are not included in cluster_worker build.
+## todo: find better solution
+##
 compile:
 	sed -i "s/ \"deps\/ctool\/annotations\/performance\.erl\"/%%\"deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
 	rm deps/cluster_worker/ebin/performance.beam || true
@@ -34,6 +39,12 @@ compile:
 deps:
 	./rebar get-deps
 
+##
+## Reltool configs introduce dependency on deps directories (which do not exist)
+## Also a release is not nescesary for us.
+## We prevent reltool from creating a release.
+## todo: find better solution
+##
 generate: deps compile
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	./rebar generate $(OVERLAY_VARS)

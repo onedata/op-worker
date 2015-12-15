@@ -24,7 +24,7 @@
 -export([init/1, handle/1, cleanup/0, healthcheck_endpoints/0]).
 
 %% endpoint_healthcheck_behaviour callbacks
--export([ healthcheck/1]).
+-export([healthcheck/1]).
 
 -define(HTTP_WORKER_MODULE, http_worker).
 

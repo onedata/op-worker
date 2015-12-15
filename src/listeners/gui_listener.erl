@@ -113,9 +113,14 @@ start() ->
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
   case {catch cowboy:stop_listener(?HTTPS_LISTENER), catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE)} of
-    ({ok, ok}) -> ok;
-    ({Error, ok}) -> ?error("Error on stopping listener ~p: ~p", [?HTTPS_LISTENER, Error]);
-    ({_, Error}) -> ?error("Error on cleaning n2o ~p: ~p", [?SESSION_LOGIC_MODULE, Error])
+    ({ok, ok}) ->
+      ok;
+    ({Error, ok}) ->
+      ?error("Error on stopping listener ~p: ~p", [?HTTPS_LISTENER, Error]),
+      {error, https_litener_stop_error};
+    ({_, Error}) ->
+      ?error("Error on cleaning n2o ~p: ~p", [?SESSION_LOGIC_MODULE, Error]),
+      {error, n2o_cleanup_error}
   end.
 
 %%%===================================================================
