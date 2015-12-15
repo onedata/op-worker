@@ -1,4 +1,15 @@
-<h3>File manager</h3>
+<form style="margin: 10px 0 20px; font-size: 30px;">
+    <label for="select-space" style="margin-right: 10px;">
+        Current space:
+    </label>
+    {{view 'select'
+    id='select-space'
+    content=spacesDir.children
+    optionValuePath='content.id'
+    optionLabelPath='content.name'
+    value=currentSpaceId}}
+</form>
+
 <div class="btn-group" role="group" aria-label="...">
     <button type="button" class="btn btn-default" id="create-new"
         {{action 'showModal' 'create_file_modal' controller model}}>
@@ -21,48 +32,14 @@
 </div>
 {{outlet 'modal'}}
 
+<div style="width: 100%;">
+    <div style="border: 1px solid black; margin: 30px auto; display: inline-block;
+    min-width: 400px; min-height: 300px; max-height: 500px; overflow-y: scroll;">
+        {{#render "sortedFileChildren" currentSpace.children}}
+            {{#each child in sortedModel}}
+                {{file-tree-node file=child}}
+            {{/each}}
+        {{/render}}
+    </div>
+</div>
 
-<table class="table table-hover">
-    <thead>
-    <tr>
-        <td>
-            {{input type='checkbox' id='toggle-all' checked=areAllSelected}}
-        </td>
-        <td>
-            <b>File name</b>
-        </td>
-        <td>
-            <b>ID</b>
-        </td>
-        <td>
-            <b>Parent</b>
-        </td>
-        <td>
-            <b>Children</b>
-        </td>
-    </tr>
-    </thead>
-    <tbody>
-    {{#each f in model}}
-        <tr>
-            <td>
-                {{input type='checkbox' checked=f.selected class='toggle' bubbles=false}}
-            </td>
-            <td  {{action 'selectRow' f}}>
-                {{f.name}}
-            </td>
-            <td  {{action 'selectRow' f}}>
-                {{f.id}}
-            </td>
-            <td  {{action 'selectRow' f}}>
-                {{f.parent.name}}
-            </td>
-            <td  {{action 'selectRow' f}}>
-                {{#each child in f.children}}
-                    <span style="margin: 5px;">{{child.name}}</span>
-                {{/each}}
-            </td>
-        </tr>
-    {{/each}}
-    </tbody>
-</table>

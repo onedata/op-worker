@@ -1,3 +1,7 @@
 tbody > tr {
     cursor: pointer;
 }
+
+#select-space {
+    min-width: 200px;
+}

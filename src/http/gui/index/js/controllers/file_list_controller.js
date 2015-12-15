@@ -1,4 +1,42 @@
 App.FileListController = Ember.ArrayController.extend({
+    currentSpaceId: null,
+    currentSpace: null,
+    fetchCurrentSpace: function () {
+        if (this.get('currentSpaceId')) {
+            console.log('currentSpaceId ' + this.get('currentSpaceId'));
+            var spaceId = this.get('currentSpaceId');
+            spaceId = spaceId.substring(spaceId.indexOf('#') + 1);
+            console.log('currentSpaceId ' + spaceId);
+            console.log('currentSpace ' + this.findBy('id', spaceId).get('name'));
+            var controller = this;
+            this.store.find('file', spaceId).then(function(data){
+                controller.set('currentSpace', data);
+                console.log(controller.get('currentSpace'));
+            });
+            //return this.findBy('id', spaceId);
+            //console.log('spaceId ' + spaceId);
+            //var file = this.findBy('id', spaceId);
+            //console.log('file ' + file);
+            //var current = this.findBy('id', this.get('currentSpaceId'));
+            //current.set('expanded', true);
+            //return this.findBy('id', this.get('currentSpaceId'));
+        }
+        //else {
+            //return null;
+        //}
+    }.observes('currentSpaceId'),
+
+    visibleDirs: function () {
+        return this.filter(function (item, index, enumerable) {
+            console.log('item: ' + item.get('id') + ' ' + item.get('expanded'));
+            return item.get('expanded') || item.get('parent.expanded');
+        });
+    }.property('@each.expanded'),
+
+    spacesDir: function () {
+        return this.findBy('id', 'root')
+    }.property('@each.selected'),
+
     selectedCount: function () {
         return this.filterBy('selected').length;
     }.property('@each.selected'),
@@ -81,7 +119,6 @@ App.FileListController = Ember.ArrayController.extend({
             if (name && attr) {
                 var file = this.store.createRecord('file', {
                     name: name,
-                    attribute: attr,
                     selected: false
                 });
 
@@ -109,8 +146,8 @@ App.FileListController = Ember.ArrayController.extend({
             }
         },
 
-        selectRow: function (file) {
-            file.set('selected', !file.get('selected'));
+        expandRow: function (file) {
+            file.set('expanded', !file.get('expanded'));
         },
 
         remove: function () {

@@ -6,7 +6,7 @@ App.Router.map(function() {
 
 App.MainRoute = Ember.Route.extend({
     model: function () {
-        return this.store.find('file');
+        return this.store.findAll('file');
     },
     actions: {
         showModal: function(name, controller, model) {

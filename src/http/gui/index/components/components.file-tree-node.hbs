@@ -1,0 +1,30 @@
+<div {{action 'expandRow' file}}
+        style="padding: 6px 40px 6px 10px; overflow: hidden;">
+    <div style="border-bottom: 2px solid lightgrey;">
+        {{#if file.isDir}}
+            <img style="width: 32px; display: inline-block; position: relative; "
+                 src="/index/images/dir.png"/>
+        {{else}}
+            <img style="width: 32px; display: inline-block; position: relative; "
+                 src="/index/images/file.png"/>
+        {{/if}}
+        <p style="padding: 0; line-height: 32px; margin: 0 0 0 10px; display: inline-block;">
+            {{file.name}}
+        </p>
+    </div>
+    <div style="padding-left: 50px;">
+        {{#render "sortedFileChildren" file.children}}
+            {{#each child in sortedModel}}
+                {{#if child.expanded}}
+                    {{file-tree-node file=child}}
+                {{/if}}
+            {{/each}}
+        {{/render}}
+    </div>
+</div>
+
+{{!#each child in file.children}}
+{{!#if file.expanded}}
+{{!file-tree-node file=child}}
+{{!/if}}
+{{!/each}}

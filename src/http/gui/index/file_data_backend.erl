@@ -11,8 +11,9 @@
 
 -compile([export_all]).
 
--include_lib("ctool/include/logging.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
 -export([init/0]).
@@ -47,29 +48,62 @@ async_loop() ->
     async_loop().
 
 
-%% ?dump({async_loop_push_in_5, self()}),
-%% timer:sleep(5000),
-%% ?dump({async_loop_push, self()}),
-%% data_backend:push([
-%% {<<"id">>, <<"dyna">>},
-%% {<<"name">>, <<"Dynamiczny">>},
-%% {<<"attribute">>, begin random:seed(now()), random:uniform(9999999) end},
-%% {<<"selected">>, false}]),
-%% %%     throw(erorroror),
-%% async_loop().
+find([<<"root">>]) ->
+    SessionID = g_session:get_session_id(),
+    {ok, SpaceDirs} = logical_file_manager:ls(SessionID,
+        {path, <<"/spaces">>}, 1000, 0),
+    VirtSpaceIds = [<<"space#", SpaceID/binary>> || {SpaceID, _} <- SpaceDirs],
+    Res = [
+        {<<"id">>, <<"root">>},
+        {<<"name">>, <<"root">>},
+        {<<"type">>, <<"dir">>},
+        {<<"parentId">>, null},
+        {<<"parent">>, null},
+        {<<"children">>, VirtSpaceIds}
+    ],
+    ?dump({find_root, Res}),
+    {ok, Res};
+
+
+find([<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
+    SessionID = g_session:get_session_id(),
+    {ok, #file_attr{name = Name}} = logical_file_manager:stat(
+        SessionID, {uuid, SpaceID}),
+    Res = [
+        {<<"id">>, VirtSpaceID},
+        {<<"name">>, Name},
+        {<<"type">>, <<"dir">>},
+        {<<"parentId">>, <<"root">>},
+        {<<"parent">>, <<"root">>},
+        {<<"children">>, [SpaceID]}
+    ],
+    ?dump({find_space, Res}),
+    {ok, Res};
 
 
 find([Id]) ->
     ?dump({find, Id}),
     SessionID = g_session:get_session_id(),
-    {ok, #file_attr{name = Name}} = logical_file_manager:stat(
-        SessionID, {uuid, Id}),
-    {ok, Children} = logical_file_manager:ls(SessionID, {uuid, Id}, 10, 0),
+    {ok, #file_attr{uuid = SpacesDirUUID}} =
+        logical_file_manager:stat(SessionID, {path, <<"/spaces">>}),
+    ParentUUID = case get_parent(Id) of
+                     SpacesDirUUID ->
+                         <<"space#", Id/binary>>;
+                     Other ->
+                         Other
+                 end,
+    {ok, #file_attr{name = Name, type = TypeAttr}} =
+        logical_file_manager:stat(SessionID, {uuid, Id}),
+    Type = case TypeAttr of
+               ?DIRECTORY_TYPE -> <<"dir">>;
+               _ -> <<"file">>
+           end,
+    {ok, Children} = logical_file_manager:ls(SessionID, {uuid, Id}, 1000, 0),
     ChildrenIds = [ChId || {ChId, _} <- Children],
-    ParentUUID = get_parent(Id),
     Res = [
         {<<"id">>, Id},
         {<<"name">>, Name},
+        {<<"type">>, Type},
         {<<"parentId">>, ParentUUID},
         {<<"parent">>, ParentUUID},
         {<<"children">>, ChildrenIds}
@@ -79,43 +113,37 @@ find([Id]) ->
 
 
 find(Ids) ->
-    ?dump({find, Ids}),
-    Files = lists:foldl(
-        fun(Id, Acc) ->
-            case Acc of
-                error ->
-                    error;
-                _ ->
-                    case get_files_by(<<"id">>, Id) of
-                        [File] -> Acc ++ [File];
-                        _ -> error
-                    end
-            end
-        end, [], Ids),
-    case Files of
-        error -> {error, <<"Files not found">>};
-        _ -> {ok, Files}
-    end.
+    Res = [begin {ok, File} = find([Id]), File end || Id <- Ids],
+    ?dump({find_ds, Res}),
+    {ok, Res}.
 
 
 find_all() ->
-    SessionID = g_session:get_session_id(),
-    ?dump(find_all),
-    {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
-        SessionID, {path, <<"/spaces">>}),
-    {ok, Children} = logical_file_manager:ls(SessionID,
-        {uuid, SpacesDirUUID}, 10, 0),
-    ChildrenIds = [ChId || {ChId, _} <- Children],
-    Res = [
-        {<<"id">>, SpacesDirUUID},
-        {<<"name">>, <<"spaces">>},
-        {<<"parentId">>, null},
-        {<<"parent">>, null},
-        {<<"children">>, ChildrenIds}
-    ],
-%%     Res = [begin {ok, R} = find([Id]), R end || {Id, _Name} <- Files],
-    ?dump({find_all, [Res]}),
-    {ok, [Res]}.
+    {ok, Root} = find([<<"root">>]),
+    ChildrenIds = proplists:get_value(<<"children">>, Root),
+    Children = [begin {ok, Ch} = find([ChId]), Ch end || ChId <- ChildrenIds],
+    Res = [Root | Children],
+    ?dump({find_all, Res}),
+    {ok, Res}.
+%%     SessionID = g_session:get_session_id(),
+%%     {ok, SpaceDirs} = logical_file_manager:ls(SessionID,
+%%         {path, <<"/spaces">>}, 10, 0),
+%%     Res = lists:map(
+%%         fun({Id, Name}) ->
+%%             {ok, Children} = logical_file_manager:ls(
+%%                 SessionID, {uuid, Id}, 10, 0),
+%%             ChildrenIds = [ChId || {ChId, _} <- Children],
+%%             Res = [
+%%                 {<<"id">>, Id},
+%%                 {<<"name">>, Name},
+%%                 {<<"parentId">>, <<"root">>},
+%%                 {<<"parent">>, null},
+%%                 {<<"children">>, ChildrenIds}
+%%             ]
+%%         end, SpaceDirs
+%%     ),
+%%     ?dump({find_all, Res}),
+%%     {ok, Res}.
 
 
 find_query(Data) ->
@@ -173,16 +201,16 @@ delete_record(Id) ->
 
 get_parent(UUID) ->
     SessionID = g_session:get_session_id(),
-    case UUID of
+    {ok, ParentUUID} = logical_file_manager:get_parent(
+        SessionID, {uuid, UUID}),
+    case ParentUUID of
         <<"spaces">> ->
-            null;
+            {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
+                SessionID, {path, <<"/spaces">>}),
+            SpacesDirUUID;
         _ ->
-            {ok, ParentUUID} = logical_file_manager:get_parent(
-                SessionID, {uuid, UUID}),
             ParentUUID
     end.
-
-
 
 
 
