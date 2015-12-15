@@ -422,7 +422,6 @@ delete_file_test(Config) ->
 
 % Tests cdmi container DELETE requests
 delete_dir_test(Config) ->
-%%   todo uncomment tests with IDs
     [Worker | _] = ?config(op_worker_nodes, Config),
     DirName = "toDelete/",
     ChildDirName = "toDelete/child/",
@@ -440,7 +439,7 @@ delete_dir_test(Config) ->
     {ok, Code1, _Headers1, _Response1} =
         do_request(Worker, DirName, delete, RequestHeaders1, []),
 
-    ?assertEqual(204,Code1),
+    ?assertEqual(204, Code1),
     ?assert(not object_exists(Config, DirName)),
     %%------------------------------
 

@@ -70,15 +70,12 @@ redirect_to_container(Req, #{path := Path} = State) ->
 -spec redirect_to(cowboy_req:req(), #{}, binary()) -> {halt, cowboy_req:req(), #{}}.
 redirect_to(Req, State, Path) ->
     {ok, Port} = application:get_env(?APP_NAME, http_worker_rest_port),
-    BinPort = integer_to_binary(Port),
     {Hostname, _} = cowboy_req:header(<<"host">>, Req),
 
     {QS, _} = cowboy_req:qs(Req),
     Location = case QS of
-                   <<"">> -> <<"https://", Hostname/binary, %":",% BinPort/binary,
-                                "/cdmi", Path/binary>>;
-                   _ -> <<"https://", Hostname/binary, %":",% BinPort/binary,
-                            "/cdmi", Path/binary, "?", QS/binary>>
+                   <<"">> -> <<"https://", Hostname/binary, "/cdmi", Path/binary>>;
+                   _ -> <<"https://", Hostname/binary, "/cdmi", Path/binary, "?", QS/binary>>
                end,
     {ok, Req2} = cowboy_req:reply(?MOVED_PERMANENTLY, [{<<"Location">>, Location}], Req),
     {halt, Req2, State}.
