@@ -19,7 +19,7 @@
 %% API
 %% -export([ace_to_proplist/1, proplist_to_ace/1, from_acl_to_json_format/1, from_json_fromat_to_acl/1, get_virtual_acl/2, check_permission/3]).
 -export([ace_to_proplist/1, proplist_to_ace/1, from_acl_to_json_format/1, from_json_fromat_to_acl/1, check_permission/3]).
--export([name_to_gruid/1]).
+-export([ace_name_to_uid/1, uid_to_ace_name/1, gid_to_ace_name/1, ace_name_to_gid/1]).
 
 %%%===================================================================
 %%% API
@@ -123,8 +123,8 @@ ace_to_proplist(#accesscontrolentity{acetype = Type, aceflags = Flags, identifie
         {<<"acetype">>, bitmask_to_type(Type)},
         {<<"identifier">>,
             case ?has_flag(Type, ?identifier_group_mask) of
-                true -> gid_to_group_name(Who);
-                false -> gruid_to_name(Who)
+                true -> gid_to_ace_name(Who);
+                false -> uid_to_ace_name(Who)
             end},
         {<<"aceflags">>, binary_list_to_csv(bitmask_to_flag_list(Flags))},
         {<<"acemask">>, binary_list_to_csv(bitmask_to_perm_list(AccessMask))}
@@ -146,8 +146,8 @@ proplist_to_ace(List) ->
     Aceflags = flags_to_bitmask(Flags),
     Acemask = perm_list_to_bitmask(Mask),
     Identifier = case ?has_flag(Aceflags, ?identifier_group_mask) of
-             true -> group_name_to_gid(Name);
-             false -> name_to_gruid(Name)
+             true -> ace_name_to_gid(Name);
+             false -> ace_name_to_uid(Name)
          end,
 
     #accesscontrolentity{acetype = Acetype, aceflags = Aceflags, acemask = Acemask, identifier = Identifier}.
@@ -157,8 +157,8 @@ proplist_to_ace(List) ->
 %% i. e. "fif3nhh238hdfg33f3" -> "John Dow#fif3n"
 %% @end
 %%--------------------------------------------------------------------
--spec gruid_to_name(Uid :: binary()) -> binary().
-gruid_to_name(Uid) ->
+-spec uid_to_ace_name(Uid :: binary()) -> binary().
+uid_to_ace_name(Uid) ->
     {ok, #document{value = #onedata_user{name = Name}}} = onedata_user:get(Uid),
     <<Name/binary,"#", Uid/binary>>.
 
@@ -167,8 +167,8 @@ gruid_to_name(Uid) ->
 %% i. e. "John Dow#fif3n" -> "fif3nhh238hdfg33f3"
 %% @end
 %%--------------------------------------------------------------------
--spec name_to_gruid(Name :: binary()) -> binary().
-name_to_gruid(AceName) ->
+-spec ace_name_to_uid(Name :: binary()) -> binary().
+ace_name_to_uid(AceName) ->
     [_UserName, Uid] = binary:split(AceName, <<"#">>, [global]),
     Uid.
 
@@ -177,8 +177,8 @@ name_to_gruid(AceName) ->
 %% i. e. "fif3nhh238hdfg33f3" -> "group1#fif3n"
 %% @end
 %%--------------------------------------------------------------------
--spec gid_to_group_name(GRGroupId :: binary()) -> binary().
-gid_to_group_name(GroupId) ->
+-spec gid_to_ace_name(GRGroupId :: binary()) -> binary().
+gid_to_ace_name(GroupId) ->
     {ok, #document{value = #onedata_group{name = Name}}} = onedata_group:get(GroupId),
     <<Name/binary,"#", GroupId/binary>>.
 
@@ -187,8 +187,8 @@ gid_to_group_name(GroupId) ->
 %% i. e. "group1#fif3n" -> "fif3nhh238hdfg33f3"
 %% @end
 %%--------------------------------------------------------------------
--spec group_name_to_gid(Name :: binary()) -> binary().
-group_name_to_gid(AceName) ->
+-spec ace_name_to_gid(Name :: binary()) -> binary().
+ace_name_to_gid(AceName) ->
     [_GroupName, GroupId] = binary:split(AceName, <<"#">>, [global]),
     GroupId.
 

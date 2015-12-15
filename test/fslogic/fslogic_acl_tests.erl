@@ -18,6 +18,59 @@
 -include("modules/datastore/datastore.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
+acl_conversion_test() ->
+    UserId = <<"UserId">>,
+    UserName = <<"UserName">>,
+    GroupId = <<"GroupId">>,
+    GroupName = <<"GroupName">>,
+    meck:new(onedata_user),
+    meck:expect(onedata_user, get,
+        fun(Id) when Id =:= UserId ->
+            {ok, #document{value = #onedata_user{name = UserName}}}
+        end
+    ),
+    meck:new(onedata_group),
+    meck:expect(onedata_group, get,
+        fun(Id) when Id =:= GroupId ->
+            {ok, #document{value = #onedata_group{name = GroupName}}}
+        end
+    ),
+
+    % when
+    AceName1 = fslogic_acl:uid_to_ace_name(UserId),
+    AceName2 = fslogic_acl:gid_to_ace_name(GroupId),
+
+    % then
+    ?assert(is_binary(AceName1)),
+    ?assert(is_binary(AceName2)),
+
+    % when
+    Acl = fslogic_acl:from_json_fromat_to_acl(
+        [
+            [
+                {<<"acetype">>, <<"ALLOW">>},
+                {<<"identifier">>, AceName1},
+                {<<"aceflags">>, <<"NO_FLAGS">>},
+                {<<"acemask">>, <<"READ, WRITE">>}
+            ],
+            [
+                {<<"acetype">>, <<"DENY">>},
+                {<<"identifier">>, AceName2},
+                {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
+                {<<"acemask">>, <<"WRITE">>}
+            ]
+        ]
+    ),
+
+    % then
+    ?assertEqual(Acl, [
+        #accesscontrolentity{acetype = ?allow_mask, identifier = UserId, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ]),
+    meck:validate(onedata_user),
+    meck:validate(onedata_group),
+    meck:unload().
+
 check_permission_test() ->
     Id1 = <<"id1">>,
     User1 = #document{key = Id1, value = #onedata_user{}},
