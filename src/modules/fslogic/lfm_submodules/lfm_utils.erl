@@ -18,7 +18,7 @@
 -include("types.hrl").
 
 %% API
--export([call_fslogic/3, rmdir/2, isdir/2]).
+-export([call_fslogic/3, rm/2, isdir/2]).
 
 
 %%--------------------------------------------------------------------
@@ -40,32 +40,6 @@ call_fslogic(SessId, Request, OKHandle) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes a directory with all its children.
-%% @end
-%%--------------------------------------------------------------------
--spec rmdir(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> ok | error_reply().
-rmdir(CTX, UUID) ->
-    rm(CTX, UUID).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if a file is directory.
-%% @end
-%%--------------------------------------------------------------------
--spec isdir(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) -> true | false | error_reply().
-isdir(CTX, UUID) ->
-    case lfm_attrs:stat(CTX, {uuid, UUID}) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
-        {ok, _} -> false;
-        X -> X
-    end.
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Deletes an object with all its children.
 %% @end
 %%--------------------------------------------------------------------
@@ -80,9 +54,27 @@ rm(CTX, UUID) ->
         %% delete an object
         lfm_files:unlink(CTX, {uuid, UUID})
     catch
-        error:Error -> {error, Error}
+        error:Error -> {error, Error};
+        badmatch:Error2 -> Error2
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if a file is directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec isdir(CTX :: #fslogic_ctx{}, UUID :: file_uuid()) ->
+    true | false | error_reply().
+isdir(CTX, UUID) ->
+    case lfm_attrs:stat(CTX, {uuid, UUID}) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
+        {ok, _} -> false;
+        X -> X
+    end.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -101,7 +93,7 @@ rm_children(#fslogic_ctx{session_id = SessId} = CTX, UUID, Chunk) ->
                     rm_children(CTX, UUID, Chunk);
                 _ -> %length of Children list is smaller then ls_chunk so there are no more children
                     lists:foreach(RemoveChild, Children),
-                     ok
+                    ok
             end;
         {error, Error} -> {error, Error}
     end.

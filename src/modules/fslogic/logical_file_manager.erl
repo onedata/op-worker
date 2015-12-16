@@ -136,7 +136,7 @@ get_children_count(SessId, FileKey) ->
 rmdir(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
-    lfm_utils:rmdir(CTX, FileUUID).
+    lfm_utils:rm(CTX, FileUUID).
 
 %%--------------------------------------------------------------------
 %% @doc
