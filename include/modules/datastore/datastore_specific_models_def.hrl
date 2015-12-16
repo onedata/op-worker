@@ -14,6 +14,7 @@
 
 -include("modules/events/subscriptions.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Identity containing user_id
 -record(identity, {
@@ -24,7 +25,7 @@
 %% identity - user identity
 -record(session, {
     identity :: #identity{},
-    type = fuse :: fuse | gui | dummy,
+    type = fuse :: fuse | gui | rest,
     auth :: #auth{},
     node = node() :: node(),
     session_sup = undefined :: pid() | undefined,

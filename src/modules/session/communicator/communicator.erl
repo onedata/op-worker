@@ -37,7 +37,7 @@
 
 -record(state, {
     session_id :: session:id(),
-    connections = [] :: [pid()]
+    connections = [] :: [pid()] | none
 }).
 
 %%%===================================================================
@@ -147,6 +147,10 @@ remove_connection(SessId, ConnectionPid) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
+init([SessId, undefined]) ->
+    process_flag(trap_exit, true),
+    {ok, SessId} = session:update(SessId, #{communicator => self()}),
+    {ok, #state{session_id = SessId, connections = none}};
 init([SessId, Con]) ->
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{communicator => self()}),
@@ -186,6 +190,9 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_cast({send, #server_message{}}, State = #state{connections = none}) ->
+    {noreply, State};
+
 handle_cast({send, #server_message{} = Msg}, State = #state{connections = ConnList}) ->
     try_send(Msg, ConnList),
     {noreply, State};

@@ -137,6 +137,18 @@ translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #remote_read{offset = Offset, size = Size};
 translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
     #remote_write{offset = Offset, data = Data};
+translate_from_protobuf(#'GetXattr'{uuid = UUID, name = Name}) ->
+    #get_xattr{uuid = UUID, name = Name};
+translate_from_protobuf(#'SetXattr'{uuid = UUID, xattr = {xattr, Xattr}}) ->
+    #set_xattr{uuid = UUID, xattr = translate_from_protobuf(Xattr)};
+translate_from_protobuf(#'RemoveXattr'{uuid = UUID, name = Name}) ->
+    #remove_xattr{uuid = UUID, name = Name};
+translate_from_protobuf(#'ListXattr'{uuid = UUID}) ->
+    #list_xattr{uuid = UUID};
+translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
+    #xattr{name = Name, value = Value};
+translate_from_protobuf(#'XattrList'{names = Names}) ->
+    #xattr_list{names = Names};
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -246,6 +258,18 @@ translate_to_protobuf(#remote_data{data = Data}) ->
     {remote_data, #'RemoteData'{data = Data}};
 translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
+translate_to_protobuf(#get_xattr{uuid = Uuid, name = Name}) ->
+    {get_xattr, #'GetXattr'{uuid = Uuid, name = Name}};
+translate_to_protobuf(#set_xattr{uuid = Uuid, xattr = Xattr}) ->
+    {set_xattr, #'SetXattr'{uuid = Uuid, xattr = translate_to_protobuf(Xattr)}};
+translate_to_protobuf(#remove_xattr{uuid = Uuid, name = Name}) ->
+    {remove_xattr, #'RemoveXattr'{uuid = Uuid, name = Name}};
+translate_to_protobuf(#list_xattr{uuid = Uuid}) ->
+    {list_xattr, #'ListXattr'{uuid = Uuid}};
+translate_to_protobuf(#xattr{name = Name, value = Value}) ->
+    {xattr, #'Xattr'{name = Name, value = Value}};
+translate_to_protobuf(#xattr_list{names = Names}) ->
+    {xattr_list, #'XattrList'{names = Names}};
 translate_to_protobuf(undefined) ->
     undefined.
 
