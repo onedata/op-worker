@@ -192,7 +192,7 @@ gen_filename() ->
     http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:rand_bytes(20)))/binary>>).
 
 ctx_server(Config) ->
-    CTX = helpers:new_handle(<<"DirectIO">>, [?path(Config, "")]),
+    CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),
     ctx_server(Config, CTX).
 ctx_server(Config, CTX) ->
     receive

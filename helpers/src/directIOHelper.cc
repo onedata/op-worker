@@ -22,18 +22,24 @@
 #include <fuse.h>
 #include <sys/stat.h>
 
+#ifdef __linux__
+#include <sys/fsuid.h>
+#endif
+
 #include <string>
 
 namespace one {
 namespace helpers {
 
 namespace {
-inline boost::filesystem::path extractPath(const IStorageHelper::ArgsMap &args)
+inline boost::filesystem::path extractPath(
+    const std::unordered_map<std::string, std::string> &args)
 {
-    const auto arg = srvArg(0);
-    return args.count(arg)
-        ? boost::any_cast<std::string>(args.at(arg)).substr(0, PATH_MAX)
-        : boost::filesystem::path{};
+    auto it = args.find("root_path");
+    if (it == args.end())
+        return {};
+
+    return {it->second};
 }
 }
 
@@ -45,11 +51,55 @@ inline boost::filesystem::path DirectIOHelper::root(
     return m_rootPath / path;
 }
 
-void DirectIOHelper::ash_getattr(CTXRef, const boost::filesystem::path &p,
+#ifdef __linux__
+DirectIOHelper::LinuxUserCTX::LinuxUserCTX(CTXConstRef helperCTX)
+    : uid(helperCTX.uid)
+    , gid(helperCTX.gid)
+{
+    prev_uid = setfsuid(uid);
+    prev_gid = setfsgid(gid);
+
+    current_uid = setfsuid(-1);
+    current_gid = setfsgid(-1);
+}
+
+bool DirectIOHelper::LinuxUserCTX::valid()
+{
+    return current_uid == uid && current_gid == gid;
+}
+
+DirectIOHelper::LinuxUserCTX::~LinuxUserCTX()
+{
+    setfsuid(prev_uid);
+    setfsgid(prev_gid);
+}
+#endif
+
+bool DirectIOHelper::NoopUserCTX::valid() { return true; }
+
+#ifdef __linux__
+DirectIOHelper::UserCTXFactory DirectIOHelper::linuxUserCTXFactory =
+    [](CTXConstRef ctx) {
+        return std::make_unique<DirectIOHelper::LinuxUserCTX>(ctx);
+    };
+#endif
+DirectIOHelper::UserCTXFactory DirectIOHelper::noopUserCTXFactory =
+    [](CTXConstRef) {
+        return std::make_unique<DirectIOHelper::NoopUserCTX>();
+    };
+
+void DirectIOHelper::ash_getattr(CTXRef ctx, const boost::filesystem::path &p,
     GeneralCallback<struct stat> callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() {
+    m_workerService.post([ =, callback = std::move(callback) ]() {
         struct stat stbuf;
+
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(std::move(stbuf), makePosixError(EDOM));
+            return;
+        }
+
         if (lstat(root(p).c_str(), &stbuf) == -1) {
             callback(std::move(stbuf), makePosixError(errno));
         }
@@ -59,17 +109,30 @@ void DirectIOHelper::ash_getattr(CTXRef, const boost::filesystem::path &p,
     });
 }
 
-void DirectIOHelper::ash_access(
-    CTXRef, const boost::filesystem::path &p, int mask, VoidCallback callback)
+void DirectIOHelper::ash_access(CTXRef ctx, const boost::filesystem::path &p,
+    int mask, VoidCallback callback)
 {
-    m_workerService.post(
-        [=, callback = std::move(callback)]() { setResult(callback, access, root(p).c_str(), mask); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        setResult(callback, access, root(p).c_str(), mask);
+    });
 }
 
-void DirectIOHelper::ash_readlink(CTXRef, const boost::filesystem::path &p,
+void DirectIOHelper::ash_readlink(CTXRef ctx, const boost::filesystem::path &p,
     GeneralCallback<std::string> callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() {
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(std::string(), makePosixError(EDOM));
+            return;
+        }
+
         std::array<char, 1024> buf;
         const int res = readlink(root(p).c_str(), buf.data(), buf.size() - 1);
 
@@ -91,10 +154,16 @@ void DirectIOHelper::ash_readdir(CTXRef ctx, const boost::filesystem::path &p,
     callback(ret, makePosixError(ENOTSUP));
 }
 
-void DirectIOHelper::ash_mknod(CTXRef, const boost::filesystem::path &p,
+void DirectIOHelper::ash_mknod(CTXRef ctx, const boost::filesystem::path &p,
     mode_t mode, dev_t rdev, VoidCallback callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() {
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
         int res;
         const auto fullPath = root(p);
 
@@ -121,82 +190,149 @@ void DirectIOHelper::ash_mknod(CTXRef, const boost::filesystem::path &p,
     });
 }
 
-void DirectIOHelper::ash_mkdir(CTXRef, const boost::filesystem::path &p,
+void DirectIOHelper::ash_mkdir(CTXRef ctx, const boost::filesystem::path &p,
     mode_t mode, VoidCallback callback)
 {
-    m_workerService.post(
-        [=, callback = std::move(callback)]() { setResult(callback, mkdir, root(p).c_str(), mode); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        setResult(callback, mkdir, root(p).c_str(), mode);
+    });
 }
 
 void DirectIOHelper::ash_unlink(
-    CTXRef, const boost::filesystem::path &p, VoidCallback callback)
+    CTXRef ctx, const boost::filesystem::path &p, VoidCallback callback)
 {
-    m_workerService.post(
-        [=, callback = std::move(callback)]() { setResult(callback, unlink, root(p).c_str()); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        setResult(callback, unlink, root(p).c_str());
+    });
 }
 
 void DirectIOHelper::ash_rmdir(
-    CTXRef, const boost::filesystem::path &p, VoidCallback callback)
+    CTXRef ctx, const boost::filesystem::path &p, VoidCallback callback)
 {
-    m_workerService.post(
-        [=, callback = std::move(callback)]() { setResult(callback, rmdir, root(p).c_str()); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        setResult(callback, rmdir, root(p).c_str());
+    });
 }
 
-void DirectIOHelper::ash_symlink(CTXRef, const boost::filesystem::path &from,
-    const boost::filesystem::path &to, VoidCallback callback)
+void DirectIOHelper::ash_symlink(CTXRef ctx,
+    const boost::filesystem::path &from, const boost::filesystem::path &to,
+    VoidCallback callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() {
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
         setResult(callback, symlink, root(from).c_str(), root(to).c_str());
     });
 }
 
-void DirectIOHelper::ash_rename(CTXRef, const boost::filesystem::path &from,
+void DirectIOHelper::ash_rename(CTXRef ctx, const boost::filesystem::path &from,
     const boost::filesystem::path &to, VoidCallback callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() {
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
         setResult(callback, rename, root(from).c_str(), root(to).c_str());
     });
 }
 
-void DirectIOHelper::ash_link(CTXRef, const boost::filesystem::path &from,
+void DirectIOHelper::ash_link(CTXRef ctx, const boost::filesystem::path &from,
     const boost::filesystem::path &to, VoidCallback callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() {
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
         setResult(callback, link, root(from).c_str(), root(to).c_str());
     });
 }
 
-void DirectIOHelper::ash_chmod(CTXRef, const boost::filesystem::path &p,
+void DirectIOHelper::ash_chmod(CTXRef ctx, const boost::filesystem::path &p,
     mode_t mode, VoidCallback callback)
 {
-    m_workerService.post(
-        [=, callback = std::move(callback)]() { setResult(callback, chmod, root(p).c_str(), mode); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        setResult(callback, chmod, root(p).c_str(), mode);
+    });
 }
 
-void DirectIOHelper::ash_chown(CTXRef, const boost::filesystem::path &p,
+void DirectIOHelper::ash_chown(CTXRef ctx, const boost::filesystem::path &p,
     uid_t uid, gid_t gid, VoidCallback callback)
 {
-    m_workerService.post(
-        [=, callback = std::move(callback)]() { setResult(callback, lchown, root(p).c_str(), uid, gid); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        setResult(callback, lchown, root(p).c_str(), uid, gid);
+    });
 }
 
-void DirectIOHelper::ash_truncate(
-    CTXRef, const boost::filesystem::path &p, off_t size, VoidCallback callback)
+void DirectIOHelper::ash_truncate(CTXRef ctx, const boost::filesystem::path &p,
+    off_t size, VoidCallback callback)
 {
-    m_workerService.post(
-        [=, callback = std::move(callback)]() { setResult(callback, truncate, root(p).c_str(), size); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        setResult(callback, truncate, root(p).c_str(), size);
+    });
 }
 
 void DirectIOHelper::ash_open(
     CTXRef ctx, const boost::filesystem::path &p, GeneralCallback<int> callback)
 {
-    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
-        int res = open(root(p).c_str(), ctx.m_ffi.flags);
+    m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(-1, makePosixError(EDOM));
+            return;
+        }
+
+        int res = open(root(p).c_str(), ctx.flags);
         if (res == -1) {
             callback(-1, makePosixError(errno));
         }
         else {
-            ctx.m_ffi.fh = res;
+            ctx.fh = res;
             callback(res, SuccessCode);
         }
     });
@@ -206,7 +342,13 @@ void DirectIOHelper::ash_read(CTXRef ctx, const boost::filesystem::path &p,
     asio::mutable_buffer buf, off_t offset,
     GeneralCallback<asio::mutable_buffer> callback)
 {
-    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
+    m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(asio::mutable_buffer(), makePosixError(EDOM));
+            return;
+        }
+
         try {
             auto res = sh_read(ctx, p, buf, offset);
             callback(res, SuccessCode);
@@ -220,7 +362,13 @@ void DirectIOHelper::ash_read(CTXRef ctx, const boost::filesystem::path &p,
 void DirectIOHelper::ash_write(CTXRef ctx, const boost::filesystem::path &p,
     asio::const_buffer buf, off_t offset, GeneralCallback<int> callback)
 {
-    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
+    m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(0, makePosixError(EDOM));
+            return;
+        }
+
         try {
             auto res = sh_write(ctx, p, buf, offset);
             callback(res, SuccessCode);
@@ -234,12 +382,18 @@ void DirectIOHelper::ash_write(CTXRef ctx, const boost::filesystem::path &p,
 void DirectIOHelper::ash_release(
     CTXRef ctx, const boost::filesystem::path &p, VoidCallback callback)
 {
-    m_workerService.post([=, &ctx, callback = std::move(callback)]() {
-        if (ctx.m_ffi.fh && close(ctx.m_ffi.fh) == -1) {
+    m_workerService.post([ =, &ctx, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        if (ctx.fh && close(ctx.fh) == -1) {
             callback(makePosixError(errno));
         }
         else {
-            ctx.m_ffi.fh = 0;
+            ctx.fh = 0;
             callback(SuccessCode);
         }
     });
@@ -248,19 +402,40 @@ void DirectIOHelper::ash_release(
 void DirectIOHelper::ash_flush(
     CTXRef ctx, const boost::filesystem::path &p, VoidCallback callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() { callback(SuccessCode); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        callback(SuccessCode);
+    });
 }
 
 void DirectIOHelper::ash_fsync(CTXRef ctx, const boost::filesystem::path &p,
     bool isDataSync, VoidCallback callback)
 {
-    m_workerService.post([=, callback = std::move(callback)]() { callback(SuccessCode); });
+    m_workerService.post([ =, callback = std::move(callback) ]() {
+        auto userCTX = m_userCTXFactory(ctx);
+        if (!userCTX->valid()) {
+            callback(makePosixError(EDOM));
+            return;
+        }
+
+        callback(SuccessCode);
+    });
 }
 
-std::size_t DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &p,
-    asio::const_buffer buf, off_t offset)
+std::size_t DirectIOHelper::sh_write(CTXRef ctx,
+    const boost::filesystem::path &p, asio::const_buffer buf, off_t offset)
 {
-    int fd = ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_WRONLY);
+    auto userCTX = m_userCTXFactory(ctx);
+    if (!userCTX->valid()) {
+        throw std::system_error(makePosixError(EDOM));
+    }
+
+    int fd = ctx.fh > 0 ? ctx.fh : open(root(p).c_str(), O_WRONLY);
     if (fd == -1) {
         throw std::system_error(makePosixError(errno));
     }
@@ -268,7 +443,7 @@ std::size_t DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &
     auto res = pwrite(fd, asio::buffer_cast<const char *>(buf),
         asio::buffer_size(buf), offset);
 
-    if (ctx.m_ffi.fh <= 0) {
+    if (ctx.fh <= 0) {
         close(fd);
     }
 
@@ -282,7 +457,12 @@ std::size_t DirectIOHelper::sh_write(CTXRef ctx, const boost::filesystem::path &
 asio::mutable_buffer DirectIOHelper::sh_read(CTXRef ctx,
     const boost::filesystem::path &p, asio::mutable_buffer buf, off_t offset)
 {
-    int fd = ctx.m_ffi.fh > 0 ? ctx.m_ffi.fh : open(root(p).c_str(), O_RDONLY);
+    auto userCTX = m_userCTXFactory(ctx);
+    if (!userCTX->valid()) {
+        throw std::system_error(makePosixError(EDOM));
+    }
+
+    int fd = ctx.fh > 0 ? ctx.fh : open(root(p).c_str(), O_RDONLY);
     if (fd == -1) {
         throw std::system_error(makePosixError(errno));
     }
@@ -290,7 +470,7 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXRef ctx,
     auto res = pread(
         fd, asio::buffer_cast<char *>(buf), asio::buffer_size(buf), offset);
 
-    if (ctx.m_ffi.fh <= 0) {
+    if (ctx.fh <= 0) {
         close(fd);
     }
 
@@ -301,9 +481,12 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXRef ctx,
     return std::move(asio::buffer(buf, res));
 }
 
-DirectIOHelper::DirectIOHelper(const ArgsMap &args, asio::io_service &service)
+DirectIOHelper::DirectIOHelper(
+    const std::unordered_map<std::string, std::string> &args,
+    asio::io_service &service, UserCTXFactory userCTXFactory)
     : m_rootPath{extractPath(args)}
     , m_workerService{service}
+    , m_userCTXFactory{userCTXFactory}
 {
 }
 

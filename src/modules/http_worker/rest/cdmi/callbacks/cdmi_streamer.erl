@@ -27,7 +27,7 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Gets size of a stream
+%% @doc Gets size of a stream, which is the size of streamed binary data of file
 %%--------------------------------------------------------------------
 -spec binary_stream_size(Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined,
   FileSize :: non_neg_integer()) -> non_neg_integer().
@@ -39,7 +39,10 @@ binary_stream_size(Ranges, FileSize) ->
     end, 0, Ranges).
 
 %%--------------------------------------------------------------------
-%% @doc Gets size of a cdmi stream
+%% @doc
+%% Gets size of a cdmi stream, which is the size of streamed json representing
+%% cdmi_object
+%% @end
 %%--------------------------------------------------------------------
 -spec cdmi_stream_size(Range :: {non_neg_integer(), non_neg_integer()},
   FileSize :: non_neg_integer(), ValueTransferEncoding :: binary(),
@@ -99,7 +102,7 @@ stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
         try
             Transport:send(Socket, JsonBodyPrefix),
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-            cdmi_streamer:stream_range(Socket, Transport, State, Range,
+            stream_range(Socket, Transport, State, Range,
                 ValueTransferEncoding, BufferSize, FileHandle),
             Transport:send(Socket,JsonBodySuffix)
         catch Type:Message ->

@@ -112,7 +112,6 @@ EOF
         workdir='/root/bin',
         volumes=volumes,
         dns_list=dns_servers,
-        run_params=["--privileged"],
         command=command)
 
     # create system users and groups
