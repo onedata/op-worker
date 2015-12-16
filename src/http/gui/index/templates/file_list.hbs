@@ -29,17 +29,49 @@
         {{action 'remove'}} {{bind-attr disabled='inNoneSelected'}}>
         Remove
     </button>
+    {{#if areAllSelected}}
+        <button type="button" class="btn btn-default" id="deselectAll"
+            {{action 'deselectAll'}}>
+            DeselectAll
+        </button>
+    {{else}}
+        <button type="button" class="btn btn-default" id="selectAll"
+            {{action 'selectAll'}}>
+            SelectAll
+        </button>
+    {{/if}}
 </div>
 {{outlet 'modal'}}
 
 <div style="width: 100%;">
-    <div style="border: 1px solid black; margin: 30px auto; display: inline-block;
-    min-width: 400px; min-height: 300px; max-height: 500px; overflow-y: scroll;">
+    <div style="padding: 6px 10px; float: left;
+    border: 1px solid black; margin: 30px 20px; display: inline-block;
+    min-height: 300px; max-height: 500px; overflow-y: auto;
+    min-width: 400px; max-width: 400px; overflow-x: auto;">
         {{#render "sortedFileChildren" currentSpace.children}}
             {{#each child in sortedModel}}
-                {{file-tree-node file=child}}
+                {{file-tree-node file=child clickAction='fileClicked'}}
             {{/each}}
         {{/render}}
     </div>
+    <div style="padding: 6px 10px; float: left;
+    border: 1px solid black; margin: 30px 20px; display: inline-block;
+    height: 500px; width: 600px; ">
+        <p>Preview:
+            {{#if previewedFile}}
+                <i>{{previewedFile.name}}</i>
+            {{else}}
+                <i>no file is selected</i>
+            {{/if}}
+        </p>
+        {{#if previewedFile}}
+            {{#if previewedFile.content}}
+                {{previewedFile.content.bytes}}
+            {{else}}
+                This file is too large to preview.
+            {{/if}}
+        {{/if}}
+    </div>
+
 </div>
 

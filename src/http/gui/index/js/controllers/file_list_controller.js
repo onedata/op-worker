@@ -1,6 +1,10 @@
 App.FileListController = Ember.ArrayController.extend({
+    sortProperties: ['type:asc', 'name:asc'],
+    sortedModel: Ember.computed.sort("model", "sortProperties"),
     currentSpaceId: null,
     currentSpace: null,
+    previewedFile: null,
+
     fetchCurrentSpace: function () {
         if (this.get('currentSpaceId')) {
             console.log('currentSpaceId ' + this.get('currentSpaceId'));
@@ -9,7 +13,8 @@ App.FileListController = Ember.ArrayController.extend({
             console.log('currentSpaceId ' + spaceId);
             console.log('currentSpace ' + this.findBy('id', spaceId).get('name'));
             var controller = this;
-            this.store.find('file', spaceId).then(function(data){
+            this.store.find('file', spaceId).then(function (data) {
+                data.set('expanded', true);
                 controller.set('currentSpace', data);
                 console.log(controller.get('currentSpace'));
             });
@@ -22,7 +27,7 @@ App.FileListController = Ember.ArrayController.extend({
             //return this.findBy('id', this.get('currentSpaceId'));
         }
         //else {
-            //return null;
+        //return null;
         //}
     }.observes('currentSpaceId'),
 
@@ -42,10 +47,11 @@ App.FileListController = Ember.ArrayController.extend({
     }.property('@each.selected'),
 
     areAllSelected: function (key, value) {
+        var visibleFiles = this.filterBy('isVisible');
         if (value === undefined) {
-            return !!this.get('length') && this.isEvery('selected', true);
+            return !!visibleFiles.get('length') && visibleFiles.isEvery('selected', true);
         } else {
-            this.setEach('selected', value);
+            visibleFiles.setEach('selected', value);
             return value;
         }
     }.property('@each.selected'),
@@ -146,8 +152,17 @@ App.FileListController = Ember.ArrayController.extend({
             }
         },
 
-        expandRow: function (file) {
-            file.set('expanded', !file.get('expanded'));
+        fileClicked: function (file) {
+            if (this.get('previewedFile')) {
+                this.get('previewedFile').set('expanded', false);
+            }
+            this.set('previewedFile', null);
+            if (file.get('type') == 'dir') {
+                file.set('expanded', !file.get('expanded'));
+            } else {
+                file.set('expanded', true);
+                this.set('previewedFile', file)
+            }
         },
 
         remove: function () {
@@ -156,6 +171,16 @@ App.FileListController = Ember.ArrayController.extend({
             var selected = this.filterBy('selected', true);
             selected.invoke('deleteRecord');
             selected.invoke('save');
+        },
+
+        selectAll: function () {
+            var visibleFiles = this.filterBy('isVisible');
+            visibleFiles.setEach('selected', true);
+        },
+
+        deselectAll: function () {
+            var visibleFiles = this.filterBy('isVisible');
+            visibleFiles.setEach('selected', false);
         }
     }
 });

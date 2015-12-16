@@ -58,6 +58,7 @@ route(<<"/">>) -> ?INDEX;
 route(<<"/index.html">>) -> ?INDEX.
 
 
-data_backend(<<"file">>) -> file_data_backend.
+data_backend(<<"file">>) -> file_data_backend;
+data_backend(<<"fileContent">>) -> file_data_backend.
 
 callback_backend(<<"global">>) -> global_callback_backend.

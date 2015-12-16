@@ -17,8 +17,8 @@
 
 %% API
 -export([init/0]).
--export([find/1, find_all/0, find_query/1]).
--export([create_record/1, update_record/2, delete_record/1]).
+-export([find/2, find_all/1, find_query/2]).
+-export([create_record/2, update_record/3, delete_record/2]).
 
 
 -define(FILE_FIXTURES, [
@@ -48,7 +48,7 @@ async_loop() ->
     async_loop().
 
 
-find([<<"root">>]) ->
+find(<<"file">>, [<<"root">>]) ->
     SessionID = g_session:get_session_id(),
     {ok, SpaceDirs} = logical_file_manager:ls(SessionID,
         {path, <<"/spaces">>}, 1000, 0),
@@ -65,7 +65,7 @@ find([<<"root">>]) ->
     {ok, Res};
 
 
-find([<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
+find(<<"file">>, [<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
     SessionID = g_session:get_session_id(),
     {ok, #file_attr{name = Name}} = logical_file_manager:stat(
         SessionID, {uuid, SpaceID}),
@@ -81,7 +81,7 @@ find([<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
     {ok, Res};
 
 
-find([Id]) ->
+find(<<"file">>, [Id]) ->
     ?dump({find, Id}),
     SessionID = g_session:get_session_id(),
     {ok, #file_attr{uuid = SpacesDirUUID}} =
@@ -92,18 +92,25 @@ find([Id]) ->
                      Other ->
                          Other
                  end,
-    {ok, #file_attr{name = Name, type = TypeAttr}} =
+    {ok, #file_attr{name = Name, type = TypeAttr, size = Size}} =
         logical_file_manager:stat(SessionID, {uuid, Id}),
     Type = case TypeAttr of
                ?DIRECTORY_TYPE -> <<"dir">>;
                _ -> <<"file">>
            end,
+    Content = case Type =:= <<"file">> andalso Size < 1000 of
+                  true ->
+                      <<"content#", Id/binary>>;
+                  _ ->
+                      null
+              end,
     {ok, Children} = logical_file_manager:ls(SessionID, {uuid, Id}, 1000, 0),
     ChildrenIds = [ChId || {ChId, _} <- Children],
     Res = [
         {<<"id">>, Id},
         {<<"name">>, Name},
         {<<"type">>, Type},
+        {<<"content">>, Content},
         {<<"parentId">>, ParentUUID},
         {<<"parent">>, ParentUUID},
         {<<"children">>, ChildrenIds}
@@ -111,17 +118,29 @@ find([Id]) ->
     ?dump({find, Res}),
     {ok, Res};
 
+find(<<"fileContent">>, [<<"content#", FileId/binary>> = Id]) ->
+    SessionID = g_session:get_session_id(),
+    {ok, Handle} = logical_file_manager:open(SessionID, {uuid, FileId}, read),
+    {ok, _, Bytes} = logical_file_manager:read(Handle, 0, 1000),
+    ?dump(Bytes),
+    Res = [
+        {<<"id">>, Id},
+        {<<"bytes">>, Bytes},
+        {<<"file">>, FileId}
+    ],
+    {ok, Res};
 
-find(Ids) ->
-    Res = [begin {ok, File} = find([Id]), File end || Id <- Ids],
+
+find(<<"file">>, Ids) ->
+    Res = [begin {ok, File} = find(<<"file">>, [Id]), File end || Id <- Ids],
     ?dump({find_ds, Res}),
     {ok, Res}.
 
 
-find_all() ->
-    {ok, Root} = find([<<"root">>]),
+find_all(<<"file">>) ->
+    {ok, Root} = find(<<"file">>, [<<"root">>]),
     ChildrenIds = proplists:get_value(<<"children">>, Root),
-    Children = [begin {ok, Ch} = find([ChId]), Ch end || ChId <- ChildrenIds],
+    Children = [begin {ok, Ch} = find(<<"file">>, [ChId]), Ch end || ChId <- ChildrenIds],
     Res = [Root | Children],
     ?dump({find_all, Res}),
     {ok, Res}.
@@ -146,7 +165,7 @@ find_all() ->
 %%     {ok, Res}.
 
 
-find_query(Data) ->
+find_query(<<"file">>, Data) ->
     ?dump({find_query, Data}),
     Result = lists:foldl(
         fun({Attr, Val}, Acc) ->
@@ -155,7 +174,7 @@ find_query(Data) ->
     {ok, Result}.
 
 
-create_record(Data) ->
+create_record(<<"file">>, Data) ->
     Id = integer_to_binary(begin random:seed(now()), random:uniform(9999999) end),
     DataWithId = [{<<"id">>, Id} | Data],
     save_files(get_files() ++ [DataWithId]),
@@ -164,7 +183,7 @@ create_record(Data) ->
     {ok, DataWithId}.
 
 
-update_record(Id, Data) ->
+update_record(<<"file">>, Id, Data) ->
     case get_files_by(<<"id">>, Id) of
         [] ->
             {error, <<"File not found">>};
@@ -184,7 +203,7 @@ update_record(Id, Data) ->
             ok
     end.
 
-delete_record(Id) ->
+delete_record(<<"file">>, Id) ->
     NewFiles = lists:filter(
         fun(File) ->
             not lists:member({<<"id">>, Id}, File)

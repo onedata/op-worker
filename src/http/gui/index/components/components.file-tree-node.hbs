@@ -1,30 +1,42 @@
-<div {{action 'expandRow' file}}
-        style="padding: 6px 40px 6px 10px; overflow: hidden;">
-    <div style="border-bottom: 2px solid lightgrey;">
+<div style="border-bottom: 2px solid lightgrey; padding: 6px 0; position: relative;">
+    <div style="position: absolute; top: 12px; left: 3px;">
+        {{input type='checkbox' checked=file.selected class='toggle' bubbles=false}}
+    </div>
+    <div class="pointer" {{action 'clickAction' file}}
+         style=" margin-left: 24px; position: relative; width: 300px;">
+
+        {{#if file.expanded}}
+            {{#if file.isDir}}
+                <img style="width: 24px; position: absolute; top: 5px; right: 0;"
+                     src="/index/images/expanded.png"/>
+            {{else}}
+                <img style="width: 24px; position: absolute; top: 5px; right: 0;"
+                     src="/index/images/previewed.png"/>
+            {{/if}}
+        {{/if}}
+
         {{#if file.isDir}}
-            <img style="width: 32px; display: inline-block; position: relative; "
+            <img style="width: 32px; position: absolute; top: 0; left: 0;"
                  src="/index/images/dir.png"/>
         {{else}}
-            <img style="width: 32px; display: inline-block; position: relative; "
+            <img style="width: 32px; position: absolute; top: 0; left: 0;"
                  src="/index/images/file.png"/>
         {{/if}}
-        <p style="padding: 0; line-height: 32px; margin: 0 0 0 10px; display: inline-block;">
-            {{file.name}}
+
+        <p style="padding: 0; line-height: 32px; margin: 0 24px 0 46px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            {{file.name}} (exp: {{file.expanded}}) (sel: {{file.selected}})
         </p>
     </div>
-    <div style="padding-left: 50px;">
-        {{#render "sortedFileChildren" file.children}}
-            {{#each child in sortedModel}}
-                {{#if child.expanded}}
-                    {{file-tree-node file=child}}
-                {{/if}}
-            {{/each}}
-        {{/render}}
-    </div>
 </div>
+{{#if file.expanded}}
+    {{#render "sortedFileChildren" file.children}}
+    {{!#each child in file.children}}
+        {{#each child in sortedModel}}
+            <div style="padding-left: 40px;">
+                {{file-tree-node file=child clickAction='fileClicked'}}
+            </div>
+        {{/each}}
+    {{/render}}
+{{/if}}
 
-{{!#each child in file.children}}
-{{!#if file.expanded}}
-{{!file-tree-node file=child}}
-{{!/if}}
-{{!/each}}
+
