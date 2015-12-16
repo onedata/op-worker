@@ -87,7 +87,6 @@ init([SeqManSup, SessId]) ->
     ?debug("Initializing sequencer manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{sequencer_manager => self()}),
-    send_message_stream_reset(SessId),
     {ok, #state{sequencer_manager_sup = SeqManSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -199,7 +198,8 @@ handle_cast(Request, State) ->
 handle_info({'EXIT', SeqManSup, shutdown}, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {stop, normal, State};
 
-handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
+handle_info(timeout, #state{sequencer_manager_sup = SeqManSup, session_id = SessId} = State) ->
+    send_message_stream_reset(SessId),
     {ok, SeqInStmSup} = sequencer_manager_sup:get_sequencer_stream_sup(
         SeqManSup, sequencer_in_stream_sup
     ),
@@ -259,7 +259,6 @@ code_change(_OldVsn, State, _Extra) ->
 send_message_stream_reset(SessId) ->
     ensure_sent(#message_stream_reset{}, SessId).
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -267,7 +266,7 @@ send_message_stream_reset(SessId) ->
 %% after delay.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_sent(Msg ::term(), SessId :: session:id()) -> ok.
+-spec ensure_sent(Msg :: term(), SessId :: session:id()) -> ok.
 ensure_sent(Msg, SessId) ->
     case communicator:send(Msg, SessId) of
         ok ->
