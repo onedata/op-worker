@@ -23,7 +23,7 @@
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
--export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
+-export([set_perms/2, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
@@ -212,16 +212,23 @@ check_perms(Path, PermType) ->
 %%--------------------------------------------------------------------
 %% @doc Returns file's Access Control List.
 %%--------------------------------------------------------------------
--spec get_acl(FileKey :: file_key()) -> {ok, [access_control_entity()]} | error_reply().
-get_acl(Path) ->
-    logical_file_manager:get_acl(Path).
+-spec get_acl(onedata_auth_api:auth(), file_key()) -> {ok, [access_control_entity()]} | error_reply().
+get_acl(Auth, FileKey) ->
+    logical_file_manager:get_acl(Auth, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Updates file's Access Control List.
 %%--------------------------------------------------------------------
--spec set_acl(FileKey :: file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
-set_acl(Path, EntityList) ->
-    logical_file_manager:set_acl(Path, EntityList).
+-spec set_acl(onedata_auth_api:auth(), file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
+set_acl(Auth, FileKey, EntityList) ->
+    logical_file_manager:set_acl(Auth, FileKey, EntityList).
+
+%%--------------------------------------------------------------------
+%% @doc Removes file's Access Control List.
+%%--------------------------------------------------------------------
+-spec remove_acl(onedata_auth_api:auth(), file_key()) -> ok | error_reply().
+remove_acl(Auth, FileKey) ->
+    logical_file_manager:remove_acl(Auth, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Returns file attributes.

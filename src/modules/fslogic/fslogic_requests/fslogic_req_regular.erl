@@ -82,7 +82,7 @@ get_helper_params(_Ctx, _SpaceId, StorageId, false = _ForceCL) ->
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), OpenMode :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
--check_permissions([{validate_ancestors_exec, 2}]).
+-check_permissions([{{arg, 3}, 2}, {validate_ancestors_exec, 2}]).
 get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, OpenFlags) ->
     ?debug("get_file_location for ~p ~p", [File, OpenFlags]),
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),

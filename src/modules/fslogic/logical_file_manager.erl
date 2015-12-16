@@ -65,7 +65,8 @@
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
--export([set_perms/2, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2]).
+-export([set_perms/2, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
+    remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
@@ -369,6 +370,23 @@ set_acl(SessId, FileKey, EntityList) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
     lfm_perms:set_acl(CTX, UUID, EntityList).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove file's Access Control List.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_acl(handle()) -> ok | error_reply().
+remove_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
+    lfm_perms:remove_acl(CTX, UUID).
+
+-spec remove_acl(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+    ok | error_reply().
+remove_acl(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_perms:remove_acl(CTX, UUID).
 
 
 %%--------------------------------------------------------------------

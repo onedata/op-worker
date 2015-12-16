@@ -44,6 +44,8 @@
 %% generic calls
 before_advice(#annotation{data = []}, _M, _F, Args) ->
     Args;
+before_advice(#annotation{data = [{{arg, N}, Item} | Rest]} = Annotation, M, F, Args) ->
+    before_advice(Annotation#annotation{data = [{lists:nth(N, Args), Item} | Rest]}, M, F, Args);
 before_advice(#annotation{}, _M, _F, [#fslogic_ctx{session = #session{identity = #identity{user_id = ?ROOT_USER_ID}}} | _Inputs] = Args) ->
     Args;   %% Always allow access by root user
 before_advice(#annotation{data = [root | _]}, _M, _F, [#fslogic_ctx{} | _Inputs] = _Args) ->

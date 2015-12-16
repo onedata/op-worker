@@ -17,7 +17,7 @@
 -define(CDMI_ACL_XATTR_KEY, <<"cdmi_acl">>).
 
 %% API
--export([set_perms/2, check_perms/2, set_acl/3, get_acl/2]).
+-export([set_perms/2, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 
 %%%===================================================================
 %%% API
@@ -60,3 +60,11 @@ get_acl(CTX, UUID) ->
 set_acl(CTX, UUID, Acl) ->
     Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
     lfm_attrs:set_xattr(CTX, UUID, #xattr{name = ?CDMI_ACL_XATTR_KEY, value = Json}).
+
+
+%%--------------------------------------------------------------------
+%% @doc Removes file's Access Control List.
+%%--------------------------------------------------------------------
+-spec remove_acl(fslogic_worker:ctx(), file_meta:uuid()) -> ok | error_reply().
+remove_acl(CTX, UUID) ->
+    lfm_attrs:remove_xattr(CTX, UUID, ?CDMI_ACL_XATTR_KEY).

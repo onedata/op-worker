@@ -399,9 +399,85 @@ metadata_test(Config) ->
     ?assertEqual(1, length(CdmiResponse13)),
     Metadata13 = proplists:get_value(<<"metadata">>, CdmiResponse13),
     ?assertEqual(<<"my_dir_value_update">>, proplists:get_value(<<"my_metadata">>, Metadata13)),
-    ?assertEqual(1, length(Metadata13)).
-%%------------------------------
-%todo add acl metadata tests
+    ?assertEqual(1, length(Metadata13)),
+    %%------------------------------
+
+    %%------ read acl metadata ---------- todo confider mapping posix perms to acls
+%%     {ok, Code14, _Headers14, Response14} = do_request(DirName ++ "?metadata:cdmi_acl", get, RequestHeaders1, []),
+%%     ?assertEqual(200, Code14),
+%%     CdmiResponse14 = mochijson2:decode(Response14),
+%%     ?assertEqual(1, length(CdmiResponse14)),
+%%     Metadata14 = proplists:get_value(<<"metadata">>, CdmiResponse14),
+%%     ?assertEqual(
+%%         [[{<<"acetype">>, <<"ALLOW">>},
+%%             {<<"identifier">>, UserId1},
+%%             {<<"aceflags">>, <<"NO_FLAGS">>},
+%%             {<<"acemask">>, <<"READ, WRITE">>}]],
+%%         proplists:get_value(<<"cdmi_acl">>, Metadata14)),
+    %%------------------------------
+
+    %%------ write acl metadata ----------
+    UserId1 = ?config({user_id, 1}, Config),
+    UserName1 = ?config({user_name, 1}, Config),
+    FileName2 = "acl_test_file.txt",
+    Ace1 = [
+        {<<"acetype">>, <<"ALLOW">>},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"acemask">>, <<"READ">>}
+    ],
+    Ace2 = [
+        {<<"acetype">>, <<"DENY">>},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"acemask">>, <<"READ, EXECUTE">>}
+    ],
+    Ace3 = [
+        {<<"acetype">>, <<"ALLOW">>},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"acemask">>, <<"WRITE">>}
+    ],
+
+    create_file(Config, FileName2),
+    write_to_file(Config, FileName2, <<"data">>, 0),
+    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
+    RawRequestBody15 = json_utils:encode(RequestBody15),
+    RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+
+    {ok, Code15, _Headers15, Response15} = do_request(Worker, FileName2 ++ "?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15),
+    ?assertMatch({204, _}, {Code15, Response15}),
+
+    {ok, Code16, _Headers16, Response16} = do_request(Worker, FileName2 ++ "?metadata", get, RequestHeaders1, []),
+    ?assertEqual(200, Code16),
+    CdmiResponse16 = json_utils:decode(Response16),
+    ?assertEqual(1, length(CdmiResponse16)),
+    Metadata16 = proplists:get_value(<<"metadata">>, CdmiResponse16),
+    ?assertEqual(6, length(Metadata16)),
+    ?assertEqual([Ace1, Ace2, Ace3], proplists:get_value(<<"cdmi_acl">>, Metadata16)),
+
+    {ok, Code17, _Headers17, Response17} = do_request(Worker, FileName2, get, [?USER_1_TOKEN_HEADER], []),
+    ?assertEqual(200, Code17),
+    ?assertEqual(<<"data">>, Response17),
+    %%------------------------------
+
+    %%-- create forbidden by acl ---
+    Ace4 = [
+        {<<"acetype">>, <<"DENY">>},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"acemask">>, <<"READ, WRITE, EXECUTE">>}],
+    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4]}]}],
+    RawRequestBody18 = json_utils:encode(RequestBody18),
+    RequestHeaders18 = [?USER_1_TOKEN_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
+
+    {ok, Code18, _Headers18, _Response18} = do_request(Worker, DirName ++ "?metadata:cdmi_acl", put, RequestHeaders18, RawRequestBody18),
+    ?assertEqual(204, Code18).
+
+%% todo enable acls
+%%     {ok, Code19, _Headers19, _Response19} = do_request(Worker, filename:join(DirName, "some_file"), put, [?USER_1_TOKEN_HEADER], []),
+%%     ?assertEqual(403, Code19).
+    %%------------------------------
 
 % Tests cdmi object DELETE requests
 delete_file_test(Config) ->

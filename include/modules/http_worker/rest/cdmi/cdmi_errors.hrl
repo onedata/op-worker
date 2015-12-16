@@ -33,6 +33,8 @@
   {?BAD_REQUEST, [{<<"error_invalid_base64">>, <<"Given base64 value could not be docoded.">>}]}).
 -define(invalid_objectid,
   {?BAD_REQUEST, [{<<"error_invalid_objectid">>, <<"Given objectid is invalid.">>}]}).
+-define(invalid_acl,
+  {?BAD_REQUEST, [{<<"error_invalid_acl">>, <<"Given access control list is invalid.">>}]}).
 
 %% HTTP error code 403 and request sent to client
 -define(forbidden,

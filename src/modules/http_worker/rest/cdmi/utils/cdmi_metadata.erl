@@ -14,6 +14,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
 -export([prepare_metadata/3, prepare_metadata/4]).
@@ -31,7 +32,8 @@
 -define(ENCODING_DEFAULT_VALUE, <<"base64">>).
 -define(COMPLETION_STATUS_DEFAULT_VALUE, <<"Complete">>).
 
--define(USER_METADATA_FORBIDDEN_PREFIX, <<"cdmi_">>).
+-define(USER_METADATA_FORBIDDEN_PREFIX_STRING, "cdmi_").
+-define(USER_METADATA_FORBIDDEN_PREFIX, <<?USER_METADATA_FORBIDDEN_PREFIX_STRING>>).
 -define(DEFAULT_STORAGE_SYSTEM_METADATA,
     [<<"cdmi_size">>, <<"cdmi_ctime">>, <<"cdmi_atime">>, <<"cdmi_mtime">>, <<"cdmi_owner">>, <<"cdmi_acl">>]).
 
@@ -46,15 +48,18 @@
 %%--------------------------------------------------------------------
 -spec get_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
     [{Name :: binary(), Value :: binary()}].
-get_user_metadata(Auth, FileKey) ->
+get_user_metadata(Auth, FileKey) -> % todo add prefix as argument
     {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey),
-    Metadata = lists:map(fun(Name) ->
-            case onedata_file_api:get_xattr(Auth, FileKey, Name) of
-                {ok, #xattr{value = XattrValue}} ->
-                    {Name, XattrValue};
-                {error, ?ENOATTR} ->
-                    undefined
-            end
+    Metadata = lists:map(
+        fun
+            (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>) -> undefined;
+            (Name) ->
+                case onedata_file_api:get_xattr(Auth, FileKey, Name) of
+                    {ok, #xattr{value = XattrValue}} ->
+                        {Name, XattrValue};
+                    {error, ?ENOATTR} ->
+                        undefined
+                end
         end, Names),
     FilteredMetadata = lists:filter(fun(Name) -> Name =/= undefined end, Metadata),
     filter_user_metadata(FilteredMetadata).
@@ -85,18 +90,18 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
     BodyMetadataNames = get_metadata_names(BodyMetadata),
     DeleteAttributeFunction =
         fun
-            (<<"cdmi_acl">>) -> ok = onedata_file_api:set_acl(FileKey, []); %todo integrate with new acls
+            (<<"cdmi_acl">>) -> ok = onedata_file_api:remove_acl(Auth, FileKey);
             (Name) -> ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
         end,
     ReplaceAttributeFunction =
         fun
-            ({<<"cdmi_acl">>, _Value}) -> ok;
-%%                 ACL = try fslogic_acl:from_json_fromat_to_acl(Value)  %todo integrate with new acls
-%%                       catch _:Error ->
-%%                           ?debug_stacktrace("Acl conversion error ~p", [Error]),
-%%                           throw({?invalid_acl, Error})
-%%                       end,
-%%                 ok = logical_files_manager:set_acl(FileKey, ACL);
+            ({<<"cdmi_acl">>, Value}) ->
+                ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
+                      catch _:Error ->
+                          ?debug_stacktrace("Acl conversion error ~p", [Error]),
+                          throw(?invalid_acl)
+                      end,
+                ok = onedata_file_api:set_acl(Auth, FileKey, ACL);
             ({Name, Value}) -> ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = Name, value = Value})
         end,
     case AllURIMetadataNames of
@@ -123,7 +128,7 @@ prepare_metadata(Auth, FileKey, Attrs) ->
 -spec prepare_metadata(Auth :: onedata_auth_api:auth(), FileKey :: onedata_file_api:file_key(), Prefix :: binary(),
   #file_attr{}) -> [{CdmiName :: binary(), Value :: binary()}].
 prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
-    StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Attrs, Prefix),
+    StorageSystemMetadata = prepare_cdmi_metadata(?DEFAULT_STORAGE_SYSTEM_METADATA, FileKey, Auth, Attrs, Prefix),
     UserMetadata = lists:filter(fun({Name, _Value}) -> binary_with_prefix(Name, Prefix) end, get_user_metadata(Auth, FileKey)),
     StorageSystemMetadata ++ UserMetadata.
 
@@ -254,31 +259,30 @@ filter_URI_Names(UserMetadata, URIMetadataNames) ->
 %%--------------------------------------------------------------------
 %% @doc Returns system metadata with given prefix, in mochijson parser format
 %%--------------------------------------------------------------------
--spec prepare_cdmi_metadata(MetadataNames :: [binary()], FileKey :: onedata_file_api:file_key(), Attrs :: #file_attr{}, Prefix :: binary()) -> list().
-prepare_cdmi_metadata([], _FileKey, _Attrs, _Prefix) -> [];
-prepare_cdmi_metadata([Name | Rest], FileKey, Attrs, Prefix) ->
+-spec prepare_cdmi_metadata(MetadataNames :: [binary()], onedata_file_api:file_key(),
+  onedata_auth_api:auth(), #file_attr{}, Prefix :: binary()) -> list().
+prepare_cdmi_metadata([], _FileKey, _Auth, _Attrs, _Prefix) -> [];
+prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
     case binary_with_prefix(Name, Prefix) of
         true ->
             case Name of
                 <<"cdmi_size">> -> %todo clarify what should be written to cdmi_size for directories
-                    [{<<"cdmi_size">>, integer_to_binary(Attrs#file_attr.size)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
+                    [{<<"cdmi_size">>, integer_to_binary(Attrs#file_attr.size)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_ctime">> -> %todo format times into yyyy-mm-ddThh-mm-ss.ssssssZ
-                    [{<<"cdmi_ctime">>, integer_to_binary(Attrs#file_attr.ctime)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
+                    [{<<"cdmi_ctime">>, integer_to_binary(Attrs#file_attr.ctime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_atime">> ->
-                    [{<<"cdmi_atime">>, integer_to_binary(Attrs#file_attr.atime)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
+                    [{<<"cdmi_atime">>, integer_to_binary(Attrs#file_attr.atime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_mtime">> ->
-                    [{<<"cdmi_mtime">>, integer_to_binary(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
+                    [{<<"cdmi_mtime">>, integer_to_binary(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_owner">> ->
-                    [{<<"cdmi_owner">>, integer_to_binary(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
+                    [{<<"cdmi_owner">>, integer_to_binary(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_acl">> ->
-                    prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)
-%%                     case onedata_file_api:get_acl(FileKey) of %todo integrate with new acls
-%%                         {ok, Acl} ->
-%%                             [{<<"cdmi_acl">>, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)];
-%%                         {logical_file_system_error, Err} when Err =:= ?VEPERM orelse Err =:= ?VEACCES ->
-%%                             throw(?forbidden);
-%%                         Error -> throw(Error)
-%%                     end
+                    case onedata_file_api:get_acl(Auth, FileKey) of
+                        {ok, Acl} ->
+                            [{<<"cdmi_acl">>, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                        {error, ?ENOATTR} ->
+                            prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)
+                    end
             end;
-        false -> prepare_cdmi_metadata(Rest, FileKey, Attrs, Prefix)
+        false -> prepare_cdmi_metadata(Rest, Auth, FileKey, Attrs, Prefix)
     end.
