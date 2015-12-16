@@ -21,14 +21,13 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([run_synchronized/2]).
 
 -type name() :: binary().
 -type value() :: binary().
 
 -export_type([name/0, value/0]).
 
--define(XATTR_LINK_NAME(XattrName), {<<"xattr">>, XattrName}).
+-define(XATTR_LINK_NAME(XattrName), <<"xattr_", XattrName/binary>>).
 
 %%%===================================================================
 %%% API
@@ -84,16 +83,6 @@ list(FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
-%% run at the same time.
-%% @end
-%%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -101,9 +90,9 @@ run_synchronized(ResourceId, Fun) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     case datastore:save(?STORE_LEVEL, Document) of
-    {ok, Key}->
-        {Uuid, Name} = decode_key(Key),
-        ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
+        {ok, Key} ->
+            {Uuid, Name} = decode_key(Key),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
             {ok, Key};
         Error ->
             Error

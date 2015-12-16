@@ -14,6 +14,7 @@
 -define(FSLOGIC_COMMON_HRL, 1).
 
 -include("modules/datastore/datastore.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% helper macro for not implemented functions
