@@ -12,9 +12,9 @@
 -module(lfm_attrs_test_SUITE).
 -author("Tomasz Lichon").
 
--include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
