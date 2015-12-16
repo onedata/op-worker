@@ -26,7 +26,7 @@
 -type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {parent, item_definition()}.
 -type access_type() :: write | read | exec | rdwr. %% Check whether user has write/read/exec permissions
 -type check_type() :: owner %% Check whether user owns the item
-                    | none  %% Noop check. Doesn't check given item, but validates ancestors' exec permission.
+                    | validate_ancestors_exec %% validates ancestors' exec permission.
                     | owner_if_parent_sticky. %% Check whether user owns the item but only if parent of the item
                                               %% has sticky bit.
 
@@ -44,41 +44,27 @@
 %% generic calls
 before_advice(#annotation{data = []}, _M, _F, Args) ->
     Args;
-before_advice(#annotation{data = [Obj | R]} = A, M, F, [#fslogic_ctx{} | _Inputs] = Args) ->
-    ?debug("check_permissions's before_advice args ~p", [Args]),
-    NewArgs = before_advice(A#annotation{data = Obj}, M, F, Args),
-    before_advice(A#annotation{data = R}, M, F, NewArgs);
-
-%% actual before_advice impl.
 before_advice(#annotation{}, _M, _F, [#fslogic_ctx{session = #session{identity = #identity{user_id = ?ROOT_USER_ID}}} | _Inputs] = Args) ->
     Args;   %% Always allow access by root user
-before_advice(#annotation{data = root}, _M, _F, [#fslogic_ctx{} | _Inputs] = _Args) ->
+before_advice(#annotation{data = [root | _]}, _M, _F, [#fslogic_ctx{} | _Inputs] = _Args) ->
     throw(?EACCES); %% At this point user is not root so deny any requests that require root
-
 %% Check whether user owns the item
-before_advice(#annotation{data = {owner, Item}}, _M, _F,
-    [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
+before_advice(#annotation{data = [{owner, Item} | Rest]} = Annotation, M, F, [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
 
-    #document{value = #file_meta{uid = OwnerId}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
-
+    #document{value = #file_meta{uid = OwnerId}} = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
     case UserId of
         OwnerId ->
-            ok = validate_ancestors_exec(Subj, UserId),
-            Args;
-        _       -> throw(?EACCES)
+            before_advice(Annotation#annotation{data = Rest}, M, F, Args);
+        _ ->
+            throw(?EACCES)
     end;
-
-%% Noop check. Doesn't check given item, but validates ancestors' exec permission.
-before_advice(#annotation{data = {none, Item}}, _M, _F,
-    [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
-
+%% Validates ancestors' exec permission.
+before_advice(#annotation{data = [{validate_ancestors_exec, Item} | Rest]} = Annotation, M, F, [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
     #document{value = #file_meta{}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
     ok = validate_ancestors_exec(Subj, UserId),
-
-    Args;
-
+    before_advice(Annotation#annotation{data = Rest}, M, F, Args);
 %% Check whether user owns the item but only if parent of the item has sticky bit.
-before_advice(#annotation{data = {owner_if_parent_sticky, Item}}, _M, _F,
+before_advice(#annotation{data = [{owner_if_parent_sticky, Item} | Rest]} = Annotation, M, F,
     [#fslogic_ctx{session = #session{identity = #identity{user_id = _UserId}}} = Ctx | Inputs] = Args) ->
 
     #document{value = #file_meta{}} = Subj = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
@@ -86,28 +72,25 @@ before_advice(#annotation{data = {owner_if_parent_sticky, Item}}, _M, _F,
 
     case (Mode band (8#1 bsl 9)) > 0 of
         true ->
-            before_advice(#annotation{data = {owner, Item}}, _M, _F, Args);
+            before_advice(Annotation#annotation{data = [{owner, Item} | Rest]}, M, F, Args);
         false ->
-            Args
+            before_advice(Annotation#annotation{data = Rest}, M, F, Args)
     end;
-
 %% Check whether user has write/read/exec permissions
-before_advice(#annotation{data = {AccessType, Item}}, _M, _F,
+before_advice(#annotation{data = [{AccessType, Item} | Rest]} = Annotation, M, F,
     [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
 
     #document{value = #file_meta{is_scope = IsScope}} = FileDoc = get_validation_subject(Ctx, resolve_file_entry(Item, Inputs)),
 
     case IsScope of
         true  ->
-            ok = check_permissions:validate_scope_access(AccessType, FileDoc, UserId);
+            ok = check_permissions:validate_scope_access(AccessType, FileDoc, UserId); %todo why do we need it?
         false ->
             ok
     end,
     
     ok = validate_posix_access(AccessType, FileDoc, UserId),
-    ok = validate_ancestors_exec(FileDoc, UserId),
-
-    Args.
+    before_advice(Annotation#annotation{data = Rest}, M, F, Args).
 
 
 %%--------------------------------------------------------------------

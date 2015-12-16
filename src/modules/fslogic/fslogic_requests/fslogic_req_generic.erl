@@ -30,7 +30,7 @@
 %%--------------------------------------------------------------------
 -spec update_times(fslogic_worker:ctx(), File :: fslogic_worker:file(),
                    ATime :: file_meta:time(), MTime :: file_meta:time(), CTime :: file_meta:time()) -> #fuse_response{} | no_return().
--check_permissions({none, 2}).
+-check_permissions([{validate_ancestors_exec, 2}]).
 update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
@@ -50,7 +50,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
--check_permissions({owner, 2}).
+-check_permissions([{owner, 2}, {validate_ancestors_exec, 2}]).
 chmod(_CTX, FileEntry, Mode) ->
 
     case file_meta:get(FileEntry) of
@@ -86,7 +86,7 @@ chmod(_CTX, FileEntry, Mode) ->
 %%--------------------------------------------------------------------
 -spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
                    #fuse_response{} | no_return().
--check_permissions(root).
+-check_permissions([root]).
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
 
@@ -98,7 +98,7 @@ chown(_, _File, _UserId) ->
 %%--------------------------------------------------------------------
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                            FuseResponse :: #fuse_response{} | no_return().
--check_permissions({none, 2}).
+-check_permissions([{validate_ancestors_exec, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
     ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
@@ -126,7 +126,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{write, {parent, 2}}, {owner_if_parent_sticky, 2}]).
+-check_permissions([{write, {parent, 2}}, {owner_if_parent_sticky, 2}, {validate_ancestors_exec, 2}]).
 delete_file(_, File) ->
     {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
     {ok, FileChildren} =
@@ -180,7 +180,7 @@ delete_file(_, File) ->
 %%--------------------------------------------------------------------
 -spec rename_file(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
                          #fuse_response{} | no_return().
--check_permissions([{write, {parent, 2}}, {write, 2}, {write, {parent, {path, 3}}}]).
+-check_permissions([{write, {parent, 2}}, {write, 2}, {write, {parent, {path, 3}}}, {validate_ancestors_exec, 2}]).
 rename_file(_CTX, SourceEntry, TargetPath) ->
     ?debug("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
     case file_meta:exists({path, TargetPath}) of

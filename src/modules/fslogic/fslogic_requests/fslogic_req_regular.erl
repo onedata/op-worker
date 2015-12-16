@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
                       FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{write, 2}]).
+-check_permissions([{write, 2}, {validate_ancestors_exec, 2}]).
 truncate(_Ctx, Entry, Size) ->
     Results = lists:map(
                 fun({SID, FID} = Loc) ->
@@ -74,12 +74,12 @@ get_helper_params(_Ctx, SID, _ForceCL) ->
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), OpenMode :: fslogic_worker:open_flags()) ->
                                no_return() | #fuse_response{}.
--check_permissions([{none, 2}]).
+-check_permissions([{validate_ancestors_exec, 2}]).
 get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, OpenFlags) ->
     ?debug("get_file_location for ~p ~p", [File, OpenFlags]),
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
 
-    ok = check_permissions:validate_posix_access(OpenFlags, FileDoc, fslogic_context:get_user_id(CTX)),
+    ok = check_permissions:validate_posix_access(OpenFlags, FileDoc, fslogic_context:get_user_id(CTX)), %todo get rid of it
 
     ok = file_watcher:insert_open_watcher(UUID, SessId),
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
@@ -98,7 +98,7 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, OpenFlags) ->
 -spec get_new_file_location(fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(), Name :: file_meta:name(),
                             Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
--check_permissions([{write, 2}]).
+-check_permissions([{write, 2}, {validate_ancestors_exec, 2}]).
 get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
                       UUID, Name, Mode, _Flags) ->
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),

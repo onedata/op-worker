@@ -46,7 +46,7 @@ check_perms(_Path, _PermType) ->
 get_acl(CTX, UUID) ->
     case lfm_attrs:get_xattr(CTX, UUID, ?CDMI_ACL_XATTR_KEY) of
         {ok, #xattr{value = Json}} ->
-            Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)),
+            Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)), %todo store perms as integers
             {ok, Acl};
         Error ->
             Error
@@ -58,5 +58,5 @@ get_acl(CTX, UUID) ->
 %%--------------------------------------------------------------------
 -spec set_acl(fslogic_worker:ctx(), file_meta:uuid(), [access_control_entity()]) -> ok | error_reply().
 set_acl(CTX, UUID, Acl) ->
-    Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)),
+    Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
     lfm_attrs:set_xattr(CTX, UUID, #xattr{name = ?CDMI_ACL_XATTR_KEY, value = Json}).
