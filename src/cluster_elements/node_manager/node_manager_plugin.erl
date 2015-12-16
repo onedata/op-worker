@@ -23,11 +23,19 @@
 %% node_manager_plugin_behaviour callbacks
 -export([on_init/1, on_terminate/2, on_code_change/3,
   handle_call_extension/3, handle_cast_extension/2, handle_info_extension/2,
-  modules_with_args/0, listeners/0, ccm_nodes/0, db_nodes/0, check_node_ip_address/0]).
+  modules_with_args/0, listeners/0, ccm_nodes/0, db_nodes/0, check_node_ip_address/0, app_name/0]).
 
 %%%===================================================================
 %%% node_manager_plugin_behaviour callbacks
 %%%===================================================================
+
+%% @doc
+%% List db nodes to be used by node manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec app_name() -> {ok, Name :: atom()}.
+app_name() ->
+  {ok, op_worker}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -54,12 +62,9 @@ db_nodes() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
-listeners() -> [
-  dns_listener,
+listeners() -> node_manager:cluster_worker_listeners() ++ [
   gui_listener,
-  nagios_listener,
   protocol_listener,
-  redirector_listener,
   rest_listener
 ].
 
@@ -70,14 +75,11 @@ listeners() -> [
 %% @end
 %%--------------------------------------------------------------------
 -spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> [
-  {datastore_worker, []},
-  {dns_worker, []},
+modules_with_args() -> node_manager:cluster_worker_modules() ++ [
   {session_manager_worker, [
     {supervisor_spec, session_manager_worker:supervisor_spec()},
     {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
   ]},
-  {http_worker, []},
   {fslogic_worker, []}
 ].
 

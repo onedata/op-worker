@@ -49,7 +49,7 @@ nagios_test(Config) ->
     % not receive update for a long time.
     ?assertEqual(MainStatus, "ok"),
 
-    NodeStatuses = [X || X <- Xml#xmlElement.content, X#xmlElement.name == cluster_worker],
+    NodeStatuses = [X || X <- Xml#xmlElement.content, X#xmlElement.name == op_worker],
 
     WorkersByNodeXML = lists:map(
         fun(#xmlElement{attributes = Attributes, content = Content}) ->
