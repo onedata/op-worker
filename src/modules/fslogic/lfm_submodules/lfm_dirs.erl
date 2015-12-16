@@ -34,12 +34,12 @@
 mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     case file_meta:resolve_path(ParentPath) of
-    {ok, {#document{key = ParentUUID}, _}} ->
-        lfm_utils:call_fslogic(SessId, #create_dir{
-            parent_uuid = ParentUUID, name = Name, mode = Mode
-            }, fun(_) -> ok end
-        );
-    {error, Error} -> {error, Error}
+        {ok, {#document{key = ParentUUID}, _}} ->
+            lfm_utils:call_fslogic(SessId,
+                #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode},
+                fun(_) -> ok end
+            );
+        {error, Error} -> {error, Error}
     end.
 
 
@@ -54,7 +54,7 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, {uuid, UUID}, Limit, Offset) ->
     lfm_utils:call_fslogic(SessId,
-        #get_file_children{uuid=UUID, offset=Offset, size=Limit},
+        #get_file_children{uuid = UUID, offset = Offset, size = Limit},
         fun({file_children, List}) ->
             {ok, [{UUID, FileName} || {_, UUID, FileName} <- List]}
         end).
