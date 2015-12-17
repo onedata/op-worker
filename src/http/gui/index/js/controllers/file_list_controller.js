@@ -3,7 +3,24 @@ App.FileListController = Ember.ArrayController.extend({
     sortedModel: Ember.computed.sort("model", "sortProperties"),
     currentSpaceId: null,
     currentSpace: null,
+
+    // Creating new files / dirs
+    newFileName: '',
+
+    // File preview
     previewedFile: null,
+    previewedFileContent: null,
+    fetchPreviewedFileContent: function () {
+        var fileContentId = 'content#' + this.get('previewedFile.id');
+        var controller = this;
+        this.store.find('fileContent', fileContentId).then(function (data) {
+            console.log('fetchPreviewedFileContent(' + fileContentId + ') = ' + data);
+            controller.set('previewedFileContent', data);
+        });
+    }.observes('previewedFile'),
+    editingPreview: false,
+    editAreaDisabled: Ember.computed.not('editingPreview'),
+
 
     fetchCurrentSpace: function () {
         if (this.get('currentSpaceId')) {
@@ -18,25 +35,8 @@ App.FileListController = Ember.ArrayController.extend({
                 controller.set('currentSpace', data);
                 console.log(controller.get('currentSpace'));
             });
-            //return this.findBy('id', spaceId);
-            //console.log('spaceId ' + spaceId);
-            //var file = this.findBy('id', spaceId);
-            //console.log('file ' + file);
-            //var current = this.findBy('id', this.get('currentSpaceId'));
-            //current.set('expanded', true);
-            //return this.findBy('id', this.get('currentSpaceId'));
         }
-        //else {
-        //return null;
-        //}
     }.observes('currentSpaceId'),
-
-    visibleDirs: function () {
-        return this.filter(function (item, index, enumerable) {
-            console.log('item: ' + item.get('id') + ' ' + item.get('expanded'));
-            return item.get('expanded') || item.get('parent.expanded');
-        });
-    }.property('@each.expanded'),
 
     spacesDir: function () {
         return this.findBy('id', 'root')
@@ -54,7 +54,7 @@ App.FileListController = Ember.ArrayController.extend({
             visibleFiles.setEach('selected', value);
             return value;
         }
-    }.property('@each.selected'),
+    }.property('@each.isVisible,@each.selected'),
 
     isAnySelected: function (key, value) {
         if (value === undefined) {
@@ -119,15 +119,12 @@ App.FileListController = Ember.ArrayController.extend({
     actions: {
         createNewFile: function () {
             var name = this.get('newFileName');
-            var attr = this.get('newFileAttr');
             this.set('newFileName', '');
-            this.set('newFileAttr', '');
-            if (name && attr) {
+            if (name) {
                 var file = this.store.createRecord('file', {
                     name: name,
-                    selected: false
+                    type: 'file'
                 });
-
                 file.save();
             }
         },
@@ -157,11 +154,12 @@ App.FileListController = Ember.ArrayController.extend({
                 this.get('previewedFile').set('expanded', false);
             }
             this.set('previewedFile', null);
+            this.set('editingPreview', false);
             if (file.get('type') == 'dir') {
                 file.set('expanded', !file.get('expanded'));
             } else {
                 file.set('expanded', true);
-                this.set('previewedFile', file)
+                this.set('previewedFile', file);
             }
         },
 
@@ -181,6 +179,20 @@ App.FileListController = Ember.ArrayController.extend({
         deselectAll: function () {
             var visibleFiles = this.filterBy('isVisible');
             visibleFiles.setEach('selected', false);
+        },
+
+        editPreview: function () {
+            this.set('editingPreview', true);
+        },
+
+        savePreview: function () {
+            this.get('previewedFileContent').save();
+            this.set('editingPreview', false);
+        },
+
+        discardPreview: function () {
+            this.get('previewedFileContent').rollback();
+            this.set('editingPreview', false);
         }
     }
 });

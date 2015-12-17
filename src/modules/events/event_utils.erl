@@ -77,8 +77,8 @@ send_subscription_handler() ->
             {ok, StmId} = sequencer:open_stream(SessId),
             sequencer:send_message(Sub, StmId, SessId),
             {SubId, StmId, SessId};
-        (_, _, _) ->
-            ok
+        (#subscription{id = SubId}, SessId, _) ->
+            {SubId, undefined, SessId}
     end.
 
 %%--------------------------------------------------------------------
@@ -113,8 +113,8 @@ open_sequencer_stream_handler() ->
         (_, SessId, fuse) ->
             {ok, StmId} = sequencer:open_stream(SessId),
             {StmId, SessId};
-        (_, _, _) ->
-            ok
+        (_, SessId, _) ->
+            {undefined, SessId}
     end.
 
 %%--------------------------------------------------------------------

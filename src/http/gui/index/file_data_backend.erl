@@ -31,17 +31,12 @@
 
 init() ->
     ?dump(websocket_init),
-    {ok, Pid} = data_backend:async_process(fun() -> async_loop() end),
-    ensure_ets(self(), Pid),
+    {ok, _Pid} = data_backend:async_process(fun() -> async_loop() end),
     ok.
 
 
 async_loop() ->
     receive
-        {push_updated, Data} ->
-            data_backend:push_updated(Data);
-        {push_deleted, Data} ->
-            data_backend:push_deleted(Data);
         Other ->
             ?dump({async_loop, Other})
     end,
@@ -49,8 +44,8 @@ async_loop() ->
 
 
 find(<<"file">>, [<<"root">>]) ->
-    SessionID = g_session:get_session_id(),
-    {ok, SpaceDirs} = logical_file_manager:ls(SessionID,
+    SessionId = g_session:get_session_id(),
+    {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
         {path, <<"/spaces">>}, 1000, 0),
     VirtSpaceIds = [<<"space#", SpaceID/binary>> || {SpaceID, _} <- SpaceDirs],
     Res = [
@@ -66,9 +61,9 @@ find(<<"file">>, [<<"root">>]) ->
 
 
 find(<<"file">>, [<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
-    SessionID = g_session:get_session_id(),
+    SessionId = g_session:get_session_id(),
     {ok, #file_attr{name = Name}} = logical_file_manager:stat(
-        SessionID, {uuid, SpaceID}),
+        SessionId, {uuid, SpaceID}),
     Res = [
         {<<"id">>, VirtSpaceID},
         {<<"name">>, Name},
@@ -83,20 +78,29 @@ find(<<"file">>, [<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
 
 find(<<"file">>, [Id]) ->
     ?dump({find, Id}),
-    SessionID = g_session:get_session_id(),
+    SessionId = g_session:get_session_id(),
     {ok, #file_attr{uuid = SpacesDirUUID}} =
-        logical_file_manager:stat(SessionID, {path, <<"/spaces">>}),
+        logical_file_manager:stat(SessionId, {path, <<"/spaces">>}),
     ParentUUID = case get_parent(Id) of
                      SpacesDirUUID ->
                          <<"space#", Id/binary>>;
                      Other ->
                          Other
                  end,
-    {ok, #file_attr{name = Name, type = TypeAttr, size = Size}} =
-        logical_file_manager:stat(SessionID, {uuid, Id}),
+    {ok, #file_attr{name = Name, type = TypeAttr}} =
+        logical_file_manager:stat(SessionId, {uuid, Id}),
     Type = case TypeAttr of
                ?DIRECTORY_TYPE -> <<"dir">>;
                _ -> <<"file">>
+           end,
+    % TODO for now, check the size by reading the file, because stat does not work
+    Size = case Type of
+               <<"dir">> ->
+                   0;
+               <<"file">> ->
+                   {ok, Handle} = logical_file_manager:open(SessionId, {uuid, Id}, read),
+                   {ok, _, Bytes} = logical_file_manager:read(Handle, 0, 1005),
+                   byte_size(Bytes)
            end,
     Content = case Type =:= <<"file">> andalso Size < 1000 of
                   true ->
@@ -104,7 +108,7 @@ find(<<"file">>, [Id]) ->
                   _ ->
                       null
               end,
-    {ok, Children} = logical_file_manager:ls(SessionID, {uuid, Id}, 1000, 0),
+    {ok, Children} = logical_file_manager:ls(SessionId, {uuid, Id}, 1000, 0),
     ChildrenIds = [ChId || {ChId, _} <- Children],
     Res = [
         {<<"id">>, Id},
@@ -119,10 +123,9 @@ find(<<"file">>, [Id]) ->
     {ok, Res};
 
 find(<<"fileContent">>, [<<"content#", FileId/binary>> = Id]) ->
-    SessionID = g_session:get_session_id(),
-    {ok, Handle} = logical_file_manager:open(SessionID, {uuid, FileId}, read),
-    {ok, _, Bytes} = logical_file_manager:read(Handle, 0, 1000),
-    ?dump(Bytes),
+    SessionId = g_session:get_session_id(),
+    {ok, Handle} = logical_file_manager:open(SessionId, {uuid, FileId}, read),
+    {ok, _, Bytes} = logical_file_manager:read(Handle, 0, 10000),
     Res = [
         {<<"id">>, Id},
         {<<"bytes">>, Bytes},
@@ -144,13 +147,13 @@ find_all(<<"file">>) ->
     Res = [Root | Children],
     ?dump({find_all, Res}),
     {ok, Res}.
-%%     SessionID = g_session:get_session_id(),
-%%     {ok, SpaceDirs} = logical_file_manager:ls(SessionID,
+%%     SessionId = g_session:get_session_id(),
+%%     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
 %%         {path, <<"/spaces">>}, 10, 0),
 %%     Res = lists:map(
 %%         fun({Id, Name}) ->
 %%             {ok, Children} = logical_file_manager:ls(
-%%                 SessionID, {uuid, Id}, 10, 0),
+%%                 SessionId, {uuid, Id}, 10, 0),
 %%             ChildrenIds = [ChId || {ChId, _} <- Children],
 %%             Res = [
 %%                 {<<"id">>, Id},
@@ -165,53 +168,58 @@ find_all(<<"file">>) ->
 %%     {ok, Res}.
 
 
-find_query(<<"file">>, Data) ->
-    ?dump({find_query, Data}),
-    Result = lists:foldl(
-        fun({Attr, Val}, Acc) ->
-            get_files_by(Attr, Val, Acc)
-        end, get_files(), Data),
-    {ok, Result}.
+find_query(<<"file">>, _Data) ->
+    {error, not_iplemented}.
 
 
 create_record(<<"file">>, Data) ->
-    Id = integer_to_binary(begin random:seed(now()), random:uniform(9999999) end),
-    DataWithId = [{<<"id">>, Id} | Data],
-    save_files(get_files() ++ [DataWithId]),
-    ?dump(get_files()),
-    push_updated(DataWithId),
-    {ok, DataWithId}.
+    ?dump({create_record, <<"file">>, Data}),
+    Name = proplists:get_value(<<"name">>, Data),
+    Type = proplists:get_value(<<"type">>, Data),
+    SessionId = g_session:get_session_id(),
+    FileId = case Type of
+                 <<"file">> ->
+                     {ok, FId} = logical_file_manager:create(SessionId, <<"/", Name/binary>>, 8#777),
+                     FId;
+                 <<"dir">> ->
+                     {ok, DirId} = logical_file_manager:mkdir(SessionId, <<"/", Name/binary>>, 8#777),
+                     DirId
+             end,
+    Content = case Type of
+                  <<"file">> ->
+                      <<"content#", FileId/binary>>;
+                  <<"dir">> ->
+                      null
+              end,
+    ParentUUID = get_parent(FileId),
+    Res = [
+        {<<"id">>, FileId},
+        {<<"name">>, Name},
+        {<<"type">>, Type},
+        {<<"content">>, Content},
+        {<<"parentId">>, ParentUUID},
+        {<<"parent">>, ParentUUID},
+        {<<"children">>, []}
+    ],
+    ?dump({find, Res}),
+    {ok, Res}.
 
 
-update_record(<<"file">>, Id, Data) ->
-    case get_files_by(<<"id">>, Id) of
-        [] ->
-            {error, <<"File not found">>};
-        [File] ->
-            NewFile = update_file(File, Data),
-            NewFileList = lists:map(
-                fun(FileInList) ->
-                    case lists:member({<<"id">>, Id}, FileInList) of
-                        false ->
-                            FileInList;
-                        true ->
-                            NewFile
-                    end
-                end, get_files()),
-            save_files(NewFileList),
-            push_updated(NewFile),
-            ok
-    end.
+update_record(<<"file">>, _Id, _Data) ->
+    {error, not_iplemented};
 
-delete_record(<<"file">>, Id) ->
-    NewFiles = lists:filter(
-        fun(File) ->
-            not lists:member({<<"id">>, Id}, File)
-        end, get_files()),
-    save_files(NewFiles),
-    % TODO A co jak nie OK?
-    push_deleted(Id),
+
+update_record(<<"fileContent">>, <<"content#", FileId/binary>>, Data) ->
+    ?dump({update_record, <<"fileContent">>, <<"content#", FileId/binary>>, Data}),
+    Bytes = proplists:get_value(<<"bytes">>, Data, <<>>),
+    SessionId = g_session:get_session_id(),
+    ok = logical_file_manager:truncate(SessionId, {uuid, FileId}, 0),
+    {ok, Handle} = logical_file_manager:open(SessionId, {uuid, FileId}, write),
+    {ok, _, _} = logical_file_manager:write(Handle, 0, Bytes),
     ok.
+
+delete_record(<<"file">>, _Id) ->
+    {error, not_iplemented}.
 
 
 % ------------------------------------------------------------
@@ -219,98 +227,14 @@ delete_record(<<"file">>, Id) ->
 % ------------------------------------------------------------
 
 get_parent(UUID) ->
-    SessionID = g_session:get_session_id(),
+    SessionId = g_session:get_session_id(),
     {ok, ParentUUID} = logical_file_manager:get_parent(
-        SessionID, {uuid, UUID}),
+        SessionId, {uuid, UUID}),
     case ParentUUID of
         <<"spaces">> ->
             {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
-                SessionID, {path, <<"/spaces">>}),
+                SessionId, {path, <<"/spaces">>}),
             SpacesDirUUID;
         _ ->
             ParentUUID
     end.
-
-
-
--define(FILE_ETS, file_ets).
-
-ensure_ets(WSPid, AsyncPid) ->
-    UserId = op_gui_utils:get_user_id(),
-    Self = self(),
-    case ets:info(?FILE_ETS) of
-        undefined ->
-            spawn(
-                fun() ->
-                    ets:new(?FILE_ETS, [named_table, public, set, {read_concurrency, true}]),
-                    Self ! created,
-                    receive
-                        die ->
-                            ok
-                    end
-                end),
-            receive created -> ok end;
-        _ ->
-            ok
-    end,
-    case ets:lookup(?FILE_ETS, {files, UserId}) of
-        [] ->
-            ets:insert(?FILE_ETS, {{files, UserId}, ?FILE_FIXTURES});
-        _ ->
-            ok
-    end,
-    case ets:lookup(?FILE_ETS, {clients, UserId}) of
-        [] ->
-            ets:insert(?FILE_ETS, {{clients, UserId}, [{WSPid, AsyncPid}]});
-        [{{clients, UserId}, List}] ->
-            ets:insert(?FILE_ETS, {{clients, UserId}, [{WSPid, AsyncPid} | List]})
-    end.
-
-
-push_updated(Data) ->
-    push_to_all(push_updated, Data).
-
-
-push_deleted(Data) ->
-    push_to_all(push_deleted, Data).
-
-
-push_to_all(Type, Data) ->
-    Self = self(),
-    UserId = op_gui_utils:get_user_id(),
-    [{{clients, UserId}, Clients}] = ets:lookup(?FILE_ETS, {clients, UserId}),
-    lists:foreach(
-        fun({WSPid, AsyncPid}) ->
-            case WSPid of
-                Self ->
-                    ok;
-                _ ->
-                    AsyncPid ! {Type, Data}
-            end
-        end, Clients).
-
-
-save_files(Files) ->
-    UserId = op_gui_utils:get_user_id(),
-    ets:insert(?FILE_ETS, {{files, UserId}, Files}).
-
-get_files() ->
-    UserId = op_gui_utils:get_user_id(),
-    [{{files, UserId}, Files}] = ets:lookup(?FILE_ETS, {files, UserId}),
-    Files.
-
-get_files_by(AttrName, AttrValue) ->
-    get_files_by(AttrName, AttrValue, get_files()).
-
-get_files_by(AttrName, AttrValue, FileList) ->
-    lists:filter(
-        fun(File) ->
-            lists:member({AttrName, AttrValue}, File)
-        end, FileList).
-
-update_file(File, Data) ->
-    lists:foldl(
-        fun({Attr, Val}, CurrFile) ->
-            lists:keyreplace(Attr, 1, CurrFile, {Attr, Val})
-        end, File, Data).
-

@@ -5,3 +5,18 @@
 #select-space {
     min-width: 200px;
 }
+
+.edit-preview {
+    resize: none;
+    width: 580px;
+    height: 400px;
+    overflow-y: auto;
+}
+
+textarea.disabled {
+    background: #EBEBE4;
+}
+
+.modal-textbox {
+    width: 500px;
+}

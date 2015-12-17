@@ -16,8 +16,8 @@ App.File = DS.Model.extend({
 
 
     isVisible: function () {
-        return this.get('parent.isExpanded');
-    }.property('parent.isExpanded')
+        return this.get('parent.expanded');
+    }.property('parent.expanded')
 });
 
 App.FileContent = DS.Model.extend({

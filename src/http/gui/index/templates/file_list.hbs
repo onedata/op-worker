@@ -11,9 +11,13 @@
 </form>
 
 <div class="btn-group" role="group" aria-label="...">
-    <button type="button" class="btn btn-default" id="create-new"
+    <button type="button" class="btn btn-default"
+        {{action 'showModal' 'create_dir_modal' controller model}}>
+        Create Directory
+    </button>
+    <button type="button" class="btn btn-default"
         {{action 'showModal' 'create_file_modal' controller model}}>
-        Create
+        Create File
     </button>
     <button type="button" class="btn btn-default" id="rename-file"
         {{action 'showModal' 'rename_file_modal' controller model}}
@@ -48,16 +52,20 @@
     border: 1px solid black; margin: 30px 20px; display: inline-block;
     min-height: 300px; max-height: 500px; overflow-y: auto;
     min-width: 400px; max-width: 400px; overflow-x: auto;">
-        {{#render "sortedFileChildren" currentSpace.children}}
-            {{#each child in sortedModel}}
-                {{file-tree-node file=child clickAction='fileClicked'}}
-            {{/each}}
-        {{/render}}
+        {{#if currentSpace.children.length}}
+            {{#render "sortedFileChildren" currentSpace.children}}
+                {{#each child in sortedModel}}
+                    {{file-tree-node file=child clickAction='fileClicked'}}
+                {{/each}}
+            {{/render}}
+        {{else}}
+            <p style="font-size: 20px; font-style: italic;">empty space</p>
+        {{/if}}
     </div>
     <div style="padding: 6px 10px; float: left;
     border: 1px solid black; margin: 30px 20px; display: inline-block;
     height: 500px; width: 600px; ">
-        <p>Preview:
+        <p style="font-size: 24px;">Preview:
             {{#if previewedFile}}
                 <i>{{previewedFile.name}}</i>
             {{else}}
@@ -65,10 +73,37 @@
             {{/if}}
         </p>
         {{#if previewedFile}}
-            {{#if previewedFile.content}}
-                {{previewedFile.content.bytes}}
+            {{#if previewedFileContent}}
+                {{#if editAreaDisabled}}
+                    <div style="width: 100%;">
+                        {{textarea class='edit-preview disabled' value=previewedFileContent.bytes
+                        placeholder='empty file content' disabled=true}}
+                    </div>
+                    <div style="width: 100%; margin-top: 4px;">
+                        <button type="button" class="btn btn-default btn-info"
+                            {{action 'editPreview'}}>
+                            Edit file
+                        </button>
+                    </div>
+                {{else}}
+                    <div style="width: 100%;">
+                        {{textarea class='edit-preview' value=previewedFileContent.bytes
+                        placeholder='empty file content' autofocus=true}}
+                    </div>
+                    <div style="width: 100%; margin-top: 4px;">
+                        <button type="button"
+                                class="btn btn-default btn-success"
+                            {{action 'savePreview'}}>
+                            Save file
+                        </button>
+                        <button type="button" class="btn btn-default btn-danger"
+                            {{action 'discardPreview'}}>
+                            Discard changes
+                        </button>
+                    </div>
+                {{/if}}
             {{else}}
-                This file is too large to preview.
+                <p style="color: red;">This file is too large to preview.</p>
             {{/if}}
         {{/if}}
     </div>
