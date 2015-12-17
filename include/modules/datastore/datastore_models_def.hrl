@@ -114,7 +114,7 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
-    version = 1,    %% Snaphot version
+    version = 1, %% Snaphot version
     is_scope = false :: boolean()
 }).
 
@@ -136,6 +136,7 @@
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: oneprovider:id(),
+    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],

@@ -121,6 +121,8 @@ handle_info(session_status_checkup, #state{session_id = SessId,
             case is_max_inactivity_period_exceeded(SessId, Period) of
                 true ->
                     {stop, normal, State};
+                false ->
+                    {noreply, State, hibernate};
                 {false, RemainingTime} ->
                     schedule_session_status_checkup(RemainingTime),
                     {noreply, State, hibernate}

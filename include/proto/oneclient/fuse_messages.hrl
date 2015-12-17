@@ -80,6 +80,7 @@
 }).
 
 -record(get_helper_params, {
+    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     force_cluster_proxy = false :: boolean()
 }).
@@ -91,6 +92,11 @@
 
 -record(close, {
     uuid :: file_meta:uuid()
+}).
+
+-record(helper_arg, {
+    key :: binary(),
+    value :: binary()
 }).
 
 -record(get_xattr, {
@@ -118,10 +124,6 @@
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
                         #list_xattr{}.
 
--record(fuse_request, {
-    fuse_request :: fuse_request()
-}).
-
 -record(file_children, {
     child_links :: [#child_link{}]
 }).
@@ -144,8 +146,12 @@
     names :: [xattr:name()]
 }).
 
--type fuse_response() :: #file_attr{} | #file_children{} | #dir{} |
-                         #helper_params{} | #file_location{} | #xattr{} | #xattr_list{}.
+-type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
+#file_location{} | #xattr{} | #xattr_list{} | #dir{}.
+
+-record(fuse_request, {
+    fuse_request :: fuse_request()
+}).
 
 -record(fuse_response, {
     status :: #status{},

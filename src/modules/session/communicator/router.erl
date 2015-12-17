@@ -19,6 +19,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -122,5 +123,17 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, SessId)
+    end),
+    ok;
+route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+    message_body = #proxyio_request{} = ProxyIORequest}) ->
+    ?debug("ProxyIO request ~p", [ProxyIORequest]),
+    spawn(fun() ->
+        ProxyIOResponse = worker_proxy:call(fslogic_worker,
+            {proxyio_request, SessId, ProxyIORequest}),
+
+        ?debug("ProxyIO response ~p", [ProxyIOResponse]),
+        communicator:send(#server_message{message_id = Id,
+            message_body = ProxyIOResponse}, SessId)
     end),
     ok.

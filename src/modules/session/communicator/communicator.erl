@@ -19,7 +19,7 @@
 
 %% API
 -export([send/2, send/3, send_async/2, communicate/2, communicate_async/2,
-    communicate_async/3, ensure_sent/2]).
+    communicate_async/3]).
 
 -define(SEND_RETRY_DELAY, timer:seconds(5)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(30)).
@@ -51,8 +51,6 @@ send(Msg, Ref) ->
 send(#server_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
     case connection:send(Msg, Ref) of
         ok -> ok;
-        {error, {not_found, session}} -> {error, {not_found, session}};
-        {exit, {noproc, _}} -> {error, {not_found, connection}};
         {error, _} ->
             timer:sleep(?SEND_RETRY_DELAY),
             case Retry of
@@ -126,19 +124,6 @@ communicate_async(#server_message{} = Msg, Ref, Recipient) ->
     end;
 communicate_async(Msg, Ref, Recipient) ->
     communicate_async(#server_message{message_body = Msg}, Ref, Recipient).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Spawns a process that is responsible for sending provided message.
-%% The process terminates when the message has been successfully sent or
-%% session has been deleted.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_sent(Msg :: #server_message{} | term(), Ref :: connection:ref()) ->
-    ok.
-ensure_sent(Msg, Ref) ->
-    spawn(?MODULE, send, [Msg, Ref, infinity]),
-    ok.
 
 %%%===================================================================
 %%% Internal functions

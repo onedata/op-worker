@@ -21,7 +21,6 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([run_synchronized/2]).
 
 -type name() :: binary().
 -type value() :: binary().
@@ -81,16 +80,6 @@ list(FileUuid) ->
 %%%===================================================================
 %%% model_behaviour callbacks
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Runs given function within locked ResourceId. This function makes sure that 2 funs with same ResourceId won't
-%% run at the same time.
-%% @end
-%%--------------------------------------------------------------------
--spec run_synchronized(ResourceId :: binary(), Fun :: fun(() -> Result :: term())) -> Result :: term().
-run_synchronized(ResourceId, Fun) ->
-    datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
 
 %%--------------------------------------------------------------------
 %% @doc

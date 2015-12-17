@@ -6,7 +6,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Module responsible for pushing new file's information to sessions.
-%%%      @todo: Should be replaced with event system
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_event).

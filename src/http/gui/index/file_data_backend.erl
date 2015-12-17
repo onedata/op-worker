@@ -185,6 +185,7 @@ create_record(<<"file">>, Data) ->
                _ ->
                    {ok, #file_attr{}} = logical_file_manager:stat(
                        SessionId, {path, <<"/spaces">>}),
+                   ok
            end,
     FileId = case Type of
                  <<"file">> ->
