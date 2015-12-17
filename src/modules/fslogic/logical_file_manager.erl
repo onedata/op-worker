@@ -84,13 +84,13 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> ok | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, Path, Mode).
 
 -spec mkdir(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-ok | error_reply().
+    {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     try
         CTX = fslogic_context:new(SessId),
@@ -138,7 +138,6 @@ get_children_count(SessId, FileKey) ->
 get_parent(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:get_parent(CTX, ensure_uuid(CTX, FileKey)).
-
 
 
 %%--------------------------------------------------------------------
@@ -206,7 +205,7 @@ create(SessId, Path, Mode) ->
         _:Reason ->
             ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
             {error, Reason}
-    end .
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -301,7 +300,7 @@ truncate(SessId, FileKey, Size) ->
         _:Reason ->
             ?error_stacktrace("truncate error for file ~p: ~p", [FileKey, Reason]),
             {error, Reason}
-    end .
+    end.
 
 
 %%--------------------------------------------------------------------

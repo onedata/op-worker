@@ -126,7 +126,7 @@
     child_links :: [#child_link{}]
 }).
 
--record(parent, {
+-record(dir, {
     uuid :: file_meta:uuid()
 }).
 
@@ -144,7 +144,7 @@
     names :: [xattr:name()]
 }).
 
--type fuse_response() :: #file_attr{} | #file_children{} | #parent{} |
+-type fuse_response() :: #file_attr{} | #file_children{} | #dir{} |
                          #helper_params{} | #file_location{} | #xattr{} | #xattr_list{}.
 
 -record(fuse_response, {

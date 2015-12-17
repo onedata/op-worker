@@ -77,7 +77,7 @@ find(<<"file">>, [<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
 
 
 find(<<"file">>, [Id]) ->
-    ?dump({find, Id}),
+    ?dump({find, <<"file">>, Id}),
     SessionId = g_session:get_session_id(),
     {ok, #file_attr{uuid = SpacesDirUUID}} =
         logical_file_manager:stat(SessionId, {path, <<"/spaces">>}),
@@ -123,6 +123,7 @@ find(<<"file">>, [Id]) ->
     {ok, Res};
 
 find(<<"fileContent">>, [<<"content#", FileId/binary>> = Id]) ->
+    ?dump({find, <<"fileContent">>, Id}),
     SessionId = g_session:get_session_id(),
     {ok, Handle} = logical_file_manager:open(SessionId, {uuid, FileId}, read),
     {ok, _, Bytes} = logical_file_manager:read(Handle, 0, 10000),
@@ -174,9 +175,17 @@ find_query(<<"file">>, _Data) ->
 
 create_record(<<"file">>, Data) ->
     ?dump({create_record, <<"file">>, Data}),
+    SessionId = g_session:get_session_id(),
     Name = proplists:get_value(<<"name">>, Data),
     Type = proplists:get_value(<<"type">>, Data),
-    SessionId = g_session:get_session_id(),
+    ProposedParentUUID = proplists:get_value(<<"parentId">>, Data, null),
+    Path = case ProposedParentUUID of
+               null ->
+                   <<"/", Name/binary>>;
+               _ ->
+                   {ok, #file_attr{}} = logical_file_manager:stat(
+                       SessionId, {path, <<"/spaces">>}),
+           end,
     FileId = case Type of
                  <<"file">> ->
                      {ok, FId} = logical_file_manager:create(SessionId, <<"/", Name/binary>>, 8#777),
@@ -201,7 +210,7 @@ create_record(<<"file">>, Data) ->
         {<<"parent">>, ParentUUID},
         {<<"children">>, []}
     ],
-    ?dump({find, Res}),
+    ?dump({create_record, Res}),
     {ok, Res}.
 
 

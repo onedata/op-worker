@@ -154,4 +154,4 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
 get_parent(_CTX, File) ->
     {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
     #fuse_response{status = #status{code = ?OK}, fuse_response =
-        #parent{uuid = ParentUUID}}.
+        #dir{uuid = ParentUUID}}.

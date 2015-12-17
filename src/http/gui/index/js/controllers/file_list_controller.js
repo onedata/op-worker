@@ -6,18 +6,31 @@ App.FileListController = Ember.ArrayController.extend({
 
     // Creating new files / dirs
     newFileName: '',
+    newFileParentId: null,
+    fetchNewFileParentId: function () {
+        this.set('newFileParentId', null);
+        if (this.get('isOneSelected')) {
+            var selected = this.findBy('selected', true);
+            if (selected.get('type') == 'dir') {
+                // Set new ID only if one directory is selected
+                this.set('newFileParentId', selected.get('id'));
+            }
+        }
+        console.log('newFileParentId ' + this.get('newFileParentId'));
+    }.observes('@each.selected'),
 
     // File preview
     previewedFile: null,
     previewedFileContent: null,
     fetchPreviewedFileContent: function () {
-        var fileContentId = 'content#' + this.get('previewedFile.id');
-        var controller = this;
-        this.store.find('fileContent', fileContentId).then(function (data) {
-            console.log('fetchPreviewedFileContent(' + fileContentId + ') = ' + data);
-            controller.set('previewedFileContent', data);
-        });
-    }.observes('previewedFile'),
+        if (this.get('previewedFile')) {
+            var fileContentId = 'content#' + this.get('previewedFile.id');
+            var controller = this;
+            this.store.find('fileContent', fileContentId).then(function (data) {
+                controller.set('previewedFileContent', data);
+            });
+        }
+    }.property('@each.selected'),
     editingPreview: false,
     editAreaDisabled: Ember.computed.not('editingPreview'),
 
@@ -40,7 +53,7 @@ App.FileListController = Ember.ArrayController.extend({
 
     spacesDir: function () {
         return this.findBy('id', 'root')
-    }.property('@each.selected'),
+    }.property(),
 
     selectedCount: function () {
         return this.filterBy('selected').length;
@@ -117,13 +130,23 @@ App.FileListController = Ember.ArrayController.extend({
     }.property('currentFile'),
 
     actions: {
+        createNewDir: function () {
+            this.send('createNew', 'dir');
+        },
+
         createNewFile: function () {
+            this.send('createNew', 'file');
+        },
+
+        createNew: function (type) {
             var name = this.get('newFileName');
             this.set('newFileName', '');
+            var parent = this.get('newFileParentId');
             if (name) {
                 var file = this.store.createRecord('file', {
                     name: name,
-                    type: 'file'
+                    type: type,
+                    parentId: parent
                 });
                 file.save();
             }
@@ -135,17 +158,6 @@ App.FileListController = Ember.ArrayController.extend({
                 var file = this.get('currentFile');
                 file.set('name', name);
                 file.save();
-            }
-        },
-
-        changeAttr: function () {
-            var attr = this.get('currentFileAttr');
-            if (attr) {
-                var selectedFiles = this.filterBy('selected');
-                selectedFiles.forEach(function (file) {
-                    file.set('attribute', attr);
-                    file.save();
-                });
             }
         },
 
@@ -164,8 +176,6 @@ App.FileListController = Ember.ArrayController.extend({
         },
 
         remove: function () {
-            //var file = this.get('model');
-            //console.log('remove ' + file);
             var selected = this.filterBy('selected', true);
             selected.invoke('deleteRecord');
             selected.invoke('save');

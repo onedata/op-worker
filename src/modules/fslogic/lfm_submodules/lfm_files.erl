@@ -70,7 +70,7 @@ cp(_PathFrom, _PathTo) ->
     {ok, file_meta:uuid()} | error_reply().
 get_parent(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     lfm_utils:call_fslogic(SessId, #get_parent{uuid = UUID},
-        fun(#parent{uuid = ParentUUID}) ->
+        fun(#dir{uuid = ParentUUID}) ->
             {ok, ParentUUID}
         end).
 
