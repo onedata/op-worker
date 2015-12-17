@@ -20,6 +20,7 @@
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -35,7 +36,7 @@
 %% traslate protobuf record to internal record
 %% @end
 %%--------------------------------------------------------------------
--spec translate_from_protobuf(tuple() | undefined) -> tuple() | undefined.
+-spec translate_from_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
 translate_from_protobuf(#'Status'{code = Code, description = Desc}) ->
     #status{code = Code, description = Desc};
 translate_from_protobuf(#'Events'{events = Evts}) ->
@@ -55,10 +56,10 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
         file_size = Record#'WriteEvent'.file_size,
         blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]
     };
-translate_from_protobuf(#'Subscription'{} = Record) ->
+translate_from_protobuf(#'Subscription'{id = Id, object = {_, Record}}) ->
     #subscription{
-        id = Record#'Subscription'.id,
-        object = translate_from_protobuf(Record#'Subscription'.object)
+        id = Id,
+        object = translate_from_protobuf(Record)
     };
 translate_from_protobuf(#'FileAttrSubscription'{} = Record) ->
     #file_attr_subscription{
@@ -124,12 +125,30 @@ translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentU
     #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)};
 translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
     #get_file_location{uuid = UUID, flags = translate_open_flags(Flags)};
-translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
-    #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
+translate_from_protobuf(#'GetHelperParams'{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP}) ->
+    #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
 translate_from_protobuf(#'Close'{uuid = UUID}) ->
     #close{uuid = UUID};
+translate_from_protobuf(#'ProxyIORequest'{space_id = SPID, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
+    #proxyio_request{space_id = SPID, storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
+    #remote_read{offset = Offset, size = Size};
+translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
+    #remote_write{offset = Offset, data = Data};
+translate_from_protobuf(#'GetXattr'{uuid = UUID, name = Name}) ->
+    #get_xattr{uuid = UUID, name = Name};
+translate_from_protobuf(#'SetXattr'{uuid = UUID, xattr = {xattr, Xattr}}) ->
+    #set_xattr{uuid = UUID, xattr = translate_from_protobuf(Xattr)};
+translate_from_protobuf(#'RemoveXattr'{uuid = UUID, name = Name}) ->
+    #remove_xattr{uuid = UUID, name = Name};
+translate_from_protobuf(#'ListXattr'{uuid = UUID}) ->
+    #list_xattr{uuid = UUID};
+translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
+    #xattr{name = Name, value = Value};
+translate_from_protobuf(#'XattrList'{names = Names}) ->
+    #xattr_list{names = Names};
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -138,7 +157,7 @@ translate_from_protobuf(undefined) ->
 %% translate internal record to protobuf record
 %% @end
 %%--------------------------------------------------------------------
--spec translate_to_protobuf(tuple() | undefined) -> tuple() | undefined.
+-spec translate_to_protobuf(tuple()) -> tuple(); (undefined) -> undefined.
 translate_to_protobuf(#status{code = Code, description = Desc}) ->
     {status, #'Status'{code = Code, description = Desc}};
 translate_to_protobuf(#events{events = Evts}) ->
@@ -163,8 +182,14 @@ translate_to_protobuf(#write_subscription{} = Sub) ->
     }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
-translate_to_protobuf(#handshake_response{session_id = Id}) ->
-    {handshake_response, #'HandshakeResponse'{session_id = Id}};
+translate_to_protobuf(#handshake_response{session_id = Id, subscriptions = Subs}) ->
+    {handshake_response, #'HandshakeResponse'{
+        session_id = Id,
+        subscriptions = lists:map(fun(Sub) ->
+            {_, Record} = translate_to_protobuf(Sub),
+            Record
+        end, Subs)
+    }};
 translate_to_protobuf(#message_stream{stream_id = StmId, sequence_number = SeqNum}) ->
     #'MessageStream'{stream_id = StmId, sequence_number = SeqNum};
 translate_to_protobuf(#end_of_message_stream{}) ->
@@ -220,6 +245,7 @@ translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
         uuid = Record#file_location.uuid,
         provider_id = Record#file_location.provider_id,
+        space_id = Record#file_location.space_id,
         storage_id = Record#file_location.storage_id,
         file_id = Record#file_location.file_id,
         blocks = lists:map(fun(Block) ->
@@ -228,6 +254,28 @@ translate_to_protobuf(#file_location{} = Record) ->
     }};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
+translate_to_protobuf(#proxyio_response{status = Status, proxyio_response = ProxyIOResponse}) ->
+    {status, StatProto} = translate_to_protobuf(Status),
+    {proxyio_response, #'ProxyIOResponse'{
+        status = StatProto,
+        proxyio_response = translate_to_protobuf(ProxyIOResponse)
+    }};
+translate_to_protobuf(#remote_data{data = Data}) ->
+    {remote_data, #'RemoteData'{data = Data}};
+translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
+    {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
+translate_to_protobuf(#get_xattr{uuid = Uuid, name = Name}) ->
+    {get_xattr, #'GetXattr'{uuid = Uuid, name = Name}};
+translate_to_protobuf(#set_xattr{uuid = Uuid, xattr = Xattr}) ->
+    {set_xattr, #'SetXattr'{uuid = Uuid, xattr = translate_to_protobuf(Xattr)}};
+translate_to_protobuf(#remove_xattr{uuid = Uuid, name = Name}) ->
+    {remove_xattr, #'RemoveXattr'{uuid = Uuid, name = Name}};
+translate_to_protobuf(#list_xattr{uuid = Uuid}) ->
+    {list_xattr, #'ListXattr'{uuid = Uuid}};
+translate_to_protobuf(#xattr{name = Name, value = Value}) ->
+    {xattr, #'Xattr'{name = Name, value = Value}};
+translate_to_protobuf(#xattr_list{names = Names}) ->
+    {xattr_list, #'XattrList'{names = Names}};
 translate_to_protobuf(undefined) ->
     undefined.
 

@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/http_worker/http_common.hrl").
--include("modules/http_worker/rest/cdmi/cdmi.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -27,7 +26,26 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get/2, put/2, get_binary/2]).
+-export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2]).
+
+%% the default json response for get/put cdmi_object will contain this entities,
+%% they can be choosed selectively by appending '?name1;name2' list to the
+%% request url
+-define(DEFAULT_GET_FILE_OPTS,
+    [
+        <<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>,
+        <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>,
+        <<"metadata">>, <<"mimetype">>, <<"valuetransferencoding">>,
+        <<"valuerange">>, <<"value">>
+    ]
+).
+-define(DEFAULT_PUT_FILE_OPTS,
+    [
+        <<"objectType">>, <<"objectID">>, <<"objectName">>, <<"parentURI">>,
+        <<"parentID">>, <<"capabilitiesURI">>, <<"completionStatus">>,
+        <<"metadata">>, <<"mimetype">>
+    ]
+).
 
 %%%===================================================================
 %%% API
@@ -86,7 +104,7 @@ content_types_provided(Req, #{cdmi_version := undefined} = State) ->
     ], Req, State};
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-object">>, get_cdmi_object}
+        {<<"application/cdmi-object">>, get_cdmi}
     ], Req, State}.
 
 
@@ -95,17 +113,21 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
     {[{binary(), atom()}], req(), #{}}.
+content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-object">>, put}
+        {<<"application/cdmi-object">>, put_cdmi}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
-delete_resource(Req, #{path := Path, identity := Identity} = State) ->
-    ok = onedata_file_api:unlink(Identity, {path, Path}),
+delete_resource(Req, #{path := Path, auth := Auth} = State) ->
+    ok = onedata_file_api:unlink(Auth, {path, Path}),
     {true, Req, State}.
 
 
@@ -119,21 +141,20 @@ delete_resource(Req, #{path := Path, identity := Identity} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
-get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) ->
-
-    % get optional 'Range' header
-    {Ranges, Req1} = get_ranges(Req, State),
-
+get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}} = State) ->
     % prepare response
-    StreamSize = get_stream_size(Ranges, Size),
-    StreamFun = stream(State, Ranges),
-    Req2 = cowboy_req:set_resp_header(<<"content-type">>, get_mimetype(Path), Req1),
-
+    {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, State),
+    Mimetype = cdmi_metadata:get_mimetype(Auth, {uuid, Uuid}),
+    Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
         case Ranges of
             undefined -> ?HTTP_OK;
             _ -> ?PARTIAL_CONTENT
         end,
+
+    % prepare stream
+    StreamSize = cdmi_streamer:binary_stream_size(Ranges, Size),
+    StreamFun = cdmi_streamer:stream_binary(State, Ranges),
 
     % reply
     {ok, Req3} = apply(cowboy_req, reply, [HttpStatus, [], {StreamSize, StreamFun}, Req2]),
@@ -144,154 +165,204 @@ get_binary(Req, #{path := Path, attributes := #file_attr{size = Size}} = State) 
 %% Handles GET with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec get(req(), #{}) -> {term(), req(), #{}}.
-get(Req, State) ->
-    {<<"ok">>, Req, State}.
+-spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
+get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}}) ->
+    NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
+    DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State),
+
+    case proplists:get_value(<<"value">>, DirCdmi) of
+        {range, Range} ->
+            % prepare response
+            BodyWithoutValue = proplists:delete(<<"value">>, DirCdmi),
+            ValueTransferEncoding = cdmi_metadata:get_encoding(Auth, {uuid, Uuid}),
+            JsonBodyWithoutValue = json_utils:encode({struct, BodyWithoutValue}),
+            JsonBodyPrefix =
+                case BodyWithoutValue of
+                    [] -> <<"{\"value\":\"">>;
+                    _ ->
+                        <<(erlang:binary_part(JsonBodyWithoutValue, 0, byte_size(JsonBodyWithoutValue) - 1))/binary, ",\"value\":\"">>
+                end,
+            JsonBodySuffix = <<"\"}">>,
+
+            % prepare stream
+            StreamSize = cdmi_streamer:cdmi_stream_size(Range, Size, ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix),
+            StreamFun = cdmi_streamer:stream_cdmi(State, Range, ValueTransferEncoding, JsonBodyPrefix, JsonBodySuffix),
+
+            % reply
+            {{stream, StreamSize, StreamFun}, Req, State};
+        undefined ->
+            Response = json_utils:encode({struct, DirCdmi}),
+            {Response, Req, State}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT without cdmi content-type
+%% @end
+%%--------------------------------------------------------------------
+-spec put_binary(req(), #{}) -> {term(), req(), #{}}.
+put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
+    % prepare request data
+    {Content, Req0} = cowboy_req:header(<<"content-type">>, ReqArg, <<"application/octet-stream">>),
+    {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
+    {Mimetype, Encoding} = cdmi_arg_parser:parse_content(Content),
+    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+    case onedata_file_api:create(Auth, Path, DefaultMode) of
+        {ok, _} ->
+            cdmi_metadata:update_completion_status(
+                Auth, {path, Path}, <<"Processing">>
+            ),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
+            Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                Auth, {path, Path}, CdmiPartialFlag
+            ),
+            Ans;
+
+        {error, ?EEXIST} ->
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
+            {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
+            case RawRange of
+                undefined ->
+                    ok = onedata_file_api:truncate(Auth, {path, Path}, 0),
+                    Ans = cdmi_streamer:write_body_to_file(Req1, State, 0),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(
+                        Auth, {path, Path}, CdmiPartialFlag
+                    ),
+                    Ans;
+                _ ->
+                    {Length, Req2} = cowboy_req:body_length(Req1),
+                    case cdmi_arg_parser:parse_byte_range(State, RawRange) of
+                        [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
+                            Ans = cdmi_streamer:write_body_to_file(Req2, State, From),
+                            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                                Auth, {path, Path}, CdmiPartialFlag
+                            ),
+                            Ans;
+                        _ ->
+                            cdmi_metadata:set_completion_status_according_to_partial_flag(
+                                Auth, {path, Path}, CdmiPartialFlag
+                            ),
+                            throw(?invalid_range)
+                    end
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Handles PUT with "application/cdmi-object" content-type
 %% @end
 %%--------------------------------------------------------------------
--spec put(req(), #{}) -> {term(), req(), #{}}.
-put(Req, State) ->
-    {true, Req, State}.
+-spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
+put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
+    % parse body
+    {ok, Body, Req0} = cdmi_arg_parser:parse_body(Req),
 
+    % prepare necessary data
+    {CdmiPartialFlag, Req1} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
+    RequestedMimetype = proplists:get_value(<<"mimetype">>, Body),
+    RequestedValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>, Body),
+    RequestedCopyURI = proplists:get_value(<<"copy">>, Body),
+    RequestedMoveURI = proplists:get_value(<<"move">>, Body),
+    RequestedUserMetadata = proplists:get_value(<<"metadata">>, Body),
+    URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
+    Value = proplists:get_value(<<"value">>, Body),
+    Range = get_range(Opts),
+    RawValue = cdmi_encoder:decode(Value, RequestedValueTransferEncoding, Range),
+    RawValueSize = byte_size(RawValue),
+    Attrs = get_attr(Auth, Path),
+
+    % create object using create/cp/mv
+    {ok, OperationPerformed} =
+        case {Attrs, RequestedCopyURI, RequestedMoveURI} of
+            {undefined, undefined, undefined} ->
+                {ok, _} = onedata_file_api:create(Auth, Path, 8#777),
+                {ok, created};
+            {#file_attr{}, undefined, undefined} ->
+                {ok, none};
+            {undefined, CopyURI, undefined} ->
+                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+            {undefined, undefined, MoveURI} ->
+                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+        end,
+
+    % update value and metadata depending on creation type
+    case OperationPerformed of
+        created ->
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+            {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+
+            % return response
+            {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
+            cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, utils:ensure_defined(
+                    RequestedValueTransferEncoding, undefined, <<"utf-8">>
+                )
+            ),
+            cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {uuid, Uuid}, CdmiPartialFlag),
+            Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{attributes => NewAttrs}),
+            Response = json_utils:encode(Answer),
+            Req2 = cowboy_req:set_resp_body(Response, Req1),
+            {true, Req2, State};
+        CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, RequestedValueTransferEncoding),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
+            cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
+            {true, Req1, State};
+        none ->
+            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
+            cdmi_metadata:update_encoding(Auth, {path, Path}, RequestedValueTransferEncoding),
+            cdmi_metadata:update_mimetype(Auth, {path, Path}, RequestedMimetype),
+            cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
+            case Range of
+            {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
+                    {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
+                    {true, Req1, State};
+                undefined when is_binary(Value) ->
+                    {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+                    ok = onedata_file_api:truncate(FileHandler, 0),
+                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
+                    {true, Req1, State};
+                undefined ->
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
+                    {true, Req1, State};
+                _MalformedRange ->
+                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
+                    throw(?invalid_range)
+            end
+    end.
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
-
 %%--------------------------------------------------------------------
-%% @doc Parses byte ranges from 'Range' http header format to list of
-%% erlang range tuples, i. e. <<"1-5,-3">> for a file with length 10
-%% will produce -> [{1,5},{7,9}]
-%% @end
+%% @doc Same as lists:keyfind/3, but returns Default when key is undefined
 %%--------------------------------------------------------------------
--spec parse_byte_range(#{}, binary() | list()) -> list(Range) | invalid when
-    Range :: {From :: integer(), To :: integer()} | invalid.
-parse_byte_range(State, Range) when is_binary(Range) ->
-    Ranges = parse_byte_range(State, binary:split(Range, <<",">>, [global])),
-    case lists:member(invalid, Ranges) of
-        true -> invalid;
-        false -> Ranges
-    end;
-parse_byte_range(_, []) ->
-    [];
-parse_byte_range(#{attributes := #file_attr{size = Size}} = State, [First | Rest]) ->
-    Range = case binary:split(First, <<"-">>, [global]) of
-                [<<>>, FromEnd] -> {max(0, Size - binary_to_integer(FromEnd)), Size - 1};
-                [From, <<>>] -> {binary_to_integer(From), Size - 1};
-                [From_, To] -> {binary_to_integer(From_), binary_to_integer(To)};
-                _ -> invalid
-            end,
-    case Range of
-        invalid -> [invalid];
-        {Begin, End} when Begin > End -> [invalid];
-        ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
+-spec get_range(Opts :: list()) -> {non_neg_integer(), non_neg_integer()} | undefined.
+get_range(Opts) ->
+    case lists:keyfind(<<"value">>, 1, Opts) of
+        {<<"value">>, From_, To_} -> {From_,To_};
+        false -> undefined
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Reads given range of bytes (defaults to whole file) from file (obtained
-%% from state path), result is encoded according to 'Encoding' argument
-%% and streamed to given Socket
-%% @end
+%% @doc Gets attributes of file, returns undefined when file does not exist
 %%--------------------------------------------------------------------
--spec stream_range(Socket :: term(), Transport :: atom(), State :: #{}, Range, Encoding :: binary(),
-    BufferSize :: integer(), FileHandle :: onedata_file_api:file_handle()) -> Result when
-    Range :: default | {From :: integer(), To :: integer()},
-    Result :: ok | no_return().
-stream_range(Socket, Transport, State, Range, Encoding, BufferSize, FileHandle) when (BufferSize rem 3) =/= 0 ->
-    %buffer size is extended, so it's divisible by 3 to allow base64 on the fly conversion
-    stream_range(Socket, Transport, State, Range, Encoding, BufferSize - (BufferSize rem 3), FileHandle);
-stream_range(Socket, Transport, #{attributes := #file_attr{size = Size}} = State, default, Encoding, BufferSize, FileHandle) ->
-    %default range should remain consistent with parse_object_ans/2 valuerange clause
-    stream_range(Socket, Transport, State, {0, Size - 1}, Encoding, BufferSize, FileHandle);
-stream_range(Socket, Transport, State, {From, To}, Encoding, BufferSize, FileHandle) ->
-    ToRead = To - From + 1,
-    case ToRead > BufferSize of
-        true ->
-            {ok, NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, BufferSize),
-            Transport:send(Socket, encode(Data, Encoding)),
-            stream_range(Socket, Transport, State, {From + BufferSize, To}, Encoding, BufferSize, NewFileHandle);
-        false ->
-            {ok, _NewFileHandle, Data} = onedata_file_api:read(FileHandle, From, ToRead),
-            Transport:send(Socket, encode(Data, Encoding))
+-spec get_attr(onedata_auth_api:auth(), onedata_file_api:file_path()) ->
+    onedata_file_api:file_attributes() | undefined.
+get_attr(Auth, Path) ->
+    case onedata_file_api:stat(Auth, {path, Path}) of
+        {ok, Attrs} -> Attrs;
+        {error, ?ENOENT} -> undefined
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns fun that reads given ranges of file and streams to given Socket
-%% @end
-%%--------------------------------------------------------------------
--spec stream(Stata ::#{}, Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined) -> any().
-stream(#{attributes := #file_attr{size = Size}} = State, undefined) ->
-    stream(State, [{0, Size -1}]);
-stream(#{path := Path, identity := Identity} = State, Ranges) ->
-    {ok, FileHandle} = onedata_file_api:open(Identity, {path, Path} ,read),
-    fun(Socket, Transport) ->
-        try
-            {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
-            lists:foreach(fun(Rng) ->
-            stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize, FileHandle) end, Ranges)
-        catch Type:Message ->
-            % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
-            ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
-        end
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets mimetype associated with file, returns default value if no mimetype
-%% could be found
-%% @end
-%%--------------------------------------------------------------------
--spec get_mimetype(binary()) -> binary().
-get_mimetype(Path) ->
-    case onedata_file_api:get_xattr({path, Path}, ?MIMETYPE_XATTR_KEY) of
-        {ok, <<"">>} -> ?MIMETYPE_DEFAULT_VALUE % TODO lfm_attrs:get_xattr is not yet implemented and returns <<"">>
-%%         {ok, Value} -> Value
-%%         {error, ?ENOATTR} -> ?MIMETYPE_DEFAULT_VALUE
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Encodes data according to given ecoding
-%%--------------------------------------------------------------------
--spec encode(Data :: binary(), Encoding :: binary()) -> binary().
-%% TODO uncomment when cdmi operations are implemented
-%% encode(Data, Encoding) when Encoding =:= <<"base64">> ->
-%%     base64:encode(Data).
-encode(Data, _) ->
-    Data.
-
-%%--------------------------------------------------------------------
-%% @doc Encodes data according to given ecoding
-%%--------------------------------------------------------------------
--spec get_ranges(Req :: req(), #{}) ->
-    {[{non_neg_integer(), non_neg_integer()}] | undefined, req()}.
-get_ranges(Req, State) ->
-    {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
-    case RawRange of
-        undefined -> {undefined, Req1};
-        _ ->
-            case parse_byte_range(State, RawRange) of
-                invalid ->throw(?invalid_range);
-                Ranges -> {Ranges, Req1}
-            end
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Gets size of a stream
-%%--------------------------------------------------------------------
--spec get_stream_size(Ranges :: [{non_neg_integer(), non_neg_integer()}] | undefined,
-    Size :: non_neg_integer()) -> non_neg_integer().
-get_stream_size(undefined, Size) -> Size;
-get_stream_size(Ranges, _Size) ->
-    lists:foldl(fun
-        ({From, To}, Acc) when To >= From -> max(0, Acc + To - From + 1);
-        ({_, _}, Acc)  -> Acc
-    end, 0, Ranges).

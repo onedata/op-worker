@@ -1,96 +1,81 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding list of sessions that are registered for
-%%%      attributes and file blocks changes. Key of the model shall match
-%%%      correspnding file_meta entry.
+%%% @doc Model for holding files' extended attributes.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_watcher).
--author("Rafal Slota").
+-module(xattr).
+-author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+%% API
+-export([get_by_name/2, delete_by_name/2, exists_by_name/2, save/2, list/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4, list/0]).
--export([insert_open_watcher/2, insert_attr_watcher/2]).
--export([get_open_watchers/1, get_attr_watchers/1]).
+    'after'/5, before/4]).
 
+-type name() :: binary().
+-type value() :: binary().
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Save given session as one that has opened given file.
-%% @end
-%%--------------------------------------------------------------------
--spec insert_open_watcher(Key :: datastore:key(), SessionId :: session:id()) -> ok | {error, term()}.
-insert_open_watcher(Key, SessionId) ->
-    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
-        fun() ->
-            case get(Key) of
-                {ok, #document{value = #file_watcher{open_sessions = OpenSess} = Value} = Doc} ->
-                    {ok, _} = save(Doc#document{value = Value#file_watcher{open_sessions = lists:umerge([SessionId], OpenSess)}}),
-                    ok;
-                {error, {not_found, _}} ->
-                    {ok, _} = create(#document{key = Key, value = #file_watcher{open_sessions = [SessionId]}}),
-                    ok
-            end
-        end).
+-export_type([name/0, value/0]).
 
+-define(XATTR_LINK_NAME(XattrName), <<"xattr_", XattrName/binary>>).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Save given session as one that is watching changes on file's attributes.
-%% @end
+%% @doc Gets extended attribute with given name
 %%--------------------------------------------------------------------
--spec insert_attr_watcher(Key :: datastore:key(), SessionId :: session:id()) -> ok | {error, term()}.
-insert_attr_watcher(Key, SessionId) ->
-    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
-        fun() ->
-            case get(Key) of
-                {ok, #document{value = #file_watcher{attr_sessions = OpenSess} = Value} = Doc} ->
-                    {ok, _} = save(Doc#document{value = Value#file_watcher{attr_sessions = lists:umerge([SessionId], OpenSess)}}),
-                    ok;
-                {error, {not_found, _}} ->
-                    {ok, _} = create(#document{key = Key, value = #file_watcher{attr_sessions = [SessionId]}}),
-                    ok
-            end
-        end).
-
+-spec get_by_name(file_meta:uuid(), xattr:name()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_by_name(FileUuid, XattrName) ->
+    xattr:get(encode_key(FileUuid, XattrName)).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Get all sessions that was previousely registered with insert_open_watcher/2
-%% @end
+%% @doc Deletes extended attribute with given name
 %%--------------------------------------------------------------------
--spec get_open_watchers(Key :: datastore:key()) -> [session:id()].
-get_open_watchers(Key) ->
-    case get(Key) of
-        {ok, #document{value = #file_watcher{open_sessions = OpenSess}}} ->
-            OpenSess;
-        {error, {not_found, _}} ->
-            []
-    end.
-
+-spec delete_by_name(file_meta:uuid(), xattr:name()) ->
+    ok | datastore:generic_error().
+delete_by_name(FileUuid, XattrName) ->
+    xattr:delete(encode_key(FileUuid, XattrName)).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Get all sessions that were previously registered with get_attr_watchers/2
-%% @end
+%% @doc Checks existence of extended attribute with given name
 %%--------------------------------------------------------------------
--spec get_attr_watchers(Key :: datastore:key()) -> [session:id()].
-get_attr_watchers(Key) ->
-    case get(Key) of
-        {ok, #document{value = #file_watcher{attr_sessions = OpenSess}}} ->
-            OpenSess;
-        {error, {not_found, _}} ->
-            []
-    end.
+-spec exists_by_name(file_meta:uuid(), xattr:name()) -> datastore:exists_return().
+exists_by_name(FileUuid, XattrName) ->
+    xattr:exists(encode_key(FileUuid, XattrName)).
+
+%%--------------------------------------------------------------------
+%% @doc Saves extended attribute
+%%--------------------------------------------------------------------
+-spec save(file_meta:uuid(), #xattr{}) ->
+    {ok, datastore:key()} | datastore:generic_error().
+save(FileUuid, Xattr = #xattr{name = XattrName}) ->
+    save(#document{key = encode_key(FileUuid, XattrName), value = Xattr}).
+
+%%--------------------------------------------------------------------
+%% @doc Lists names of all extended attributes associated with given file
+%%--------------------------------------------------------------------
+-spec list(file_meta:uuid()) -> {ok, [xattr:name()]} | datastore:generic_error().
+list(FileUuid) ->
+    datastore:foreach_link(?LINK_STORE_LEVEL, FileUuid, ?MODEL_NAME,
+        fun
+            (?XATTR_LINK_NAME(Name), _, Acc) ->
+                [Name | Acc];
+            (_, _, Acc) ->
+                Acc
+        end, []).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -103,11 +88,15 @@ get_attr_watchers(Key) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
-save(#document{key = Key} = Document) when is_binary(Key) ->
-    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
-        fun() ->
-            datastore:save(?STORE_LEVEL, Document)
-        end).
+save(Document) ->
+    case datastore:save(?STORE_LEVEL, Document) of
+        {ok, Key} ->
+            {Uuid, Name} = decode_key(Key),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
+            {ok, Key};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,13 +115,15 @@ update(Key, Diff) ->
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) ->
     {ok, datastore:key()} | datastore:create_error().
-create(#document{key = Key} = Document) when is_binary(Key) ->
-    datastore:run_synchronized(?MODEL_NAME, res_id(Key),
-        fun() ->
-            datastore:create(?STORE_LEVEL, Document)
-        end);
 create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+    case datastore:create(?STORE_LEVEL, Document) of
+        {ok, Key}->
+            {Uuid, Name} = decode_key(Key),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, {?XATTR_LINK_NAME(Name), {Key, ?MODEL_NAME}}),
+            {ok, Key};
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -150,7 +141,13 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
+    case datastore:delete(?STORE_LEVEL, ?MODULE, Key) of
+        ok ->
+            {Uuid, Name} = decode_key(Key),
+            ok = datastore:delete_links(?LINK_STORE_LEVEL, Uuid, ?MODEL_NAME, ?XATTR_LINK_NAME(Name));
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -168,7 +165,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(system, [{file_meta, create}, {file_meta, save}, {file_meta, delete}], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(xattr_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -179,12 +176,6 @@ model_init() ->
     Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(file_meta, create, _Level, _Context, {ok, Key}) ->
-    create(#document{key = Key, value = #file_watcher{}});
-'after'(file_meta, save, _Level, _Context, {ok, Key}) ->
-    create(#document{key = Key, value = #file_watcher{}});
-'after'(file_meta, delete, _Level, _Context, {ok, Key}) ->
-    delete(Key);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -200,15 +191,20 @@ model_init() ->
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
--spec res_id(datastore:key()) -> binary().
-res_id(Key) ->
-    <<"watcher_", Key/binary>>.
+%%--------------------------------------------------------------------
+%% @doc Decodes xattr key to file uuid and xattr name
+%%--------------------------------------------------------------------
+-spec decode_key(binary()) -> {file_meta:uuid(), xattr:name()}.
+decode_key(Key) ->
+    binary_to_term(Key).
+
+%%--------------------------------------------------------------------
+%% @doc Creates xattr key from file uuid and xattr name
+%%--------------------------------------------------------------------
+-spec encode_key(file_meta:uuid(), xattr:name()) -> binary().
+encode_key(FileUuid, XattrName) ->
+    term_to_binary({FileUuid, XattrName}).

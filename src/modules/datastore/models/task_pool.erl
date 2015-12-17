@@ -175,7 +175,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(test_bucket, [], ?LOCAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(task_pool_bucket, [], ?LOCAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

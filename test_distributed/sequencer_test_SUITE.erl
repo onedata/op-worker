@@ -140,17 +140,15 @@ init_per_testcase(Case, Config) when
     [{session_id, SessId}, {stream_id, StmId} | Config];
 
 init_per_testcase(Case, Config) when
+    Case =:= open_stream_should_return_stream_id;
+    Case =:= open_stream_should_return_different_stream_ids;
+    Case =:= close_stream_should_notify_sequencer_manager;
     Case =:= route_message_should_forward_message;
     Case =:= route_message_should_forward_messages_to_the_same_stream;
     Case =:= route_message_should_forward_messages_to_different_streams ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_router(Worker),
-    mock_communicator(Worker, fun(_, _) -> ok end),
-    {ok, SessId} = session_setup(Worker),
-    [{session_id, SessId} | Config];
-
-init_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    mock_communicator(Worker, fun(_, _, _) -> ok end),
     {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
 
@@ -164,17 +162,16 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate_and_unload(Worker, communicator);
 
 end_per_testcase(Case, Config) when
+    Case =:= open_stream_should_return_stream_id;
+    Case =:= open_stream_should_return_different_stream_ids;
+    Case =:= close_stream_should_notify_sequencer_manager;
     Case =:= route_message_should_forward_message;
     Case =:= route_message_should_forward_messages_to_the_same_stream;
     Case =:= route_message_should_forward_messages_to_different_streams ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    test_utils:mock_validate_and_unload(Worker, [communicator, router]);
-
-end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    session_teardown(Worker, ?config(session_id, Config)).
+    test_utils:mock_validate_and_unload(Worker, [communicator, router]).
 
 %%%===================================================================
 %%% Internal functions
@@ -202,7 +199,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user_id">>},
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self]
+        reuse_or_create_fuse_session, [SessId, Iden, Self]
     )),
     {ok, SessId}.
 
@@ -281,7 +278,7 @@ client_message(StmId, SeqNum) ->
 -spec mock_communicator(Worker :: node()) -> ok.
 mock_communicator(Worker) ->
     Self = self(),
-    mock_communicator(Worker, fun(Msg, _) -> Self ! Msg end).
+    mock_communicator(Worker, fun(Msg, _, _) -> Self ! Msg, ok end).
 
 %%--------------------------------------------------------------------
 %% @private

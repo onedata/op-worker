@@ -13,7 +13,7 @@
 -define(DATASTORE_MODELS_HRL, 1).
 
 -include("modules/events/subscriptions.hrl").
--include("proto/common/credentials.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Wrapper for all models' records
 -record(document, {
@@ -37,7 +37,7 @@
     task_pool,
     storage,
     file_location,
-    file_watcher
+    xattr
 ]).
 
 %% List of all global caches
@@ -46,7 +46,7 @@
     file_meta,
     storage,
     file_location,
-    file_watcher
+    xattr
 ]).
 
 %% List of all local caches
@@ -55,21 +55,21 @@
 
 %% Model that controls utilization of cache
 -record(cache_controller, {
-    timestamp = {0, 0, 0} :: tuple(),
+    timestamp = {0, 0, 0} :: erlang:timestamp(),
     action = non :: atom(),
     last_user = non :: string() | non,
-    last_action_time = {0, 0, 0} :: tuple(),
+    last_action_time = {0, 0, 0} :: erlang:timestamp(),
     deleted_links = [] :: list()
 }).
 
-%% sample model with example fields
+%% Description of task to be done
 -record(task_pool, {
     task :: task_manager:task(),
     owner :: pid(),
     node :: node()
 }).
 
-%% sample model with example fields
+%% Sample model with example fields
 -record(some_record, {
     field1 :: term(),
     field2 :: term(),
@@ -81,17 +81,19 @@
     user_id :: onedata_user:id()
 }).
 
-%% session:
-%% identity - user identity
+%% User session
 -record(session, {
-    identity :: #identity{},
-    type = fuse :: fuse | gui | dummy,
-    auth :: #auth{},
-    node = node() :: node(),
-    session_sup = undefined :: pid() | undefined,
-    event_manager = undefined :: pid() | undefined,
-    sequencer_manager = undefined :: pid() | undefined,
-    communicator = undefined :: pid() | undefined
+    status :: session:status(),
+    accessed :: erlang:timestamp(),
+    type :: session:type(),
+    identity :: session:identity(),
+    auth :: session:auth(),
+    node :: node(),
+    supervisor :: pid(),
+    watcher :: pid(),
+    event_manager :: pid(),
+    sequencer_manager :: pid(),
+    connections = [] :: [pid()]
 }).
 
 %% Local, cached version of globalregistry user
@@ -110,7 +112,7 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
-    version = 1,    %% Snaphot version
+    version = 1, %% Snaphot version
     is_scope = false :: boolean()
 }).
 
@@ -132,15 +134,11 @@
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: oneprovider:id(),
+    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     size = 0 :: non_neg_integer() | undefined
 }).
 
-%% Model for tracking open files and watched attributes
--record(file_watcher, {
-    open_sessions = [] :: [session:id()], %% Sessions that opened the file
-    attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
-}).
 -endif.

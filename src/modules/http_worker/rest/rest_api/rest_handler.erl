@@ -91,27 +91,30 @@ delete_resource(Req, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_json_data(req(), #{}) -> {term(), req(), #{}}.
-handle_json_data(Req, State = #{identity := ?GLOBALREGISTRY_IDENTITY}) ->
-    case cowboy_req:path_info(Req) of
-        {[<<"auth">>], _}  ->
-            {ok, Body, Req2} = cowboy_req:body(Req),
-            Json = json_utils:decode(Body),
-            User = proplists:get_value(<<"user">>, Json),
-            Cert = proplists:get_value(<<"cert">>, Json),
+handle_json_data(Req, State = #{auth := Auth}) ->
+    case Auth =:= session:get_rest_session_id(?GLOBALREGISTRY_IDENTITY) of
+        true ->
+            case cowboy_req:path_info(Req) of
+                {[<<"auth">>], _}  ->
+                    {ok, Body, Req2} = cowboy_req:body(Req),
+                    Json = json_utils:decode(Body),
+                    User = proplists:get_value(<<"user">>, Json),
+                    Cert = proplists:get_value(<<"cert">>, Json),
 
-            UserId = proplists:get_value(<<"userId">>, User),
-            UserName = proplists:get_value(<<"name">>, User),
+                    UserId = proplists:get_value(<<"userId">>, User),
+                    UserName = proplists:get_value(<<"name">>, User),
 
-            case lists:any(fun(X) -> X =:= undefined end, [UserId, UserName, Cert]) of
-                true -> {false, Req2, State};
-                false ->
-                    {ok, _} = onedata_user:save(#document{key = UserId, value = #onedata_user{name = UserName}}),
-                    [{'Certificate', DerCert, _}] = public_key:pem_decode(Cert),
-                    OtpCert = public_key:pkix_decode_cert(DerCert, otp),
-                    {ok, _} = identity:save(#document{key = OtpCert, value = #identity{user_id = UserId}}),
-                    {true, Req2, State}
-            end
-    end;
-handle_json_data(Req, State) ->
-    {ok, Req2} = cowboy_req:reply(401, [], <<"">>, Req),
-    {halt, Req2, State}.
+                    case lists:any(fun(X) -> X =:= undefined end, [UserId, UserName, Cert]) of
+                        true -> {false, Req2, State};
+                        false ->
+                            {ok, _} = onedata_user:save(#document{key = UserId, value = #onedata_user{name = UserName}}),
+                            [{'Certificate', DerCert, _}] = public_key:pem_decode(Cert),
+                            OtpCert = public_key:pkix_decode_cert(DerCert, otp),
+                            {ok, _} = identity:save(#document{key = OtpCert, value = #identity{user_id = UserId}}),
+                            {true, Req2, State}
+                    end
+            end;
+        false ->
+            {ok, Req2} = cowboy_req:reply(401, [], <<"">>, Req),
+            {halt, Req2, State}
+    end.

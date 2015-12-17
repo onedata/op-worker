@@ -16,20 +16,24 @@
 
 -include("modules/datastore/datastore_model.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([get_session_supervisor_and_node/1, get_event_manager/1,
-    get_event_managers/0, get_sequencer_manager/1, get_communicator/1, get_auth/1]).
+-export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
+    get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
+    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1]).
 
--type id() :: binary() | dummy_session_id().
--type dummy_session_id() :: #identity{}.
+-type id() :: binary().
+-type auth() :: #auth{}.
+-type type() :: fuse | rest | gui.
+-type status() :: active | inactive | phantom.
 -type identity() :: #identity{}.
 
--export_type([id/0, identity/0]).
+-export_type([id/0, auth/0, type/0, status/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -41,8 +45,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
-    datastore:save(?STORE_LEVEL, Document).
+save(#document{value = Sess} = Document) ->
+    Timestamp = os:timestamp(),
+    datastore:save(?STORE_LEVEL, Document#document{value = Sess#session{
+        accessed = Timestamp
+    }}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,8 +58,16 @@ save(Document) ->
 %%--------------------------------------------------------------------
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
-update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
+update(Key, Diff) when is_map(Diff) ->
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff#{accessed => os:timestamp()});
+update(Key, Diff) when is_function(Diff) ->
+    NewDiff = fun(Sess) ->
+        case Diff(Sess) of
+            {ok, NewSess} -> {ok, NewSess#session{accessed = os:timestamp()}};
+            {error, Reason} -> {error, Reason}
+        end
+    end,
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, NewDiff).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,20 +75,41 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
-    datastore:create(?STORE_LEVEL, Document).
+create(#document{value = Sess} = Document) ->
+    Timestamp = os:timestamp(),
+    datastore:create(?STORE_LEVEL, Document#document{value = Sess#session{
+        accessed = Timestamp
+    }}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback get/1.
+%% Sets access time to current time for user session and returns old value.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(#identity{} = Identity) ->
-    {ok, #document{key = Identity, value = #session{type = dummy, identity = Identity}}};
 get(?ROOT_SESS_ID) ->
-    {ok, #document{key = ?ROOT_SESS_ID, value = #session{identity = #identity{user_id = ?ROOT_USER_ID}}}};
+    {ok, #document{key = ?ROOT_SESS_ID, value = #session{
+        identity = #identity{user_id = ?ROOT_USER_ID}
+    }}};
 get(Key) ->
+    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
+        {ok, Doc} ->
+            session:update(Key, #{}),
+            {ok, Doc};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link model_behaviour} callback get/1.
+%% Does not modify access time.
+%% @end
+%%--------------------------------------------------------------------
+-spec const_get(datastore:key()) ->
+    {ok, datastore:document()} | datastore:get_error().
+const_get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -101,7 +137,13 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
+    case ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)) of
+        true ->
+            update(Key, #{}),
+            true;
+        false ->
+            false
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -146,9 +188,9 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, {SessSup :: pid(), Node :: node()}} | {error, Reason :: term()}.
 get_session_supervisor_and_node(SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{session_sup = undefined}}} ->
+        {ok, #document{value = #session{supervisor = undefined}}} ->
             {error, {not_found, missing}};
-        {ok, #document{value = #session{session_sup = SessSup, node = Node}}} ->
+        {ok, #document{value = #session{supervisor = SessSup, node = Node}}} ->
             {ok, {SessSup, Node}};
         {error, Reason} ->
             {error, Reason}
@@ -210,19 +252,53 @@ get_sequencer_manager(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns communicator associated with session.
+%% Returns random connection associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_communicator(SessId :: id()) ->
+-spec get_random_connection(SessId :: session:id()) ->
+    {ok, Con :: pid()} | {error, Reason :: term()}.
+get_random_connection(SessId) ->
+    case get_connections(SessId) of
+        {ok, []} -> {error, empty_connection_pool};
+        {ok, Cons} -> {ok, utils:random_element(Cons)};
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns connections associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_connections(SessId :: id()) ->
     {ok, Comm :: pid()} | {error, Reason :: term()}.
-get_communicator(SessId) ->
+get_connections(SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{communicator = undefined}}} ->
-            {error, {not_found, missing}};
-        {ok, #document{value = #session{communicator = Comm}}} ->
-            {ok, Comm};
+        {ok, #document{value = #session{connections = Cons}}} ->
+            {ok, Cons};
         {error, Reason} ->
             {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes connection from session and if it was the last connection schedules
+%% session removal.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_connection(SessId :: session:id(), Con :: pid()) ->
+    ok | datastore:update_error().
+remove_connection(SessId, Con) ->
+    Diff = fun(#session{watcher = Watcher, connections = Cons} = Sess) ->
+        NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
+        case NewCons of
+            [] -> gen_server:cast(Watcher, schedule_session_status_checkup);
+            _ -> ok
+        end,
+        {ok, Sess#session{connections = NewCons}}
+    end,
+    case session:update(SessId, Diff) of
+        {ok, SessId} -> ok;
+        Other -> Other
     end.
 
 %%--------------------------------------------------------------------
@@ -230,7 +306,8 @@ get_communicator(SessId) ->
 %% Returns #auth{} record associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(SessId :: id()) -> {ok, Auth :: #auth{}} |{error, Reason :: term()}.
+-spec get_auth(SessId :: id()) ->
+    {ok, Auth :: #auth{}} | {error, Reason :: term()}.
 get_auth(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} ->
@@ -239,5 +316,16 @@ get_auth(SessId) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns rest session id for given identity.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_rest_session_id(session:identity()) -> id().
+get_rest_session_id(#identity{user_id = Uid}) ->
+    <<Uid/binary, "_rest_session">>.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 

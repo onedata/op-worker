@@ -75,8 +75,8 @@
     uuid :: file_meta:uuid()
 }).
 
-
 -record(get_helper_params, {
+    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     force_cluster_proxy = false :: boolean()
 }).
@@ -86,21 +86,39 @@
     size :: non_neg_integer()
 }).
 
-
 -record(close, {
     uuid :: file_meta:uuid()
 }).
-
 
 -record(helper_arg, {
     key :: binary(),
     value :: binary()
 }).
 
+-record(get_xattr, {
+    uuid :: file_meta:uuid(),
+    name :: xattr:name()
+}).
+
+-record(set_xattr, {
+    uuid :: file_meta:uuid(),
+    xattr :: #xattr{}
+}).
+
+-record(remove_xattr, {
+    uuid :: file_meta:uuid(),
+    name :: xattr:name()
+}).
+
+-record(list_xattr, {
+    uuid :: file_meta:uuid()
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
-                        #get_file_location{}.
+                        #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
+                        #list_xattr{}.
 
 -record(file_children, {
     child_links :: [#child_link{}]
@@ -111,7 +129,12 @@
     helper_args :: [#helper_arg{}]
 }).
 
--type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} | #file_location{}.
+-record(xattr_list, {
+    names :: [xattr:name()]
+}).
+
+-type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
+    #file_location{} | #xattr{} | #xattr_list{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

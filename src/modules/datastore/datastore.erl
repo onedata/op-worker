@@ -26,7 +26,8 @@
 -type ext_key() :: key() | term().
 -type document() :: #document{}.
 -type value() :: term().
--type document_diff() :: #{term() => term()} | fun((OldValue :: value()) -> NewValue :: value()).
+-type document_diff() :: #{term() => term()} | fun((OldValue :: value()) ->
+    {ok, NewValue :: value()} | {error, Reason :: term()}).
 -type bucket() :: atom() | binary().
 
 -export_type([uuid/0, key/0, ext_key/0, value/0, document/0, document_diff/0, bucket/0]).
