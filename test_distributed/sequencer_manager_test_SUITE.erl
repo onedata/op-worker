@@ -30,7 +30,6 @@
 %% tests
 -export([
     sequencer_manager_should_update_session_on_init/1,
-    sequencer_manager_should_send_message_stream_reset_on_init/1,
     sequencer_manager_should_update_session_on_terminate/1,
     sequencer_manager_should_register_sequencer_in_stream/1,
     sequencer_manager_should_unregister_sequencer_in_stream/1,
@@ -48,7 +47,6 @@
 -performance({test_cases, []}).
 all() -> [
     sequencer_manager_should_update_session_on_init,
-    sequencer_manager_should_send_message_stream_reset_on_init,
     sequencer_manager_should_update_session_on_terminate,
     sequencer_manager_should_register_sequencer_in_stream,
     sequencer_manager_should_unregister_sequencer_in_stream,
@@ -73,9 +71,6 @@ sequencer_manager_should_update_session_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertMatch({ok, _}, rpc:call(Worker, session, get_sequencer_manager,
         [?config(session_id, Config)])).
-
-sequencer_manager_should_send_message_stream_reset_on_init(_) ->
-    ?assertReceivedMatch(#message_stream_reset{}, ?TIMEOUT).
 
 sequencer_manager_should_update_session_on_terminate(Config) ->
     stop_sequencer_manager(?config(sequencer_manager, Config)),

@@ -199,8 +199,7 @@ handle_cast(Request, State) ->
 handle_info({'EXIT', SeqManSup, shutdown}, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {stop, normal, State};
 
-handle_info(timeout, #state{sequencer_manager_sup = SeqManSup, session_id = SessId} = State) ->
-    send_message_stream_reset(SessId),
+handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {ok, SeqInStmSup} = sequencer_manager_sup:get_sequencer_stream_sup(
         SeqManSup, sequencer_in_stream_sup
     ),
@@ -249,16 +248,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends a message stream reset request for all streams to the remote client.
-%% @end
-%%--------------------------------------------------------------------
--spec send_message_stream_reset(SessId :: session:id()) -> ok.
-send_message_stream_reset(SessId) ->
-    ensure_sent(#message_stream_reset{}, SessId).
 
 %%--------------------------------------------------------------------
 %% @private

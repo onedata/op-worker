@@ -18,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit/1, emit/2, subscribe/1, subscribe/2, unsubscribe/1, unsubscribe/2]).
+-export([emit/1, emit/2, flush/2, flush/3, subscribe/1, subscribe/2,
+    unsubscribe/1, unsubscribe/2]).
 
 -export_type([key/0, object/0, update_object/0, counter/0, subscription/0, manager_ref/0]).
 
@@ -28,10 +29,10 @@
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
 -type manager_ref() :: pid() | session:id() | [pid() | session:id()] |
-                       % reference all event managers except one provided
-                       {exclude, pid() | session:id()} |
-                       % reference all event managers except those provided in list
-                       {exclude, [pid() | session:id()]}.
+% reference all event managers except one provided
+{exclude, pid() | session:id()} |
+% reference all event managers except those provided in list
+{exclude, [pid() | session:id()]}.
 
 %%%===================================================================
 %%% API
@@ -65,6 +66,31 @@ emit(#event{} = Evt, Ref) ->
 
 emit(EvtObject, Ref) ->
     emit(#event{object = EvtObject}, Ref).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes all event streams associated with a subscription. Injects PID of a process,
+%% which should be notified when operation completes, to the event handler context.
+%% IMPORTANT! Event handler is responsible for notifying the awaiting process.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush(SubId :: subscription:id(), Notify :: pid()) ->
+    ok | {error, Reason :: term()}.
+flush(SubId, Notify) ->
+    send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers()).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes event streams associated with a subscription for given session. Injects
+%% PID of a process, which should be notified when operation completes, to the
+%% event handler context.
+%% IMPORTANT! Event handler is responsible for notifying the awaiting process.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush(SubId :: subscription:id(), Notify :: pid(), Ref :: event:manager_ref()) ->
+    ok | {error, Reason :: term()}.
+flush(SubId, Notify, Ref) ->
+    send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers(as_list(Ref))).
 
 %%--------------------------------------------------------------------
 %% @doc
