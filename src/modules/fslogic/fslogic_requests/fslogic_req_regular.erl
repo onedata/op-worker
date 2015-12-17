@@ -14,6 +14,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/4]).
@@ -82,12 +83,10 @@ get_helper_params(_Ctx, _SpaceId, StorageId, false = _ForceCL) ->
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), OpenMode :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
--check_permissions([{{arg, 3}, 2}, {validate_ancestors_exec, 2}]).
+-check_permissions([{3, 2}, {validate_ancestors_exec, 2}]).
 get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, OpenFlags) ->
     ?debug("get_file_location for ~p ~p", [File, OpenFlags]),
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
-
-    ok = check_permissions:validate_posix_access(OpenFlags, FileDoc, fslogic_context:get_user_id(CTX)), %todo get rid of it
 
     ok = file_watcher:insert_open_watcher(UUID, SessId),
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),

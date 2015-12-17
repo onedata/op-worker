@@ -14,6 +14,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([mkdir/4, read_dir/4, link/3, read_link/2]).
