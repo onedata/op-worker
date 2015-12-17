@@ -13,6 +13,7 @@
 -module(page_validate_login).
 -compile(export_all).
 
+-include("proto/common/credentials.hrl").
 -include("modules/http_worker/http_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 

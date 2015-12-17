@@ -320,5 +320,5 @@ mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
-        (Msg, _) -> Self ! Msg
+        (Msg, _, _) -> Self ! Msg, ok
     end).

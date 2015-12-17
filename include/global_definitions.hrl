@@ -34,6 +34,13 @@
 %% works as a dispatcher.
 -define(DISPATCHER_NAME, request_dispatcher).
 
+%% Local name (name and node is used to identify it) of session manager worker.
+-define(SESSION_MANAGER_WORKER, session_manager_worker).
+
+%% Local name (name and node is used to identify it) of session manager worker
+%% supervisor.
+-define(SESSION_MANAGER_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?SESSION_MANAGER_WORKER)).
+
 %%%===================================================================
 %%% Global identities
 %%%===================================================================

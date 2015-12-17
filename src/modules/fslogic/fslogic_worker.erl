@@ -61,7 +61,6 @@ init(_Args) ->
         },
         event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
             metadata = 0,
-            emission_time = 500,
             emission_rule = fun(_) -> true end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, InitResult) ->
@@ -220,24 +219,20 @@ handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
-handle_events([], _) ->
-    [];
-handle_events([Event | T], InitResult) ->
-    handle_events(Event, InitResult),
-    handle_events(T, InitResult);
-handle_events(#event{object = #write_event{blocks = Blocks, file_uuid = FileUUID,
-    file_size = FileSize}} = T, {_, _, SessId}) ->
-    ?debug("fslogic handle_events: ~p", [T]),
-
-    case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
-        {ok, size_changed} ->
-            fslogic_notify:attributes({uuid, FileUUID}, [SessId]),
-            fslogic_notify:blocks({uuid, FileUUID}, Blocks, [SessId]);
-        {ok, size_not_changed} ->
-            fslogic_notify:blocks({uuid, FileUUID}, Blocks, [SessId]);
-        {error, Reason} ->
-            {error, Reason}
-    end.
+handle_events(Evts, {_, _, SessId}) ->
+    lists:foreach(fun(#event{object = #write_event{
+        blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
+    }}) ->
+        case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
+            {ok, size_changed} ->
+                fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
+                fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
+            {ok, size_not_changed} ->
+                fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
+            {error, Reason} ->
+                ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason])
+        end
+    end, Evts).
 
 handle_proxyio_request(SessionId, #proxyio_request{
     space_id = SPID, storage_id = SID, file_id = FID,

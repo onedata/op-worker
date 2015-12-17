@@ -14,6 +14,7 @@
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
@@ -35,23 +36,47 @@
 -spec handle_handshake(#client_message{}, #'OTPCertificate'{}) ->
     {ok, #server_message{}} | no_return().
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = IdToReuse, auth = Auth = #auth{}}}, _) when is_binary(IdToReuse) ->
+    session_id = SessId, auth = Auth = #auth{}}}, _) when is_binary(SessId) ->
     {ok, Iden} = authenticate_using_token(Auth),
-    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Iden, self()),
-    ok = session_manager:update_session_auth(IdToReuse, Auth),
-    {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}};
+    case session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()) of
+        {ok, created} ->
+            handle_initial_handshake(SessId);
+        {ok, reused} ->
+            {ok, #server_message{message_body = #handshake_response{session_id = SessId}}}
+    end;
 
 handle_handshake(#client_message{message_body = #handshake_request{
-    session_id = IdToReuse}}, OtpCert) when is_binary(IdToReuse) ->
+    session_id = SessId}}, OtpCert) when is_binary(SessId) ->
     {ok, Iden} = authenticate_using_certificate(OtpCert),
-    {ok, _} = session_manager:reuse_or_create_session(IdToReuse, Iden, self()),
-    {ok, #server_message{message_body = #handshake_response{session_id = IdToReuse}}}.
+    case session_manager:reuse_or_create_fuse_session(SessId, Iden, self()) of
+        {ok, created} ->
+            handle_initial_handshake(SessId);
+        {ok, reused} ->
+            {ok, #server_message{message_body = #handshake_response{session_id = SessId}}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles initial handshake by starting event streams.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_initial_handshake(SessId :: session:id()) -> {ok, #server_message{}}.
+handle_initial_handshake(SessId) ->
+    {ok, Docs} = subscription:list(),
+    Subs = lists:filtermap(fun
+        (#document{value = #subscription{object = undefined}}) -> false;
+        (#document{value = #subscription{} = Sub}) -> {true, Sub}
+    end, Docs),
+    {ok, #server_message{message_body = #handshake_response{
+        session_id = SessId, subscriptions = Subs
+    }}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Authenticate client using given token, returns client identity.
 %% @end
@@ -62,6 +87,7 @@ authenticate_using_token(Auth) ->
     {ok, Iden}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Authenticate client using given certificate. Returns client identity.
 %% @end

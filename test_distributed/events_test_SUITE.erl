@@ -16,6 +16,8 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -152,6 +154,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    communicator_mock_setup(Worker),
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         session_setup(Worker, SessId),
@@ -162,6 +165,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    communicator_mock_setup(Worker),
     {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
 
@@ -186,11 +190,13 @@ end_per_testcase(Case, Config) when
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
-    end, ?config(session_ids, Config));
+    end, ?config(session_ids, Config)),
+    test_utils:mock_validate_and_unload(Worker, [communicator]);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    session_teardown(Worker, ?config(session_id, Config)).
+    session_teardown(Worker, ?config(session_id, Config)),
+    test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================
 %%% Internal functions
@@ -218,7 +224,7 @@ session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user_id">>},
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self]
+        reuse_or_create_fuse_session, [SessId, Iden, Self]
     )),
     {ok, SessId}.
 
@@ -231,6 +237,19 @@ session_setup(Worker, SessId) ->
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
     rpc:call(Worker, session_manager, remove_session, [SessId]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks communicator module, so that it ignores all messages.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
+communicator_mock_setup(Workers) ->
+    test_utils:mock_new(Workers, communicator),
+    test_utils:mock_expect(Workers, communicator, send,
+        fun(_, _) -> ok end
+    ).
 
 %%--------------------------------------------------------------------
 %% @private

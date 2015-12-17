@@ -13,7 +13,6 @@
 -define(DATASTORE_SPECIFIC_MODELS_HRL, 1).
 
 -include("modules/events/subscriptions.hrl").
--include("proto/common/credentials.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Identity containing user_id
@@ -21,17 +20,19 @@
     user_id :: onedata_user:id()
 }).
 
-%% session:
-%% identity - user identity
+%% User session
 -record(session, {
-    identity :: #identity{},
-    type = fuse :: fuse | gui | rest,
-    auth :: #auth{},
-    node = node() :: node(),
-    session_sup = undefined :: pid() | undefined,
-    event_manager = undefined :: pid() | undefined,
-    sequencer_manager = undefined :: pid() | undefined,
-    communicator = undefined :: pid() | undefined
+    status :: session:status(),
+    accessed :: erlang:timestamp(),
+    type :: session:type(),
+    identity :: session:identity(),
+    auth :: session:auth(),
+    node :: node(),
+    supervisor :: pid(),
+    watcher :: pid(),
+    event_manager :: pid(),
+    sequencer_manager :: pid(),
+    connections = [] :: [pid()]
 }).
 
 %% Local, cached version of globalregistry user
@@ -50,7 +51,7 @@
     ctime :: file_meta:time(),
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
-    version = 1,    %% Snaphot version
+    version = 1, %% Snaphot version
     is_scope = false :: boolean()
 }).
 
@@ -77,12 +78,6 @@
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     size = 0 :: non_neg_integer() | undefined
-}).
-
-%% Model for tracking open files and watched attributes
--record(file_watcher, {
-    open_sessions = [] :: [session:id()], %% Sessions that opened the file
-    attr_sessions = [] :: [session:id()]  %% Sessions that are watching attributes changes for the file
 }).
 
 -endif.

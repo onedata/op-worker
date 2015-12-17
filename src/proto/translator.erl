@@ -56,10 +56,10 @@ translate_from_protobuf(#'WriteEvent'{} = Record) ->
         file_size = Record#'WriteEvent'.file_size,
         blocks = [translate_from_protobuf(B) || B <- Record#'WriteEvent'.blocks]
     };
-translate_from_protobuf(#'Subscription'{} = Record) ->
+translate_from_protobuf(#'Subscription'{id = Id, object = {_, Record}}) ->
     #subscription{
-        id = Record#'Subscription'.id,
-        object = translate_from_protobuf(Record#'Subscription'.object)
+        id = Id,
+        object = translate_from_protobuf(Record)
     };
 translate_from_protobuf(#'FileAttrSubscription'{} = Record) ->
     #file_attr_subscription{
@@ -182,8 +182,14 @@ translate_to_protobuf(#write_subscription{} = Sub) ->
     }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
-translate_to_protobuf(#handshake_response{session_id = Id}) ->
-    {handshake_response, #'HandshakeResponse'{session_id = Id}};
+translate_to_protobuf(#handshake_response{session_id = Id, subscriptions = Subs}) ->
+    {handshake_response, #'HandshakeResponse'{
+        session_id = Id,
+        subscriptions = lists:map(fun(Sub) ->
+            {_, Record} = translate_to_protobuf(Sub),
+            Record
+        end, Subs)
+    }};
 translate_to_protobuf(#message_stream{stream_id = StmId, sequence_number = SeqNum}) ->
     #'MessageStream'{stream_id = StmId, sequence_number = SeqNum};
 translate_to_protobuf(#end_of_message_stream{}) ->
