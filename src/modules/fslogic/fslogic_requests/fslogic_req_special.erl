@@ -71,9 +71,10 @@ read_dir(CTX, File, Offset, Size) ->
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
-    SpacesKey = fslogic_path:spaces_uuid(UserId),
+    SpacesKey = fslogic_uuid:spaces_uuid(UserId),
+    DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
     case Key of
-        UserId ->
+        DefaultSpaceKey ->
             {ok, DefaultSpace} = fslogic_spaces:get_default_space(CTX),
             {ok, DefaultSpaceChildLinks} =
                 case Offset of
@@ -90,13 +91,13 @@ read_dir(CTX, File, Offset, Size) ->
         SpacesKey ->
             {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
                 onedata_user:get(UserId),
-            SpaceRes = [file_meta:get(SpacesId) || SpacesId <- SpacesIds],
+            SpaceRes = [file_meta:get_space_dir(SpaceId) || SpaceId <- SpacesIds],
 
             Children =
                 case Offset < length(SpacesIds) of
                     true ->
-                        SpaceLinks = [#child_link{uuid = SpaceId, name = SpaceName} ||
-                            {ok, #document{key = SpaceId, value = #file_meta{name = SpaceName}}} <- SpaceRes],
+                        SpaceLinks = [#child_link{uuid = SpaceDirUuid, name = SpaceName} ||
+                            {ok, #document{key = SpaceDirUuid, value = #file_meta{name = SpaceName}}} <- SpaceRes],
 
                         lists:sublist(SpaceLinks, Offset + 1, Size);
                     false ->

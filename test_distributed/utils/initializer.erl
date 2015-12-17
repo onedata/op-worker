@@ -175,7 +175,7 @@ teardown_sesion(Worker, Config) ->
             ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
             ?assertEqual(ok,
                 rpc:call(Worker, file_meta, delete,
-                    [fslogic_path:spaces_uuid(UserId)]
+                    [fslogic_uuid:spaces_uuid(UserId)]
                 )),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->

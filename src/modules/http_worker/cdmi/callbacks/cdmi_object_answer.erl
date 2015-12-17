@@ -32,8 +32,9 @@ prepare([], _State) ->
     [];
 prepare([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-object">>} | prepare(Tail, State)];
-%% prepare([<<"objectID">> | Tail], #{attributes := #file_attr{uuid = Uuid}} = State) -> todo introduce objectid
-%%     [{<<"objectID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare(Tail, State)];
+prepare([<<"objectID">> | Tail], #{attributes := #file_attr{uuid = Uuid}} = State) ->
+    {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
+    [{<<"objectID">>, Id} | prepare(Tail, State)];
 prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
     [{<<"objectName">>, filename:basename(Path)} | prepare(Tail, State)];
 prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
@@ -41,12 +42,13 @@ prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
 prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
     ParentURI = str_utils:ensure_ends_with_slash(filename:dirname(Path)),
     [{<<"parentURI">>, ParentURI} | prepare(Tail, State)];
-%% prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) -> todo introduce objectid
-%%     [{<<"parentID">>, <<>>} | prepare(Tail, State)];
-%% prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
-%%     {ok, #file_attr{uuid = Uuid}} =
-%%         onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
-%%     [{<<"parentID">>, cdmi_id:uuid_to_objectid(Uuid)} | prepare(Tail, State)];
+prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
+    [{<<"parentID">>, <<>>} | prepare(Tail, State)];
+prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
+    {ok, #file_attr{uuid = Uuid}} =
+        onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
+    {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
+    [{<<"parentID">>, Id} | prepare(Tail, State)];
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, ?dataobject_capability_path} | prepare(Tail, State)];
 prepare([<<"completionStatus">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
@@ -71,7 +73,7 @@ prepare([<<"valuerange">> | Tail], #{options := Opts, attributes := Attrs} = Sta
         {<<"value">>, From, To} ->
             [{<<"valuerange">>, iolist_to_binary([integer_to_binary(From), <<"-">>, integer_to_binary(To)])} | prepare(Tail, State)];
         _ ->
-            [{<<"valuerange">>, iolist_to_binary([<<"0-">>, integer_to_binary(Attrs#file_attr.size - 1)])} | prepare(Tail, State)]
+            [{<<"valuerange">>, iolist_to_binary([<<"0-">>, integer_to_binary(Attrs#file_attr.size - 1)])} | prepare(Tail, State)] %todo fix 0--1 when file is empty
     end;
 prepare([_Other | Tail], State) ->
     prepare(Tail, State).

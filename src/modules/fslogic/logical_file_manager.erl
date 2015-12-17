@@ -60,7 +60,7 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2]).
+-export([exists/1, mv/2, cp/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
@@ -169,6 +169,16 @@ mv(FileKeyFrom, PathTo) ->
 cp(PathFrom, PathTo) ->
     lfm_files:cp(PathFrom, PathTo).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns full path of file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_path(SessId :: session:id(), Uuid :: file_meta:uuid()) ->
+    {ok, file_meta:path()}.
+get_file_path(SessId, Uuid) ->
+    CTX = fslogic_context:new(SessId),
+    {ok, fslogic_uuid:uuid_to_path(CTX, Uuid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -511,5 +521,5 @@ ensure_uuid(_CTX, {uuid, UUID}) ->
 ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
-    {uuid, fslogic_path:to_uuid(CTX, Path)}.
+    {uuid, fslogic_uuid:path_to_uuid(CTX, Path)}.
 

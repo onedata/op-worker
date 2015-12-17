@@ -22,6 +22,7 @@
 
 %% Common names
 -define(SPACES_BASE_DIR_NAME, <<"spaces">>).
+-define(SPACES_BASE_DIR_UUID, base64:encode(?SPACES_BASE_DIR_NAME)).
 -define(DIRECTORY_SEPARATOR, "/").
 
 %% Context definition

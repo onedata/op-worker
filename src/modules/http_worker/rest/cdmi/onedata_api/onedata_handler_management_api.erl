@@ -5,37 +5,26 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc
-%%% This mudule provides information about cdmi protocol plugin and it's used
-%%% by onedata during plugin registration process.
+%%% @doc Public api for management of request flow, available in
+%%% protocol plugins.
 %%% @end
 %%%--------------------------------------------------------------------
--module(cdmi_protocol_plugin).
--behaviour(protocol_plugin_behaviour).
+-module(onedata_handler_management_api).
 -author("Tomasz Lichon").
 
 %% API
--export([routes/0]).
+-export([set_handler/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns routes to cdmi protocol.
-%% @end
+%% @doc Change handler of actual request
 %%--------------------------------------------------------------------
--spec routes() -> [{Route :: string(), protocol_plugin_behaviour:handler()}].
-routes() ->
-    [
-        {"/cdmi/cdmi_capabilities/", #{handler => cdmi_capabilities_handler}},
-        {"/cdmi/cdmi_capabilities/container/", #{handler => cdmi_container_capabilities_handler}},
-        {"/cdmi/cdmi_capabilities/dataobject/", #{handler => cdmi_dataobject_capabilities_handler}},
-        {"/cdmi/cdmi_objectid/:id/[...]", #{handler => cdmi_objectid_handler}},
-        {"/cdmi/[...]", fun cdmi_handler_selector:choose_object_or_container_handler/1}
-    ].
-
+-spec set_handler(module()) -> ok.
+set_handler(Handler) ->
+    request_context:set_handler(Handler).
 
 %%%===================================================================
 %%% Internal functions

@@ -324,7 +324,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             case Range of
             {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
-                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+                    {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, From, RawValue),
                     cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 undefined when is_binary(Value) ->

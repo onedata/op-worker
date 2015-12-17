@@ -90,10 +90,8 @@ prepare_capability_ans([<<"objectType">> | Tail]) ->
       {<<"objectType">>, <<"application/cdmi-capability">>}
       | prepare_capability_ans(Tail)
   ];
-%% todo uncomment when ID'll be used
 prepare_capability_ans([<<"objectID">> | Tail]) ->
-  prepare_capability_ans(Tail);
-%%   [{<<"objectID">>, ?dataobject_capability_id} | prepare_capability_ans(Tail)];
+  [{<<"objectID">>, ?dataobject_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
   [
     {<<"objectName">>, 
@@ -105,10 +103,8 @@ prepare_capability_ans([<<"parentURI">> | Tail]) ->
     {<<"parentURI">>, ?root_capability_path} 
     | prepare_capability_ans(Tail)
   ];
-%% todo uncomment when ID'll be used
 prepare_capability_ans([<<"parentID">> | Tail]) ->
-  prepare_capability_ans(Tail);
-%%   [{<<"parentID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
+  [{<<"parentID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"capabilities">> | Tail]) ->
   [{<<"capabilities">>, ?dataobject_capability_list} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"childrenrange">> | Tail]) ->

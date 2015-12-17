@@ -18,8 +18,7 @@
 %% API
 -export([verify_file_path/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, is_space_dir/1, basename_and_parent/1]).
--export([ensure_path_begins_with_slash/1]).
--export([spaces_uuid/1, to_uuid/2, dirname/1]).
+-export([ensure_path_begins_with_slash/1, dirname/1]).
 
 %%%===================================================================
 %%% API functions
@@ -34,15 +33,6 @@ dirname(Tokens) when is_list(Tokens) ->
     fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1));
 dirname(Path) when is_binary(Path) ->
     dirname(split(Path)).
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns UUID of user's main 'spaces' directory.
-%% @end
-%%--------------------------------------------------------------------
--spec spaces_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
-spaces_uuid(UserId) ->
-    base64:encode(term_to_binary({UserId, ?SPACES_BASE_DIR_NAME})).
 
 %%--------------------------------------------------------------------
 %% @doc Same as {@link filename:split/1} but platform independent.
@@ -111,19 +101,19 @@ binary_join(List, Sep) ->
     FileEntry :: file_meta:entry().
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    {uuid, UserId};
+    {uuid, fslogic_uuid:default_space_uuid(UserId)};
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME]),
     {path, Path};
-get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]) ->
+get_canonical_file_entry(_Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]) ->
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]),
     {path, Path};
 get_canonical_file_entry(Ctx, Tokens) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
         onedata_user:get(UserId),
-    {ok, #document{value = #file_meta{name = DefaultSpaceName}}} = file_meta:get(DefaultSpaceId),
+    {ok, #document{value = #file_meta{name = DefaultSpaceName}}} = file_meta:get_space_dir(DefaultSpaceId),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME,
         DefaultSpaceName | Tokens]),
     {path, Path}.
@@ -185,16 +175,3 @@ is_space_dir(Path) ->
 ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) ->
     Path;
 ensure_path_begins_with_slash(Path) -> <<?DIRECTORY_SEPARATOR, Path/binary>>.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Converts given file path to UUID.
-%% @end
-%%--------------------------------------------------------------------
--spec to_uuid(fslogic_worker:ctx(), file_meta:path()) -> file_meta:uuid().
-to_uuid(CTX, Path) ->
-    {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, #document{key = UUID}} = file_meta:get(Entry),
-    UUID.

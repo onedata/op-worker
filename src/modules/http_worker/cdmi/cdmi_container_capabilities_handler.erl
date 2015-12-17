@@ -84,20 +84,16 @@ get_cdmi_capability(Req, State) ->
 prepare_capability_ans([]) ->
     [];
 prepare_capability_ans([<<"objectType">> | Tail]) ->
-    [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
-%% todo uncomment when ID'll be used
+  [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectID">> | Tail]) ->
-    prepare_capability_ans(Tail);
-%%   [{<<"objectID">>, ?container_capability_id} | prepare_capability_ans(Tail)];
+  [{<<"objectID">>, ?container_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
     [{<<"objectName">>, str_utils:ensure_ends_with_slash(filename:basename(?container_capability_path))}
         | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
-    [{<<"parentURI">>, ?root_capability_path} | prepare_capability_ans(Tail)];
-%% todo uncomment when ID'll be used
+  [{<<"parentURI">>, ?root_capability_path} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentID">> | Tail]) ->
-    prepare_capability_ans(Tail);
-%%   [{<<"parentID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
+  [{<<"parentID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"capabilities">> | Tail]) ->
     [{<<"capabilities">>, ?container_capability_list} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"childrenrange">> | Tail]) ->

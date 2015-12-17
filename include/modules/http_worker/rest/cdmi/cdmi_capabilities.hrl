@@ -17,27 +17,27 @@
 %% List of general cdmi system capabilites
 %% CDMI documentation: chapter 12.1.1 and table 100.
 -define(root_capability_list,[
-  {<<"cdmi_dataobjects">>, <<"true">>}
+  {<<"cdmi_dataobjects">>, <<"true">>},
 %%   {<<"cdmi_security_access_control">>, <<"true">>},
 %%   {<<"cdmi_object_move_from_local">>, <<"true">>},
 %%   {<<"cdmi_object_copy_from_local">>, <<"true">>},
-%%   {<<"cdmi_object_access_by_ID">>, <<"true">>}
+  {<<"cdmi_object_access_by_ID">>, <<"true">>}
 ]).
 
 %% List of cdmi container capabilites
 %% Documentation: chapters 12.1.2, 12.1.3 and tables 101, 102
 -define(dataobject_capability_list,[
 %%   {<<"cdmi_acl">>,<<"true">>},
-%%   {<<"cdmi_size">>,<<"true">>},
-%%   {<<"cdmi_ctime">>,<<"true">>},
-%%   {<<"cdmi_atime">>,<<"true">>},
-%%   {<<"cdmi_mtime">>,<<"true">>},
-%%   {<<"cdmi_read_value">>,<<"true">>},
-%%   {<<"cdmi_read_value_range">>,<<"true">>},
-%%   {<<"cdmi_read_metadata">>,<<"true">>},
-%%   {<<"cdmi_modify_value">>,<<"true">>},
-%%   {<<"cdmi_modify_value_range">>,<<"true">>},
-%%   {<<"cdmi_modify_metadata">>,<<"true">>},
+  {<<"cdmi_size">>,<<"true">>},
+  {<<"cdmi_ctime">>,<<"true">>},
+  {<<"cdmi_atime">>,<<"true">>},
+  {<<"cdmi_mtime">>,<<"true">>},
+  {<<"cdmi_read_value">>,<<"true">>},
+  {<<"cdmi_read_value_range">>,<<"true">>},
+  {<<"cdmi_read_metadata">>,<<"true">>},
+  {<<"cdmi_modify_value">>,<<"true">>},
+  {<<"cdmi_modify_value_range">>,<<"true">>},
+  {<<"cdmi_modify_metadata">>,<<"true">>},
   {<<"cdmi_delete_dataobject">>,<<"true">>}
 ]).
 
@@ -45,15 +45,15 @@
 %% Documentation: chapters 12.1.2, 12.1.4 and tables 101, 103
 -define(container_capability_list,[
 %%   {<<"cdmi_acl">>,<<"true">>},
-%%   {<<"cdmi_size">>,<<"true">>},
-%%   {<<"cdmi_ctime">>,<<"true">>},
-%%   {<<"cdmi_atime">>,<<"true">>},
-%%   {<<"cdmi_mtime">>,<<"true">>},
-%%   {<<"cdmi_list_children">>,<<"true">>},
-%%   {<<"cdmi_list_children_range">>,<<"true">>},
-%%   {<<"cdmi_read_metadata">>,<<"true">>},
-%%   {<<"cdmi_modify_metadata">>,<<"true">>},
-%%   {<<"cdmi_create_dataobject">>,<<"true">>},
+  {<<"cdmi_size">>,<<"true">>},
+  {<<"cdmi_ctime">>,<<"true">>},
+  {<<"cdmi_atime">>,<<"true">>},
+  {<<"cdmi_mtime">>,<<"true">>},
+  {<<"cdmi_list_children">>,<<"true">>},
+  {<<"cdmi_list_children_range">>,<<"true">>},
+  {<<"cdmi_read_metadata">>,<<"true">>},
+  {<<"cdmi_modify_metadata">>,<<"true">>},
+  {<<"cdmi_create_dataobject">>,<<"true">>},
   {<<"cdmi_create_container">>,<<"true">>},
   {<<"cdmi_delete_container">>,<<"true">>}
 %%   {<<"cdmi_move_container">>,<<"true">>},
@@ -70,14 +70,19 @@
 %% todo uncomment IDs
 
 % Fake datastore uuids, necessary for objectid generation
-%% -define(root_capability_uuid,"0000000000000001").
-%% -define(container_capability_uuid,"0000000000000002").
-%% -define(dataobject_capability_uuid,"0000000000000003").
+-define(root_capability_uuid, base64:encode(<<"00000000000000000000000000000001">>)).
+-define(container_capability_uuid, base64:encode(<<"00000000000000000000000000000002">>)).
+-define(dataobject_capability_uuid, base64:encode(<<"00000000000000000000000000000003">>)).
 
 % Cdmi objectIDs for all cdmi capability containers
-%% -define(root_capability_id,cdmi_id:uuid_to_objectid(?root_capability_uuid)).
-%% -define(container_capability_id,cdmi_id:uuid_to_objectid(?container_capability_uuid)).
-%% -define(dataobject_capability_id,cdmi_id:uuid_to_objectid(?dataobject_capability_uuid)).
+% equivalent of running:
+% begin {ok, Id__} = cdmi_id:uuid_to_objectid(?root_capability_uuid), Id__ end).
+-define(root_capability_id,
+  <<"0000000000208CA83030303030303030303030303030303030303030303030303030303030303031">>).
+-define(container_capability_id,
+  <<"0000000000208DE83030303030303030303030303030303030303030303030303030303030303032">>).
+-define(dataobject_capability_id,
+  <<"0000000000204D293030303030303030303030303030303030303030303030303030303030303033">>).
 
 %% Proplist that provides mapping between path and capability name
 -define(CapabilityNameByPath, [
@@ -86,9 +91,9 @@
   {?dataobject_capability_path, dataobject}]).
 
 %% Proplist that provides mapping between objectid and capability path
-%% -define(CapabilityPathById, [
-%%   {?root_capability_id, ?root_capability_path},
-%%   {?container_capability_id, ?container_capability_path},
-%%   {?dataobject_capability_id, ?dataobject_capability_path}
-%% ]).
+-define(CapabilityPathById, [
+  {?root_capability_id, ?root_capability_path},
+  {?container_capability_id, ?container_capability_path},
+  {?dataobject_capability_id, ?dataobject_capability_path}
+]).
 

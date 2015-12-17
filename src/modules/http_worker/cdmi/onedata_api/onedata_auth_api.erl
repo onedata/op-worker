@@ -15,7 +15,7 @@
 -include("modules/http_worker/http_common.hrl").
 
 %% API
--export([is_authorized/2]).
+-export([is_authorized/2, authenticate/1]).
 
 % opaque type of auth token that is neccessary to perform operations on files.
 -type auth() :: any().
@@ -32,6 +32,15 @@
 -spec is_authorized(req(), #{}) -> {boolean(), req(), #{auth => auth()}}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Authenticates user basing on request headers
+%% @end
+%%--------------------------------------------------------------------
+-spec authenticate(Req :: req()) -> {{ok, auth()} | {error, term()}, req()}.
+authenticate(Req) ->
+    rest_auth:authenticate(Req).
 
 %%%===================================================================
 %%% Internal functions
