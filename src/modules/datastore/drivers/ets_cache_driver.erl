@@ -1,4 +1,4 @@
- %%%-------------------------------------------------------------------
+%%%-------------------------------------------------------------------
 %%% @author Rafal Slota
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -65,9 +65,13 @@ update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_functio
         [] ->
             {error, {not_found, ModelName}};
         [{_, Value}] ->
-            NewValue = Diff(Value),
-            true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
-            {ok, Key}
+            case Diff(Value) of
+                {ok, NewValue} ->
+                    true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
+                    {ok, Key};
+                {error, Reason} ->
+                    {error, Reason}
+            end
     end;
 update(#model_config{name = ModelName} = ModelConfig, Key, Diff) when is_map(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
@@ -92,13 +96,13 @@ create(#model_config{} = ModelConfig, #document{key = Key, value = Value}) ->
         true -> {ok, Key}
     end.
 
- %%--------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% @doc
 %% {@link store_driver_behaviour} callback create_or_update/2.
 %% @end
 %%--------------------------------------------------------------------
- -spec create_or_update(model_behaviour:model_config(), datastore:document(), Diff :: datastore:document_diff()) ->
-     {ok, datastore:ext_key()} | datastore:create_error().
+-spec create_or_update(model_behaviour:model_config(), datastore:document(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:create_error().
 create_or_update(#model_config{} = ModelConfig, #document{key = Key, value = Value}, Diff) when is_function(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
         [] ->
@@ -107,9 +111,13 @@ create_or_update(#model_config{} = ModelConfig, #document{key = Key, value = Val
                 true -> {ok, Key}
             end;
         [{_, OldValue}] ->
-            NewValue = Diff(OldValue),
-            true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
-            {ok, Key}
+            case Diff(OldValue) of
+                {ok, NewValue} ->
+                    true = ets:insert(table_name(ModelConfig), {Key, datastore_utils:shallow_to_record(NewValue)}),
+                    {ok, Key};
+                {error, Reason} ->
+                    {error, Reason}
+            end
     end;
 create_or_update(#model_config{} = ModelConfig, #document{key = Key, value = Value}, Diff) when is_map(Diff) ->
     case ets:lookup(table_name(ModelConfig), Key) of
@@ -156,7 +164,6 @@ list(#model_config{} = ModelConfig, Fun, AccIn) ->
         '$end_of_table' ->
             list_next('$end_of_table', undefined, Fun, AccIn)
     end.
-
 
 
 %%--------------------------------------------------------------------
@@ -257,7 +264,7 @@ foreach_link(_, _Key, _, _AccIn) ->
 -spec list_next([term()] | '$end_of_table', term(), datastore:list_fun(), term()) ->
     {ok, Acc :: term()} | datastore:generic_error().
 list_next([{Key, Obj} | R], Handle, Fun, AccIn) ->
-    Doc =  #document{key = Key, value = Obj},
+    Doc = #document{key = Key, value = Obj},
     case Fun(Doc, AccIn) of
         {next, NewAcc} ->
             list_next(R, Handle, Fun, NewAcc);

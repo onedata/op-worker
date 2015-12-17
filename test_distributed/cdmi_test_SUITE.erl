@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -272,7 +273,7 @@ get_file_test(Config) ->
     {ok, Code8, _Headers8, _Response8} =
         do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
     ?assertEqual(400, Code8).
-%%------------------------------
+    %%------------------------------
 
 % Tests cdmi metadata read on object GET request.
 metadata_test(Config) ->
@@ -400,7 +401,8 @@ metadata_test(Config) ->
     Metadata13 = proplists:get_value(<<"metadata">>, CdmiResponse13),
     ?assertEqual(<<"my_dir_value_update">>, proplists:get_value(<<"my_metadata">>, Metadata13)),
     ?assertEqual(1, length(Metadata13)).
-%%------------------------------
+    %%------------------------------
+
 %todo add acl metadata tests
 
 % Tests cdmi object DELETE requests
@@ -433,7 +435,7 @@ delete_file_test(Config) ->
     ?assertEqual(204, Code2),
 
     ?assert(not object_exists(Config, GroupFileName)).
-%%------------------------------
+    %%------------------------------
 
 % Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
 % json string), or without (when we treat request body as new file content)
@@ -510,7 +512,7 @@ create_file_test(Config) ->
 
     ?assert(object_exists(Config, ToCreate5)),
     ?assertEqual(FileContent, get_file_content(Config, ToCreate5)).
-%%------------------------------
+    %%------------------------------
 
 % Tests cdmi object PUT requests (updating content)
 update_file_test(Config) ->
@@ -1053,6 +1055,7 @@ partial_upload_test(Config) ->
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     initializer:setup_storage(ConfigWithNodes).
+
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).

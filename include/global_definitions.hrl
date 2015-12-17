@@ -38,6 +38,13 @@
 %% coordinates the processes started by concrete worker_host (given by arg)
 -define(WORKER_HOST_SUPERVISOR_NAME(Module), list_to_atom(atom_to_list(Module) ++ "_sup")).
 
+%% Local name (name and node is used to identify it) of session manager worker.
+-define(SESSION_MANAGER_WORKER, session_manager_worker).
+
+%% Local name (name and node is used to identify it) of session manager worker
+%% supervisor.
+-define(SESSION_MANAGER_WORKER_SUP, ?WORKER_HOST_SUPERVISOR_NAME(?SESSION_MANAGER_WORKER)).
+
 %%%===================================================================
 %%% Global types
 %%%===================================================================

@@ -339,7 +339,7 @@ get_hooks_config() ->
 update_usage_info(Key, ModelName, Level) ->
     Uuid = caches_controller:get_cache_uuid(Key, ModelName),
     UpdateFun = fun(Record) ->
-        Record#cache_controller{timestamp = os:timestamp()}
+        {ok, Record#cache_controller{timestamp = os:timestamp()}}
     end,
     TS = os:timestamp(),
     V = #cache_controller{timestamp = TS, last_action_time = TS},
@@ -459,8 +459,8 @@ end_disk_op(Uuid, Owner, ModelName, Op, Level) ->
                     (#cache_controller{last_user = LastUser} = Record) ->
                         case LastUser of
                             Owner ->
-                                Record#cache_controller{last_user = non, action = non,
-                                    last_action_time = os:timestamp()};
+                                {ok, Record#cache_controller{last_user = non, action = non,
+                                    last_action_time = os:timestamp()}};
                             _ ->
                                 throw(user_changed)
                         end
@@ -469,6 +469,8 @@ end_disk_op(Uuid, Owner, ModelName, Op, Level) ->
         end,
         ok
     catch
+        throw:user_changed ->
+            ok;
         E1:E2 ->
             ?error_stacktrace("Error in cache_controller end_disk_op. Args: ~p. Error: ~p:~p.",
                 [{Uuid, Owner, ModelName, Op, Level}, E1, E2]),
@@ -490,7 +492,7 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
         Pid = pid_to_list(self()),
 
         UpdateFun = fun(Record) ->
-            Record#cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}
+            {ok, Record#cache_controller{last_user = Pid, timestamp = os:timestamp(), action = Op}}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
         TS = os:timestamp(),
@@ -527,7 +529,7 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                                        {ok, SavedValue} ->
                                            {ok, save, [SavedValue]};
                                        {error, {not_found, _}} ->
-                                           {error, deleted};
+                                           {ok, delete, [Key, ?PRED_ALWAYS]};
                                        GetError ->
                                            {get_error, GetError}
                                    end
@@ -537,16 +539,28 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                            case timer:now_diff(os:timestamp(), LAT) >= 1000 * ForceTime of
                                true ->
                                    UpdateFun2 = fun(Record) ->
-                                       Record#cache_controller{last_action_time = os:timestamp()}
+                                       {ok, Record#cache_controller{last_action_time = os:timestamp()}}
                                    end,
                                    update(Level, Uuid, UpdateFun2),
-                                   case datastore:get(Level, ModelName, Key) of
-                                       {ok, SavedValue} ->
-                                           {ok, save, [SavedValue]};
-                                       {error, {not_found, _}} ->
-                                           ok;
-                                       GetError ->
-                                           {get_error, GetError}
+                                   case Op of
+                                       delete ->
+                                           case datastore:get(Level, ModelName, Key) of
+                                               {ok, SavedValue} ->
+                                                   {ok, save, [SavedValue]};
+                                               {error, {not_found, _}} ->
+                                                   ok;
+                                               GetError ->
+                                                   {get_error, GetError}
+                                           end;
+                                       _ ->
+                                           case datastore:get(Level, ModelName, Key) of
+                                               {ok, SavedValue} ->
+                                                   {ok, save, [SavedValue]};
+                                               {error, {not_found, _}} ->
+                                                   {ok, delete, [Key, ?PRED_ALWAYS]};
+                                               GetError ->
+                                                   {get_error, GetError}
+                                           end
                                    end;
                                _ ->
                                    {error, not_last_user}
@@ -557,8 +571,9 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
             Ans = case ToDo of
                       {ok, NewMethod, NewArgs} ->
                           FullArgs = [ModelConfig | NewArgs],
-                          worker_proxy:call(datastore_worker, {driver_call,
-                              datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, ?DISK_OP_TIMEOUT);
+                          CallAns = worker_proxy:call(datastore_worker, {driver_call,
+                              datastore:driver_to_module(?PERSISTENCE_DRIVER), NewMethod, FullArgs}, ?DISK_OP_TIMEOUT),
+                          {op_change, NewMethod, CallAns};
                       ok ->
                           FullArgs = [ModelConfig | Args],
                           worker_proxy:call(datastore_worker, {driver_call,
@@ -572,8 +587,10 @@ start_disk_op(Key, ModelName, Op, Args, Level) ->
                      {ok, _} ->
                          end_disk_op(Uuid, Pid, ModelName, Op, Level);
                      {error, not_last_user} -> ok;
-                     {error, deleted} ->
-                         delete_dump_info(Uuid, Pid, Level);
+                     {op_change, NewOp, ok} ->
+                         end_disk_op(Uuid, Pid, ModelName, NewOp, Level);
+                     {op_change, NewOp, {ok, _}} ->
+                         end_disk_op(Uuid, Pid, ModelName, NewOp, Level);
                      WrongAns -> WrongAns
                  end
         end,
@@ -590,7 +607,7 @@ before_del(Key, ModelName, Level) ->
         Uuid = caches_controller:get_cache_uuid(Key, ModelName),
 
         UpdateFun = fun(Record) ->
-            Record#cache_controller{action = delete}
+            {ok, Record#cache_controller{action = delete}}
         end,
         % TODO - not transactional updates in local store - add transactional create and update on ets
         V = #cache_controller{action = delete},
@@ -629,9 +646,9 @@ log_link_del(Key, ModelName, LinkNames, stop, _Args, Level) ->
         UpdateFun = fun(#cache_controller{deleted_links = DL} = Record) ->
             case LinkNames of
                 LNs when is_list(LNs) ->
-                    Record#cache_controller{deleted_links = DL -- LinkNames};
+                    {ok, Record#cache_controller{deleted_links = DL -- LinkNames}};
                 _ ->
-                    Record#cache_controller{deleted_links = DL -- [LinkNames]}
+                    {ok, Record#cache_controller{deleted_links = DL -- [LinkNames]}}
             end
         end,
         update(Level, Uuid, UpdateFun)
@@ -648,9 +665,9 @@ before_link_del(Key, ModelName, LinkNames, Level) ->
         UpdateFun = fun(#cache_controller{deleted_links = DL} = Record) ->
             case LinkNames of
                 LNs when is_list(LNs) ->
-                    Record#cache_controller{deleted_links = DL ++ LinkNames};
+                    {ok, Record#cache_controller{deleted_links = DL ++ LinkNames}};
                 _ ->
-                    Record#cache_controller{deleted_links = DL ++ [LinkNames]}
+                    {ok, Record#cache_controller{deleted_links = DL ++ [LinkNames]}}
             end
         end,
         V = case LinkNames of
