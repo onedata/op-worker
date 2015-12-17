@@ -16,6 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([send_subscription_handler/0, send_subscription_cancellation_handler/0,
@@ -65,21 +66,22 @@ inject_event_stream_definition(#subscription{object = #file_location_subscriptio
     }}.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns handler which sends subscription to the remote client.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_subscription_handler() -> Handler :: event_stream:init_handler().
 send_subscription_handler() ->
-    fun(#subscription{id = SubId} = Sub, SessId) ->
-        {ok, StmId} = sequencer:open_stream(SessId),
-        sequencer:send_message(Sub, StmId, SessId),
-        {SubId, StmId, SessId}
+    fun
+        (#subscription{id = SubId} = Sub, SessId, fuse) ->
+            {ok, StmId} = sequencer:open_stream(SessId),
+            sequencer:send_message(Sub, StmId, SessId),
+            {SubId, StmId, SessId};
+        (#subscription{id = SubId}, SessId, _) ->
+            {SubId, undefined, SessId}
     end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns handler which sends subscription cancellation to the remote client.
 %% @end
@@ -87,9 +89,12 @@ send_subscription_handler() ->
 -spec send_subscription_cancellation_handler() ->
     Handler :: event_stream:terminate_handler().
 send_subscription_cancellation_handler() ->
-    fun({SubId, StmId, SessId}) ->
-        sequencer:send_message(#subscription_cancellation{id = SubId}, StmId, SessId),
-        sequencer:close_stream(StmId, SessId)
+    fun
+        ({_SubId, undefined, _SessId}) ->
+            ok;
+        ({SubId, StmId, SessId}) ->
+            sequencer:send_message(#subscription_cancellation{id = SubId}, StmId, SessId),
+            sequencer:close_stream(StmId, SessId)
     end.
 
 %%%===================================================================
@@ -104,9 +109,12 @@ send_subscription_cancellation_handler() ->
 %%--------------------------------------------------------------------
 -spec open_sequencer_stream_handler() -> Handler :: event_stream:init_handler().
 open_sequencer_stream_handler() ->
-    fun(_, SessId) ->
-        {ok, StmId} = sequencer:open_stream(SessId),
-        {StmId, SessId}
+    fun
+        (_, SessId, fuse) ->
+            {ok, StmId} = sequencer:open_stream(SessId),
+            {StmId, SessId};
+        (_, SessId, _) ->
+            {undefined, SessId}
     end.
 
 %%--------------------------------------------------------------------
@@ -117,8 +125,9 @@ open_sequencer_stream_handler() ->
 %%--------------------------------------------------------------------
 -spec close_sequencer_stream_handler() -> Handler :: event_stream:terminate_handler().
 close_sequencer_stream_handler() ->
-    fun({StmId, SessId}) ->
-        sequencer:close_stream(StmId, SessId)
+    fun
+        ({undefined, _}) -> ok;
+        ({StmId, SessId}) -> sequencer:close_stream(StmId, SessId)
     end.
 
 %%--------------------------------------------------------------------
@@ -129,8 +138,13 @@ close_sequencer_stream_handler() ->
 %%--------------------------------------------------------------------
 -spec send_events_handler() -> Handler :: event_stream:event_handler().
 send_events_handler() ->
-    fun(Evts, {StmId, SessId}) ->
-        sequencer:send_message(#events{events = Evts}, StmId, SessId)
+    fun
+        ([], _) ->
+            ok;
+        (_, {undefined, _}) ->
+            ok;
+        (Evts, {StmId, SessId}) ->
+            sequencer:send_message(#events{events = Evts}, StmId, SessId)
     end.
 
 %%--------------------------------------------------------------------

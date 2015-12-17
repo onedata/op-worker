@@ -69,7 +69,7 @@ clean_test_users_and_spaces(Config) ->
     Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
 basic_session_setup(Worker, SessId, Iden, Con, Config) ->
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Con])),
+        reuse_or_create_fuse_session, [SessId, Iden, Con])),
     [{session_id, SessId}, {identity, Iden} | Config].
 
 %%--------------------------------------------------------------------
@@ -139,7 +139,7 @@ setup_session(Worker, [{UserNum, Spaces} | R], Config) ->
     UserName = Name("username", UserNum),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
+        reuse_or_create_fuse_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{

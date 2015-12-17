@@ -16,7 +16,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1, start_event_stream/4]).
@@ -30,10 +30,10 @@
 %% Starts the event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() ->
+-spec start_link(SessType :: session:type()) ->
     {ok, EvtStmSup :: pid()} | ignore | {error, Reason :: term()}.
-start_link() ->
-    supervisor:start_link(?MODULE, []).
+start_link(SessType) ->
+    supervisor:start_link(?MODULE, [SessType]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -65,12 +65,12 @@ start_event_stream(EvtStmSup, EvtMan, Sub, SessId) ->
         Intensity :: non_neg_integer(),
         Period :: non_neg_integer()
     }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
-init([]) ->
+init([SessType]) ->
     RestartStrategy = simple_one_for_one,
     Intensity = 3,
     Period = 1,
     {ok, {{RestartStrategy, Intensity, Period}, [
-        event_stream_spec()
+        event_stream_spec(SessType)
     ]}}.
 
 %%%===================================================================
@@ -83,10 +83,10 @@ init([]) ->
 %% Returns a supervisor child_spec for a event stream.
 %% @end
 %%--------------------------------------------------------------------
--spec event_stream_spec() -> supervisor:child_spec().
-event_stream_spec() ->
+-spec event_stream_spec(SessType :: session:type()) -> supervisor:child_spec().
+event_stream_spec(SessType) ->
     Id = Module = event_stream,
     Restart = transient,
     Shutdown = timer:seconds(10),
     Type = worker,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [SessType]}, Restart, Shutdown, Type, [Module]}.

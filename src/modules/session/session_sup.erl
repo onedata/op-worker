@@ -29,10 +29,10 @@
 %% Starts the supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id(), Con :: pid() | none) ->
+-spec start_link(SessId :: session:id(), SessType :: session:type()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessId, Con) ->
-    supervisor:start_link(?MODULE, [SessId, Con]).
+start_link(SessId, SessType) ->
+    supervisor:start_link(?MODULE, [SessId, SessType]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -53,18 +53,26 @@ start_link(SessId, Con) ->
         [ChildSpec :: supervisor:child_spec()]
     }} |
     ignore.
-init([SessId, Con]) ->
+init([SessId, SessType]) ->
     RestartStrategy = one_for_all,
     MaxRestarts = 0,
     RestartTimeWindowSecs = 1,
 
-    {ok, SessId} = session:update(SessId, #{session_sup => self(), node => node()}),
+    {ok, SessId} = session:update(SessId, #{supervisor => self(), node => node()}),
 
-    {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
-        communicator_spec(SessId, Con),
-        sequencer_manager_sup_spec(SessId),
-        event_manager_sup_spec(SessId)
-    ]}}.
+    case SessType of
+        fuse ->
+            {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+                session_watcher_spec(SessId, SessType),
+                sequencer_manager_sup_spec(SessId),
+                event_manager_sup_spec(SessId, SessType)
+            ]}};
+        _ ->
+            {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+                session_watcher_spec(SessId, SessType),
+                event_manager_sup_spec(SessId, SessType)
+            ]}}
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -73,17 +81,17 @@ init([SessId, Con]) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates a worker child_spec for a connection manager child.
+%% Creates a worker child_spec for a session watcher child.
 %% @end
 %%--------------------------------------------------------------------
--spec communicator_spec(SessId :: session:id(), Con :: pid()) ->
+-spec session_watcher_spec(SessId :: session:id(), SessType :: session:type()) ->
     supervisor:child_spec().
-communicator_spec(SessId, Con) ->
-    Id = Module = communicator,
+session_watcher_spec(SessId, SessType) ->
+    Id = Module = session_watcher,
     Restart = transient,
-    Shutdown = timer:seconds(5),
+    Shutdown = timer:seconds(10),
     Type = worker,
-    {Id, {Module, start_link, [SessId, Con]}, Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [SessId, SessType]}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -106,11 +114,11 @@ sequencer_manager_sup_spec(SessId) ->
 %% Creates a supervisor child_spec for a event manager child.
 %% @end
 %%--------------------------------------------------------------------
--spec event_manager_sup_spec(SessId :: session:id()) ->
+-spec event_manager_sup_spec(SessId :: session:id(), SessType :: session:type()) ->
     supervisor:child_spec().
-event_manager_sup_spec(SessId) ->
+event_manager_sup_spec(SessId, SessType) ->
     Id = Module = event_manager_sup,
     Restart = transient,
     Shutdown = infinity,
     Type = supervisor,
-    {Id, {Module, start_link, [SessId]}, Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [SessId, SessType]}, Restart, Shutdown, Type, [Module]}.

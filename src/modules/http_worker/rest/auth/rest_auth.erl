@@ -70,7 +70,7 @@ authenticate(Req) ->
     case cowboy_req:header(<<"x-auth-token">>, Req) of
         {undefined, Req2} ->
             authenticate_using_cert(Req2);
-        {Token, Req2}->
+        {Token, Req2} ->
             authenticate_using_token(Req2, Token)
     end.
 
@@ -84,10 +84,8 @@ authenticate_using_token(Req, Token) ->
     Auth = #auth{macaroon = Token},
     case identity:get_or_fetch(Auth) of
         {ok, #document{value = Iden}} ->
-            {ok, _} = session_manager:reuse_or_create_rest_session(Iden),
-            SessionId = session:get_rest_session_id(Iden),
-            ok = session_manager:update_session_auth(SessionId, Auth),
-            {{ok, SessionId}, Req};
+            {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
+            {{ok, SessId}, Req};
         Error ->
             {Error, Req}
     end.
@@ -105,9 +103,8 @@ authenticate_using_cert(Req) ->
             Certificate = public_key:pkix_decode_cert(Der, otp),
             case identity:get_or_fetch(Certificate) of
                 {ok, #document{value = Iden}} ->
-                    {ok, _} = session_manager:reuse_or_create_rest_session(Iden),
-                    SessionId = session:get_rest_session_id(Iden),
-                    {{ok, SessionId}, Req};
+                    {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden),
+                    {{ok, SessId}, Req};
                 Error ->
                     {Error, Req}
             end;
