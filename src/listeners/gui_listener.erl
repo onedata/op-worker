@@ -53,11 +53,11 @@ start() ->
 
   {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
   {ok, GuiNbAcceptors} =
-    application:get_env(?WORKER_APP_NAME, http_worker_number_of_acceptors),
+    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_number_of_acceptors),
   {ok, MaxKeepAlive} =
-    application:get_env(?WORKER_APP_NAME, http_worker_max_keepalive),
+    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_max_keepalive),
   {ok, Timeout} =
-    application:get_env(?WORKER_APP_NAME, http_worker_socket_timeout_seconds),
+    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_socket_timeout_seconds),
 
   % Setup GUI dispatch opts for cowboy
   GUIDispatch = [

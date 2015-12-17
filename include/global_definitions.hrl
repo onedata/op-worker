@@ -14,6 +14,7 @@
 -define(GLOBAL_DEFINITIONS_HRL, 1).
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 
 %%%===================================================================
@@ -23,16 +24,9 @@
 %% Name of the application.
 -define(APP_NAME, op_worker).
 
-%% Name of the base worker application.
--define(WORKER_APP_NAME, cluster_worker).
-
 %% Local name (name and node is used to identify it) of supervisor that
 %% coordinates application at each node (one supervisor per node).
 -define(APPLICATION_SUPERVISOR_NAME, op_worker_sup).
-
-%% Local name (name and node is used to identify it) of gen_server that
-%% works as a dispatcher.
--define(DISPATCHER_NAME, request_dispatcher).
 
 %% Local name (name and node is used to identify it) of session manager worker.
 -define(SESSION_MANAGER_WORKER, session_manager_worker).

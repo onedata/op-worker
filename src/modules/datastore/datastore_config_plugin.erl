@@ -32,6 +32,5 @@ models() -> [
   file_meta,
   storage,
   file_location,
-  file_watcher,
   xattr
 ].
