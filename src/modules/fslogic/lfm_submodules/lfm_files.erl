@@ -121,24 +121,20 @@ open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
 %%--------------------------------------------------------------------
 -spec fsync(FileHandle :: file_handle()) -> ok | {error, Reason :: term()}.
 fsync(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    case event:flush(?FSLOGIC_SUB_ID, self(), SessId) of
-        ok ->
-            receive
-                {handler_executed, Results} ->
-                    Errors = lists:filter(fun
-                        ({error, _}) -> true;
-                        (_) -> false
-                    end, Results),
-                    case Errors of
-                        [] -> ok;
-                        _ -> {error, {handler_error, Errors}}
-                    end
-            after
-                ?FSYNC_TIMEOUT ->
-                    {error, handler_timeout}
-            end;
-        Other ->
-            Other
+    event:flush(?FSLOGIC_SUB_ID, self(), SessId),
+    receive
+        {handler_executed, Results} ->
+            Errors = lists:filter(fun
+                ({error, _}) -> true;
+                (_) -> false
+            end, Results),
+            case Errors of
+                [] -> ok;
+                _ -> {error, {handler_error, Errors}}
+            end
+    after
+        ?FSYNC_TIMEOUT ->
+            {error, handler_timeout}
     end.
 
 %%--------------------------------------------------------------------

@@ -29,10 +29,10 @@
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
 -type manager_ref() :: pid() | session:id() | [pid() | session:id()] |
-% reference all event managers except one provided
-{exclude, pid() | session:id()} |
-% reference all event managers except those provided in list
-{exclude, [pid() | session:id()]}.
+                       % reference all event managers except one provided
+                       {exclude, pid() | session:id()} |
+                       % reference all event managers except those provided in list
+                       {exclude, [pid() | session:id()]}.
 
 %%%===================================================================
 %%% API
@@ -74,8 +74,7 @@ emit(EvtObject, Ref) ->
 %% IMPORTANT! Event handler is responsible for notifying the awaiting process.
 %% @end
 %%--------------------------------------------------------------------
--spec flush(SubId :: subscription:id(), Notify :: pid()) ->
-    ok | {error, Reason :: term()}.
+-spec flush(SubId :: subscription:id(), Notify :: pid()) -> ok.
 flush(SubId, Notify) ->
     send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers()).
 
@@ -87,8 +86,7 @@ flush(SubId, Notify) ->
 %% IMPORTANT! Event handler is responsible for notifying the awaiting process.
 %% @end
 %%--------------------------------------------------------------------
--spec flush(SubId :: subscription:id(), Notify :: pid(), Ref :: event:manager_ref()) ->
-    ok | {error, Reason :: term()}.
+-spec flush(SubId :: subscription:id(), Notify :: pid(), Ref :: event:manager_ref()) -> ok.
 flush(SubId, Notify, Ref) ->
     send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers(as_list(Ref))).
 
@@ -254,7 +252,7 @@ filter_event_managers(EvtMans, ExcludedEvtMans) ->
 %% Sends message to event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec send_to_event_managers(Msg :: term(), EvtMans :: [event:manager_ref()]) ->
+-spec send_to_event_managers(Msg :: term(), EvtMans :: [EvtMan :: pid()]) ->
     ok.
 send_to_event_managers(Msg, EvtMans) ->
     lists:foreach(fun(EvtMan) ->
