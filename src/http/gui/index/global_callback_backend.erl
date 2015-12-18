@@ -18,4 +18,11 @@
 -export([callback/2]).
 
 callback(<<"userName">>, _) ->
-    {ok, op_gui_utils:get_user_id()}.
+    {ok, op_gui_utils:get_user_id()};
+
+callback(<<"sync">>, _) ->
+    Res = case sync:sync() of
+              true -> <<"ok">>;
+              false -> <<"error">>
+          end,
+    {ok, Res}.

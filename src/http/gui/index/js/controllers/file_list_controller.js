@@ -17,7 +17,7 @@ App.FileListController = Ember.ArrayController.extend({
         } else {
             this.set('newFileParent', this.get('currentSpace'));
         }
-        console.log('newFileParent ' +  this.get('newFileParent.id'));
+        console.log('newFileParent ' + this.get('newFileParent.id'));
     }.observes('currentSpace,@each.selected'),
 
     // File preview

@@ -13,7 +13,8 @@
 <body>
 
 <script type="text/x-handlebars" data-template-name="main">
-    {{top-menu user=global.userName}}
+    {{top-menu user=global.userName clickAction='syncAndReload'
+    syncMessage=global.syncMessage syncMessageStyle=global.syncMessageStyle}}
     {{outlet 'modal'}}
     <div class="container" style="margin-top: 100px;">
         {{render 'file_list' model}}
@@ -38,6 +39,7 @@
 <script src="/index/components/components.file-tree-node.js"></script>
 <script src="/index/components/components.file-test.js"></script>
 <script src="/index/components/file-tree-node.js"></script>
+<script src="/index/components/top-menu.js"></script>
 <script src="/index/templates/file_list.js"></script>
 <script src="/index/templates/create_file_modal.js"></script>
 <script src="/index/templates/create_dir_modal.js"></script>
