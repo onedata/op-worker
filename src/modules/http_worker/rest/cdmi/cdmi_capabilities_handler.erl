@@ -25,39 +25,39 @@
 %%--------------------------------------------------------------------
 -spec rest_init(req(), term()) -> {ok, req(), #{}} | {shutdown, req()}.
 rest_init(Req, _Opts) ->
-    {ok, Req, #{}}.
+  {ok, Req, #{}}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), req(), #{}) -> ok.
 terminate(_, _, _) ->
-    ok.
+  ok.
 
 %% ====================================================================
 %% @doc @equiv pre_handler:allowed_methods/2
 %% ====================================================================
 -spec allowed_methods(req(), #{}) -> {[binary()], req(), #{}}.
 allowed_methods(Req, State) ->
-    {[<<"GET">>], Req, State}.
+  {[<<"GET">>], Req, State}.
 
 %% ====================================================================
 %% @doc @equiv pre_handler:malformed_request/2
 %% ====================================================================
 -spec malformed_request(req(), #{}) -> {boolean(), req(), #{}} | no_return().
 malformed_request(Req, State) ->
-    cdmi_arg_parser:malformed_capability_request(Req, State).
+  cdmi_arg_parser:malformed_capability_request(Req, State).
 
 %% ====================================================================
 %% @doc @equiv pre_handler:content_types_provided/2
 %% ====================================================================
 -spec content_types_provided(req(), #{}) -> {[{ContentType, Method}], req(), #{}} when
-    ContentType :: binary(),
-    Method :: atom().
+  ContentType :: binary(),
+  Method :: atom().
 content_types_provided(Req, State) ->
-    {[
-        {<<"application/cdmi-capability">>, get_cdmi_capability}
-    ], Req, State}.
+  {[
+    {<<"application/cdmi-capability">>, get_cdmi_capability}
+  ], Req, State}.
 
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -66,13 +66,12 @@ content_types_provided(Req, State) ->
 %% ====================================================================
 -spec get_cdmi_capability(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi_capability(Req, #{options := Opts} = State) ->
-    RawCapabilities = case Opts of
-                          [] ->
-                              prepare_capability_ans(?default_get_capability_opts);
-                          X -> prepare_capability_ans(X)
-                      end,
-    Capabilities = json_utils:encode(RawCapabilities),
-    {Capabilities, Req, State}.
+  RawCapabilities = case Opts of
+                      [] -> prepare_capability_ans(?default_get_capability_opts);
+                      X -> prepare_capability_ans(X)
+                    end,
+  Capabilities = json_utils:encode(RawCapabilities),
+  {Capabilities, Req, State}.
 
 %% ====================================================================
 %% Internal functions
@@ -82,25 +81,25 @@ get_cdmi_capability(Req, #{options := Opts} = State) ->
 %% @doc Return proplist contains CDMI answer
 %% ====================================================================
 -spec prepare_capability_ans([Opt :: binary()]) ->
-    [{Capability :: binary(), Value :: term()}].
+  [{Capability :: binary(), Value :: term()}].
 prepare_capability_ans([]) ->
-    [];
+  [];
 prepare_capability_ans([<<"objectType">> | Tail]) ->
-    [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
+  [{<<"objectType">>, <<"application/cdmi-capability">>} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectID">> | Tail]) ->
-    [{<<"objectID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
+  [{<<"objectID">>, ?root_capability_id} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"objectName">> | Tail]) ->
-    [{<<"objectName">>, ?root_capability_path} | prepare_capability_ans(Tail)];
+  [{<<"objectName">>, ?root_capability_path} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->
-    prepare_capability_ans(Tail);
+  prepare_capability_ans(Tail);
 prepare_capability_ans([<<"parentID">> | Tail]) ->
-    prepare_capability_ans(Tail);
+  prepare_capability_ans(Tail);
 prepare_capability_ans([<<"capabilities">> | Tail]) ->
-    [{<<"capabilities">>, ?root_capability_list} | prepare_capability_ans(Tail)];
+  [{<<"capabilities">>, ?root_capability_list} | prepare_capability_ans(Tail)];
 prepare_capability_ans([<<"childrenrange">> | Tail]) ->
-    [{<<"childrenrange">>, <<"0-1">>} | prepare_capability_ans(Tail)]; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
+  [{<<"childrenrange">>, <<"0-1">>} | prepare_capability_ans(Tail)]; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
 prepare_capability_ans([<<"children">> | Tail]) ->
-    [{<<"children">>, [
-        str_utils:ensure_ends_with_slash(filename:basename(?container_capability_path)),
-        str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))
-    ]} | prepare_capability_ans(Tail)].
+  [{<<"children">>, [
+    str_utils:ensure_ends_with_slash(filename:basename(?container_capability_path)),
+    str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))
+  ]} | prepare_capability_ans(Tail)].
