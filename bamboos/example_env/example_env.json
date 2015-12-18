@@ -151,6 +151,41 @@
             }
         }
     },
+    "cluster_domains": {
+        "p1": {
+            "db_driver": "couchbase",
+            "os_config": "cfg1",
+            "op_ccm": {
+                "ccm1": {
+                    "vm.args": {
+                        "setcookie": "cookie1"
+                    },
+                    "sys.config": {
+                        "ccm_nodes": [
+                            "ccm1"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "cluster_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "cookie1"
+                    },
+                    "sys.config": {
+                        "ccm_nodes": [
+                            "ccm1"
+                        ],
+                        "db_nodes": [
+                            "dbnode1",
+                            "dbnode2"
+                        ]
+                    }
+                }
+            }
+        }
+    },
     "globalregistry_domains": {
         "gr": {
             "globalregistry": {

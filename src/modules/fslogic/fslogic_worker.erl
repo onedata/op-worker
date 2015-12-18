@@ -51,7 +51,7 @@ init(_Args) ->
     {ok, CounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
     {ok, TimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
     {ok, SizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
-    SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
+    SubId = ?FSLOGIC_SUB_ID,
     Sub = #subscription{
         id = SubId,
         object = #write_subscription{
@@ -63,8 +63,8 @@ init(_Args) ->
             metadata = 0,
             emission_rule = fun(_) -> true end,
             init_handler = event_utils:send_subscription_handler(),
-            event_handler = fun(Evts, InitResult) ->
-                handle_events(Evts, InitResult)
+            event_handler = fun(Evts, Ctx) ->
+                handle_events(Evts, Ctx)
             end,
             terminate_handler = event_utils:send_subscription_cancellation_handler()
         }
@@ -221,8 +221,8 @@ handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
-handle_events(Evts, {_, _, SessId}) ->
-    lists:foreach(fun(#event{object = #write_event{
+handle_events(Evts, #{session_id := SessId} = Ctx) ->
+    Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
     }}) ->
         case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
@@ -234,7 +234,14 @@ handle_events(Evts, {_, _, SessId}) ->
             {error, Reason} ->
                 ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason])
         end
-    end, Evts).
+    end, Evts),
+
+    case Ctx of
+        #{notify := Pid} -> Pid ! {handler_executed, Results};
+        _ -> ok
+    end,
+
+    Results.
 
 handle_proxyio_request(SessionId, #proxyio_request{
     space_id = SPID, storage_id = SID, file_id = FID,
