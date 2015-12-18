@@ -26,24 +26,22 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
 
--export_type([definition/0, metadata/0, init_handler/0, terminate_handler/0,
+-export_type([ctx/0, definition/0, metadata/0, init_handler/0, terminate_handler/0,
     event_handler/0, admission_rule/0, aggregation_rule/0, transition_rule/0,
     emission_rule/0, emission_time/0]).
 
+-type ctx() :: #{}.
 -type definition() :: #event_stream_definition{}.
 -type metadata() :: term().
--type init_handler() :: fun((#subscription{}, session:id(), session:type()) ->
-    init_result()
-).
--type terminate_handler() :: fun((init_result()) -> term()).
--type event_handler() :: fun(([#event{}], init_result()) -> ok).
+-type init_handler() :: fun((#subscription{}, session:id(), session:type()) -> ctx()).
+-type terminate_handler() :: fun((ctx()) -> term()).
+-type event_handler() :: fun(([#event{}], ctx()) -> ok).
 -type admission_rule() :: fun((#event{}) -> true | false).
 -type aggregation_rule() :: fun((#event{}, #event{}) -> #event{}).
 -type transition_rule() :: fun((metadata(), #event{}) -> metadata()).
 -type emission_rule() :: fun((metadata()) -> true | false).
 -type emission_time() :: timeout().
 
--type init_result() :: term().
 -type events() :: #{event:key() => #event{}}.
 
 %% event stream state:
@@ -51,7 +49,7 @@
 %% session_id      - ID of a session associated with this event manager
 %% event_manager   - pid of an event manager that controls this event stream
 %% definition      - event stream definition
-%% init_result     - result of init handler execution
+%% ctx             - result of init handler execution
 %% metadata        - event stream metadata
 %% events          - mapping form an event key to an aggregated event
 %% emission_ref    - reference associated with the last 'periodic_emission' message
@@ -61,7 +59,7 @@
     session_type :: session:type(),
     event_manager :: pid(),
     definition :: definition(),
-    init_result :: term(),
+    ctx :: term(),
     metadata :: metadata(),
     events = #{} :: events(),
     emission_ref :: reference()
@@ -103,7 +101,7 @@ init([SessType, EvtMan, #subscription{id = SubId, event_stream = StmDef} = Sub, 
         session_id = SessId,
         session_type = SessType,
         event_manager = EvtMan,
-        init_result = execute_init_handler(StmDef, Sub, SessId, SessType),
+        ctx = execute_init_handler(StmDef, Sub, SessId, SessType),
         metadata = get_initial_metadata(StmDef),
         definition = StmDef,
         emission_ref = schedule_event_handler_execution(StmDef)
@@ -147,6 +145,12 @@ handle_cast(#event{} = Evt, #state{subscription_id = SubId, session_id = SessId,
         false -> {noreply, State}
     end;
 
+handle_cast({flush, Pid}, #state{ctx = Ctx} = State) ->
+    #state{ctx = NewCtx} = NewState = execute_event_handler(
+        State#state{ctx = Ctx#{notify => Pid}}
+    ),
+    {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
+
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
@@ -186,10 +190,10 @@ handle_info(_Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
 terminate(Reason, #state{event_manager = EvtMan, subscription_id = SubId,
-    definition = StmDef, init_result = InitResult} = State) ->
+    definition = StmDef, ctx = Ctx} = State) ->
     ?log_terminate(Reason, State),
     execute_event_handler(State),
-    execute_terminate_handler(StmDef, InitResult),
+    execute_terminate_handler(StmDef, Ctx),
     unregister_stream(EvtMan, SubId).
 
 %%--------------------------------------------------------------------
@@ -234,7 +238,7 @@ unregister_stream(EvtMan, SubId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec execute_init_handler(StmDef :: definition(), Sub :: #subscription{},
-    SessId :: session:id(), SessType :: session:type()) -> InitResult :: init_result().
+    SessId :: session:id(), SessType :: session:type()) -> Ctx :: ctx().
 execute_init_handler(#event_stream_definition{init_handler = Handler}, Sub, SessId,
     SessType) ->
     Handler(Sub, SessId, SessType).
@@ -245,11 +249,11 @@ execute_init_handler(#event_stream_definition{init_handler = Handler}, Sub, Sess
 %% Executes terminate handler.
 %% @end
 %%--------------------------------------------------------------------
--spec execute_terminate_handler(StmDef :: definition(), InitResult :: init_result()) ->
+-spec execute_terminate_handler(StmDef :: definition(), Ctx :: ctx()) ->
     term().
 execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
-    InitResult) ->
-    Handler(InitResult).
+    Ctx) ->
+    Handler(Ctx).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -261,10 +265,10 @@ execute_terminate_handler(#event_stream_definition{terminate_handler = Handler},
 -spec execute_event_handler(State :: #state{}) -> NewState :: #state{}.
 execute_event_handler(#state{subscription_id = SubId, session_id = SessId,
     events = Evts, definition = #event_stream_definition{event_handler = Handler
-    } = StmDef, init_result = InitResult} = State) ->
+    } = StmDef, ctx = Ctx} = State) ->
     ?debug("Executing event handler on events ~p in event stream for subscription "
     "~p and session ~p", [Evts, SubId, SessId]),
-    Handler(maps:values(Evts), InitResult),
+    Handler(maps:values(Evts), Ctx),
     State#state{
         events = #{},
         metadata = get_initial_metadata(StmDef),

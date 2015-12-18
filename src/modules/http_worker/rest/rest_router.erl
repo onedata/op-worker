@@ -12,6 +12,8 @@
 -module(rest_router).
 -author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
+
 %% API
 -export([top_level_routing/0]).
 
@@ -27,7 +29,7 @@
 %%--------------------------------------------------------------------
 -spec top_level_routing() -> list().
 top_level_routing() ->
-    {ok, Plugins} = application:get_env(protocol_plugins),
+    {ok, Plugins} = application:get_env(?APP_NAME, protocol_plugins),
     PluginRoutes = [Plugin:routes() || Plugin <- Plugins],
     FlattenPluginRoutes = lists:flatten(PluginRoutes),
     [{Path, pre_handler, PluginDescription} || {Path, PluginDescription} <- FlattenPluginRoutes].
