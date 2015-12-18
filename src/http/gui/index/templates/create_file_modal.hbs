@@ -1,6 +1,10 @@
 {{#modal-dialog title='Create new file' ok='createNewFile' close='hideModal'}}
     <form {{action 'ok' on='submit' target=view}}>
         <div class="form-group">
+            <p style="margin-bottom: 20px;">
+                The file will be created in directory <b>{{controller.newFileParent.name}}</b>.<br />
+                To change the destination, select target directory (select none for space root).
+            </p>
             {{input
             type='text'
             class='modal-textbox'

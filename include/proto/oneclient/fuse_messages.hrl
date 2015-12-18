@@ -94,11 +94,6 @@
     uuid :: file_meta:uuid()
 }).
 
--record(helper_arg, {
-    key :: binary(),
-    value :: binary()
-}).
-
 -record(get_xattr, {
     uuid :: file_meta:uuid(),
     name :: xattr:name()

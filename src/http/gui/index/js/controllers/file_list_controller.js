@@ -6,18 +6,19 @@ App.FileListController = Ember.ArrayController.extend({
 
     // Creating new files / dirs
     newFileName: '',
-    newFileParentId: null,
+    newFileParent: null,
     fetchNewFileParentId: function () {
-        this.set('newFileParentId', null);
         if (this.get('isOneSelected')) {
             var selected = this.findBy('selected', true);
             if (selected.get('type') == 'dir') {
                 // Set new ID only if one directory is selected
-                this.set('newFileParentId', selected.get('id'));
+                this.set('newFileParent', selected);
             }
+        } else {
+            this.set('newFileParent', this.get('currentSpace'));
         }
-        console.log('newFileParentId ' + this.get('newFileParentId'));
-    }.observes('@each.selected'),
+        console.log('newFileParent ' +  this.get('newFileParent.id'));
+    }.observes('currentSpace,@each.selected'),
 
     // File preview
     previewedFile: null,
@@ -25,12 +26,13 @@ App.FileListController = Ember.ArrayController.extend({
     fetchPreviewedFileContent: function () {
         if (this.get('previewedFile')) {
             var fileContentId = 'content#' + this.get('previewedFile.id');
+            console.log('fileContentId: ' + fileContentId);
             var controller = this;
             this.store.find('fileContent', fileContentId).then(function (data) {
                 controller.set('previewedFileContent', data);
             });
         }
-    }.property('@each.selected'),
+    }.observes('previewedFile'),
     editingPreview: false,
     editAreaDisabled: Ember.computed.not('editingPreview'),
 
@@ -56,71 +58,50 @@ App.FileListController = Ember.ArrayController.extend({
     }.property(),
 
     selectedCount: function () {
-        return this.filterBy('selected').length;
+        var visibleFiles = this.filterBy('isVisible');
+        var res = visibleFiles.filterBy('selected').length;
+        console.log('selectedCount: ' + res);
+        return res;
     }.property('@each.selected'),
 
     areAllSelected: function (key, value) {
-        var visibleFiles = this.filterBy('isVisible');
         if (value === undefined) {
-            return !!visibleFiles.get('length') && visibleFiles.isEvery('selected', true);
+            return !!this.get('length') && this.filterBy('isVisible').isEvery('selected', true);
         } else {
-            visibleFiles.setEach('selected', value);
+            this.filterBy('isVisible').setEach('selected', value);
             return value;
         }
     }.property('@each.isVisible,@each.selected'),
 
-    isAnySelected: function (key, value) {
-        if (value === undefined) {
-            return !!this.get('length') && this.isAny('selected', true);
-        } else {
-            return value;
-        }
-    }.property('@each.selected'),
-
+    isAnySelected: function () {
+        return this.get('selectedCount') > 0;
+    }.property('selectedCount'),
     isNoneSelected: Ember.computed.not('isAnySelected'),
 
-    isOneSelected: function (key, value) {
-        if (value === undefined) {
-            return this.get('selectedCount') == 1;
-        } else {
-            return value;
-        }
-    }.property('@each.selected'),
-
-    inNotOneSelected: Ember.computed.not('isOneSelected'),
+    isOneSelected: function () {
+        return this.get('selectedCount') == 1;
+    }.property('selectedCount'),
+    isNotOneSelected: Ember.computed.not('isOneSelected'),
 
     currentFile: function (key, value) {
         console.log('key ' + key);
         console.log('value ' + value);
         if (value === undefined) {
             if (this.get('isOneSelected')) {
-                return this.filterBy('selected')[0];
+                return this.findBy('selected');
             } else {
                 return null;
             }
         } else {
             return value;
         }
-    }.property('@each.selected'),
+    }.property('isOneSelected'),
 
     currentFileName: function (key, value) {
         if (value === undefined) {
             var currentFile = this.get('currentFile');
             if (currentFile) {
                 return currentFile.get('name');
-            } else {
-                return '';
-            }
-        } else {
-            return value;
-        }
-    }.property('currentFile'),
-
-    currentFileAttr: function (key, value) {
-        if (value === undefined) {
-            var currentFile = this.get('currentFile');
-            if (currentFile) {
-                return currentFile.get('attribute');
             } else {
                 return '';
             }
@@ -141,12 +122,12 @@ App.FileListController = Ember.ArrayController.extend({
         createNew: function (type) {
             var name = this.get('newFileName');
             this.set('newFileName', '');
-            var parent = this.get('newFileParentId');
+            var parentID = this.get('newFileParent.id');
             if (name) {
                 var file = this.store.createRecord('file', {
                     name: name,
                     type: type,
-                    parentId: parent
+                    parentId: parentID
                 });
                 file.save();
             }

@@ -19,18 +19,14 @@
         {{action 'showModal' 'create_file_modal' controller model}}>
         Create File
     </button>
-    <button type="button" class="btn btn-default" id="rename-file"
-        {{action 'showModal' 'rename_file_modal' controller model}}
-        {{bind-attr disabled="inNotOneSelected"}}>
-        Rename
-    </button>
-    <button type="button" class="btn btn-default" id="rename-file"
-        {{action 'showModal' 'change_attr_modal' controller model}}
-        {{bind-attr disabled="isNoneSelected"}}>
-        Change attribute
-    </button>
-    <button type="button" class="btn btn-default" id="remove"
-        {{action 'remove'}} {{bind-attr disabled='inNoneSelected'}}>
+    <!--<button type="button" class="btn btn-default"-->
+        {{!action 'showModal' 'rename_file_modal' controller model}}
+        {{!bind-attr disabled="inNotOneSelected"}}
+            <!-- todo close button tag here
+        <!--Rename-->
+    <!--</button>-->
+    <button type="button" class="btn btn-default"
+        {{action 'remove'}} {{bind-attr disabled='isNoneSelected'}}>
         Remove
     </button>
     {{#if areAllSelected}}

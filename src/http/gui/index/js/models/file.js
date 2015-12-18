@@ -16,7 +16,12 @@ App.File = DS.Model.extend({
 
 
     isVisible: function () {
-        return this.get('parent.expanded');
+        var visible = this.get('parent.expanded');
+        console.log('deselect(' + this.get('name') + '): ' + (this.get('selected') && !visible));
+        if (this.get('selected') && !visible) {
+            this.set('selected', false);
+        }
+        return visible;
     }.property('parent.expanded')
 });
 

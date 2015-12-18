@@ -79,8 +79,7 @@ find(<<"file">>, [<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
 find(<<"file">>, [Id]) ->
     ?dump({find, <<"file">>, Id}),
     SessionId = g_session:get_session_id(),
-    {ok, #file_attr{uuid = SpacesDirUUID}} =
-        logical_file_manager:stat(SessionId, {path, <<"/spaces">>}),
+    SpacesDirUUID = get_spaces_dir_uuid(),
     ParentUUID = case get_parent(Id) of
                      SpacesDirUUID ->
                          <<"space#", Id/binary>>;
@@ -108,7 +107,14 @@ find(<<"file">>, [Id]) ->
                   _ ->
                       null
               end,
-    {ok, Children} = logical_file_manager:ls(SessionId, {uuid, Id}, 1000, 0),
+    Children = case Type of
+                   <<"file">> ->
+                       [];
+                   <<"dir">> ->
+                       {ok, Chldrn} = logical_file_manager:ls(
+                           SessionId, {uuid, Id}, 1000, 0),
+                       Chldrn
+               end,
     ChildrenIds = [ChId || {ChId, _} <- Children],
     Res = [
         {<<"id">>, Id},
@@ -183,16 +189,19 @@ create_record(<<"file">>, Data) ->
                null ->
                    <<"/", Name/binary>>;
                _ ->
-                   {ok, #file_attr{}} = logical_file_manager:stat(
-                       SessionId, {path, <<"/spaces">>}),
-                   ok
+                   {ok, ParentPath} = logical_file_manager:get_file_path(
+                       SessionId, ProposedParentUUID),
+                   filename:join([ParentPath, Name])
            end,
+    ?dump(Path),
     FileId = case Type of
                  <<"file">> ->
-                     {ok, FId} = logical_file_manager:create(SessionId, <<"/", Name/binary>>, 8#777),
+                     {ok, FId} = logical_file_manager:create(
+                         SessionId, Path, 8#777),
                      FId;
                  <<"dir">> ->
-                     {ok, DirId} = logical_file_manager:mkdir(SessionId, <<"/", Name/binary>>, 8#777),
+                     {ok, DirId} = logical_file_manager:mkdir(
+                         SessionId, Path, 8#777),
                      DirId
              end,
     Content = case Type of
@@ -228,8 +237,8 @@ update_record(<<"fileContent">>, <<"content#", FileId/binary>>, Data) ->
     {ok, _, _} = logical_file_manager:write(Handle, 0, Bytes),
     ok.
 
-delete_record(<<"file">>, _Id) ->
-    {error, not_iplemented}.
+delete_record(<<"file">>, Id) ->
+    ok = rm_rf(Id).
 
 
 % ------------------------------------------------------------
@@ -240,11 +249,29 @@ get_parent(UUID) ->
     SessionId = g_session:get_session_id(),
     {ok, ParentUUID} = logical_file_manager:get_parent(
         SessionId, {uuid, UUID}),
-    case ParentUUID of
-        <<"spaces">> ->
-            {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
-                SessionId, {path, <<"/spaces">>}),
-            SpacesDirUUID;
+    case logical_file_manager:get_file_path(SessionId, ParentUUID) of
+        {ok, <<"/spaces">>} ->
+            get_spaces_dir_uuid();
         _ ->
             ParentUUID
     end.
+
+
+get_spaces_dir_uuid() ->
+    SessionId = g_session:get_session_id(),
+    {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
+        SessionId, {path, <<"/spaces">>}),
+    SpacesDirUUID.
+
+
+rm_rf(Id) ->
+    SessionId = g_session:get_session_id(),
+    {ok, Children} = logical_file_manager:ls(SessionId,
+        {uuid, Id}, 1000, 0),
+    lists:foreach(
+        fun({ChId, _}) ->
+            ok = rm_rf(ChId)
+        end, Children),
+    ok = logical_file_manager:unlink(SessionId, {uuid, Id}).
+
+
