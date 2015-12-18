@@ -15,10 +15,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([check/2]).
+-export([check/3]).
 
 %%%===================================================================
 %%% API
@@ -29,27 +30,113 @@
 %% Check if given access_definition is granted to given user.
 %% @end
 %%--------------------------------------------------------------------
--spec check(check_permissions:access_definition(), onedata_user:id()) -> term().
-check(root, ?ROOT_USER_ID) ->
+-spec check(check_permissions:access_definition(), #onedata_user{}, [#accesscontrolentity{}]) -> term().
+% standard posix checks
+check(_, #document{key = ?ROOT_USER_ID}, _) ->
     ok;
-check({owner, #document{value = #file_meta{uid = OwnerId}}}, OwnerId) ->
+check({owner, #document{value = #file_meta{uid = OwnerId}}}, #document{key = OwnerId}, _) ->
     ok;
-check({validate_ancestors_exec, Doc}, UserId) ->
-    ok = validate_ancestors_exec(Doc, UserId);
-check({owner_if_parent_sticky, Doc}, UserId) ->
+check({traverse_ancestors, Doc}, UserDoc, _) ->
+    ok = traverse_ancestors(Doc, UserDoc);
+check({owner_if_parent_sticky, Doc}, UserDoc, Acl) ->
     #document{value = #file_meta{mode = Mode}} = fslogic_utils:get_parent(Doc),
     case (Mode band (8#1 bsl 9)) > 0 of
         true ->
-            check({owner, Doc}, UserId);
+            check({owner, Doc}, UserDoc, Acl);
         false ->
             ok
     end;
-check({AccessType, #document{value = #file_meta{is_scope = true}} = Doc}, UserId) ->
+check({AccessType, #document{value = #file_meta{is_scope = true}} = Doc}, #document{key = UserId}, undefined) when
+    AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
     ok = validate_scope_access(AccessType, Doc, UserId),
     ok = validate_posix_access(AccessType, Doc, UserId);
-check({AccessType, Doc}, UserId) ->
+check({AccessType, Doc}, #document{key = UserId}, undefined) when
+    AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
     ok = validate_posix_access(AccessType, Doc, UserId);
-check(_, _) ->
+
+
+% if no acl specified, map access masks checks to posix checks
+check({?read_object, Doc}, UserDoc, undefined) ->
+    ok = check({read, Doc}, UserDoc, undefined);
+check({?list_container, Doc}, UserDoc, undefined) ->
+    ok = check({read, Doc}, UserDoc, undefined),
+    ok = check({exec, Doc}, UserDoc, undefined);
+check({?write_object, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined);
+check({?add_object, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined),
+    ok = check({exec, Doc}, UserDoc, undefined);
+check({?append_data, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined);
+check({?add_subcontainer, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined);
+check({?read_metadata, Doc}, UserDoc, undefined) ->
+    ok = check({read, Doc}, UserDoc, undefined);
+check({?write_metadata, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined);
+check({?execute, Doc}, UserDoc, undefined) ->
+    ok = check({exec, Doc}, UserDoc, undefined);
+check({?traverse_container, Doc}, UserDoc, undefined) ->
+    ok = check({exec, Doc}, UserDoc, undefined);
+check({?delete_object, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined),
+    ok = check({exec, Doc}, UserDoc, undefined);
+check({?delete_subcontainer, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined),
+    ok = check({exec, Doc}, UserDoc, undefined);
+check({?read_attributes, _Doc}, _UserDoc, undefined) ->
+    ok;
+check({?write_attributes, Doc}, UserDoc, undefined) ->
+    ok = check({write, Doc}, UserDoc, undefined);
+check({?delete, Doc}, UserDoc, undefined) ->
+    ok = check({owner_if_parent_sticky, Doc}, UserDoc, undefined);
+check({?read_acl, _Doc}, _UserDoc, undefined) ->
+    ok;
+check({?write_acl, Doc}, UserDoc, undefined) ->
+    ok = check({owner, Doc}, UserDoc, undefined);
+check({?write_owner, _}, UserDoc, undefined) ->
+    ok = check(root, UserDoc, undefined);
+
+% acl is specified, check access masks
+check({?read_object, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_object_mask);
+check({?list_container, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?list_container_mask);
+check({?write_object, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_object_mask);
+check({?add_object, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?add_object_mask);
+check({?append_data, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?append_data_mask);
+check({?add_subcontainer, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?add_subcontainer_mask);
+check({?read_metadata, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_metadata_mask);
+check({?write_metadata, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_metadata_mask);
+check({?execute, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?execute_mask);
+check({?traverse_container, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
+check({?delete_object, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?delete_object_mask);
+check({?delete_subcontainer, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?delete_subcontainer_mask);
+check({?read_attributes, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_attributes_mask);
+check({?write_attributes, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_attributes_mask);
+check({?delete, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?delete_mask);
+check({?read_acl, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?read_acl_mask);
+check({?write_acl, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_acl_mask);
+check({?write_owner, _}, UserDoc, Acl) ->
+    fslogic_acl:check_permission(Acl, UserDoc, ?write_owner_mask);
+
+check(Perm, User, Acl) ->
+    ?error_stacktrace("Unknown permission check rule: (~p, ~p, ~p)", [Perm, User, Acl]),
     throw(?EPERM).
 
 %%%===================================================================
@@ -95,20 +182,23 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
 %%--------------------------------------------------------------------
 %% @doc Checks whether given user has execute permission on all file's ancestors.
 %%--------------------------------------------------------------------
--spec validate_ancestors_exec(Subj :: fslogic_worker:file(), UserId :: onedata_user:id()) -> ok | no_return().
-validate_ancestors_exec(Subj, UserId) ->
-    {ok, #document{value = #file_meta{is_scope = IsScope}} = SubjDoc} = file_meta:get(Subj),
+-spec traverse_ancestors(Subj :: fslogic_worker:file(), UserDoc :: #document{}) -> ok | no_return().
+traverse_ancestors(Subj, UserDoc = #document{key = UserId}) ->
+    {ok, #document{key = Uuid, value = #file_meta{is_scope = IsScope}} = SubjDoc} = file_meta:get(Subj),
     {ok, AncestorsIds} = file_meta:get_ancestors(SubjDoc),
     case IsScope of
         true ->
-            ok = validate_posix_access(exec, SubjDoc, UserId);
+            Acl = check_permissions:get_acl(Uuid),
+            ok = check({?traverse_container, SubjDoc}, UserDoc, Acl);
         false ->
             ok
     end,
     lists:map(
         fun(AncestorId) ->
             #document{value = #file_meta{}} = FileDoc = check_permissions:get_validation_subject(UserId, {uuid, AncestorId}),
-            ok = validate_posix_access(exec, FileDoc, UserId)
+            AncestorAcl = check_permissions:get_acl(AncestorId),
+
+            ok = check({?traverse_container, FileDoc}, UserDoc, AncestorAcl)
         end, AncestorsIds),
     ok.
 

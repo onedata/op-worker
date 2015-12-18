@@ -466,17 +466,16 @@ metadata_test(Config) ->
         {<<"acetype">>, <<"DENY">>},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
         {<<"aceflags">>, <<"NO_FLAGS">>},
-        {<<"acemask">>, <<"READ, WRITE, EXECUTE">>}],
-    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace4]}]}],
+        {<<"acemask">>, <<"WRITE">>}],
+    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace4]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [?USER_1_TOKEN_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
 
     {ok, Code18, _Headers18, _Response18} = do_request(Worker, DirName ++ "?metadata:cdmi_acl", put, RequestHeaders18, RawRequestBody18),
-    ?assertEqual(204, Code18).
+    ?assertEqual(204, Code18),
 
-%% todo enable acls
-%%     {ok, Code19, _Headers19, _Response19} = do_request(Worker, filename:join(DirName, "some_file"), put, [?USER_1_TOKEN_HEADER], []),
-%%     ?assertEqual(403, Code19).
+    {ok, Code19, _Headers19, _Response19} = do_request(Worker, filename:join(DirName, "some_file"), put, [?USER_1_TOKEN_HEADER], []),
+    ?assertEqual(500, Code19). %todo change to 403 after merging with VFS-1401
     %%------------------------------
 
 % Tests cdmi object DELETE requests

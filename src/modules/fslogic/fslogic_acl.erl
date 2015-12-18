@@ -25,39 +25,12 @@
 %%% API
 %%%===================================================================
 
-%% %%--------------------------------------------------------------------
-%% %% @doc Converts posix permission of file, to ACL format. Such acl is called virtual
-%% %% because it is based only on file perms and it is not stored in db.
-%% %% @end
-%% %%--------------------------------------------------------------------
-%% -spec get_virtual_acl(FullfileName :: string(), FileDoc :: record(db_document)) -> [#accesscontrolentity{}].
-%% get_virtual_acl(FullfileName, FileDoc) ->
-%%     #db_document{record = #file{perms = Perms, uid = Uid}} = FileDoc,
-%%     {ok, #space_info{users = Users}} = fslogic_utils:get_space_info_for_path(FullfileName),
-%%     {ok, #db_document{record = #user{global_id = OwnerGlobalId}}} = fslogic_objects:get_user({uuid, Uid}),
-%%     OwnerPerms = posix_perms_to_acl_mask(Perms, true, true),
-%%     OwnerAce = #accesscontrolentity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = utils:ensure_binary(OwnerGlobalId), acemask = OwnerPerms},
-%%     RestAceList = [ #accesscontrolentity{
-%%         acetype = ?allow_mask,
-%%         aceflags = ?no_flags_mask,
-%%         identifier = utils:ensure_binary(UserGlobalId),
-%%         acemask = posix_perms_to_acl_mask(Perms, false, true)
-%%     } || UserGlobalId <- Users -- [utils:ensure_binary(OwnerGlobalId)]],
-%%     case Uid of
-%%         "0" -> RestAceList;
-%%         _ -> [OwnerAce | RestAceList]
-%%     end.
-
 %%--------------------------------------------------------------------
 %% @doc Traverses given ACL in order to check if a Principal (in our case GRUID),
 %% has permissions specified in 'OperationMask' (according to this ACL)
 %% @end
 %%--------------------------------------------------------------------
--spec check_permission(ACL :: [#accesscontrolentity{}], User :: #document{value :: #onedata_user{}}, OperationMask :: non_neg_integer() | read | write | execute) -> ok | no_return().
-check_permission(ACL, User, read) -> check_permission(ACL, User, ?read_mask);
-check_permission(ACL, User, write) -> check_permission(ACL, User, ?write_mask);
-check_permission(ACL, User, execute) ->
-    check_permission(ACL, User, ?execute_mask);
+-spec check_permission(ACL :: [#accesscontrolentity{}], User :: #document{value :: #onedata_user{}}, OperationMask :: non_neg_integer()) -> ok | no_return().
 check_permission([], _User, ?no_flags_mask) -> ok;
 check_permission([], _User, _OperationMask) -> throw(?EPERM);
 check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
@@ -279,12 +252,3 @@ binary_list_to_csv(List) ->
 -spec csv_to_binary_list([binary()]) -> binary().
 csv_to_binary_list(BinaryCsv) ->
     lists:map(fun utils:trim_spaces/1, binary:split(BinaryCsv, <<",">>, [global])).
-
-%% %%--------------------------------------------------------------------
-%% %% @doc converts posix perm mask, to acl perm mask
-%% %%--------------------------------------------------------------------
-%% -spec posix_perms_to_acl_mask(PosixPerms :: non_neg_integer(), FileOwner :: boolean(), GroupOwner :: boolean()) -> non_neg_integer().
-%% posix_perms_to_acl_mask(PosixPerms, FileOwner, GroupOwner) ->
-%%     (case fslogic_perms:has_permission(read, PosixPerms, FileOwner, GroupOwner) of true -> ?read_mask; false -> ?no_flags_mask end) bor
-%%     (case fslogic_perms:has_permission(write, PosixPerms, FileOwner, GroupOwner) of true -> ?write_mask; false -> ?no_flags_mask end) bor
-%%     (case fslogic_perms:has_permission(execute, PosixPerms, FileOwner, GroupOwner) of true -> ?execute_mask; false -> ?no_flags_mask end).

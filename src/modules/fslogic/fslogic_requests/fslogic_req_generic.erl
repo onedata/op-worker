@@ -14,15 +14,16 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([chmod/3, get_file_attr/2, delete_file/2, rename_file/3, update_times/5,
+-export([chmod/3, get_file_attr/2, delete/2, rename_file/3, update_times/5,
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2]).
 
-%%--------------------------------------------------------------------
-%% API functions
-%%--------------------------------------------------------------------
+%%%===================================================================
+%%% API functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc Changes file's access times.
@@ -31,7 +32,7 @@
 %%--------------------------------------------------------------------
 -spec update_times(fslogic_worker:ctx(), File :: fslogic_worker:file(),
                    ATime :: file_meta:time(), MTime :: file_meta:time(), CTime :: file_meta:time()) -> #fuse_response{} | no_return().
--check_permissions([{validate_ancestors_exec, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
@@ -51,7 +52,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
--check_permissions([{owner, 2}, {validate_ancestors_exec, 2}]).
+-check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
 chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
 
     case file_meta:get(FileEntry) of
@@ -89,7 +90,7 @@ chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
 %%--------------------------------------------------------------------
 -spec chown(fslogic_worker:ctx(), File :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
                    #fuse_response{} | no_return().
--check_permissions([root]).
+-check_permissions([{?write_owner, 2}]).
 chown(_, _File, _UserId) ->
     #fuse_response{status = #status{code = ?ENOTSUP}}.
 
@@ -101,7 +102,7 @@ chown(_, _File, _UserId) ->
 %%--------------------------------------------------------------------
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                            FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{validate_ancestors_exec, 2}]).
+-check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
     ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
@@ -130,54 +131,14 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+-spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{write, {parent, 2}}, {owner_if_parent_sticky, 2}, {validate_ancestors_exec, 2}]).
-delete_file(#fslogic_ctx{session_id = SessionId}, File) ->
-    {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
-    {ok, FileChildren} =
-        case Type of
-            ?DIRECTORY_TYPE ->
-                file_meta:list_children(FileDoc, 0, 1);
-            ?REGULAR_FILE_TYPE ->
-                #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
-                ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
-                Results =
-                    lists:map( %% @todo: run this via task manager
-                      fun({StorageId, FileId}) ->
-                              case storage:get(StorageId) of
-                                  {ok, Storage} ->
-                                      SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FileId),
-                                      case storage_file_manager:unlink(SFMHandle) of
-                                          ok -> ok;
-                                          {error, Reason1} ->
-                                              {{StorageId, FileId}, {error, Reason1}}
-                                      end ;
-                                  {error, Reason2} ->
-                                      {{StorageId, FileId}, {error, Reason2}}
-                              end
-                      end, ToDelete),
-                case Results -- [ok] of
-                    [] -> ok;
-                    Errors ->
-                        lists:foreach(
-                          fun({{SID0, FID0}, {error, Reason0}}) ->
-                                  ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
-                          end, Errors)
-                end,
-                {ok, []};
-            _ ->
-                {ok, []}
-        end,
-    case length(FileChildren) of
-        0 ->
-            ok = file_meta:delete(FileDoc),
-            {ok, ParentDoc} = file_meta:get_parent(FileDoc),
-            {ok, _} = file_meta:update(ParentDoc, #{mtime => utils:time()}),
-            #fuse_response{status = #status{code = ?OK}};
-        _ ->
-            #fuse_response{status = #status{code = ?ENOTEMPTY}}
+delete(CTX, File) ->
+    case file_meta:get(File) of
+        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE} = FileDoc}} ->
+            delete_dir(CTX, FileDoc);
+        {ok, FileDoc} ->
+            delete_file(CTX, FileDoc)
     end.
 
 
@@ -188,8 +149,9 @@ delete_file(#fslogic_ctx{session_id = SessionId}, File) ->
 %%--------------------------------------------------------------------
 -spec rename_file(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
                          #fuse_response{} | no_return().
--check_permissions([{write, {parent, 2}}, {write, 2}, {write, {parent, {path, 3}}}, {validate_ancestors_exec, 2}]).
-rename_file(_CTX, SourceEntry, TargetPath) ->
+-check_permissions([{?delete_object, {parent, 2}}, {?delete_subcontainer, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2},
+    {?add_object, {parent, {path, 3}}}, {?add_subcontainer, {parent, {path, 3}}}, {traverse_ancestors, {path, 3}}]).
+rename_file(_CTX, SourceEntry, TargetPath) -> %todo split into delete_dir and delete_file functions (to check acls)
     ?debug("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
     case file_meta:exists({path, TargetPath}) of
         true ->
@@ -206,6 +168,7 @@ rename_file(_CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
+-check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:get_by_name(FileUuid, XattrName) of
         {ok, #document{value = Xattr}} ->
@@ -223,6 +186,7 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 %%--------------------------------------------------------------------
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
     #fuse_response{} | no_return().
+-check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
 set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
@@ -238,6 +202,7 @@ set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
 %%--------------------------------------------------------------------
 -spec remove_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
+-check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
 remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
@@ -253,6 +218,7 @@ remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
+-check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
 list_xattr(_CTX, {uuid, FileUuid}) ->
     case xattr:list(FileUuid) of
         {ok, List} ->
@@ -261,6 +227,76 @@ list_xattr(_CTX, {uuid, FileUuid}) ->
             #fuse_response{status = #status{code = ?ENOENT}}
     end.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
-%% Internal functions
+%% @equiv delete_impl(CTX, File) with permission check
 %%--------------------------------------------------------------------
+-spec delete_dir(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+    FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2}]).
+delete_dir(CTX, File) ->
+    delete_impl(CTX, File).
+
+%%--------------------------------------------------------------------
+%% @equiv delete_impl(CTX, File) with permission check
+%%--------------------------------------------------------------------
+-spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+    FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2}]).
+delete_file(CTX, File) ->
+    delete_impl(CTX, File).
+
+%%--------------------------------------------------------------------
+%% @doc Deletes file or directory
+%%--------------------------------------------------------------------
+-spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+    FuseResponse :: #fuse_response{} | no_return().
+delete_impl(#fslogic_ctx{session_id = SessionId}, File) ->
+    {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+    {ok, FileChildren} =
+        case Type of
+            ?DIRECTORY_TYPE ->
+                file_meta:list_children(FileDoc, 0, 1);
+            ?REGULAR_FILE_TYPE ->
+                #document{value = #file_location{} = Location} = fslogic_utils:get_local_file_location(File),
+                ToDelete = fslogic_utils:get_local_storage_file_locations(Location),
+                Results =
+                    lists:map( %% @todo: run this via task manager
+                        fun({StorageId, FileId}) ->
+                            case storage:get(StorageId) of
+                                {ok, Storage} ->
+                                    SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FileId),
+                                    case storage_file_manager:unlink(SFMHandle) of
+                                        ok -> ok;
+                                        {error, Reason1} ->
+                                            {{StorageId, FileId}, {error, Reason1}}
+                                    end ;
+                                {error, Reason2} ->
+                                    {{StorageId, FileId}, {error, Reason2}}
+                            end
+                        end, ToDelete),
+                case Results -- [ok] of
+                    [] -> ok;
+                    Errors ->
+                        lists:foreach(
+                            fun({{SID0, FID0}, {error, Reason0}}) ->
+                                ?error("Cannot unlink file ~p from storage ~p due to: ~p", [FID0, SID0, Reason0])
+                            end, Errors)
+                end,
+                {ok, []};
+            _ ->
+                {ok, []}
+        end,
+    case length(FileChildren) of
+        0 ->
+            ok = file_meta:delete(FileDoc),
+            {ok, ParentDoc} = file_meta:get_parent(FileDoc),
+            {ok, _} = file_meta:update(ParentDoc, #{mtime => utils:time()}),
+            #fuse_response{status = #status{code = ?OK}};
+        _ ->
+            #fuse_response{status = #status{code = ?ENOTEMPTY}}
+    end.

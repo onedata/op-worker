@@ -16,22 +16,23 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([before_advice/4, after_advice/5, get_validation_subject/2]).
+-export([before_advice/4, after_advice/5, get_validation_subject/2, get_acl/1]).
 
 %% Object pointing to annotation's argument which holds file data (see resolve_file/2)
 -type item_definition() :: non_neg_integer() | {path, non_neg_integer()} | {uuid, file_meta:uuid()} | {parent, item_definition()}.
--type check_type() :: non_neg_integer() % Check type taken from function argument
-                    | owner % Check whether user owns the item
-                    | validate_ancestors_exec % validates ancestors' exec permission.
+-type check_type() :: owner % Check whether user owns the item
+                    | traverse_ancestors % validates ancestors' exec permission.
                     | owner_if_parent_sticky % Check whether user owns the item but only if parent of the item has sticky bit.
                     | write
                     | read
                     | exec
-                    | rdwr.
+                    | rdwr
+                    | term(). %todo define as acl access mask
 
 
 -type access_definition() :: root | {check_type(), item_definition()}.
@@ -50,16 +51,17 @@
 %% generic calls
 before_advice(#annotation{data = []}, _M, _F, Args) ->
     Args;
-before_advice(#annotation{data = [{N, Item} | Rest]} = Annotation, M, F, Args) when is_integer(N) ->
-    before_advice(Annotation#annotation{data = [{lists:nth(N, Args), Item} | Rest]}, M, F, Args);
 before_advice(#annotation{data = [{CheckType, ItemDefinition} | Rest]} = Annotation, M, F,
   [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx | Inputs] = Args) ->
-    FileDoc = get_validation_subject(Ctx, resolve_file_entry(ItemDefinition, Inputs)),
-    ok = rules:check({CheckType, FileDoc}, UserId),
+    FileDoc = #document{key = Key} = get_validation_subject(Ctx, resolve_file_entry(ItemDefinition, Inputs)),
+    Acl = get_acl(Key), %todo refactor and get it once
+    {ok, UserDoc} = onedata_user:get(UserId), %todo refactor and get it once
+    ok = rules:check({CheckType, FileDoc}, UserDoc, Acl),
     before_advice(Annotation#annotation{data = Rest}, M, F, Args);
 before_advice(#annotation{data = [AccessDefinition | Rest]} = Annotation, M, F,
   [#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} | _] = Args) ->
-    ok = rules:check(AccessDefinition, UserId),
+    {ok, UserDoc} = onedata_user:get(UserId), %todo refactor and get it once
+    ok = rules:check(AccessDefinition, UserDoc, undefined),
     before_advice(Annotation#annotation{data = Rest}, M, F, Args).
 
 %%--------------------------------------------------------------------
@@ -101,3 +103,16 @@ resolve_file_entry({path, Item}, Inputs) when is_integer(Item) ->
     {path, resolve_file_entry(Item, Inputs)};
 resolve_file_entry({parent, Item}, Inputs) ->
     fslogic_utils:get_parent(resolve_file_entry(Item, Inputs)).
+
+%%--------------------------------------------------------------------
+%% @doc Get acl of given file, returns undefined when acls are empty
+%%--------------------------------------------------------------------
+-spec get_acl(Uuid :: file_meta:uuid()) -> [#accesscontrolentity{}] | undefined.
+get_acl(Uuid) -> %todo do not export
+    case xattr:get_by_name(Uuid, ?ACL_XATTR_NAME) of
+        {ok, #document{value = #xattr{value = Value}}} ->
+            AclProplist = json_utils:decode(Value),
+            fslogic_acl:from_json_fromat_to_acl(AclProplist);
+        {error, {not_found, xattr}} ->
+            undefined
+    end.

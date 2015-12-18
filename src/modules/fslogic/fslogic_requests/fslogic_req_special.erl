@@ -14,6 +14,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
@@ -27,12 +28,12 @@
 %% @doc Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(),
+-spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: fslogic_worker:file(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{write, 2}, {exec, 2}, {validate_ancestors_exec, 2}]).
+-check_permissions([{?add_subcontainer, 2}, {?traverse_container, 2}, {traverse_ancestors, 2}]).
 mkdir(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
-    UUID, Name, Mode) ->
+  {uuid, UUID}, Name, Mode) ->
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
     mkdir(CTX, DefaultSpaceUUID, Name, Mode);
 mkdir(CTX, ParentUUID, Name, Mode) ->
@@ -63,7 +64,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
 -spec read_dir(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file(),
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{read, 2}, {validate_ancestors_exec, 2}]).
+-check_permissions([{?list_container, 2}, {?traverse_container, 2}, {traverse_ancestors, 2}]).
 read_dir(CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
