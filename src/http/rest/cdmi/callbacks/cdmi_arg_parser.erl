@@ -12,9 +12,9 @@
 -module(cdmi_arg_parser).
 -author("Piotr Ociepka").
 
--include("modules/http_worker/http_common.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+-include("http/http_common.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
+-include("http/rest/cdmi/cdmi_capabilities.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 

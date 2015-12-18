@@ -13,9 +13,9 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/http_worker/http_common.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
--include("modules/http_worker/rest/http_status.hrl").
+-include("http/http_common.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
+-include("http/rest/http_status.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -299,8 +299,8 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             % return response
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
             cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, utils:ensure_defined(
-                    RequestedValueTransferEncoding, undefined, <<"utf-8">>
-                )
+                RequestedValueTransferEncoding, undefined, <<"utf-8">>
+            )
             ),
             cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
@@ -322,7 +322,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             cdmi_metadata:update_mimetype(Auth, {path, Path}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
             case Range of
-            {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
+                {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, From, RawValue),
                     cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
@@ -352,7 +352,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 -spec get_range(Opts :: list()) -> {non_neg_integer(), non_neg_integer()} | undefined.
 get_range(Opts) ->
     case lists:keyfind(<<"value">>, 1, Opts) of
-        {<<"value">>, From_, To_} -> {From_,To_};
+        {<<"value">>, From_, To_} -> {From_, To_};
         false -> undefined
     end.
 

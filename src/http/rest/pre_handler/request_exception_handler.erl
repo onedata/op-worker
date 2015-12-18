@@ -21,7 +21,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/logging.hrl").
--include("modules/http_worker/rest/http_status.hrl").
+-include("http/rest/http_status.hrl").
 
 %% Function that translates handler exception to cowboy format
 -type exception_handler() ::

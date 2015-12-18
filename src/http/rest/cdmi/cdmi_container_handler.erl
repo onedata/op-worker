@@ -12,8 +12,8 @@
 -module(cdmi_container_handler).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/http_common.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include("http/http_common.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
@@ -149,7 +149,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
             URIMetadataNames = [MetadataName || {OptKey, MetadataName} <- Opts, OptKey == <<"metadata">>],
             ok = cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
             {true, Req1, State};
-        _  ->
+        _ ->
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
             Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, opts => ?DEFAULT_GET_DIR_OPTS}),

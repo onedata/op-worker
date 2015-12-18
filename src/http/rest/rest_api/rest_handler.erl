@@ -13,7 +13,7 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
--include("modules/http_worker/http_common.hrl").
+-include("http/http_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").

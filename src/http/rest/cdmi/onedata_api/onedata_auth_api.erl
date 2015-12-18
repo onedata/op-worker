@@ -12,7 +12,7 @@
 -module(onedata_auth_api).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/http_common.hrl").
+-include("http/http_common.hrl").
 
 %% API
 -export([is_authorized/2, authenticate/1]).

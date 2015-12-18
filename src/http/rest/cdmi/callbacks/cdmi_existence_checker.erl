@@ -14,7 +14,7 @@
 
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include("modules/http_worker/rest/http_status.hrl").
+-include("http/rest/http_status.hrl").
 
 %% API
 -export([container_resource_exists/2, object_resource_exists/2]).

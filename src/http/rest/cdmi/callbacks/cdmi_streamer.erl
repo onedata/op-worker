@@ -13,8 +13,8 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/http_worker/http_common.hrl").
--include_lib("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include("http/http_common.hrl").
+-include_lib("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 

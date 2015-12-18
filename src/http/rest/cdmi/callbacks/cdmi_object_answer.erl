@@ -12,8 +12,8 @@
 -module(cdmi_object_answer).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include("http/rest/cdmi/cdmi_capabilities.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API

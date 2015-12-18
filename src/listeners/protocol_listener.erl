@@ -9,19 +9,16 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(protocol_listener).
+-behaviour(listener_behaviour).
 -author("Tomasz Lichon").
 -author("Michal Zmuda").
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% Session logic module
--define(SESSION_LOGIC_MODULE, session_logic).
-
 % Cowboy listener references
 -define(TCP_PROTO_LISTENER, tcp_proto).
 
--behaviour(listener_behaviour).
 
 %% listener_starter_behaviour callbacks
 -export([start/0, stop/0]).

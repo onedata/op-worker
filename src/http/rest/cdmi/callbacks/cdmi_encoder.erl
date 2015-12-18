@@ -12,7 +12,7 @@
 -module(cdmi_encoder).
 -author("Tomasz Lichon").
 
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
 
 %% API
 -export([encode/2, decode/2, decode/3, base64_encoded_data_size/1]).
