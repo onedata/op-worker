@@ -20,7 +20,8 @@
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
 -export([state_get/1, state_put/2]).
--export([apply_batch_changes/2]).
+-export([apply_batch_changes/2, init_stream/3]).
+-export([bcast_status/0, on_status_received/2]).
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 
@@ -28,6 +29,11 @@
     seq,
     doc,
     model
+}).
+
+-record(seq_range, {
+    since,
+    until
 }).
 
 -record(batch, {
@@ -58,6 +64,7 @@
 init(_Args) ->
     timer:sleep(5000),
     ?info("[ DBSync ]: Starting dbsync..."),
+    timer:send_after(100, dbsync_worker, {timer, bcast_status}),
     Since = 0,
     {ok, ChangesStream} = init_stream(Since, infinity, global),
     {ok, #{changes_stream => ChangesStream, {queue, global} => #queue{last_send = now(), current_batch = #batch{since = Since}}}}.
@@ -89,6 +96,16 @@ handle(ping) ->
 
 handle(healthcheck) ->
     ok;
+
+handle({reemit, Msg}) ->
+    dbsync_proto:reemit(Msg);
+
+handle(bcast_status) ->
+    ok = bcast_status(),
+    timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status});
+
+handle(requested_bcast_status) ->
+    ok = bcast_status();
 
 
 handle({QueueKey, cleanup}) ->
@@ -171,20 +188,24 @@ queue_push(QueueKey, #change{seq = Since} = Change, SpaceId) ->
         end).
 
 
-apply_batch_changes(_FromProvider, #batch{changes = Changes}) ->
-    lists:foreach(fun({SpaceId, ChangeList}) ->
-        ok = apply_changes(SpaceId, ChangeList)
-    end, maps:to_list(Changes)).
+apply_batch_changes(FromProvider, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+    CurrentUntil = get_current_seq(FromProvider),
+    case CurrentUntil < Since of
+        true ->
+            ?error("Unable to apply changes from provider ~p. Current 'until': ~p, batch 'since': ~p", [FromProvider, CurrentUntil, Since]),
+            stash_batch(FromProvider, Batch),
+            do_request_changes(FromProvider, CurrentUntil, Since);
+        false ->
+            lists:foreach(fun({SpaceId, ChangeList}) ->
+                ok = apply_changes(SpaceId, ChangeList)
+                          end, maps:to_list(Changes)),
+            update_current_seq(oneprovider:get_provider_id(), Until)
+    end.
 
 apply_changes(SpaceId, [#change{doc = #document{key = Key} = Doc, model = ModelName} = Change | T]) ->
 %%    ?info("Apply in ~p change ~p", [SpaceId, Change]),
     try
         ModelConfig = ModelName:model_init(),
-        caches_controller:safe_delete(?GLOBAL_ONLY_LEVEL, ModelName, Key),
-        caches_controller:safe_delete(?LOCAL_ONLY_LEVEL, ModelName, Key),
-        caches_controller:delete_old_keys(globally_cached, 0),
-        caches_controller:delete_old_keys(locally_cached, 0),
-        mnesia_cache_driver:delete(ModelConfig, Key, ?PRED_ALWAYS),
         {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
         apply_changes(SpaceId, T)
     catch
@@ -250,3 +271,46 @@ get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+update_current_seq(ProviderId, SeqNum) ->
+    worker_host:state_update(dbsync_worker, {current_seq, ProviderId},
+        fun (undefined) ->
+            SeqNum;
+            (CurrentSeq) ->
+                max(SeqNum, CurrentSeq)
+        end).
+
+get_current_seq() ->
+    get_current_seq(oneprovider:get_provider_id()).
+
+get_current_seq(ProviderId) ->
+    worker_host:state_get(dbsync_worker, {current_seq, ProviderId}).
+
+
+
+bcast_status() ->
+    CurrentSeq = get_current_seq(),
+    dbsync_proto:status_report(CurrentSeq).
+
+
+on_status_received(ProviderId, SeqNum) ->
+    CurrentSeq = get_current_seq(ProviderId),
+    case SeqNum > CurrentSeq of
+        true ->
+            do_request_changes(ProviderId, CurrentSeq, SeqNum);
+        false ->
+            ok
+    end.
+
+do_request_changes(ProviderId, Since, Until) ->
+    dbsync_proto:changes_request(ProviderId, Since, Until).
+
+
+stash_batch(ProviderId, Batch) ->
+    worker_host:state_update(dbsync_worker, {stash, ProviderId},
+        fun (undefined) ->
+            [Batch];
+            (Batches) ->
+                [Batch | Batches]
+        end).

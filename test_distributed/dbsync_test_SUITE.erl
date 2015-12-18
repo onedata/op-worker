@@ -100,7 +100,7 @@ global_stream_test(Config) ->
             Path8 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>,
             Path9 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>,
             Path10 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>,
-            Path11 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>,
+%%            Path11 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>,
 
 
             {ok, #file_attr{uuid = UUID1}} = stat(WorkerP1, SessId1, {path,     Path1}),
@@ -113,7 +113,7 @@ global_stream_test(Config) ->
             {ok, #file_attr{uuid = UUID8}} = stat(WorkerP1, SessId1, {path,     Path8}),
             {ok, #file_attr{uuid = UUID9}} = stat(WorkerP1, SessId1, {path,     Path9}),
             {ok, #file_attr{uuid = UUID10}} = stat(WorkerP1, SessId1, {path,    Path10}),
-            {ok, #file_attr{uuid = UUID11}} = stat(WorkerP1, SessId1, {path,    Path11}),
+%%            {ok, #file_attr{uuid = UUID11}} = stat(WorkerP1, SessId1, {path,    Path11}),
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
@@ -125,7 +125,7 @@ global_stream_test(Config) ->
             {ok, #document{rev = Rev8}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID8]),
             {ok, #document{rev = Rev9}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID9]),
             {ok, #document{rev = Rev10}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID10]),
-            {ok, #document{rev = Rev11}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID11]),
+%%            {ok, #document{rev = Rev11}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID11]),
 
             {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [<<UUID1/binary, "$$">>]),
             {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [<<UUID2/binary, "$$">>]),
@@ -137,7 +137,7 @@ global_stream_test(Config) ->
             {ok, #document{rev = LRev8}} = rpc:call(WorkerP1, file_meta, get, [<<UUID8/binary, "$$">>]),
             {ok, #document{rev = LRev9}} = rpc:call(WorkerP1, file_meta, get, [<<UUID9/binary, "$$">>]),
             {ok, #document{rev = LRev10}} = rpc:call(WorkerP1, file_meta, get, [<<UUID10/binary, "$$">>]),
-            {ok, #document{rev = LRev11}} = rpc:call(WorkerP1, file_meta, get, [<<UUID11/binary, "$$">>]),
+%%            {ok, #document{rev = LRev11}} = rpc:call(WorkerP1, file_meta, get, [<<UUID11/binary, "$$">>]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {UUID1,    Rev1,   LRev1}, Map0),
@@ -149,8 +149,8 @@ global_stream_test(Config) ->
             Map7 = maps:put(Path7, {UUID7,    Rev7,   LRev7}, Map6),
             Map8 = maps:put(Path8, {UUID8,    Rev8,   LRev8}, Map7),
             Map9 = maps:put(Path9, {UUID9,    Rev9,   LRev9}, Map8),
-            Map10 = maps:put(Path10, {UUID10,    Rev10,   LRev10}, Map9),
-            _Map11 = maps:put(Path11, {UUID11,    Rev11,   LRev11}, Map10)
+            Map10 = maps:put(Path10, {UUID10,    Rev10,   LRev10}, Map9)
+%%            _Map11 = maps:put(Path11, {UUID11,    Rev11,   LRev11}, Map10)
         end, Dirs),
 
     lists:foreach(

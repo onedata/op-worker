@@ -42,7 +42,6 @@
 %% List of all global caches
 -define(GLOBAL_CACHES, [
     some_record,
-    file_meta,
     storage,
     file_location,
     file_watcher
