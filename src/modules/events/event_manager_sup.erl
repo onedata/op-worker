@@ -18,7 +18,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1, get_event_stream_sup/1]).
+-export([start_link/2, get_event_stream_sup/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -32,10 +32,10 @@
 %% Starts the event manager supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(SessId :: session:id()) ->
+-spec start_link(SessId :: session:id(), SessType :: session:type()) ->
     {ok, EvtManPid :: pid()} | ignore | {error, Reason :: term()}.
-start_link(SessId) ->
-    supervisor:start_link(?MODULE, [SessId]).
+start_link(SessId, SessType) ->
+    supervisor:start_link(?MODULE, [SessId, SessType]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,12 +71,12 @@ get_event_stream_sup(EvtManSup) ->
         Intensity :: non_neg_integer(),
         Period :: non_neg_integer()
     }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
-init([SessId]) ->
+init([SessId, SessType]) ->
     RestartStrategy = one_for_all,
     Intensity = 3,
     Period = 1,
     {ok, {{RestartStrategy, Intensity, Period}, [
-        event_stream_sup_spec(),
+        event_stream_sup_spec(SessType),
         event_manager_spec(self(), SessId)
     ]}}.
 
@@ -90,13 +90,13 @@ init([SessId]) ->
 %% Returns a supervisor child_spec for an event stream supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec event_stream_sup_spec() -> supervisor:child_spec().
-event_stream_sup_spec() ->
+-spec event_stream_sup_spec(SessType :: session:type()) -> supervisor:child_spec().
+event_stream_sup_spec(SessType) ->
     Id = Module = event_stream_sup,
     Restart = permanent,
     Shutdown = infinity,
     Type = supervisor,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+    {Id, {Module, start_link, [SessType]}, Restart, Shutdown, Type, [Module]}.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -12,7 +12,9 @@
 -module(sequencer_manager_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("modules/datastore/datastore.hrl").
+-include("global_definitions.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -28,7 +30,6 @@
 %% tests
 -export([
     sequencer_manager_should_update_session_on_init/1,
-    sequencer_manager_should_send_message_stream_reset_on_init/1,
     sequencer_manager_should_update_session_on_terminate/1,
     sequencer_manager_should_register_sequencer_in_stream/1,
     sequencer_manager_should_unregister_sequencer_in_stream/1,
@@ -46,7 +47,6 @@
 -performance({test_cases, []}).
 all() -> [
     sequencer_manager_should_update_session_on_init,
-    sequencer_manager_should_send_message_stream_reset_on_init,
     sequencer_manager_should_update_session_on_terminate,
     sequencer_manager_should_register_sequencer_in_stream,
     sequencer_manager_should_unregister_sequencer_in_stream,
@@ -71,9 +71,6 @@ sequencer_manager_should_update_session_on_init(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertMatch({ok, _}, rpc:call(Worker, session, get_sequencer_manager,
         [?config(session_id, Config)])).
-
-sequencer_manager_should_send_message_stream_reset_on_init(_) ->
-    ?assertReceivedMatch(#message_stream_reset{}, ?TIMEOUT).
 
 sequencer_manager_should_update_session_on_terminate(Config) ->
     stop_sequencer_manager(?config(sequencer_manager, Config)),
@@ -318,5 +315,5 @@ mock_communicator(Worker) ->
     Self = self(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
-        (Msg, _) -> Self ! Msg
+        (Msg, _, _) -> Self ! Msg, ok
     end).

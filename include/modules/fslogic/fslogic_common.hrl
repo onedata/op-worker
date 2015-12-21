@@ -13,7 +13,8 @@
 -ifndef(FSLOGIC_COMMON_HRL).
 -define(FSLOGIC_COMMON_HRL, 1).
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/helpers.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
@@ -37,6 +38,8 @@
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 
+%% fslogic subscription id
+-define(FSLOGIC_SUB_ID, binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF).
 
 %% Deafult file modes
 
