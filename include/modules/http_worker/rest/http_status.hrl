@@ -17,7 +17,9 @@
 
 -define(MOVED_PERMANENTLY, 301).
 -define(BAD_REQUEST, 400).
+-define(NOT_AUTHORIZED, 401).
 -define(FORBIDDEN, 403).
+-define(NOT_FOUND, 404).
 -define(UNSUPPORTED_MEDIA_TYPE, 415).
 -define(INTERNAL_SERVER_ERROR, 500).
 
