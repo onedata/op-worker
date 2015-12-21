@@ -17,30 +17,45 @@
 namespace one {
 namespace helpers {
 
+class CephHelperCTX : public IStorageHelperCTX {
+public:
+    ~CephHelperCTX();
+
+    void setUserCTX(std::unordered_map<std::string, std::string> args);
+
+    std::unordered_map<std::string, std::string> getUserCTX();
+
+    librados::Rados cluster;
+    librados::IoCtx ioCTX;
+
+private:
+    std::string m_username;
+};
+
 class CephHelper : public IStorageHelper {
 public:
     CephHelper(const std::unordered_map<std::string, std::string> &args,
         asio::io_service &service);
 
-    virtual ~CephHelper();
+    CTXPtr createCTX();
 
     void ash_unlink(
-        CTXRef ctx, const boost::filesystem::path &p, VoidCallback callback);
+        CTXPtr ctx, const boost::filesystem::path &p, VoidCallback callback);
 
-    void ash_read(CTXRef ctx, const boost::filesystem::path &p,
+    void ash_read(CTXPtr ctx, const boost::filesystem::path &p,
         asio::mutable_buffer buf, off_t offset,
         GeneralCallback<asio::mutable_buffer>);
 
-    void ash_write(CTXRef ctx, const boost::filesystem::path &p,
+    void ash_write(CTXPtr ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset, GeneralCallback<std::size_t>);
 
-    void ash_truncate(CTXRef ctx, const boost::filesystem::path &p, off_t size,
+    void ash_truncate(CTXPtr ctx, const boost::filesystem::path &p, off_t size,
         VoidCallback callback);
 
 private:
+    std::shared_ptr<CephHelperCTX> getCTX(CTXPtr rawCtx) const;
+
     asio::io_service &m_service;
-    librados::Rados m_cluster;
-    librados::IoCtx m_ioCtx;
     static const error_t SuccessCode;
 };
 

@@ -38,12 +38,16 @@ public:
         : m_service{1}
         , m_idleWork{asio::make_work(m_service)}
         , m_worker{[=] { m_service.run(); }}
-        , m_helper{{{"user_name", "client.admin"}, {"cluster_name", "ceph"},
-                       {"mon_host", std::move(monHost)},
-                       {"keyring", std::move(keyring)},
-                       {"pool_name", std::move(poolName)}},
-              m_service}
+        , m_helper{{}, m_service}
     {
+        auto rawCTX = m_helper.createCTX();
+        m_ctx = std::dynamic_pointer_cast<one::helpers::CephHelperCTX>(rawCTX);
+        if (m_ctx == nullptr)
+            throw std::make_error_code(std::errc::invalid_argument);
+        m_ctx->setUserCTX({{"user_name", "client.admin"},
+            {"cluster_name", "ceph"}, {"mon_host", std::move(monHost)},
+            {"keyring", std::move(keyring)},
+            {"pool_name", std::move(poolName)}});
     }
 
     ~CephProxy()
@@ -54,75 +58,71 @@ public:
 
     bool unlink(std::string fileId)
     {
-        using namespace std::literals;
         ReleaseGIL guard;
-        one::helpers::StorageHelperCTX ctx;
-        auto promise = std::make_shared<std::promise<bool>>();
-        auto future = promise->get_future();
 
-        auto callback = [promise = std::move(promise)](
-            const std::error_code &ec) mutable
-        {
-            if (ec)
-                promise->set_exception(
-                    std::make_exception_ptr(std::system_error{ec}));
-            else
-                promise->set_value(true);
-        };
+        auto p = make_promise();
+        m_helper.ash_unlink(m_ctx, fileId,
+            std::bind(&CephProxy::set_promise, this, p, std::placeholders::_1));
 
-        m_helper.ash_unlink(ctx, fileId, std::move(callback));
-        if (future.wait_for(2s) != std::future_status::ready)
-            throw std::system_error{std::make_error_code(std::errc::timed_out)};
-
-        return future.get();
+        return get_future(std::move(p));
     }
 
     std::string read(std::string fileId, int offset, int size)
     {
         ReleaseGIL guard;
-        one::helpers::StorageHelperCTX ctx;
         std::string buffer(size, '\0');
-        m_helper.sh_read(ctx, fileId, asio::buffer(buffer), offset);
+        m_helper.sh_read(m_ctx, fileId, asio::buffer(buffer), offset);
         return buffer;
     }
 
     int write(std::string fileId, std::string data, int offset)
     {
         ReleaseGIL guard;
-        one::helpers::StorageHelperCTX ctx;
-        return m_helper.sh_write(ctx, fileId, asio::buffer(data), offset);
+        return m_helper.sh_write(m_ctx, fileId, asio::buffer(data), offset);
     }
 
     bool truncate(std::string fileId, int offset)
     {
-        using namespace std::literals;
         ReleaseGIL guard;
-        one::helpers::StorageHelperCTX ctx;
-        auto promise = std::make_shared<std::promise<bool>>();
-        auto future = promise->get_future();
 
-        auto callback = [promise = std::move(promise)](
-            const std::error_code &ec) mutable
-        {
-            if (ec)
-                promise->set_exception(
-                    std::make_exception_ptr(std::system_error{ec}));
-            else
-                promise->set_value(true);
-        };
+        auto p = make_promise();
+        m_helper.ash_truncate(m_ctx, fileId, offset,
+            std::bind(&CephProxy::set_promise, this, p, std::placeholders::_1));
 
-        m_helper.ash_truncate(ctx, fileId, offset, std::move(callback));
-        if (future.wait_for(2s) != std::future_status::ready)
-            throw std::system_error{std::make_error_code(std::errc::timed_out)};
-
-        return future.get();
+        return get_future(std::move(p));
     }
 
 private:
+    void set_promise(
+        std::shared_ptr<std::promise<bool>> p, one::helpers::error_t e)
+    {
+        if (e) {
+            p->set_exception(std::make_exception_ptr(std::system_error(e)));
+        }
+        else {
+            p->set_value(true);
+        }
+    }
+
+    std::shared_ptr<std::promise<bool>> make_promise()
+    {
+        return std::make_shared<std::promise<bool>>();
+    }
+
+    bool get_future(std::shared_ptr<std::promise<bool>> p)
+    {
+        using namespace std::literals;
+        auto f = p->get_future();
+        if (f.wait_for(2s) != std::future_status::ready)
+            throw std::system_error{std::make_error_code(std::errc::timed_out)};
+        return f.get();
+    }
+
     asio::io_service m_service;
     asio::executor_work<asio::io_service::executor_type> m_idleWork;
     std::thread m_worker;
     one::helpers::CephHelper m_helper;
+    std::shared_ptr<one::helpers::CephHelperCTX> m_ctx;
 };
 
 namespace {
