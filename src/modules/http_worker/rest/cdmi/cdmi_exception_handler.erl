@@ -21,6 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
+-include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 
 %% API
 -export([handle/4]).
@@ -43,17 +44,13 @@ handle(Req, State, error, {error, no_peer_certificate}) ->
     {ok, Req2} = cowboy_req:reply(?NOT_AUTHORIZED, [], [], Req),
     {halt, Req2, State};
 handle(Req, State, error, {error,{not_found,file_meta}}) ->
-    BodyBinary = json_utils:encode([{<<"error_not_found">>, <<"The resource could not be found">>}]),
-    {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], BodyBinary, Req),
-    {halt, Req2, State};
+    handle(Req, State, error, ?ERROR_NOT_FOUND);
 handle(Req, State, error, {error, ?ENOENT}) ->
-    BodyBinary = json_utils:encode([{<<"error_not_found">>, <<"The resource could not be found">>}]),
-    {ok, Req2} = cowboy_req:reply(?NOT_FOUND, [], BodyBinary, Req),
-    {halt, Req2, State};
+    handle(Req, State, error, ?ERROR_NOT_FOUND);
 handle(Req, State, error, {error, ?EACCES}) ->
-    BodyBinary = json_utils:encode([{<<"error_forbidden">>, <<"Permission denied">>}]),
-    {ok, Req2} = cowboy_req:reply(?FORBIDDEN, [], BodyBinary, Req),
-    {halt, Req2, State};
+    handle(Req, State, error, ?ERROR_PERMISSION_DENIED);
+handle(Req, State, error, {error, ?EPERM}) ->
+    handle(Req, State, error, ?ERROR_FORBIDDEN);
 handle(Req, State, Type, Error) ->
     ?error_stacktrace("Unhandled exception in cdmi request ~p:~p", [Type, Error]),
     request_exception_handler:handle(Req, State, Type, Error).

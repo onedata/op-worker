@@ -99,7 +99,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
                 ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
                       catch _:Error ->
                           ?debug_stacktrace("Acl conversion error ~p", [Error]),
-                          throw(?invalid_acl)
+                          throw(?ERROR_INVALID_ACL)
                       end,
                 ok = onedata_file_api:set_acl(Auth, FileKey, ACL);
             ({Name, Value}) -> ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = Name, value = Value})

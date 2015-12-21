@@ -60,7 +60,7 @@ malformed_capability_request(Req, State) ->
     {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
     case maps:find(cdmi_version, State2) of
         {ok, _} -> {false, Req, State2};
-        _ -> throw(?unsupported_version)
+        _ -> throw(?ERROR_UNSUPPORTED_VERSION)
     end.
 
 %%--------------------------------------------------------------------
@@ -86,7 +86,7 @@ malformed_objectid_request(Req, State) ->
     Uuid =
         case cdmi_id:objectid_to_uuid(Id) of
             {ok, Uuid_} -> Uuid_;
-            _ -> throw(?invalid_objectid)
+            _ -> throw(?ERROR_INVALID_OBJECTID)
         end,
 
     % get path of object with that uuid
@@ -151,7 +151,7 @@ get_ranges(Req, State) ->
         undefined -> {undefined, Req1};
         _ ->
             case parse_byte_range(State, RawRange) of
-                invalid ->throw(?invalid_range);
+                invalid ->throw(?ERROR_INVALID_RANGE);
                 Ranges -> {Ranges, Req1}
             end
     end.
@@ -231,7 +231,7 @@ get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
     VersionList = lists:map(fun utils:trim_spaces/1, binary:split(VersionBinary, <<",">>, [global])),
     get_supported_version(VersionList);
-get_supported_version([]) -> throw(?unsupported_version);
+get_supported_version([]) -> throw(?ERROR_UNSUPPORTED_VERSION);
 get_supported_version([<<"1.1.1">> | _Rest]) -> <<"1.1.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 
@@ -274,10 +274,10 @@ validate_body(Body) ->
     case length(Keys) =:= length(Body) of
         true ->
             case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
-                N when N > 1 -> throw(?conflicting_body_fields);
+                N when N > 1 -> throw(?ERROR_CONFLICTING_BODY_FIELDS);
                 _ -> ok
             end;
-        false -> throw(?duplicated_body_fields)
+        false -> throw(?ERROR_DUPLICATED_BODY_FIELDS)
     end.
 
 %%--------------------------------------------------------------------

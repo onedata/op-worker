@@ -124,13 +124,13 @@ distinguish_files(Uuid, Name, Auth) ->
   ChildNum :: integer(), MaxChildren :: integer()) ->
     {NewFrom :: integer(), NewTo :: integer()} | no_return().
 normalize_childrenrange(From, To, _ChildNum, _MaxChildren) when From > To ->
-    throw(?invalid_childrenrange);
+    throw(?ERROR_INVALID_CHILDRENRANGE);
 normalize_childrenrange(_From, To, ChildNum, _MaxChildren) when To >= ChildNum ->
-    throw(?invalid_childrenrange);
+    throw(?ERROR_INVALID_CHILDRENRANGE);
 normalize_childrenrange(From, To, ChildNum, MaxChildren) ->
     To2 = min(ChildNum - 1, To),
     case MaxChildren < (To2 - From + 1) of
-        true -> throw(?too_large_childrenrange(MaxChildren));
+        true -> throw(?ERROR_TOO_LARGE_CHILDRENRANGE(MaxChildren));
         false -> {From, To2}
     end.
 
@@ -139,6 +139,6 @@ normalize_childrenrange(From, To, ChildNum, MaxChildren) ->
 %%--------------------------------------------------------------------
 -spec terminate_if_too_many_children(list(), non_neg_integer()) -> ok | no_return().
 terminate_if_too_many_children(List, MaxChildren) when length(List) > MaxChildren ->
-    throw(?too_large_childrenrange(MaxChildren));
+    throw(?ERROR_TOO_LARGE_CHILDRENRANGE(MaxChildren));
 terminate_if_too_many_children(_, _) ->
     ok.

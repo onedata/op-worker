@@ -246,7 +246,7 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                             cdmi_metadata:set_completion_status_according_to_partial_flag(
                                 Auth, {path, Path}, CdmiPartialFlag
                             ),
-                            throw(?invalid_range)
+                            throw(?ERROR_INVALID_RANGE)
                     end
             end
     end.
@@ -339,7 +339,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                     {true, Req1, State};
                 _MalformedRange ->
                     cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
-                    throw(?invalid_range)
+                    throw(?ERROR_INVALID_RANGE)
             end
     end.
 

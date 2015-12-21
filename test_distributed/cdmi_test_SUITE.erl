@@ -39,8 +39,7 @@ all() ->
         list_dir_test, get_file_test, metadata_test, delete_file_test, create_file_test,
         update_file_test, create_dir_test, capabilities_test,
         choose_adequate_handler, use_supported_cdmi_version,
-        use_unsupported_cdmi_version, objectid_test,
-%%         request_format_check_test, todo merge JK changes and enable
+        use_unsupported_cdmi_version, objectid_test, request_format_check_test,
         mimetype_and_encoding_test, out_of_range_test, partial_upload_test,
         acl_test, errors_test
     ].
@@ -478,7 +477,7 @@ metadata_test(Config) ->
     ?assertEqual(204, Code18),
 
     {ok, Code19, _Headers19, _Response19} = do_request(Worker, filename:join(DirName, "some_file"), put, [?USER_1_TOKEN_HEADER], []),
-    ?assertEqual(500, Code19). %todo change to 403 after merging with VFS-1401
+    ?assertEqual(403, Code19).
     %%------------------------------
 
 % Tests cdmi object DELETE requests
@@ -1004,8 +1003,6 @@ mimetype_and_encoding_test(Config) ->
 
 %todo put moved_pemanently_test from demo here
 
-%todo put errors_test from demo here
-
 % tests reading&writing file at random ranges
 out_of_range_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -1149,7 +1146,7 @@ acl_test(Config) ->
         {<<"aceflags">>, <<"NO_FLAGS">>},
         {<<"acemask">>, <<"WRITE">>}
     ],
-    _Execute = [
+    Execute = [
         {<<"acetype">>, <<"ALLOW">>},
         {<<"identifier">>, Identifier1},
         {<<"aceflags">>, <<"NO_FLAGS">>},
@@ -1159,6 +1156,7 @@ acl_test(Config) ->
     MetadataAclRead = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read]}]}]),
     MetadataAclWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
     MetadataAclReadWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
+    MetadataAclReadWriteExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read, Execute]}]}]),
 
     %%----- read file test ---------
     % create test file with dummy data
@@ -1170,41 +1168,40 @@ acl_test(Config) ->
     RequestHeaders1 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclWrite),
     {ok, 403, _, _} = do_request(Worker, Filename1, get, RequestHeaders1, []),
-    {ok, 403, _, _} = do_request(Worker, Filename1, get, [], []),
-    ?assertEqual({wrong_open_return_code, -13}, get_file_content(Config, Filename1)),
+    {ok, 403, _, _} = do_request(Worker, Filename1, get, [?USER_1_TOKEN_HEADER], []),
+    ?assertEqual({error, ?EPERM}, open_file(Config, Filename1, read)),
 
-
-    % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
-    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
-    {ok, 200, _, _} = do_request(Worker, Filename1, get, RequestHeaders1, []),
-    {ok, 200, _, _} = do_request(Worker, Filename1, get, [], []),
-    %%------------------------------
-
-    %%------- write file test ------
-    % set acl to 'read&write' and test cdmi/non-cdmi put request (should succeed)
-    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
-    RequestBody4 = json_utils:encode([{<<"value">>, <<"new_data">>}]),
-    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, RequestBody4),
-    ?assertEqual(<<"new_data">>, get_file_content(Config, Filename1)),
-    write_to_file(Config, Filename1, <<"1">>, 0),
-    ?assertEqual(<<"new_data1">>, get_file_content(Config, Filename1)),
-    {ok, 204, _, _} = do_request(Worker, Filename1, put, [], <<"new_data2">>),
-    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
-
-    % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
-    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclRead),
-    RequestBody6 = json_utils:encode([{<<"value">>, <<"new_data3">>}]),
-    {ok, 403, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, RequestBody6),
-    {ok, 403, _, _} = do_request(Worker, Filename1, put, [], <<"new_data4">>),
-    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
-    ?assertEqual({wrong_open_return_code, -13}, write_to_file(Config, Filename1, <<"some_data">>, 0)),
-    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
-    %%------------------------------
-
-    %%------ delete file test ------
-    {ok, 204, _, _} = do_request(Worker, Filename1, delete, [], []),
-    ?assert(not object_exists(Config, Filename1)),
-    %%------------------------------
+%%    % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed) todo create set_acl message and handle it it fslogic with proper permission, so owner may change acl of file with no WRITE permission
+%%    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
+%%    {ok, 200, _, _} = do_request(Worker, Filename1, get, RequestHeaders1, []),
+%%    {ok, 200, _, _} = do_request(Worker, Filename1, get, [?USER_1_TOKEN_HEADER], []),
+%%    %%------------------------------
+%%
+%%    %%------- write file test ------
+%%    % set acl to 'read&write' and test cdmi/non-cdmi put request (should succeed)
+%%    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
+%%    RequestBody4 = json_utils:encode([{<<"value">>, <<"new_data">>}]),
+%%    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, RequestBody4),
+%%    ?assertEqual(<<"new_data">>, get_file_content(Config, Filename1)),
+%%    write_to_file(Config, Filename1, <<"1">>, 0),
+%%    ?assertEqual(<<"new_data1">>, get_file_content(Config, Filename1)),
+%%    {ok, 204, _, _} = do_request(Worker, Filename1, put, [?USER_1_TOKEN_HEADER], <<"new_data2">>),
+%%    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
+%%
+%%    % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
+%%    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclRead),
+%%    RequestBody6 = json_utils:encode([{<<"value">>, <<"new_data3">>}]),
+%%    {ok, 403, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, RequestBody6),
+%%    {ok, 403, _, _} = do_request(Worker, Filename1, put, [?USER_1_TOKEN_HEADER], <<"new_data4">>),
+%%    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
+%%    ?assertEqual({error, ?EPERM}, open_file(Config, Filename1, write)),
+%%    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
+%%    %%------------------------------
+%%
+%%    %%------ delete file test ------
+%%    {ok, 204, _, _} = do_request(Worker, Filename1, delete, [?USER_1_TOKEN_HEADER], []),
+%%    ?assert(not object_exists(Config, Filename1)),
+%%    %%------------------------------
 
     %%--- read write dir test ------
     ?assert(not object_exists(Config, Dirname1)),
@@ -1216,11 +1213,11 @@ acl_test(Config) ->
 
     % set acl to 'read&write' and test cdmi get request (should succeed)
     RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclReadWrite),
+    {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclReadWriteExecute),
     {ok, 200, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
 
     % create files in directory (shoul succeed)
-    {ok, 201, _, _} = do_request(Worker, File1, put, [], []),
+    {ok, 201, _, _} = do_request(Worker, File1, put, [?USER_1_TOKEN_HEADER], []),
     ?assert(object_exists(Config, File1)),
     {ok, 201, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
     ?assert(object_exists(Config, File2)),
@@ -1228,40 +1225,42 @@ acl_test(Config) ->
     ?assert(object_exists(Config, File3)),
 
     % delete files (should succeed)
-    {ok, 204, _, _} = do_request(Worker, File1, delete, [], []),
+    {ok, 204, _, _} = do_request(Worker, File1, delete, [?USER_1_TOKEN_HEADER], []),
     ?assert(not object_exists(Config, File1)),
-    {ok, 204, _, _} = do_request(Worker, File2, delete, [], []),
+    {ok, 204, _, _} = do_request(Worker, File2, delete, [?USER_1_TOKEN_HEADER], []),
     ?assert(not object_exists(Config, File2)),
 
     % set acl to 'write' and test cdmi get request (should return 403 forbidden)
     {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclWrite),
-    {ok, 403, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
+    {ok, 403, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []).
 
-    % set acl to 'read' and test cdmi put request (should return 403 forbidden)
-    {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclRead),
-    {ok, 200, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
-    {ok, 403, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, json_utils:encode([{<<"metadata">>, [{<<"my_meta">>, <<"value">>}]}])),
-
-    % create files (should return 403 forbidden)
-    {ok, 403, _, _} = do_request(Worker, File1, put, [], []),
-    ?assert(not object_exists(Config, File1)),
-    {ok, 403, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
-    ?assert(not object_exists(Config, File2)),
-    ?assertEqual({logical_file_system_error, "eacces"}, create_file(Config, File4)),
-    ?assert(not object_exists(Config, File4)),
-
-    % delete files (should return 403 forbidden)
-    {ok, 403, _, _} = do_request(Worker, File3, delete, [], []),
-    ?assert(object_exists(Config, File3)).
-    %%------------------------------
+%%    % set acl to 'read' and test cdmi put request (should return 403 forbidden)
+%%    {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclRead), %todo fix 403
+%%    {ok, 200, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
+%%    {ok, 403, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, json_utils:encode([{<<"metadata">>, [{<<"my_meta">>, <<"value">>}]}])),
+%%
+%%    % create files (should return 403 forbidden)
+%%    {ok, 403, _, _} = do_request(Worker, File1, put, [?USER_1_TOKEN_HEADER], []),
+%%    ?assert(not object_exists(Config, File1)),
+%%    {ok, 403, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
+%%    ?assert(not object_exists(Config, File2)),
+%%    ?assertEqual({logical_file_system_error, "eacces"}, create_file(Config, File4)),
+%%    ?assert(not object_exists(Config, File4)),
+%%
+%%    % delete files (should return 403 forbidden)
+%%    {ok, 403, _, _} = do_request(Worker, File3, delete, [?USER_1_TOKEN_HEADER], []),
+%%    ?assert(object_exists(Config, File3)).
+%%    %%------------------------------
 
 % test error handling
 errors_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    {TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+        create_test_dir_and_file(Config),
 
     %%---- unauthorized access -----
     {ok, Code1, _Headers1, _Response1} =
-        do_request(Worker, ?TEST_DIR_NAME, get, [], []),
+        do_request(Worker, TestDirName, get, [], []),
     ?assertEqual(401, Code1),
     %%------------------------------
 
@@ -1272,7 +1271,7 @@ errors_test(Config) ->
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code2, _Headers2, _Response2} =
-        do_request(Worker, "dir", put, RequestHeaders2, []),
+        do_request(Worker, "test_dir", put, RequestHeaders2, []),
     ?assertEqual(415, Code2),
     %%------------------------------
 
@@ -1283,7 +1282,7 @@ errors_test(Config) ->
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
     {ok, Code3, _Headers3, _Response3} =
-        do_request(Worker, "dir/", put, RequestHeaders3, []),
+        do_request(Worker, "test_dir/", put, RequestHeaders3, []),
     ?assertEqual(415, Code3),
     %%------------------------------
 
@@ -1341,7 +1340,7 @@ errors_test(Config) ->
     create_file(Config, File8),
     ?assertEqual(object_exists(Config, File8), true),
     write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
-    ?assertEqual(get_file_content(Config, File8),FileContent8),
+    ?assertEqual(get_file_content(Config, File8), FileContent8),
     RequestHeaders8 = [?USER_1_TOKEN_HEADER],
 
     mock_opening_file_without_perms(Config),
@@ -1357,7 +1356,7 @@ errors_test(Config) ->
     create_file(Config, File9),
     ?assertEqual(object_exists(Config, File9), true),
     write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
-    ?assertEqual(get_file_content(Config, File9),FileContent9),
+    ?assertEqual(get_file_content(Config, File9), FileContent9),
     RequestHeaders9 = [
         ?USER_1_TOKEN_HEADER,
         ?CDMI_VERSION_HEADER,
@@ -1369,7 +1368,7 @@ errors_test(Config) ->
         do_request(Worker, File9, get, RequestHeaders9),
     unmock_opening_file_without_perms(Config),
     ?assertEqual(403, Code9).
-%%------------------------------
+    %%------------------------------
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1499,7 +1498,7 @@ write_to_file(Config, Path, Data, Offset) ->
 
 get_file_content(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, FileHandle} = open_file(Config, Path, write),
+    {ok, FileHandle} = open_file(Config, Path, read),
     case lfm_proxy:read(Worker, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
         {error, Error} -> {error, Error};
         {ok, Content} -> Content

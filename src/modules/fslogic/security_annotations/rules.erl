@@ -137,7 +137,7 @@ check({?write_owner, _}, UserDoc, Acl) ->
 
 check(Perm, User, Acl) ->
     ?error_stacktrace("Unknown permission check rule: (~p, ~p, ~p)", [Perm, User, Acl]),
-    throw(?EPERM).
+    throw(?EACCES).
 
 %%%===================================================================
 %%% Internal functions
