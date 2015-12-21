@@ -18,7 +18,8 @@
 
 -behaviour(gen_server).
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
@@ -50,6 +51,8 @@
     sequencer_out_streams = #{} :: streams()
 }).
 
+-define(SEND_RETRY_DELAY, timer:seconds(5)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -71,7 +74,7 @@ start_link(SeqManSup, SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Initializes the server. Returns timeout equal to zero, so that
+%% Initializes the sequencer manager. Returns timeout equal to zero, so that
 %% sequencer manager receives 'timeout' message in handle_info immediately after
 %% initialization. This mechanism is introduced in order to avoid deadlock
 %% when asking sequencer manager supervisor for sequencer stream supervisor pid
@@ -82,9 +85,9 @@ start_link(SeqManSup, SessId) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SeqManSup, SessId]) ->
+    ?debug("Initializing sequencer manager for session ~p", [SessId]),
     process_flag(trap_exit, true),
     {ok, SessId} = session:update(SessId, #{sequencer_manager => self()}),
-    send_message_stream_reset(SessId),
     {ok, #state{sequencer_manager_sup = SeqManSup, session_id = SessId}, 0}.
 
 %%--------------------------------------------------------------------
@@ -101,8 +104,9 @@ init([SeqManSup, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call(open_stream, _From, State) ->
+handle_call(open_stream, _From, #state{session_id = SessId} = State) ->
     StmId = generate_stream_id(),
+    ?debug("Opening stream ~p in sequencer manager for session ~p", [StmId, SessId]),
     {reply, {ok, StmId}, create_sequencer_out_stream(StmId, State)};
 
 handle_call(Request, _From, State) ->
@@ -131,7 +135,8 @@ handle_cast({unregister_in_stream, StmId}, #state{sequencer_in_streams = Stms} =
 handle_cast({unregister_out_stream, StmId}, #state{sequencer_out_streams = Stms} = State) ->
     {noreply, State#state{sequencer_out_streams = maps:remove(StmId, Stms)}};
 
-handle_cast({close_stream, StmId}, State) ->
+handle_cast({close_stream, StmId}, #state{session_id = SessId} = State) ->
+    ?debug("Closing stream ~p in sequencer manager for session ~p", [StmId, SessId]),
     forward_to_sequencer_out_stream(#server_message{
         message_stream = #message_stream{stream_id = StmId},
         message_body = #end_of_message_stream{}
@@ -139,24 +144,29 @@ handle_cast({close_stream, StmId}, State) ->
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_stream_reset{
-    stream_id = undefined} = Msg}, #state{sequencer_out_streams = Stms} = State) ->
+    stream_id = undefined} = Msg}, #state{sequencer_out_streams = Stms,
+    session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     maps:map(fun(_, SeqStm) ->
         gen_server:cast(SeqStm, Msg)
     end, Stms),
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_stream_reset{
-    stream_id = StmId} = Msg}, State) ->
+    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     forward_to_sequencer_out_stream(Msg, StmId, State),
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_request{
-    stream_id = StmId} = Msg}, State) ->
+    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     forward_to_sequencer_out_stream(Msg, StmId, State),
     {noreply, State};
 
 handle_cast(#client_message{message_body = #message_acknowledgement{
-    stream_id = StmId} = Msg}, State) ->
+    stream_id = StmId} = Msg}, #state{session_id = SessId} = State) ->
+    ?debug("Handling ~p in sequencer manager for session ~p", [Msg, SessId]),
     forward_to_sequencer_out_stream(Msg, StmId, State),
     {noreply, State};
 
@@ -187,7 +197,7 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info({'EXIT', SeqManSup, shutdown}, #state{sequencer_manager_sup = SeqManSup} = State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
     {ok, SeqInStmSup} = sequencer_manager_sup:get_sequencer_stream_sup(
@@ -200,6 +210,10 @@ handle_info(timeout, #state{sequencer_manager_sup = SeqManSup} = State) ->
         sequencer_in_stream_sup = SeqInStmSup,
         sequencer_out_stream_sup = SeqOutStmSup
     }};
+
+handle_info({send, Msg, SessId}, State) ->
+    ensure_sent(Msg, SessId),
+    {noreply, State};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -238,12 +252,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sends a message stream reset request for all streams to the remote client.
+%% Sends a message to client associated with session. If an error occurs retries
+%% after delay.
 %% @end
 %%--------------------------------------------------------------------
--spec send_message_stream_reset(SessId :: session:id()) -> ok.
-send_message_stream_reset(SessId) ->
-    communicator:send(#message_stream_reset{}, SessId).
+-spec ensure_sent(Msg :: term(), SessId :: session:id()) -> ok.
+ensure_sent(Msg, SessId) ->
+    case communicator:send(Msg, SessId) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ?error("Cannot send message ~p due to: ~p", [Msg, Reason]),
+            erlang:send_after(?SEND_RETRY_DELAY, self(), {send, Msg, SessId}),
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

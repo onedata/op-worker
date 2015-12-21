@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
 -include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -263,7 +264,7 @@ metadata_test(Config) ->
     FileName = "metadataTest.txt",
     FileContent = <<"Some content...">>,
     DirName = "metadataTestDir/",
-    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {_SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
 
     %%-------- create file with user metadata --------
     ?assert(not object_exists(Config, FileName)),
@@ -370,7 +371,6 @@ metadata_test(Config) ->
     RequestBody11 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value">>}]}],
     RawRequestBody11 = json_utils:encode(RequestBody11),
     {ok, 201, _Headers11, Response11} = do_request(Worker, DirName, put, RequestHeaders2, RawRequestBody11),
-    ct:print("~p", [Response11]),
     CdmiResponse11 = json_utils:decode(Response11),
     Metadata11 = proplists:get_value(<<"metadata">>, CdmiResponse11),
     ?assertEqual(<<"my_dir_value">>, proplists:get_value(<<"my_metadata">>, Metadata11)),
@@ -457,9 +457,9 @@ create_file_test(Config) ->
     RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
     RequestBody2 = [{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, base64:encode(FileContent)}],
     RawRequestBody2 = json_utils:encode(RequestBody2),
-
     {ok, Code2, _Headers2, Response2} =
         do_request(Worker, ToCreate2, put, RequestHeaders2, RawRequestBody2),
+    
     ?assertEqual(201, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
@@ -664,7 +664,6 @@ create_dir_test(Config) ->
         do_request(Worker, DirName, put, RequestHeaders3, []),
     ?assertEqual(204,Code3),
 
-
     ?assert(object_exists(Config, DirName)),
     %%------------------------------
 
@@ -865,6 +864,7 @@ errors_test(Config) ->
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     initializer:setup_storage(ConfigWithNodes).
+
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).

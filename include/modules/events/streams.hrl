@@ -34,7 +34,7 @@
 %% emission_time     - maximal delay between successive event handler executions
 -record(event_stream_definition, {
     metadata = 0 :: event_stream:metadata(),
-    init_handler = fun(_, _) -> ok end :: event_stream:init_handler(),
+    init_handler = fun(_, _, _) -> #{} end :: event_stream:init_handler(),
     terminate_handler = fun(_) -> ok end :: event_stream:terminate_handler(),
     event_handler = fun(_, _) -> ok end :: event_stream:event_handler(),
     admission_rule :: event_stream:admission_rule(),

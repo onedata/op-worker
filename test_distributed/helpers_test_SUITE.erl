@@ -25,6 +25,8 @@
 -define(dio_root(Config), ?TEMP_DIR).
 -define(path(Config, File), list_to_binary(filename:join(?dio_root(Config), str_utils:to_list(File)))).
 
+-define(CALL_TIMEOUT_MILLIS, timer:minutes(3)).
+
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
@@ -192,7 +194,7 @@ gen_filename() ->
     http_utils:url_encode(<<"helpers_test_", (base64:encode(crypto:rand_bytes(20)))/binary>>).
 
 ctx_server(Config) ->
-    CTX = helpers:new_handle(<<"DirectIO">>, [?path(Config, "")]),
+    CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),
     ctx_server(Config, CTX).
 ctx_server(Config, CTX) ->
     receive
@@ -212,10 +214,15 @@ call(Config, Method, Args) ->
     CTXServer ! {self(), {run_helpers, Method, Args}},
     receive
         Resp -> Resp
+    after
+        ?CALL_TIMEOUT_MILLIS -> {error, timeout}
     end.
+
 call(Config, Module, Method, Args) ->
     CTXServer = ?config(ctx_server, Config),
     CTXServer ! {self(), {run, Module, Method, Args}},
     receive
         Resp -> Resp
+    after
+        ?CALL_TIMEOUT_MILLIS -> {error, timeout}
     end.

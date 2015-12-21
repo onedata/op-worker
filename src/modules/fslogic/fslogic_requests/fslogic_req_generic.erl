@@ -36,8 +36,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
     {ok, _} = file_meta:update(FileEntry, UpdateMap1),
 
-    %% @todo: replace with events
-    spawn(fun() -> fslogic_notify:attributes(FileEntry, [SessId]) end),
+    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, [SessId]) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -51,14 +50,16 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
 -check_permissions({owner, 2}).
-chmod(_CTX, FileEntry, Mode) ->
+chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
 
     case file_meta:get(FileEntry) of
-        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}}} ->
+        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
             Results = lists:map(
                         fun({SID, FID} = Loc) ->
                                 {ok, Storage} = storage:get(SID),
-                                {Loc, storage_file_manager:chmod(Storage, FID, Mode)}
+                                SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FID),
+                                {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
                         end, fslogic_utils:get_local_storage_file_locations(FileEntry)),
 
             case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
@@ -74,7 +75,7 @@ chmod(_CTX, FileEntry, Mode) ->
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
     %% @todo: replace with events
-    spawn(fun() -> fslogic_notify:attributes(FileEntry, []) end),
+    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -104,13 +105,14 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
                                               type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                                              ctime = CTime, uid = UID, name = Name}}} ->
+                                              ctime = CTime, uid = UID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
-            ok = file_watcher:insert_attr_watcher(UUID, SessId),
-
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+            #posix_user_ctx{gid = GID} = fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-                               #file_attr{
+                               #file_attr {
+                                  gid = GID,
                                   uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
                                   ctime = CTime, uid = fslogic_utils:gen_storage_uid(UID), size = Size, name = Name
                                  }};
@@ -127,8 +129,9 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
 -spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{write, {parent, 2}}, {owner_if_parent_sticky, 2}]).
-delete_file(_, File) ->
+delete_file(#fslogic_ctx{session_id = SessionId}, File) ->
     {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
     {ok, FileChildren} =
         case Type of
             ?DIRECTORY_TYPE ->
@@ -141,7 +144,8 @@ delete_file(_, File) ->
                       fun({StorageId, FileId}) ->
                               case storage:get(StorageId) of
                                   {ok, Storage} ->
-                                      case storage_file_manager:unlink(Storage, FileId) of
+                                      SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FileId),
+                                      case storage_file_manager:unlink(SFMHandle) of
                                           ok -> ok;
                                           {error, Reason1} ->
                                               {{StorageId, FileId}, {error, Reason1}}
@@ -204,7 +208,7 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Xattr};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}};
-        {error, {not_found, _}} ->
+        {error, {not_found, xattr}} ->
             #fuse_response{status = #status{code = ?ENOATTR}}
     end.
 
