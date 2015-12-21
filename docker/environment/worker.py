@@ -11,7 +11,7 @@ import json
 import os
 import subprocess
 import sys
-from . import common, docker, riak, couchbase, dns, provider_ccm
+from . import common, docker, riak, couchbase, dns, cluster_manager
 
 CLUSTER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 # mounting point for op-worker-node docker
@@ -42,9 +42,9 @@ def _tweak_config(config, name, instance, uid, configurator):
     cfg['nodes'] = {'node': cfg['nodes'][name]}
 
     sys_config = cfg['nodes']['node']['sys.config']
-    sys_config['ccm_nodes'] = [
-        provider_ccm.ccm_erl_node_name(n, instance, uid) for n in
-        sys_config['ccm_nodes']]
+    sys_config['cm_nodes'] = [
+        cluster_manager.cm_erl_node_name(n, instance, uid) for n in
+        sys_config['cm_nodes']]
     # Set the cluster domain (needed for nodes to start)
     sys_config[configurator.domain_env_name()] = cluster_domain(instance, uid)
 
