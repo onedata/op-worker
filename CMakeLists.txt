@@ -83,6 +83,11 @@ add_definitions(
     -DBOOST_ALL_DYN_LINK
     -DASIO_STANDALONE)
 
+option(BUILD_PROXY_IO "Build Proxy IO helper." ON)
+if(BUILD_PROXY_IO)
+    add_definitions("-DBUILD_PROXY_IO")
+endif(BUILD_PROXY_IO)
+
 add_subdirectory(clproto)
 add_subdirectory(${ERLANG_TLS_DIR}/src)
 add_subdirectory(src)

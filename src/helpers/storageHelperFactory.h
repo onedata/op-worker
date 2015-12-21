@@ -11,7 +11,9 @@
 
 #include "helpers/IStorageHelper.h"
 
+#ifdef BUILD_PROXY_IO
 #include "communication/communicator.h"
+#endif
 
 #include <asio/io_service.hpp>
 
@@ -26,9 +28,14 @@ namespace helpers {
  */
 class StorageHelperFactory {
 public:
+#ifdef BUILD_PROXY_IO
     StorageHelperFactory(asio::io_service &ceph_service,
         asio::io_service &dio_service,
         communication::Communicator &communicator);
+#else
+    StorageHelperFactory(
+        asio::io_service &ceph_service, asio::io_service &dio_service);
+#endif
 
     virtual ~StorageHelperFactory() = default;
 
@@ -46,7 +53,9 @@ public:
 private:
     asio::io_service &m_cephService;
     asio::io_service &m_dioService;
+#ifdef BUILD_PROXY_IO
     communication::Communicator &m_communicator;
+#endif
 };
 
 } // namespace helpers
