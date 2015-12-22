@@ -70,6 +70,11 @@ public:
         throw std::make_error_code(std::errc::not_supported);
     }
 
+    virtual void setFlags(int flags)
+    {
+        throw std::make_error_code(std::errc::not_supported);
+    }
+
     virtual std::vector<Flag> getFlags()
     {
         throw std::make_error_code(std::errc::not_supported);

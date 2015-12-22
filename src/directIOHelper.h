@@ -33,6 +33,8 @@ public:
 
     void setFlags(std::vector<IStorageHelperCTX::Flag> flags);
 
+    void setFlags(int flags);
+
     std::vector<IStorageHelperCTX::Flag> getFlags();
 
     int getFlagValue(Flag flag);

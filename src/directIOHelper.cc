@@ -570,6 +570,8 @@ void PosixHelperCTX::setFlags(std::vector<IStorageHelperCTX::Flag> _flags)
         flags |= getFlagValue(flag);
 }
 
+void PosixHelperCTX::setFlags(int _flags) { flags = _flags; }
+
 std::vector<IStorageHelperCTX::Flag> PosixHelperCTX::getFlags()
 {
     std::vector<IStorageHelperCTX::Flag> _flags;
