@@ -90,17 +90,21 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
     {[{binary(), atom()}], req(), #{}}.
+content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put_cdmi},
-        {'*', put_binary}
+        {<<"application/cdmi-container">>, put_cdmi}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
-delete_resource(Req, State) ->
+delete_resource(Req, State = #{auth := Auth, path := Path}) ->
+    ok = onedata_file_api:rmdir(Auth, {path, Path}),
     {true, Req, State}.
 
 %%%===================================================================
@@ -133,13 +137,16 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, OperationPerformed} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {onedata_file_api:mkdir(Auth, Path), created};
+                ok = onedata_file_api:mkdir(Auth, Path),
+                {ok, created};
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
             {undefined, CopyURI, undefined} ->
-                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+                ok = onedata_file_api:cp({path, CopyURI}, Path),
+                {ok, copied};
             {undefined, undefined, MoveURI} ->
-                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+                ok = onedata_file_api:mv({path, MoveURI}, Path),
+                {ok, moved}
         end,
 
     %update metadata and return result

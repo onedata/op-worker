@@ -284,9 +284,11 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
             {undefined, CopyURI, undefined} ->
-                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+                ok = onedata_file_api:cp({path, CopyURI}, Path),
+                {ok, copied};
             {undefined, undefined, MoveURI} ->
-                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+                ok = onedata_file_api:mv({path, MoveURI}, Path),
+                {ok, moved}
         end,
 
     % update value and metadata depending on creation type
@@ -300,8 +302,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
             cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, utils:ensure_defined(
                 RequestedValueTransferEncoding, undefined, <<"utf-8">>
-            )
-            ),
+            )),
             cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
             cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {uuid, Uuid}, CdmiPartialFlag),
