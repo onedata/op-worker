@@ -86,11 +86,16 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     {ok, file_uuid()} | error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
-    lfm_utils:call_fslogic(SessId, #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode},
-        fun(#file_location{uuid = UUID}) ->
-            {ok, UUID}
-        end).
+    case file_meta:resolve_path(ParentPath) of
+        {ok, {#document{key = ParentUUID}, _}} ->
+            lfm_utils:call_fslogic(SessId,
+                #get_new_file_location{
+                    name = Name, parent_uuid = ParentUUID, mode = Mode
+                },
+                fun(#file_location{uuid = UUID}) -> {ok, UUID} end
+            );
+        {error, Error} -> {error, Error}
+    end.
 
 
 %%--------------------------------------------------------------------
