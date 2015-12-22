@@ -27,7 +27,7 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi/2, put_cdmi/2, put_binary/2]).
+-export([get_cdmi/2, put_cdmi/2, put_binary/2, error_wrong_path/2]).
 
 %%%===================================================================
 %%% API
@@ -96,7 +96,9 @@ content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
     ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put_cdmi}
+        {<<"application/cdmi-container">>, put_cdmi},
+        {<<"application/cdmi-object">>, error_wrong_path}
+
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -174,6 +176,15 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
 put_binary(Req, State = #{auth := Auth, path := Path}) ->
     ok = onedata_file_api:mkdir(Auth, Path),
     {true, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with cdmi-object content type, which indicates that request has
+%% wrong path as it ends with '/'
+%% @end
+%%--------------------------------------------------------------------
+error_wrong_path(_Req, _State) ->
+    throw(?wrong_path).
 
 %%%===================================================================
 %%% Internal functions

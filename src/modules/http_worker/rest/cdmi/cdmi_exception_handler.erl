@@ -20,7 +20,7 @@
 
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include("modules/http_worker/rest/http_status.hrl").
+-include("http/rest/http_status.hrl").
 
 %% API
 -export([handle/4]).
@@ -54,8 +54,11 @@ handle(Req, State, error, {error, ?EACCES}) ->
     BodyBinary = json_utils:encode([{<<"error_forbidden">>, <<"Permission denied">>}]),
     {ok, Req2} = cowboy_req:reply(?FORBIDDEN, [], BodyBinary, Req),
     {halt, Req2, State};
+handle(Req, State, error, {error, ?EPERM}) ->
+    BodyBinary = json_utils:encode([{<<"error_forbidden">>, <<"Permission denied">>}]),
+    {ok, Req2} = cowboy_req:reply(?FORBIDDEN, [], BodyBinary, Req),
+    {halt, Req2, State};
 handle(Req, State, Type, Error) ->
-    ?error_stacktrace("Unhandled exception in cdmi request ~p:~p", [Type, Error]),
     request_exception_handler:handle(Req, State, Type, Error).
 
 %%%===================================================================

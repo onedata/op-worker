@@ -26,7 +26,7 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2]).
+-export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2, error_wrong_path/2]).
 
 %% the default json response for get/put cdmi_object will contain this entities,
 %% they can be choosed selectively by appending '?name1;name2' list to the
@@ -119,7 +119,8 @@ content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
     ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-object">>, put_cdmi}
+        {<<"application/cdmi-object">>, put_cdmi},
+        {<<"application/cdmi-container">>, error_wrong_path}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -342,6 +343,15 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                     throw(?invalid_range)
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with cdmi-object content type, which indicates that request has
+%% wrong path as it ends with '/'
+%% @end
+%%--------------------------------------------------------------------
+error_wrong_path(Req, State) ->
+    throw(?wrong_path).
 
 %% ====================================================================
 %% Internal functions

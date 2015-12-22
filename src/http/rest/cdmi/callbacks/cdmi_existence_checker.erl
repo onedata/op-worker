@@ -69,7 +69,6 @@ redirect_to_container(Req, #{path := Path} = State) ->
 %%--------------------------------------------------------------------
 -spec redirect_to(cowboy_req:req(), #{}, binary()) -> {halt, cowboy_req:req(), #{}}.
 redirect_to(Req, State, Path) ->
-    {ok, Port} = application:get_env(?APP_NAME, http_worker_rest_port),
     {Hostname, _} = cowboy_req:header(<<"host">>, Req),
 
     {QS, _} = cowboy_req:qs(Req),

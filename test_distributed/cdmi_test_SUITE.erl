@@ -207,7 +207,7 @@ list_dir_test(Config) ->
             ?assert(lists:member(Name,
                 ChildrenResponse6 ++ ChildrenResponse7 ++ ChildrenResponse8))
         end, ChildsBinaries).
-%%------------------------------
+    %%------------------------------
 
 %%  Tests cdmi object GET request. Request can be done without cdmi header (in that case
 %%  file conent is returned as response body), or with cdmi header (the response
@@ -939,7 +939,7 @@ errors_test(Config) ->
     ],
     {ok, Code2, _Headers2, _Response2} =
         do_request(Worker, "dir", put, RequestHeaders2, []),
-    ?assertEqual(415, Code2),
+    ?assertEqual(400, Code2),
     %%------------------------------
 
     %%---- wrong create path 2 -----
@@ -950,7 +950,7 @@ errors_test(Config) ->
     ],
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "dir/", put, RequestHeaders3, []),
-    ?assertEqual(415, Code3),
+    ?assertEqual(400, Code3),
     %%------------------------------
 
     %%-------- wrong base64 --------
@@ -1177,11 +1177,7 @@ mimetype_and_encoding_test(Config) ->
     ?assertEqual(<<"text/plain">>, proplists:get_value(<<"mimetype">>, CdmiResponse7)),
     ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse7)),
     ?assertEqual(FileContent6, proplists:get_value(<<"value">>, CdmiResponse7)).
-%%------------------------------
-
-%todo put moved_pemanently_test from demo here
-
-%todo put errors_test from demo here
+    %%------------------------------
 
 % tests reading&writing file at random ranges
 out_of_range_test(Config) ->
@@ -1410,8 +1406,7 @@ object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:stat(Worker, SessionId,
-        {path, absolute_binary_path(Path)}) of
+    case lfm_proxy:stat(Worker, SessionId, {path, absolute_binary_path(Path)}) of
         {ok, _} ->
             true;
         {error, ?ENOENT} ->
