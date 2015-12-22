@@ -73,17 +73,10 @@ stream_binary(#{attributes := #file_attr{size = Size}} = State, undefined) ->
 stream_binary(#{path := Path, auth := Auth} = State, Ranges) ->
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
     fun(Socket, Transport) ->
-        try
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
             lists:foreach(fun(Rng) ->
                 stream_range(Socket, Transport, State, Rng, <<"utf-8">>, BufferSize, FileHandle)
             end, Ranges)
-        catch Type:Message ->
-            % Any exceptions that occur during file streaming must be caught
-            % here for cowboy to close the connection cleanly
-            ?error_stacktrace("Error while streaming file '~p' - ~p:~p",
-                [Path, Type, Message])
-        end
     end.
 
 %%--------------------------------------------------------------------
@@ -99,17 +92,11 @@ stream_cdmi(#{path := Path, auth := Auth} = State, Range, ValueTransferEncoding,
   JsonBodyPrefix, JsonBodySuffix) ->
     {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path} ,read),
     fun(Socket, Transport) ->
-        try
             Transport:send(Socket, JsonBodyPrefix),
             {ok, BufferSize} = application:get_env(?APP_NAME, download_buffer_size),
             stream_range(Socket, Transport, State, Range,
                 ValueTransferEncoding, BufferSize, FileHandle),
             Transport:send(Socket,JsonBodySuffix)
-        catch Type:Message ->
-            % Any exceptions that occur during file streaming must be caught
-            % here for cowboy to close the connection cleanly
-            ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [Path, Type, Message])
-        end
     end.
 
 %%--------------------------------------------------------------------
