@@ -92,7 +92,7 @@
 uuid_to_objectid(Uuid) ->
     case build_objectid(base64:decode(Uuid)) of
         {error, Error} -> {error, Error};
-        Id -> {ok, list_to_binary(to_base16(Id))}
+        Id -> {ok, to_base16(Id)}
     end.
 
 %%--------------------------------------------------------------------
@@ -100,7 +100,7 @@ uuid_to_objectid(Uuid) ->
 %%--------------------------------------------------------------------
 -spec objectid_to_uuid(binary()) -> {ok, onedata_file_api:file_uuid()} | {error, atom()}.
 objectid_to_uuid(ObjectId) ->
-    case from_base16(binary_to_list(ObjectId)) of
+    case from_base16(ObjectId) of
         <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> ->
             {ok, base64:encode(Data)};
         _Other -> {error, badarg}
@@ -147,22 +147,24 @@ build_objectid(Enum, Data) when is_binary(Data) ->
 %%--------------------------------------------------------------------
 %% @doc Convert an object ID to a Base16 encoded string.
 %%--------------------------------------------------------------------
--spec to_base16(Bin :: binary()) -> string().
+-spec to_base16(Bin :: binary()) -> binary().
 to_base16(Bin) ->
-    lists:flatten([io_lib:format("~2.16.0B", [X]) ||
-        X <- binary_to_list(Bin)]).
+    list_to_binary(
+        lists:flatten([io_lib:format("~2.16.0B", [X]) ||
+            X <- binary_to_list(Bin)])
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc Convert an encoded object ID to its binary form.
 %%--------------------------------------------------------------------
--spec from_base16(Encoded :: string()) -> binary().
+-spec from_base16(Encoded :: binary()) -> binary().
 from_base16(Encoded) ->
-    from_base16(Encoded, []).
-from_base16([], Acc) ->
-    list_to_binary(lists:reverse(Acc));
-from_base16([X, Y | T], Acc) ->
+    from_base16(Encoded, <<"">>).
+from_base16(<<"">>, Acc) ->
+    str_utils:reverse_binary(Acc);
+from_base16(<<X, Y, Rest/binary>>, Acc) ->
     {ok, [V], []} = io_lib:fread("~16u", [X, Y]),
-    from_base16(T, [V | Acc]).
+    from_base16(Rest, <<V, Acc/binary>>).
 
 %%--------------------------------------------------------------------
 %% @doc Computes CRC sum for given string

@@ -40,7 +40,7 @@ prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
 prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
     [{<<"parentURI">>, <<>>} | prepare(Tail, State)];
 prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
-    ParentURI = str_utils:ensure_ends_with_slash(filename:dirname(Path)),
+    ParentURI = filepath_utils:parent_dir(Path),
     [{<<"parentURI">>, ParentURI} | prepare(Tail, State)];
 prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
     [{<<"parentID">>, <<>>} | prepare(Tail, State)];

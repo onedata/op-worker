@@ -118,8 +118,8 @@ delete_resource(Req, State = #{auth := Auth, path := Path}) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, #{options := Options} = State) ->
-    NewOptions = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
-    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
+    NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
+    DirCdmi = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
     Response = json_utils:encode({struct, DirCdmi}),
     {Response, Req, State}.
 
@@ -161,7 +161,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
         _ ->
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
-            Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, opts => ?DEFAULT_GET_DIR_OPTS}),
+            Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, options => ?DEFAULT_GET_DIR_OPTS}),
             Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
@@ -183,6 +183,7 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
 %% wrong path as it ends with '/'
 %% @end
 %%--------------------------------------------------------------------
+-spec error_wrong_path(req(), #{}) -> no_return().
 error_wrong_path(_Req, _State) ->
     throw(?wrong_path).
 

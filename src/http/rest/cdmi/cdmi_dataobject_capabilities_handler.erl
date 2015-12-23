@@ -96,7 +96,7 @@ prepare_capability_ans([<<"objectID">> | Tail]) ->
 prepare_capability_ans([<<"objectName">> | Tail]) ->
     [
         {<<"objectName">>,
-            str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))}
+            filepath_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))}
         | prepare_capability_ans(Tail)
     ];
 prepare_capability_ans([<<"parentURI">> | Tail]) ->

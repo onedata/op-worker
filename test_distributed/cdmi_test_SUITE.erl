@@ -1034,7 +1034,12 @@ errors_test(Config) ->
     {ok, Code9, _Headers9, _Response9} =
         do_request(Worker, File9, get, RequestHeaders9),
     unmock_opening_file_without_perms(Config),
-    ?assertEqual(403, Code9).
+    ?assertEqual(403, Code9),
+    %%------------------------------
+
+    %%--- unauthorized access to / by objectid ---
+    {ok, Code10, _, _} = do_request(Worker, "", get, [?CDMI_VERSION_HEADER], []),
+    ?assertEqual(401, Code10).
     %%------------------------------
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path
@@ -1446,7 +1451,7 @@ absolute_binary_path(Path) ->
 
 ensure_begins_with_slash(Path) ->
     ReversedBinary = list_to_binary(lists:reverse(Path)),
-    lists:reverse(binary_to_list(str_utils:ensure_ends_with_slash(ReversedBinary))).
+    lists:reverse(binary_to_list(filepath_utils:ensure_ends_with_slash(ReversedBinary))).
 
 % Returns current time in seconds
 now_in_secs() ->

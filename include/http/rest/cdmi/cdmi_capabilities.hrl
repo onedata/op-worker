@@ -1,15 +1,15 @@
-%% ===================================================================
-%% @author Tomasz Lichon
-%% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc This header provides common definitions for cdmi_capabilities,
-%% such as lists of capabilities, ids and paths of main capability containers:
-%% "cdmi_capabilities/", "cdmi_capabilities/container/", "cdmi_capabilities/dataobject/"
-%% @end
-%% ===================================================================
+%%%-------------------------------------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C): 2014 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc This header provides common definitions for cdmi_capabilities,
+%%% such as lists of capabilities, ids and paths of main capability containers:
+%%% "cdmi_capabilities/", "cdmi_capabilities/container/", "cdmi_capabilities/dataobject/"
+%%% @end
+%%%-------------------------------------------------------------------
 
 %% the default json response for capability object will contain this entities, they can be choosed selectively by appending '?name1;name2' list to the requested url
 -define(default_get_capability_opts,[<<"objectType">>,<<"objectID">>,<<"objectName">>,<<"parentURI">>,<<"parentID">>,<<"capabilities">>,<<"childrenrange">>,<<"children">>]).
@@ -67,8 +67,6 @@
 -define(container_capability_path,<<"cdmi_capabilities/container/">>).
 -define(dataobject_capability_path,<<"cdmi_capabilities/dataobject/">>).
 
-%% todo uncomment IDs
-
 % Fake datastore uuids, necessary for objectid generation
 -define(root_capability_uuid, base64:encode(<<"00000000000000000000000000000001">>)).
 -define(container_capability_uuid, base64:encode(<<"00000000000000000000000000000002">>)).
@@ -92,8 +90,8 @@
 
 %% Proplist that provides mapping between objectid and capability path
 -define(CapabilityPathById, [
-  {?root_capability_id, ?root_capability_path},
-  {?container_capability_id, ?container_capability_path},
-  {?dataobject_capability_id, ?dataobject_capability_path}
+  {?root_capability_id, filename:absname(<<"/", (?root_capability_path)/binary>>)},
+  {?container_capability_id, filename:absname(<<"/", (?container_capability_path)/binary>>)},
+  {?dataobject_capability_id, filename:absname(<<"/", (?dataobject_capability_path)/binary>>)}
 ]).
 

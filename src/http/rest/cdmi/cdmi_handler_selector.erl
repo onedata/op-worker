@@ -49,15 +49,7 @@ choose_object_or_container_handler(Req) ->
 -spec choose_object_or_container_handler_module(binary()) ->
     cdmi_container_handler | cdmi_object_handler.
 choose_object_or_container_handler_module(Path) ->
-    case ends_with_slash(Path) of
+    case filepath_utils:ends_with_slash(Path) of
         true -> cdmi_container_handler;
         false -> cdmi_object_handler
     end.
-
-
-%%--------------------------------------------------------------------
-%% @equiv binary:last(Path) =:= $/
-%%--------------------------------------------------------------------
--spec ends_with_slash(binary()) -> boolean().
-ends_with_slash(Path) ->
-    binary:last(Path) =:= $/.

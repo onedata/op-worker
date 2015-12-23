@@ -144,7 +144,7 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
 get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}} = State) ->
     % prepare response
-    {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, State),
+    {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, Size),
     Mimetype = cdmi_metadata:get_mimetype(Auth, {uuid, Uuid}),
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
@@ -169,7 +169,7 @@ get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Uui
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}}) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
-    DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State),
+    DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
 
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
@@ -236,7 +236,8 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                     Ans;
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
-                    case cdmi_arg_parser:parse_byte_range(State, RawRange) of
+                    #file_attr{size = Size} = get_attr(Auth, Path),
+                    case cdmi_arg_parser:parse_byte_range(RawRange, Size) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
                             Ans = cdmi_streamer:write_body_to_file(Req2, State, From),
                             cdmi_metadata:set_completion_status_according_to_partial_flag(
@@ -350,7 +351,8 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 %% wrong path as it ends with '/'
 %% @end
 %%--------------------------------------------------------------------
-error_wrong_path(Req, State) ->
+-spec error_wrong_path(req(), #{}) -> no_return().
+error_wrong_path(_Req, _State) ->
     throw(?wrong_path).
 
 %% ====================================================================

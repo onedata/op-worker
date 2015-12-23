@@ -1,5 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Piotr Ociepka
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -22,6 +23,8 @@
 -define(KEYS_REQUIRED_TO_BE_EXCLUSIVE, [<<"deserialize">>, <<"copy">>,
     <<"move">>, <<"reference">>, <<"deserializevalue">>, <<"value">>]).
 
+-define(CDMI_VERSION_HEADER, <<"x-cdmi-specification-version">>).
+
 %% API
 -export([malformed_request/2, malformed_capability_request/2,
     malformed_objectid_request/2, get_ranges/2, parse_body/1,
@@ -39,15 +42,10 @@
 %%--------------------------------------------------------------------
 -spec malformed_request(req(), #{}) -> {false, req(), #{}}.
 malformed_request(Req, State) ->
-    {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
-    Version = get_supported_version(RawVersion),
-    {Qs, Req3} = cowboy_req:qs(Req2),
-    Opts = parse_opts(Qs),
-    {RawPath, Req4} = cowboy_req:path(Req3),
-    <<"/cdmi", Path/binary>> = RawPath,
-
-    NewState = State#{cdmi_version => Version, options => Opts, path => Path},
-    {false, Req4, NewState}.
+    {State2, Req2} = add_version_to_state(Req, State),
+    {State3, Req3} = add_opts_to_state(Req2, State2),
+    {State4, Req4} = add_path_to_state(Req3, State3),
+    {false, Req4, State4}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,86 +69,25 @@ malformed_capability_request(Req, State) ->
 %%--------------------------------------------------------------------
 -spec malformed_objectid_request(req(), #{}) -> {false, req(), #{}} | no_return().
 malformed_objectid_request(Req, State) ->
-    % get objectid
-    {Id, Req1} = cowboy_req:binding(id, Req),
-    {RawVersion, Req2} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req1),
-    Version = get_supported_version(RawVersion),
-    {Qs, Req3} = cowboy_req:qs(Req2),
-    Opts = parse_opts(Qs),
-    {RawPath, Req4} = cowboy_req:path(Req3),
-    {Id, Req5} = cowboy_req:binding(id, Req4),
-    IdSize = byte_size(Id),
-    <<"/cdmi/cdmi_objectid/", Id:IdSize/binary, Path/binary>> = RawPath,
+    {State2 = #{path := Path}, Req2} = add_objectid_path_to_state(Req, State),
+    {State3, Req3} = add_version_to_state(Req2, State2),
+    {State4, Req4} = add_opts_to_state(Req3, State3),
 
-    % get uuid from objectid
-    Uuid =
-        case cdmi_id:objectid_to_uuid(Id) of
-            {ok, Uuid_} -> Uuid_;
-            _ -> throw(?invalid_objectid)
-        end,
-
-    % get path of object with that uuid
-    {BasePath, Req6} =
-        case is_capability_object(Req5) of
-            true -> {proplists:get_value(Id, ?CapabilityPathById), Req5};
-            false ->
-                {{ok, Auth}, Req6_} = onedata_auth_api:authenticate(Req5), %todo check for no permission
-                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Uuid),
-                {NewPath, Req6_}
-        end,
-
-    % join base name with the rest of filepath
-    FullPath =
-        case BasePath of
-            <<"/">> -> Path;
-            _ -> <<BasePath/binary, Path/binary>>
-        end,
-    {RawVersion, Req7} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req6),
-    Version = get_supported_version(RawVersion),
-    {Qs, Req8} = cowboy_req:qs(Req7),
-    Opts = parse_opts(Qs),
-
-    % delegate request to cdmi_container/cdmi_object/cdmi_capability (depending on filepath)
-    case Path =/= <<"">> andalso binary:last(Path) =:= $/ of
-        true ->
-            case is_capability_object(Req8) of %todo update req
-                false ->
-                    onedata_handler_management_api:set_handler(cdmi_container_handler),
-                    NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                    {false, Req8, NewState};
-                true ->
-                    case BasePath of
-                        ?root_capability_path ->
-                            onedata_handler_management_api:set_handler(cdmi_capabilities_handler),
-                            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                            {false, Req8, NewState};
-                        ?dataobject_capability_path ->
-                            onedata_handler_management_api:set_handler(cdmi_dataobject_capabilities_handler),
-                            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                            {false, Req8, NewState};
-                        ?container_capability_path ->
-                            onedata_handler_management_api:set_handler(cdmi_container_capabilities_handler),
-                            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-                            {false, Req8, NewState}
-                    end
-            end;
-        false ->
-            onedata_handler_management_api:set_handler(cdmi_object_handler),
-            NewState = State#{cdmi_version => Version, options => Opts, path => FullPath},
-            {false, Req8, NewState}
-    end.
+    {Handler, Req5} = choose_handler(Req4, Path),
+    onedata_handler_management_api:set_handler(Handler),
+    {false, Req5, State4}.
 
 %%--------------------------------------------------------------------
 %% @doc Get requested ranges list.
 %%--------------------------------------------------------------------
--spec get_ranges(Req :: req(), #{}) ->
+-spec get_ranges(Req :: req(), Size :: non_neg_integer()) ->
     {[{non_neg_integer(), non_neg_integer()}] | undefined, req()}.
-get_ranges(Req, State) ->
+get_ranges(Req, Size) ->
     {RawRange, Req1} = cowboy_req:header(<<"range">>, Req),
     case RawRange of
         undefined -> {undefined, Req1};
         _ ->
-            case parse_byte_range(State, RawRange) of
+            case parse_byte_range(RawRange, Size) of
                 invalid ->throw(?invalid_range);
                 Ranges -> {Ranges, Req1}
             end
@@ -172,17 +109,17 @@ parse_body(Req) ->
 %% will produce -> [{1,5},{7,9}]
 %% @end
 %%--------------------------------------------------------------------
--spec parse_byte_range(#{}, binary() | list()) -> list(Range) | invalid when
+-spec parse_byte_range(binary() | list(), non_neg_integer()) -> list(Range) | invalid when
     Range :: {From :: integer(), To :: integer()} | invalid.
-parse_byte_range(State, Range) when is_binary(Range) ->
-    Ranges = parse_byte_range(State, binary:split(Range, <<",">>, [global])),
+parse_byte_range(Range, Size) when is_binary(Range) ->
+    Ranges = parse_byte_range(binary:split(Range, <<",">>, [global]), Size),
     case lists:member(invalid, Ranges) of
         true -> invalid;
         false -> Ranges
     end;
-parse_byte_range(_, []) ->
+parse_byte_range([], _) ->
     [];
-parse_byte_range(#{attributes := #file_attr{size = Size}} = State, [First | Rest]) ->
+parse_byte_range([First | Rest], Size) ->
     Range =
         case binary:split(First, <<"-">>, [global]) of
             [<<>>, FromEnd] ->
@@ -195,7 +132,7 @@ parse_byte_range(#{attributes := #file_attr{size = Size}} = State, [First | Rest
     case Range of
         invalid -> [invalid];
         {Begin, End} when Begin > End -> [invalid];
-        ValidRange -> [ValidRange | parse_byte_range(State, Rest)]
+        ValidRange -> [ValidRange | parse_byte_range(Rest, Size)]
     end.
 
 %%--------------------------------------------------------------------
@@ -221,6 +158,90 @@ parse_content(Content) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses request's version adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_version_to_state(cowboy_req:req(), #{}) ->
+    {#{cdmi_version => binary()}, cowboy_req:req()}.
+add_version_to_state(Req, State) ->
+    {RawVersion, NewReq} = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
+    Version = get_supported_version(RawVersion),
+    {State#{cdmi_version => Version}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Parses request's query string options and adds it to State.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_opts_to_state(cowboy_req:req(), #{}) ->
+    {#{options => list()}, cowboy_req:req()}.
+add_opts_to_state(Req, State) ->
+    {Qs, NewReq} = cowboy_req:qs(Req),
+    Opts = parse_opts(Qs),
+    {State#{options => Opts}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves file path from req and adds it to state.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_path_to_state(cowboy_req:req(), #{}) ->
+    {#{path => onedata_file_api:file_path()}, cowboy_req:req()}.
+add_path_to_state(Req, State) ->
+    {RawPath, NewReq} = cowboy_req:path(Req),
+    <<"/cdmi", Path/binary>> = RawPath,
+    {State#{path => Path}, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Expand resource path from objectid format to full, absolute filepath.
+%% Such full path is added to State.
+%%
+%% Converts {ObjectId}{Path} -> {BasePath}{Path}
+%% e. g.
+%% {IdOfFile1} -> /file1
+%% {IdOfSpacesDir}/space1 -> spaces/space1
+%% {IdOfRootDir} -> /
+%% @end
+%%--------------------------------------------------------------------
+-spec add_objectid_path_to_state(cowboy_req:req(), #{}) ->
+    {#{path => onedata_file_api:file_path()}, cowboy_req:req()}.
+add_objectid_path_to_state(Req, State) ->
+    % get objectid
+    {Id, Req2} = cowboy_req:binding(id, Req),
+    {RawPath, Req3} = cowboy_req:path(Req2),
+    IdSize = byte_size(Id),
+    <<"/cdmi/cdmi_objectid/", Id:IdSize/binary, Path/binary>> = RawPath,
+
+    % get uuid from objectid
+    Uuid =
+        case cdmi_id:objectid_to_uuid(Id) of
+            {ok, Uuid_} -> Uuid_;
+            _ -> throw(?invalid_objectid)
+        end,
+
+    % get path of object with that uuid
+    {BasePath, Req4} =
+        case is_capability_object(Req3) of
+            {true, Req3_1} ->
+                {proplists:get_value(Id, ?CapabilityPathById), Req3_1};
+            {false, Req3_1} ->
+                {{ok, Auth}, Req3_2} = onedata_auth_api:authenticate(Req3_1),
+                {ok, NewPath} = onedata_file_api:get_file_path(Auth, Uuid),
+                {NewPath, Req3_2}
+        end,
+
+    % concatenate BasePath and Path to FullPath
+    FullPath =
+        case BasePath of
+            <<"/">> -> Path;
+            _ -> <<BasePath/binary, Path/binary>>
+        end,
+
+    {State#{path => FullPath}, Req4}.
 
 %%--------------------------------------------------------------------
 %% @doc Extract the CDMI version from request arguments string.
@@ -281,13 +302,43 @@ validate_body(Body) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @doc
+%% Chooses adequate handler for objectid request, on basis of filepath.
+%% @end
+%%--------------------------------------------------------------------
+-spec choose_handler(cowboy_req:req(), onedata_file_api:file_path()) ->
+    {module(), cowboy_req:req()}.
+choose_handler(Req, Path) ->
+    case filepath_utils:ends_with_slash(Path) of
+        true ->
+            case is_capability_object(Req) of
+                {false, Req2} ->
+                    {cdmi_container_handler, Req2};
+                {true, Req2} ->
+                    <<"/", RelativePath/binary>> = Path,
+                    case RelativePath of
+                        ?root_capability_path ->
+                            {cdmi_capabilities_handler, Req2};
+                        ?dataobject_capability_path ->
+                            {cdmi_dataobject_capabilities_handler, Req2};
+                        ?container_capability_path ->
+                            {cdmi_container_capabilities_handler, Req2}
+                    end
+            end;
+        false ->
+            {cdmi_object_handler, Req}
+    end.
+
+%%--------------------------------------------------------------------
 %% @doc Checks if this objectid request points to capability object
 %%--------------------------------------------------------------------
--spec is_capability_object(req()) -> boolean().
-is_capability_object(Req) -> %todo return req object
-    {Path, _} = cowboy_req:path(Req),
-    case binary:split(Path, <<"/">>, [global]) of
-        [<<"">>, <<"cdmi">>, <<"cdmi_objectid">>, Id | _Rest] ->
-            proplists:is_defined(Id, ?CapabilityPathById);
-        _ -> false
-    end.
+-spec is_capability_object(req()) -> {boolean(), cowboy_req:req()}.
+is_capability_object(Req) ->
+    {Path, NewReq} = cowboy_req:path(Req),
+    Answer =
+        case binary:split(Path, <<"/">>, [global]) of
+            [<<"">>, <<"cdmi">>, <<"cdmi_objectid">>, Id | _Rest] ->
+                proplists:is_defined(Id, ?CapabilityPathById);
+            _ -> false
+        end,
+    {Answer, NewReq}.
