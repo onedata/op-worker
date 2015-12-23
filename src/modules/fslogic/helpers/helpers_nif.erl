@@ -19,7 +19,6 @@
 -type open_mode() :: 'O_RDONLY' | 'O_WRONLY' | 'O_RDWR'. %% Exactly one of those
 -type flag() :: open_mode() | 'O_NONBLOCK' | 'O_APPEND' | 'O_ASYNC' | 'O_FSYNC' | 'O_NOFOLLOW' | 'O_CREAT' | 'O_TRUNC' | 'O_EXCL'. %% Any of those
 -type file_type() :: 'S_IFREG' | 'S_IFCHR' | 'S_IFBLK' | 'S_IFIFO' | 'S_IFSOCK'.
--type fd() :: non_neg_integer().
 -type nif_string() :: string() | binary().
 -type helper_args() :: #{binary() => binary()}.
 -type request_id() :: {integer(), integer(), integer()}. %% Response message from helper will be {request_id(), Result :: term()}
@@ -28,10 +27,9 @@
 
 %% API
 -export([init/0]).
--export([new_helper_obj/2, new_helper_ctx/0, set_user_ctx/3, get_user_ctx/1]).
+-export([new_helper_obj/2, new_helper_ctx/1, set_user_ctx/2, get_user_ctx/1]).
 -export([username_to_uid/1, groupname_to_gid/1]).
--export([set_flags/2, get_flags/1, get_flag_value/1]).
--export([set_fd/2, get_fd/1]).
+-export([set_flags/2, get_flags/1, get_flag_value/2]).
 -export([getattr/3, access/4, mknod/5, mkdir/4, unlink/3, rmdir/3, symlink/4, rename/4, link/4, chmod/4, chown/5]).
 -export([truncate/4, open/3, read/5, write/5, release/3, flush/3, fsync/4]).
 
@@ -52,24 +50,24 @@ new_helper_obj(_HelperName, _HelperArgs) ->
 %% @doc Creates new helper context object. Returned handle is only valid within local Erlang-VM.
 %% @end
 %%--------------------------------------------------------------------
--spec new_helper_ctx() -> {ok, HelperCTX :: resource_handle()}.
-new_helper_ctx() ->
+-spec new_helper_ctx(HelperObj :: resource_handle()) -> {ok, HelperCTX :: resource_handle()}.
+new_helper_ctx(_HelperObj) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
 %% @doc Creates new helper context object. Returned handle is only valid within local Erlang-VM.
 %% @end
 %%--------------------------------------------------------------------
--spec get_flag_value(flag() | open_mode() | file_type()) -> non_neg_integer().
-get_flag_value(_Flag) ->
+-spec get_flag_value(HelperCTX :: resource_handle(), flag() | open_mode() | file_type()) -> non_neg_integer().
+get_flag_value(_HelperCTX, _Flag) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
 %% @doc Sets FS UID / FS GID in given helper context.
 %% @end
 %%--------------------------------------------------------------------
--spec set_user_ctx(HelperCTX :: resource_handle(), User :: integer(), Group :: integer()) -> ok.
-set_user_ctx(_HelperCTX, _User, _Group) ->
+-spec set_user_ctx(HelperCTX :: resource_handle(), UserCTX :: helpers:user_ctx_map()) -> ok.
+set_user_ctx(_HelperCTX, _UserCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -77,7 +75,7 @@ set_user_ctx(_HelperCTX, _User, _Group) ->
 %% @doc Gets current FS UID / FS GID from given helper context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_ctx(HelperCTX :: resource_handle()) -> {ok, {UID :: integer(), GID :: integer()}}.
+-spec get_user_ctx(HelperCTX :: resource_handle()) -> {ok, UserCTX :: helpers:user_ctx_map()}.
 get_user_ctx(_HelperCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
@@ -106,28 +104,11 @@ set_flags(_HelperCTX, _Flags) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Gets 'flags' field value from helper context.
+%% @doc Gets 'flags' value from helper context.
 %% @end
 %%----------------------------------------------------
 -spec get_flags(HelperCTX :: resource_handle()) -> {ok, Flags :: [flag()]}.
 get_flags(_HelperCTX) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-%%--------------------------------------------------------------------
-%% @doc Gets 'fh' (file handle) field in helper context. Normally open/3 sets this field, so this function
-%%      shall be used only to override it.
-%% @end
-%%--------------------------------------------------------------------
--spec set_fd(HelperCTX :: resource_handle(), fd()) -> ok.
-set_fd(_HelperCTX, _FD) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-%%--------------------------------------------------------------------
-%% @doc Gets 'fh' field value from helper context.
-%% @end
-%%--------------------------------------------------------------------
--spec get_fd(HelperCTX :: resource_handle()) -> {ok, FD :: fd()}.
-get_fd(_HelperCTX) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------

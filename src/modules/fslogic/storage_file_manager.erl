@@ -21,8 +21,8 @@
 -record(sfm_handle, {
     helper_handle :: helpers:handle(),
     file :: helpers:file(),
-    session_id = session:id(),
-    space_uuid = file_meta:uuid(),
+    session_id :: session:id(),
+    space_uuid :: file_meta:uuid(),
     storage :: datastore:document()
 }).
 

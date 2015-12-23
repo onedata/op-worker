@@ -36,10 +36,12 @@
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
 -type args() :: helpers_nif:helper_args().
--type user_ctx() :: #posix_user_ctx{}.
+-type user_ctx() :: #ceph_user_ctx{} | #posix_user_ctx{}.
+-type user_ctx_map() :: #{binary() => binary()}.
 -type init() :: #helper_init{}.
 
--export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0, user_ctx/0, init/0]).
+-export_type([file/0, open_mode/0, error_code/0, handle/0, name/0, args/0,
+    user_ctx/0, user_ctx_map/0, init/0]).
 
 %%%===================================================================
 %%% API
@@ -63,9 +65,9 @@ new_handle(#helper_init{name = Name, args = Args}) ->
 -spec new_handle(HelperName :: helpers_nif:nif_string(), args()) -> handle().
 new_handle(HelperName, HelperArgs) ->
     ?debug("helpers:new_handle~p ~p", [HelperName, HelperArgs]),
-    {ok, Instance} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
-    {ok, CTX} = helpers_nif:new_helper_ctx(),
-    #helper_handle{instance = Instance, ctx = CTX, helper_name = HelperName}.
+    {ok, HelperObj} = helpers_nif:new_helper_obj(HelperName, HelperArgs),
+    {ok, CTX} = helpers_nif:new_helper_ctx(HelperObj),
+    #helper_handle{instance = HelperObj, ctx = CTX, helper_name = HelperName}.
 
 
 %%--------------------------------------------------------------------
@@ -75,8 +77,12 @@ new_handle(HelperName, HelperArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_user_ctx(handle(), user_ctx()) -> ok.
+set_user_ctx(#helper_handle{ctx = CTX}, #ceph_user_ctx{username = Username, keyring = Keyring}) ->
+    UserCTX = #{<<"username">> => Username, <<"keyring">> => Keyring},
+    ok = helpers_nif:set_user_ctx(CTX, UserCTX);
 set_user_ctx(#helper_handle{ctx = CTX}, #posix_user_ctx{uid = UID, gid = GID}) ->
-    ok = helpers_nif:set_user_ctx(CTX, UID, GID);
+    UserCTX = #{<<"uid">> => integer_to_binary(UID), <<"gid">> => integer_to_binary(GID)},
+    ok = helpers_nif:set_user_ctx(CTX, UserCTX);
 set_user_ctx(_, Unknown) ->
     ?error("Unknown user context ~p", [Unknown]),
     erlang:error({unknown_user_ctx_type, erlang:element(1, Unknown)}).
@@ -105,8 +111,9 @@ access(#helper_handle{} = HelperHandle, File, Mask) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mknod(handle(), File :: file(), Mode :: non_neg_integer(), Type :: reg) -> ok | {error, term()}.
-mknod(#helper_handle{} = HelperHandle, File, Mode, reg) ->
-    apply_helper_nif(HelperHandle, mknod, [File, Mode bor helpers_nif:get_flag_value('S_IFREG'), 0]).
+mknod(#helper_handle{ctx = CTX} = HelperHandle, File, Mode, reg) ->
+    Flag = helpers_nif:get_flag_value(CTX, 'S_IFREG'),
+    apply_helper_nif(HelperHandle, mknod, [File, Mode bor Flag, 0]).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.

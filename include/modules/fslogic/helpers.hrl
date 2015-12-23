@@ -23,9 +23,16 @@
 
 
 %% Names of helpers
+-define(CEPH_HELPER_NAME, <<"Ceph">>).
 -define(DIRECTIO_HELPER_NAME, <<"DirectIO">>).
 
-%% Record holding user's identity that may be used on POSIX compilant systems
+%% Record holding user's identity that may be used on Ceph storage system
+-record(ceph_user_ctx, {
+    username :: binary(),
+    keyring :: binary()
+}).
+
+%% Record holding user's identity that may be used on POSIX compliant systems
 -record(posix_user_ctx, {
     uid :: non_neg_integer(),
     gid :: non_neg_integer()

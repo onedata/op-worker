@@ -32,9 +32,14 @@
 %%--------------------------------------------------------------------
 -spec new_user_ctx(helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
+new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, _SpaceUUID) ->
+    new_ceph_user_ctx(SessionId);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_posix_user_ctx(SessionId, SpaceUUID).
 
+
+new_ceph_user_ctx(_SessionId) ->
+    #ceph_user_ctx{}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -43,7 +48,7 @@ new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) -
 %% @end
 %%--------------------------------------------------------------------
 -spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
-    #posix_user_ctx{}.
+    helpers:user_ctx().
 new_posix_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
@@ -56,11 +61,7 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
         end,
 
     FinalUID = fslogic_utils:gen_storage_uid(UserId),
-    #posix_user_ctx{
-        uid = FinalUID,
-        gid = FinalGID
-    }.
-
+    #posix_user_ctx{uid = FinalUID, gid = FinalGID}.
 
 
 %%--------------------------------------------------------------------
@@ -112,8 +113,6 @@ new_helper_init(HelperName, HelperArgs) ->
 -spec new_storage(Name :: storage:name(), [#helper_init{}]) -> #storage{}.
 new_storage(Name, Helpers) ->
     #storage{name = Name, helpers = Helpers}.
-
-
 
 
 %%%===================================================================
