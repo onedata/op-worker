@@ -17,7 +17,7 @@ RIAK_READY_WAIT_SECONDS = 60 * 5
 
 
 def riak_hostname(node_num, op_instance, uid):
-    """Formats hostname for a docker hosting cluster_manager.
+    """Formats hostname for a docker hosting riak.
     NOTE: Hostnames are also used as docker names!
     """
     node_name = 'riak{0}'.format(node_num)
