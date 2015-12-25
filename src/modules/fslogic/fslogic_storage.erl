@@ -11,7 +11,8 @@
 -module(fslogic_storage).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/helpers.hrl").
 

@@ -83,13 +83,12 @@ get_helper_params(_Ctx, _SpaceId, StorageId, false = _ForceCL) ->
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file(), OpenMode :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{none, 2}]).
-get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File, OpenFlags) ->
+get_file_location(#fslogic_ctx{} = CTX, File, OpenFlags) ->
     ?debug("get_file_location for ~p ~p", [File, OpenFlags]),
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
 
     ok = check_permissions:validate_posix_access(OpenFlags, FileDoc, fslogic_context:get_user_id(CTX)),
 
-    ok = file_watcher:insert_open_watcher(UUID, SessId),
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
@@ -151,8 +150,6 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
     SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FileId),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, Mode),
-
-    ok = file_watcher:insert_open_watcher(UUID, SessId),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{

@@ -23,12 +23,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include("modules/http_worker/rest/http_status.hrl").
 
-%% Function that translates handler exception to cowboy format
--type exception_handler() ::
-fun((Req :: cowboy_req:req(), State :: term(), Type :: atom(), Error :: term()) -> term()).
-
--export_type([exception_handler/0]).
-
 %% API
 -export([handle/4]).
 

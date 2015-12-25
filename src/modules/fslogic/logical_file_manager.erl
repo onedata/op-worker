@@ -58,11 +58,11 @@
 -export_type([handle/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2, rmdir/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
+-export([create/3, open/3, fsync/1, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
@@ -90,7 +90,7 @@ mkdir(SessId, Path) ->
     mkdir(SessId, Path, Mode).
 
 -spec mkdir(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-ok | error_reply().
+    ok | error_reply().
 mkdir(SessId, Path, Mode) ->
     try
         CTX = fslogic_context:new(SessId),
@@ -127,6 +127,16 @@ get_children_count(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_dirs:get_children_count(SessId, ensure_uuid(CTX, FileKey)).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a directory with all its children.
+%% @end
+%%--------------------------------------------------------------------
+-spec rmdir(SessId :: session:id(), FileKey :: file_key()) -> ok | error_reply().
+rmdir(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_utils:rm(CTX, FileUUID).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -193,7 +203,7 @@ create(SessId, Path, Mode) ->
         _:Reason ->
             ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
             {error, Reason}
-    end .
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -205,6 +215,17 @@ create(SessId, Path, Mode) ->
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:open(CTX, ensure_uuid(CTX, FileKey), OpenType).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes waiting events for session connected with handler.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(FileHandle :: file_handle()) -> ok | {error, Reason :: term()}.
+fsync(FileHandle) ->
+    lfm_files:fsync(FileHandle).
+
 
 
 %%--------------------------------------------------------------------
@@ -288,7 +309,7 @@ truncate(SessId, FileKey, Size) ->
         _:Reason ->
             ?error_stacktrace("truncate error for file ~p: ~p", [FileKey, Reason]),
             {error, Reason}
-    end .
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -500,4 +521,3 @@ ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
     {uuid, fslogic_path:to_uuid(CTX, Path)}.
-
