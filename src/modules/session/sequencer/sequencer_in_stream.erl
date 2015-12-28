@@ -89,6 +89,7 @@ start_link(SeqMan, StmId, SessId) ->
     {ok, StateName :: atom(), StateData :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([SeqMan, StmId, SessId]) ->
+    ?debug("Initializing sequencer in stream for session ~p", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
     send_message_stream_reset(StmId, SessId),
@@ -153,7 +154,7 @@ handle_sync_event(Event, From, StateName, State) ->
         timeout() | hibernate} |
     {stop, Reason :: normal | term(), NewStateData :: term()}).
 handle_info({'EXIT', _, shutdown}, _, State) ->
-    {stop, shutdown, State};
+    {stop, normal, State};
 
 handle_info(Info, StateName, State) ->
     ?log_bad_request({Info, StateName}),
@@ -171,9 +172,15 @@ handle_info(Info, StateName, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
 | term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(Reason, StateName, State) ->
+terminate(Reason, StateName, #state{stream_id = StmId, sequence_number = SeqNum,
+    session_id = SessId, sequencer_manager = SeqMan} = State) ->
     ?log_terminate(Reason, {StateName, State}),
-    unregister_stream(send_message_acknowledgement(State)).
+    Msg = #message_acknowledgement{stream_id = StmId, sequence_number = SeqNum - 1},
+    case communicator:send(Msg, SessId) of
+        ok -> ok;
+        {error, Reason} -> SeqMan ! {send, Msg, SessId}
+    end,
+    unregister_stream(State).
 
 
 %%--------------------------------------------------------------------
@@ -313,7 +320,7 @@ unregister_stream(#state{sequencer_manager = SeqMan, stream_id = StmId}) ->
 -spec send_message_stream_reset(StmId :: stream_id(),
     SessId :: session:id()) -> ok.
 send_message_stream_reset(StmId, SessId) ->
-    communicator:send(#message_stream_reset{stream_id = StmId}, SessId).
+    communicator:send(#message_stream_reset{stream_id = StmId}, SessId, infinity).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -331,7 +338,7 @@ send_message_acknowledgement(#state{stream_id = StmId, sequence_number = SeqNum,
     session_id = SessId} = State) ->
     communicator:send(#message_acknowledgement{
         stream_id = StmId, sequence_number = SeqNum - 1
-    }, SessId),
+    }, SessId, infinity),
     State#state{sequence_number_ack = SeqNum - 1}.
 
 %%--------------------------------------------------------------------
@@ -365,7 +372,7 @@ send_message_request(UpperSeqNum, #state{stream_id = StmId,
         stream_id = StmId,
         lower_sequence_number = LowerSeqNum,
         upper_sequence_number = UpperSeqNum
-    }, SessId).
+    }, SessId, infinity).
 
 %%--------------------------------------------------------------------
 %% @private

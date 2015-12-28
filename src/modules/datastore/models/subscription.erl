@@ -12,8 +12,9 @@
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
--include("modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 -define(BATCH_SIZE, 100).
 
@@ -123,7 +124,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(event_stream_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(subscription_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

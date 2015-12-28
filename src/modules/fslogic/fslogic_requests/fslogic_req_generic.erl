@@ -38,8 +38,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
     {ok, _} = file_meta:update(FileEntry, UpdateMap1),
 
-    %% @todo: replace with events
-    spawn(fun() -> fslogic_notify:attributes(FileEntry, [SessId]) end),
+    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, [SessId]) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -78,7 +77,7 @@ chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
     %% @todo: replace with events
-    spawn(fun() -> fslogic_notify:attributes(FileEntry, []) end),
+    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -110,8 +109,6 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
                                               type = Type, mode = Mode, atime = ATime, mtime = MTime,
                                               ctime = CTime, uid = UID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
-
-            ok = file_watcher:insert_attr_watcher(UUID, SessId),
 
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
             #posix_user_ctx{gid = GID} = fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID),

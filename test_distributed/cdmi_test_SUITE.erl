@@ -13,8 +13,10 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_capabilities.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
+-include("http/rest/cdmi/cdmi_capabilities.hrl").
+-include("http/rest/http_status.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -26,22 +28,52 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([list_dir_test/1, get_file_test/1, metadata_test/1, delete_file_test/1,
-    create_file_test/1, update_file_test/1, create_dir_test/1, capabilities_test/1,
-    choose_adequate_handler/1, use_supported_cdmi_version/1,
-    use_unsupported_cdmi_version/1, objectid_test/1, request_format_check_test/1,
-    mimetype_and_encoding_test/1, out_of_range_test/1, partial_upload_test/1,
-    acl_test/1, errors_test/1]).
+-export([
+    list_dir_test/1,
+    get_file_test/1,
+    metadata_test/1,
+    delete_file_test/1,
+    delete_dir_test/1,
+    create_file_test/1,
+    update_file_test/1,
+    create_dir_test/1,
+    capabilities_test/1,
+    choose_adequate_handler/1,
+    use_supported_cdmi_version/1,
+    use_unsupported_cdmi_version/1,
+    errors_test/1,
+    moved_permanently_test/1,
+    objectid_test/1,
+    request_format_check_test/1,
+    mimetype_and_encoding_test/1,
+    out_of_range_test/1,
+    partial_upload_test/1,
+    acl_test/1
+]).
 
 -performance({test_cases, []}).
 all() ->
     [
-        list_dir_test, get_file_test, metadata_test, delete_file_test, create_file_test,
-        update_file_test, create_dir_test, capabilities_test,
-        choose_adequate_handler, use_supported_cdmi_version,
-        use_unsupported_cdmi_version, objectid_test, request_format_check_test,
-        mimetype_and_encoding_test, out_of_range_test, partial_upload_test,
-        acl_test, errors_test
+        list_dir_test,
+        get_file_test,
+        metadata_test,
+        delete_file_test,
+        delete_dir_test,
+        create_file_test,
+        update_file_test,
+        create_dir_test,
+        capabilities_test,
+        choose_adequate_handler,
+        use_supported_cdmi_version,
+        use_unsupported_cdmi_version,
+        errors_test,
+        moved_permanently_test,
+        objectid_test,
+        request_format_check_test,
+        mimetype_and_encoding_test,
+        out_of_range_test,
+        partial_upload_test,
+        acl_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -51,8 +83,6 @@ all() ->
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
 -define(OBJECT_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-object">>}).
-
--define(FILE_PERMISSIONS, 8#664).
 
 -define(DEFAULT_FILE_MODE, 8#664).
 -define(FILE_BEGINNING, 0).
@@ -179,7 +209,7 @@ list_dir_test(Config) ->
             ?assert(lists:member(Name,
                 ChildrenResponse6 ++ ChildrenResponse7 ++ ChildrenResponse8))
         end, ChildsBinaries).
-%%------------------------------
+    %%------------------------------
 
 %%  Tests cdmi object GET request. Request can be done without cdmi header (in that case
 %%  file conent is returned as response body), or with cdmi header (the response
@@ -298,7 +328,7 @@ metadata_test(Config) ->
     ?assertEqual(201, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
     Metadata1 = proplists:get_value(<<"metadata">>, CdmiResponse1),
-%%     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)), todo fix wrong size (0) in attrs
+    ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
     CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
     ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
     MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
@@ -512,6 +542,59 @@ delete_file_test(Config) ->
     ?assert(not object_exists(Config, GroupFileName)).
     %%------------------------------
 
+% Tests cdmi container DELETE requests
+delete_dir_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    DirName = "toDelete/",
+    ChildDirName = "toDelete/child/",
+    SpacesDirName = "spaces/",
+
+    %%----- basic delete -----------
+    mkdir(Config, DirName),
+    ?assert(object_exists(Config, DirName)),
+
+    RequestHeaders1 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code1, _Headers1, _Response1} =
+        do_request(Worker, DirName, delete, RequestHeaders1, []),
+
+    ?assertEqual(204, Code1),
+    ?assert(not object_exists(Config, DirName)),
+    %%------------------------------
+
+    %%------ recursive delete ------
+    mkdir(Config, DirName),
+    ?assert(object_exists(Config, DirName)),
+    mkdir(Config, ChildDirName),
+    ?assert(object_exists(Config, DirName)),
+
+    RequestHeaders2 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code2, _Headers2, _Response2} =
+        do_request(Worker, DirName, delete, RequestHeaders2, []),
+
+    ?assertEqual(204,Code2),
+    ?assert(not object_exists(Config, DirName)),
+    ?assert(not object_exists(Config, ChildDirName)),
+    %%------------------------------
+
+    %%----- delete group dir -------
+    ?assert(object_exists(Config, SpacesDirName)),
+
+    RequestHeaders3 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER],
+    ?assert(object_exists(Config, SpacesDirName)),
+    {ok, Code3, _Headers3, _Response3} =
+        do_request(Worker, SpacesDirName, delete, RequestHeaders3, []),
+    ?assertEqual(403, Code3),
+    ?assert(object_exists(Config, SpacesDirName)).
+    %%------------------------------
+
 % Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
 % json string), or without (when we treat request body as new file content)
 create_file_test(Config) ->
@@ -550,9 +633,9 @@ create_file_test(Config) ->
     RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
     RequestBody2 = [{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, base64:encode(FileContent)}],
     RawRequestBody2 = json_utils:encode(RequestBody2),
-
     {ok, Code2, _Headers2, Response2} =
         do_request(Worker, ToCreate2, put, RequestHeaders2, RawRequestBody2),
+
     ?assertEqual(201, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>, CdmiResponse2)),
@@ -914,6 +997,182 @@ capabilities_test(Config) ->
     ?assertEqual(?dataobject_capability_list, Capabilities3).
     %%------------------------------
 
+% test error handling
+errors_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    %%---- unauthorized access -----
+    {ok, Code1, _Headers1, _Response1} =
+        do_request(Worker, "dir", get, [], []),
+    ?assertEqual(401, Code1),
+    %%------------------------------
+
+    %%----- wrong create path ------
+    RequestHeaders2 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code2, _Headers2, _Response2} =
+        do_request(Worker, "dir", put, RequestHeaders2, []),
+    ?assertEqual(400, Code2),
+    %%------------------------------
+
+    %%---- wrong create path 2 -----
+    RequestHeaders3 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code3, _Headers3, _Response3} =
+        do_request(Worker, "dir/", put, RequestHeaders3, []),
+    ?assertEqual(400, Code3),
+    %%------------------------------
+
+    %%-------- wrong base64 --------
+    RequestHeaders4 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    RequestBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
+    {ok, Code4, _Headers4, _Response4} =
+        do_request(Worker, "some_file_b64", put, RequestHeaders4, RequestBody4),
+    ?assertEqual(400, Code4),
+    %%------------------------------
+
+    %%-- duplicated body fields ----
+    RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
+    RequestBody5 = json_utils:encode(RawBody5),
+    RequestHeaders5 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code5, _Headers5, Response5} =
+        do_request(Worker, "dir_dupl/", put, RequestHeaders5, RequestBody5),
+    ?assertEqual(400, Code5),
+    CdmiResponse5 = json_utils:decode(Response5),
+    ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5),
+
+    %%-- reding non-existing file --
+    RequestHeaders6 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code6, _Headers6, _Response6} =
+        do_request(Worker, "nonexistent_file", get, RequestHeaders6),
+    ?assertMatch(404, Code6),
+    %%------------------------------
+
+    %%--- list nonexisting dir -----
+    RequestHeaders7 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code7, _Headers7, _Response7} =
+        do_request(Worker, "nonexisting_dir/", get, RequestHeaders7),
+    ?assertEqual(404, Code7),
+    %%------------------------------
+
+    %%--- open binary file without permission -----
+    File8 = "file",
+    FileContent8 = <<"File content...">>,
+    create_file(Config, File8),
+    ?assertEqual(object_exists(Config, File8), true),
+    write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
+    ?assertEqual(get_file_content(Config, File8),FileContent8),
+    RequestHeaders8 = [?USER_1_TOKEN_HEADER],
+
+    mock_opening_file_without_perms(Config),
+    {ok, Code8, _Headers8, _Response8} =
+        do_request(Worker, File8, get, RequestHeaders8),
+    unmock_opening_file_without_perms(Config),
+    ?assertEqual(403, Code8),
+    %%------------------------------
+
+    %%--- open cdmi file without permission -----
+    File9 = "file",
+    FileContent9 = <<"File content...">>,
+    create_file(Config, File9),
+    ?assertEqual(object_exists(Config, File9), true),
+    write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
+    ?assertEqual(get_file_content(Config, File9),FileContent9),
+    RequestHeaders9 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+
+    mock_opening_file_without_perms(Config),
+    {ok, Code9, _Headers9, _Response9} =
+        do_request(Worker, File9, get, RequestHeaders9),
+    unmock_opening_file_without_perms(Config),
+    ?assertEqual(403, Code9),
+    %%------------------------------
+
+    %%--- unauthorized access to / by objectid ---
+    {ok, Code10, _, _} = do_request(Worker, "", get, [?CDMI_VERSION_HEADER], []),
+    ?assertEqual(401, Code10).
+    %%------------------------------
+
+% tests if cdmi returns 'moved permanently' code when we forget about '/' in path
+moved_permanently_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    DirName = "somedir/",
+    DirNameWithoutSlash = "somedir",
+    FileName = "somedir/somefile.txt",
+    FileNameWithSlash = "somedir/somefile.txt/",
+    mkdir(Config, DirName),
+    ?assert(object_exists(Config, DirName)),
+    create_file(Config, FileName),
+    ?assert(object_exists(Config, FileName)),
+
+    CDMIEndpoint = cdmi_endpoint(Worker),
+    %%--------- dir test -----------
+    RequestHeaders1 = [
+        ?CONTAINER_CONTENT_TYPE_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?USER_1_TOKEN_HEADER
+    ],
+    Location1 = list_to_binary(CDMIEndpoint ++ DirName),
+    {ok, Code1, Headers1, _Response1} =
+        do_request(Worker, DirNameWithoutSlash, get, RequestHeaders1, []),
+    ?assertEqual(?MOVED_PERMANENTLY, Code1),
+    ?assertEqual(Location1,
+        proplists:get_value(<<"Location">>, Headers1)),
+    %%------------------------------
+
+    %%--------- dir test with QS-----------
+    RequestHeaders2 = [
+        ?CONTAINER_CONTENT_TYPE_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?USER_1_TOKEN_HEADER
+    ],
+    Location2 = list_to_binary(CDMIEndpoint ++ DirName++"?example_qs=1"),
+    {ok, Code2, Headers2, _Response2} =
+        do_request(Worker, DirNameWithoutSlash++"?example_qs=1", get, RequestHeaders2, []),
+    ?assertEqual(?MOVED_PERMANENTLY, Code2),
+    ?assertEqual(Location2,
+        proplists:get_value(<<"Location">>, Headers2)),
+    %%------------------------------
+
+    %%--------- file test ----------
+    RequestHeaders3 = [
+        ?OBJECT_CONTENT_TYPE_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?USER_1_TOKEN_HEADER
+    ],
+    Location3 = list_to_binary(CDMIEndpoint ++ FileName),
+    {ok, Code3, Headers3, _Response3} =
+        do_request(Worker, FileNameWithSlash, get, RequestHeaders3, []),
+    ?assertEqual(?MOVED_PERMANENTLY, Code3),
+    ?assertEqual(Location3,
+        proplists:get_value(<<"Location">>, Headers3)).
+    %%------------------------------
+
 % tests req format checking
 request_format_check_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -1000,8 +1259,6 @@ mimetype_and_encoding_test(Config) ->
     ?assertEqual(<<"utf-8">>, proplists:get_value(<<"valuetransferencoding">>, CdmiResponse7)),
     ?assertEqual(FileContent6, proplists:get_value(<<"value">>, CdmiResponse7)).
     %%------------------------------
-
-%todo put moved_pemanently_test from demo here
 
 % tests reading&writing file at random ranges
 out_of_range_test(Config) ->
@@ -1377,6 +1634,7 @@ errors_test(Config) ->
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     initializer:setup_storage(ConfigWithNodes).
+
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
     test_node_starter:clean_environment(Config).
@@ -1514,7 +1772,7 @@ absolute_binary_path(Path) ->
 
 ensure_begins_with_slash(Path) ->
     ReversedBinary = list_to_binary(lists:reverse(Path)),
-    lists:reverse(binary_to_list(str_utils:ensure_ends_with_slash(ReversedBinary))).
+    lists:reverse(binary_to_list(filepath_utils:ensure_ends_with_slash(ReversedBinary))).
 
 % Returns current time in seconds
 now_in_secs() ->

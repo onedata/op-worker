@@ -13,7 +13,8 @@
 -include("types.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -23,9 +24,11 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/3, get_block_map/2, unlink/2]).
+-export([create/3, open/3, fsync/1, write/3, read/3, truncate/3, get_block_map/2, unlink/2]).
 
 -compile({no_auto_import, [unlink/1]}).
+
+-define(FSYNC_TIMEOUT, timer:seconds(2)).
 
 %%%===================================================================
 %%% API
@@ -103,20 +106,42 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 -spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
     lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID, flags = OpenType},
-        fun(#file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}) ->
+        fun(#file_location{uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, UUID}),
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}),
             SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FileId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
                     {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, NewSFMHandle}}]),
-                        fslogic_ctx = CTX, file_uuid = UUID, open_mode = OpenType}};
+                        fslogic_ctx = CTX, file_uuid = _UUID, open_mode = OpenType}};
                 {error, Reason} ->
                     {error, Reason}
             end
         end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes waiting events for session connected with handler.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(FileHandle :: file_handle()) -> ok | {error, Reason :: term()}.
+fsync(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    event:flush(?FSLOGIC_SUB_ID, self(), SessId),
+    receive
+        {handler_executed, Results} ->
+            Errors = lists:filter(fun
+                ({error, _}) -> true;
+                (_) -> false
+            end, Results),
+            case Errors of
+                [] -> ok;
+                _ -> {error, {handler_error, Errors}}
+            end
+    after
+        ?FSYNC_TIMEOUT ->
+            {error, handler_timeout}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

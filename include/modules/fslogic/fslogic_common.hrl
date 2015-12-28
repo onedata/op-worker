@@ -13,7 +13,8 @@
 -ifndef(FSLOGIC_COMMON_HRL).
 -define(FSLOGIC_COMMON_HRL, 1).
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/helpers.hrl").
 
 %% helper macro for not implemented functions
@@ -23,6 +24,7 @@
 -define(SPACES_BASE_DIR_NAME, <<"spaces">>).
 -define(SPACES_BASE_DIR_UUID, base64:encode(?SPACES_BASE_DIR_NAME)).
 -define(DIRECTORY_SEPARATOR, "/").
+-define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
 
 %% Context definition
 -record(fslogic_ctx, {
@@ -37,6 +39,8 @@
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 
+%% fslogic subscription id
+-define(FSLOGIC_SUB_ID, binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF).
 
 %% Deafult file modes
 

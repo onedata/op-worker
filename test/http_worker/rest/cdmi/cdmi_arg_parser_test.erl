@@ -14,7 +14,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--include("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include("http/rest/cdmi/cdmi_errors.hrl").
 
 -define(version, cdmi_arg_parser:get_supported_version).
 

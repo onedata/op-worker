@@ -18,7 +18,7 @@ set -e
 # for each given module, find its location, compile and copy to releases
 for module in $@; do
     for dir in src test; do
-        find ${dir} -type f -name ${module}.erl -exec erlc `ls deps | awk '{ print "-I deps/" $1}'` -I include -I deps {} \;
+        find ${dir} -type f -name ${module}.erl -exec erlc +debug_info `ls deps | awk '{ print "-I deps/" $1}'` -I include -I deps {} \;
         find ${dir} -type f -name ${module}.erl -exec cp {} .eunit/ \;
     done
     for rel_dir in `ls rel/op_worker/lib/ | grep op_worker`; do

@@ -15,7 +15,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/global_registry/gr_groups.hrl").
--include("modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
@@ -77,7 +77,7 @@ clean_test_users_and_spaces(Config) ->
     Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
 basic_session_setup(Worker, SessId, Iden, Con, Config) ->
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Con])),
+        reuse_or_create_fuse_session, [SessId, Iden, Con])),
     [{session_id, SessId}, {identity, Iden} | Config].
 
 %%--------------------------------------------------------------------
@@ -148,7 +148,7 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     UserName = Name("username", UserNum),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
+        reuse_or_create_fuse_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{
@@ -180,12 +180,12 @@ teardown_sesion(Worker, Config) ->
         ({{spaces, _}, Spaces}, Acc) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
             lists:foreach(fun(SpaceId) ->
-                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
+                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)]))
             end, SpaceIds),
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:default_space_uuid(UserId)])),
             ?assertEqual(ok,
                 rpc:call(Worker, file_meta, delete,
                     [fslogic_uuid:spaces_uuid(UserId)]

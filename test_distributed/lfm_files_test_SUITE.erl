@@ -12,7 +12,8 @@
 -module(lfm_files_test_SUITE).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -32,6 +33,7 @@
     lfm_create_and_access_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
+    lfm_synch_stat_test/1,
     lfm_truncate_test/1,
     lfm_acl_test/1
 ]).
@@ -43,6 +45,7 @@ all() -> [
     lfm_create_and_access_test,
     lfm_write_test,
     lfm_stat_test,
+    lfm_synch_stat_test,
     lfm_truncate_test,
     lfm_acl_test
 ].
@@ -260,6 +263,28 @@ lfm_stat_test(Config) ->
 
     ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
     ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>}), 10).
+
+lfm_synch_stat_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
+
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/test5">>}, rdwr),
+
+    ?assertMatch({ok, _}, O11),
+    {ok, Handle11} = O11,
+
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(W, SessId1, {path, <<"/test5">>})),
+
+    ?assertMatch({ok, 3, {ok, #file_attr{size = 3}}}, lfm_proxy:write_and_check(W, Handle11, 0, <<"abc">>)),
+
+    ?assertMatch({ok, 3, {ok, #file_attr{size = 6}}}, lfm_proxy:write_and_check(W, Handle11, 3, <<"abc">>)),
+
+    ?assertMatch({ok, 3, {ok, #file_attr{size = 6}}}, lfm_proxy:write_and_check(W, Handle11, 2, <<"abc">>)),
+
+    ?assertMatch({ok, 9, {ok, #file_attr{size = 10}}}, lfm_proxy:write_and_check(W, Handle11, 1, <<"123456789">>)).
 
 lfm_truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

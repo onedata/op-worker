@@ -56,7 +56,7 @@ ls(SessId, {uuid, UUID}, Limit, Offset) ->
     lfm_utils:call_fslogic(SessId,
         #get_file_children{uuid = UUID, offset = Offset, size = Limit},
         fun({file_children, List}) ->
-            {ok, [{UUID, FileName} || {_, UUID, FileName} <- List]}
+            {ok, [{UUID_, FileName} || {_, UUID_, FileName} <- List]}
         end).
 
 

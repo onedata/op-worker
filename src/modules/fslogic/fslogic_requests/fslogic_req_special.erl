@@ -1,13 +1,13 @@
-%% ===================================================================
-%% @author Rafal Slota
-%% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: FSLogic request handlers for special files.
-%% @end
-%% ===================================================================
+%%%-------------------------------------------------------------------
+%%% @author Rafal Slota
+%%% @copyright (C): 2013, ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc FSLogic request handlers for special files.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(fslogic_req_special).
 -author("Rafal Slota").
 
@@ -32,11 +32,15 @@
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{?add_subcontainer, 2}, {?traverse_container, 2}, {traverse_ancestors, 2}]).
-mkdir(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
-  {uuid, UUID}, Name, Mode) ->
-    {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-    mkdir(CTX, DefaultSpaceUUID, Name, Mode);
 mkdir(CTX, ParentUUID, Name, Mode) ->
+    NormalizedParentUUID =
+        case {uuid, fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX))} =:= ParentUUID of
+            true ->
+                {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
+                {uuid, DefaultSpaceUUID};
+            false ->
+                ParentUUID
+        end,
     CTime = utils:time(),
     File = #document{value = #file_meta{
         name = Name,
@@ -47,9 +51,9 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
-    case file_meta:create({uuid, ParentUUID}, File) of
+    case file_meta:create(NormalizedParentUUID, File) of
         {ok, _} ->
-            {ok, _} = file_meta:update({uuid, ParentUUID}, #{mtime => CTime}),
+            {ok, _} = file_meta:update(NormalizedParentUUID, #{mtime => CTime}),
             #fuse_response{status = #status{code = ?OK}};
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
