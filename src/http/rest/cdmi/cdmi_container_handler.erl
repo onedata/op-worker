@@ -185,7 +185,7 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
 %%--------------------------------------------------------------------
 -spec error_wrong_path(req(), #{}) -> no_return().
 error_wrong_path(_Req, _State) ->
-    throw(?wrong_path).
+    throw(?ERROR_WRONG_PATH).
 
 %%%===================================================================
 %%% Internal functions

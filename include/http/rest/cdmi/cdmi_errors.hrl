@@ -33,7 +33,7 @@
   {?BAD_REQUEST, [{<<"error_invalid_base64">>, <<"Given base64 value could not be docoded.">>}]}).
 -define(ERROR_INVALID_OBJECTID,
   {?BAD_REQUEST, [{<<"error_invalid_objectid">>, <<"Given objectid is invalid.">>}]}).
--define(wrong_path, %todo uppercase
+-define(ERROR_WRONG_PATH,
   {?BAD_REQUEST, [{<<"error_wrong_path">>, <<"Requested uri is invalid, check the trailing slash.">>}]}).
 -define(ERROR_INVALID_ACL,
   {?BAD_REQUEST, [{<<"error_invalid_acl">>, <<"Given access control list is invalid.">>}]}).

@@ -38,9 +38,14 @@
 %% Local, cached version of globalregistry user
 -record(onedata_user, {
     name :: binary(),
-    space_ids :: [binary()]
+    space_ids :: [binary()],
+    group_ids :: [binary()]
 }).
 
+%% Local, cached version of globalregistry group
+-record(onedata_group, {
+    name :: binary()
+}).
 
 -record(file_meta, {
     name :: file_meta:name(),

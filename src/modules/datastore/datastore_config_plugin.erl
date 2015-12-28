@@ -28,6 +28,7 @@ models() -> [
   subscription,
   session,
   onedata_user,
+  onedata_group,
   identity,
   file_meta,
   storage,
