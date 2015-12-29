@@ -54,8 +54,8 @@ rm(CTX, UUID) ->
         %% delete an object
         lfm_files:unlink(CTX, {uuid, UUID})
     catch
-        error:Error -> {error, Error};
-        badmatch:Error2 -> Error2
+        error:{badmatch, Error2} -> Error2;
+        error:Error -> {error, Error}
     end.
 
 %%--------------------------------------------------------------------
