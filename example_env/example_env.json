@@ -17,7 +17,7 @@
             "target_dir": "rel/test_cluster"
         },
         "onepanel": {
-            "input_dir": "rel_oneprovider/op_panel",
+            "input_dir": "rel/op_panel",
             "target_dir": "rel/test_cluster"
         }
     },
@@ -330,26 +330,54 @@
         }
     },
     "onepanel": {
-        "onepanel1": {
-            "vm.args": {
-                "name": "onepanel@onepanel1",
-                "setcookie": "cookie7"
-            },
-            "sys.config": {
-                "multicast_address": {
-                    "string": "239.255.0.1"
-                }
+        "packages": {
+            "cluster_manager": "packages/cluster-manager.deb",
+            "op_worker": "packages/op-worker.deb"
+        },
+        "storages": {
+            "storage1": {
+                "host": "/mnt/vfs",
+                "container": "/mnt/vfs"
             }
         },
-        "onepanel2": {
-            "vm.args": {
-                "name": "onepanel@onepanel2",
-                "setcookie": "cookie7"
+        "nodes": {
+            "node1": {
+                "vm.args": {
+                    "name": "onepanel@onepanel1",
+                    "setcookie": "cookie7"
+                },
+                "sys.config": {
+                    "multicast_address": {
+                        "string": "239.255.0.1"
+                    },
+                    "verify_gr_cert": false
+                },
+                "packages": [
+                    "cluster_manager",
+                    "op_worker"
+                ],
+                "storages": [
+                    "storage1"
+                ]
             },
-            "sys.config": {
-                "multicast_address": {
-                    "string": "239.255.0.1"
-                }
+            "node2": {
+                "vm.args": {
+                    "name": "onepanel@onepanel2",
+                    "setcookie": "cookie7"
+                },
+                "sys.config": {
+                    "multicast_address": {
+                        "string": "239.255.0.1"
+                    },
+                    "verify_gr_cert": false
+                },
+                "packages": [
+                    "cluster_manager",
+                    "op_worker"
+                ],
+                "storages": [
+                    "storage1"
+                ]
             }
         }
     }
