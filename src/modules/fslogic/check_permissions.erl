@@ -132,8 +132,9 @@ get_validation_subject(CTX = #fslogic_ctx{}, FileEntry) ->
     get_validation_subject(fslogic_context:get_user_id(CTX), FileEntry);
 get_validation_subject(UserId, FileEntry) ->
     {ok, #document{key = FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
+    DefaultSpaceDirUuid = fslogic_uuid:default_space_uuid(UserId),
     case FileId of
-        UserId ->
+        DefaultSpaceDirUuid ->
             {ok, #document{} = SpaceDoc} = fslogic_spaces:get_default_space(UserId),
             SpaceDoc;
         _ ->
@@ -183,7 +184,7 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
                        _ ->
                            {ok, #document{value = #onedata_user{space_ids = Spaces}}} = onedata_user:get(UserId),
                            {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
-                           case lists:member(ScopeUUID, Spaces) of
+                           case lists:member(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), Spaces) of
                                true ->
                                    ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as space member.", [UserId, ReqBit, FileDoc, Mode]),
                                    ((ReqBit bsl 3) band Mode) =:= (ReqBit bsl 3);
