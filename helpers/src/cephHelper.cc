@@ -167,10 +167,10 @@ void CephHelperCTX::setUserCTX(
     if (ret < 0)
         throw std::system_error(makePosixError(ret),
             "Couldn't set monitor host configuration variable.");
-    ret = cluster.conf_set("keyring", args.at("keyring").c_str());
+    ret = cluster.conf_set("key", args.at("key").c_str());
     if (ret < 0)
-        throw std::system_error(makePosixError(ret),
-            "Couldn't set keyring configuration variable.");
+        throw std::system_error(
+            makePosixError(ret), "Couldn't set key configuration variable.");
     ret = cluster.connect();
     if (ret < 0)
         throw std::system_error(
