@@ -14,9 +14,9 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 
 %% model_behaviour callbacks

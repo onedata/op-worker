@@ -179,11 +179,8 @@ get_file_location_for_rdwr(CTX, File) -> get_file_location(CTX, File).
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
-get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    ?debug("get_file_location for ~p ~p", [File, OpenFlags]),
+get_file_location(CTX, File) ->
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
-
-    ok = check_permissions:validate_posix_access(OpenFlags, FileDoc, fslogic_context:get_user_id(CTX)),
 
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),

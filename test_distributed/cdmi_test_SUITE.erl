@@ -934,7 +934,13 @@ objectid_test(Config) ->
     ?assertEqual( % should be the same as in 6 (except parent)
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6)),
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse7))
-    ).
+    ),
+    %%------------------------------
+
+    %%---- unauthorized access to / by objectid -------
+    RequestHeaders8 = [?CDMI_VERSION_HEADER],
+    {ok, Code8, _, _} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders8, []),
+    ?assertEqual(401, Code8).
     %%------------------------------
 
 % tests if capabilities of objects, containers, and whole storage system are set properly
@@ -995,127 +1001,6 @@ capabilities_test(Config) ->
         proplists:get_value(<<"objectName">>, CdmiResponse10)),
     Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
     ?assertEqual(?dataobject_capability_list, Capabilities3).
-    %%------------------------------
-
-% test error handling
-errors_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    %%---- unauthorized access -----
-    {ok, Code1, _Headers1, _Response1} =
-        do_request(Worker, "dir", get, [], []),
-    ?assertEqual(401, Code1),
-    %%------------------------------
-
-    %%----- wrong create path ------
-    RequestHeaders2 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code2, _Headers2, _Response2} =
-        do_request(Worker, "dir", put, RequestHeaders2, []),
-    ?assertEqual(400, Code2),
-    %%------------------------------
-
-    %%---- wrong create path 2 -----
-    RequestHeaders3 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code3, _Headers3, _Response3} =
-        do_request(Worker, "dir/", put, RequestHeaders3, []),
-    ?assertEqual(400, Code3),
-    %%------------------------------
-
-    %%-------- wrong base64 --------
-    RequestHeaders4 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-    RequestBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
-    {ok, Code4, _Headers4, _Response4} =
-        do_request(Worker, "some_file_b64", put, RequestHeaders4, RequestBody4),
-    ?assertEqual(400, Code4),
-    %%------------------------------
-
-    %%-- duplicated body fields ----
-    RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
-    RequestBody5 = json_utils:encode(RawBody5),
-    RequestHeaders5 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code5, _Headers5, Response5} =
-        do_request(Worker, "dir_dupl/", put, RequestHeaders5, RequestBody5),
-    ?assertEqual(400, Code5),
-    CdmiResponse5 = json_utils:decode(Response5),
-    ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5),
-
-    %%-- reding non-existing file --
-    RequestHeaders6 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code6, _Headers6, _Response6} =
-        do_request(Worker, "nonexistent_file", get, RequestHeaders6),
-    ?assertMatch(404, Code6),
-    %%------------------------------
-
-    %%--- list nonexisting dir -----
-    RequestHeaders7 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code7, _Headers7, _Response7} =
-        do_request(Worker, "nonexisting_dir/", get, RequestHeaders7),
-    ?assertEqual(404, Code7),
-    %%------------------------------
-
-    %%--- open binary file without permission -----
-    File8 = "file",
-    FileContent8 = <<"File content...">>,
-    create_file(Config, File8),
-    ?assertEqual(object_exists(Config, File8), true),
-    write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
-    ?assertEqual(get_file_content(Config, File8),FileContent8),
-    RequestHeaders8 = [?USER_1_TOKEN_HEADER],
-
-    mock_opening_file_without_perms(Config),
-    {ok, Code8, _Headers8, _Response8} =
-        do_request(Worker, File8, get, RequestHeaders8),
-    unmock_opening_file_without_perms(Config),
-    ?assertEqual(403, Code8),
-    %%------------------------------
-
-    %%--- open cdmi file without permission -----
-    File9 = "file",
-    FileContent9 = <<"File content...">>,
-    create_file(Config, File9),
-    ?assertEqual(object_exists(Config, File9), true),
-    write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
-    ?assertEqual(get_file_content(Config, File9),FileContent9),
-    RequestHeaders9 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-
-    mock_opening_file_without_perms(Config),
-    {ok, Code9, _Headers9, _Response9} =
-        do_request(Worker, File9, get, RequestHeaders9),
-    unmock_opening_file_without_perms(Config),
-    ?assertEqual(403, Code9),
-    %%------------------------------
-
-    %%--- unauthorized access to / by objectid ---
-    {ok, Code10, _, _} = do_request(Worker, "", get, [?CDMI_VERSION_HEADER], []),
-    ?assertEqual(401, Code10).
     %%------------------------------
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path

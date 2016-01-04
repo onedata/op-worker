@@ -17,6 +17,7 @@
 -include_lib("ctool/include/global_registry/gr_groups.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,

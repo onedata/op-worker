@@ -14,7 +14,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include_lib("modules/http_worker/rest/cdmi/cdmi_errors.hrl").
+-include_lib("http/rest/cdmi/cdmi_errors.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
 -export([prepare_metadata/3, prepare_metadata/4]).
