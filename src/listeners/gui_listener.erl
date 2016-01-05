@@ -66,7 +66,7 @@ start() ->
     %% TODO LOOLOL
     gui:init(),
     % Start the listener for web gui and nagios handler
-    {ok, _} = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
+    Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
         ranch_ssl2, [
             {ip, {127, 0, 0, 1}},
             {port, GuiPort},
@@ -77,7 +77,11 @@ start() ->
             {timeout, timer:seconds(Timeout)},
             % On every request, add headers that improve security to the response
             {onrequest, fun gui_utils:onrequest_adjust_headers/1}
-        ]).
+        ]),
+    case Result of
+        {ok, _} -> ok;
+        _ -> Result
+    end.
 
 
 %%--------------------------------------------------------------------
