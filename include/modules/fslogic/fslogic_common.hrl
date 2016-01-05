@@ -30,7 +30,8 @@
 %% Context definition
 -record(fslogic_ctx, {
     session :: #session{},
-    session_id :: session:id()
+    session_id :: session:id(),
+    space_id :: file_meta:uuid()
 }).
 
 %% Stub record

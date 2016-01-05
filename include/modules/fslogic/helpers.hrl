@@ -28,8 +28,8 @@
 
 %% Record holding user's identity that may be used on Ceph storage system
 -record(ceph_user_ctx, {
-    username :: binary(),
-    keyring :: binary()
+    user_name :: binary(),
+    user_key :: binary()
 }).
 
 %% Record holding user's identity that may be used on POSIX compliant systems

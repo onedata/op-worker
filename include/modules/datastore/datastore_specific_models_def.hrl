@@ -80,4 +80,15 @@
     size = 0 :: non_neg_integer() | undefined
 }).
 
+%% Model that maps space to storage
+-record(space_storage, {
+    storage_id :: storage:id()
+}).
+
+%% Model that maps onedata user to Ceph user
+-record(ceph_user, {
+    user_name :: binary(),
+    user_key :: binary()
+}).
+
 -endif.

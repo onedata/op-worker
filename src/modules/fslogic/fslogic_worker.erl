@@ -129,7 +129,7 @@ cleanup() ->
 maybe_handle_fuse_request(SessId, FuseRequest) ->
     try
         ?debug("Processing request: ~p", [FuseRequest]),
-        Resp = handle_fuse_request(fslogic_context:new(SessId), FuseRequest),
+        Resp = handle_fuse_request(SessId, FuseRequest),
         ?debug("Fuse request ~p from user ~p: ~p", [FuseRequest, SessId, Resp]),
         Resp
     catch
@@ -155,7 +155,7 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec report_error(FuseRequest :: #fuse_request{}, Error :: term(),
-    LogLevel :: debug | warning | error) -> FuseResponse :: #fuse_response{}.
+LogLevel :: debug | warning | error) -> FuseResponse :: #fuse_response{}.
 report_error(FuseRequest, Error, LogLevel) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
@@ -163,7 +163,8 @@ report_error(FuseRequest, Error, LogLevel) ->
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
 %%      info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
-        warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
+        warning ->
+            ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
         error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,
     #fuse_response{status = Status}.
@@ -174,48 +175,49 @@ report_error(FuseRequest, Error, LogLevel) ->
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_fuse_request(Ctx :: fslogic_worker:ctx(), FuseRequest :: fuse_request()) ->
+-spec handle_fuse_request(SessId :: session:id(), FuseRequest :: fuse_request()) ->
     FuseResponse :: #fuse_response{}.
-handle_fuse_request(Ctx, #get_file_attr{entry = {path, Path}}) ->
+handle_fuse_request(SessId, #get_file_attr{entry = {path, Path} = Entry}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
+    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(SessId, Tokens),
+    Ctx = fslogic_context:new(SessId, Entry),
     fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
-handle_fuse_request(Ctx, #get_file_attr{entry = Entry}) ->
-    fslogic_req_generic:get_file_attr(Ctx, Entry);
-handle_fuse_request(Ctx, #delete_file{uuid = UUID}) ->
-    fslogic_req_generic:delete_file(Ctx, {uuid, UUID});
-handle_fuse_request(Ctx, #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
-    fslogic_req_special:mkdir(Ctx, ParentUUID, Name, Mode);
-handle_fuse_request(Ctx, #get_file_children{uuid = UUID, offset = Offset, size = Size}) ->
-    fslogic_req_special:read_dir(Ctx, {uuid, UUID}, Offset, Size);
-handle_fuse_request(Ctx, #change_mode{uuid = UUID, mode = Mode}) ->
-    fslogic_req_generic:chmod(Ctx, {uuid, UUID}, Mode);
-handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
+handle_fuse_request(SessId, #get_file_attr{entry = Entry}) ->
+    fslogic_req_generic:get_file_attr(fslogic_context:new(SessId, Entry), Entry);
+handle_fuse_request(SessId, #delete_file{uuid = UUID}) ->
+    fslogic_req_generic:delete_file(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID});
+handle_fuse_request(SessId, #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
+    fslogic_req_special:mkdir(fslogic_context:new(SessId, {uuid, ParentUUID}), ParentUUID, Name, Mode);
+handle_fuse_request(SessId, #get_file_children{uuid = UUID, offset = Offset, size = Size}) ->
+    fslogic_req_special:read_dir(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, Offset, Size);
+handle_fuse_request(SessId, #change_mode{uuid = UUID, mode = Mode}) ->
+    fslogic_req_generic:chmod(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, Mode);
+handle_fuse_request(SessId, #rename{uuid = UUID, target_path = TargetPath}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(TargetPath),
-    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
+    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(SessId, Tokens),
     {ok, CanonicalTargetPath} = file_meta:gen_path(CanonicalFileEntry),
-    fslogic_req_generic:rename_file(Ctx, {uuid, UUID}, CanonicalTargetPath);
-handle_fuse_request(Ctx, #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}) ->
-    fslogic_req_generic:update_times(Ctx, {uuid, UUID}, ATime, MTime, CTime);
-handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = ParentUUID, flags = Flags, mode = Mode}) ->
-    fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags);
-handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
-    fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
-handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
-    fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SPID, SID, ForceCL);
-handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
-    fslogic_req_generic:delete_file(Ctx, {uuid, UUID});
-handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
-    fslogic_req_generic:get_xattr(Ctx, {uuid, UUID}, XattrName);
-handle_fuse_request(Ctx, #set_xattr{uuid = UUID, xattr = Xattr}) ->
-    fslogic_req_generic:set_xattr(Ctx, {uuid, UUID}, Xattr);
-handle_fuse_request(Ctx, #remove_xattr{uuid = UUID, name = XattrName}) ->
-    fslogic_req_generic:remove_xattr(Ctx, {uuid, UUID}, XattrName);
-handle_fuse_request(Ctx, #list_xattr{uuid = UUID}) ->
-    fslogic_req_generic:list_xattr(Ctx, {uuid, UUID});
-handle_fuse_request(_Ctx, Req) ->
+    fslogic_req_generic:rename_file(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, CanonicalTargetPath);
+handle_fuse_request(SessId, #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}) ->
+    fslogic_req_generic:update_times(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, ATime, MTime, CTime);
+handle_fuse_request(SessId, #get_new_file_location{name = Name, parent_uuid = ParentUUID, flags = Flags, mode = Mode}) ->
+    fslogic_req_regular:get_new_file_location(fslogic_context:new(SessId, {uuid, ParentUUID}), ParentUUID, Name, Mode, Flags);
+handle_fuse_request(SessId, #get_file_location{uuid = UUID, flags = Flags}) ->
+    fslogic_req_regular:get_file_location(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, Flags);
+handle_fuse_request(SessId, #truncate{uuid = UUID, size = Size}) ->
+    fslogic_req_regular:truncate(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, Size);
+handle_fuse_request(SessId, #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
+    fslogic_req_regular:get_helper_params(fslogic_context:new(SessId, {space_id, SPID}), SPID, SID, ForceCL);
+handle_fuse_request(SessId, #unlink{uuid = UUID}) ->
+    fslogic_req_generic:delete_file(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID});
+handle_fuse_request(SessId, #get_xattr{uuid = UUID, name = XattrName}) ->
+    fslogic_req_generic:get_xattr(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, XattrName);
+handle_fuse_request(SessId, #set_xattr{uuid = UUID, xattr = Xattr}) ->
+    fslogic_req_generic:set_xattr(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, Xattr);
+handle_fuse_request(SessId, #remove_xattr{uuid = UUID, name = XattrName}) ->
+    fslogic_req_generic:remove_xattr(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID}, XattrName);
+handle_fuse_request(SessId, #list_xattr{uuid = UUID}) ->
+    fslogic_req_generic:list_xattr(fslogic_context:new(SessId, {uuid, UUID}), {uuid, UUID});
+handle_fuse_request(_SessId, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 

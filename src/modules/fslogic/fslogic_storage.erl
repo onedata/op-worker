@@ -39,8 +39,13 @@ new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) -
     new_posix_user_ctx(SessionId, SpaceUUID).
 
 
-new_ceph_user_ctx(_SessionId) ->
-    #ceph_user_ctx{}.
+new_ceph_user_ctx(SessionId) ->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #ceph_user{user_name = UserName, user_key = UserKey}}} = ceph_user:get(UserId),
+    #ceph_user_ctx{
+        user_name = UserName,
+        user_key = UserKey
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -85,14 +90,15 @@ select_helper(#storage{helpers = [Helper | _]}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec select_storage(fslogic_worker:ctx()) -> {ok, datastore:document()} | {error, Reason :: term()}.
-select_storage(#fslogic_ctx{}) ->
-    %% For now just return any available storage.
-    case storage:list() of
-        {ok, [#document{} = Storage | _]} ->
-            {ok, Storage};
-        {ok, []} ->
-            {error, {not_found, storage}};
-        E -> E
+select_storage(#fslogic_ctx{space_id = SpaceId}) ->
+    case space_storage:get(SpaceId) of
+        {ok, #document{value = #space_storage{storage_id = StorageId}}} ->
+            case storage:get(StorageId) of
+                {ok, #document{} = Storage} -> {ok, Storage};
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 

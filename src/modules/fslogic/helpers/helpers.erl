@@ -17,7 +17,6 @@
 -include_lib("ctool/include/logging.hrl").
 
 
-
 %% API
 -export([new_handle/1, new_handle/2, set_user_ctx/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
@@ -78,8 +77,8 @@ new_handle(HelperName, HelperArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_user_ctx(handle(), user_ctx()) -> ok.
-set_user_ctx(#helper_handle{ctx = CTX}, #ceph_user_ctx{username = Username, keyring = Keyring}) ->
-    UserCTX = #{<<"username">> => Username, <<"keyring">> => Keyring},
+set_user_ctx(#helper_handle{ctx = CTX}, #ceph_user_ctx{user_name = UserName, user_key = UserKey}) ->
+    UserCTX = #{<<"user_name">> => UserName, <<"key">> => UserKey},
     ok = helpers_nif:set_user_ctx(CTX, UserCTX);
 set_user_ctx(#helper_handle{ctx = CTX}, #posix_user_ctx{uid = UID, gid = GID}) ->
     UserCTX = #{<<"uid">> => integer_to_binary(UID), <<"gid">> => integer_to_binary(GID)},
@@ -218,8 +217,8 @@ open(#helper_handle{} = HelperHandle, File, rdwr) ->
 %%      First argument shall be #helper_handle{} from new_handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec read(handle(), File :: file(),  Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
-                  {ok, Data :: binary()} | {error, term()}.
+-spec read(handle(), File :: file(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    {ok, Data :: binary()} | {error, term()}.
 read(#helper_handle{} = HelperHandle, File, Offset, Size) ->
     apply_helper_nif(HelperHandle, read, [File, Offset, Size]).
 
@@ -229,7 +228,7 @@ read(#helper_handle{} = HelperHandle, File, Offset, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(handle(), File :: file(), Offset :: non_neg_integer(), Data :: binary()) ->
-                   {ok, Size :: non_neg_integer()} | {error, term()}.
+    {ok, Size :: non_neg_integer()} | {error, term()}.
 write(#helper_handle{} = HelperHandle, File, Offset, Data) ->
     apply_helper_nif(HelperHandle, write, [File, Offset, Data]).
 
@@ -281,7 +280,7 @@ apply_helper_nif(#helper_handle{instance = Instance, ctx = CTX, timeout = Timeou
         {Guard, Result} ->
             Result
     after Timeout ->
-            {error, nif_timeout}
+        {error, nif_timeout}
     end.
 
 
