@@ -540,6 +540,11 @@ attach_location(Entry, LocId, ProviderId) ->
     ok = datastore:add_links(?LINK_STORE_LEVEL, FDoc, {location_ref(ProviderId), {LocId, file_location}}),
     ok = datastore:add_links(?LINK_STORE_LEVEL, LocId, file_location, {file_meta, {FileId, file_meta}}).
 
+%%--------------------------------------------------------------------
+%% @doc Get space dir document for given SpaceId
+%%--------------------------------------------------------------------
+-spec get_space_dir(SpaceId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
 get_space_dir(SpaceId) ->
     get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
 

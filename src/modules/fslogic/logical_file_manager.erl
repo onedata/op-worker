@@ -58,7 +58,7 @@
 -export_type([handle/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2, get_parent/2]).
+-export([mkdir/2, mkdir/3, rmdir/2, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2, get_file_path/2]).
 %% Functions operating on files
@@ -84,12 +84,14 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> {ok, DirUUID :: file_uuid()} | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_path()) -> 
+    {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, Path, Mode).
 
--spec mkdir(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+-spec mkdir(SessId :: session:id(), Path :: file_path(), 
+    Mode :: file_meta:posix_permissions()) ->
     {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     try
@@ -103,6 +105,18 @@ mkdir(SessId, Path, Mode) ->
             ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
             {error, Reason}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a directory with all its children.
+%% @end
+%%--------------------------------------------------------------------
+-spec rmdir(SessId :: session:id(), FileKey :: file_key()) -> ok | error_reply().
+rmdir(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_utils:rm(CTX, FileUUID).
 
 
 %%--------------------------------------------------------------------
@@ -533,4 +547,3 @@ ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
     {uuid, fslogic_uuid:path_to_uuid(CTX, Path)}.
-

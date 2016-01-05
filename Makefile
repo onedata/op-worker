@@ -62,11 +62,11 @@ distclean:
 
 rel: generate
 
-test_rel: generate ccm_rel appmock_rel
+test_rel: generate cm_rel appmock_rel
 
-ccm_rel:
-	ln -sf deps/cluster_worker/op_ccm/
-	make -C op_ccm/ rel
+cm_rel:
+	ln -sf deps/cluster_worker/cluster_manager/
+	make -C cluster_manager/ rel
 
 appmock_rel:
 	make -C appmock/ rel
@@ -75,7 +75,7 @@ relclean:
 	rm -rf rel/test_cluster
 	rm -rf rel/op_worker
 	rm -rf appmock/rel/appmock
-	rm -rf op_ccm/rel/op_ccm
+	rm -rf cluster_manager/rel/cluster_manager
 
 ##
 ## Testing targets

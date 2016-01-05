@@ -27,7 +27,7 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi/2, put_cdmi/2, put_binary/2]).
+-export([get_cdmi/2, put_cdmi/2, put_binary/2, error_wrong_path/2]).
 
 %%%===================================================================
 %%% API
@@ -90,17 +90,23 @@ content_types_provided(Req, State) ->
 %%--------------------------------------------------------------------
 -spec content_types_accepted(req(), #{}) ->
     {[{binary(), atom()}], req(), #{}}.
+content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
+    {[
+        {'*', put_binary}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
         {<<"application/cdmi-container">>, put_cdmi},
-        {'*', put_binary}
+        {<<"application/cdmi-object">>, error_wrong_path}
+
     ], Req, State}.
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:delete_resource/2
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
-delete_resource(Req, State) ->
+delete_resource(Req, State = #{auth := Auth, path := Path}) ->
+    ok = onedata_file_api:rmdir(Auth, {path, Path}),
     {true, Req, State}.
 
 %%%===================================================================
@@ -112,8 +118,8 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, #{options := Options} = State) ->
-    NewOptions = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
-    DirCdmi = cdmi_container_answer:prepare(NewOptions, State#{options := NewOptions}),
+    NonEmptyOpts = utils:ensure_defined(Options, [], ?DEFAULT_GET_DIR_OPTS),
+    DirCdmi = cdmi_container_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
     Response = json_utils:encode({struct, DirCdmi}),
     {Response, Req, State}.
 
@@ -133,13 +139,16 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, OperationPerformed} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {onedata_file_api:mkdir(Auth, Path), created};
+                ok = onedata_file_api:mkdir(Auth, Path),
+                {ok, created};
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
             {undefined, CopyURI, undefined} ->
-                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+                ok = onedata_file_api:cp({path, CopyURI}, Path),
+                {ok, copied};
             {undefined, undefined, MoveURI} ->
-                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+                ok = onedata_file_api:mv({path, MoveURI}, Path),
+                {ok, moved}
         end,
 
     %update metadata and return result
@@ -152,7 +161,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
         _ ->
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
             ok = cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
-            Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, opts => ?DEFAULT_GET_DIR_OPTS}),
+            Answer = cdmi_container_answer:prepare(?DEFAULT_GET_DIR_OPTS, State#{attributes => NewAttrs, options => ?DEFAULT_GET_DIR_OPTS}),
             Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
             {true, Req2, State}
@@ -167,6 +176,16 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
 put_binary(Req, State = #{auth := Auth, path := Path}) ->
     ok = onedata_file_api:mkdir(Auth, Path),
     {true, Req, State}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with cdmi-object content type, which indicates that request has
+%% wrong path as it ends with '/'
+%% @end
+%%--------------------------------------------------------------------
+-spec error_wrong_path(req(), #{}) -> no_return().
+error_wrong_path(_Req, _State) ->
+    throw(?wrong_path).
 
 %%%===================================================================
 %%% Internal functions

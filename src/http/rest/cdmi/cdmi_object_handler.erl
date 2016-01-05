@@ -26,7 +26,7 @@
     content_types_accepted/2, delete_resource/2]).
 
 %% Content type routing functions
--export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2]).
+-export([get_cdmi/2, get_binary/2, put_cdmi/2, put_binary/2, error_wrong_path/2]).
 
 %% the default json response for get/put cdmi_object will contain this entities,
 %% they can be choosed selectively by appending '?name1;name2' list to the
@@ -119,7 +119,8 @@ content_types_accepted(Req, #{cdmi_version := undefined} = State) ->
     ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-object">>, put_cdmi}
+        {<<"application/cdmi-object">>, put_cdmi},
+        {<<"application/cdmi-container">>, error_wrong_path}
     ], Req, State}.
 
 %%--------------------------------------------------------------------
@@ -143,7 +144,7 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
 get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}} = State) ->
     % prepare response
-    {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, State),
+    {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, Size),
     Mimetype = cdmi_metadata:get_mimetype(Auth, {uuid, Uuid}),
     Req2 = cowboy_req:set_resp_header(<<"content-type">>, Mimetype, Req1),
     HttpStatus =
@@ -168,7 +169,7 @@ get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = Uui
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
 get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = Uuid}}) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
-    DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State),
+    DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
 
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
@@ -235,7 +236,8 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                     Ans;
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
-                    case cdmi_arg_parser:parse_byte_range(State, RawRange) of
+                    #file_attr{size = Size} = get_attr(Auth, Path),
+                    case cdmi_arg_parser:parse_byte_range(RawRange, Size) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
                             Ans = cdmi_streamer:write_body_to_file(Req2, State, From),
                             cdmi_metadata:set_completion_status_according_to_partial_flag(
@@ -284,9 +286,11 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
             {undefined, CopyURI, undefined} ->
-                {onedata_file_api:cp({path, CopyURI}, Path), copied};
+                ok = onedata_file_api:cp({path, CopyURI}, Path),
+                {ok, copied};
             {undefined, undefined, MoveURI} ->
-                {onedata_file_api:mv({path, MoveURI}, Path), moved}
+                ok = onedata_file_api:mv({path, MoveURI}, Path),
+                {ok, moved}
         end,
 
     % update value and metadata depending on creation type
@@ -300,8 +304,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
             cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, utils:ensure_defined(
                 RequestedValueTransferEncoding, undefined, <<"utf-8">>
-            )
-            ),
+            )),
             cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
             cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {uuid, Uuid}, CdmiPartialFlag),
@@ -341,6 +344,16 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
                     throw(?invalid_range)
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles PUT with cdmi-object content type, which indicates that request has
+%% wrong path as it ends with '/'
+%% @end
+%%--------------------------------------------------------------------
+-spec error_wrong_path(req(), #{}) -> no_return().
+error_wrong_path(_Req, _State) ->
+    throw(?wrong_path).
 
 %% ====================================================================
 %% Internal functions

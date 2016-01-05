@@ -40,14 +40,11 @@ prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
 prepare([<<"parentURI">> | Tail], #{path := <<"/">>} = State) ->
     [{<<"parentURI">>, <<>>} | prepare(Tail, State)];
 prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
-    ParentURI = str_utils:ensure_ends_with_slash(
-        filename:dirname(binary:part(Path, {0, byte_size(Path) - 1}))),
-    [{<<"parentURI">>, ParentURI} | prepare(Tail, State)];
+    [{<<"parentURI">>, filepath_utils:parent_dir(Path)} | prepare(Tail, State)];
 prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
     prepare(Tail, State);
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
-    {ok, #file_attr{uuid = Uuid}} =
-        onedata_file_api:stat(Auth, {path, filename:dirname(binary:part(Path, {0, byte_size(Path) - 1}))}),
+    {ok, #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, filepath_utils:parent_dir(Path)}),
     {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
     [{<<"parentID">>, Id} | prepare(Tail, State)];
 prepare([<<"capabilitiesURI">> | Tail], State) ->
@@ -110,7 +107,7 @@ prepare([_Other | Tail], State) ->
 distinguish_files(Uuid, Name, Auth) ->
     case onedata_file_api:stat(Auth, {uuid, Uuid}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            str_utils:ensure_ends_with_slash(Name);
+            filepath_utils:ensure_ends_with_slash(Name);
         {ok, _} -> Name
     end.
 

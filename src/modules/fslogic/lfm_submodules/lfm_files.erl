@@ -100,11 +100,16 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     {ok, file_uuid()} | error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
-    {ok, {#document{key = ParentUUID}, _}} = file_meta:resolve_path(ParentPath),
-    lfm_utils:call_fslogic(SessId, #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode},
-        fun(#file_location{uuid = UUID}) ->
-            {ok, UUID}
-        end).
+    case file_meta:resolve_path(ParentPath) of
+        {ok, {#document{key = ParentUUID}, _}} ->
+            lfm_utils:call_fslogic(SessId,
+                #get_new_file_location{
+                    name = Name, parent_uuid = ParentUUID, mode = Mode
+                },
+                fun(#file_location{uuid = UUID}) -> {ok, UUID} end
+            );
+        {error, Error} -> {error, Error}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -115,15 +120,15 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 -spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
     lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID, flags = OpenType},
-        fun(#file_location{uuid = UUID, file_id = FileId, storage_id = StorageId}) ->
+        fun(#file_location{uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, UUID}),
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}),
             SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FileId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
                     {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, NewSFMHandle}}]),
-                        fslogic_ctx = CTX, file_uuid = UUID, open_mode = OpenType}};
+                        fslogic_ctx = CTX, file_uuid = _UUID, open_mode = OpenType}};
                 {error, Reason} ->
                     {error, Reason}
             end

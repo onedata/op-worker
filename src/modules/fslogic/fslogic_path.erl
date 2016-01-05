@@ -18,7 +18,7 @@
 %% API
 -export([verify_file_path/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, is_space_dir/1, basename_and_parent/1]).
--export([ensure_path_begins_with_slash/1, dirname/1]).
+-export([dirname/1]).
 
 %%%===================================================================
 %%% API functions
@@ -166,12 +166,3 @@ is_space_dir(Path) ->
         [?SPACES_BASE_DIR_NAME, _SpaceName] -> true;
         _ -> false
     end.
-
-%%--------------------------------------------------------------------
-%% @doc Ensures that path begins with "/"
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_path_begins_with_slash(Path :: file_meta:path()) -> file_meta:path().
-ensure_path_begins_with_slash(<<?DIRECTORY_SEPARATOR, _R/binary>> = Path) ->
-    Path;
-ensure_path_begins_with_slash(Path) -> <<?DIRECTORY_SEPARATOR, Path/binary>>.

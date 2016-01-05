@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2, rmdir/2]).
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2, get_file_path/2]).
 %% Functions operating on files
@@ -95,6 +95,15 @@ ls(Auth, FileKey, Limit, Offset) ->
 -spec get_children_count(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
 get_children_count(Auth, FileKey) ->
     logical_file_manager:get_children_count(Auth, FileKey).
+
+
+%%--------------------------------------------------------------------
+%% @doc Deletes a directory with all its children.
+%%--------------------------------------------------------------------
+-spec rmdir(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path())
+        -> ok | error_reply().
+rmdir(Auth, FileKey) ->
+    logical_file_manager:rmdir(Auth, FileKey).
 
 
 %%--------------------------------------------------------------------

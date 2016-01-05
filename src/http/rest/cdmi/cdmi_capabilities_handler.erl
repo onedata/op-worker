@@ -101,6 +101,6 @@ prepare_capability_ans([<<"childrenrange">> | Tail]) ->
     [{<<"childrenrange">>, <<"0-1">>} | prepare_capability_ans(Tail)]; %todo hardcoded childrens, when adding childrenranges or new capabilities, this has to be changed
 prepare_capability_ans([<<"children">> | Tail]) ->
     [{<<"children">>, [
-        str_utils:ensure_ends_with_slash(filename:basename(?container_capability_path)),
-        str_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))
+        filepath_utils:ensure_ends_with_slash(filename:basename(?container_capability_path)),
+        filepath_utils:ensure_ends_with_slash(filename:basename(?dataobject_capability_path))
     ]} | prepare_capability_ans(Tail)].
