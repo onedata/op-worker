@@ -117,4 +117,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 
 new(SpaceId, StorageId) ->
-    #document{key = SpaceId, value = #space_storage{storage_id = StorageId}}.
+    #document{
+        key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+        value = #space_storage{storage_id = StorageId}
+    }.
