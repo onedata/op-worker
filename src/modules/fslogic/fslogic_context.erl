@@ -36,9 +36,16 @@ new(SessId) ->
     #fslogic_ctx{session = Session, session_id = SessId}.
 
 
-set_space_id(Ctx, Entry) ->
-    {ok, #document{key = SpaceDirUuid}} = file_meta:get_scope(Entry),
-    Ctx#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid)}.
+set_space_id(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}} = Ctx, Entry) ->
+    {ok, SpaceId} = case file_meta:get_scope(Entry) of
+        {ok, #document{value = #file_meta{name = Name}}} when Name =:= UserId ->
+            fslogic_spaces:get_default_space_id(UserId);
+        {ok, #document{value = #file_meta{name = ?SPACES_BASE_DIR_NAME}}} ->
+            fslogic_spaces:get_default_space_id(UserId);
+        {ok, #document{key = SpaceDirUuid}} ->
+            {ok, fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid)}
+    end,
+    Ctx#fslogic_ctx{space_id = SpaceId}.
 
 
 %% gen_global_session_id/1
