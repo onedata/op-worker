@@ -29,6 +29,8 @@ public:
 
     int getFlagValue(Flag flag) { return 0; }
 
+    void setFlags(int flags) {}
+
     librados::Rados cluster;
     librados::IoCtx ioCTX;
 

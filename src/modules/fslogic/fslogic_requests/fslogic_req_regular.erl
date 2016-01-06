@@ -63,14 +63,15 @@ get_helper_params(_Ctx, SpaceId, StorageId, true = _ForceCL) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #helper_params{helper_name = <<"ProxyIO">>,
             helper_args = [
-                #helper_arg{key = <<"storage_id">>, value = StorageId}
+                #helper_arg{key = <<"storage_id">>, value = StorageId},
                 #helper_arg{key = <<"space_id">>, value = SpaceId}]}};
 get_helper_params(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}},
     _SpaceId, StorageId, false = _ForceCL) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
     {HelperName, HelperArgsMap} = case fslogic_storage:select_helper(StorageDoc) of
         {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args}} ->
-            {ok, #ceph_user{user_name = UserName, user_key = UserKey}} = ceph_user:get(UserId),
+            {ok, #document{value = #ceph_user{user_name = UserName, user_key = UserKey}}} =
+                ceph_user:get(UserId),
             {?CEPH_HELPER_NAME, Args#{<<"user_name">> => UserName, <<"key">> => UserKey}};
         {ok, #helper_init{name = Name, args = Args}} ->
             {Name, Args}
