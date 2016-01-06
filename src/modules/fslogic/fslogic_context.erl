@@ -19,7 +19,7 @@
 
 %% API
 -export([gen_global_session_id/2, read_global_session_id/1, is_global_session_id/1]).
--export([get_user_id/1, new/2]).
+-export([get_user_id/1, new/1, set_scope/2]).
 
 %%%===================================================================
 %%% API functions
@@ -30,14 +30,15 @@
 %%  Returns newly created fslogic CTX for given session ID.
 %% @end
 %%--------------------------------------------------------------------
--spec new(session:id(), file_meta:entry() | {space_id, SpaceId :: file_meta:uuid()}) ->
-    fslogic_worker:ctx() | no_return().
-new(SessId, {space_id, SpaceId}) ->
+-spec new(session:id()) -> fslogic_worker:ctx() | no_return().
+new(SessId) ->
     {ok, #document{value = Session}} = session:get(SessId),
-    #fslogic_ctx{session = Session, session_id = SessId, space_id = SpaceId};
-new(SessId, Entry) ->
+    #fslogic_ctx{session = Session, session_id = SessId}.
+
+
+set_scope(Ctx, Entry) ->
     {ok, #document{key = SpaceId}} = file_meta:get_scope(Entry),
-    new(SessId, {space_id, SpaceId}).
+    Ctx#fslogic_ctx{space_id = SpaceId}.
 
 
 %% gen_global_session_id/1
