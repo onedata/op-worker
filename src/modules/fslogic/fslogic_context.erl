@@ -19,7 +19,7 @@
 
 %% API
 -export([gen_global_session_id/2, read_global_session_id/1, is_global_session_id/1]).
--export([get_user_id/1, new/1, set_scope/2]).
+-export([get_user_id/1, new/1, set_space_id/2]).
 
 %%%===================================================================
 %%% API functions
@@ -36,9 +36,9 @@ new(SessId) ->
     #fslogic_ctx{session = Session, session_id = SessId}.
 
 
-set_scope(Ctx, Entry) ->
-    {ok, #document{key = SpaceId}} = file_meta:get_scope(Entry),
-    Ctx#fslogic_ctx{space_id = SpaceId}.
+set_space_id(Ctx, Entry) ->
+    {ok, #document{key = SpaceDirUuid}} = file_meta:get_scope(Entry),
+    Ctx#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid)}.
 
 
 %% gen_global_session_id/1
