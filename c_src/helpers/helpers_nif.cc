@@ -258,14 +258,14 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, const T &fun)
     try {
         return fun();
     }
-    catch (const nifpp::badarg &) {
+    catch (nifpp::badarg &) {
         return enif_make_badarg(env);
     }
-    catch (const std::system_error &e) {
+    catch (std::system_error &e) {
         return nifpp::make(
             env, std::make_tuple(error, nifpp::str_atom{e.code().message()}));
     }
-    catch (const std::exception &e) {
+    catch (std::exception &e) {
         return nifpp::make(env, std::make_tuple(error, std::string{e.what()}));
     }
 }

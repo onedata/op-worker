@@ -27,6 +27,8 @@ public:
 
     std::unordered_map<std::string, std::string> getUserCTX();
 
+    int getFlagValue(Flag flag) { return 0; }
+
     librados::Rados cluster;
     librados::IoCtx ioCTX;
 
