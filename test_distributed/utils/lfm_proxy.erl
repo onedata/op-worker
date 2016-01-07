@@ -162,8 +162,7 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
                                 {ok, Res, logical_file_manager:stat(SessId, {uuid, UUID})};
                             Other2 ->
                                 Other2
-                        end,
-                        {ok, Res, logical_file_manager:stat(SessId, {uuid, UUID})};
+                        end;
                     Other -> Other
                 end,
             Host ! {self(), Result}

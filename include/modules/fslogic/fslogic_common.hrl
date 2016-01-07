@@ -40,6 +40,7 @@
 %% root user definitions
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
+-define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
 
 %% fslogic subscription id
 -define(FSLOGIC_SUB_ID, binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF).
