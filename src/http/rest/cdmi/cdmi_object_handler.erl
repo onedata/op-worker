@@ -301,6 +301,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
 
             % return response
+            onedata_file_api:fsync(FileHandler),
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
             cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, utils:ensure_defined(
                 RequestedValueTransferEncoding, undefined, <<"utf-8">>

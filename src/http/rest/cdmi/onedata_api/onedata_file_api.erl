@@ -21,7 +21,7 @@
 -export([exists/1, mv/2, cp/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
-    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
+    get_block_map/1, get_block_map/2, unlink/1, unlink/2, fsync/1]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
@@ -145,6 +145,12 @@ unlink(Handle) ->
 unlink(Auth, FileEntry) ->
     logical_file_manager:unlink(Auth, FileEntry).
 
+%%--------------------------------------------------------------------
+%% @doc Flushes waiting events for session connected with handler.
+%%--------------------------------------------------------------------
+-spec fsync(file_handle()) -> ok | error_reply().
+fsync(Handle) ->
+    logical_file_manager:fsync(Handle).
 
 %%--------------------------------------------------------------------
 %% @doc Creates a new file.
