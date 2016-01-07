@@ -20,8 +20,8 @@
 -define(REST_LISTENER, rest).
 
 
-%% listener_starter_behaviour callbacks
--export([start/0, stop/0]).
+%% listener_behaviour callbacks
+-export([start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
 %%% listener_starter_behaviour callbacks
@@ -61,6 +61,7 @@ start() ->
         _ -> Result
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link listener_starter_behaviour} callback stop/1.
@@ -72,6 +73,24 @@ stop() ->
         (ok) ->
             ok;
         (Error) ->
-            ?error("Error on stopping listener ~p: ~p", [?REST_LISTENER, Error]),
+            ?error("Error on stopping listener ~p: ~p",
+                [?REST_LISTENER, Error]),
             {error, rest_stop_error}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the status of a listener.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | {error, server_not_responding}.
+healthcheck() ->
+    {ok, RestPort} = application:get_env(?APP_NAME, rest_port),
+    case http_client:get("https://127.0.0.1:" ++ integer_to_list(RestPort),
+        [], <<>>, [insecure]) of
+        {ok, _, _, _} ->
+            ok;
+        _ ->
+            {error, server_not_responding}
     end.

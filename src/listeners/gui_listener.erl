@@ -20,8 +20,8 @@
 % Cowboy listener references
 -define(HTTPS_LISTENER, https).
 
-%% listener_starter_behaviour callbacks
--export([start/0, stop/0]).
+%% listener_behaviour callbacks
+-export([start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
 %%% listener_starter_behaviour callbacks
@@ -48,8 +48,10 @@ start() ->
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
-        % Matching requests will be redirected to the same address without leading 'www.'
-        % Cowboy does not have a mechanism to match every hostname starting with 'www.'
+        % Matching requests will be redirected
+        % to the same address without leading 'www.'
+        % Cowboy does not have a mechanism to match
+        % every hostname starting with 'www.'
         % This will match hostnames with up to 6 segments
         % e. g. www.seg2.seg3.seg4.seg5.com
         {"www.:_[.:_[.:_[.:_[.:_]]]]", [
@@ -75,7 +77,7 @@ start() ->
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, timer:seconds(Timeout)},
-            % On every request, add headers that improve security to the response
+            % On every request add headers that improve security of the response
             {onrequest, fun gui_utils:onrequest_adjust_headers/1}
         ]),
     case Result of
@@ -95,6 +97,24 @@ stop() ->
         (ok) ->
             ok;
         (Error) ->
-            ?error("Error on stopping listener ~p: ~p", [?HTTPS_LISTENER, Error]),
+            ?error("Error on stopping listener ~p: ~p",
+                [?HTTPS_LISTENER, Error]),
             {error, https_listener_stop_error}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the status of a listener.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | {error, server_not_responding}.
+healthcheck() ->
+    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
+    case http_client:get("https://127.0.0.1:" ++ integer_to_list(GuiPort),
+        [], <<>>, [insecure]) of
+        {ok, _, _, _} ->
+            ok;
+        _ ->
+            {error, server_not_responding}
     end.
