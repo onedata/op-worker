@@ -21,6 +21,8 @@ callback(<<"userName">>, _) ->
     {ok, op_gui_utils:get_user_id()};
 
 callback(<<"sync">>, _) ->
+    sync:start("../../build"),
+    sync:track_gui(),
     Res = case sync:sync() of
               true -> <<"ok">>;
               false -> <<"error">>
