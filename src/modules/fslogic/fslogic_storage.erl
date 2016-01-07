@@ -33,18 +33,21 @@
 %%--------------------------------------------------------------------
 -spec new_user_ctx(helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
-new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, _SpaceUUID) ->
-    new_ceph_user_ctx(SessionId);
+new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
+    new_ceph_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_posix_user_ctx(SessionId, SpaceUUID).
 
 
-new_ceph_user_ctx(SessionId) ->
+new_ceph_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-    {ok, #document{value = #ceph_user{user_name = UserName, user_key = UserKey}}} = ceph_user:get(UserId),
+    {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} = ceph_user:get(UserId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
+    {ok, Credentials} = maps:find(StorageId, CredentialsMap),
     #ceph_user_ctx{
-        user_name = UserName,
-        user_key = UserKey
+        user_name = ceph_user:name(Credentials),
+        user_key = ceph_user:key(Credentials)
     }.
 
 %%--------------------------------------------------------------------
@@ -92,7 +95,7 @@ select_helper(#storage{helpers = [Helper | _]}) ->
 -spec select_storage(fslogic_worker:ctx()) -> {ok, datastore:document()} | {error, Reason :: term()}.
 select_storage(#fslogic_ctx{space_id = SpaceId}) ->
     case space_storage:get(SpaceId) of
-        {ok, #document{value = #space_storage{storage_id = StorageId}}} ->
+        {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} ->
             case storage:get(StorageId) of
                 {ok, #document{} = Storage} -> {ok, Storage};
                 {error, Reason} -> {error, Reason}

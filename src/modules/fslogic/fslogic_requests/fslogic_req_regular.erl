@@ -70,9 +70,12 @@ get_helper_params(#fslogic_ctx{session = #session{identity = #identity{user_id =
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
     {HelperName, HelperArgsMap} = case fslogic_storage:select_helper(StorageDoc) of
         {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args}} ->
-            {ok, #document{value = #ceph_user{user_name = UserName, user_key = UserKey}}} =
-                ceph_user:get(UserId),
-            {?CEPH_HELPER_NAME, Args#{<<"user_name">> => UserName, <<"key">> => UserKey}};
+            {ok, #document{value = #ceph_user{credentials = UserCredentials}}} = ceph_user:get(UserId),
+            {ok, Credentials} = maps:find(StorageId, UserCredentials),
+            {?CEPH_HELPER_NAME, Args#{
+                <<"user_name">> => ceph_user:name(Credentials),
+                <<"key">> => ceph_user:key(Credentials)
+            }};
         {ok, #helper_init{name = Name, args = Args}} ->
             {Name, Args}
     end,

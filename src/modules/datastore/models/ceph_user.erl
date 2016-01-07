@@ -17,11 +17,20 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([new/3]).
+-export([add/4, name/1, key/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
+
+-record(ceph_user_credentials, {
+    user_name :: binary(),
+    user_key :: binary()
+}).
+
+-type credentials() :: #ceph_user_credentials{}.
+
+-export_type([credentials/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -97,8 +106,8 @@ model_init() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-Level :: datastore:store_level(), Context :: term(),
-ReturnValue :: term()) -> ok.
+    Level :: datastore:store_level(), Context :: term(),
+    ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -108,7 +117,7 @@ ReturnValue :: term()) -> ok.
 %% @end
 %%--------------------------------------------------------------------
 -spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -116,7 +125,40 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
-new(UserId, UserName, UserKey) ->
+add(UserId, StorageId, UserName, UserKey) ->
+    case ceph_user:get(UserId) of
+        {ok, #document{value = CephUser} = Doc} ->
+            NewCephUser = add_credentials(CephUser, StorageId, UserName, UserKey),
+            ceph_user:save(Doc#document{value = NewCephUser});
+        {error, {not_found, _}} ->
+            CephUser = new(UserId, StorageId, UserName, UserKey),
+            case create(CephUser) of
+                {ok, CephUserId} -> {ok, CephUserId};
+                {error, already_exists} ->
+                    add(UserId, StorageId, UserName, UserKey);
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+new(UserId, StorageId, UserName, UserKey) ->
     #document{key = UserId, value = #ceph_user{
-        user_name = UserName, user_key = UserKey
-    }}.
+        credentials = maps:put(StorageId, #ceph_user_credentials{
+            user_name = UserName,
+            user_key = UserKey
+        }, #{})}
+    }.
+
+
+add_credentials(#ceph_user{credentials = Credentials} = CephUser, StorageId, UserName, UserKey) ->
+    CephUser#ceph_user{credentials = maps:put(StorageId, #ceph_user_credentials{
+        user_name = UserName,
+        user_key = UserKey
+    }, Credentials)}.
+
+name(#ceph_user_credentials{user_name = UserName}) ->
+    UserName.
+
+key(#ceph_user_credentials{user_key = UserKey}) ->
+    UserKey.

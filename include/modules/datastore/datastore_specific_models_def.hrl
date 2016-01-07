@@ -82,13 +82,12 @@
 
 %% Model that maps space to storage
 -record(space_storage, {
-    storage_id :: storage:id()
+    storage_ids = [] :: [storage:id()]
 }).
 
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
-    user_name :: binary(),
-    user_key :: binary()
+    credentials :: #{storage:id() => ceph_user:credentials()}
 }).
 
 -endif.

@@ -17,7 +17,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([new/2]).
+-export([add/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -97,8 +97,8 @@ model_init() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-Level :: datastore:store_level(), Context :: term(),
-ReturnValue :: term()) -> ok.
+    Level :: datastore:store_level(), Context :: term(),
+    ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -108,7 +108,7 @@ ReturnValue :: term()) -> ok.
 %% @end
 %%--------------------------------------------------------------------
 -spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
-Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
+    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
@@ -116,5 +116,25 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
+add(SpaceId, StorageId) ->
+    case space_storage:get(SpaceId) of
+        {ok, #document{value = SpaceStorage} = Doc} ->
+            NewSpaceStorage = add_storage(SpaceStorage, StorageId),
+            space_storage:save(Doc#document{value = NewSpaceStorage});
+        {error, {not_found, _}} ->
+            SpaceStorage = new(SpaceId, StorageId),
+            case create(SpaceStorage) of
+                {ok, SpaceStorageId} -> {ok, SpaceStorageId};
+                {error, already_exists} ->
+                    add(SpaceId, StorageId);
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 new(SpaceId, StorageId) ->
-    #document{key = SpaceId, value = #space_storage{storage_id = StorageId}}.
+    #document{key = SpaceId, value = #space_storage{storage_ids = [StorageId]}}.
+
+add_storage(#space_storage{storage_ids = StorageIds} = SpaceStorage, StorageId) ->
+    SpaceStorage#space_storage{storage_ids = [StorageId | StorageIds]}.
