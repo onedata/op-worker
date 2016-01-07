@@ -1,4 +1,4 @@
-REPO	        ?= op-worker
+EPO	        ?= op-worker
 
 # distro for package building
 DISTRIBUTION    ?= none
