@@ -34,7 +34,7 @@
         }
       },
       "op_worker": {
-        "worker1": {
+        "worker": {
           "vm.args": {
             "setcookie": "test_cookie"
           },
@@ -68,7 +68,7 @@
         }
       },
       "op_worker": {
-        "worker1": {
+        "worker": {
           "vm.args": {
             "setcookie": "test_cookie2"
           },

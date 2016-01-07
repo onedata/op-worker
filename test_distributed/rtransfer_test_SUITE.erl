@@ -23,23 +23,26 @@
 
 -export([less_than_block_fetch_test/1, exact_block_size_fetch_test/1,
     more_than_block_fetch_test/1, cancel_fetch_test/1, error_open_fun_test/1,
-    error_read_fun_test/1, error_write_fun_test/1, many_requests_test/1, 
-    many_requests_to_one_file/1]).
+    error_read_fun_test/1, error_write_fun_test/1, many_requests_test/1,
+    many_requests_to_one_file/1, bad_request_test/1, bad_file_offset_test/1]).
 
 -export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1]).
 
 -performance({test_cases, []}).
 all() ->
     [
-        less_than_block_fetch_test,
-        exact_block_size_fetch_test,
-        more_than_block_fetch_test,
-        cancel_fetch_test,
-        many_requests_test,
-        many_requests_to_one_file,
-        error_open_fun_test,
-        error_read_fun_test,
-        error_write_fun_test
+        less_than_block_fetch_test
+%%         ,
+%%         exact_block_size_fetch_test,
+%%         more_than_block_fetch_test,
+%%         cancel_fetch_test,
+%%         many_requests_test,
+%%         many_requests_to_one_file,
+%%         error_open_fun_test,
+%%         error_read_fun_test,
+%%         error_write_fun_test,
+%%         bad_request_test,
+%%         bad_file_offset_test
     ].
 
 -define(FILE_HANDLE, <<"file_handle">>).
@@ -58,7 +61,6 @@ all() ->
     [
         {block_size, ?TEST_BLOCK_SIZE},
         {get_nodes_fun, get_nodes()},
-        {retry, 1},
         {open_fun, open_fun({ok, ?FILE_HANDLE})},
         {close_fun, close_fun()},
         {ranch_opts,
@@ -77,15 +79,9 @@ all() ->
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
-%% TODO tests description
-%% TODO test with retry numbers > 1
-%% TODO patologiczne testy
-
 less_than_block_fetch_test(Config) ->
-    %% fetching data of size smaller then rtransfer block_size
-
+    %% test fetching data of size smaller then rtransfer block_size
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
-    [CCM1, CCM2 | _] = ?config(op_ccm_nodes, Config),
 
     %% given
     DataSize = 32,
@@ -93,76 +89,17 @@ less_than_block_fetch_test(Config) ->
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     CounterPid = spawn(?MODULE, counter, [0]),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
-    erlang:set_cookie(node(), ?COOKIE_OP2),
-    ct:pal("Worker1: ~p ~p", [Worker1, rpc:call(Worker1, erlang, self,[])]),
-    ct:pal("CCM1: ~p ~p", [CCM1, rpc:call(CCM1, erlang, self,[])]),
-
-    erlang:set_cookie(node(), ?COOKIE_OP1),
-    ct:pal("Worker2: ~p ~p", [Worker2, rpc:call(Worker2, erlang, self,[])]),
-    ct:pal("CCM2: ~p ~p", [CCM2, rpc:call(CCM2, erlang, self,[])]),
-    
     %% when
-    tracer:start(Worker1),
-    tracer:start(Worker2),
-    tracer:start(CCM1),
-    tracer:start(CCM2),
-    tracer:start(node()),
-    tracer:trace_calls(rtransfer, fetch),
-    tracer:trace_calls(rtransfer_test_SUITE, remote_apply),
-
     ?assertMatch({ok, _},
         remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
     ),
-    
+
     ?assertMatch({ok, _},
         remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
     ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    ct:pal("REF: ~p", [Ref1]),
-
-    tracer:trace_calls(gen_server, cast),
-    tracer:trace_calls(global, send),
-
-    ?assertEqual(ok, 
-        remote_apply(Worker1, rtransfer, fetch, 
-            [Ref1, notify_fun(CounterPid), on_complete_fun(self())])
-    ),
-
-    tracer:stop(),
-    %% then
-    stop_counter(CounterPid),
-    ?assertReceivedEqual({counter, 1}, ?TIMEOUT),
-    ?assertReceivedEqual({on_complete, {ok, DataSize}}, ?TIMEOUT).
-
-exact_block_size_fetch_test(Config) ->
-    %% fetching data of size equal to rtransfer block_size
-
-    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
-
-    %% given
-    DataSize = ?TEST_BLOCK_SIZE,
-    Data = generate_binary(DataSize),
-    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
-    CounterPid = spawn(?MODULE, counter, [0]),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
-
-    %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])),
-
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])),
-
 
     Ref1 = remote_apply(
         Worker1, rtransfer, prepare_request,
@@ -176,11 +113,47 @@ exact_block_size_fetch_test(Config) ->
 
     %% then
     stop_counter(CounterPid),
-    ?assertReceivedEqual({counter, 1}, ?TIMEOUT),
-    ?assertReceivedEqual({on_complete, {ok, DataSize}}, ?TIMEOUT).
+    ?assertReceivedMatch({counter, 1}, ?TIMEOUT),
+    ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT).
+
+exact_block_size_fetch_test(Config) ->
+    %% test fetching data of size equal to rtransfer block_size
+
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    DataSize = ?TEST_BLOCK_SIZE,
+    Data = generate_binary(DataSize),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
+    CounterPid = spawn(?MODULE, counter, [0]),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    ?assertMatch({ok, _},
+        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])),
+
+    ?assertMatch({ok, _},
+        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])),
+
+    Ref1 = remote_apply(
+        Worker1, rtransfer, prepare_request,
+        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
+    ),
+
+    ?assertEqual(ok,
+        remote_apply(Worker1, rtransfer, fetch,
+            [Ref1, notify_fun(CounterPid), on_complete_fun(self())])
+    ),
+
+    %% then
+    stop_counter(CounterPid),
+    ?assertReceivedMatch({counter, 1}, ?TIMEOUT),
+    ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT).
 
 more_than_block_fetch_test(Config) ->
-    %% fetching data of size bigger then rtransfer block_size
+    %% test fetching data of size bigger then rtransfer block_size
 
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
@@ -190,14 +163,14 @@ more_than_block_fetch_test(Config) ->
     CounterPid = spawn(?MODULE, counter, [0]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _},
         remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
     ),
-    
+
     ?assertMatch({ok, _},
         remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
     ),
@@ -208,17 +181,18 @@ more_than_block_fetch_test(Config) ->
     ),
 
     ?assertEqual(ok,
-        remote_apply(Worker1, rtransfer, fetch, 
+        remote_apply(Worker1, rtransfer, fetch,
             [Ref1, notify_fun(CounterPid), on_complete_fun(self())]
         )
     ),
 
     %% then
     stop_counter(CounterPid),
-    ?assertReceivedEqual({counter, 1024}, ?TIMEOUT),
-    ?assertReceivedEqual({on_complete, {ok, DataSize}}, ?TIMEOUT).
+    ?assertReceivedMatch({counter, 1024}, ?TIMEOUT),
+    ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT).
 
 cancel_fetch_test(Config) ->
+    %% test cancelling request during fetching
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
@@ -231,8 +205,8 @@ cancel_fetch_test(Config) ->
         end
     },
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _},
@@ -255,9 +229,10 @@ cancel_fetch_test(Config) ->
     remote_apply(Worker1, rtransfer, cancel, [Ref1]),
 
     %% then
-    ?assertReceivedEqual({on_complete, {error, canceled}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {error, canceled}}, ?TIMEOUT).
 
 many_requests_test(Config) ->
+    %% test fetching many files
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
@@ -267,14 +242,14 @@ many_requests_test(Config) ->
     CounterPid = spawn(?MODULE, counterOnComplete, [#{ok => 0, errors => 0}]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _},
         remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
     ),
-    
+
     ?assertMatch({ok, _},
         remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
     ),
@@ -285,23 +260,24 @@ many_requests_test(Config) ->
 
     %% then
     stop_counter(CounterPid),
-    ?assertReceivedEqual(
-        {counterOnComplete, {ok, RequestsNum}, {erros, 0}}, ?TIMEOUT),
-    ?assertReceivedEqual({on_complete, {ok, DataSize}}, ?TIMEOUT).
+    ?assertReceivedMatch(
+        {counterOnComplete, {ok, RequestsNum}, {erros, 0}}, ?TIMEOUT).
 
 many_requests_to_one_file(Config) ->
+    %% test sending many requests to one file
+    %% requested blocks of file are intersected
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
     DataSize = 1024,
     Chunk = 4,
-    RequestsNum = DataSize div Chunk + (DataSize -1) div Chunk,
+    RequestsNum = DataSize div Chunk + (DataSize - 1) div Chunk,
     Data = generate_binary(DataSize),
     CounterPid = spawn(?MODULE, counterOnComplete, [#{ok => 0, errors => 0}]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _},
@@ -317,11 +293,11 @@ many_requests_to_one_file(Config) ->
 
     %% then
     stop_counter(CounterPid),
-    ?assertReceivedEqual(
-        {counterOnComplete, {ok,RequestsNum}, {erros, 0}}, ?TIMEOUT),
-    ?assertReceivedEqual({on_complete, {ok, DataSize}}, ?TIMEOUT).
+    ?assertReceivedMatch(
+        {counterOnComplete, {ok, RequestsNum}, {erros, 0}}, ?TIMEOUT).
 
 error_open_fun_test(Config) ->
+    %% test with open_fun callback returning an error
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
@@ -347,20 +323,20 @@ error_open_fun_test(Config) ->
         Worker1, rtransfer, fetch,
         [Ref1, notify_fun(), on_complete_fun(self())]
     ),
-    remote_apply(Worker1, rtransfer, cancel, [Ref1]),
 
     %% then
-    ?assertReceivedEqual({on_complete, {error, test_error}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {error, test_error}}, ?TIMEOUT).
 
 error_read_fun_test(Config) ->
+    %% test with read_fun callback returning an error
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
     DataSize = 1024 * ?TEST_BLOCK_SIZE,
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {error, ?FILE_HANDLE2, test_error}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
     ?assertMatch({ok, _},
@@ -379,12 +355,12 @@ error_read_fun_test(Config) ->
         Worker1, rtransfer, fetch,
         [Ref1, notify_fun(), on_complete_fun(self())]
     ),
-    remote_apply(Worker1, rtransfer, cancel, [Ref1]),
 
 %%     then
-    ?assertReceivedEqual({on_complete, {error, test_error}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {error, test_error}}, ?TIMEOUT).
 
 error_write_fun_test(Config) ->
+    %% test with write_fun callback returning an error
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
@@ -392,11 +368,11 @@ error_write_fun_test(Config) ->
     Data = generate_binary(DataSize),
     WriteFunOpt = make_opt_fun(write_fun, {error, ?FILE_HANDLE2, test_error}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1)| ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2)| ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, 
+    ?assertMatch({ok, _},
         remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
     ),
     ?assertMatch({ok, _},
@@ -412,35 +388,108 @@ error_write_fun_test(Config) ->
         Worker1, rtransfer, fetch,
         [Ref1, notify_fun(), on_complete_fun(self())]
     ),
-    remote_apply(Worker1, rtransfer, cancel, [Ref1]),
 
     %% then
-    ?assertReceivedEqual({on_complete, {error, test_error}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {error, test_error}}, ?TIMEOUT).
+
+bad_request_test(Config) ->
+    %% test calling fetch with bad _request
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    DataSize = 1024 * ?TEST_BLOCK_SIZE,
+    Data = generate_binary(DataSize),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    ?assertMatch({ok, _},
+        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    ),
+    ?assertMatch({ok, _},
+        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
+    ),
+
+    ?assertMatch({error, _},
+        remote_apply(Worker1, rtransfer, fetch,
+            [{bad_request}, notify_fun(), on_complete_fun(self())]
+        )
+    ),
+
+    %% then
+    %% TODO check what should be the error
+    ?assertReceivedMatch({on_complete, {error, test_error}}, ?TIMEOUT).
+
+bad_file_offset_test(Config) ->
+    %% test calling fetch with file offset greater than file size
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    DataSize = 1024 * ?TEST_BLOCK_SIZE,
+    Data = generate_binary(DataSize),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    ?assertMatch({ok, _},
+        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    ),
+    ?assertMatch({ok, _},
+        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
+    ),
+
+    ?assertMatch({error, _},
+        remote_apply(Worker1, rtransfer, fetch,
+            [{bad_request}, notify_fun(), on_complete_fun(self())]
+        )
+    ),
+
+    Ref1 = remote_apply(
+        Worker1, rtransfer, prepare_request,
+        [Worker2, ?TEST_FILE_UUID, DataSize + 100, DataSize]
+    ),
+
+    ?assertMatch({error, _},
+        remote_apply(Worker1, rtransfer, fetch,
+            [Ref1, notify_fun(), on_complete_fun(self())]
+        )
+    ),
+    %% then
+    %% TODO check what should be the reply
+    ?assertReceivedMatch({on_complete, {error, test_error}}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    Config.
+%%     ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
 
-end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config).
+end_per_suite(_Config) ->
+    ok.
+%%     test_node_starter:clean_environment(_Config).
+
 
 init_per_testcase(_, Config) ->
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     application:start(ssl2),
     hackney:start(),
-    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
     start_applier(Worker1, ?REMOTE_APPLIER, ?COOKIE_OP2),
     start_applier(Worker2, ?REMOTE_APPLIER, ?COOKIE_OP1),
-    Config.
+    NewConfig.
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun stop_applier/1, Workers),
     hackney:stop(),
-    application:stop(ssl2).
-
+    application:stop(ssl2),
+    test_node_starter:clean_environment(Config).
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -452,48 +501,30 @@ get_nodes() ->
 
 read_fun(Expected) ->
     fun(_Handle, _Offset, _Size) ->
-        ?info_stacktrace("CALLED READ FUN~n"),
         Expected
     end.
 
 write_fun(Expected) ->
     fun(_Handle, _Offset, _Data) ->
-        ?info_stacktrace("CALLED WRITE FUN~n"),
         Expected
     end.
 
 open_fun(Expected) ->
-    fun(_UUID, _Mode) -> ?info_stacktrace("CALLED OPEN FUN~n"), Expected end.
+    fun(_UUID, _Mode) -> Expected end.
 
 close_fun() ->
-    fun(_Handle) -> ?info_stacktrace("CALLED CLOSE FUN~n"),ok end.
+    fun(_Handle) -> ok end.
 
-notify_fun() ->
-    fun(_Ref, _Size) ->
-        ?info_stacktrace("CALLED NOTIFY FUN~n"),
-        ok
-    end.
+notify_fun() -> fun(_Ref, _Offset,_Size) -> ok end.
 
 notify_fun(CounterPid) ->
-    fun(_Ref, _Size) ->
-%%         ct:pal("CALLED NOTIFY FUN~n"),
-        ?info_stacktrace("CALLED NOTIFY FUN~n"),
+    fun(_Ref, _Offset,_Size) ->
         CounterPid ! increase,
-        ok
-    end.
-
-notify_fun(Counter, TestNode) ->
-    fun(_Ref, _Size) ->
-%%         ct:pal("CALLED NOTIFY FUN~n"),
-        ?info_stacktrace("CALLED NOTIFY FUN~n"),
-        {Counter, TestNode} ! increase,
         ok
     end.
 
 on_complete_fun(Pid) ->
     fun(_Ref, Arg) ->
-%%         ct:pal("CALLED ON_COMPLETE FUN: ~p~n", [Arg]),
-        ?info_stacktrace("CALLED ON_COMPLETE FUN: ~p~n", [Arg]),
         Pid ! {on_complete, Arg},
         ok
     end.
@@ -518,8 +549,6 @@ start_applier(Node, ApplierName, Cookie) ->
             fun Loop() ->
                 receive
                     {Pid, Mod, Fun, Args} ->
-                        ct:pal("Loop: ~p ~p ~p ~p", [Pid, Mod, Fun, Args]),
-                        ?info_stacktrace("CALLED START APPLIER LOOP FUN: ~p~n", [Args]),
                         Pid ! apply(Mod, Fun, Args),
                         Loop();
                     stop -> ok
@@ -554,10 +583,8 @@ generate_binary(Length) ->
 counter(State) ->
     receive
         increase ->
-            ct:pal("COUNTER GOT INCREASE: ~p ~p~n", [State + 1]),
             counter(State + 1);
         {return, Pid} ->
-            ct:pal("COUNTER GOT RETURN: ~p ~p~n", [State, Pid]),
             Pid ! {counter, State}
     end.
 
@@ -578,14 +605,14 @@ generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize) ->
     [
         remote_apply(Worker1, rtransfer, prepare_request,
             [Worker2, <<?TEST_FILE_UUID/binary, I>>, ?TEST_OFFSET, DataSize])
-        || I <- lists:seq(1,RequestsNum)
+        || I <- lists:seq(1, RequestsNum)
     ].
 
 generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk) ->
     [
         remote_apply(Worker1, rtransfer, prepare_request,
-            [Worker2, ?TEST_FILE_UUID, I, Chunk/2])
-        || I <- lists:seq(0, RequestsNum - 2, 2)
+            [Worker2, ?TEST_FILE_UUID, I, Chunk / 2])
+        || I <- lists:seq(rtransfer0, RequestsNum - 2, 2)
     ].
 
 fetch_many(Refs, Worker1, Notify, OnComplete) ->
@@ -602,12 +629,3 @@ get_node_ip(Node) ->
     CMD = "docker inspect --format '{{ .NetworkSettings.IPAddress }}'" ++ " " ++
         utils:get_host(Node),
     re:replace(os:cmd(CMD), "\\s+", "", [global, {return, list}]).
-
-flush(Timeout) ->
-    ct:pal("CALLED flush()~n"),
-    receive
-        X -> ct:pal("MSG: ~p~n", [X]),
-            flush(Timeout)
-    after
-        Timeout -> ok
-    end.
