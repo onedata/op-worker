@@ -11,7 +11,7 @@
         "globalregistry": {
             "input_dir": "rel/globalregistry",
             "target_dir": "rel/test_cluster"
-        },
+        }
     },
     "os_configs": {
         "cfg1": {
@@ -55,7 +55,7 @@
                             "cm1"
                         ],
                         "db_nodes": [
-                            "riaknode1"
+                            "dbnode1"
                         ],
                         "verify_gr_cert": false
                     }
@@ -82,5 +82,5 @@
                 }
             }
         }
-    },
+    }
 }
