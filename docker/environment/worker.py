@@ -9,8 +9,6 @@ Script is parametrised by worker type related configurator.
 import copy
 import json
 import os
-import subprocess
-import sys
 from . import common, docker, riak, couchbase, dns, cluster_manager
 
 CLUSTER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2

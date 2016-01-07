@@ -180,7 +180,7 @@ def create_users(container, users):
     for user in users:
         uid = str(hash(user) % 50000 + 10000)
         command = ["adduser", "--disabled-password", "--gecos", "''",
-                   "--uid", uid, user]
+                   "--no-create-home", "--uid", uid, user]
         assert 0 is docker.exec_(container, command, interactive=True)
 
 
