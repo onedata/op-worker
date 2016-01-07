@@ -11,10 +11,11 @@
 -module(fslogic_storage).
 -author("Rafal Slota").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/helpers.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2]).
@@ -42,7 +43,8 @@ new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) -
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} = ceph_user:get(UserId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{key = RealSpaceUUID}} = fslogic_spaces:get_space({uuid, SpaceUUID}, UserId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(RealSpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
     {ok, Credentials} = maps:find(StorageId, CredentialsMap),
     #ceph_user_ctx{

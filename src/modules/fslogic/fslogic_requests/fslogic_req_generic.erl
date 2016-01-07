@@ -50,11 +50,11 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
 -check_permissions({owner, 2}).
-chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
+chmod(#fslogic_ctx{session_id = SessionId} = CTX, FileEntry, Mode) ->
 
     case file_meta:get(FileEntry) of
         {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
             Results = lists:map(
                         fun({SID, FID} = Loc) ->
                                 {ok, Storage} = storage:get(SID),
@@ -100,7 +100,7 @@ chown(_, _File, _UserId) ->
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions({none, 2}).
-get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
+get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
     ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
@@ -108,7 +108,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
                                               ctime = CTime, uid = UID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
             #posix_user_ctx{gid = GID} = fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                                #file_attr {
@@ -129,9 +129,9 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
 -spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{write, {parent, 2}}, {owner_if_parent_sticky, 2}]).
-delete_file(#fslogic_ctx{session_id = SessionId}, File) ->
+delete_file(#fslogic_ctx{session_id = SessionId} = CTX, File) ->
     {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
     {ok, FileChildren} =
         case Type of
             ?DIRECTORY_TYPE ->

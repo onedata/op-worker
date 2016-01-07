@@ -32,8 +32,8 @@
 -spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{write, 2}]).
-truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry),
+truncate(#fslogic_ctx{session_id = SessionId} = CTX, Entry, Size) ->
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)),
     Results = lists:map(
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),
@@ -105,7 +105,7 @@ get_file_location(#fslogic_ctx{} = CTX, File, OpenFlags) ->
 
     #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
 
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{
@@ -127,7 +127,7 @@ get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_
     {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
     get_new_file_location(CTX, DefaultSpaceUUID, Name, Mode, _Flags);
 get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name, Mode, _Flags) ->
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
