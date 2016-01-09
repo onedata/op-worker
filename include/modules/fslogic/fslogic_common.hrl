@@ -43,7 +43,7 @@
 -define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
 
 %% fslogic subscription id
--define(FSLOGIC_SUB_ID, binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF).
+-define(FSLOGIC_SUB_ID, binary:decode_unsigned(crypto:hash(md5, <<"fslogic">>)) rem 16#FFFFFFFFFFFF).
 
 %% Deafult file modes
 

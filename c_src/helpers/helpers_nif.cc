@@ -235,13 +235,6 @@ struct NifCTX {
     {
     }
 
-    ~NifCTX()
-    {
-        // @todo: get valid file_id instead of empty one (its still works though
-        // since we are closing descriptor from CTX)
-        helperObj->ash_release(helperCTX, "", [=](error_t e) {});
-    }
-
     ErlNifEnv *env;
     Env localEnv;
     ErlNifPid reqPid;
