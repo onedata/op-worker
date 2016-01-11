@@ -251,8 +251,8 @@ default_permissions_test(Config) ->
     {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
     {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
 
-    test_utils:mock_new(Worker, check_permissions),
-    test_utils:mock_expect(Worker, check_permissions, validate_scope_access, fun
+    test_utils:mock_new(Worker, rules),
+    test_utils:mock_expect(Worker, rules, validate_scope_access, fun
         (_, _, _) -> ok
     end),
 

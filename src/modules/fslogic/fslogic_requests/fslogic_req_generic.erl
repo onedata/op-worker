@@ -18,7 +18,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([chmod/3, get_file_attr/2, delete/2, rename_file/3, update_times/5,
+-export([chmod/3, get_file_attr/2, delete/2, rename/3, update_times/5,
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2]).
 
 %%%===================================================================
@@ -140,22 +140,25 @@ delete(CTX, File) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Renames file.
+%% @doc Renames file/dir.
 %% For best performance use following arg types: path -> uuid -> document
 %% @end
 %%--------------------------------------------------------------------
--spec rename_file(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
+-spec rename(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
                          #fuse_response{} | no_return().
--check_permissions([{?delete_object, {parent, 2}}, {?delete_subcontainer, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2},
-    {?add_object, {parent, {path, 3}}}, {?add_subcontainer, {parent, {path, 3}}}, {traverse_ancestors, {path, 3}}]).
-rename_file(_CTX, SourceEntry, TargetPath) -> %todo split into delete_dir and delete_file functions (to check acls)
+-check_permissions([{traverse_ancestors, 2}, {traverse_ancestors, {path, 3}}, {?delete, 2}]).
+rename(CTX, SourceEntry, TargetPath) ->
     ?debug("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
     case file_meta:exists({path, TargetPath}) of
         true ->
             #fuse_response{status = #status{code = ?EEXIST}};
         false ->
-            ok = file_meta:rename(SourceEntry, {path, TargetPath}),
-            #fuse_response{status = #status{code = ?OK}}
+            case file_meta:get(SourceEntry) of
+                {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
+                    rename_dir(CTX, FileDoc, TargetPath);
+                {ok, FileDoc} ->
+                    rename_file(CTX, FileDoc, TargetPath)
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -297,3 +300,27 @@ delete_impl(#fslogic_ctx{session_id = SessionId}, File) ->
         _ ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Checks necessary permissions and renames directory
+%%--------------------------------------------------------------------
+-spec rename_dir(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
+-check_permissions([{?delete_subcontainer, {parent, 2}}, {?add_subcontainer, {parent, {path, 3}}}]).
+rename_dir(CTX, SourceEntry, TargetPath) ->
+    rename_impl(CTX, SourceEntry, TargetPath).
+
+%%--------------------------------------------------------------------
+%% @doc Checks necessary permissions and renames file
+%%--------------------------------------------------------------------
+-spec rename_file(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
+-check_permissions([{?delete_object, {parent, 2}}, {?add_object, {parent, {path, 3}}}]).
+rename_file(CTX, SourceEntry, TargetPath) ->
+    rename_impl(CTX, SourceEntry, TargetPath).
+
+%%--------------------------------------------------------------------
+%% @doc Renames file_meta doc.
+%%--------------------------------------------------------------------
+-spec rename_impl(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
+rename_impl(_CTX, SourceEntry, TargetPath) ->
+    ok = file_meta:rename(SourceEntry, {path, TargetPath}),
+    #fuse_response{status = #status{code = ?OK}}
