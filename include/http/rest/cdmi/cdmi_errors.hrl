@@ -40,7 +40,7 @@
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED,
-  {?BAD_REQUEST, [{<<"error_unauthorized">>, <<"Error unauthorized.">>}]}).
+  {?NOT_AUTHORIZED, [{<<"error_unauthorized">>, <<"Error unauthorized.">>}]}).
 
 %% HTTP 403 errors
 -define(ERROR_PERMISSION_DENIED,
