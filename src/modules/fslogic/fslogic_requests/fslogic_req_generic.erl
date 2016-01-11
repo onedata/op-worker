@@ -132,7 +132,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
                          FuseResponse :: #fuse_response{} | no_return().
 delete(CTX, File) ->
     case file_meta:get(File) of
-        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE} = FileDoc}} ->
+        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
             delete_dir(CTX, FileDoc);
         {ok, FileDoc} ->
             delete_file(CTX, FileDoc)
