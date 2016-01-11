@@ -1414,7 +1414,7 @@ errors_test(Config) ->
     ],
     {ok, Code2, _Headers2, _Response2} =
         do_request(Worker, "test_dir", put, RequestHeaders2, []),
-    ?assertEqual(415, Code2),
+    ?assertEqual(400, Code2),
     %%------------------------------
 
     %%---- wrong create path 2 -----
@@ -1425,7 +1425,7 @@ errors_test(Config) ->
     ],
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "test_dir/", put, RequestHeaders3, []),
-    ?assertEqual(415, Code3),
+    ?assertEqual(400, Code3),
     %%------------------------------
 
     %%-------- wrong base64 --------
