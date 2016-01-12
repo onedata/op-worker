@@ -231,7 +231,6 @@ cancel_fetch_test(Config) ->
     %% then
     ?assertReceivedMatch({on_complete, {error, canceled}}, ?TIMEOUT).
 
-%% TODO...
 many_requests_test(Config) ->
     %% test fetching many files
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -263,9 +262,8 @@ many_requests_test(Config) ->
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
-        {counterOnComplete, {ok, RequestsNum}, {erros, 0}}, ?TIMEOUT).
+        {counterOnComplete, {ok, RequestsNum}, {errors, 0}}, ?TIMEOUT).
 
-%% TODO...
 many_requests_to_one_file(Config) ->
     %% test sending many requests to one file
     %% requested blocks of file are intersected
@@ -294,11 +292,10 @@ many_requests_to_one_file(Config) ->
 
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
-    timer:sleep(?TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
-        {counterOnComplete, {ok, RequestsNum}, {erros, 0}}, ?TIMEOUT).
+        {counterOnComplete, {ok, RequestsNum}, {errors, 0}}, ?TIMEOUT).
 
 error_open_fun_test(Config) ->
     %% test with open_fun callback returning an error
@@ -633,8 +630,8 @@ generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize) ->
 generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk) ->
     [
         remote_apply(Worker1, rtransfer, prepare_request,
-            [Worker2, ?TEST_FILE_UUID, I, Chunk / 2])
-        || I <- lists:seq(0, RequestsNum - 2, 2)
+            [Worker2, ?TEST_FILE_UUID, Offset, Chunk])
+        || Offset <- lists:seq(0, 2 * RequestsNum - 1 , Chunk div 2)
     ].
 
 fetch_many(Refs, Worker1, Notify, OnComplete) ->
