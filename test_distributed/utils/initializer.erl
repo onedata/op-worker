@@ -14,7 +14,7 @@
 
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
--include("modules/datastore/datastore_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
@@ -167,15 +167,15 @@ teardown_sesion(Worker, Config) ->
         ({{spaces, _}, Spaces}, Acc) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
             lists:foreach(fun(SpaceId) ->
-                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [SpaceId]))
+                ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)]))
             end, SpaceIds),
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
             ?assertEqual(ok, rpc:call(Worker, onedata_user, delete, [UserId])),
-            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [UserId])),
+            ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [fslogic_uuid:default_space_uuid(UserId)])),
             ?assertEqual(ok,
                 rpc:call(Worker, file_meta, delete,
-                    [fslogic_path:spaces_uuid(UserId)]
+                    [fslogic_uuid:spaces_uuid(UserId)]
                 )),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
