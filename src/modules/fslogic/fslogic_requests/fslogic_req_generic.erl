@@ -54,7 +54,6 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
                    #fuse_response{} | no_return().
 -check_permissions([{owner, 2}, {traverse_ancestors, 2}]).
 chmod(#fslogic_ctx{session_id = SessionId} = CTX, FileEntry, Mode) ->
-
     case file_meta:get(FileEntry) of
         {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
@@ -76,7 +75,7 @@ chmod(#fslogic_ctx{session_id = SessionId} = CTX, FileEntry, Mode) ->
     end,
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
-    {uuid, FileUuid} = FileEntry, %todo xattr should accept FileEntry
+    {uuid, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
     %% @todo: replace with events

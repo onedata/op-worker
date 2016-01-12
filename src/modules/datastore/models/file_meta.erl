@@ -16,20 +16,10 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
-
-%% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}
--define(run(B),
-    try B of
-        __Other -> __Other
-    catch
-        error:__Reason ->
-            __Reason0 = normalize_error(__Reason),
-            ?error_stacktrace("file_meta error: ~p", [__Reason0]),
-            {error, __Reason0}
-    end).
 
 %% How many processes shall be process single set_scope operation.
 -define(SET_SCOPER_WORKERS, 25).
@@ -53,7 +43,7 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
--export([snapshot_name/2]).
+-export([snapshot_name/2, to_uuid/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -548,6 +538,22 @@ attach_location(Entry, LocId, ProviderId) ->
 get_space_dir(SpaceId) ->
     get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
+to_uuid({uuid, UUID}) ->
+    {ok, UUID};
+to_uuid(#document{key = UUID}) ->
+    {ok, UUID};
+to_uuid({path, Path}) ->
+    ?run(begin
+             {ok, {Doc, _}} = resolve_path(Path),
+             to_uuid(Doc)
+         end).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -689,21 +695,6 @@ gen_path2(Entry, Acc) ->
             gen_path2({uuid, ParentUUID}, [Doc | Acc])
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
-%% @end
-%%--------------------------------------------------------------------
--spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
-to_uuid({uuid, UUID}) ->
-    {ok, UUID};
-to_uuid(#document{key = UUID}) ->
-    {ok, UUID};
-to_uuid({path, Path}) ->
-    ?run(begin
-             {ok, {Doc, _}} = resolve_path(Path),
-             to_uuid(Doc)
-         end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -732,23 +723,6 @@ is_valid_filename(FileName) when is_binary(FileName) ->
         end,
 
     SnapSep andalso DirSep.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns just error reason for given error tuple
-%% @end
-%%--------------------------------------------------------------------
--spec normalize_error(term()) -> term().
-normalize_error({badmatch, Reason}) ->
-    normalize_error(Reason);
-normalize_error({case_clause, Reason}) ->
-    normalize_error(Reason);
-normalize_error({error, Reason}) ->
-    normalize_error(Reason);
-normalize_error({ok, Inv}) ->
-    normalize_error({invalid_response, normalize_error(Inv)});
-normalize_error(Reason) ->
-    Reason.
 
 
 %%--------------------------------------------------------------------
