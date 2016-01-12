@@ -272,6 +272,7 @@ many_requests_to_one_file(Config) ->
     %% given
     DataSize = 1024,
     Chunk = 4,
+    %% should be 511 requests
     RequestsNum = DataSize div Chunk + (DataSize - 1) div Chunk,
     Data = generate_binary(DataSize),
     CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0}]),
@@ -292,6 +293,7 @@ many_requests_to_one_file(Config) ->
 
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
+    timer:sleep(?TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
@@ -507,38 +509,33 @@ get_nodes() ->
 
 read_fun(Expected) ->
     fun(_Handle, _Offset, _Size) ->
-        ?info_stacktrace("DEBUG READ_FUN~n"),
         Expected
     end.
 
 write_fun(Expected) ->
     fun(_Handle, _Offset, _Data) ->
-        ?info_stacktrace("DEBUG WRITE_FUN~n"),
         Expected
     end.
 
 open_fun(Expected) ->
-    fun(_UUID, _Mode) -> ?info_stacktrace("DEBUG OPEN_FUN~n"),Expected end.
+    fun(_UUID, _Mode) -> Expected end.
 
 close_fun() ->
-    fun(_Handle) -> ?info_stacktrace("CLOSE_FUN~n"),ok end.
+    fun(_Handle) ->ok end.
 
 notify_fun() ->
     fun(_Ref, _Offset,_Size) ->
-        ?info_stacktrace("DEBUG NOTIFY_FUN~n"),
         ok
     end.
 
 notify_fun(CounterPid) ->
     fun(_Ref, _Offset,_Size) ->
-        ?info_stacktrace("DEBUG NOTIFY_FUN, counterpid = ~p~n", [CounterPid]),
         CounterPid ! increase,
         ok
     end.
 
 on_complete_fun(Pid) ->
     fun(_Ref, Arg) ->
-        ?info_stacktrace("DEBUG ON_COMPLETE_FUN: ~p, pid = ~p~n", [Arg, Pid]),
         Pid ! {on_complete, Arg},
         ok
     end.
@@ -597,10 +594,8 @@ generate_binary(Length) ->
 counter(State) ->
     receive
         increase ->
-            ct:pal("Counter got increase, State = ~p~n", [State]),
             counter(State + 1);
         {return, Pid} ->
-            ct:pal("Counter got return, State = ~p, Pid = ~p~n", [State, Pid]),
             Pid ! {counter, State}
     end.
 
@@ -610,13 +605,10 @@ stop_counter(CounterPid) ->
 onCompleteCounter(#{ok := OK, errors := Errors} = State) ->
     receive
         {on_complete, {ok, _DataSize}} ->
-            ct:pal("onCompleteCounter got ok, OK = ~p, Errors = ~p~n", [maps:get(ok, State), maps:get(errors, State)]),
             onCompleteCounter(State#{ok => OK + 1});
         {on_complete, {error, _Error}} ->
-            ct:pal("onCompleteCounter got error, OK = ~p, Errors = ~p~n", [maps:get(ok, State), maps:get(errors, State)]),
             onCompleteCounter(State#{errors => Errors + 1});
         {return, Pid} ->
-            ct:pal("onCompleteCounter got return, OK = ~p, Errors = ~p~n", [maps:get(ok, State), maps:get(errors, State)]),
             Pid ! {counterOnComplete, {ok, maps:get(ok, State)}, {errors, maps:get(errors, State)}}
     end.
 
