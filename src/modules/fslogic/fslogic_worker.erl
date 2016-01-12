@@ -215,6 +215,12 @@ handle_fuse_request(Ctx, #remove_xattr{uuid = UUID, name = XattrName}) ->
     fslogic_req_generic:remove_xattr(Ctx, {uuid, UUID}, XattrName);
 handle_fuse_request(Ctx, #list_xattr{uuid = UUID}) ->
     fslogic_req_generic:list_xattr(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #get_acl{uuid = UUID}) ->
+    fslogic_req_generic:get_acl(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #set_acl{uuid = UUID, acl = Acl}) ->
+    fslogic_req_generic:set_acl(Ctx, {uuid, UUID}, Acl);
+handle_fuse_request(Ctx, #remove_acl{uuid = UUID}) ->
+    fslogic_req_generic:remove_acl(Ctx, {uuid, UUID});
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

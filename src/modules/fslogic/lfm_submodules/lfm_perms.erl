@@ -11,6 +11,8 @@
 -module(lfm_perms).
 
 -include("types.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
@@ -43,28 +45,28 @@ check_perms(_Path, _PermType) ->
 %% @doc Returns file's Access Control List.
 %%--------------------------------------------------------------------
 -spec get_acl(fslogic_worker:ctx(), file_meta:uuid()) -> {ok, [access_control_entity()]} | error_reply().
-get_acl(CTX, UUID) ->
-    case lfm_attrs:get_xattr(CTX, UUID, ?CDMI_ACL_XATTR_KEY) of
-        {ok, #xattr{value = Json}} ->
+get_acl(#fslogic_ctx{session_id = SessId}, UUID) ->
+    lfm_utils:call_fslogic(SessId, #get_acl{uuid = UUID},
+        fun(#acl{value = Json}) ->
             Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)), %todo store perms as integers
-            {ok, Acl};
-        Error ->
-            Error
-    end.
+            {ok, Acl}
+        end).
 
 
 %%--------------------------------------------------------------------
 %% @doc Updates file's Access Control List.
 %%--------------------------------------------------------------------
 -spec set_acl(fslogic_worker:ctx(), file_meta:uuid(), [access_control_entity()]) -> ok | error_reply().
-set_acl(CTX, UUID, Acl) ->
+set_acl(#fslogic_ctx{session_id = SessId}, UUID, Acl) ->
     Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
-    lfm_attrs:set_xattr(CTX, UUID, #xattr{name = ?CDMI_ACL_XATTR_KEY, value = Json}).
+    lfm_utils:call_fslogic(SessId, #set_acl{uuid = UUID, acl = #acl{value = Json}},
+        fun(_) -> ok end).
 
 
 %%--------------------------------------------------------------------
 %% @doc Removes file's Access Control List.
 %%--------------------------------------------------------------------
 -spec remove_acl(fslogic_worker:ctx(), file_meta:uuid()) -> ok | error_reply().
-remove_acl(CTX, UUID) ->
-    lfm_attrs:remove_xattr(CTX, UUID, ?CDMI_ACL_XATTR_KEY).
+remove_acl(#fslogic_ctx{session_id = SessId}, UUID) ->
+    lfm_utils:call_fslogic(SessId, #remove_acl{uuid = UUID},
+        fun(_) -> ok end).

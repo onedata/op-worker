@@ -1358,7 +1358,7 @@ acl_test(Config) ->
     {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclReadWriteExecute),
     {ok, 200, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
 
-    % create files in directory (shoul succeed)
+    % create files in directory (should succeed)
     {ok, 201, _, _} = do_request(Worker, File1, put, [?USER_1_TOKEN_HEADER], []),
     ?assert(object_exists(Config, File1)),
     {ok, 201, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),

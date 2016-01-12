@@ -19,7 +19,8 @@
 
 %% API
 -export([chmod/3, get_file_attr/2, delete/2, rename/3, update_times/5,
-    get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2]).
+    get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
+    get_acl/2, set_acl/3, remove_acl/2]).
 
 %%%===================================================================
 %%% API functions
@@ -51,8 +52,8 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
--check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
+-check_permissions([{owner, 2}, {traverse_ancestors, 2}]).
+chmod(#fslogic_ctx{session_id = SessionId} = CTX, FileEntry, Mode) ->
 
     case file_meta:get(FileEntry) of
         {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
@@ -75,6 +76,8 @@ chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
     end,
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
+    {uuid, FileUuid} = FileEntry, %todo xattr should accept FileEntry
+    xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
     %% @todo: replace with events
     spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
@@ -170,6 +173,7 @@ rename(CTX, SourceEntry, TargetPath) ->
     #fuse_response{} | no_return().
 -check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
+    % todo block acl read
     case xattr:get_by_name(FileUuid, XattrName) of
         {ok, #document{value = Xattr}} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Xattr};
@@ -188,6 +192,7 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
 set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
+    % todo block acl update
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
             #fuse_response{status = #status{code = ?OK}};
@@ -223,6 +228,50 @@ list_xattr(_CTX, {uuid, FileUuid}) ->
     case xattr:list(FileUuid) of
         {ok, List} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = #xattr_list{names = List}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Get access control list of file.
+%%--------------------------------------------------------------------
+-spec get_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
+    #fuse_response{} | no_return().
+-check_permissions([{?read_acl, 2}, {traverse_ancestors, 2}]).
+get_acl(_CTX, {uuid, FileUuid})  ->
+    case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
+        {ok, #document{value = #xattr{value = Val}}} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #acl{value = Val}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}};
+        {error, {not_found, xattr}} ->
+            #fuse_response{status = #status{code = ?ENOATTR}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Sets access control list of file.
+%%--------------------------------------------------------------------
+-spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
+    #fuse_response{} | no_return().
+-check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
+set_acl(_CTX, {uuid, FileUuid}, #acl{value = Val}) ->
+    case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
+        {ok, _} ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end. %todo chmod to 000 on storage
+
+%%--------------------------------------------------------------------
+%% @doc Removes access control list of file.
+%%--------------------------------------------------------------------
+-spec remove_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
+    #fuse_response{} | no_return().
+-check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
+remove_acl(_CTX, {uuid, FileUuid}) ->
+    case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
+        ok ->
+            #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
     end.
@@ -323,4 +372,5 @@ rename_file(CTX, SourceEntry, TargetPath) ->
 -spec rename_impl(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
 rename_impl(_CTX, SourceEntry, TargetPath) ->
     ok = file_meta:rename(SourceEntry, {path, TargetPath}),
-    #fuse_response{status = #status{code = ?OK}}
+    #fuse_response{status = #status{code = ?OK}}.
+
