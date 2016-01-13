@@ -12,7 +12,7 @@
 -module(events_performance_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").

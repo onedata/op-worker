@@ -2,7 +2,7 @@
 -name nonode@nohost
 
 ## Cookie for distributed erlang
--setcookie oneprovider_node
+-setcookie cluster_node
 
 ## Treat lager warnings as warnings
 +W w
