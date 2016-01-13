@@ -32,7 +32,8 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Initializes the session_logic module. Any setup such as ets creation
+%% @doc
+%% Initializes the session_logic module. Any setup such as ets creation
 %% should be performed in this function.
 %% @end
 %%--------------------------------------------------------------------
@@ -42,7 +43,8 @@ init() ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Performs any cleanup, such as deleting the previously created ets tables.
+%% @doc
+%% Performs any cleanup, such as deleting the previously created ets tables.
 %% @end
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.

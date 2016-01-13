@@ -248,14 +248,18 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
                 adapter.promises[json.uuid].error(json.data);
             }
             delete adapter.promises[json.uuid];
-        } else if (json.msgType == MSG_TYPE_PUSH_UPDATED) {
-            App.File.store.pushPayload('file', {
-                file: json.data
-            })
-        } else if (json.msgType == MSG_TYPE_PUSH_DELETED) {
-            App.File.store.find('file', json.data).then(function(post) {
-                App.File.store.unloadRecord(post);
-            });
+            // @todo implement on generic data type
+            //} else if (json.msgType == MSG_TYPE_PUSH_UPDATED) {
+            //    App.File.store.pushPayload('file', {
+            //        file: json.data
+            //    })
+            //} else if (json.msgType == MSG_TYPE_PUSH_DELETED) {
+            //    var record_id;
+            //    for (record_id in json.data) {
+            //        App.File.store.find('file', record_id).then(function (post) {
+            //            App.File.store.unloadRecord(post);
+            //        });
+            //    }
         } else if (json.msgType == CALLBACK_RESP) {
             var callback = adapter.promises[json.uuid];
             callback.success(json.data);

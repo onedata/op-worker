@@ -55,7 +55,8 @@ start() ->
         % This will match hostnames with up to 6 segments
         % e. g. www.seg2.seg3.seg4.seg5.com
         {"www.:_[.:_[.:_[.:_[.:_]]]]", [
-            {'_', gui_https_redirect_handler, []}
+            % redirector_handler is defined in cluster_worker
+            {'_', redirector_handler, []}
         ]},
         % Proper requests are routed to handler modules
         {'_', [
