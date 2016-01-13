@@ -1,3 +1,6 @@
+
+// Interface between WebSocket Adapter client and server. Corresponding
+// interface is located in gui_ws_handler.erl.
 var FIND = 'find';
 var FIND_ALL = 'findAll';
 var FIND_QUERY = 'findQuery';
@@ -17,14 +20,19 @@ var MSG_TYPE_PUSH_UPDATED = "pushUpdated";
 var MSG_TYPE_PUSH_DELETED = "pushDeleted";
 
 DS.WebsocketAdapter = DS.RESTAdapter.extend({
+    // Promises that will be resolved when response comes
     promises: {},
+    // The WebSocket
     socket: null,
+    // Queue of messages before the socket is open
     beforeOpenQueue: [],
 
+    // Initialize connection
     init: function () {
         this.initializeSocket();
     },
 
+    // Developer function
     logToConsole: function (fun_name, fun_params) {
         console.log(fun_name + '(');
         for (var i = 0; i < fun_params.length; i++) {
@@ -33,36 +41,43 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         console.log(')');
     },
 
+    // Called when ember store wants to find a record
     find: function (store, type, id, record) {
         this.logToConsole(FIND, [store, type, id, record]);
         return this.asyncRequest(FIND, type.typeKey, id);
     },
 
+    // Called when ember store wants to find all records of a type
     findAll: function (store, type, sinceToken) {
         this.logToConsole(FIND_ALL, [store, type, sinceToken]);
         return this.asyncRequest(FIND_ALL, type.typeKey, null, sinceToken);
     },
 
+    // Called when ember store wants to find all records that match a query
     findQuery: function (store, type, query) {
         this.logToConsole(FIND_QUERY, [store, type, query]);
         return this.asyncRequest(FIND_QUERY, type.typeKey, null, query);
     },
 
+    // Called when ember store wants to find multiple records by id
     findMany: function (store, type, ids, records) {
         this.logToConsole(FIND_MANY, [store, type, ids, records]);
         return this.asyncRequest(FIND_MANY, type.typeKey, null, ids);
     },
 
+    // @todo is this needed?
     findHasMany: function (store, record, url, relationship) {
         this.logToConsole(FIND_HAS_MANY, [store, record, url, relationship]);
         return 'not_implemented';
     },
 
+    // @todo is this needed?
     findBelongsTo: function (store, record, url, relationship) {
         this.logToConsole(FIND_BELONGS_TO, [store, record, url, relationship]);
         return 'not_implemented';
     },
 
+    // Called when ember store wants to create a record
     createRecord: function (store, type, record) {
         this.logToConsole(CREATE_RECORD, [store, type, record]);
         var data = {};
@@ -71,6 +86,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         return this.asyncRequest(CREATE_RECORD, type.typeKey, null, data);
     },
 
+    // Called when ember store wants to update a record
     updateRecord: function (store, type, record) {
         this.logToConsole(UPDATE_RECORD, [store, type, record]);
         var data = {};
@@ -80,17 +96,21 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         return this.asyncRequest(UPDATE_RECORD, type.typeKey, id, data);
     },
 
+    // Called when ember store wants to delete a record
     deleteRecord: function (store, type, record) {
         this.logToConsole(DELETE_RECORD, [store, type, record]);
         var id = Ember.get(record, 'id');
         return this.asyncRequest(DELETE_RECORD, type.typeKey, id);
     },
 
+    // @todo is this needed?
     groupRecordsForFindMany: function (store, records) {
         this.logToConsole('groupRecordsForFindMany', [store, records]);
         return [records];
     },
 
+    // Used to transform some types of requests, because they carry different
+    // information.
     transformRequest: function (json, type, operation) {
         switch (operation) {
             case UPDATE_RECORD:
@@ -146,6 +166,8 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         }
     },
 
+    // Performs an sync request to server side and stores a handle to the
+    // promise, which will be resolved in message function.
     asyncRequest: function (operation, type, ids, data) {
         var adapter = this;
         adapter.logToConsole('asyncRequest', [operation, type, ids, data]);
@@ -186,6 +208,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         });
     },
 
+    // Generates a random uuid
     generateUuid: function () {
         var date = new Date().getTime();
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (character) {
@@ -195,6 +218,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         });
     },
 
+    // Initializes the WebScoket
     initializeSocket: function () {
         var adapter = this;
 
@@ -220,7 +244,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         }
     },
 
-
+    // WebScoket onopen callback
     open: function (event) {
         var adapter = this;
 
@@ -232,6 +256,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         }
     },
 
+    // WebScoket onmessage callback, resolves promises with received replies.
     message: function (event) {
         var adapter = this;
         console.log('received: ' + event.data);
@@ -266,7 +291,9 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
         }
     },
 
+    // WebScoket onerror callback
     error: function (event) {
+        // @todo better error handling
         alert(event.data);
     },
 
