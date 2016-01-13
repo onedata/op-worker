@@ -98,7 +98,7 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
             ({<<"cdmi_acl">>, Value}) ->
                 ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
                       catch _:Error ->
-                          ?debug_stacktrace("Acl conversion error ~p", [Error]),
+                          ?warning_stacktrace("Acl conversion error ~p", [Error]),
                           throw(?ERROR_INVALID_ACL)
                       end,
                 ok = onedata_file_api:set_acl(Auth, FileKey, ACL);

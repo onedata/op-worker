@@ -33,7 +33,7 @@
 %%--------------------------------------------------------------------
 -spec check_permission(ACL :: [#accesscontrolentity{}], User :: #document{value :: #onedata_user{}}, OperationMask :: non_neg_integer()) -> ok | no_return().
 check_permission([], _User, ?no_flags_mask) -> ok;
-check_permission([], _User, _OperationMask) -> throw(?EPERM);
+check_permission([], _User, _OperationMask) -> throw(?EACCES);
 check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, aceflags = Flags, acemask = AceMask} | Rest],
   #document{value = #onedata_user{group_ids = Groups}} = User, Operation)
     when ?has_flag(Flags, ?identifier_group_mask) ->
@@ -51,7 +51,7 @@ check_permission([#accesscontrolentity{acetype = Type, identifier = GroupId, ace
                      case (Operation band AceMask) of
                          ?no_flags_mask ->
                              check_permission(Rest, User, Operation);
-                         _ -> throw(?EPERM)
+                         _ -> throw(?EACCES)
                      end
              end
     end;
@@ -64,7 +64,7 @@ check_permission([#accesscontrolentity{acetype = ?allow_mask, identifier = SameU
 check_permission([#accesscontrolentity{acetype = ?deny_mask, identifier = SameUserId, acemask = AceMask} | Rest], #document{key = SameUserId} = User, Operation) ->
     case (Operation band AceMask) of
         ?no_flags_mask -> check_permission(Rest, User, Operation);
-        _ -> throw(?EPERM)
+        _ -> throw(?EACCES)
     end;
 check_permission([#accesscontrolentity{} | Rest], User = #document{}, Operation) ->
     check_permission(Rest, User, Operation).
@@ -199,8 +199,42 @@ bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_mask) ->
     bitmask_to_perm_list2(Hex bxor ?read_mask, [?read | List]);
 bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_mask) ->
     bitmask_to_perm_list2(Hex bxor ?write_mask, [?write | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_object_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?read_object_mask, [?read_object | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?list_container_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?list_container_mask, [?list_container | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_object_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?write_object_mask, [?write_object | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?add_object_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?add_object_mask, [?add_object | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?append_data_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?append_data_mask, [?append_data | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?add_subcontainer_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?add_subcontainer_mask, [?add_subcontainer | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_metadata_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?read_metadata_mask, [?read_metadata | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_metadata_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?write_metadata_mask, [?write_metadata | List]);
 bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?execute_mask) ->
     bitmask_to_perm_list2(Hex bxor ?execute_mask, [?execute | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?traverse_container_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?traverse_container_mask, [?traverse_container | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?delete_object_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?delete_object_mask, [?delete_object | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?delete_subcontainer_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?delete_subcontainer_mask, [?delete_subcontainer | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_attributes_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?read_attributes_mask, [?read_attributes | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_attributes_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?write_attributes_mask, [?write_attributes | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?delete_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?delete_mask, [?delete | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_acl_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?read_acl_mask, [?read_acl | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_acl_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?write_acl_mask, [?write_acl | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_owner_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?write_owner_mask, [?write_owner | List]);
 bitmask_to_perm_list2(?no_flags_mask, List) -> List;
 bitmask_to_perm_list2(_, _) -> undefined.
 
@@ -231,7 +265,24 @@ perm_list_to_bitmask(MaskNames) when is_binary(MaskNames) ->
 perm_list_to_bitmask([]) -> ?no_flags_mask;
 perm_list_to_bitmask([?read | Rest]) -> ?read_mask bor perm_list_to_bitmask(Rest);
 perm_list_to_bitmask([?write | Rest]) -> ?write_mask bor perm_list_to_bitmask(Rest);
-perm_list_to_bitmask([?execute | Rest]) -> ?execute_mask bor perm_list_to_bitmask(Rest).
+perm_list_to_bitmask([?read_object | Rest]) -> ?read_object_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?list_container | Rest]) -> ?list_container_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?write_object | Rest]) -> ?write_object_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?add_object | Rest]) -> ?add_object_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?append_data | Rest]) -> ?append_data_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?add_subcontainer | Rest]) -> ?add_subcontainer_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?read_metadata | Rest]) -> ?read_metadata_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?write_metadata | Rest]) -> ?write_metadata_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?execute | Rest]) -> ?execute_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?traverse_container | Rest]) -> ?traverse_container_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?delete_object | Rest]) -> ?delete_object_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?delete_subcontainer | Rest]) -> ?delete_subcontainer_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?read_attributes | Rest]) -> ?read_attributes_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?write_attributes | Rest]) -> ?write_attributes_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?delete | Rest]) -> ?delete_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?read_acl | Rest]) -> ?read_acl_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?write_acl | Rest]) -> ?write_acl_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?write_owner | Rest]) -> ?write_owner_mask bor perm_list_to_bitmask(Rest).
 
 %%--------------------------------------------------------------------
 %% @doc converts list of binaries to one, coma separated binary.

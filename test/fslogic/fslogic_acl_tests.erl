@@ -82,9 +82,9 @@ check_permission_test() ->
     % rdwr permission on different ACEs
     ?assertEqual(ok, fslogic_acl:check_permission([Ace1, Ace2], User1, ?read_mask bor ?write_mask)),
     % rwx permission, not allowed
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?execute_mask)),
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace1, Ace2], User1, ?read_mask bor ?write_mask bor ?execute_mask)),
     % x permission, not allowed
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace1, Ace2], User1, ?execute_mask)),
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace1, Ace2], User1, ?execute_mask)),
 
     Id2 = <<"id2">>,
     User2 = #document{key = Id2, value = #onedata_user{}},
@@ -93,7 +93,7 @@ check_permission_test() ->
     % read permission, with denying someone's else read
     ?assertEqual(ok, fslogic_acl:check_permission([Ace3, Ace1, Ace2], User1, ?read_mask)),
     % read permission, with denying read
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace2, Ace4, Ace1], User2, ?read_mask bor ?write_mask)).
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace2, Ace4, Ace1], User2, ?read_mask bor ?write_mask)).
 
 check_group_permission_test() ->
     Id1 = <<"id1">>,
@@ -112,21 +112,21 @@ check_group_permission_test() ->
     % rdwr permission on different ACEs
     ?assertEqual(ok, fslogic_acl:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask)),
     % rwx permission, not allowed
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?execute_mask)),
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace1, Ace2, Ace3], User1, ?read_mask bor ?write_mask bor ?execute_mask)),
     % x permission, not allowed
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace1, Ace2, Ace3], User1, ?execute_mask)),
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace1, Ace2, Ace3], User1, ?execute_mask)),
     % write, not allowed
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace1], User1, ?write_mask)),
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace1], User1, ?write_mask)),
 
     Id2 = <<"id2">>,
     User2 = #document{key = Id2, value = #onedata_user{}},
     Ace4 = #accesscontrolentity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = GId1, acemask = ?read_mask},
 
     % user allow, group deny
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace2, Ace4], User1, ?read_mask bor ?write_mask)),
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace2, Ace4], User1, ?read_mask bor ?write_mask)),
     % read & write allow from onedata_user and group ace
     ?assertEqual(ok, fslogic_acl:check_permission([Ace1, Ace4], User1, ?read_mask bor ?read_mask)),
 
-    ?assertEqual(?EPERM, catch fslogic_acl:check_permission([Ace1, Ace2], User2, ?read_mask bor ?write_mask)).
+    ?assertEqual(?EACCES, catch fslogic_acl:check_permission([Ace1, Ace2], User2, ?read_mask bor ?write_mask)).
 
 -endif.

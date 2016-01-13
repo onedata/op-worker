@@ -75,6 +75,8 @@ chmod(#fslogic_ctx{session_id = SessionId} = CTX, FileEntry, Mode) ->
     end,
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
+
+    % remove acl
     {uuid, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
@@ -103,7 +105,7 @@ chown(_, _File, _UserId) ->
 %%--------------------------------------------------------------------
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                            FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
     ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
@@ -222,7 +224,7 @@ remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
--check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}]).
 list_xattr(_CTX, {uuid, FileUuid}) ->
     case xattr:list(FileUuid) of
         {ok, List} ->
