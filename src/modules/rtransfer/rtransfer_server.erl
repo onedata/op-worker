@@ -36,9 +36,9 @@
 %% Initialize the module, starting all necessary services and side-effects.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: rtransfer:opt()) ->
-    {ok, State :: rtransfer:opt()} |
-    {ok, State :: rtransfer:opt(), timeout() | hibernate} |
+-spec init(Args :: [rtransfer:opt()]) ->
+    {ok, State :: [rtransfer:opt()]} |
+    {ok, State :: [rtransfer:opt()], timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init(RtransferOpts) ->
     {ok, _} = rt_map:new({local, ?aggregators_map}),
@@ -51,9 +51,9 @@ init(RtransferOpts) ->
 %% Handles transfer requests from external modules.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: rtransfer:opt()) ->
-    {noreply, NewState :: rtransfer:opt()} |
-    {noreply, NewState :: rtransfer:opt(), timeout() | hibernate} |
+-spec handle_cast(Request :: #request_transfer{}, State :: [rtransfer:opt()]) ->
+    {noreply, NewState :: [rtransfer:opt()]} |
+    {noreply, NewState :: [rtransfer:opt()], timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: rtransfer:opt()}.
 handle_cast(#request_transfer{} = Request, State) ->
     FetchRetryNumber = proplists:get_value(retry, State, 5),
@@ -124,8 +124,8 @@ handle_info({fetch_error, Details, #gw_fetch{} = Action}, State) ->
     {noreply, State}.
 
 
-handle_call(_Request, _From, _State) ->
-    erlang:error(not_implemented).
+handle_call(_Request, _From, State) ->
+    {noreply, State}.
 
 
 terminate(_Reason, _State) ->
@@ -192,7 +192,7 @@ pick_gw_node() ->
 %% Translate provider's id to its TCP address.
 %% @end
 %%--------------------------------------------------------------------
--spec provider_id_to_remote(ProviderId :: binary(), State :: rtransfer:opt()) ->
+-spec provider_id_to_remote(ProviderId :: binary(), State :: [rtransfer:opt()]) ->
     {inet:ip_address(), inet:port_number()}.
 provider_id_to_remote(ProviderId, State) ->
     GetNodes = proplists:get_value(get_nodes_fun, State),

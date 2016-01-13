@@ -29,7 +29,7 @@
 
 %% RTransfer container element
 -record(rt_block, {
-    file_id = "" :: string(),
+    file_id = <<"">> :: binary(),
     provider_ref :: term(),
     offset = 0 :: non_neg_integer(),
     size = 1 :: pos_integer(),

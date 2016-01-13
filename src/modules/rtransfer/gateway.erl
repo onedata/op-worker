@@ -38,9 +38,9 @@
 %% Initialize the module, starting all necessary services.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: rtransfer:opt()) ->
-    {ok, State :: rtransfer:opt()} |
-    {ok, State :: rtransfer:opt(), timeout() | hibernate} |
+-spec init(Args :: [rtransfer:opt()]) ->
+    {ok, State :: [rtransfer:opt()]} |
+    {ok, State :: [rtransfer:opt()], timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init(RtransferOpts) ->
     RanchOpts = proplists:get_value(ranch_opts, RtransferOpts, []),
@@ -59,7 +59,7 @@ init(RtransferOpts) ->
 
     register(gw_queue_loop, QueueLoopPid),
 
-    {ok, state}.
+    {ok, RtransferOpts}.
 
 
 %%--------------------------------------------------------------------
@@ -85,8 +85,8 @@ terminate(_Reason, _State) ->
     ok.
 
 
-handle_call(_Request, _From, _State) ->
-    erlang:error(not_implemented).
+handle_call(_Request, _From, State) ->
+    {noreply, State}.
 
 
 handle_info(_Info, State) ->
@@ -161,7 +161,7 @@ start_queue_loop(Max) ->
 %% jobs.
 %% @end
 %%--------------------------------------------------------------------
--spec act_on_fetch_result(Result :: {ok, #rt_block{}} | {error, term},
+-spec act_on_fetch_result(Result :: {ok, #rt_block{}} | {error, term()},
     SubRef :: reference()) -> integer().
 act_on_fetch_result({ok, Block}, _SubRef) ->
     #gw_fetch{notify = Notify} = Request = repackage(Block),
@@ -197,7 +197,7 @@ wait_for_messages(SubRef) ->
 %%--------------------------------------------------------------------
 -spec repackage(#gw_fetch{}) -> #rt_block{}; (#rt_block{}) -> #gw_fetch{}.
 repackage(#gw_fetch{file_id = FileId, offset = Offset, size = Size, remote = Remote, notify = Notify, retry = Retry}) ->
-    #rt_block{file_id = str_utils:to_list(FileId), offset = Offset, size = Size, provider_ref = Remote, terms = Notify, retry = Retry};
+    #rt_block{file_id = FileId, offset = Offset, size = Size, provider_ref = Remote, terms = Notify, retry = Retry};
 
 repackage(#rt_block{file_id = FileId, offset = Offset, size = Size, provider_ref = Remote, terms = Notify, retry = Retry}) ->
-    #gw_fetch{file_id = str_utils:to_binary(FileId), offset = Offset, size = Size, remote = Remote, notify = Notify, retry = Retry}.
+    #gw_fetch{file_id = FileId, offset = Offset, size = Size, remote = Remote, notify = Notify, retry = Retry}.
