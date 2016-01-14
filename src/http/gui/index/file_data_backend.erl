@@ -26,7 +26,7 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %% Convenience macro to log a debug level log dumping given variable.
--define(log_debug,
+-define(log_debug(_Arg),
     ?debug("~s", [gui_str:format("FILE_DATA_BACKEND: ~s: ~p", [??_Arg, _Arg])])
 ).
 

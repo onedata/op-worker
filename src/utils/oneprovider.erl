@@ -101,7 +101,7 @@ get_gr_url() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the URL to GR.
+%% Returns the URL to GR login page.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_gr_login_page() -> string().
@@ -113,7 +113,7 @@ get_gr_login_page() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the URL to GR.
+%% Returns the URL to GR logout page.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_gr_logout_page() -> string().

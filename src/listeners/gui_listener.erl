@@ -66,7 +66,7 @@ start() ->
         ]}
     ],
 
-    %% TODO LOOLOL
+    % Call gui init, which will call init on all modules that might need state.
     gui:init(),
     % Start the listener for web gui and nagios handler
     Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
@@ -94,6 +94,9 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
+    % Call gui cleanup, which will call cleanup on all modules that
+    % were previously set up with gui:init/0.
+    gui:cleanup(),
     case catch cowboy:stop_listener(?HTTPS_LISTENER) of
         (ok) ->
             ok;

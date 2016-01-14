@@ -1,13 +1,18 @@
 %%%-------------------------------------------------------------------
-%%% @author lopiola
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 20. Aug 2015 15:25
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module implements page_backend_behaviour and is called
+%%% when login page is visited - it contains login logic (redirects to GR).
+%%% THIS IS A PROTOTYPE AND AN EXAMPLE OF IMPLEMENTATION.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(login_backend).
--author("lopiola").
+-author("Lukasz Opiola").
 -behaviour(page_backend_behaviour).
 
 -compile([export_all]).

@@ -1,13 +1,19 @@
 %%%-------------------------------------------------------------------
-%%% @author lopiola
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 20. Aug 2015 15:25
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module implements page_backend_behaviour and is called
+%%% when validate_login page is visited - it contains the logic
+%%% that validates a redirect for login from GR.
+%%% THIS IS A PROTOTYPE AND AN EXAMPLE OF IMPLEMENTATION.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(validate_login_backend).
--author("lopiola").
+-author("Lukasz Opiola").
 -behaviour(page_backend_behaviour).
 
 -compile([export_all]).
@@ -22,7 +28,7 @@ page_init() ->
             ok;
         false ->
             SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
-            {ok, Auth = #auth{}} = gui_auth_manager:authorize(SrlzdMacaroon),
+            {ok, Auth = #auth{}} = gui_auth_manager:authenticate(SrlzdMacaroon),
             {ok, _} = g_session:log_in([Auth])
     end,
     {redirect_relative, <<"/">>}.
