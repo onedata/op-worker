@@ -69,7 +69,7 @@ cp(_PathFrom, _PathTo) ->
 %% Returns uuid of parent for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+-spec get_parent(SessId :: session:id(), {uuid, file_uuid()}) ->
     {ok, file_meta:uuid()} | error_reply().
 get_parent(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     lfm_utils:call_fslogic(SessId, #get_parent{uuid = UUID},
