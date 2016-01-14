@@ -179,6 +179,7 @@ rename(CTX, SourceEntry, TargetPath) ->
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
 -check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
+get_xattr(_CTX, _, <<"cdmi_", _/binary>>) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     % todo block acl read
     case xattr:get_by_name(FileUuid, XattrName) of
@@ -198,6 +199,7 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
+set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
 set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
     % todo block acl update
     case xattr:save(FileUuid, Xattr) of
