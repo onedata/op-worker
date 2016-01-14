@@ -1396,7 +1396,7 @@ create_test_dir_and_file(Config) ->
 
     case object_exists(Config, TestDirName) of
         false ->
-            ok = mkdir(Config, TestDirName),
+            {ok, _} = mkdir(Config, TestDirName),
             ?assert(object_exists(Config, TestDirName)),
             {ok, _} = create_file(Config, FullTestFileName),
             ?assert(object_exists(Config, FullTestFileName)),
