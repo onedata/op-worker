@@ -27,6 +27,9 @@
 %% Functions concerning file attributes
 -export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
+%% Functions concerning cdmi attributes
+-export([get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2,
+    set_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -54,6 +57,9 @@
 -type access_control_entity() :: term(). % TODO should be a proper record
 -type block_range() :: term(). % TODO should be a proper record
 -type share_id() :: binary().
+-type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
+-type completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
+-type mimetype() :: binary().
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
@@ -70,10 +76,12 @@
 %%--------------------------------------------------------------------
 %% @doc Creates a directory.
 %%--------------------------------------------------------------------
--spec mkdir(Identity :: onedata_auth_api:auth(), Path :: file_path()) -> ok | error_reply().
+-spec mkdir(Identity :: onedata_auth_api:auth(), Path :: file_path()) ->
+    ok | error_reply().
 mkdir(Auth, Path) ->
     logical_file_manager:mkdir(Auth, Path).
--spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
+-spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
+    ok | error_reply().
 mkdir(Auth, Path, Mode) ->
     logical_file_manager:mkdir(Auth, Path, Mode).
 
@@ -84,7 +92,8 @@ mkdir(Auth, Path, Mode) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+-spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) ->
+    {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(Auth, FileKey, Limit, Offset) ->
     logical_file_manager:ls(Auth, FileKey, Limit, Offset).
 
@@ -92,7 +101,8 @@ ls(Auth, FileKey, Limit, Offset) ->
 %%--------------------------------------------------------------------
 %% @doc Returns number of children of a directory.
 %%--------------------------------------------------------------------
--spec get_children_count(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
+-spec get_children_count(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) ->
+    {ok, integer()} | error_reply().
 get_children_count(Auth, FileKey) ->
     logical_file_manager:get_children_count(Auth, FileKey).
 
@@ -164,7 +174,8 @@ create(Auth, Path, Mode) ->
 %%--------------------------------------------------------------------
 %% @doc Opens a file in selected mode and returns a file handle used to read or write.
 %%--------------------------------------------------------------------
--spec open(onedata_auth_api:auth(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
+-spec open(onedata_auth_api:auth(), FileKey :: file_id_or_path(), OpenType :: open_mode()) ->
+    {ok, file_handle()} | error_reply().
 open(Auth, FileKey, OpenType) ->
     logical_file_manager:open(Auth, FileKey, OpenType).
 
@@ -190,10 +201,12 @@ read(FileHandle, Offset, MaxSize) ->
 %%--------------------------------------------------------------------
 %% @doc Truncates a file.
 %%--------------------------------------------------------------------
--spec truncate(FileHandle :: file_handle(), Size :: non_neg_integer()) -> ok | error_reply().
+-spec truncate(FileHandle :: file_handle(), Size :: non_neg_integer()) ->
+    ok | error_reply().
 truncate(Handle, Size) ->
     logical_file_manager:truncate(Handle, Size).
--spec truncate(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
+-spec truncate(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) ->
+    ok | error_reply().
 truncate(Auth, FileKey, Size) ->
     logical_file_manager:truncate(Auth, FileKey, Size).
 
@@ -205,7 +218,8 @@ truncate(Auth, FileKey, Size) ->
 -spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
 get_block_map(Handle) ->
     logical_file_manager:get_block_map(Handle).
--spec get_block_map(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+-spec get_block_map(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) ->
+    {ok, [block_range()]} | error_reply().
 get_block_map(Auth, FileKey) ->
     logical_file_manager:get_block_map(Auth, FileKey).
 
@@ -213,28 +227,32 @@ get_block_map(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.
 %%--------------------------------------------------------------------
--spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) -> ok | error_reply().
+-spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) ->
+    ok | error_reply().
 set_perms(Path, NewPerms) ->
     logical_file_manager:set_perms(Path, NewPerms).
 
 %%--------------------------------------------------------------------
 %% @doc Checks if current user has given permissions for given file.
 %%--------------------------------------------------------------------
--spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
+-spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) ->
+    {ok, boolean()} | error_reply().
 check_perms(Path, PermType) ->
     logical_file_manager:check_perms(Path, PermType).
 
 %%--------------------------------------------------------------------
 %% @doc Returns file's Access Control List.
 %%--------------------------------------------------------------------
--spec get_acl(onedata_auth_api:auth(), file_key()) -> {ok, [access_control_entity()]} | error_reply().
+-spec get_acl(onedata_auth_api:auth(), file_key()) ->
+    {ok, [access_control_entity()]} | error_reply().
 get_acl(Auth, FileKey) ->
     logical_file_manager:get_acl(Auth, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Updates file's Access Control List.
 %%--------------------------------------------------------------------
--spec set_acl(onedata_auth_api:auth(), file_key(), EntityList :: [access_control_entity()]) -> ok | error_reply().
+-spec set_acl(onedata_auth_api:auth(), file_key(), EntityList :: [access_control_entity()]) ->
+    ok | error_reply().
 set_acl(Auth, FileKey, EntityList) ->
     logical_file_manager:set_acl(Auth, FileKey, EntityList).
 
@@ -262,7 +280,8 @@ stat(Auth, FileKey) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(Handle, XattrName) ->
     logical_file_manager:get_xattr(Handle, XattrName).
--spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) -> {ok, #xattr{}} | error_reply().
+-spec get_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) ->
+    {ok, #xattr{}} | error_reply().
 get_xattr(Auth, FileKey, XattrName) ->
     logical_file_manager:get_xattr(Auth, FileKey, XattrName).
 
@@ -284,7 +303,8 @@ set_xattr(Auth, FileKey, Xattr) ->
 remove_xattr(Handle, XattrName) ->
     logical_file_manager:remove_xattr(Handle, XattrName).
 
--spec remove_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) -> ok | error_reply().
+-spec remove_xattr(onedata_auth_api:auth(), file_key(), xattr_name()) ->
+    ok | error_reply().
 remove_xattr(Auth, FileKey, XattrName) ->
     logical_file_manager:remove_xattr(Auth, FileKey, XattrName).
 
@@ -299,16 +319,72 @@ list_xattr(Auth, FileKey) ->
     logical_file_manager:list_xattr(Auth, FileKey).
 
 %%--------------------------------------------------------------------
+%% @doc Returns encoding suitable for rest transfer.
+%%--------------------------------------------------------------------
+-spec get_transfer_encoding(onedata_auth_api:auth(), file_key()) ->
+    {ok, transfer_encoding()} | error_reply().
+get_transfer_encoding(Auth, FileKey) ->
+    logical_file_manager:get_transfer_encoding(Auth, FileKey).
+
+%%--------------------------------------------------------------------
+%% @doc Sets encoding suitable for rest transfer.
+%%--------------------------------------------------------------------
+-spec set_transfer_encoding(onedata_auth_api:auth(), file_key(), transfer_encoding()) ->
+    ok | error_reply().
+set_transfer_encoding(Auth, FileKey, Encoding) ->
+    logical_file_manager:set_transfer_encoding(Auth, FileKey, Encoding).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns completion status, which tells if the file is under modification by
+%% cdmi at the moment.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_completion_status(onedata_auth_api:auth(), file_key()) ->
+    {ok, completion_status()} | error_reply().
+get_completion_status(Auth, FileKey) ->
+    logical_file_manager:get_completion_status(Auth, FileKey).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets completion status, which tells if the file is under modification by
+%% cdmi at the moment.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_completion_status(onedata_auth_api:auth(), file_key(), completion_status()) ->
+    ok | error_reply().
+set_completion_status(Auth, FileKey, CompletionStatus) ->
+    logical_file_manager:set_completion_status(Auth, FileKey, CompletionStatus).
+
+%%--------------------------------------------------------------------
+%% @doc Returns mimetype of file.
+%%--------------------------------------------------------------------
+-spec get_mimetype(onedata_auth_api:auth(), file_key()) ->
+    {ok, mimetype()} | error_reply().
+get_mimetype(Auth, FileKey) ->
+    logical_file_manager:get_mimetype(Auth, FileKey).
+
+%%--------------------------------------------------------------------
+%% @doc Sets mimetype of file.
+%%--------------------------------------------------------------------
+-spec set_mimetype(onedata_auth_api:auth(), file_key(), mimetype()) ->
+    ok | error_reply().
+set_mimetype(Auth, FileKey, Mimetype) ->
+    logical_file_manager:set_mimetype(Auth, FileKey, Mimetype).
+
+%%--------------------------------------------------------------------
 %% @doc Creates a symbolic link.
 %%--------------------------------------------------------------------
--spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_uuid()} | error_reply().
+-spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) ->
+    {ok, file_uuid()} | error_reply().
 create_symlink(Path, TargetFileKey) ->
     logical_file_manager:create_symlink(Path, TargetFileKey).
 
 %%--------------------------------------------------------------------
 %% @doc Returns the symbolic link's target file.
 %%--------------------------------------------------------------------
--spec read_symlink(FileKey :: file_key()) -> {ok, {file_uuid(), file_name()}} | error_reply().
+-spec read_symlink(FileKey :: file_key()) ->
+    {ok, {file_uuid(), file_name()}} | error_reply().
 read_symlink(FileKey) ->
     logical_file_manager:read_symlink(FileKey).
 
@@ -333,7 +409,8 @@ create_share(Path, ShareWith) ->
 %%--------------------------------------------------------------------
 %% @doc Returns shared file by share_id.
 %%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
+-spec get_share(ShareID :: share_id()) ->
+    {ok, {file_uuid(), file_name()}} | error_reply().
 get_share(ShareID) ->
     logical_file_manager:get_share(ShareID).
 

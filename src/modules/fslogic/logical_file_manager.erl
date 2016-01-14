@@ -70,6 +70,9 @@
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
+%% Functions concerning cdmi attributes
+-export([get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2,
+    set_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -488,6 +491,71 @@ list_xattr(SessId, FileKey) ->
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
     lfm_attrs:list_xattr(CTX, UUID).
 
+%%--------------------------------------------------------------------
+%% @doc Returns encoding suitable for rest transfer.
+%%--------------------------------------------------------------------
+-spec get_transfer_encoding(session:id(), file_key()) ->
+    {ok, transfer_encoding()} | error_reply().
+get_transfer_encoding(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:get_transfer_encoding(CTX, UUID).
+
+%%--------------------------------------------------------------------
+%% @doc Sets encoding suitable for rest transfer.
+%%--------------------------------------------------------------------
+-spec set_transfer_encoding(session:id(), file_key(), transfer_encoding()) ->
+    ok | error_reply().
+set_transfer_encoding(SessId, FileKey, Encoding) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:set_transfer_encoding(CTX, UUID, Encoding).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns completion status, which tells if the file is under modification by
+%% cdmi at the moment.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_completion_status(session:id(), file_key()) ->
+    {ok, completion_status()} | error_reply().
+get_completion_status(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:get_completion_status(CTX, UUID).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets completion status, which tells if the file is under modification by
+%% cdmi at the moment.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_completion_status(session:id(), file_key(), completion_status()) ->
+    ok | error_reply().
+set_completion_status(SessId, FileKey, CompletionStatus) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:set_completion_status(CTX, UUID, CompletionStatus).
+
+%%--------------------------------------------------------------------
+%% @doc Returns mimetype of file.
+%%--------------------------------------------------------------------
+-spec get_mimetype(session:id(), file_key()) ->
+    {ok, mimetype()} | error_reply().
+get_mimetype(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:get_mimetype(CTX, UUID).
+
+%%--------------------------------------------------------------------
+%% @doc Sets mimetype of file.
+%%--------------------------------------------------------------------
+-spec set_mimetype(session:id(), file_key(), mimetype()) ->
+    ok | error_reply().
+set_mimetype(SessId, FileKey, Mimetype) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:set_mimetype(CTX, UUID, Mimetype).
 
 %%--------------------------------------------------------------------
 %% @doc

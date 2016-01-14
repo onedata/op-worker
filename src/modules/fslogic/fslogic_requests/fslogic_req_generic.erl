@@ -13,14 +13,20 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("types.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
+%% Keys of special cdmi attrs
+-define(MIMETYPE_XATTR_NAME, <<"cdmi_mimetype">>).
+-define(TRANSFER_ENCODING_XATTR_NAME, <<"cdmi_valuetransferencoding">>).
+-define(COMPLETION_STATUS_XATTR_NAME, <<"cdmi_completion_status">>).
+
 %% API
 -export([chmod/3, get_file_attr/2, delete/2, rename/3, update_times/5,
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
-    get_acl/2, set_acl/3, remove_acl/2]).
+    get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2, set_completion_status/3, get_mimetype/2, set_mimetype/3]).
 
 %%%===================================================================
 %%% API functions
@@ -53,7 +59,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
 -check_permissions([{owner, 2}, {traverse_ancestors, 2}]).
-chmod(#fslogic_ctx{session_id = SessionId} = CTX, FileEntry, Mode) ->
+chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
     case file_meta:get(FileEntry) of
         {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
@@ -272,6 +278,100 @@ set_acl(_CTX, {uuid, FileUuid}, #acl{value = Val}) ->
 remove_acl(_CTX, {uuid, FileUuid}) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Returns encoding suitable for rest transfer.
+%%--------------------------------------------------------------------
+-spec get_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    {ok, transfer_encoding()} | error_reply().
+-check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
+    case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
+        {ok, #document{value = #xattr{value = Val}}} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #transfer_encoding{value = Val}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}};
+        {error, {not_found, xattr}} ->
+            #fuse_response{status = #status{code = ?ENOATTR}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Sets encoding suitable for rest transfer.
+%%--------------------------------------------------------------------
+-spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, transfer_encoding()) ->
+    ok | error_reply().
+-check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
+    case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
+        {ok, _} ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns completion status, which tells if the file is under modification by
+%% cdmi at the moment.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    {ok, completion_status()} | error_reply().
+-check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+get_completion_status(_CTX, {uuid, FileUuid}) ->
+    case xattr:get_by_name(FileUuid, ?COMPLETION_STATUS_XATTR_NAME) of
+        {ok, #document{value = #xattr{value = Val}}} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #completion_status{value = Val}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}};
+        {error, {not_found, xattr}} ->
+            #fuse_response{status = #status{code = ?ENOATTR}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets completion status, which tells if the file is under modification by
+%% cdmi at the moment.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, completion_status()) ->
+    ok | error_reply().
+-check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+set_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
+    case xattr:save(FileUuid, #xattr{name = ?COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
+        {ok, _} ->
+            #fuse_response{status = #status{code = ?OK}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+%%--------------------------------------------------------------------
+%% @doc Returns mimetype of file.
+%%--------------------------------------------------------------------
+-spec get_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    {ok, mimetype()} | error_reply().
+-check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+get_mimetype(_CTX, {uuid, FileUuid}) ->
+    case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
+        {ok, #document{value = #xattr{value = Val}}} ->
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #mimetype{value = Val}};
+        {error, {not_found, file_meta}} ->
+            #fuse_response{status = #status{code = ?ENOENT}};
+        {error, {not_found, xattr}} ->
+            #fuse_response{status = #status{code = ?ENOATTR}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Sets mimetype of file.
+%%--------------------------------------------------------------------
+-spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, mimetype()) ->
+    ok | error_reply().
+-check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+set_mimetype(_CTX, {uuid, FileUuid}, Mimetype) ->
+    case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
+        {ok, _} ->
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
