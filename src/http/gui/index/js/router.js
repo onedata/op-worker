@@ -1,7 +1,6 @@
+// Router for the prototype ember app.
 App.Router.map(function() {
-    //this.route('main', { path: '/' });
     this.route('main', { path: '/' });
-    //this.route('global', { path: '/*' });
 });
 
 App.MainRoute = Ember.Route.extend({

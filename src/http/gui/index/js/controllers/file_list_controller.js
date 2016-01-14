@@ -1,6 +1,12 @@
+// This is a prototype controller for file list view.
+// It creates an interface between the view and model.
+
 App.FileListController = Ember.ArrayController.extend({
+    // Sorting of files by type and name
     sortProperties: ['type:asc', 'name:asc'],
     sortedModel: Ember.computed.sort("model", "sortProperties"),
+
+    // The space that is currently browsed
     currentSpaceId: null,
     currentSpace: null,
 
@@ -36,7 +42,7 @@ App.FileListController = Ember.ArrayController.extend({
     editingPreview: false,
     editAreaDisabled: Ember.computed.not('editingPreview'),
 
-
+    // Resolving current space
     fetchCurrentSpace: function () {
         if (this.get('currentSpaceId')) {
             console.log('currentSpaceId ' + this.get('currentSpaceId'));
@@ -53,10 +59,12 @@ App.FileListController = Ember.ArrayController.extend({
         }
     }.observes('currentSpaceId'),
 
+    // A virtual dir that contains all spaces
     spacesDir: function () {
         return this.findBy('id', 'root')
     }.property(),
 
+    // Number of selected files
     selectedCount: function () {
         var visibleFiles = this.filterBy('isVisible');
         var res = visibleFiles.filterBy('selected').length;
@@ -83,6 +91,7 @@ App.FileListController = Ember.ArrayController.extend({
     }.property('selectedCount'),
     isNotOneSelected: Ember.computed.not('isOneSelected'),
 
+    // File that is selected, if only it is selected
     currentFile: function (key, value) {
         console.log('key ' + key);
         console.log('value ' + value);
@@ -110,6 +119,7 @@ App.FileListController = Ember.ArrayController.extend({
         }
     }.property('currentFile'),
 
+    // Handling actions
     actions: {
         createNewDir: function () {
             this.send('createNew', 'dir');

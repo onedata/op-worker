@@ -1,3 +1,6 @@
+// Prototype ember controller for the component modal-dialog.
+// Here user actions are handled.
+
 App.ModalDialogComponent = Ember.Component.extend({
     actions: {
         ok: function () {

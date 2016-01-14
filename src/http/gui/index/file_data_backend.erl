@@ -1,13 +1,18 @@
 %%%-------------------------------------------------------------------
-%%% @author lopiola
-%%% @copyright (C) 2015, <COMPANY>
-%%% @doc
-%%%
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
 %%% @end
-%%% Created : 20. Aug 2015 15:25
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module implements data_backend_behaviour and is used to synchronize
+%%% the file model used in Ember application.
+%%% THIS IS A PROTOTYPE AND AN EXAMPLE OF IMPLEMENTATION.
+%%% @end
 %%%-------------------------------------------------------------------
 -module(file_data_backend).
--author("lopiola").
+-author("Lukasz Opiola").
 
 -compile([export_all]).
 
@@ -20,29 +25,34 @@
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
-
--define(FILE_FIXTURES, [
-    [{<<"id">>, <<"f1">>}, {<<"name">>, <<"File 1">>}, {<<"attribute">>, 82364234}, {<<"selected">>, false}],
-    [{<<"id">>, <<"f2">>}, {<<"name">>, <<"Plik 2">>}, {<<"attribute">>, 451345134}, {<<"selected">>, false}],
-    [{<<"id">>, <<"f3">>}, {<<"name">>, <<"Notatki 3">>}, {<<"attribute">>, 56892}, {<<"selected">>, false}],
-    [{<<"id">>, <<"f4">>}, {<<"name">>, <<"Readme 4">>}, {<<"attribute">>, 124123567}, {<<"selected">>, false}]
-]).
+%% Convenience macro to log a debug level log dumping given variable.
+-define(log_debug,
+    ?debug("~s", [gui_str:format("FILE_DATA_BACKEND: ~s: ~p", [??_Arg, _Arg])])
+).
 
 
 init() ->
-    ?dump(websocket_init),
+    ?log_debug(websocket_init),
     {ok, _Pid} = data_backend:async_process(fun() -> async_loop() end),
     ok.
 
-
+%% Currently unused
 async_loop() ->
     receive
         Other ->
-            ?dump({async_loop, Other})
+            ?log_debug({async_loop, Other})
     end,
     async_loop().
 
 
+%% A virtual 'root' dir is introduces, that includes virtual dirs representing
+%% spaces (they are given by id space#<space_id>.
+%% This way, we can get all user spaces without having to list all the
+%% children of the spaces.
+%% In Ember, if a record has a relation, you have to return all the
+%% IDs of related records. If we returned space dirs here, we would have to
+%% list them all for file ids.
+%% The virtual spaces returned here have one child each - the proper space dir.
 find(<<"file">>, [<<"root">>]) ->
     SessionId = g_session:get_session_id(),
     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
@@ -56,10 +66,12 @@ find(<<"file">>, [<<"root">>]) ->
         {<<"parent">>, null},
         {<<"children">>, VirtSpaceIds}
     ],
-    ?dump({find_root, Res}),
+    ?log_debug({find_root, Res}),
     {ok, Res};
 
 
+%% Called when ember asks for the virtual space dir -
+%% it has one child, the proper space dir.
 find(<<"file">>, [<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
     SessionId = g_session:get_session_id(),
     {ok, #file_attr{name = Name}} = logical_file_manager:stat(
@@ -72,12 +84,13 @@ find(<<"file">>, [<<"space#", SpaceID/binary>> = VirtSpaceID]) ->
         {<<"parent">>, <<"root">>},
         {<<"children">>, [SpaceID]}
     ],
-    ?dump({find_space, Res}),
+    ?log_debug({find_space, Res}),
     {ok, Res};
 
 
+%% Called when ember asks for a file, dir or space dir
 find(<<"file">>, [Id]) ->
-    ?dump({find, <<"file">>, Id}),
+    ?log_debug({find, <<"file">>, Id}),
     SessionId = g_session:get_session_id(),
     SpacesDirUUID = get_spaces_dir_uuid(),
     ParentUUID = case get_parent(Id) of
@@ -125,11 +138,12 @@ find(<<"file">>, [Id]) ->
         {<<"parent">>, ParentUUID},
         {<<"children">>, ChildrenIds}
     ],
-    ?dump({find, Res}),
+    ?log_debug({find, Res}),
     {ok, Res};
 
+%% Called when ember asks for content of a file
 find(<<"fileContent">>, [<<"content#", FileId/binary>> = Id]) ->
-    ?dump({find, <<"fileContent">>, Id}),
+    ?log_debug({find, <<"fileContent">>, Id}),
     SessionId = g_session:get_session_id(),
     {ok, Handle} = logical_file_manager:open(SessionId, {uuid, FileId}, read),
     {ok, _, Bytes} = logical_file_manager:read(Handle, 0, 10000),
@@ -140,19 +154,19 @@ find(<<"fileContent">>, [<<"content#", FileId/binary>> = Id]) ->
     ],
     {ok, Res};
 
-
+%% Called when ember asks for multiple files
 find(<<"file">>, Ids) ->
     Res = [begin {ok, File} = find(<<"file">>, [Id]), File end || Id <- Ids],
-    ?dump({find_ds, Res}),
+    ?log_debug({find_ds, Res}),
     {ok, Res}.
 
-
+%% Called when ember asks for all files
 find_all(<<"file">>) ->
     {ok, Root} = find(<<"file">>, [<<"root">>]),
     ChildrenIds = proplists:get_value(<<"children">>, Root),
     Children = [begin {ok, Ch} = find(<<"file">>, [ChId]), Ch end || ChId <- ChildrenIds],
     Res = [Root | Children],
-    ?dump({find_all, Res}),
+    ?log_debug({find_all, Res}),
     {ok, Res}.
 %%     SessionId = g_session:get_session_id(),
 %%     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
@@ -171,16 +185,17 @@ find_all(<<"file">>) ->
 %%             ]
 %%         end, SpaceDirs
 %%     ),
-%%     ?dump({find_all, Res}),
+%%     ?log_debug({find_all, Res}),
 %%     {ok, Res}.
 
 
+%% Called when ember asks for file mathcing given query
 find_query(<<"file">>, _Data) ->
     {error, not_iplemented}.
 
-
+%% Called when ember asks to create a record
 create_record(<<"file">>, Data) ->
-    ?dump({create_record, <<"file">>, Data}),
+    ?log_debug({create_record, <<"file">>, Data}),
     SessionId = g_session:get_session_id(),
     Name = proplists:get_value(<<"name">>, Data),
     Type = proplists:get_value(<<"type">>, Data),
@@ -193,7 +208,7 @@ create_record(<<"file">>, Data) ->
                        SessionId, ProposedParentUUID),
                    filename:join([ParentPath, Name])
            end,
-    ?dump(Path),
+    ?log_debug(Path),
     FileId = case Type of
                  <<"file">> ->
                      {ok, FId} = logical_file_manager:create(
@@ -220,16 +235,15 @@ create_record(<<"file">>, Data) ->
         {<<"parent">>, ParentUUID},
         {<<"children">>, []}
     ],
-    ?dump({create_record, Res}),
+    ?log_debug({create_record, Res}),
     {ok, Res}.
 
-
+%% Called when ember asks to update a record
 update_record(<<"file">>, _Id, _Data) ->
     {error, not_iplemented};
 
-
 update_record(<<"fileContent">>, <<"content#", FileId/binary>>, Data) ->
-    ?dump({update_record, <<"fileContent">>, <<"content#", FileId/binary>>, Data}),
+    ?log_debug({update_record, <<"fileContent">>, <<"content#", FileId/binary>>, Data}),
     Bytes = proplists:get_value(<<"bytes">>, Data, <<>>),
     SessionId = g_session:get_session_id(),
     ok = logical_file_manager:truncate(SessionId, {uuid, FileId}, 0),
@@ -237,12 +251,13 @@ update_record(<<"fileContent">>, <<"content#", FileId/binary>>, Data) ->
     {ok, _, _} = logical_file_manager:write(Handle, 0, Bytes),
     ok.
 
+%% Called when ember asks to delete a record
 delete_record(<<"file">>, Id) ->
     ok = rm_rf(Id).
 
 
 % ------------------------------------------------------------
-%
+% Internal
 % ------------------------------------------------------------
 
 get_parent(UUID) ->

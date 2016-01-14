@@ -1,3 +1,7 @@
+<!--
+    This is a prototype model representing a file in file browser.
+-->
+
 App.File = DS.Model.extend({
 
     name: DS.attr('string'),
@@ -17,7 +21,8 @@ App.File = DS.Model.extend({
 
     isVisible: function () {
         var visible = this.get('parent.expanded');
-        console.log('deselect(' + this.get('name') + '): ' + (this.get('selected') && !visible));
+        console.log('deselect(' + this.get('name') + '): ' +
+            (this.get('selected') && !visible));
         if (this.get('selected') && !visible) {
             this.set('selected', false);
         }

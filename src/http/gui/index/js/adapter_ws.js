@@ -1,4 +1,3 @@
-
 // Interface between WebSocket Adapter client and server. Corresponding
 // interface is located in gui_ws_handler.erl.
 var FIND = 'find';
