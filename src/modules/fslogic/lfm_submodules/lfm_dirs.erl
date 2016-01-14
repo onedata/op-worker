@@ -29,16 +29,18 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(fslogic_worker:ctx(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    ok | error_reply().
+-spec mkdir(fslogic_worker:ctx(), Path :: file_path(), 
+    Mode :: file_meta:posix_permissions()) ->
+    {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     case file_meta:resolve_path(ParentPath) of
         {ok, {#document{key = ParentUUID}, _}} ->
             lfm_utils:call_fslogic(SessId,
                 #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode},
-                fun(_) -> ok end
-            );
+                fun(#dir{uuid = DirUUID}) ->
+                    {ok, DirUUID}
+                end);
         {error, Error} -> {error, Error}
     end.
 
@@ -50,7 +52,8 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: {uuid, file_uuid()}, Limit :: integer(), Offset :: integer()) ->
+-spec ls(SessId :: session:id(), FileKey :: {uuid, file_uuid()}, 
+    Limit :: integer(), Offset :: integer()) ->
     {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, {uuid, UUID}, Limit, Offset) ->
     lfm_utils:call_fslogic(SessId,

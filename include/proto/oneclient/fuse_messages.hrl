@@ -33,6 +33,10 @@
     size :: file_meta:size()
 }).
 
+-record(get_parent, {
+    uuid :: file_meta:uuid()
+}).
+
 -record(create_dir, {
     name :: file_meta:name(),
     parent_uuid :: file_meta:uuid(),
@@ -91,11 +95,6 @@
     uuid :: file_meta:uuid()
 }).
 
--record(helper_arg, {
-    key :: binary(),
-    value :: binary()
-}).
-
 -record(get_xattr, {
     uuid :: file_meta:uuid(),
     name :: xattr:name()
@@ -115,7 +114,7 @@
     uuid :: file_meta:uuid()
 }).
 
--type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
+-type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
@@ -123,6 +122,15 @@
 
 -record(file_children, {
     child_links :: [#child_link{}]
+}).
+
+-record(dir, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(helper_arg, {
+    key :: binary(),
+    value :: binary()
 }).
 
 -record(helper_params, {
@@ -135,7 +143,7 @@
 }).
 
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
-    #file_location{} | #xattr{} | #xattr_list{}.
+#file_location{} | #xattr{} | #xattr_list{} | #dir{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
