@@ -181,7 +181,6 @@ rename(CTX, SourceEntry, TargetPath) ->
 -check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
 get_xattr(_CTX, _, <<"cdmi_", _/binary>>) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
-    % todo block acl read
     case xattr:get_by_name(FileUuid, XattrName) of
         {ok, #document{value = Xattr}} ->
             #fuse_response{status = #status{code = ?OK}, fuse_response = Xattr};
@@ -201,7 +200,6 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 -check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
 set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
 set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
-    % todo block acl update
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
             #fuse_response{status = #status{code = ?OK}};
