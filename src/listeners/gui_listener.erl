@@ -21,11 +21,22 @@
 -define(HTTPS_LISTENER, https).
 
 %% listener_behaviour callbacks
--export([start/0, stop/0, healthcheck/0]).
+-export([port/0, start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
 %%% listener_starter_behaviour callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link listener_starter_behaviour} callback port/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec port() -> integer().
+port() ->
+    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
+    GuiPort.
+
 
 %%--------------------------------------------------------------------
 %% @doc
