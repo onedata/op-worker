@@ -111,12 +111,16 @@ get_file_location(#fslogic_ctx{} = CTX, File, OpenFlags) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{write, 2}]).
-get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
-    UUID, Name, Mode, _Flags) ->
-    {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-    get_new_file_location(CTX, DefaultSpaceUUID, Name, Mode, _Flags);
 get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name, Mode, _Flags) ->
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}),
+    NormalizedParentUUID =
+        case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
+            true ->
+                {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
+                DefaultSpaceUUID;
+            false ->
+                ParentUUID
+        end,
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
@@ -129,7 +133,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
         uid = fslogic_context:get_user_id(CTX)
     }},
 
-    {ok, UUID} = file_meta:create({uuid, ParentUUID}, File),
+    {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
