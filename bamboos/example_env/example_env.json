@@ -1,7 +1,7 @@
 {
     "dirs_config": {
-        "cluster_manager": {
-            "input_dir": "rel/cluster_manager",
+        "op_ccm": {
+            "input_dir": "rel/op_ccm",
             "target_dir": "rel/test_cluster"
         },
         "op_worker": {
@@ -58,9 +58,9 @@
                     "user3"
                 ],
                 "fuse": [
-                    "user1",
-                    "user2",
-                    "user3"
+                    "u1",
+                    "u2",
+                    "u3"
                 ]
             }
         }
@@ -69,14 +69,14 @@
         "p1": {
             "db_driver": "couchbase",
             "os_config": "cfg1",
-            "cluster_manager": {
-                "cm1": {
+            "op_ccm": {
+                "ccm1": {
                     "vm.args": {
                         "setcookie": "cookie1"
                     },
                     "sys.config": {
-                        "cm_nodes": [
-                            "cm1"
+                        "ccm_nodes": [
+                            "ccm1"
                         ],
                         "worker_num": 1
                     }
@@ -88,8 +88,8 @@
                         "setcookie": "cookie1"
                     },
                     "sys.config": {
-                        "cm_nodes": [
-                            "cm1"
+                        "ccm_nodes": [
+                            "ccm1"
                         ],
                         "db_nodes": [
                             "dbnode1",
@@ -104,14 +104,14 @@
         "p2.gr": {
             "db_driver": "riak",
             "os_config": "cfg2",
-            "cluster_manager": {
-                "cm1": {
+            "op_ccm": {
+                "ccm1": {
                     "vm.args": {
                         "setcookie": "cookie2"
                     },
                     "sys.config": {
-                        "cm_nodes": [
-                            "cm1"
+                        "ccm_nodes": [
+                            "ccm1"
                         ],
                         "worker_num": 2
                     }
@@ -123,8 +123,8 @@
                         "setcookie": "cookie2"
                     },
                     "sys.config": {
-                        "cm_nodes": [
-                            "cm1"
+                        "ccm_nodes": [
+                            "ccm1"
                         ],
                         "db_nodes": [
                             "riaknode1"
@@ -138,49 +138,14 @@
                         "setcookie": "cookie2"
                     },
                     "sys.config": {
-                        "cm_nodes": [
-                            "cm1"
+                        "ccm_nodes": [
+                            "ccm1"
                         ],
                         "db_nodes": [
                             "riaknode1"
                         ],
                         "global_registry_domain": "gr",
                         "verify_gr_cert": false
-                    }
-                }
-            }
-        }
-    },
-    "cluster_domains": {
-        "p1": {
-            "db_driver": "couchbase",
-            "os_config": "cfg1",
-            "cluster_manager": {
-                "cm1": {
-                    "vm.args": {
-                        "setcookie": "cookie1"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm1"
-                        ],
-                        "worker_num": 1
-                    }
-                }
-            },
-            "cluster_worker": {
-                "worker1": {
-                    "vm.args": {
-                        "setcookie": "cookie1"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm1"
-                        ],
-                        "db_nodes": [
-                            "dbnode1",
-                            "dbnode2"
-                        ]
                     }
                 }
             }
@@ -208,39 +173,39 @@
     },
     "global_setup": {
         "users": {
-            "user1": {
-                "default_space": "space1"
+            "u1": {
+                "default_space": "s1"
             },
-            "user2": {
-                "default_space": "space2"
+            "u2": {
+                "default_space": "s2"
             },
-            "user3": {
-                "default_space": "space1"
+            "u3": {
+                "default_space": "s1"
             }
         },
         "groups": {
-            "group1": {
+            "g1": {
                 "users": [
-                    "user1",
-                    "user3"
+                    "u1",
+                    "u3"
                 ]
             },
-            "group2": {
+            "g2": {
                 "users": [
-                    "user2"
+                    "u2"
                 ]
             }
         },
         "spaces": {
-            "space1": {
-                "displayed_name": "space1",
+            "s1": {
+                "displayed_name": "s1",
                 "users": [
-                    "user1",
-                    "user2",
-                    "user3"
+                    "u1",
+                    "u2",
+                    "u3"
                 ],
                 "groups": [
-                    "group1"
+                    "g1"
                 ],
                 "providers": [
                     {
@@ -249,13 +214,13 @@
                     }
                 ]
             },
-            "space2": {
-                "displayed_name": "space2",
+            "s2": {
+                "displayed_name": "s2",
                 "users": [
-                    "user2"
+                    "u2"
                 ],
                 "groups": [
-                    "group2"
+                    "g2"
                 ],
                 "providers": [
                     {
@@ -291,8 +256,8 @@
                     "gr_domain": "gr",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
-                    "mounting_path": "/home/user1/onedata",
-                    "token_for": "user1"
+                    "mounting_path": "/home/u1/onedata",
+                    "token_for": "u1"
                 },
                 "client2": {
                     "name": "client2",
@@ -300,8 +265,8 @@
                     "gr_domain": "gr",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
-                    "mounting_path": "/home/user1/onedata",
-                    "token_for": "user1"
+                    "mounting_path": "/home/u1/onedata",
+                    "token_for": "u1"
                 }
             }
         },
@@ -314,8 +279,8 @@
                     "gr_domain": "gr",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
-                    "mounting_path": "/home/user1/onedata",
-                    "token_for": "user1"
+                    "mounting_path": "/home/u1/onedata",
+                    "token_for": "u1"
                 },
                 "client2": {
                     "name": "client2",
@@ -323,8 +288,8 @@
                     "gr_domain": "gr",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
-                    "mounting_path": "/home/user2/onedata",
-                    "token_for": "user2"
+                    "mounting_path": "/home/u2/onedata",
+                    "token_for": "u2"
                 }
             }
         }
