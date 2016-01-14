@@ -49,7 +49,7 @@ all() ->
 -define(TEST_FILE_UUID, <<"file_uuid">>).
 -define(TEST_BLOCK_SIZE, 1024).
 -define(NUM_ACCEPTORS, 10).
--define(RTRANSFER_PORT, 6666).
+-define(RTRANSFER_PORT, 6665).
 -define(TEST_OFFSET, 0).
 -define(TIMEOUT, timer:seconds(120)).
 
