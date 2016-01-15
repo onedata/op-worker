@@ -40,7 +40,12 @@ truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),
             SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FID),
-            {Loc, storage_file_manager:truncate(SFMHandle, Size)}
+            case storage_file_manager:open(SFMHandle, write) of
+                {ok, Handle} ->
+                    {Loc, storage_file_manager:truncate(Handle, Size)};
+                Error ->
+                    {Loc, Error}
+            end
         end, fslogic_utils:get_local_storage_file_locations(Entry)),
 
     case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
