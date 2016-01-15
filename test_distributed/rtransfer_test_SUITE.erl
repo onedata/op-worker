@@ -149,7 +149,6 @@ exact_block_size_fetch_test(Config) ->
     stop_counter(CounterPid),
     ?assertReceivedMatch({counter, 1}, ?TIMEOUT).
 
-%% TODO not working, only on notify message is sent
 more_than_block_fetch_test(Config) ->
     %% test fetching data of size bigger then rtransfer block_size
 
@@ -189,7 +188,6 @@ more_than_block_fetch_test(Config) ->
     stop_counter(CounterPid),
     ?assertReceivedMatch({counter, 1024}, ?TIMEOUT).
 
-%% TODO not working, got {ok, Size} instead of {error, cancel}
 cancel_fetch_test(Config) ->
     %% test cancelling request during fetching
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -366,7 +364,6 @@ error_read_fun_test(Config) ->
     %% then
     ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
 
-%% TODO exited with no function clause matching
 error_write_fun_test(Config) ->
     %% test with write_fun callback returning an error
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -397,11 +394,9 @@ error_write_fun_test(Config) ->
         [Ref1, notify_fun(), on_complete_fun(self())]
     ),
 
-%%     timer:sleep(?TIMEOUT),
     %% then
     ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
 
-%% TODO this case crashes
 bad_formatted_request_test(Config) ->
     %% test calling fetch with bad _request
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -426,10 +421,8 @@ bad_formatted_request_test(Config) ->
         [{bad_request}, notify_fun(), on_complete_fun(self())]),
 
     %% then
-    %% TODO check what should error message look like
     ?assertReceivedMatch({on_complete, {error, _}}, ?TIMEOUT).
 
-%% TODO this case crashes
 bad_file_offset_test(Config) ->
     %% test calling fetch with file offset greater than file size
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -470,7 +463,6 @@ bad_file_offset_test(Config) ->
     ),
 
     %% then
-    %% TODO check what should error msg look like
     ?assertReceivedMatch({on_complete, {error, _}}, ?TIMEOUT).
 
 %%%===================================================================
