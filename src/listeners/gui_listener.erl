@@ -9,35 +9,34 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(gui_listener).
--author("Tomasz Lichon").
+-behaviour(listener_behaviour).
 -author("Michal Zmuda").
+-author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
+-include_lib("gui/include/gui.hrl").
 -include_lib("ctool/include/logging.hrl").
-
-% Custom cowboy bridge module
--define(COWBOY_BRIDGE_MODULE, n2o_handler).
-
-% Session logic module
--define(SESSION_LOGIC_MODULE, session_logic).
-
-% GUI routing module
--define(GUI_ROUTING_MODULE, gui_routes).
-
-% Paths in gui static directory
--define(STATIC_PATHS, ["/common/", "/css/", "/flatui/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Cowboy listener references
 -define(HTTPS_LISTENER, https).
 
--behaviour(listener_behaviour).
-
-%% listener_starter_behaviour callbacks
--export([start/0, stop/0]).
+%% listener_behaviour callbacks
+-export([port/0, start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
 %%% listener_starter_behaviour callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link listener_starter_behaviour} callback port/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec port() -> integer().
+port() ->
+    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
+    GuiPort.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -46,64 +45,58 @@
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
-  % Get params from env for gui
-  {ok, DocRoot} =
-    application:get_env(?APP_NAME, http_worker_static_files_root),
-  {ok, GuiPort} = application:get_env(?APP_NAME, http_worker_https_port),
+    % Get params from env for gui
+    {ok, DocRoot} =
+        application:get_env(?APP_NAME, gui_static_files_root),
+    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
+    {ok, GuiNbAcceptors} =
+        application:get_env(?APP_NAME, gui_number_of_acceptors),
+    {ok, MaxKeepAlive} =
+        application:get_env(?APP_NAME, gui_max_keepalive),
+    {ok, Timeout} =
+        application:get_env(?APP_NAME, gui_socket_timeout_seconds),
+    {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
 
-  {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
-  {ok, GuiNbAcceptors} =
-    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_number_of_acceptors),
-  {ok, MaxKeepAlive} =
-    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_max_keepalive),
-  {ok, Timeout} =
-    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_socket_timeout_seconds),
-
-  % Setup GUI dispatch opts for cowboy
-  GUIDispatch = [
-    % Matching requests will be redirected to the same address without leading 'www.'
-    % Cowboy does not have a mechanism to match every hostname starting with 'www.'
-    % This will match hostnames with up to 6 segments
-    % e. g. www.seg2.seg3.seg4.seg5.com
-    {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', opn_cowboy_bridge,
-      [
-        {delegation, true},
-        {handler_module, https_redirect_handler},
-        {handler_opts, []}
-      ]}
-    ]},
-    % Proper requests are routed to handler modules
-    {'_', static_dispatches(DocRoot, ?STATIC_PATHS) ++ [
-      {'_', opn_cowboy_bridge,
-        [
-          {delegation, true},
-          {handler_module, n2o_handler},
-          {handler_opts, []}
+    % Setup GUI dispatch opts for cowboy
+    GUIDispatch = [
+        % Matching requests will be redirected
+        % to the same address without leading 'www.'
+        % Cowboy does not have a mechanism to match
+        % every hostname starting with 'www.'
+        % This will match hostnames with up to 6 segments
+        % e. g. www.seg2.seg3.seg4.seg5.com
+        {"www.:_[.:_[.:_[.:_[.:_]]]]", [
+            % redirector_handler is defined in cluster_worker
+            {'_', redirector_handler, []}
+        ]},
+        % Proper requests are routed to handler modules
+        {'_', [
+            {"/nagios/[...]", nagios_handler, []},
+            {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
+            {"/[...]", gui_static_handler, {dir, DocRoot}}
         ]}
-    ]}
-  ],
+    ],
 
-  % Create ets tables and set envs needed by n2o
-  gui_utils:init_n2o_ets_and_envs(GuiPort, ?GUI_ROUTING_MODULE,
-    ?SESSION_LOGIC_MODULE, ?COWBOY_BRIDGE_MODULE),
+    % Call gui init, which will call init on all modules that might need state.
+    gui:init(),
+    % Start the listener for web gui and nagios handler
+    Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
+        ranch_ssl2, [
+            {ip, {127, 0, 0, 1}},
+            {port, GuiPort},
+            {certfile, Cert}
+        ], cowboy_protocol, [
+            {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
+            {max_keepalive, MaxKeepAlive},
+            {timeout, timer:seconds(Timeout)},
+            % On every request add headers that improve security of the response
+            {onrequest, fun gui_utils:onrequest_adjust_headers/1}
+        ]),
+    case Result of
+        {ok, _} -> ok;
+        _ -> Result
+    end.
 
-  % Start the listener for web gui and nagios handler
-  Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
-    ranch_ssl2, [
-      {ip, {127, 0, 0, 1}},
-      {port, GuiPort},
-      {certfile, Cert}
-    ], cowboy_protocol, [
-      {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
-      {max_keepalive, MaxKeepAlive},
-      {timeout, timer:seconds(Timeout)},
-      % On every request, add headers that improve security to the response
-      {onrequest, fun gui_utils:onrequest_adjust_headers/1}
-    ]),
-  case Result of
-    {ok, _} -> ok;
-    _ -> Result
-  end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -112,35 +105,31 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
-  case {catch cowboy:stop_listener(?HTTPS_LISTENER), catch gui_utils:cleanup_n2o(?SESSION_LOGIC_MODULE)} of
-    ({ok, ok}) ->
-      ok;
-    ({Error, ok}) ->
-      ?error("Error on stopping listener ~p: ~p", [?HTTPS_LISTENER, Error]),
-      {error, https_litener_stop_error};
-    ({_, Error}) ->
-      ?error("Error on cleaning n2o ~p: ~p", [?SESSION_LOGIC_MODULE, Error]),
-      {error, n2o_cleanup_error}
-  end.
+    % Call gui cleanup, which will call cleanup on all modules that
+    % were previously set up with gui:init/0.
+    gui:cleanup(),
+    case catch cowboy:stop_listener(?HTTPS_LISTENER) of
+        (ok) ->
+            ok;
+        (Error) ->
+            ?error("Error on stopping listener ~p: ~p",
+                [?HTTPS_LISTENER, Error]),
+            {error, https_listener_stop_error}
+    end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Generates static file routing rules for cowboy.
+%% Returns the status of a listener.
 %% @end
 %%--------------------------------------------------------------------
--spec static_dispatches(DocRoot :: string(), StaticPaths :: [string()]) -> [term()].
-static_dispatches(DocRoot, StaticPaths) ->
-  _StaticDispatches = lists:map(fun(Dir) ->
-    {Dir ++ "[...]", opn_cowboy_bridge,
-      [
-        {delegation, true},
-        {handler_module, cowboy_static},
-        {handler_opts, {dir, DocRoot ++ Dir}}
-      ]}
-  end, StaticPaths).
-
+-spec healthcheck() -> ok | {error, server_not_responding}.
+healthcheck() ->
+    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
+    case http_client:get("https://127.0.0.1:" ++ integer_to_list(GuiPort),
+        [], <<>>, [insecure]) of
+        {ok, _, _, _} ->
+            ok;
+        _ ->
+            {error, server_not_responding}
+    end.

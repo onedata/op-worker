@@ -139,7 +139,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, OperationPerformed} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                ok = onedata_file_api:mkdir(Auth, Path),
+                {ok, _} = onedata_file_api:mkdir(Auth, Path),
                 {ok, created};
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
@@ -174,7 +174,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
 %%--------------------------------------------------------------------
 -spec put_binary(req(), #{}) -> {term(), req(), #{}}.
 put_binary(Req, State = #{auth := Auth, path := Path}) ->
-    ok = onedata_file_api:mkdir(Auth, Path),
+    {ok, _} = onedata_file_api:mkdir(Auth, Path),
     {true, Req, State}.
 
 %%--------------------------------------------------------------------
