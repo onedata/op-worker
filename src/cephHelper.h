@@ -19,25 +19,42 @@ namespace helpers {
 
 class CephHelperCTX : public IStorageHelperCTX {
 public:
+    CephHelperCTX(std::unordered_map<std::string, std::string> args);
+
     ~CephHelperCTX();
 
     void setUserCTX(std::unordered_map<std::string, std::string> args);
 
     std::unordered_map<std::string, std::string> getUserCTX();
 
+    int getFlagValue(Flag flag) { return 0; }
+
+    void setFlags(int flags) {}
+
+    /**
+     * Establishes connection to the Ceph storage cluster.
+     * @param reconnect Flag that defines whether close current connection (if
+     * present) and establish new one.
+     */
+    int connect(bool reconnect = false);
+
     librados::Rados cluster;
     librados::IoCtx ioCTX;
 
 private:
-    std::string m_username;
+    bool m_connected = false;
+    std::unordered_map<std::string, std::string> m_args;
 };
 
 class CephHelper : public IStorageHelper {
 public:
-    CephHelper(const std::unordered_map<std::string, std::string> &args,
+    CephHelper(std::unordered_map<std::string, std::string> args,
         asio::io_service &service);
 
     CTXPtr createCTX();
+
+    void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
+        GeneralCallback<int> callback);
 
     void ash_unlink(
         CTXPtr ctx, const boost::filesystem::path &p, VoidCallback callback);
@@ -52,10 +69,29 @@ public:
     void ash_truncate(CTXPtr ctx, const boost::filesystem::path &p, off_t size,
         VoidCallback callback);
 
+    void ash_mknod(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
+        dev_t rdev, VoidCallback callback)
+    {
+        callback(SuccessCode);
+    }
+
+    void ash_mkdir(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
+        VoidCallback callback)
+    {
+        callback(SuccessCode);
+    }
+
+    void ash_chmod(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
+        VoidCallback callback)
+    {
+        callback(SuccessCode);
+    }
+
 private:
     std::shared_ptr<CephHelperCTX> getCTX(CTXPtr rawCtx) const;
 
     asio::io_service &m_service;
+    std::unordered_map<std::string, std::string> m_args;
     static const error_t SuccessCode;
 };
 

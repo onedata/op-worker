@@ -20,10 +20,19 @@
 namespace one {
 namespace helpers {
 
+class ProxyIOHelperCTX : public IStorageHelperCTX {
+public:
+    void setUserCTX(std::unordered_map<std::string, std::string> args) {}
+
+    void setFlags(int flags) {}
+};
+
 class ProxyIOHelper : public IStorageHelper {
 public:
     ProxyIOHelper(const std::unordered_map<std::string, std::string> &args,
         communication::Communicator &communicator);
+
+    CTXPtr createCTX();
 
     void ash_read(CTXPtr ctx, const boost::filesystem::path &p,
         asio::mutable_buffer buf, off_t offset,
