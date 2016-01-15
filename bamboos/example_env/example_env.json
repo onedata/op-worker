@@ -92,7 +92,8 @@
                             "cm1"
                         ],
                         "db_nodes": [
-                            "dbnode1"
+                            "dbnode1",
+                            "dbnode2"
                         ],
                         "global_registry_domain": "gr",
                         "verify_gr_cert": false
@@ -290,7 +291,7 @@
                     "gr_domain": "gr",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
-                    "mounting_path": "/home/user1/onedata",
+                    "mounting_path": "/home/user1/onedata_cl1",
                     "token_for": "user1"
                 },
                 "client2": {
@@ -299,13 +300,13 @@
                     "gr_domain": "gr",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
-                    "mounting_path": "/home/user1/onedata",
+                    "mounting_path": "/home/user1/onedata_cl2",
                     "token_for": "user1"
                 }
             }
         },
         "client_host_2": {
-            "os_config": "cfg1",
+            "os_config": "cfg2",
             "clients": {
                 "client1": {
                     "name": "client1",

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Common definitions for http_worker modules.
+%%% Common definitions for modules regarding http.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(HTTP_COMMON_HRL).

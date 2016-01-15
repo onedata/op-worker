@@ -32,7 +32,9 @@
     watcher :: pid(),
     event_manager :: pid(),
     sequencer_manager :: pid(),
-    connections = [] :: [pid()]
+    connections = [] :: [pid()],
+    % Key-value in-session memory
+    memory = [] :: [{Key :: term(), Value :: term()}]
 }).
 
 %% Local, cached version of globalregistry user

@@ -70,10 +70,10 @@
 %%--------------------------------------------------------------------
 %% @doc Creates a directory.
 %%--------------------------------------------------------------------
--spec mkdir(Identity :: onedata_auth_api:auth(), Path :: file_path()) -> ok | error_reply().
+-spec mkdir(Identity :: onedata_auth_api:auth(), Path :: file_path()) -> {ok, file_uuid()} | error_reply().
 mkdir(Auth, Path) ->
     logical_file_manager:mkdir(Auth, Path).
--spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> ok | error_reply().
+-spec mkdir(Auth :: onedata_auth_api:auth(), Path :: file_path(), Mode :: file_meta:posix_permissions()) -> {ok, file_uuid()} | error_reply().
 mkdir(Auth, Path, Mode) ->
     logical_file_manager:mkdir(Auth, Path, Mode).
 

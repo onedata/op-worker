@@ -17,6 +17,7 @@
 
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/4]).
+-export([get_parent/2]).
 
 %%%===================================================================
 %%% API functions
@@ -172,3 +173,16 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
             space_id = SpaceUUID}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc Gets new file location (implicit mknod operation).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+    FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{none, 2}]).
+get_parent(_CTX, File) ->
+    {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
+    #fuse_response{status = #status{code = ?OK}, fuse_response =
+        #dir{uuid = ParentUUID}}.

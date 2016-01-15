@@ -1368,7 +1368,7 @@ cdmi_endpoint(Node) ->
     Port =
         case get(port) of
             undefined ->
-                {ok, P} = test_utils:get_env(Node, ?APP_NAME, http_worker_rest_port),
+                {ok, P} = test_utils:get_env(Node, ?APP_NAME, rest_port),
                 PStr = integer_to_list(P),
                 put(port, PStr),
                 PStr;
@@ -1401,7 +1401,7 @@ create_test_dir_and_file(Config) ->
 
     case object_exists(Config, TestDirName) of
         false ->
-            ok = mkdir(Config, TestDirName),
+            {ok, _} = mkdir(Config, TestDirName),
             ?assert(object_exists(Config, TestDirName)),
             {ok, _} = create_file(Config, FullTestFileName),
             ?assert(object_exists(Config, FullTestFileName)),
