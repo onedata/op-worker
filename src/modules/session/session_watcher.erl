@@ -148,8 +148,6 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(shutdown, #state{} = State) ->
-    ?log_terminate(shutdown, State);
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
     session:update(SessId, #{watcher => undefined}),

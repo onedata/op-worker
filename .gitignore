@@ -4,7 +4,6 @@
 .dialyzer.plt
 .idea
 
-cluster_manager
 src/gui_static/common
 src/gui_static/flatui
 src/gui_static/fonts

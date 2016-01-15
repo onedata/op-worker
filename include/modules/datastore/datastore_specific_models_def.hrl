@@ -38,7 +38,7 @@
 %% Local, cached version of globalregistry user
 -record(onedata_user, {
     name :: binary(),
-    space_ids = [] :: [binary()]
+    space_ids :: [binary()]
 }).
 
 
