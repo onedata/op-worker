@@ -59,6 +59,8 @@ init(RtransferOpts) ->
 
     register(gw_queue_loop, QueueLoopPid),
 
+    ok = pg2:create(gateway),
+    ok = pg2:join(gateway, self()),
     {ok, RtransferOpts}.
 
 
@@ -67,10 +69,10 @@ init(RtransferOpts) ->
 %% Handle a message.
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(#gw_fetch{} = Request, state) ->
+handle_cast(#gw_fetch{} = Request, State) ->
     Block = repackage(Request),
     rt_utils:push(?GATEWAY_INCOMING_QUEUE, Block),
-    {noreply, state}.
+    {noreply, State}.
 
 
 %%--------------------------------------------------------------------

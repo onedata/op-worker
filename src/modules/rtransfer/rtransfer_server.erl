@@ -72,16 +72,16 @@ handle_cast(#request_transfer{} = Request, State) ->
     Blocks = rt_utils:partition(ExistingBlocks, BaseBlock),
 
     lists:foreach(
-        fun(#rt_block{file_id = BFileId, offset = BOffset, size = BSize, terms = Nodes} = Block) ->
-            {AdditionalNotify, GatewayNodes} =
-                case Nodes of
+        fun(#rt_block{file_id = BFileId, offset = BOffset, size = BSize, terms = GWs} = Block) ->
+            {AdditionalNotify, Gateways} =
+                case GWs of
                     [] ->
-                        Node = pick_gw_node(),
-                        rt_map:put(?gateways_map, Block#rt_block{terms = [Node]}),
-                        {[self()], [Node]};
+                        Gateway = pick_gw(),
+                        rt_map:put(?gateways_map, Block#rt_block{terms = [Gateway]}),
+                        {[self()], [Gateway]};
 
                     _  ->
-                        {[], Nodes}
+                        {[], GWs}
                 end,
 
             rt_map:put(?aggregators_map, Block#rt_block{terms = [Aggregator]}),
@@ -89,7 +89,7 @@ handle_cast(#request_transfer{} = Request, State) ->
             FetchRequest = #gw_fetch{file_id = BFileId, offset = BOffset, size = BSize,
                 remote = Remote, notify = [Aggregator | AdditionalNotify], retry = FetchRetryNumber},
 
-            gen_server:abcast(GatewayNodes, gateway, FetchRequest)
+            [gen_server:cast(GW, FetchRequest) || GW <- Gateways]
         end, Blocks),
 
     {noreply, State}.
@@ -164,11 +164,11 @@ retry(_Why, #gw_fetch{file_id = FileId, offset = Offset, size = Size, retry = Re
     lists:foreach(
         fun(#rt_block{file_id = BFileId, offset = BOffset, size = BSize, provider_ref = ProviderId, terms = Aggregators} = Block) ->
             Remote = provider_id_to_remote(ProviderId, State),
-            Node = pick_gw_node(),
-            rt_map:put(?gateways_map, Block#rt_block{terms = [Node]}),
+            Gateway = pick_gw(),
+            rt_map:put(?gateways_map, Block#rt_block{terms = [Gateway]}),
             FetchRequest = #gw_fetch{file_id = BFileId, offset = BOffset, size = BSize,
                 remote = Remote, notify = [self() | Aggregators], retry = Retry},
-            gen_server:cast({gateway, Node}, FetchRequest)
+            gen_server:cast(Gateway, FetchRequest)
         end, UnfinishedBlocks),
     ok.
 
@@ -179,9 +179,9 @@ retry(_Why, #gw_fetch{file_id = FileId, offset = Offset, size = Size, retry = Re
 %% Pick one of gateway nodes available to perform requests.
 %% @end
 %%--------------------------------------------------------------------
--spec pick_gw_node() -> node().
-pick_gw_node() ->
-    Nodes = [node() | nodes()],
+-spec pick_gw() -> pid().
+pick_gw() ->
+    Nodes = pg2:get_members(gateway),
     NodeNo = random:uniform(length(Nodes)),
     lists:nth(NodeNo, Nodes).
 
