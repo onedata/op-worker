@@ -140,7 +140,7 @@ mv(_FileHandleFrom, _PathOnStorageTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(handle(), NewMode :: perms_octal()) -> ok | error_reply().
+-spec chmod(handle(), NewMode :: file_meta:posix_permissions()) -> ok | error_reply().
 chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Mode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),

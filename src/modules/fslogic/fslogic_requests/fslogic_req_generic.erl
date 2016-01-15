@@ -77,7 +77,7 @@ chmod(#fslogic_ctx{session_id = SessionId} = CTX, FileEntry, Mode) ->
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
     % remove acl
-    {uuid, FileUuid} = file_meta:to_uuid(FileEntry),
+    {ok, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
     %% @todo: replace with events

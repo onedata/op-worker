@@ -29,7 +29,6 @@
 -type file_id_or_path() :: {uuid, file_uuid()} | {path, file_path()}.
 -type file_key() :: fslogic_worker:file() | {handle, file_handle()}.
 -type open_mode() :: helpers:open_mode().
--type perms_octal() :: non_neg_integer().
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
 -type file_attributes() :: #file_attr{}.
 -type access_control_entity() :: #accesscontrolentity{}.
