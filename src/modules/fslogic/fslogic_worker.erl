@@ -221,6 +221,18 @@ handle_fuse_request(Ctx, #set_acl{uuid = UUID, acl = Acl}) ->
     fslogic_req_generic:set_acl(Ctx, {uuid, UUID}, Acl);
 handle_fuse_request(Ctx, #remove_acl{uuid = UUID}) ->
     fslogic_req_generic:remove_acl(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #get_transfer_encoding{uuid = UUID}) ->
+    fslogic_req_generic:get_transfer_encoding(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #set_transfer_encoding{uuid = UUID, value = Value}) ->
+    fslogic_req_generic:set_transfer_encoding(Ctx, {uuid, UUID}, Value);
+handle_fuse_request(Ctx, #get_completion_status{uuid = UUID}) ->
+    fslogic_req_generic:get_completion_status(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #set_completion_status{uuid = UUID, value = Value}) ->
+    fslogic_req_generic:set_completion_status(Ctx, {uuid, UUID}, Value);
+handle_fuse_request(Ctx, #get_mimetype{uuid = UUID}) ->
+    fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #set_mimetype{uuid = UUID, value = Value}) ->
+    fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

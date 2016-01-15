@@ -132,11 +132,41 @@
     uuid :: file_meta:uuid()
 }).
 
+-record(get_transfer_encoding, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(set_transfer_encoding, {
+    uuid :: file_meta:uuid(),
+    value :: binary()
+}).
+
+-record(get_completion_status, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(set_completion_status, {
+    uuid :: file_meta:uuid(),
+    value :: binary()
+}).
+
+-record(get_mimetype, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(set_mimetype, {
+    uuid :: file_meta:uuid(),
+    value :: binary()
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-                        #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{}.
+                        #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
+                        #get_transfer_encoding{} | #set_transfer_encoding{} | #get_completion_status{} |
+                        #set_completion_status{} | #get_mimetype{} | #set_mimetype{}.
+
 
 -record(file_children, {
     child_links :: [#child_link{}]
@@ -151,8 +181,21 @@
     names :: [xattr:name()]
 }).
 
+-record(transfer_encoding, {
+    value :: binary()
+}).
+
+-record(completion_status, {
+    value :: binary()
+}).
+
+-record(mimetype, {
+    value :: binary()
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
-    #file_location{} | #xattr{} | #xattr_list{} | #acl{}.
+    #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
+    #completion_status{} | #mimetype{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

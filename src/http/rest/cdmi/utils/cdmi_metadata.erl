@@ -22,11 +22,6 @@
     update_mimetype/3, update_encoding/3, update_completion_status/3,
     set_completion_status_according_to_partial_flag/3]).
 
-%% Keys of special cdmi attrs
--define(MIMETYPE_XATTR_KEY, <<"cdmi_mimetype">>).
--define(ENCODING_XATTR_KEY, <<"cdmi_valuetransferencoding">>).
--define(COMPLETION_STATUS_XATTR_KEY, <<"cdmi_completion_status">>).
-
 %% Default values of special cdmi attrs
 -define(MIMETYPE_DEFAULT_VALUE, <<"application/octet-stream">>).
 -define(ENCODING_DEFAULT_VALUE, <<"base64">>).
@@ -139,8 +134,8 @@ prepare_metadata(Auth, FileKey, Prefix, Attrs) ->
 %%--------------------------------------------------------------------
 -spec get_mimetype(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
 get_mimetype(Auth, FileKey) ->
-    case onedata_file_api:get_xattr(Auth, FileKey, ?MIMETYPE_XATTR_KEY) of
-        {ok, #xattr{value = Value}} ->
+    case onedata_file_api:get_mimetype(Auth, FileKey) of
+        {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
             ?MIMETYPE_DEFAULT_VALUE
@@ -153,8 +148,8 @@ get_mimetype(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 -spec get_encoding(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
 get_encoding(Auth, FileKey) ->
-    case onedata_file_api:get_xattr(Auth, FileKey, ?ENCODING_XATTR_KEY) of
-        {ok, #xattr{value = Value}} ->
+    case onedata_file_api:get_transfer_encoding(Auth, FileKey) of
+        {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
             ?ENCODING_DEFAULT_VALUE
@@ -168,8 +163,8 @@ get_encoding(Auth, FileKey) ->
 %%--------------------------------------------------------------------
 -spec get_completion_status(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
 get_completion_status(Auth, FileKey) ->
-    case onedata_file_api:get_xattr(Auth, FileKey, ?COMPLETION_STATUS_XATTR_KEY) of
-        {ok, #xattr{value = Value}} ->
+    case onedata_file_api:get_completion_status(Auth, FileKey) of
+        {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
             ?COMPLETION_STATUS_DEFAULT_VALUE
@@ -181,7 +176,7 @@ get_completion_status(Auth, FileKey) ->
 -spec update_mimetype(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) -> ok | no_return().
 update_mimetype(_Auth, _FileKey, undefined) -> ok;
 update_mimetype(Auth, FileKey, Mimetype) ->
-    ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = ?MIMETYPE_XATTR_KEY, value = Mimetype}).
+    ok = onedata_file_api:set_mimetype(Auth, FileKey, Mimetype).
 
 %%--------------------------------------------------------------------
 %% @doc Updates valuetransferencoding associated with file
@@ -189,7 +184,7 @@ update_mimetype(Auth, FileKey, Mimetype) ->
 -spec update_encoding(onedata_auth_api:auth(), onedata_file_api:file_key(), binary() | undefined) -> ok | no_return().
 update_encoding(_Auth, _FileKey, undefined) -> ok;
 update_encoding(Auth, FileKey, Encoding) ->
-    ok = onedata_file_api:set_xattr(Auth, FileKey, #xattr{name = ?ENCODING_XATTR_KEY, value = Encoding}).
+    ok = onedata_file_api:set_transfer_encoding(Auth, FileKey, Encoding).
 
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
@@ -201,8 +196,7 @@ update_completion_status(Auth, FileKey, CompletionStatus)
     when CompletionStatus =:= <<"Complete">>
     orelse CompletionStatus =:= <<"Processing">>
     orelse CompletionStatus =:= <<"Error">> ->
-    ok = onedata_file_api:set_xattr(
-        Auth, FileKey, #xattr{name = ?COMPLETION_STATUS_XATTR_KEY, value = CompletionStatus}).
+    ok = onedata_file_api:set_completion_status(Auth, FileKey, CompletionStatus).
 
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
