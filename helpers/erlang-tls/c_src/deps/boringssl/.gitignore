@@ -1,5 +1,0 @@
-build/
-ssl/test/runner/runner
-*.swp
-*.swo
-doc/*.html
