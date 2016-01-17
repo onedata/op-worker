@@ -31,10 +31,18 @@ public:
 
     void setFlags(int flags) {}
 
+    /**
+     * Establishes connection to the Ceph storage cluster.
+     * @param reconnect Flag that defines whether close current connection (if
+     * present) and establish new one.
+     */
+    int connect(bool reconnect = false);
+
     librados::Rados cluster;
     librados::IoCtx ioCTX;
 
 private:
+    bool m_connected = false;
     std::unordered_map<std::string, std::string> m_args;
 };
 
@@ -44,6 +52,12 @@ public:
         asio::io_service &service);
 
     CTXPtr createCTX();
+
+    void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
+        GeneralCallback<int> callback)
+    {
+        callback(-1, SUCCESS_CODE);
+    }
 
     void ash_unlink(
         CTXPtr ctx, const boost::filesystem::path &p, VoidCallback callback);
@@ -61,25 +75,19 @@ public:
     void ash_mknod(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
         dev_t rdev, VoidCallback callback)
     {
-        callback(SuccessCode);
+        callback(SUCCESS_CODE);
     }
 
     void ash_mkdir(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
         VoidCallback callback)
     {
-        callback(SuccessCode);
+        callback(SUCCESS_CODE);
     }
 
     void ash_chmod(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
         VoidCallback callback)
     {
-        callback(SuccessCode);
-    }
-
-    void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
-        GeneralCallback<int> callback)
-    {
-        callback({}, SuccessCode);
+        callback(SUCCESS_CODE);
     }
 
 private:
@@ -87,7 +95,6 @@ private:
 
     asio::io_service &m_service;
     std::unordered_map<std::string, std::string> m_args;
-    static const error_t SuccessCode;
 };
 
 } // namespace helpers

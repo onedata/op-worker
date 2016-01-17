@@ -9,9 +9,7 @@ Script is parametrised by worker type related configurator.
 import copy
 import json
 import os
-import subprocess
-import sys
-from . import common, docker, riak, couchbase, dns, provider_ccm
+from . import common, docker, riak, couchbase, dns, cluster_manager
 
 CLUSTER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 # mounting point for op-worker-node docker
@@ -42,9 +40,9 @@ def _tweak_config(config, name, instance, uid, configurator):
     cfg['nodes'] = {'node': cfg['nodes'][name]}
 
     sys_config = cfg['nodes']['node']['sys.config']
-    sys_config['ccm_nodes'] = [
-        provider_ccm.ccm_erl_node_name(n, instance, uid) for n in
-        sys_config['ccm_nodes']]
+    sys_config['cm_nodes'] = [
+        cluster_manager.cm_erl_node_name(n, instance, uid) for n in
+        sys_config['cm_nodes']]
     # Set the cluster domain (needed for nodes to start)
     sys_config[configurator.domain_env_name()] = cluster_domain(instance, uid)
 
@@ -102,9 +100,10 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         dns_list=dns_servers,
         command=command)
 
-    # create system users and grous
-    common.create_users(container, config['os_config']['users'])
-    common.create_groups(container, config['os_config']['groups'])
+    # create system users and groups (if specified)
+    if 'os_config' in config:
+        common.create_users(container, config['os_config']['users'])
+        common.create_groups(container, config['os_config']['groups'])
 
     return container, {
         'docker_ids': [container],
@@ -168,16 +167,21 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
 
     # Workers of every cluster are started together
     for instance in config[configurator.domains_attribute()]:
-        os_config = config[configurator.domains_attribute()][instance]['os_config']
+        current_output = {}
+
         gen_dev_cfg = {
             'config': {
                 'input_dir': input_dir,
                 'target_dir': '/root/bin'
             },
             'nodes': config[configurator.domains_attribute()][instance][configurator.app_name()],
-            'db_driver': _db_driver(config[configurator.domains_attribute()][instance]),
-            'os_config': config['os_configs'][os_config]
+            'db_driver': _db_driver(config[configurator.domains_attribute()][instance])
         }
+
+        # If present, include os_config
+        if 'os_config' in config[configurator.domains_attribute()][instance]:
+            os_config = config[configurator.domains_attribute()][instance]['os_config']
+            gen_dev_cfg['os_config'] = config['os_configs'][os_config]
 
         # Tweak configs, retrieve lis of riak nodes to start
         configs = []
@@ -200,7 +204,7 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
         else:
             raise ValueError("Invalid db_driver: {0}".format(db_driver))
 
-        common.merge(output, db_out)
+        common.merge(current_output, db_out)
 
         # Start the workers
         workers = []
@@ -209,7 +213,7 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
             worker, node_out = _node_up(image, bindir, cfg, dns_servers, db_node_mappings, logdir, configurator)
             workers.append(worker)
             worker_ips.append(common.get_docker_ip(worker))
-            common.merge(output, node_out)
+            common.merge(current_output, node_out)
 
         # Wait for all workers to start
         common.wait_until(_ready, workers, CLUSTER_WAIT_FOR_NAGIOS_SECONDS)
@@ -223,8 +227,9 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
                 }
             }
         }
-        common.merge(output, domains)
-        configurator.configure_started_instance(bindir, instance, config, os_config, output)
+        common.merge(current_output, domains)
+        configurator.configure_started_instance(bindir, instance, config, current_output)
+        common.merge(output, current_output)
 
     # Make sure domains are added to the dns server.
     dns.maybe_restart_with_configuration(dns_server, uid, output)

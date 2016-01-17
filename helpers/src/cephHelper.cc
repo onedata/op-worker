@@ -11,8 +11,6 @@
 namespace one {
 namespace helpers {
 
-const error_t CephHelper::SuccessCode = error_t();
-
 CephHelper::CephHelper(std::unordered_map<std::string, std::string> args,
     asio::io_service &service)
     : m_service{service}
@@ -49,7 +47,7 @@ void CephHelper::ash_unlink(
             callback(makePosixError(result));
         }
         else {
-            callback(SuccessCode);
+            callback(SUCCESS_CODE);
         }
     });
 }
@@ -84,7 +82,7 @@ void CephHelper::ash_read(CTXPtr rawCTX, const boost::filesystem::path &p,
         }
         else {
             asio::buffer_copy(buf, asio::mutable_buffer(bl->c_str(), result));
-            callback(asio::buffer(buf, result), SuccessCode);
+            callback(asio::buffer(buf, result), SUCCESS_CODE);
         }
     });
 }
@@ -117,7 +115,7 @@ void CephHelper::ash_write(CTXPtr rawCTX, const boost::filesystem::path &p,
             callback(0, makePosixError(result));
         }
         else {
-            callback(size, SuccessCode);
+            callback(size, SUCCESS_CODE);
         }
     });
 }
@@ -138,7 +136,7 @@ void CephHelper::ash_truncate(CTXPtr rawCTX, const boost::filesystem::path &p,
             callback(makePosixError(result));
         }
         else {
-            callback(SuccessCode);
+            callback(SUCCESS_CODE);
         }
     });
 }

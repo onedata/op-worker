@@ -28,9 +28,10 @@
 namespace one {
 namespace helpers {
 
-constexpr std::chrono::seconds ASYNC_OPS_TIMEOUT{2};
-
 using error_t = std::error_code;
+
+constexpr std::chrono::seconds ASYNC_OPS_TIMEOUT{2};
+static const error_t SUCCESS_CODE = error_t();
 
 class IStorageHelperCTX {
 public:
