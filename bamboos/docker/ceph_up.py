@@ -30,11 +30,11 @@ parser.add_argument(
         '-p', '--pool',
         action='append',
         default=[],
-        help='pool name and number of placement groups in format name,pg_num',
+        help='pool name and number of placement groups in format name:pg_num',
         dest='pools')
 
 args = parser.parse_args()
-pools = map(lambda pool: tuple(pool.split(',')), args.pools)
+pools = map(lambda pool: tuple(pool.split(':')), args.pools)
 
 config = ceph.up(args.image, pools)
 
