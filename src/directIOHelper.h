@@ -27,6 +27,8 @@ namespace helpers {
 
 class PosixHelperCTX : public IStorageHelperCTX {
 public:
+    ~PosixHelperCTX();
+
     void setUserCTX(std::unordered_map<std::string, std::string> args);
 
     std::unordered_map<std::string, std::string> getUserCTX();
@@ -42,7 +44,7 @@ public:
     uid_t uid = 0;
     gid_t gid = 0;
     int flags = 0;
-    int fh = 0;
+    int fh = -1;
 
 private:
     static const std::map<IStorageHelperCTX::Flag, int> openFlagTranslation;
@@ -154,7 +156,7 @@ protected:
             callback(makePosixError(errno));
         }
         else {
-            callback(SuccessCode);
+            callback(SUCCESS_CODE);
         }
     }
 
@@ -202,7 +204,6 @@ private:
     const boost::filesystem::path m_rootPath;
     asio::io_service &m_workerService;
     UserCTXFactory m_userCTXFactory;
-    static const error_t SuccessCode;
 };
 
 } // namespace helpers

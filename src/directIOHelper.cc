@@ -32,20 +32,6 @@
 namespace one {
 namespace helpers {
 
-namespace {
-inline boost::filesystem::path extractPath(
-    const std::unordered_map<std::string, std::string> &args)
-{
-    auto it = args.find("root_path");
-    if (it == args.end())
-        return {};
-
-    return {it->second};
-}
-}
-
-const error_t DirectIOHelper::SuccessCode = error_t();
-
 inline boost::filesystem::path DirectIOHelper::root(
     const boost::filesystem::path &path)
 {
@@ -112,7 +98,7 @@ void DirectIOHelper::ash_getattr(CTXPtr rawCTX,
                 callback(std::move(stbuf), makePosixError(errno));
             }
             else {
-                callback(std::move(stbuf), SuccessCode);
+                callback(std::move(stbuf), SUCCESS_CODE);
             }
         });
 }
@@ -154,7 +140,7 @@ void DirectIOHelper::ash_readlink(CTXPtr rawCTX,
             }
             else {
                 buf[res] = '\0';
-                callback(buf.data(), SuccessCode);
+                callback(buf.data(), SUCCESS_CODE);
             }
         });
 }
@@ -200,7 +186,7 @@ void DirectIOHelper::ash_mknod(CTXPtr rawCTX, const boost::filesystem::path &p,
                 callback(makePosixError(errno));
             }
             else {
-                callback(SuccessCode);
+                callback(SUCCESS_CODE);
             }
         });
 }
@@ -365,12 +351,13 @@ void DirectIOHelper::ash_open(CTXPtr rawCTX, const boost::filesystem::path &p,
             }
 
             int res = open(root(p).c_str(), ctx->flags);
+
             if (res == -1) {
                 callback(-1, makePosixError(errno));
             }
             else {
                 ctx->fh = res;
-                callback(res, SuccessCode);
+                callback(res, SUCCESS_CODE);
             }
         });
 }
@@ -390,7 +377,7 @@ void DirectIOHelper::ash_read(CTXPtr rawCTX, const boost::filesystem::path &p,
 
             try {
                 auto res = sh_read(std::move(ctx), p, buf, offset);
-                callback(res, SuccessCode);
+                callback(res, SUCCESS_CODE);
             }
             catch (std::system_error &e) {
                 callback(asio::mutable_buffer(), e.code());
@@ -412,7 +399,7 @@ void DirectIOHelper::ash_write(CTXPtr rawCTX, const boost::filesystem::path &p,
 
             try {
                 auto res = sh_write(std::move(ctx), p, buf, offset);
-                callback(res, SuccessCode);
+                callback(res, SUCCESS_CODE);
             }
             catch (std::system_error &e) {
                 callback(0, e.code());
@@ -432,12 +419,12 @@ void DirectIOHelper::ash_release(
                 return;
             }
 
-            if (ctx->fh && close(ctx->fh) == -1) {
+            if ((ctx->fh != -1) && close(ctx->fh) == -1) {
                 callback(makePosixError(errno));
             }
             else {
-                ctx->fh = 0;
-                callback(SuccessCode);
+                ctx->fh = -1;
+                callback(SUCCESS_CODE);
             }
         });
 }
@@ -454,7 +441,7 @@ void DirectIOHelper::ash_flush(
                 return;
             }
 
-            callback(SuccessCode);
+            callback(SUCCESS_CODE);
         });
 }
 
@@ -470,7 +457,7 @@ void DirectIOHelper::ash_fsync(CTXPtr rawCTX, const boost::filesystem::path &p,
                 return;
             }
 
-            callback(SuccessCode);
+            callback(SUCCESS_CODE);
         });
 }
 
@@ -483,7 +470,7 @@ std::size_t DirectIOHelper::sh_write(CTXPtr rawCTX,
         throw std::system_error(makePosixError(EDOM));
     }
 
-    int fd = ctx->fh > 0 ? ctx->fh : open(root(p).c_str(), O_WRONLY);
+    int fd = ctx->fh != -1 ? ctx->fh : open(root(p).c_str(), O_WRONLY);
     if (fd == -1) {
         throw std::system_error(makePosixError(errno));
     }
@@ -493,7 +480,7 @@ std::size_t DirectIOHelper::sh_write(CTXPtr rawCTX,
 
     auto potentialError = makePosixError(errno);
 
-    if (ctx->fh <= 0) {
+    if (ctx->fh == -1) {
         close(fd);
     }
 
@@ -513,7 +500,7 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXPtr rawCTX,
         throw std::system_error(makePosixError(EDOM));
     }
 
-    int fd = ctx->fh > 0 ? ctx->fh : open(root(p).c_str(), O_RDONLY);
+    int fd = ctx->fh != -1 ? ctx->fh : open(root(p).c_str(), O_RDONLY);
     if (fd == -1) {
         throw std::system_error(makePosixError(errno));
     }
@@ -523,7 +510,7 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXPtr rawCTX,
 
     auto potentialError = makePosixError(errno);
 
-    if (ctx->fh <= 0) {
+    if (ctx->fh == -1) {
         close(fd);
     }
 
@@ -537,7 +524,7 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXPtr rawCTX,
 DirectIOHelper::DirectIOHelper(
     const std::unordered_map<std::string, std::string> &args,
     asio::io_service &service, UserCTXFactory userCTXFactory)
-    : m_rootPath{extractPath(args)}
+    : m_rootPath{args.at("root_path")}
     , m_workerService{service}
     , m_userCTXFactory{userCTXFactory}
 {
@@ -547,8 +534,14 @@ std::shared_ptr<PosixHelperCTX> DirectIOHelper::getCTX(CTXPtr rawCTX) const
 {
     auto ctx = std::dynamic_pointer_cast<PosixHelperCTX>(rawCTX);
     if (ctx == nullptr)
-        throw std::make_error_code(std::errc::invalid_argument);
+        throw std::system_error{std::make_error_code(std::errc::invalid_argument)};
     return ctx;
+}
+
+PosixHelperCTX::~PosixHelperCTX()
+{
+    if (fh != -1)
+        close(fh);
 }
 
 void PosixHelperCTX::setUserCTX(
