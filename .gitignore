@@ -19,6 +19,7 @@ cluster_manager
 rel/op_worker
 rel/test_cluster
 rel/*.rpm
+cluster_manager
 
 test/eunit_results
 test_distributed/cover_tmp.spec

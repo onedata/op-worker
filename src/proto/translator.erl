@@ -234,6 +234,7 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
         translate_to_protobuf(ChildLink)
     end, FileEntries)}};
+translate_to_protobuf(#dir{}) -> undefined;
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
         helper_args = lists:map(fun(HelpersArg) ->

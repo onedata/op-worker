@@ -52,9 +52,11 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         uid = fslogic_context:get_user_id(CTX)
     }},
     case file_meta:create(NormalizedParentUUID, File) of
-        {ok, _} ->
+        {ok, DirUUID} ->
             {ok, _} = file_meta:update(NormalizedParentUUID, #{mtime => CTime}),
-            #fuse_response{status = #status{code = ?OK}};
+            #fuse_response{status = #status{code = ?OK}, fuse_response =
+                #dir{uuid = DirUUID}
+            };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
     end.
@@ -99,7 +101,7 @@ read_dir(CTX, File, Offset, Size) ->
             SpaceRes = [file_meta:get_space_dir(SpaceId) || SpaceId <- SpacesIds],
 
             Children =
-                case Offset < length(SpacesIds)  of
+                case Offset < length(SpacesIds) of
                     true ->
                         SpaceLinks = [#child_link{uuid = SpaceDirUuid, name = SpaceName} ||
                             {ok, #document{key = SpaceDirUuid, value = #file_meta{name = SpaceName}}} <- SpaceRes],

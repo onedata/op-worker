@@ -59,26 +59,8 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
 -check_permissions([{owner, 2}, {traverse_ancestors, 2}]).
-chmod(#fslogic_ctx{session_id = SessionId}, FileEntry, Mode) ->
-    case file_meta:get(FileEntry) of
-        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
-            Results = lists:map(
-                        fun({SID, FID} = Loc) ->
-                                {ok, Storage} = storage:get(SID),
-                                SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FID),
-                                {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
-                        end, fslogic_utils:get_local_storage_file_locations(FileEntry)),
-
-            case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
-                [] -> ok;
-                Errors ->
-                    [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p", [FID, SID, Mode, Reason])
-                     || {{SID, FID}, {error, Reason}} <- Errors],
-                    throw(?EAGAIN)
-            end;
-        _ -> ok
-    end,
+chmod(#fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
+    chmod_storage_files(SessId, FileEntry, Mode),
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
@@ -261,13 +243,14 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 -spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-set_acl(_CTX, {uuid, FileUuid}, #acl{value = Val}) ->
+set_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
         {ok, _} ->
+            ok = chmod_storage_files(SessId, {uuid, FileUuid}, 8#000),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
-    end. %todo chmod to 000 on storage
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Removes access control list of file.
@@ -275,9 +258,11 @@ set_acl(_CTX, {uuid, FileUuid}, #acl{value = Val}) ->
 -spec remove_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-remove_acl(_CTX, {uuid, FileUuid}) ->
+remove_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
+            {ok, #file_meta{mode = Mode}} = file_meta:get({uuid, FileUuid}),
+            ok = chmod_storage_files(SessId, {uuid, FileUuid}, Mode),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -404,8 +389,8 @@ delete_file(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
-delete_impl(#fslogic_ctx{session_id = SessionId}, File) ->
-    {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
+delete_impl(#fslogic_ctx{session_id = SessId}, File) ->
+    {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
     {ok, FileChildren} =
         case Type of
@@ -419,7 +404,7 @@ delete_impl(#fslogic_ctx{session_id = SessionId}, File) ->
                         fun({StorageId, FileId}) ->
                             case storage:get(StorageId) of
                                 {ok, Storage} ->
-                                    SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FileId),
+                                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
                                     case storage_file_manager:unlink(SFMHandle) of
                                         ok -> ok;
                                         {error, Reason1} ->
@@ -475,3 +460,29 @@ rename_impl(_CTX, SourceEntry, TargetPath) ->
     ok = file_meta:rename(SourceEntry, {path, TargetPath}),
     #fuse_response{status = #status{code = ?OK}}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Change mode of storage files related with given file_meta.
+%% @end
+%%--------------------------------------------------------------------
+-spec chmod_storage_files(session:id(), file_meta:entry(), perms_octal()) -> ok | no_return().
+chmod_storage_files(SessId, FileEntry, Mode) ->
+    case file_meta:get(FileEntry) of
+        {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+            Results = lists:map(
+                fun({SID, FID} = Loc) ->
+                    {ok, Storage} = storage:get(SID),
+                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
+                    {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
+                end, fslogic_utils:get_local_storage_file_locations(FileEntry)),
+
+            case [{Loc, Error} || {Loc, {error, _} = Error} <- Results] of
+                [] -> ok;
+                Errors ->
+                    [?error("Unable to chmod [FileId: ~p] [StoragId: ~p] to mode ~p due to: ~p", [FID, SID, Mode, Reason])
+                        || {{SID, FID}, {error, Reason}} <- Errors],
+                    throw(?EAGAIN)
+            end;
+        _ -> ok
+    end.

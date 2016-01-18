@@ -188,6 +188,8 @@ handle_fuse_request(Ctx, #create_dir{parent_uuid = ParentUUID, name = Name, mode
     fslogic_req_special:mkdir(Ctx, {uuid, ParentUUID}, Name, Mode);
 handle_fuse_request(Ctx, #get_file_children{uuid = UUID, offset = Offset, size = Size}) ->
     fslogic_req_special:read_dir(Ctx, {uuid, UUID}, Offset, Size);
+handle_fuse_request(Ctx, #get_parent{uuid = UUID}) ->
+    fslogic_req_regular:get_parent(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #change_mode{uuid = UUID, mode = Mode}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, UUID}, Mode);
 handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
@@ -203,8 +205,8 @@ handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SPID, SID, ForceCL);
+handle_fuse_request(Ctx, #get_helper_params{space_id = UUID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
+    fslogic_req_regular:get_helper_params(Ctx, UUID, SID, ForceCL);
 handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
     fslogic_req_generic:delete(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->

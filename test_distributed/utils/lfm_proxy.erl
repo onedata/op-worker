@@ -170,7 +170,7 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
             Host ! {self(), Result}
         end).
 
--spec mkdir(node(), session:id(), binary()) -> ok | error_reply().
+-spec mkdir(node(), session:id(), binary()) -> {ok, file_uuid()} | error_reply().
 mkdir(Worker, SessId, Path) ->
     exec(Worker,
         fun(Host) ->
