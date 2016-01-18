@@ -20,6 +20,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 -export([new_handle/5]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
@@ -272,7 +273,7 @@ unlink(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, ses
 %% @doc Opens file in read mode and checks necessary permissions.
 %%--------------------------------------------------------------------
 -spec open_for_read(handle()) -> {ok, handle()} | error_reply().
-%%-check_permissions([{?read_object, 1}]). todo add uuid to LfmHandle
+-check_permissions([{?read_object, 1}]).
 open_for_read(LfmHandle) ->
     open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read).
 
@@ -280,7 +281,7 @@ open_for_read(LfmHandle) ->
 %% @doc Opens file in write mode and checks necessary permissions.
 %%--------------------------------------------------------------------
 -spec open_for_write(handle()) -> {ok, handle()} | error_reply().
-%%-check_permissions([{?write_object, 1}]). todo add uuid to LfmHandle
+-check_permissions([{?write_object, 1}]).
 open_for_write(LfmHandle) ->
     open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write).
 
@@ -288,7 +289,7 @@ open_for_write(LfmHandle) ->
 %% @doc Opens file in rdwr mode and checks necessary permissions.
 %%--------------------------------------------------------------------
 -spec open_for_rdwr(handle()) -> {ok, handle()} | error_reply().
-%%-check_permissions([{?read_object, 1}, {?write_object, 1}]). todo add uuid to LfmHandle
+-check_permissions([{?read_object, 1}, {?write_object, 1}]).
 open_for_rdwr(LfmHandle) ->
     open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
 
