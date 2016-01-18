@@ -18,7 +18,7 @@
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% API
--export([get_default_space/1]).
+-export([get_default_space/1, get_space/1]).
 
 %%%===================================================================
 %%% API
@@ -36,7 +36,18 @@ get_default_space(CTX = #fslogic_ctx{}) ->
 get_default_space(UserId) ->
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
         onedata_user:get(UserId),
-    file_meta:get({uuid, DefaultSpaceId}).
+    file_meta:get_space_dir(DefaultSpaceId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space document for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space(FileEntry :: fslogic_worker:file()) ->
+    {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
+get_space(FileEntry) ->
+    file_meta:get_scope(FileEntry).
 
 %%%===================================================================
 %%% Internal functions

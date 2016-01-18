@@ -18,8 +18,8 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
--include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -108,14 +108,17 @@ protobuf_msg_test(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_expect(Workers, router, preroute_message, fun
-        (#client_message{message_body = #event{event = #read_event{}}}, _) ->
-            ok
+        (#client_message{message_body = #events{events = [#event{
+            object = #read_event{}
+        }]}}, _) -> ok
     end),
     Msg = #'ClientMessage'{
         message_id = <<"0">>,
-        message_body = {event, #'Event'{event =
-        {read_event, #'ReadEvent'{counter = 1, file_id = <<"id">>, size = 1, blocks = []}}
-        }}
+        message_body = {events, #'Events'{events = [#'Event'{
+            counter = 1, object = {read_event, #'ReadEvent'{
+                file_uuid = <<"id">>, size = 1, blocks = []
+            }}
+        }]}}
     },
     RawMsg = messages:encode_msg(Msg),
 
@@ -123,7 +126,7 @@ protobuf_msg_test(Config) ->
     {ok, {Sock, _}} = connect_via_token(Worker1),
     ok = ssl2:send(Sock, RawMsg),
 
-    % then
+% then
     ok = ssl2:close(Sock).
 
 -performance([
@@ -145,18 +148,21 @@ multi_message_test(Config) ->
     Self = self(),
     MsgNumbers = lists:seq(1, MsgNum),
     Events = lists:map(fun(N) ->
-        #'ClientMessage'{message_body = {event, #'Event'{event =
-        {read_event, #'ReadEvent'{
+        #'ClientMessage'{message_body = {events, #'Events'{events = [#'Event'{
             counter = N,
-            file_id = <<"id">>,
-            size = 1,
-            blocks = []
-        }}}}}
+            object = {read_event, #'ReadEvent'{
+                file_uuid = <<"id">>,
+                size = 1,
+                blocks = []
+            }}
+        }]}}}
     end, MsgNumbers),
     RawEvents = lists:map(fun(E) -> messages:encode_msg(E) end, Events),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     test_utils:mock_expect(Workers, router, route_message, fun
-        (#client_message{message_body = #event{event = #read_event{counter = Counter}}}) ->
+        (#client_message{message_body = #events{events = [#event{
+            counter = Counter, object = #read_event{}
+        }]}}) ->
             Self ! Counter,
             ok
     end),
@@ -167,7 +173,7 @@ multi_message_test(Config) ->
     lists:foreach(fun(E) -> ok = ssl2:send(Sock, E) end, RawEvents),
     T2 = os:timestamp(),
 
-    % then
+% then
     lists:foreach(fun(N) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
@@ -183,7 +189,7 @@ client_send_test(Config) ->
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
     {ok, {Sock, SessionId}} = connect_via_token(Worker1),
-    Code = 'VOK',
+    Code = ?OK,
     Description = <<"desc">>,
     ServerMsgInternal = #server_message{message_body = #status{
         code = Code,
@@ -207,7 +213,7 @@ client_send_test(Config) ->
 client_communicate_test(Config) ->
     % given
     [Worker1, _] = ?config(op_worker_nodes, Config),
-    Status = #status{code = 'VOK', description = <<"desc">>},
+    Status = #status{code = ?OK, description = <<"desc">>},
     ServerMsgInternal = #server_message{message_body = Status},
 
     % when
@@ -223,7 +229,7 @@ client_communicate_async_test(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
     Status = #status{
-        code = 'VOK',
+        code = ?OK,
         description = <<"desc">>
     },
     ServerMsgInternal = #server_message{message_body = Status},
@@ -235,8 +241,9 @@ client_communicate_async_test(Config) ->
         [ServerMsgInternal, SessionId, Self]),
 
     % then
-    #client_message{message_id = MsgId, message_body = Status} =
-        ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
+    ?assertReceivedMatch(#client_message{
+        message_id = MsgId, message_body = Status
+    }, ?TIMEOUT),
 
     % given
     test_utils:mock_expect(Workers, router, route_message, fun
@@ -282,7 +289,7 @@ multi_ping_pong_test(Config) ->
         #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
     end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Self = self(),
 
     T1 = os:timestamp(),
@@ -337,7 +344,7 @@ sequential_ping_pong_test(Config) ->
         #'ClientMessage'{message_id = N, message_body = {ping, #'Ping'{}}}
     end, MsgNumbersBin),
     RawPings = lists:map(fun(E) -> messages:encode_msg(E) end, Pings),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
@@ -374,7 +381,7 @@ multi_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
     ConnNumbersList = [integer_to_binary(N) || N <- lists:seq(1, ConnNumbers)],
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
 
     % when
     Connections = lists:map(fun(_) ->
@@ -412,7 +419,7 @@ bandwidth_test(Config) ->
     PacketRaw = messages:encode_msg(Packet),
 
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #ping{}}) ->
@@ -470,7 +477,7 @@ python_client_test(Config) ->
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
 
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Self = self(),
     test_utils:mock_expect(Workers, router, route_message, fun
         (#client_message{message_body = #ping{}}) ->
@@ -502,7 +509,7 @@ python_client_test(Config) ->
         ?assertReceivedMatch(router_message_called, timer:seconds(15))
     end, lists:seq(1, PacketNum)),
     T2 = os:timestamp(),
-    catch port_close(PythonClient),
+        catch port_close(PythonClient),
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
 proto_version_test(Config) ->
@@ -541,7 +548,7 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(cert_connection_test, Config) ->
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     Workers = ?config(op_worker_nodes, Config),
     application:ensure_started(ssl2),
     test_utils:mock_new(Workers, serializator),
@@ -555,7 +562,7 @@ init_per_testcase(Case, Config) when
     Case =:= bandwidth_test;
     Case =:= python_client_test ->
     Workers = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     application:ensure_started(ssl2),
     test_utils:mock_new(Workers, router),
     mock_identity(Workers),
@@ -563,15 +570,14 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    op_test_utils:remove_pending_messages(),
+    initializer:remove_pending_messages(),
     mock_identity(Workers),
     application:ensure_started(ssl2),
     Config.
 
 end_per_testcase(cert_connection_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [identity, serializator]),
-    test_utils:mock_unload(Workers, [identity, serializator]);
+    test_utils:mock_validate_and_unload(Workers, [identity, serializator]);
 
 end_per_testcase(Case, Config) when
     Case =:= protobuf_msg_test;
@@ -579,20 +585,17 @@ end_per_testcase(Case, Config) when
     Case =:= client_communicate_async_test;
     Case =:= bandwidth_test ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, [identity, router]),
-    test_utils:mock_unload(Workers, [identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [identity, router]);
 
 end_per_testcase(python_client_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     file:delete(?TEST_FILE(Config, "handshake.arg")),
     file:delete(?TEST_FILE(Config, "message.arg")),
-    test_utils:mock_validate(Workers, [identity, router]),
-    test_utils:mock_unload(Workers, [identity, router]);
+    test_utils:mock_validate_and_unload(Workers, [identity, router]);
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate(Workers, identity),
-    test_utils:mock_unload(Workers, identity).
+    test_utils:mock_validate_and_unload(Workers, identity).
 
 %%%===================================================================
 %%% Internal functions
@@ -628,9 +631,9 @@ connect_via_token(Node, SocketOpts, SessId) ->
     }},
     TokenAuthMessageRaw = messages:encode_msg(TokenAuthMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
-                    undefined -> [];
-                    Other -> [{active, Other}]
-                end,
+        undefined -> [];
+        Other -> [{active, Other}]
+    end,
     NewSocketOpts = proplists:delete(active, SocketOpts),
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, protocol_handler_port),
 
@@ -670,7 +673,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                     % respond with the same data to the server (excluding stream_reset)
                     case Body of
                         {message_stream_reset, _} -> ok;
-                        {event_subscription, _} -> ok;
+                        {subscription, _} -> ok;
                         _ ->
                             ClientAnsProtobuf = #'ClientMessage'{message_id = Id, message_body = Body},
                             ClientAnsRaw = messages:encode_msg(ClientAnsProtobuf),
@@ -695,7 +698,7 @@ mock_identity(Workers) ->
     ).
 
 receive_server_message() ->
-    receive_server_message([message_stream_reset, event_subscription]).
+    receive_server_message([message_stream_reset, subscription]).
 
 receive_server_message(IgnoredMsgList) ->
     receive

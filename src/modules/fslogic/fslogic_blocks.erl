@@ -11,7 +11,8 @@
 -module(fslogic_blocks).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -23,12 +24,29 @@
 
 %% API
 -export([calculate_file_size/1, update/3, get_file_size/1]).
--export([upper/1, lower/1]).
+-export([aggregate/2, upper/1, lower/1]).
 -export([consolidate/1, invalidate/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Aggregates lists of 'file_block' records.
+%% IMPORTANT! Both list should contain disjoint file blocks sorted in ascending
+%% order of block offset.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate(Blocks1 :: blocks(), Blocks2 :: blocks()) -> AggBlocks :: blocks().
+aggregate([], Blocks) ->
+    Blocks;
+
+aggregate(Blocks, []) ->
+    Blocks;
+
+aggregate(Blocks1, Blocks2) ->
+    aggregate_blocks(Blocks1, Blocks2, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -82,7 +100,6 @@ calculate_file_size(Entry) ->
     calculate_file_size(Locations1).
 
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% For given file / location or multiple locations, reads file size assigned to those locations.
@@ -117,17 +134,35 @@ get_file_size(Entry) ->
 %%--------------------------------------------------------------------
 -spec update(FileUUID :: file_meta:uuid(), Blocks :: blocks(), FileSize :: non_neg_integer() | undefined) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update(FileUUID, Blocks, FileSize) ->
+update(FileUUID, Blocks0, FileSize) ->
     file_location:run_synchronized(FileUUID, fun() ->
         try
             LProviderId = oneprovider:get_provider_id(),
             {ok, LocIds} = file_meta:get_locations({uuid, FileUUID}),
             Locations = [file_location:get(LocId) || LocId <- LocIds],
             Locations1 = [Loc || {ok, Loc} <- Locations],
-            [LocalLocation] = [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations1, LProviderId =:= ProviderId],
+            [LocalLocation = #document{value = #file_location{storage_id = DSID, file_id = DFID}}] =
+                [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations1, LProviderId =:= ProviderId],
             RemoteLocations = Locations1 -- [LocalLocation],
 
-            BlocksSorted = consolidate(lists:usort(Blocks)),
+            %% Make sure that storage_id and file_id are set (assume defaults form location if not)
+            Blocks1 = lists:map(
+                fun(#file_block{storage_id = SID, file_id = FID} = B) ->
+                    NewSID =
+                        case SID of
+                            undefined   ->  DSID;
+                            _           ->  SID
+                        end,
+                    NewFID =
+                        case FID of
+                            undefined   ->  DFID;
+                            _           ->  FID
+                        end,
+
+                    B#file_block{storage_id = NewSID, file_id = NewFID}
+                end, Blocks0),
+
+            BlocksSorted = consolidate(lists:usort(Blocks1)),
 
             ok = invalidate(RemoteLocations, BlocksSorted),
             ok = append([LocalLocation], BlocksSorted),
@@ -144,10 +179,10 @@ update(FileUUID, Blocks, FileSize) ->
             end
         catch
             _:Reason ->
-                ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),
+                ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks0, FileSize, Reason]),
                 {error, Reason}
         end
-    end).
+                                             end).
 
 
 %%--------------------------------------------------------------------
@@ -227,8 +262,54 @@ consolidate([B | T]) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Aggregates lists of 'file_block' records using acumulator AggBlocks.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate_blocks(Blocks1 :: blocks(), Blocks2 :: blocks(), AggBlocks :: blocks()) ->
+    NewAggBlocks :: blocks().
+aggregate_blocks([], [], AggBlocks) ->
+    lists:reverse(AggBlocks);
+
+aggregate_blocks([], [Block | Blocks], AggBlocks) ->
+    aggregate_blocks([], Blocks, aggregate_block(Block, AggBlocks));
+
+aggregate_blocks([Block | Blocks], [], AggBlocks) ->
+    aggregate_blocks(Blocks, [], aggregate_block(Block, AggBlocks));
+
+aggregate_blocks([#file_block{offset = Offset1} = Block1 | Blocks1],
+    [#file_block{offset = Offset2} | _] = Blocks2, AggBlocks)
+    when Offset1 < Offset2 ->
+    aggregate_blocks(Blocks1, Blocks2, aggregate_block(Block1, AggBlocks));
+
+aggregate_blocks(Blocks1, [#file_block{} = Block2 | Blocks2], AggBlocks) ->
+    aggregate_blocks(Blocks1, Blocks2, aggregate_block(Block2, AggBlocks)).
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Aggregates 'file_block' record  with list of 'file_block' records.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate_block(Block :: block(), Blocks :: blocks()) -> AggBlocks :: blocks().
+aggregate_block(Block, []) ->
+    [Block];
+
+aggregate_block(#file_block{offset = Offset1, size = Size1} = Block1,
+    [#file_block{offset = Offset2, size = Size2} | Blocks])
+    when Offset1 =< Offset2 + Size2 ->
+    [Block1#file_block{
+        offset = Offset2,
+        size = max(Offset1 + Size1, Offset2 + Size2) - Offset2
+    } | Blocks];
+
+aggregate_block(Block, Blocks) ->
+    [Block | Blocks].
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Appends given blocks to given locations and updates file size for those locations.
 %% @end
@@ -250,8 +331,8 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
     ok.
 
 
-
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Performs truncate operation on given locations. Note that on remote locations only shrinking will be done.
 %% @end
@@ -262,6 +343,7 @@ do_truncate(FileSize, #document{value = #file_location{}} = LocalLocation, Remot
     {do_local_truncate(FileSize, LocalLocation), do_remote_truncate(FileSize, RemoteLocations)}.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Truncates blocks from given location. Works for both shrinking and growing file.
 %% @end
@@ -269,14 +351,14 @@ do_truncate(FileSize, #document{value = #file_location{}} = LocalLocation, Remot
 -spec do_local_truncate(FileSize :: non_neg_integer(), datastore:document()) -> ok | no_return().
 do_local_truncate(FileSize, #document{value = #file_location{size = FileSize}}) ->
     ok;
-do_local_truncate(FileSize, #document{value =
-                    #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
+do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
     append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}]);
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} = LocalLocation) when LocalSize > FileSize ->
     invalidate(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}]).
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Truncates blocks from given location. Works only for shrinking file. Growing is ignored.
 %% @end

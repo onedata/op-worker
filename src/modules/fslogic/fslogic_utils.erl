@@ -55,7 +55,7 @@ random_ascii_lowercase_sequence(Length) ->
 get_parent({path, Path}) ->
     [_ | R] = lists:reverse(fslogic_path:split(Path)),
     Tokens = lists:reverse(R),
-    ParentPath = fslogic_path:ensure_path_begins_with_slash(fslogic_path:join(Tokens)),
+    ParentPath = filepath_utils:ensure_begins_with_prefix(fslogic_path:join(Tokens), ?DIRECTORY_SEPARATOR_BINARY),
     {ok, Doc} = file_meta:get({path, ParentPath}),
     Doc;
 get_parent(File) ->
@@ -76,7 +76,10 @@ get_local_file_location(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),
     Locations = [file_location:get(LocId) || LocId <- LocIds],
-    [LocalLocation] = [Location || {ok, #document{value = #file_location{provider_id = ProviderId}} = Location} <- Locations, LProviderId =:= ProviderId],
+    [LocalLocation] = [Location ||
+        {ok, #document{value = #file_location{provider_id = ProviderId}} = Location}
+            <- Locations, LProviderId =:= ProviderId
+    ],
     LocalLocation.
 
 -spec get_local_storage_file_locations(datastore:document() | #file_location{} | fslogic_worker:file()) ->

@@ -1,7 +1,7 @@
 {
     "dirs_config": {
-        "op_ccm": {
-            "input_dir": "rel/op_ccm",
+        "cluster_manager": {
+            "input_dir": "rel/cluster_manager",
             "target_dir": "rel/test_cluster"
         },
         "op_worker": {
@@ -9,17 +9,25 @@
             "target_dir": "rel/test_cluster"
         }
     },
+    "os_configs": {
+        "cfg1": {
+            "storages": [],
+            "users": [],
+            "groups": {}
+        }
+    },
     "provider_domains": {
         "p1": {
-            "db_driver": "couchdb",
-            "op_ccm": {
-                "ccm": {
+            "db_driver": "couchbase",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
                     "vm.args": {
                         "setcookie": "test_cookie"
                     },
                     "sys.config": {
-                        "ccm_nodes": [
-                            "ccm"
+                        "cm_nodes": [
+                            "cm"
                         ],
                         "worker_num": 1
                     }
@@ -31,12 +39,13 @@
                         "setcookie": "test_cookie"
                     },
                     "sys.config": {
-                        "ccm_nodes": [
-                            "ccm"
+                        "cm_nodes": [
+                            "cm"
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
-                        ]
+                        ],
+                        "verify_gr_cert": false
                     }
                 }
             }

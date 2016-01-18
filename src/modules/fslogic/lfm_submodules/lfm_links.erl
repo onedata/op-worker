@@ -11,7 +11,7 @@
 -module(lfm_links).
 
 -include("types.hrl").
--include("errors.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).

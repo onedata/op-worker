@@ -13,7 +13,9 @@
 -ifndef(FSLOGIC_COMMON_HRL).
 -define(FSLOGIC_COMMON_HRL, 1).
 
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% helper macro for not implemented functions
@@ -21,7 +23,9 @@
 
 %% Common names
 -define(SPACES_BASE_DIR_NAME, <<"spaces">>).
+-define(SPACES_BASE_DIR_UUID, base64:encode(?SPACES_BASE_DIR_NAME)).
 -define(DIRECTORY_SEPARATOR, "/").
+-define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
 
 %% Context definition
 -record(fslogic_ctx, {
@@ -32,15 +36,12 @@
 %% Stub record
 -record(space_info, {}).
 
-%% File types
--define(REGULAR_FILE_TYPE, 'REG').
--define(DIRECTORY_TYPE, 'DIR').
--define(LINK_TYPE, 'LNK').
-
 %% root user definitions
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 
+%% fslogic subscription id
+-define(FSLOGIC_SUB_ID, binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF).
 
 %% Deafult file modes
 

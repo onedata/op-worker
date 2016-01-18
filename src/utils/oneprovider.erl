@@ -15,7 +15,7 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
--include("modules/datastore/datastore.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -35,7 +35,9 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
--export([get_provider_domain/0, get_gr_domain/0]).
+-export([get_provider_domain/0]).
+-export([get_gr_domain/0, get_gr_url/0]).
+-export([get_gr_login_page/0, get_gr_logout_page/0]).
 -export([get_provider_id/0, get_globalregistry_cert/0]).
 -export([register_in_gr/3, register_in_gr_dev/3, save_file/2]).
 
@@ -73,7 +75,7 @@ get_node_ip() ->
 -spec get_provider_domain() -> string().
 get_provider_domain() ->
     {ok, Domain} = application:get_env(?APP_NAME, provider_domain),
-    gui_str:to_list(Domain).
+    str_utils:to_list(Domain).
 
 
 %%--------------------------------------------------------------------
@@ -84,7 +86,41 @@ get_provider_domain() ->
 -spec get_gr_domain() -> string().
 get_gr_domain() ->
     {ok, Hostname} = application:get_env(?APP_NAME, global_registry_domain),
-    gui_str:to_list(Hostname).
+    str_utils:to_list(Hostname).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the URL to GR.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_gr_url() -> string().
+get_gr_url() ->
+    "https://" ++ get_gr_domain().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the URL to GR login page.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_gr_login_page() -> string().
+get_gr_login_page() ->
+    {ok, Page} = application:get_env(?APP_NAME, global_registry_login_page),
+    % Page is in format '/page_name.html'
+    str_utils:format("https://~s~s", [get_gr_domain(), Page]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the URL to GR logout page.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_gr_logout_page() -> string().
+get_gr_logout_page() ->
+    {ok, Page} = application:get_env(?APP_NAME, global_registry_logout_page),
+    % Page is in format '/page_name.html'
+    str_utils:format("https://~s~s", [get_gr_domain(), Page]).
 
 
 %%--------------------------------------------------------------------
@@ -143,7 +179,7 @@ register_in_gr_dev(NodeList, KeyFilePassword, ProviderName) ->
         {ok, Key} = file:read_file(GRPKeyPath),
         % Send signing request to GR
         IPAddresses = get_all_nodes_ips(NodeList),
-        ProviderDomain = gui_str:to_binary(oneprovider:get_provider_domain()),
+        ProviderDomain = str_utils:to_binary(oneprovider:get_provider_domain()),
         RedirectionPoint = <<"https://", ProviderDomain/binary>>,
         Parameters = [
             {<<"urls">>, IPAddresses},
@@ -233,12 +269,12 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
         case Attribute#'AttributeTypeAndValue'.type of
             ?'id-at-commonName' ->
                 {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                {true, utils:ensure_binary(Id)};
+                {true, str_utils:to_binary(Id)};
             _ -> false
         end
     end, Attrs),
 
-    utils:ensure_binary(ProviderId).
+    str_utils:to_binary(ProviderId).
 
 
 %%--------------------------------------------------------------------

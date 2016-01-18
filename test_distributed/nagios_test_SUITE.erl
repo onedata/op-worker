@@ -12,7 +12,6 @@
 -author("Lukasz Opiola").
 
 -include("global_definitions.hrl").
--include("modules_and_args.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -28,7 +27,7 @@
 all() -> [nagios_test].
 
 % Path to nagios endpoint
--define(HEALTHCHECK_PATH, "https://127.0.0.1:443/nagios").
+-define(HEALTHCHECK_PATH, "http://127.0.0.1:6666/nagios").
 % How many retries should be performed if nagios endpoint is not responding
 -define(HEALTHCHECK_RETRIES, 10).
 % How often should the retries be performed
@@ -41,9 +40,9 @@ all() -> [nagios_test].
 nagios_test(Config) ->
     [Worker1, _, _] = WorkerNodes = ?config(op_worker_nodes, Config),
 
-    {ok, "200", _, XMLString} = rpc:call(Worker1, ibrowse, send_req, [?HEALTHCHECK_PATH, [], get]),
+    {ok, 200, _, XMLString} = rpc:call(Worker1, http_client, get, [?HEALTHCHECK_PATH, [], <<>>, [insecure]]),
 
-    {Xml, _} = xmerl_scan:string(XMLString),
+    {Xml, _} = xmerl_scan:string(str_utils:to_list(XMLString)),
 
     [MainStatus] = [X#xmlAttribute.value || X <- Xml#xmlElement.attributes, X#xmlAttribute.name == status],
     % Whole app status might become out_of_sync in some marginal cases when dns or dispatcher does
@@ -66,12 +65,12 @@ nagios_test(Config) ->
         end, WorkerNodes),
 
     % Check if all workers are in the report.
-    Nodes = gen_server:call({global, ?CCM}, get_nodes, 1000),
+    Nodes = gen_server:call({global, ?CLUSTER_MANAGER}, get_nodes, 1000),
     lists:foreach(
         fun({WNode, WName}) ->
             WorkersOnNode = proplists:get_value(atom_to_list(WNode), WorkersByNodeXML),
             ?assertEqual(true, lists:member(WName, WorkersOnNode))
-        end, [{Node, Worker} || Node <- Nodes, Worker <- ?MODULES]),
+        end, [{Node, Worker} || Node <- Nodes, Worker <- node_manager:modules()]),
 
     % Check if every node's status contains dispatcher and node manager status
     lists:foreach(

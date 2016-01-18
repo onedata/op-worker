@@ -28,7 +28,7 @@
 %   - open mode
 %   - ??
 % 3) How to get rid of rubbish like not closed opens - check expired handles if a session connected with them has ended?
-% 4) All errors should be listed in one hrl -> errors.hrl
+% 4) All errors should be listed in one hrl -> ctool/include/posix/errors.hrl
 % 4) Common types should be listed in one hrl -> types.hrl
 % 5) chown is no longer featured in lfm as it is not needed by higher layers
 % 6) Blocks related functions should go to another module (synchronize, mark_as_truncated etc).
@@ -48,9 +48,9 @@
 
 -include("global_definitions.hrl").
 -include("types.hrl").
--include("errors.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type handle() :: #lfm_handle{}.
@@ -58,15 +58,17 @@
 -export_type([handle/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, rmdir/2, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2]).
+-export([exists/1, mv/2, cp/2, get_file_path/2]).
 %% Functions operating on files
--export([create/3, open/3, write/3, read/3, truncate/2, truncate/3, get_block_map/1, unlink/1, unlink/2]).
+-export([create/3, open/3, fsync/1, write/3, read/3, truncate/2, truncate/3,
+    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/2, check_perms/2, set_acl/2, get_acl/1]).
 %% Functions concerning file attributes
--export([stat/1, stat/2, set_xattr/3, get_xattr/2, remove_xattr/2, list_xattr/1]).
+-export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
+    remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -82,13 +84,15 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> ok | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_path()) ->
+    {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, Path, Mode).
 
--spec mkdir(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    ok | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_path(),
+    Mode :: file_meta:posix_permissions()) ->
+    {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     try
         CTX = fslogic_context:new(SessId),
@@ -101,6 +105,18 @@ mkdir(SessId, Path, Mode) ->
             ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
             {error, Reason}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a directory with all its children.
+%% @end
+%%--------------------------------------------------------------------
+-spec rmdir(SessId :: session:id(), FileKey :: file_key()) -> ok | error_reply().
+rmdir(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_utils:rm(CTX, FileUUID).
 
 
 %%--------------------------------------------------------------------
@@ -122,7 +138,20 @@ ls(SessId, FileKey, Limit, Offset) ->
 %%--------------------------------------------------------------------
 -spec get_children_count(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
-    lfm_dirs:get_children_count(FileKey).
+    CTX = fslogic_context:new(SessId),
+    lfm_dirs:get_children_count(SessId, ensure_uuid(CTX, FileKey)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns uuid of parent for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+    {ok, file_meta:uuid()} | error_reply().
+get_parent(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    lfm_files:get_parent(CTX, ensure_uuid(CTX, FileKey)).
 
 
 %%--------------------------------------------------------------------
@@ -154,6 +183,16 @@ mv(FileKeyFrom, PathTo) ->
 cp(PathFrom, PathTo) ->
     lfm_files:cp(PathFrom, PathTo).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns full path of file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_path(SessId :: session:id(), Uuid :: file_meta:uuid()) ->
+    {ok, file_meta:path()}.
+get_file_path(SessId, Uuid) ->
+    CTX = fslogic_context:new(SessId),
+    {ok, fslogic_uuid:uuid_to_path(CTX, Uuid)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -190,7 +229,7 @@ create(SessId, Path, Mode) ->
         _:Reason ->
             ?error_stacktrace("Create error for file ~p: ~p", [Path, Reason]),
             {error, Reason}
-    end .
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -202,6 +241,17 @@ create(SessId, Path, Mode) ->
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:open(CTX, ensure_uuid(CTX, FileKey), OpenType).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flushes waiting events for session connected with handler.
+%% @end
+%%--------------------------------------------------------------------
+-spec fsync(FileHandle :: file_handle()) -> ok | {error, Reason :: term()}.
+fsync(FileHandle) ->
+    lfm_files:fsync(FileHandle).
+
 
 
 %%--------------------------------------------------------------------
@@ -285,7 +335,7 @@ truncate(SessId, FileKey, Size) ->
         _:Reason ->
             ?error_stacktrace("truncate error for file ~p: ~p", [FileKey, Reason]),
             {error, Reason}
-    end .
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -364,9 +414,16 @@ stat(SessId, FileKey) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(FileKey :: file_key(), Key :: xattr_key()) -> {ok, xattr_value()} | error_reply().
-get_xattr(Path, Key) ->
-    lfm_attrs:get_xattr(Path, Key).
+-spec get_xattr(Handle :: handle(), XattrName :: xattr:name()) ->
+    {ok, #xattr{}} | error_reply().
+get_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
+    get_xattr(SessId, {uuid, UUID}, XattrName).
+
+-spec get_xattr(session:id(), file_key(), xattr:name()) -> {ok, #xattr{}} | error_reply().
+get_xattr(SessId, FileKey, XattrName) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:get_xattr(CTX, FileUUID, XattrName).
 
 
 %%--------------------------------------------------------------------
@@ -374,9 +431,15 @@ get_xattr(Path, Key) ->
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(FileKey :: file_key(), Key :: xattr_key(), Value :: xattr_value()) -> ok |  error_reply().
-set_xattr(Path, Key, Value) ->
-    lfm_attrs:set_xattr(Path, Key, Value).
+-spec set_xattr(handle(), #xattr{}) -> ok | error_reply().
+set_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Xattr) ->
+    set_xattr(SessId, {uuid, UUID}, Xattr).
+
+-spec set_xattr(session:id(), file_key(), #xattr{}) -> ok | error_reply().
+set_xattr(SessId, FileKey, Xattr) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:set_xattr(CTX, FileUUID, Xattr).
 
 
 %%--------------------------------------------------------------------
@@ -384,19 +447,30 @@ set_xattr(Path, Key, Value) ->
 %% Removes file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(FileKey :: file_key(), Key :: xattr_key()) -> ok |  error_reply().
-remove_xattr(Path, Key) ->
-    lfm_attrs:remove_xattr(Path, Key).
+-spec remove_xattr(handle(), xattr:name()) -> ok | error_reply().
+remove_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, XattrName) ->
+    remove_xattr(SessId, {uuid, UUID}, XattrName).
 
+-spec remove_xattr(session:id(), file_key(), xattr:name()) -> ok | error_reply().
+remove_xattr(SessId, FileKey, XattrName) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:remove_xattr(CTX, FileUUID, XattrName).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns complete list of extended attributes of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(FileKey :: file_key()) -> {ok, [{Key :: xattr_key(), Value :: xattr_value()}]} | error_reply().
-list_xattr(Path) ->
-    lfm_attrs:list_xattr(Path).
+-spec list_xattr(handle()) -> {ok, [xattr:name()]} | error_reply().
+list_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    list_xattr(SessId, {uuid, UUID}).
+
+-spec list_xattr(session:id(), file_key()) -> {ok, [xattr:name()]} | error_reply().
+list_xattr(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
+    lfm_attrs:list_xattr(CTX, FileUUID).
 
 
 %%--------------------------------------------------------------------
@@ -472,5 +546,4 @@ ensure_uuid(_CTX, {uuid, UUID}) ->
 ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
-    {uuid, fslogic_path:to_uuid(CTX, Path)}.
-
+    {uuid, fslogic_uuid:path_to_uuid(CTX, Path)}.

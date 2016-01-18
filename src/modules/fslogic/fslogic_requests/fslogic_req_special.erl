@@ -1,13 +1,13 @@
-%% ===================================================================
-%% @author Rafal Slota
-%% @copyright (C): 2013, ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: FSLogic request handlers for special files.
-%% @end
-%% ===================================================================
+%%%-------------------------------------------------------------------
+%%% @author Rafal Slota
+%%% @copyright (C): 2013, ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc FSLogic request handlers for special files.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(fslogic_req_special).
 -author("Rafal Slota").
 
@@ -30,11 +30,15 @@
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{write, 2}, {exec, 2}]).
-mkdir(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
-    UUID, Name, Mode) ->
-    {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-    mkdir(CTX, DefaultSpaceUUID, Name, Mode);
 mkdir(CTX, ParentUUID, Name, Mode) ->
+    NormalizedParentUUID =
+        case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
+            true ->
+                {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
+                DefaultSpaceUUID;
+            false ->
+                ParentUUID
+        end,
     CTime = utils:time(),
     File = #document{value = #file_meta{
         name = Name,
@@ -45,10 +49,11 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
-    case file_meta:create({uuid, ParentUUID}, File) of
-        {ok, _} ->
-            {ok, _} = file_meta:update({uuid, ParentUUID}, #{mtime => CTime}),
-            #fuse_response{status = #status{code = ?OK}};
+    case file_meta:create({uuid, NormalizedParentUUID}, File) of
+        {ok, DirUUID} ->
+            {ok, _} = file_meta:update({uuid, NormalizedParentUUID}, #{mtime => CTime}),
+            #fuse_response{status = #status{code = ?OK}, fuse_response =
+            #dir{uuid = DirUUID}};
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
     end.
@@ -70,9 +75,10 @@ read_dir(CTX, File, Offset, Size) ->
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
-    SpacesKey = fslogic_path:spaces_uuid(UserId),
+    SpacesKey = fslogic_uuid:spaces_uuid(UserId),
+    DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
     case Key of
-        UserId ->
+        DefaultSpaceKey ->
             {ok, DefaultSpace} = fslogic_spaces:get_default_space(CTX),
             {ok, DefaultSpaceChildLinks} =
                 case Offset of
@@ -81,21 +87,21 @@ read_dir(CTX, File, Offset, Size) ->
                     _ ->
                         file_meta:list_children(DefaultSpace, Offset - 1, Size)
                 end,
-                #fuse_response{status = #status{code = ?OK},
-                    fuse_response = #file_children{
-                        child_links = ChildLinks ++ DefaultSpaceChildLinks
-                    }
-                };
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = #file_children{
+                    child_links = ChildLinks ++ DefaultSpaceChildLinks
+                }
+            };
         SpacesKey ->
             {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
                 onedata_user:get(UserId),
-            SpaceRes = [file_meta:get(SpacesId) || SpacesId <- SpacesIds],
+            SpaceRes = [file_meta:get_space_dir(SpaceId) || SpaceId <- SpacesIds],
 
             Children =
-                case Offset < length(SpacesIds)  of
+                case Offset < length(SpacesIds) of
                     true ->
-                        SpaceLinks = [#child_link{uuid = SpaceId, name = SpaceName} ||
-                            {ok, #document{key = SpaceId, value = #file_meta{name = SpaceName}}} <- SpaceRes],
+                        SpaceLinks = [#child_link{uuid = SpaceDirUuid, name = SpaceName} ||
+                            {ok, #document{key = SpaceDirUuid, value = #file_meta{name = SpaceName}}} <- SpaceRes],
 
                         lists:sublist(SpaceLinks, Offset + 1, Size);
                     false ->

@@ -13,12 +13,13 @@
 -module(fslogic_worker).
 -behaviour(worker_plugin_behaviour).
 
--include("errors.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include("modules/event_manager/events.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
+-include("modules/events/definitions.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -50,22 +51,27 @@ init(_Args) ->
     {ok, CounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
     {ok, TimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
     {ok, SizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
-    Sub = #write_event_subscription{
-        producer = all,
-        producer_counter_threshold = CounterThreshold,
-        producer_time_threshold = TimeThreshold,
-        producer_size_threshold = SizeThreshold,
-        event_stream = ?WRITE_EVENT_STREAM#event_stream{
+    SubId = ?FSLOGIC_SUB_ID,
+    Sub = #subscription{
+        id = SubId,
+        object = #write_subscription{
+            counter_threshold = CounterThreshold,
+            time_threshold = TimeThreshold,
+            size_threshold = SizeThreshold
+        },
+        event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
             metadata = 0,
-            emission_time = 500,
             emission_rule = fun(_) -> true end,
-            handlers = [fun(Evts) -> handle_events(Evts) end]
+            init_handler = event_utils:send_subscription_handler(),
+            event_handler = fun(Evts, Ctx) ->
+                handle_events(Evts, Ctx)
+            end,
+            terminate_handler = event_utils:send_subscription_cancellation_handler()
         }
     },
-    SubId = binary:decode_unsigned(crypto:hash(md5, atom_to_binary(?MODULE, utf8))) rem 16#FFFFFFFFFFFF,
 
-    case event_manager:subscribe(SubId, Sub) of
-        ok ->
+    case event:subscribe(Sub) of
+        {ok, SubId} ->
             ok;
         {error, already_exists} ->
             ok
@@ -90,6 +96,8 @@ handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     maybe_handle_fuse_request(SessId, FuseRequest);
+handle({proxyio_request, SessId, ProxyIORequest}) ->
+    handle_proxyio_request(SessId, ProxyIORequest);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -154,7 +162,7 @@ report_error(FuseRequest, Error, LogLevel) ->
     MsgFormat = "Cannot process request ~p due to error: ~p (code: ~p)",
     case LogLevel of
         debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-%%         info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
+%%      info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
         warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
         error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
     end,
@@ -180,6 +188,8 @@ handle_fuse_request(Ctx, #create_dir{parent_uuid = ParentUUID, name = Name, mode
     fslogic_req_special:mkdir(Ctx, ParentUUID, Name, Mode);
 handle_fuse_request(Ctx, #get_file_children{uuid = UUID, offset = Offset, size = Size}) ->
     fslogic_req_special:read_dir(Ctx, {uuid, UUID}, Offset, Size);
+handle_fuse_request(Ctx, #get_parent{uuid = UUID}) ->
+    fslogic_req_regular:get_parent(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #change_mode{uuid = UUID, mode = Mode}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, UUID}, Mode);
 handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
@@ -195,32 +205,56 @@ handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
+handle_fuse_request(Ctx, #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
+    fslogic_req_regular:get_helper_params(Ctx, SPID, SID, ForceCL);
 handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
     fslogic_req_generic:delete_file(Ctx, {uuid, UUID});
+handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
+    fslogic_req_generic:get_xattr(Ctx, {uuid, UUID}, XattrName);
+handle_fuse_request(Ctx, #set_xattr{uuid = UUID, xattr = Xattr}) ->
+    fslogic_req_generic:set_xattr(Ctx, {uuid, UUID}, Xattr);
+handle_fuse_request(Ctx, #remove_xattr{uuid = UUID, name = XattrName}) ->
+    fslogic_req_generic:remove_xattr(Ctx, {uuid, UUID}, XattrName);
+handle_fuse_request(Ctx, #list_xattr{uuid = UUID}) ->
+    fslogic_req_generic:list_xattr(Ctx, {uuid, UUID});
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
-handle_events([]) ->
-    [];
-handle_events([Event | T]) ->
-    [handle_events(Event) | handle_events(T)];
-handle_events(#write_event{blocks = Blocks, file_uuid = FileUUID, file_size = FileSize, source = Source} = T) ->
-    ?debug("fslogic handle_events: ~p", [T]),
-    ExcludedSessions =
-        case Source of
-            {session, SessionId} ->
-                [SessionId]
-        end,
+handle_events(Evts, #{session_id := SessId} = Ctx) ->
+    Results = lists:map(fun(#event{object = #write_event{
+        blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
+    }}) ->
+        case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
+            {ok, size_changed} ->
+                fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
+                fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
+            {ok, size_not_changed} ->
+                fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
+            {error, Reason} ->
+                ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason])
+        end
+    end, Evts),
 
-    case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
-        {ok, size_changed} ->
-            fslogic_notify:attributes({uuid, FileUUID}, ExcludedSessions),
-            fslogic_notify:blocks({uuid, FileUUID}, Blocks, ExcludedSessions);
-        {ok, size_not_changed} ->
-            fslogic_notify:blocks({uuid, FileUUID}, Blocks, ExcludedSessions);
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    case Ctx of
+        #{notify := Pid} -> Pid ! {handler_executed, Results};
+        _ -> ok
+    end,
+
+    Results.
+
+handle_proxyio_request(SessionId, #proxyio_request{
+    space_id = SPID, storage_id = SID, file_id = FID,
+    proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
+
+    fslogic_proxyio:write(SessionId, SPID, SID, FID, Offset, Data);
+
+handle_proxyio_request(SessionId, #proxyio_request{
+    space_id = SPID, storage_id = SID, file_id = FID,
+    proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
+
+    fslogic_proxyio:read(SessionId, SPID, SID, FID, Offset, Size);
+
+handle_proxyio_request(_SessionId, Req) ->
+    ?log_bad_request(Req),
+    erlang:error({invalid_request, Req}).

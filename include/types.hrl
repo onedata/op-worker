@@ -13,7 +13,7 @@
 % TODO or create many hrls and group the types
 % TODO those types might also be exported from .erl modules <----- +1
 
--include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 
 %%--------------------------------------------------------------------
 %% IDs of entities
@@ -33,14 +33,12 @@
 -type perms_octal() :: non_neg_integer().
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
 -type file_attributes() :: #file_attr{}.
--type xattr_key() :: binary().
--type xattr_value() :: binary().
 -type access_control_entity() :: term(). % TODO should be a proper record
 -type block_range() :: term(). % TODO should be a proper record
 -type share_id() :: binary().
 %%--------------------------------------------------------------------
 
-%% --------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% Misc
 -type error_reply() :: {error, term()}.
 %%--------------------------------------------------------------------

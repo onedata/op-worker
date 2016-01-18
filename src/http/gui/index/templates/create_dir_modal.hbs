@@ -1,0 +1,21 @@
+<!--
+    Prototype template for modal dialog used to create new directories
+-->
+
+{{#modal-dialog title='Create new directory' ok='createNewDir' close='hideModal'}}
+    <form {{action 'ok' on='submit' target=view}}>
+        <div class="form-group">
+            <p style="margin-bottom: 20px;">
+                The directory will be created in directory <b>{{controller.newFileParent.name}}</b>.<br />
+                To change the destination, select target directory (select none for space root).
+            </p>
+            {{input
+            type='text'
+            class='modal-textbox'
+            id='new-dir-name'
+            placeholder='Directory name'
+            value=newFileName
+            autofocus='autofocus'}}
+        </div>
+    </form>
+{{/modal-dialog}}
