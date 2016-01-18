@@ -52,7 +52,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         uid = fslogic_context:get_user_id(CTX)
     }},
     case file_meta:create(NormalizedParentUUID, File) of
-        {ok, _} ->
+        {ok, DirUUID} ->
             {ok, _} = file_meta:update(NormalizedParentUUID, #{mtime => CTime}),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = DirUUID}
