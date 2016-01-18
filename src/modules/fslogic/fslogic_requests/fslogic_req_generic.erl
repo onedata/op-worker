@@ -246,7 +246,7 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 set_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
         {ok, _} ->
-            ok = chmod_storage_files(SessId, {uuid, FileUuid}, 8#000),
+            ok = chmod_storage_files(?ROOT_SESS_ID, {uuid, FileUuid}, 8#000),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
