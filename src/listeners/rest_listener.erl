@@ -9,26 +9,34 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(rest_listener).
+-behaviour(listener_behaviour).
 -author("Tomasz Lichon").
 -author("Michal Zmuda").
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% Session logic module
--define(SESSION_LOGIC_MODULE, session_logic).
-
 % Cowboy listener references
 -define(REST_LISTENER, rest).
 
--behaviour(listener_behaviour).
 
-%% listener_starter_behaviour callbacks
--export([start/0, stop/0]).
+%% listener_behaviour callbacks
+-export([port/0, start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
 %%% listener_starter_behaviour callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link listener_starter_behaviour} callback port/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec port() -> integer().
+port() ->
+    {ok, RestPort} = application:get_env(?APP_NAME, rest_port),
+    RestPort.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -37,32 +45,33 @@
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
-  {ok, NbAcceptors} =
-    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_number_of_acceptors),
-  {ok, Timeout} =
-    application:get_env(?CLUSTER_WORKER_APP_NAME, http_worker_socket_timeout_seconds),
-  {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
-  {ok, RestPort} = application:get_env(?APP_NAME, http_worker_rest_port),
+    {ok, NbAcceptors} =
+        application:get_env(?APP_NAME, rest_number_of_acceptors),
+    {ok, Timeout} =
+        application:get_env(?APP_NAME, rest_socket_timeout_seconds),
+    {ok, RestPort} = application:get_env(?APP_NAME, rest_port),
+    {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
 
-  RestDispatch = [
-    {'_', rest_router:top_level_routing()}
-  ],
+    RestDispatch = [
+        {'_', rest_router:top_level_routing()}
+    ],
 
-  % Start the listener for REST handler
-  Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
-    ranch_ssl2, [
-      {ip, {127, 0, 0, 1}},
-      {port, RestPort},
-      {certfile, Cert}
-    ], cowboy_protocol, [
-      {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
-      {max_keepalive, 1},
-      {timeout, timer:seconds(Timeout)}
-    ]),
-  case Result of
-    {ok, _} -> ok;
-    _ -> Result
-  end.
+    % Start the listener for REST handler
+    Result = ranch:start_listener(?REST_LISTENER, NbAcceptors,
+        ranch_ssl2, [
+            {ip, {127, 0, 0, 1}},
+            {port, RestPort},
+            {certfile, Cert}
+        ], cowboy_protocol, [
+            {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
+            {max_keepalive, 1},
+            {timeout, timer:seconds(Timeout)}
+        ]),
+    case Result of
+        {ok, _} -> ok;
+        _ -> Result
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,10 +80,28 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
-  case catch cowboy:stop_listener(?REST_LISTENER) of
-    (ok) ->
-      ok;
-    (Error) ->
-      ?error("Error on stopping listener ~p: ~p", [?REST_LISTENER, Error]),
-      {error, rest_stop_error}
-  end.
+    case catch cowboy:stop_listener(?REST_LISTENER) of
+        (ok) ->
+            ok;
+        (Error) ->
+            ?error("Error on stopping listener ~p: ~p",
+                [?REST_LISTENER, Error]),
+            {error, rest_stop_error}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the status of a listener.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | {error, server_not_responding}.
+healthcheck() ->
+    {ok, RestPort} = application:get_env(?APP_NAME, rest_port),
+    case http_client:get("https://127.0.0.1:" ++ integer_to_list(RestPort),
+        [], <<>>, [insecure]) of
+        {ok, _, _, _} ->
+            ok;
+        _ ->
+            {error, server_not_responding}
+    end.

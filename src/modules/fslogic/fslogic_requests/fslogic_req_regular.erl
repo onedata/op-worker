@@ -19,6 +19,7 @@
 
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/4]).
+-export([get_parent/2]).
 
 %%%===================================================================
 %%% API functions
@@ -103,12 +104,16 @@ get_file_location(CTX, File, rdwr) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{?add_object, 2}, {?traverse_container, 2}, {traverse_ancestors, 2}]).
-get_new_file_location(#fslogic_ctx{session = #session{identity = #identity{user_id = UUID}}} = CTX,
-    {uuid, UUID}, Name, Mode, _Flags) ->
-    {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-    get_new_file_location(CTX, {uuid, DefaultSpaceUUID}, Name, Mode, _Flags);
-get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, Parent, Name, Mode, _Flags) ->
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Parent),
+get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags) ->
+    NormalizedParentUUID =
+        case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
+            true ->
+                {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
+                DefaultSpaceUUID;
+            false ->
+                ParentUUID
+        end,
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
@@ -121,7 +126,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, Parent, Name, Mod
         uid = fslogic_context:get_user_id(CTX)
     }},
 
-    {ok, UUID} = file_meta:create(Parent, File),
+    {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
@@ -148,6 +153,20 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, Parent, Name, Mod
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
             space_id = SpaceUUID}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc Gets parent of file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+    FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{none, 2}]).
+get_parent(_CTX, File) ->
+    {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
+    #fuse_response{status = #status{code = ?OK}, fuse_response =
+    #dir{uuid = ParentUUID}}.
+
 
 %%%===================================================================
 %%% Internal functions
