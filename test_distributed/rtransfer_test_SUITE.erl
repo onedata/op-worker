@@ -158,7 +158,7 @@ more_than_block_fetch_test(Config) ->
     DataSize = 1024 * ?TEST_BLOCK_SIZE,
     Data = generate_binary(DataSize),
     CounterPid = spawn(?MODULE, counter, [0]),
-    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, ?TEST_BLOCK_SIZE}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
