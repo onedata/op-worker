@@ -19,6 +19,7 @@
     helper_handle :: helpers:handle(),
     file :: helpers:file(),
     session_id :: session:id(),
+    file_uuid :: file_meta:uuid(),
     space_uuid :: file_meta:uuid(),
     storage :: datastore:document(),
     open_mode :: helpers:open_mode(),

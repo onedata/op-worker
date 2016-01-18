@@ -21,7 +21,7 @@
 -include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/4]).
+-export([new_handle/5]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1]).
 
@@ -41,12 +41,14 @@
 %% when handle goes out of scope (term will be released by Erlang's GC).
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), Storage :: datastore:document(), FileId :: helpers:file()) ->
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+  Storage :: datastore:document(), FileId :: helpers:file()) ->
     handle().
-new_handle(SessionId, SpaceUUID, Storage, FileId) ->
+new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,
+        file_uuid = FileUUID,
         file = FileId,
         storage = Storage
     }.

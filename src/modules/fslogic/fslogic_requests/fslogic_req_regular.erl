@@ -35,11 +35,12 @@
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{?write_object, 2}, {traverse_ancestors, 2}]).
 truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry),
+    {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(Entry),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
     Results = lists:map(
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),
-            SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, Storage, FID),
+            SFMHandle = storage_file_manager:new_handle(SessionId, SpaceUUID, FileUUID, Storage, FID),
             case storage_file_manager:open(SFMHandle, write) of
                 {ok, Handle} ->
                     {Loc, storage_file_manager:truncate(Handle, Size)};
@@ -63,16 +64,16 @@ truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
 %% @doc Gets helper params based on given session and storage ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_params(fslogic_worker:ctx(), SpaceId :: file_meta:uuid(),
+-spec get_helper_params(fslogic_worker:ctx(), FileUUID :: file_meta:uuid(),
     StorageId :: storage:id(), ForceCL :: boolean()) ->
     FuseResponse :: #fuse_response{} | no_return().
-get_helper_params(_Ctx, SpaceId, StorageId, true = _ForceCL) ->
+get_helper_params(_Ctx, FileUUID, StorageId, true = _ForceCL) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #helper_params{helper_name = <<"ProxyIO">>,
             helper_args = [
                 #helper_arg{key = <<"storage_id">>, value = StorageId}
-                #helper_arg{key = <<"space_id">>, value = SpaceId}]}};
-get_helper_params(_Ctx, _SpaceId, StorageId, false = _ForceCL) ->
+                #helper_arg{key = <<"space_id">>, value = FileUUID}]}};
+get_helper_params(_Ctx, _FileUUID, StorageId, false = _ForceCL) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
     {ok, #helper_init{name = Name, args = HelperArgsMap}} = fslogic_storage:select_helper(StorageDoc),
 
@@ -131,14 +132,14 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, Parent, Name, Mod
     file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
 
     LeafLess = fslogic_path:dirname(FileId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, Storage, LeafLess),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, undefined, Storage, LeafLess),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
 
-    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FileId),
+    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, Mode),
 

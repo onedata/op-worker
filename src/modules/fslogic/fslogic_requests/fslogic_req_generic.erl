@@ -390,7 +390,7 @@ delete_file(CTX, File) ->
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
 delete_impl(#fslogic_ctx{session_id = SessId}, File) ->
-    {ok, #document{value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
+    {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
     {ok, FileChildren} =
         case Type of
@@ -404,7 +404,7 @@ delete_impl(#fslogic_ctx{session_id = SessId}, File) ->
                         fun({StorageId, FileId}) ->
                             case storage:get(StorageId) of
                                 {ok, Storage} ->
-                                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FileId),
+                                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
                                     case storage_file_manager:unlink(SFMHandle) of
                                         ok -> ok;
                                         {error, Reason1} ->
@@ -468,12 +468,12 @@ rename_impl(_CTX, SourceEntry, TargetPath) ->
 -spec chmod_storage_files(session:id(), file_meta:entry(), perms_octal()) -> ok | no_return().
 chmod_storage_files(SessId, FileEntry, Mode) ->
     case file_meta:get(FileEntry) of
-        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
+        {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
             Results = lists:map(
                 fun({SID, FID} = Loc) ->
                     {ok, Storage} = storage:get(SID),
-                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FID),
+                    SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
                     {Loc, storage_file_manager:chmod(SFMHandle, Mode)}
                 end, fslogic_utils:get_local_storage_file_locations(FileEntry)),
 

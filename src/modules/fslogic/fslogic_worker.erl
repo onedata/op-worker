@@ -203,8 +203,8 @@ handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SPID, SID, ForceCL);
+handle_fuse_request(Ctx, #get_helper_params{space_id = UUID, storage_id = SID, force_cluster_proxy = ForceCL}) ->
+    fslogic_req_regular:get_helper_params(Ctx, UUID, SID, ForceCL);
 handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
     fslogic_req_generic:delete(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->

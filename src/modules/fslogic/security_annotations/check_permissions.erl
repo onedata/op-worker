@@ -54,16 +54,15 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
     Args;
-before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId} = Handle | RestOfArgs] = Args) ->
+before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_uuid = FileUUID} = Handle | RestOfArgs] = Args) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
-    HasAcl = true, % todo check if file has acl defined
-    case HasAcl of
-        true ->
-            [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
+    case has_acl(FileUUID) of
         false ->
-            Args
+            Args;
+        true ->
+            [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs]
     end.
 
 %%--------------------------------------------------------------------
@@ -105,7 +104,8 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, Inputs, 
 %%      E.g. for virtual "/" directory returns deafult space file.
 %%--------------------------------------------------------------------
 -spec get_validation_subject(onedata_user:id(), fslogic_worker:file()) -> fslogic_worker:file() | no_return().
-get_validation_subject(_UserId, #sfm_handle{}) -> undefined; %todo get FileUuid from sfm_handle somehow
+get_validation_subject(UserId, #sfm_handle{file_uuid = FileUUID}) ->
+    get_validation_subject(UserId, {uuid, FileUUID});
 get_validation_subject(UserId, FileEntry) ->
     {ok, #document{key = FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),
     DefaultSpaceDirUuid = fslogic_uuid:default_space_uuid(UserId),
@@ -155,6 +155,15 @@ expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_me
                 {?traverse_container, FileDoc, UserDoc, AncestorAcl}
             end, AncestorsIds),
     SubjectCheck ++ AncestorsCheck.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file has acl defined.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_acl(FileUUID :: file_meta:uuid()) -> boolean().
+has_acl(FileUUID) ->
+    xattr:exists_by_name(FileUUID, ?ACL_XATTR_NAME).
 
 %%--------------------------------------------------------------------
 %% @doc Get acl of given file, returns undefined when acls are empty

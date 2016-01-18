@@ -104,12 +104,12 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
-open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, UUID}, OpenType) ->
-    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = UUID, flags = OpenType},
+open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, FileUUID}, OpenType) ->
+    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileUUID, flags = OpenType},
         fun(#file_location{uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}),
-            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FileId),
+            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
@@ -266,15 +266,15 @@ get_sfm_handle_key(_UUID, _Offset, Size, []) ->
     {{StorageId :: storage:id(), FileId :: file_uuid()},
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: file_handle()} |  no_return().
-get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
+get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
     Key, SFMHandles, OpenType) ->
     {{StorageId, FileId}, SFMHandle} =
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
                 {SID, FID} = Key,
                 {ok, #document{value = Storage}} = storage:get(SID),
-                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, UUID}),
-                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, Storage, FID),
+                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}),
+                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
 
                 case storage_file_manager:open(SFMHandle0, OpenType) of
                     {ok, NewSFMHandle} ->

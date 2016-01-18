@@ -27,15 +27,16 @@
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec write(SessId :: session:id(), SpaceId :: file_meta:uuid(),
+-spec write(SessId :: session:id(), FileUuid :: file_meta:uuid(),
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Data :: binary()) ->
     #proxyio_response{}.
-write(SessionId, SpaceId, StorageId, FileId, Offset, Data) ->
+write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
+    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceId, Storage, FileId),
+        storage_file_manager:new_handle(SessionId, SpaceId, FileUuid, Storage, FileId),
 
     {Status, Response} =
         case storage_file_manager:open(SFMHandle, write) of
@@ -64,15 +65,16 @@ write(SessionId, SpaceId, StorageId, FileId, Offset, Data) ->
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(SessId :: session:id(), SpaceId :: file_meta:uuid(),
+-spec read(SessId :: session:id(), FileUuid :: file_meta:uuid(),
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     #proxyio_response{}.
-read(SessionId, SpaceId, StorageId, FileId, Offset, Size) ->
+read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
+    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceId, Storage, FileId),
+        storage_file_manager:new_handle(SessionId, SpaceId, FileUuid, Storage, FileId),
 
     {Status, Response} =
         case storage_file_manager:open(SFMHandle, read) of
