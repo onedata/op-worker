@@ -42,14 +42,15 @@
     choose_adequate_handler/1,
     use_supported_cdmi_version/1,
     use_unsupported_cdmi_version/1,
-    errors_test/1,
     moved_permanently_test/1,
     objectid_test/1,
     request_format_check_test/1,
     mimetype_and_encoding_test/1,
     out_of_range_test/1,
     partial_upload_test/1,
-    acl_test/1
+    acl_test/1,
+    errors_test/1,
+    accept_header_test/1
 ]).
 
 -performance({test_cases, []}).
@@ -67,14 +68,15 @@ all() ->
         choose_adequate_handler,
         use_supported_cdmi_version,
         use_unsupported_cdmi_version,
-        errors_test,
         moved_permanently_test,
         objectid_test,
         request_format_check_test,
         mimetype_and_encoding_test,
         out_of_range_test,
         partial_upload_test,
-        acl_test
+        acl_test,
+        errors_test,
+        accept_header_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -1516,6 +1518,19 @@ errors_test(Config) ->
     unmock_opening_file_without_perms(Config),
     ?assertEqual(403, Code9).
     %%------------------------------
+
+accept_header_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    AcceptHeader = {<<"Accept">>, <<"*/*">>},
+    tracer:start(Worker),
+    tracer:trace_calls(plugin_callback_selector),
+
+    {ok, Code1, _Headers1, _Response1} =
+        do_request(Worker, [], get,
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, AcceptHeader], []),
+    tracer:stop(),
+
+    ?assertEqual(200, Code1).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

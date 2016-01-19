@@ -243,7 +243,7 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 -spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-set_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}, #acl{value = Val}) ->
+set_acl(_CTX, {uuid, FileUuid}, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
         {ok, _} ->
             ok = chmod_storage_files(?ROOT_SESS_ID, {uuid, FileUuid}, 8#000),
