@@ -38,20 +38,20 @@ using helper_args_t = std::unordered_map<std::string, std::string>;
  * Static resource holder.
  */
 struct HelpersNIF {
-    asio::io_service dioService;
-    asio::executor_work<asio::io_service::executor_type> dio_work =
-        asio::make_work(dioService);
+    asio::io_service ioService;
+    asio::executor_work<asio::io_service::executor_type> ioWork =
+        asio::make_work(ioService);
 
     std::vector<std::thread> workers;
 
     one::helpers::StorageHelperFactory SHFactory =
-        one::helpers::StorageHelperFactory(dioService, dioService);
+        one::helpers::StorageHelperFactory(ioService, ioService, ioService);
 
     HelpersNIF() { umask(0); }
 
     ~HelpersNIF()
     {
-        dioService.stop();
+        ioService.stop();
 
         for (auto &th : workers) {
             th.join();
@@ -674,7 +674,7 @@ static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
     for (auto i = 0; i < 100; ++i) {
         application.workers.push_back(
-            std::thread([]() { application.dioService.run(); }));
+            std::thread([]() { application.ioService.run(); }));
     }
 
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
