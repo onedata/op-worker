@@ -85,13 +85,13 @@ isdir(CTX, UUID) ->
         -> ok | error_reply().
 rm_children(#fslogic_ctx{session_id = SessId} = CTX, UUID, Chunk) ->
     RemoveChild = fun({ChildUUID, _ChildName}) -> ok = rm(CTX, ChildUUID) end,
-    case lfm_dirs:ls(SessId, {uuid, UUID}, Chunk, 0) of
+    case lfm_dirs:ls(SessId, {uuid, UUID}, 0, Chunk) of
         {ok, Children} ->
             case length(Children) of
                 Chunk ->
                     lists:foreach(RemoveChild, Children),
                     rm_children(CTX, UUID, Chunk);
-                _ -> %length of Children list is smaller then ls_chunk so there are no more children
+                _ -> %length of Children list is smaller than ls_chunk so there are no more children
                     lists:foreach(RemoveChild, Children),
                     ok
             end;

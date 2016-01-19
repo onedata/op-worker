@@ -190,11 +190,11 @@ mkdir(Worker, SessId, Path, Mode) ->
         end).
 
 -spec ls(node(), session:id(), file_id_or_path(), integer(), integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls(Worker, SessId, FileKey, Limit, Offset) ->
+ls(Worker, SessId, FileKey, Offset, Limit) ->
     exec(Worker,
         fun(Host) ->
             Result =
-                logical_file_manager:ls(SessId, FileKey, Limit, Offset),
+                logical_file_manager:ls(SessId, FileKey, Offset, Limit),
             Host ! {self(), Result}
         end).
 

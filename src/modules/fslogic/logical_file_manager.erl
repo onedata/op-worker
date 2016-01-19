@@ -129,10 +129,10 @@ rmdir(SessId, FileKey) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls(SessId, FileKey, Limit, Offset) ->
+-spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Offset :: integer(), Limit :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+ls(SessId, FileKey, Offset, Limit) ->
     CTX = fslogic_context:new(SessId),
-    lfm_dirs:ls(SessId, ensure_uuid(CTX, FileKey), Limit, Offset).
+    lfm_dirs:ls(SessId, ensure_uuid(CTX, FileKey), Offset, Limit).
 
 
 %%--------------------------------------------------------------------
