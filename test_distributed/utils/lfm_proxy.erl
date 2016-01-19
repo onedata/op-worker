@@ -179,7 +179,8 @@ mkdir(Worker, SessId, Path) ->
             Host ! {self(), Result}
         end).
 
--spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) -> ok | error_reply().
+-spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) ->
+    {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     exec(Worker,
         fun(Host) ->

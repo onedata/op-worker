@@ -28,7 +28,6 @@
         acemask = Mask
     }).
 
-
 -define(deny_user(UserId, Mask),
     #accesscontrolentity{
         acetype = ?deny_mask,
@@ -44,7 +43,6 @@
         identifier = GroupId,
         acemask = Mask
     }).
-
 
 -define(deny_group(GroupId, Mask),
     #accesscontrolentity{
@@ -153,7 +151,6 @@ all() ->
         acl_write_acl_group_test
     ].
 
-
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -181,7 +178,6 @@ posix_read_file_group_test(Config) ->
     SessId1 = ?config({session_id, 1}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     {ok, Uuid} = lfm_proxy:create(W, SessId2, <<"/file">>, 8#730),
-
 
     {ok, H1} = lfm_proxy:open(W, SessId1, {uuid, Uuid}, write),
     {ok, 1} = lfm_proxy:write(W, H1, 0, <<255:8>>),
@@ -239,7 +235,7 @@ posix_write_file_group_test(Config) ->
 posix_read_dir_user_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#370),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#370),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#770),
 
@@ -254,7 +250,7 @@ posix_read_dir_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, 1}, Config),
     SessId2 = ?config({session_id, 2}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#730),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#730),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#770),
 
@@ -268,7 +264,7 @@ posix_read_dir_group_test(Config) ->
 posix_write_dir_user_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId3 = ?config({session_id, 3}, Config),
-    {ok, DirUuid} = mkdir(W, SessId3, <<"/dir">>, 8#770),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#770),
     {ok, File1Uuid} = lfm_proxy:create(W, SessId3, <<"/dir/file1">>, 8#770),
     ok = lfm_proxy:set_perms(W, SessId3, {uuid, DirUuid}, 8#570),
 
@@ -289,7 +285,7 @@ posix_write_dir_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId3 = ?config({session_id, 3}, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId3, <<"/dir">>, 8#770),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#770),
     {ok, File1Uuid} = lfm_proxy:create(W, SessId3, <<"/dir/file1">>, 8#770),
     ok = lfm_proxy:set_perms(W, SessId3, {uuid, DirUuid}, 8#750),
 
@@ -311,8 +307,8 @@ posix_write_dir_group_test(Config) ->
 posix_execute_dir_user_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId2, <<"/spaces/space_name3/dir1">>, 8#770),
-    {ok, Dir2Uuid} = mkdir(W, SessId2, <<"/spaces/space_name3/dir1/dir2">>, 8#770),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1">>, 8#770),
+    {ok, Dir2Uuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1/dir2">>, 8#770),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir1/dir2/file">>, 8#770),
     ok = lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#670),
@@ -335,8 +331,8 @@ posix_execute_dir_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
     SessId3 = ?config({session_id, 3}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId2, <<"/spaces/space_name3/dir1">>, 8#770),
-    {ok, Dir2Uuid} = mkdir(W, SessId2, <<"/spaces/space_name3/dir1/dir2">>, 8#770),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1">>, 8#770),
+    {ok, Dir2Uuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1/dir2">>, 8#770),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir1/dir2/file">>, 8#770),
     ok = lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#760),
@@ -409,7 +405,7 @@ acl_list_container_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#777),
 
@@ -425,14 +421,13 @@ acl_list_container_user_test(Config) ->
     Ans2 = lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 5, 0),
     ?assertMatch({ok, [{FileUuid, _}]}, Ans2).
 
-
 acl_list_container_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [{GroupId1, _} | _] = ?config({groups, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#777),
 
@@ -465,7 +460,7 @@ acl_write_object_user_test(Config) ->
 
     Ace2 = ?allow_user(UserId1, ?write_object_mask),
 
-        ok = lfm_proxy:set_acl(W, SessId2, {uuid, Uuid}, [?acl_all(UserId2), Ace2]),
+    ok = lfm_proxy:set_acl(W, SessId2, {uuid, Uuid}, [?acl_all(UserId2), Ace2]),
     {ok, H1} = lfm_proxy:open(W, SessId1, {uuid, Uuid}, write),
     Ans2 = lfm_proxy:write(W, H1, 0, <<255:8>>),
     ?assertEqual({ok, 1}, Ans2),
@@ -491,11 +486,10 @@ acl_write_object_group_test(Config) ->
 
     Ace2 = ?allow_group(GroupId1, ?write_object_mask),
 
-        ok = lfm_proxy:set_acl(W, SessId2, {uuid, Uuid}, [?acl_all(UserId2), Ace2]),
+    ok = lfm_proxy:set_acl(W, SessId2, {uuid, Uuid}, [?acl_all(UserId2), Ace2]),
     {ok, H1} = lfm_proxy:open(W, SessId1, {uuid, Uuid}, write),
     Ans2 = lfm_proxy:write(W, H1, 0, <<255:8>>),
     ?assertEqual({ok, 1}, Ans2),
-
 
     {ok, H2} = lfm_proxy:open(W, SessId2, {uuid, Uuid}, read),
     Ans3 = lfm_proxy:read(W, H2, 0, 1),
@@ -507,7 +501,7 @@ acl_add_object_user_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
-    {ok, DirUuid} = mkdir(W, SessId3, <<"/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777),
 
     Ace1 = ?deny_user(UserId2, ?add_object_mask),
     Ace2 = ?allow_user(UserId2, ?traverse_container_mask),
@@ -528,7 +522,7 @@ acl_add_object_group_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     [_, {GroupId2, _} | _] = ?config({groups, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId3, <<"/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777),
 
     Ace1 = ?deny_group(GroupId2, ?add_object_mask),
     Ace2 = ?allow_group(GroupId2, ?traverse_container_mask),
@@ -549,19 +543,19 @@ acl_add_subcontainer_user_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId3, <<"/spaces/space_name4/dir1">>, 8#777),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId3, <<"/spaces/space_name4/dir1">>, 8#777),
 
     Ace1 = ?allow_user(UserId2, ?add_subcontainer_mask),
     Ace2 = ?deny_user(UserId2, ?traverse_container_mask),
 
     ok = lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace1, Ace2]),
-    Ans1 = mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
+    Ans1 = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
     ?assertEqual({error, ?EACCES}, Ans1),
 
     Ace3 = ?allow_user(UserId2, ?add_subcontainer_mask bor ?traverse_container_mask),
 
     ok = lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace3]),
-    Ans2 = mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
+    Ans2 = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
     ?assertMatch({ok, _Dir2Uuid}, Ans2).
 
 acl_add_subcontainer_group_test(Config) ->
@@ -570,19 +564,19 @@ acl_add_subcontainer_group_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     [_, {GroupId2, _} | _] = ?config({groups, 1}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId3, <<"/spaces/space_name4/dir1">>, 8#777),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId3, <<"/spaces/space_name4/dir1">>, 8#777),
 
     Ace1 = ?allow_group(GroupId2, ?add_subcontainer_mask),
     Ace2 = ?deny_group(GroupId2, ?traverse_container_mask),
 
     ok = lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace1, Ace2]),
-    Ans1 = mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
+    Ans1 = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
     ?assertEqual({error, ?EACCES}, Ans1),
 
     Ace3 = ?allow_group(GroupId2, ?add_subcontainer_mask bor ?traverse_container_mask),
 
     ok = lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace3]),
-    Ans2 = mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
+    Ans2 = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
     ?assertMatch({ok, _Dir2Uuid}, Ans2).
 
 acl_read_metadata_user_test(Config) ->
@@ -685,8 +679,8 @@ acl_traverse_container_user_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     UserId3 = ?config({user_id, 3}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId1, <<"/spaces/space_name3/dir1">>, 8#777),
-    {ok, Dir2Uuid} = mkdir(W, SessId1, <<"/spaces/space_name3/dir1/dir2">>, 8#777),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1">>, 8#777),
+    {ok, Dir2Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1/dir2">>, 8#777),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/dir1/dir2/file">>, 8#777),
     {ok, H1} = lfm_proxy:open(W, SessId1, {uuid, FileUuid}, write),
@@ -715,8 +709,8 @@ acl_traverse_container_group_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     [_, _, {GroupId3, _} | _] = ?config({groups, 1}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId1, <<"/spaces/space_name3/dir1">>, 8#777),
-    {ok, Dir2Uuid} = mkdir(W, SessId1, <<"/spaces/space_name3/dir1/dir2">>, 8#777),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1">>, 8#777),
+    {ok, Dir2Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1/dir2">>, 8#777),
     {ok, FileUuid} =
         lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/dir1/dir2/file">>, 8#777),
     {ok, H1} = lfm_proxy:open(W, SessId1, {uuid, FileUuid}, write),
@@ -745,7 +739,7 @@ acl_delete_object_user_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
-    {ok, DirUuid} = mkdir(W, SessId3, <<"/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId3, <<"/dir/file">>, 8#777),
 
     Ace1 = ?deny_user(UserId2, ?delete_object_mask),
@@ -767,7 +761,7 @@ acl_delete_object_group_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     [_, _, _, {GroupId4, _}] = ?config({groups, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId3, <<"/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId3, <<"/dir/file">>, 8#777),
 
     Ace1 = ?allow_group(GroupId4, ?traverse_container_mask),
@@ -789,8 +783,8 @@ acl_delete_subcontainer_user_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId4 = ?config({session_id, 4}, Config),
     UserId4 = ?config({user_id, 4}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId1, <<"/spaces/space_name4/dir1">>, 8#777),
-    {ok, Dir2Uuid} = mkdir(W, SessId1, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1">>, 8#777),
+    {ok, Dir2Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
 
     Ace1 = ?deny_user(UserId4, ?delete_subcontainer_mask),
     Ace2 = ?allow_user(UserId4, ?traverse_container_mask),
@@ -811,8 +805,8 @@ acl_delete_subcontainer_group_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId4 = ?config({session_id, 4}, Config),
     [_, _, _, {GroupId4, _}] = ?config({groups, 1}, Config),
-    {ok, Dir1Uuid} = mkdir(W, SessId1, <<"/spaces/space_name4/dir1">>, 8#777),
-    {ok, Dir2Uuid} = mkdir(W, SessId1, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
+    {ok, Dir1Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1">>, 8#777),
+    {ok, Dir2Uuid} = lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1/dir2">>, 8#777),
 
     Ace1 = ?deny_group(GroupId4, ?delete_subcontainer_mask),
     Ace2 = ?allow_group(GroupId4, ?traverse_container_mask),
@@ -965,7 +959,7 @@ acl_delete_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId2, <<"/file">>, 8#777),
 
     Ace1 = ?deny_user(UserId1, ?delete_mask),
@@ -993,8 +987,8 @@ acl_delete_group_test(Config) ->
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    [{GroupId1, _}| _] = ?config({groups, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/dir">>, 8#777),
+    [{GroupId1, _} | _] = ?config({groups, 1}, Config),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId2, <<"/file">>, 8#777),
 
     Ace1 = ?deny_group(GroupId1, ?delete_mask),
@@ -1023,7 +1017,7 @@ acl_read_acl_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/file">>, 8#777),
 
     Ace1 = ?deny_user(UserId1, ?read_acl_mask),
@@ -1051,8 +1045,8 @@ acl_read_acl_group_test(Config) ->
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    [_, _, {GroupId3, _}| _] = ?config({groups, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
+    [_, _, {GroupId3, _} | _] = ?config({groups, 1}, Config),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/file">>, 8#777),
 
     Ace1 = ?deny_group(GroupId3, ?read_acl_mask),
@@ -1081,7 +1075,7 @@ acl_write_acl_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name3/dir">>, 8#777),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/file">>, 8#777),
 
     Ace1 = ?deny_user(UserId1, ?write_acl_mask),
@@ -1109,8 +1103,8 @@ acl_write_acl_group_test(Config) ->
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    [_, _, {GroupId3, _}| _] = ?config({groups, 1}, Config),
-    {ok, DirUuid} = mkdir(W, SessId2, <<"/spaces/space_name3/dir">>, 8#777),
+    [_, _, {GroupId3, _} | _] = ?config({groups, 1}, Config),
+    {ok, DirUuid} = lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir">>, 8#777),
     {ok, FileUuid} = lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/file">>, 8#777),
 
     Ace1 = ?deny_group(GroupId3, ?write_acl_mask),
@@ -1133,7 +1127,6 @@ acl_write_acl_group_test(Config) ->
     Ans4 = lfm_proxy:set_acl(W, SessId1, {uuid, FileUuid}, []),
     ?assertEqual(ok, Ans4).
 
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1154,18 +1147,7 @@ end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces(Config).
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-% Creates directory and returns its uuid
-mkdir(Worker, SessId, Path, Mode) ->
-    case lfm_proxy:mkdir(Worker, SessId, Path, Mode) of
-        ok ->
-            {ok, #file_attr{uuid = Uuid}} =
-                lfm_proxy:stat(Worker, SessId, {path, Path}),
-            {ok, Uuid};
-        Error ->
-            Error
-    end.
