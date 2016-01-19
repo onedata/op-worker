@@ -125,8 +125,8 @@ translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentU
     #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)};
 translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
     #get_file_location{uuid = UUID, flags = translate_open_flags(Flags)};
-translate_from_protobuf(#'GetHelperParams'{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP}) ->
-    #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP};
+translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
+    #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
 translate_from_protobuf(#'Close'{uuid = UUID}) ->

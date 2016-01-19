@@ -18,7 +18,7 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/4]).
+-export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/3]).
 -export([get_parent/2]).
 
 %%%===================================================================
@@ -62,19 +62,19 @@ truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Gets helper params based on given session and storage ID.
+%% @doc Gets helper params based on given storage ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_params(fslogic_worker:ctx(), FileUUID :: file_meta:uuid(),
+-spec get_helper_params(fslogic_worker:ctx(),
     StorageId :: storage:id(), ForceCL :: boolean()) ->
     FuseResponse :: #fuse_response{} | no_return().
-get_helper_params(_Ctx, FileUUID, StorageId, true = _ForceCL) ->
+get_helper_params(_Ctx, StorageId, true = _ForceCL) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #helper_params{helper_name = <<"ProxyIO">>,
             helper_args = [
-                #helper_arg{key = <<"storage_id">>, value = StorageId},
-                #helper_arg{key = <<"space_id">>, value = FileUUID}]}};
-get_helper_params(_Ctx, _FileUUID, StorageId, false = _ForceCL) ->
+                #helper_arg{key = <<"storage_id">>, value = StorageId}
+            ]}};
+get_helper_params(_Ctx, StorageId, false = _ForceCL) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
     {ok, #helper_init{name = Name, args = HelperArgsMap}} = fslogic_storage:select_helper(StorageDoc),
 
