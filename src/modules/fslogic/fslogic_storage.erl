@@ -37,7 +37,9 @@
 new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_ceph_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_posix_user_ctx(SessionId, SpaceUUID).
+    new_posix_user_ctx(SessionId, SpaceUUID);
+new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
+    new_s3_user_ctx(SessionId, SpaceUUID).
 
 
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
@@ -72,6 +74,18 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
 
     FinalUID = fslogic_utils:gen_storage_uid(UserId),
     #posix_user_ctx{uid = FinalUID, gid = FinalGID}.
+
+
+new_s3_user_ctx(SessionId, SpaceUUID) ->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #s3_user{credentials = CredentialsMap}}} = s3_user:get(UserId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
+    {ok, Credentials} = maps:find(StorageId, CredentialsMap),
+    #s3_user_ctx{
+        access_key = s3_user:access_key(Credentials),
+        secret_key = s3_user:secret_key(Credentials)
+    }.
 
 
 %%--------------------------------------------------------------------
