@@ -12,13 +12,14 @@
 -module(dbsync_test_SUITE).
 -author("Rafal Slota").
 
--include("modules/datastore/datastore.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -213,16 +214,16 @@ get_uuid(Worker, SessId, Path) ->
 
 init_per_suite(Config) ->
     try
-    Config1 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    [Worker | _] = ?config(op_worker_nodes, Config1),
+        Config1 = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+        [Worker | _] = ?config(op_worker_nodes, Config1),
 
-    TmpDir = gen_storage_dir(),
+        TmpDir = gen_storage_dir(),
 
-    %% @todo: use shared storage
-    "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
-    {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
-        [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(TmpDir)})])}]),
-    [{storage_id, StorageId}, {storage_dir, TmpDir} | Config1]
+        %% @todo: use shared storage
+        "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
+        {ok, StorageId} = rpc:call(Worker, storage, create, [#document{value = fslogic_storage:new_storage(<<"Test">>,
+            [fslogic_storage:new_helper_init(<<"DirectIO">>, #{<<"root_path">> => list_to_binary(TmpDir)})])}]),
+        [{storage_id, StorageId}, {storage_dir, TmpDir} | Config1]
     catch
         _:Reason ->
             ct:print("~p ~p", [Reason, erlang:get_stacktrace()]),
@@ -236,57 +237,18 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    [Worker, Worker2] = Workers = ?config(op_worker_nodes, Config),
-    ct:print("Workers ~p", [Workers]),
-
+    Workers = ?config(op_worker_nodes, Config),
     communicator_mock_setup(Workers),
-    file_meta_mock_setup(Workers),
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
-    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
-
-    User1 = {1, [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User2 = {2, [<<"space_id2">>, <<"space_id3">>, <<"space_id4">>]},
-    User3 = {3, [<<"space_id3">>, <<"space_id4">>]},
-    User4 = {4, [<<"space_id4">>]},
-
-    Host = self(),
-    Servers = lists:map(fun(W) ->
-        spawn_link(W, fun() ->
-            lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
-            Host ! {self(), done},
-            receive
-                exit -> ok
-            end
-        end)
-    end, ?config(op_worker_nodes, Config)),
-
-    lists:foreach(fun(Server) ->
-        receive
-            {Server, done} -> ok
-        after timer:seconds(5) ->
-            error("Cannot setup lfm_handles ETS")
-        end
-    end, Servers),
-
-
-    Config1 = session_setup(Worker, [User1, User2, User3, User4], Config),
-
-    session_setup(Worker2, [User1, User2, User3, User4], Config),
-    [{servers, Servers} | Config1].
+    initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    initializer:clean_test_users_and_spaces(Config),
+    test_utils:mock_validate_and_unload(Workers, communicator),
 
-    lists:foreach(fun(Pid) ->
-        Pid ! exit
-    end, ?config(servers, Config)),
+    ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [], timer:seconds(60))),
+    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, timer:seconds(60))).
 
-    session_teardown(Worker, Config),
-    test_utils:mock_validate(Workers, [communicator, file_meta, gr_spaces]),
-    test_utils:mock_unload(Workers, [communicator, file_meta, gr_spaces]).
 
 %%%===================================================================
 %%% Internal functions
@@ -312,7 +274,7 @@ session_setup(Worker, [{UserNum, SpaceIds} | R], Config) ->
     UserName = Name("username", UserNum),
 
     ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
-        reuse_or_create_session, [SessId, Iden, Self])),
+        reuse_or_create_fuse_session, [SessId, Iden, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{

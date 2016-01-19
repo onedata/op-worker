@@ -21,6 +21,7 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneprovider/dbsync_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -149,6 +150,16 @@ translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
     #xattr{name = Name, value = Value};
 translate_from_protobuf(#'XattrList'{names = Names}) ->
     #xattr_list{names = Names};
+
+
+
+
+
+
+
+
+
+
 translate_from_protobuf(undefined) ->
     undefined.
 

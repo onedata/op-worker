@@ -259,9 +259,17 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_client_message(#state{}, binary()) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_client_message(State = #state{session_id = SessId}, Data) ->
+handle_client_message(State = #state{session_id = SessId, certificate = Cert}, Data) ->
     try serializator:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined ->
+            IsProvider = provider_auth_manager:is_provider(Cert),
+            case IsProvider of
+                true ->
+                    SessId = provider_auth_manager:handshake(Cert, self()),
+                    handle_normal_message(State#state{session_id = SessId}, Msg);
+                false ->
+                    handle_handshake(State, Msg)
+            end,
             handle_handshake(State, Msg);
         {ok, Msg} ->
             handle_normal_message(State, Msg)
