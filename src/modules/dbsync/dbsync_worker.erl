@@ -149,7 +149,8 @@ handle({flush_queue, QueueKey}) ->
                     Queue#queue{current_batch = #batch{since = Until, until = Until}}
             end
         end);
-
+handle({dbsync_request, SessId, DBSyncRequest}) ->
+    dbsync_proto:handle(SessId, DBSyncRequest);
 %% Unknown request
 handle(_Request) ->
     ?log_bad_request(_Request).

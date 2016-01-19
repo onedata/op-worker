@@ -151,13 +151,31 @@ translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
 translate_from_protobuf(#'XattrList'{names = Names}) ->
     #xattr_list{names = Names};
 
+%% DBSync
+translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
+    #dbsync_request{message_body = translate_from_protobuf(MessageBody)};
+translate_from_protobuf(#'DBSyncResponse'{status = Status}) ->
+    #dbsync_response{status = translate_from_protobuf(Status)};
+translate_from_protobuf(#'TreeBroadcast'{message_body = {_, MessageBody}, depth = Depth, excluded_providers = ExcludedProv,
+    l_edge = LEdge, r_edge = REgde, request_id = ReqId, space_id = SpaceId}) ->
+    #tree_broadcast{
+        message_body = translate_from_protobuf(MessageBody),
+        depth = Depth,
+        l_edge = LEdge,
+        r_edge = REgde,
+        space_id = SpaceId,
+        request_id = ReqId,
+        excluded_providers = ExcludedProv
+    };
+translate_from_protobuf(#'ChangesRequest'{since_seq = Since, until_seq = Until}) ->
+    #changes_request{since_seq = Since, until_seq = Until};
 
-
-
-
-
-
-
+translate_from_protobuf(#'StatusRequest'{}) ->
+    #status_request{};
+translate_from_protobuf(#'StatusReport'{seq_num = SeqNum}) ->
+    #status_report{seq = SeqNum};
+translate_from_protobuf(#'BatchUpdate'{since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
+    #batch_update{since_seq = Since, until_seq = Until, changes_encoded = Changes};
 
 
 translate_from_protobuf(undefined) ->
@@ -186,7 +204,7 @@ translate_to_protobuf(#read_subscription{} = Sub) ->
         size_threshold = Sub#read_subscription.size_threshold
     }};
 translate_to_protobuf(#write_subscription{} = Sub) ->
-    {write_subscription, #'ReadSubscription'{
+    {write_subscription, #'WriteSubscription'{
         counter_threshold = Sub#write_subscription.counter_threshold,
         time_threshold = Sub#write_subscription.time_threshold,
         size_threshold = Sub#write_subscription.size_threshold
@@ -287,6 +305,32 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
     {xattr, #'Xattr'{name = Name, value = Value}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
+
+translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->
+    {dbsync_request, #'DBSyncRequest'{message_body = translate_to_protobuf(MessageBody)}};
+translate_to_protobuf(#dbsync_response{status = Status}) ->
+    {dbsync_response, #'DBSyncResponse'{status = translate_to_protobuf(Status)}};
+translate_to_protobuf(#tree_broadcast{message_body = MessageBody, depth = Depth, excluded_providers = ExcludedProv,
+    l_edge = LEdge, r_edge = REgde, request_id = ReqId, space_id = SpaceId}) ->
+    {tree_broadcast, #'TreeBroadcast'{
+        message_body = translate_to_protobuf(MessageBody),
+        depth = Depth,
+        l_edge = LEdge,
+        r_edge = REgde,
+        space_id = SpaceId,
+        request_id = ReqId,
+        excluded_providers = ExcludedProv
+    }};
+translate_to_protobuf(#changes_request{since_seq = Since, until_seq = Until}) ->
+    {changes_request, #'ChangesRequest'{since_seq = Since, until_seq = Until}};
+
+translate_to_protobuf(#status_request{}) ->
+    {status_request, #'StatusRequest'{}};
+translate_to_protobuf(#status_report{seq = SeqNum}) ->
+    {status_report, #'StatusReport'{seq_num = SeqNum}};
+translate_to_protobuf(#batch_update{since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
+    {batch_update, #'BatchUpdate'{since_seq = Since, until_seq = Until, changes_encoded = Changes}};
+
 translate_to_protobuf(undefined) ->
     undefined.
 

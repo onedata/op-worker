@@ -12,6 +12,8 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
+-include("proto/oneprovider/dbsync_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 %%-include_lib("cluster_worker/include/modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -46,39 +48,10 @@
 }).
 
 
--record(tree_broadcast, {
-    depth,
-    l_edge,
-    r_edge,
-    space_id, %% ??
-    request_id,
-    excluded_providers,
-    message_body
-}).
-
--record(batch_update, {
-    since_seq,
-    until_seq,
-    changes_encoded
-}).
-
--record(status_report, {
-    seq
-}).
-
--record(status_request, {
-}).
-
--record(changes_request, {
-    since_seq,
-    until_seq
-}).
-
-
 -export([send_batch/2, changes_request/3, status_report/1]).
 
 -export([send_tree_broadcast/3, send_tree_broadcast/4, send_direct_message/3]).
--export([]).
+-export([handle/2]).
 -export([reemit/1]).
 
 %%%==================================================================
@@ -231,6 +204,19 @@ reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, messa
     ok = send_tree_broadcast(Providers4, Request, BaseRequest, 3).
 
 
+handle(SessId, #dbsync_request{message_body = MessageBody}) ->
+    #session{identity = #identity{provider_id = ProviderId}} = session:get(SessId),
+    try handle(ProviderId, MessageBody) of
+        ok ->
+            #dbsync_response{status = #status{code = ?OK}};
+        {error, Reason} ->
+            ?error("DBSync error ~p", [Reason]),
+            #dbsync_response{status = #status{code = ?EAGAIN}}
+    catch
+        _:Reason0 ->
+            ?error_stacktrace("DBSync error ~p", [Reason0]),
+            #dbsync_response{status = #status{code = ?EAGAIN}}
+    end;
 %% Handle tree_broadcast{} message
 handle(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
     Ignore =
