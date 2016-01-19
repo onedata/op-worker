@@ -262,13 +262,13 @@ handle_events(Evts, #{session_id := SessId} = Ctx) ->
     Results.
 
 handle_proxyio_request(SessionId, #proxyio_request{
-    space_id = SPID, storage_id = SID, file_id = FID,
+    file_uuid = SPID, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
 
     fslogic_proxyio:write(SessionId, SPID, SID, FID, Offset, Data);
 
 handle_proxyio_request(SessionId, #proxyio_request{
-    space_id = SPID, storage_id = SID, file_id = FID,
+    file_uuid = SPID, storage_id = SID, file_id = FID,
     proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
 
     fslogic_proxyio:read(SessionId, SPID, SID, FID, Offset, Size);
