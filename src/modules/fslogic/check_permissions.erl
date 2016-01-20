@@ -184,12 +184,16 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
                        _ ->
                            {ok, #document{value = #onedata_user{space_ids = Spaces}}} = onedata_user:get(UserId),
                            {ok, #document{key = ScopeUUID}} = file_meta:get_scope(FileDoc),
-                           case lists:member(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), Spaces) of
+                           try lists:member(fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID), Spaces) of
                                true ->
                                    ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as space member.", [UserId, ReqBit, FileDoc, Mode]),
                                    ((ReqBit bsl 3) band Mode) =:= (ReqBit bsl 3);
                                false ->
                                    ?debug("Require ~p to have ~.8B mode on file ~p with mode ~.8B as other (Spaces ~p, scope ~p).", [UserId, ReqBit, FileDoc, Mode, Spaces, ScopeUUID]),
+                                   (ReqBit band Mode) =:= ReqBit
+                           catch
+                               _:_ ->
+                                   ?info("Require ~p to have ~.8B mode on file ~p with mode ~.8B as other (Spaces ~p, scope ~p).", [UserId, ReqBit, FileDoc, Mode, Spaces, ScopeUUID]),
                                    (ReqBit band Mode) =:= ReqBit
                            end
                    end,

@@ -257,7 +257,7 @@ get_sequencer_manager(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_random_connection(SessId :: session:id()) ->
-    {ok, Con :: pid()} | {error, Reason :: term()}.
+    {ok, Con :: pid()} | {error, Reason :: empty_connection_pool | term()}.
 get_random_connection(SessId) ->
     case get_connections(SessId) of
         {ok, []} -> {error, empty_connection_pool};

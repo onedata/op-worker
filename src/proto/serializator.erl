@@ -19,6 +19,7 @@
 
 %% API
 -export([deserialize_client_message/2, serialize_server_message/1]).
+-export([deserialize_server_message/2, serialize_client_message/1]).
 
 %%%===================================================================
 %%% API
@@ -45,6 +46,27 @@ deserialize_client_message(Message, SessionId) ->
         message_body = translator:translate_from_protobuf(MsgBody)
     }}.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% deserialize protobuf binary data to client message
+%% @end
+%%--------------------------------------------------------------------
+-spec deserialize_server_message(Message :: binary(), SessionId :: undefined | session:id()) ->
+    {ok, ClientMsg :: #server_message{}} | no_return().
+deserialize_server_message(Message, _SessionId) ->
+    #'ServerMessage'{
+        message_id = MsgId,
+        message_stream = MsgStm,
+        message_body = {_, MsgBody}
+    } = messages:decode_msg(Message, 'ServerMessage'),
+    {ok, DecodedId} = message_id:decode(MsgId),
+    {ok, #server_message{
+        message_id = DecodedId,
+        message_stream = translator:translate_from_protobuf(MsgStm),
+        message_body = translator:translate_from_protobuf(MsgBody)
+    }}.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% serialize server message to protobuf binary data
@@ -60,6 +82,23 @@ serialize_server_message(#server_message{message_id = MsgId, message_stream = Ms
         message_body = translator:translate_to_protobuf(MsgBody)
     },
     {ok, messages:encode_msg(ServerMessage)}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% serialize server message to protobuf binary data
+%% @end
+%%--------------------------------------------------------------------
+-spec serialize_client_message(#client_message{}) -> {ok, binary()} | no_return().
+serialize_client_message(#client_message{message_id = MsgId, message_stream = MsgStm,
+    message_body = MsgBody}) ->
+    {ok, EncodedId} = message_id:encode(MsgId),
+    ClientMessage = #'ClientMessage'{
+        message_id = EncodedId,
+        message_stream = translator:translate_to_protobuf(MsgStm),
+        message_body = translator:translate_to_protobuf(MsgBody)
+    },
+    {ok, messages:encode_msg(ClientMessage)}.
 
 %%%===================================================================
 %%% Internal functions

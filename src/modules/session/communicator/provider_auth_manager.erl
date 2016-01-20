@@ -45,7 +45,9 @@ is_provider(#'OTPCertificate'{} = Cert) ->
         [<<"Providers">>] =:= OU
     catch
         _:_ -> false
-    end.
+    end;
+is_provider(_) ->
+    false.
 
 
 handshake(Cert, Conn) ->

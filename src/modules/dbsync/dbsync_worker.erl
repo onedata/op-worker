@@ -68,7 +68,7 @@ init(_Args) ->
     timer:send_after(100, dbsync_worker, {timer, bcast_status}),
     Since = 0,
     {ok, ChangesStream} = init_stream(Since, infinity, global),
-    {ok, #{changes_stream => ChangesStream, {queue, global} => #queue{last_send = now(), current_batch = #batch{since = Since}}}}.
+    {ok, #{changes_stream => ChangesStream, {queue, global} => #queue{last_send = now(), current_batch = #batch{since = Since, until = Since}}}}.
 
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
@@ -125,6 +125,8 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
                 {ok, SpaceId} ->
 %%                    ?info("Document ~p assigned to space ~p", [Key, SpaceId]),
                     queue_push(QueueKey, Change, SpaceId);
+                {error, not_a_space} ->
+                    skip;
                 {error, Reason} ->
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
@@ -135,7 +137,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
     end;
 
 handle({flush_queue, QueueKey}) ->
-    ?info("[ DBSync ] Flush queue ~p", [QueueKey]),
+    ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
     worker_host:state_update(dbsync_worker, {queue, QueueKey},
         fun(#queue{current_batch = #batch{until = Until} = BatchToSend, removed = IsRemoved} = Queue) ->
 %%            ?info("[ DBSync ] Flush queue ~p ~p", [QueueKey, BatchToSend]),
@@ -151,6 +153,18 @@ handle({flush_queue, QueueKey}) ->
         end);
 handle({dbsync_request, SessId, DBSyncRequest}) ->
     dbsync_proto:handle(SessId, DBSyncRequest);
+handle({'EXIT', Stream, Reason}) ->
+    case state_get(changes_stream) of
+        Stream ->
+            #queue{current_batch = #batch{until = Since}} = state_get({queue, global}),
+            worker_host:state_update(dbsync_worker, changes_stream,
+                fun(_) ->
+                    {ok, NewStream} = init_stream(Since, infinity, global),
+                    NewStream
+                end);
+        _ ->
+            ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
+    end;
 %% Unknown request
 handle(_Request) ->
     ?log_bad_request(_Request).
@@ -181,11 +195,13 @@ queue_push(QueueKey, #change{seq = Since} = Change, SpaceId) ->
             Queue1 =
                 case Queue of
                     undefined ->
+                        ?info("New queue ~p", [Since]),
                         #queue{last_send = now(), current_batch = #batch{since = Since, until = Since}};
                     #queue{} = Q -> Q
                 end,
             CurrentBatch = Queue1#queue.current_batch,
             ChangesList = maps:get(SpaceId, CurrentBatch#batch.changes, []),
+            ?info("!! Since ~p", [CurrentBatch#batch.since]),
             Queue1#queue{current_batch = CurrentBatch#batch{until = Since, changes = maps:put(SpaceId, [Change | ChangesList], CurrentBatch#batch.changes)}}
         end).
 
@@ -267,9 +283,17 @@ get_space_id(#document{key = Key} = Doc) ->
 get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
     FileUUID = get_file_scope(Doc),
     case file_meta:get_scope({uuid, FileUUID}) of
-        {ok, #document{key = SpaceId}} ->
-            state_put({space_id, KeyToCache}, SpaceId),
-            {ok, SpaceId};
+        {ok, #document{key = <<"">> = Root}} ->
+            state_put({space_id, KeyToCache}, Root),
+            {ok, Root};
+        {ok, #document{key = ScopeUUID}} ->
+            try
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
+                state_put({space_id, KeyToCache}, SpaceId),
+                {ok, SpaceId}
+            catch
+                _:_ -> {error, not_a_space}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.

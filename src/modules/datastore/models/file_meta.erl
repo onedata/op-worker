@@ -492,6 +492,7 @@ setup_onedata_user(UUID) ->
             case exists({uuid, SpaceDirUuid}) of
                 true -> ok;
                 false ->
+                    ?info("WUT ~p", [SpaceId]),
                     {ok, #space_details{name = SpaceName}} =
                         gr_spaces:get_details(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},

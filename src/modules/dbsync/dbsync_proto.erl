@@ -63,7 +63,9 @@ send_batch(global, #batch{changes = Changes, since = Since, until = Until} = Bat
     ?info("[ DBSync ] Sending batch to all providers: ~p", [Batch]),
     lists:foreach(
         fun({SpaceId, ChangeList}) ->
-            ToSend = #batch_update{ since_seq = Since, until_seq = Until, changes_encoded = dbsync_utils:encode_term(maps:from_list([{SpaceId, ChangeList}]))},
+            ?info("Processing space ~p", [SpaceId]),
+            ToSend = #batch_update{ since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
+                changes_encoded = dbsync_utils:encode_term(maps:from_list([{SpaceId, ChangeList}]))},
             Providers = dbsync_utils:get_providers_for_space(SpaceId),
             send_tree_broadcast(Providers, ToSend, 3)
         end, maps:to_list(Changes)),
@@ -76,7 +78,8 @@ send_batch({provider, ProviderId, _}, #batch{changes = Changes, since = Since, u
             maps:remove(SpaceId, CMap)
         end, Changes, SpaceIds),
 
-    send_direct_message(ProviderId, #batch_update{since_seq = Since, until_seq = Until, changes_encoded = dbsync_utils:encode_term(NewChanges)}, 3).
+    send_direct_message(ProviderId, #batch_update{since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
+        changes_encoded = dbsync_utils:encode_term(NewChanges)}, 3).
 
 
 changes_request(ProviderId, Since, Until) ->
@@ -326,4 +329,5 @@ pb_module(ModuleName) ->
 
 
 communicate(ProviderId, Message) ->
-    ok.
+    SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
+    provider_communicator:communicate(#dbsync_request{message_body = Message}, SessId).
