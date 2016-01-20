@@ -42,6 +42,14 @@ new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_s3_user_ctx(SessionId, SpaceUUID).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for Ceph storage helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_ceph_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+    helpers:user_ctx().
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} = ceph_user:get(UserId),
@@ -52,6 +60,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
         user_name = ceph_user:name(Credentials),
         user_key = ceph_user:key(Credentials)
     }.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -76,6 +85,14 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
     #posix_user_ctx{uid = FinalUID, gid = FinalGID}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for Amazon S3 storage helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_s3_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+    helpers:user_ctx().
 new_s3_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     {ok, #document{value = #s3_user{credentials = CredentialsMap}}} = s3_user:get(UserId),

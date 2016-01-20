@@ -162,6 +162,13 @@ get_or_fetch(Key, Token) ->
         Error -> Error
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of user space IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_spaces(UserId :: onedata_user:id()) ->
+    {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
 get_spaces(UserId) ->
     case onedata_user:get(UserId) of
         {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->

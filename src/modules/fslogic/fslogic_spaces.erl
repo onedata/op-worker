@@ -29,11 +29,19 @@
 %% Returns default space document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_default_space(Ctx :: fslogic_worker:ctx() | onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
+-spec get_default_space(UserIdOrCTX :: fslogic_worker:ctx() | onedata_user:id()) ->
+    {ok, datastore:document()} | datastore:get_error().
 get_default_space(UserIdOrCTX) ->
     {ok, DefaultSpaceId} = get_default_space_id(UserIdOrCTX),
     file_meta:get_space_dir(DefaultSpaceId).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns default space ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_default_space_id(UserIdOrCTX :: fslogic_worker:ctx() | onedata_user:id()) ->
+    {ok, SpaceId :: binary()}.
 get_default_space_id(CTX = #fslogic_ctx{}) ->
     UserId = fslogic_context:get_user_id(CTX),
     get_default_space_id(UserId);

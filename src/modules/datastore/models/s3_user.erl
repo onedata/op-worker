@@ -24,13 +24,15 @@
     model_init/0, 'after'/5, before/4]).
 
 -record(s3_user_credentials, {
-    access_key :: binary(),
-    secret_key :: binary()
+    access_key :: access_key(),
+    secret_key :: secret_key()
 }).
 
+-type access_key() :: binary().
+-type secret_key() :: binary().
 -type credentials() :: #s3_user_credentials{}.
 
--export_type([credentials/0]).
+-export_type([access_key/0, secret_key/0, credentials/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -125,6 +127,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds Amazon S3 storage credentials for onedata user.
+%% @end
+%%--------------------------------------------------------------------
+-spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), AccessKey :: access_key(),
+    SecretKey :: secret_key()) -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
 add(UserId, StorageId, AccessKey, SecretKey) ->
     case s3_user:get(UserId) of
         {ok, #document{value = S3User} = Doc} ->
@@ -142,6 +151,36 @@ add(UserId, StorageId, AccessKey, SecretKey) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns Amazon S3 user access key.
+%% @end
+%%--------------------------------------------------------------------
+-spec access_key(Credentials :: #s3_user_credentials{}) -> AccessKey :: access_key().
+access_key(#s3_user_credentials{access_key = AccessKey}) ->
+    AccessKey.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns S3 user secret key.
+%% @end
+%%--------------------------------------------------------------------
+-spec secret_key(Credentials :: #s3_user_credentials{}) -> SecretKey :: secret_key().
+secret_key(#s3_user_credentials{secret_key = SecretKey}) ->
+    SecretKey.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns Amazon S3 user datastore document.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(UserId :: onedata_user:id(), StorageId :: storage:id(),
+    AccessKey :: access_key(), SecretKey :: secret_key()) -> Doc :: #document{}.
 new(UserId, StorageId, AccessKey, SecretKey) ->
     #document{key = UserId, value = #s3_user{
         credentials = maps:put(StorageId, #s3_user_credentials{
@@ -150,15 +189,16 @@ new(UserId, StorageId, AccessKey, SecretKey) ->
         }, #{})}
     }.
 
-
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds credentials to existing Amazon S3 user.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_credentials(S3User :: #s3_user{}, StorageId :: storage:id(),
+    AccessKey :: access_key(), SecretKey :: secret_key()) -> NewS3User :: #s3_user{}.
 add_credentials(#s3_user{credentials = Credentials} = S3User, StorageId, AccessKey, SecretKey) ->
     S3User#s3_user{credentials = maps:put(StorageId, #s3_user_credentials{
         access_key = AccessKey,
         secret_key = SecretKey
     }, Credentials)}.
-
-access_key(#s3_user_credentials{access_key = AccessKey}) ->
-    AccessKey.
-
-secret_key(#s3_user_credentials{secret_key = SecretKey}) ->
-    SecretKey.
