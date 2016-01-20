@@ -138,13 +138,17 @@ uid_to_ace_name(Uid) ->
 
 %%--------------------------------------------------------------------
 %% @doc Transforms acl name representation (name and hash suffix) to global id
-%% i. e. "John Dow#fif3n" -> "fif3nhh238hdfg33f3"
+%% i. e. "John Dow#fif3n" -> "fif3n"
 %% @end
 %%--------------------------------------------------------------------
 -spec ace_name_to_uid(Name :: binary()) -> binary().
 ace_name_to_uid(AceName) ->
-    [_UserName, Uid] = binary:split(AceName, <<"#">>, [global]),
-    Uid.
+    case binary:split(AceName, <<"#">>, [global]) of
+        [_UserName, Uid] ->
+            Uid;
+        Uid ->
+            Uid
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Transforms global group id to acl group name representation (name and hash suffix)
@@ -158,13 +162,17 @@ gid_to_ace_name(GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc Transforms acl group name representation (name and hash suffix) to global id
-%% i. e. "group1#fif3n" -> "fif3nhh238hdfg33f3"
+%% i. e. "group1#fif3n" -> "fif3n"
 %% @end
 %%--------------------------------------------------------------------
 -spec ace_name_to_gid(Name :: binary()) -> binary().
 ace_name_to_gid(AceName) ->
-    [_GroupName, GroupId] = binary:split(AceName, <<"#">>, [global]),
-    GroupId.
+    case binary:split(AceName, <<"#">>, [global]) of
+        [_GroupName, GroupId] ->
+            GroupId;
+        GroupId ->
+            GroupId
+    end.
 
 %%%===================================================================
 %%% Internal functions

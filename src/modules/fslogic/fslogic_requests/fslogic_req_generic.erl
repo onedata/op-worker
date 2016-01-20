@@ -261,7 +261,7 @@ set_acl(_CTX, {uuid, FileUuid}, #acl{value = Val}) ->
 remove_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
-            {ok, #file_meta{mode = Mode}} = file_meta:get({uuid, FileUuid}),
+            {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
             ok = chmod_storage_files(SessId, {uuid, FileUuid}, Mode),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->

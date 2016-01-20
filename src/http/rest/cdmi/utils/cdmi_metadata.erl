@@ -217,7 +217,7 @@ set_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
 %%--------------------------------------------------------------------
 -spec filter_user_metadata(UserMetadata) -> UserMetadata when
     UserMetadata :: [{CdmiName :: binary(), Value :: binary()}] | [CdmiName :: binary()].
-filter_user_metadata(UserMetadata) ->
+filter_user_metadata(UserMetadata) when is_list(UserMetadata) ->
     lists:filter(
         fun
             ({<<"cdmi_acl">>, _Value}) -> true;
@@ -225,7 +225,9 @@ filter_user_metadata(UserMetadata) ->
             (<<"cdmi_acl">>) -> true;
             (Name) -> not binary_with_prefix(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
         end,
-        UserMetadata).
+        UserMetadata);
+filter_user_metadata(_) ->
+    throw(?ERROR_INVALID_METADATA).
 
 %%--------------------------------------------------------------------
 %% @doc Predicate that tells whether binary starts with given prefix.
