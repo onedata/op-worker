@@ -16,7 +16,7 @@
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
--export([mkdir/3, ls/4, get_children_count/2]).
+-export([mkdir/2, mkdir/3, ls/4, get_children_count/2]).
 
 %%%===================================================================
 %%% API
@@ -28,11 +28,21 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(fslogic_worker:ctx(), Path :: file_meta:path(),
+-spec mkdir(SessId :: session:id(), Path :: file_meta:path()) ->
+    {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
+mkdir(SessId, Path) ->
+    {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
+    mkdir(SessId, Path, Mode).
+
+-spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
     {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
-mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
-    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+mkdir(SessId, Path, Mode) ->
+    CTX = fslogic_context:new(SessId),
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    {ok, CanonicalPath} = file_meta:gen_path(Entry),
+    {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
     case file_meta:resolve_path(ParentPath) of
         {ok, {#document{key = ParentUUID}, _}} ->
             lfm_utils:call_fslogic(SessId,
@@ -51,10 +61,12 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: {uuid, file_meta:uuid()},
+-spec ls(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{file_meta:uuid(), file_meta:name()}]} | logical_file_manager:error_reply().
-ls(SessId, {uuid, UUID}, Offset, Limit) ->
+ls(SessId, FileKey, Offset, Limit) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId,
         #get_file_children{uuid = UUID, offset = Offset, size = Limit},
         fun({file_children, List}) ->
@@ -68,9 +80,11 @@ ls(SessId, {uuid, UUID}, Offset, Limit) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(session:id(), FileKey :: {uuid, file_meta:uuid()})
+-spec get_children_count(session:id(), FileKey :: file_meta:uuid_or_path())
         -> {ok, integer()} | logical_file_manager:error_reply().
-get_children_count(SessId, {uuid, UUID}) ->
+get_children_count(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
     case count_children(SessId, UUID, 0) of
         {error, Err} -> {error, Err};
         ChildrenNum -> {ok, ChildrenNum}

@@ -42,9 +42,11 @@ call_fslogic(SessId, Request, OKHandle) ->
 %% Deletes an object with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rm(CTX :: #fslogic_ctx{}, UUID :: file_meta:uuid()) ->
+-spec rm(SessId :: session:id(), FileKey :: logical_file_manager:file_key()) ->
     ok | logical_file_manager:error_reply().
-rm(CTX, UUID) ->
+rm(SessId, FileKey) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     try
         case isdir(CTX, UUID) of
@@ -52,7 +54,7 @@ rm(CTX, UUID) ->
             false -> ok
         end,
         %% delete an object
-        lfm_files:unlink(CTX, {uuid, UUID})
+        logical_file_manager:unlink(SessId, {uuid, UUID})
     catch
         error:{badmatch, Error2} -> Error2;
         error:Error -> {error, Error}
@@ -65,8 +67,8 @@ rm(CTX, UUID) ->
 %%--------------------------------------------------------------------
 -spec isdir(CTX :: #fslogic_ctx{}, UUID :: file_meta:uuid()) ->
     true | false | logical_file_manager:error_reply().
-isdir(CTX, UUID) ->
-    case lfm_attrs:stat(CTX, {uuid, UUID}) of
+isdir(#fslogic_ctx{session_id = SessId}, UUID) ->
+    case logical_file_manager:stat(SessId, {uuid, UUID}) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
         {ok, _} -> false;
         X -> X
@@ -84,8 +86,8 @@ isdir(CTX, UUID) ->
 -spec rm_children(CTX :: #fslogic_ctx{}, UUID :: file_meta:uuid(), Chunk :: non_neg_integer())
         -> ok | logical_file_manager:error_reply().
 rm_children(#fslogic_ctx{session_id = SessId} = CTX, UUID, Chunk) ->
-    RemoveChild = fun({ChildUUID, _ChildName}) -> ok = rm(CTX, ChildUUID) end,
-    case lfm_dirs:ls(SessId, {uuid, UUID}, 0, Chunk) of
+    RemoveChild = fun({ChildUUID, _ChildName}) -> ok = rm(SessId, {uuid, ChildUUID}) end,
+    case logical_file_manager:ls(SessId, {uuid, UUID}, 0, Chunk) of
         {ok, Children} ->
             case length(Children) of
                 Chunk ->

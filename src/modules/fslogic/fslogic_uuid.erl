@@ -16,7 +16,7 @@
 
 %% API
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
-    spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1]).
+    spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2]).
 
 %%%===================================================================
 %%% API
@@ -33,6 +33,20 @@ path_to_uuid(CTX, Path) ->
     Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
     {ok, #document{key = UUID}} = file_meta:get(Entry),
     UUID.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given file entry to UUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:file()) ->
+    {uuid, file_meta:uuid()}.
+ensure_uuid(_CTX, {uuid, UUID}) ->
+    {uuid, UUID};
+ensure_uuid(_CTX, #document{key = UUID}) ->
+    {uuid, UUID};
+ensure_uuid(CTX, {path, Path}) ->
+    {uuid, path_to_uuid(CTX, Path)}.
 
 %%--------------------------------------------------------------------
 %% @doc
