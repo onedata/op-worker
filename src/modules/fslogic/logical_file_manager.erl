@@ -65,7 +65,7 @@
 -export([create/3, open/3, fsync/1, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
--export([set_perms/2, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
+-export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
 %% Functions concerning file attributes
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
@@ -363,9 +363,11 @@ get_block_map(SessId, FileKey) ->
 %% Changes the permissions of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) -> ok | error_reply().
-set_perms(Path, NewPerms) ->
-    lfm_perms:set_perms(Path, NewPerms).
+-spec set_perms(SessId :: session:id(), FileKey :: file_key(), NewPerms :: file_meta:posix_permissions()) -> ok | error_reply().
+set_perms(SessId, FileKey, NewPerms) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = ensure_uuid(CTX, FileKey),
+    lfm_perms:set_perms(CTX, UUID, NewPerms).
 
 
 %%--------------------------------------------------------------------

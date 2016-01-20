@@ -19,8 +19,9 @@
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4,
-    read/4, write/4, mkdir/3, get_xattr/4, set_xattr/4, remove_xattr/4, list_xattr/3,
-    get_acl/3, set_acl/4, write_and_check/4]).
+    read/4, write/4, mkdir/3, mkdir/4, ls/5, set_perms/4, get_xattr/4,
+    set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
+    write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4, get_completion_status/3, set_completion_status/4, get_mimetype/3, set_mimetype/4]).
 
 %%%===================================================================
 %%% API
@@ -178,6 +179,34 @@ mkdir(Worker, SessId, Path) ->
             Host ! {self(), Result}
         end).
 
+-spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) ->
+    {ok, DirUUID :: file_uuid()} | error_reply().
+mkdir(Worker, SessId, Path, Mode) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:mkdir(SessId, Path, Mode),
+            Host ! {self(), Result}
+        end).
+
+-spec ls(node(), session:id(), file_id_or_path(), integer(), integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+ls(Worker, SessId, FileKey, Limit, Offset) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:ls(SessId, FileKey, Limit, Offset),
+            Host ! {self(), Result}
+        end).
+
+-spec set_perms(node(), session:id(), file_key(), file_meta:posix_permissions()) -> ok | error_reply().
+set_perms(Worker, SessId, FileKey, NewPerms) ->
+  exec(Worker,
+    fun(Host) ->
+      Result =
+        logical_file_manager:set_perms(SessId, FileKey, NewPerms),
+      Host ! {self(), Result}
+    end).
+
 -spec get_xattr(node(), session:id(), file_id_or_path(), xattr:name()) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey) ->
@@ -232,6 +261,66 @@ set_acl(Worker, SessId, FileKey, EntityList) ->
         fun(Host) ->
             Result =
                 logical_file_manager:set_acl(SessId, FileKey, EntityList),
+            Host ! {self(), Result}
+        end).
+
+-spec get_transfer_encoding(node(), session:id(), file_key()) ->
+    {ok, transfer_encoding()} | error_reply().
+get_transfer_encoding(Worker, SessId, FileKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:get_transfer_encoding(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec set_transfer_encoding(node(), session:id(), file_key(), transfer_encoding()) ->
+    ok | error_reply().
+set_transfer_encoding(Worker, SessId, FileKey, Encoding) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_transfer_encoding(SessId, FileKey, Encoding),
+            Host ! {self(), Result}
+        end).
+
+-spec get_completion_status(node(), session:id(), file_key()) ->
+    {ok, completion_status()} | error_reply().
+get_completion_status(Worker, SessId, FileKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:get_completion_status(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec set_completion_status(node(), session:id(), file_key(), completion_status()) ->
+    ok | error_reply().
+set_completion_status(Worker, SessId, FileKey, CompletionStatus) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_completion_status(SessId, FileKey, CompletionStatus),
+            Host ! {self(), Result}
+        end).
+
+-spec get_mimetype(node(), session:id(), file_key()) ->
+    {ok, mimetype()} | error_reply().
+get_mimetype(Worker, SessId, FileKey) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:get_mimetype(SessId, FileKey),
+            Host ! {self(), Result}
+        end).
+
+-spec set_mimetype(node(), session:id(), file_key(), mimetype()) ->
+ok | error_reply().
+set_mimetype(Worker, SessId, FileKey, Mimetype) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:set_mimetype(SessId, FileKey, Mimetype),
             Host ! {self(), Result}
         end).
 

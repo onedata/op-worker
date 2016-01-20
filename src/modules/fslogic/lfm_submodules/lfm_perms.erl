@@ -19,7 +19,7 @@
 -define(CDMI_ACL_XATTR_KEY, <<"cdmi_acl">>).
 
 %% API
--export([set_perms/2, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
+-export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 
 %%%===================================================================
 %%% API
@@ -28,9 +28,11 @@
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.
 %%--------------------------------------------------------------------
--spec set_perms(FileKey :: file_key(), NewPerms :: perms_octal()) -> ok | error_reply().
-set_perms(_Path, _NewPerms) ->
-    ok.
+-spec set_perms(fslogic_worker:ctx(), file_meta:uuid(), file_meta:posix_permissions()) ->
+    ok | error_reply().
+set_perms(#fslogic_ctx{session_id = SessId}, UUID, NewPerms) ->
+    lfm_utils:call_fslogic(SessId, #change_mode{uuid = UUID, mode = NewPerms},
+        fun(_) -> ok end).
 
 
 %%--------------------------------------------------------------------

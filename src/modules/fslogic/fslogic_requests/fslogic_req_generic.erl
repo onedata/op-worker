@@ -65,7 +65,7 @@ chmod(#fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
     % remove acl
-    {uuid, FileUuid} = file_meta:to_uuid(FileEntry),
+    {ok, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
     %% @todo: replace with events
@@ -465,7 +465,7 @@ rename_impl(_CTX, SourceEntry, TargetPath) ->
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_storage_files(session:id(), file_meta:entry(), perms_octal()) -> ok | no_return().
+-spec chmod_storage_files(session:id(), file_meta:entry(), file_meta:posix_permissions()) -> ok | no_return().
 chmod_storage_files(SessId, FileEntry, Mode) ->
     case file_meta:get(FileEntry) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
