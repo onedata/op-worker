@@ -10,7 +10,6 @@
 %%%-------------------------------------------------------------------
 -module(lfm_dirs).
 
--include("types.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -29,9 +28,9 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(fslogic_worker:ctx(), Path :: file_path(), 
+-spec mkdir(fslogic_worker:ctx(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_uuid()} | error_reply().
+    {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     case file_meta:resolve_path(ParentPath) of
@@ -52,9 +51,9 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: {uuid, file_uuid()},
+-spec ls(SessId :: session:id(), FileKey :: {uuid, file_meta:uuid()},
     Offset :: integer(), Limit :: integer()) ->
-    {ok, [{file_uuid(), file_name()}]} | error_reply().
+    {ok, [{file_meta:uuid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(SessId, {uuid, UUID}, Offset, Limit) ->
     lfm_utils:call_fslogic(SessId,
         #get_file_children{uuid = UUID, offset = Offset, size = Limit},
@@ -69,8 +68,8 @@ ls(SessId, {uuid, UUID}, Offset, Limit) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(SessId :: session:id(), FileKey :: {uuid, file_uuid()})
-        -> {ok, integer()} | error_reply().
+-spec get_children_count(session:id(), FileKey :: {uuid, file_meta:uuid()})
+        -> {ok, integer()} | logical_file_manager:error_reply().
 get_children_count(SessId, {uuid, UUID}) ->
     case count_children(SessId, UUID, 0) of
         {error, Err} -> {error, Err};
@@ -86,8 +85,9 @@ get_children_count(SessId, {uuid, UUID}) ->
 %% as possible
 %% @end
 %%--------------------------------------------------------------------
--spec count_children(SessId :: session:id(), UUID :: file_uuid(),
-    Acc :: non_neg_integer()) -> non_neg_integer() | error_reply().
+-spec count_children(SessId :: session:id(), UUID :: file_meta:uuid(),
+    Acc :: non_neg_integer()) ->
+    non_neg_integer() | logical_file_manager:error_reply().
 count_children(SessId, UUID, Acc) ->
     {ok, Chunk} = application:get_env(?APP_NAME, ls_chunk_size),
     case ls(SessId, {uuid, UUID}, Acc, Chunk) of

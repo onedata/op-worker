@@ -10,10 +10,14 @@
 %%%-------------------------------------------------------------------
 -module(lfm_attrs).
 
--include("types.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+
+-type file_attributes() :: #file_attr{}.
+
+-export_type([file_attributes/0]).
 
 %% API
 -export([stat/2, get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2]).
@@ -29,8 +33,8 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(fslogic_worker:ctx(), FileEntry :: file_key()) ->
-    {ok, file_attributes()} | error_reply().
+-spec stat(fslogic_worker:ctx(), FileEntry :: logical_file_manager:file_key()) ->
+    {ok, file_attributes()} | logical_file_manager:error_reply().
 stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
     lfm_utils:call_fslogic(SessId, #get_file_attr{entry = FileEntry},
         fun(#file_attr{} = Attrs) ->
@@ -44,8 +48,8 @@ stat(#fslogic_ctx{session_id = SessId}, FileEntry) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr:name()) ->
-    {ok, #xattr{}} | error_reply().
+-spec get_xattr(fslogic_worker:ctx(), FileUuid :: file_meta:uuid(), XattrName :: xattr:name()) ->
+    {ok, #xattr{}} | logical_file_manager:error_reply().
 get_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
     lfm_utils:call_fslogic(SessId, #get_xattr{uuid = FileUuid, name = XattrName},
         fun(#xattr{} = Xattr) ->
@@ -59,8 +63,8 @@ get_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), Xattr :: #xattr{}) ->
-    ok | error_reply().
+-spec set_xattr(fslogic_worker:ctx(), FileUuid :: file_meta:uuid(), Xattr :: #xattr{}) ->
+    ok | logical_file_manager:error_reply().
 set_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, Xattr) ->
     lfm_utils:call_fslogic(SessId, #set_xattr{uuid = FileUuid, xattr = Xattr},
         fun(_) -> ok end).
@@ -72,8 +76,8 @@ set_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, Xattr) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid(), XattrName :: xattr:name()) ->
-    ok | error_reply().
+-spec remove_xattr(fslogic_worker:ctx(), FileUuid :: file_meta:uuid(), XattrName :: xattr:name()) ->
+    ok | logical_file_manager:error_reply().
 remove_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
     lfm_utils:call_fslogic(SessId, #remove_xattr{uuid = FileUuid, name = XattrName},
         fun(_) -> ok end).
@@ -84,8 +88,8 @@ remove_xattr(#fslogic_ctx{session_id = SessId}, FileUuid, XattrName) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec list_xattr(fslogic_worker:ctx(), FileUuid :: file_uuid()) ->
-    {ok, [xattr:name()]} | error_reply().
+-spec list_xattr(fslogic_worker:ctx(), FileUuid :: file_meta:uuid()) ->
+    {ok, [xattr:name()]} | logical_file_manager:error_reply().
 list_xattr(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #list_xattr{uuid = FileUuid},
         fun(#xattr_list{names = Names}) ->
@@ -95,8 +99,8 @@ list_xattr(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec get_transfer_encoding(session:id(), file_key()) ->
-    {ok, transfer_encoding()} | error_reply().
+-spec get_transfer_encoding(session:id(), logical_file_manager:file_key()) ->
+    {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
 get_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #get_transfer_encoding{uuid = FileUuid},
         fun(#transfer_encoding{value = Val}) -> {ok, Val} end
@@ -105,8 +109,8 @@ get_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(session:id(), file_key(), transfer_encoding()) ->
-    ok | error_reply().
+-spec set_transfer_encoding(session:id(), logical_file_manager:file_key(), xattr:transfer_encoding()) ->
+    ok | logical_file_manager:error_reply().
 set_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid, Encoding) ->
     lfm_utils:call_fslogic(SessId, #set_transfer_encoding{uuid = FileUuid, value = Encoding},
         fun(_) -> ok end
@@ -118,8 +122,8 @@ set_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(session:id(), file_key()) ->
-    {ok, completion_status()} | error_reply().
+-spec get_completion_status(session:id(), logical_file_manager:file_key()) ->
+    {ok, xattr:completion_status()} | logical_file_manager:error_reply().
 get_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #get_completion_status{uuid = FileUuid},
         fun(#completion_status{value = Val}) -> {ok, Val} end
@@ -131,8 +135,8 @@ get_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(session:id(), file_key(), completion_status()) ->
-    ok | error_reply().
+-spec set_completion_status(session:id(), logical_file_manager:file_key(), xattr:completion_status()) ->
+    ok | logical_file_manager:error_reply().
 set_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid, CompletionStatus) ->
     lfm_utils:call_fslogic(SessId, #set_completion_status{uuid = FileUuid, value = CompletionStatus},
         fun(_) -> ok end
@@ -141,8 +145,8 @@ set_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid, CompletionSta
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
--spec get_mimetype(session:id(), file_key()) ->
-    {ok, mimetype()} | error_reply().
+-spec get_mimetype(session:id(), logical_file_manager:file_key()) ->
+    {ok, xattr:mimetype()} | logical_file_manager:error_reply().
 get_mimetype(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #get_mimetype{uuid = FileUuid},
         fun(#mimetype{value = Val}) -> {ok, Val} end
@@ -151,8 +155,8 @@ get_mimetype(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(session:id(), file_key(), mimetype()) ->
-    ok | error_reply().
+-spec set_mimetype(session:id(), logical_file_manager:file_key(), xattr:mimetype()) ->
+    ok | logical_file_manager:error_reply().
 set_mimetype(#fslogic_ctx{session_id = SessId}, FileUuid, Mimetype) ->
     lfm_utils:call_fslogic(SessId, #set_mimetype{uuid = FileUuid, value = Mimetype},
         fun(_) -> ok end

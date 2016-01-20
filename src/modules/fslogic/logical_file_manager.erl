@@ -47,15 +47,16 @@
 
 
 -include("global_definitions.hrl").
--include("types.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type handle() :: #lfm_handle{}.
+-type file_key() :: fslogic_worker:file() | {handle, handle()}.
+-type error_reply() :: {error, term()}.
 
--export_type([handle/0]).
+-export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, rmdir/2, ls/4, get_children_count/2, get_parent/2]).
@@ -88,15 +89,15 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) -> 
-    {ok, DirUUID :: file_uuid()} | error_reply().
+-spec mkdir(SessId :: session:id(), Path :: file_meta:path()) ->
+    {ok, DirUUID :: file_meta:uuid()} | error_reply().
 mkdir(SessId, Path) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, Path, Mode).
 
--spec mkdir(SessId :: session:id(), Path :: file_path(), 
+-spec mkdir(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_uuid()} | error_reply().
+    {ok, DirUUID :: file_meta:uuid()} | error_reply().
 mkdir(SessId, Path, Mode) ->
     try
         CTX = fslogic_context:new(SessId),
@@ -116,7 +117,7 @@ mkdir(SessId, Path, Mode) ->
 %% Deletes a directory with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rmdir(SessId :: session:id(), FileKey :: file_key()) -> ok | error_reply().
+-spec rmdir(session:id(), file_key()) -> ok | error_reply().
 rmdir(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUUID} = ensure_uuid(CTX, FileKey),
@@ -129,7 +130,8 @@ rmdir(SessId, FileKey) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: file_id_or_path(), Offset :: integer(), Limit :: integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+-spec ls(session:id(), FileKey :: file_meta:uuid_or_path(), Offset :: integer(), Limit :: integer()) ->
+    {ok, [{file_meta:uuid(), file_meta:name()}]} | error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
     CTX = fslogic_context:new(SessId),
     lfm_dirs:ls(SessId, ensure_uuid(CTX, FileKey), Offset, Limit).
@@ -140,7 +142,8 @@ ls(SessId, FileKey, Offset, Limit) ->
 %% Returns number of children of a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_count(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, integer()} | error_reply().
+-spec get_children_count(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+    {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_dirs:get_children_count(SessId, ensure_uuid(CTX, FileKey)).
@@ -151,7 +154,7 @@ get_children_count(SessId, FileKey) ->
 %% Returns uuid of parent for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+-spec get_parent(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
     {ok, file_meta:uuid()} | error_reply().
 get_parent(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
@@ -173,7 +176,8 @@ exists(FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
+-spec mv(FileKeyFrom :: file_key(), PathTo :: file_meta:path()) ->
+    ok | error_reply().
 mv(FileKeyFrom, PathTo) ->
     lfm_files:mv(FileKeyFrom, PathTo).
 
@@ -183,7 +187,8 @@ mv(FileKeyFrom, PathTo) ->
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
--spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
+-spec cp(FileKeyFrom :: file_key(), PathTo :: file_meta:path()) ->
+    ok | error_reply().
 cp(PathFrom, PathTo) ->
     lfm_files:cp(PathFrom, PathTo).
 
@@ -220,8 +225,8 @@ unlink(SessId, FileEntry) ->
 %% Creates a new file.
 %% @end
 %%--------------------------------------------------------------------
--spec create(SessId :: session:id(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    {ok, file_uuid()} | error_reply().
+-spec create(SessId :: session:id(), Path :: file_meta:path(), Mode :: file_meta:posix_permissions()) ->
+    {ok, file_meta:uuid()} | error_reply().
 create(SessId, Path, Mode) ->
     try
         CTX = fslogic_context:new(SessId),
@@ -241,7 +246,8 @@ create(SessId, Path, Mode) ->
 %% Opens a file in selected mode and returns a file handle used to read or write.
 %% @end
 %%--------------------------------------------------------------------
--spec open(session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) -> {ok, handle()} | error_reply().
+-spec open(session:id(), FileKey :: file_meta:uuid_or_path(), OpenType :: helpers:open_mode()) ->
+    {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:open(CTX, ensure_uuid(CTX, FileKey), OpenType).
@@ -252,7 +258,7 @@ open(SessId, FileKey, OpenType) ->
 %% Flushes waiting events for session connected with handler.
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(FileHandle :: file_handle()) -> ok | {error, Reason :: term()}.
+-spec fsync(FileHandle :: handle()) -> ok | {error, Reason :: term()}.
 fsync(FileHandle) ->
     lfm_files:fsync(FileHandle).
 
@@ -325,11 +331,13 @@ read(FileHandle, Offset, MaxSize) ->
 %% Truncates a file.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(FileHandle :: handle(), Size :: non_neg_integer()) -> ok | error_reply().
+-spec truncate(FileHandle :: handle(), Size :: non_neg_integer()) ->
+    ok | error_reply().
 truncate(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Size) ->
     truncate(SessId, {uuid, FileUUID}, Size).
 
--spec truncate(SessId :: session:id(), FileKey :: file_id_or_path(), Size :: non_neg_integer()) -> ok | error_reply().
+-spec truncate(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(), Size :: non_neg_integer()) ->
+    ok | error_reply().
 truncate(SessId, FileKey, Size) ->
     try
         CTX = fslogic_context:new(SessId),
@@ -348,11 +356,13 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec get_block_map(FileHandle :: handle()) -> {ok, [block_range()]} | error_reply().
+-spec get_block_map(FileHandle :: handle()) ->
+    {ok, [lfm_files:block_range()]} | error_reply().
 get_block_map(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
     lfm_files:get_block_map(CTX, UUID).
 
--spec get_block_map(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+-spec get_block_map(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+    {ok, [lfm_files:block_range()]} | error_reply().
 get_block_map(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:get_block_map(CTX, ensure_uuid(CTX, FileKey)).
@@ -363,7 +373,8 @@ get_block_map(SessId, FileKey) ->
 %% Changes the permissions of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_perms(SessId :: session:id(), FileKey :: file_key(), NewPerms :: file_meta:posix_permissions()) -> ok | error_reply().
+-spec set_perms(session:id(), file_key(), NewPerms :: file_meta:posix_permissions()) ->
+    ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -375,7 +386,8 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% Checks if current user has given permissions for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
+-spec check_perms(FileKey :: file_key(), PermsType :: check_permissions:check_type()) ->
+    {ok, boolean()} | error_reply().
 check_perms(Path, PermType) ->
     lfm_perms:check_perms(Path, PermType).
 
@@ -385,12 +397,12 @@ check_perms(Path, PermType) ->
 %% Returns file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec get_acl(handle()) -> {ok, [access_control_entity()]} | error_reply().
+-spec get_acl(handle()) -> {ok, [lfm_perms:access_control_entity()]} | error_reply().
 get_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
     lfm_perms:get_acl(CTX, UUID).
 
--spec get_acl(SessId :: session:id(), FileKey :: file_id_or_path()) ->
-    {ok, [access_control_entity()]} | error_reply().
+-spec get_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+    {ok, [lfm_perms:access_control_entity()]} | error_reply().
 get_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -402,11 +414,12 @@ get_acl(SessId, FileKey) ->
 %% Updates file's Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec set_acl(handle(), EntityList :: [access_control_entity()]) -> ok | error_reply().
+-spec set_acl(handle(), EntityList :: [lfm_perms:access_control_entity()]) ->
+    ok | error_reply().
 set_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}, EntityList) ->
     lfm_perms:set_acl(CTX, UUID, EntityList).
 
--spec set_acl(SessId :: session:id(), FileKey :: file_id_or_path(), EntityList :: [access_control_entity()]) ->
+-spec set_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(), EntityList :: [lfm_perms:access_control_entity()]) ->
     ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     CTX = fslogic_context:new(SessId),
@@ -423,7 +436,7 @@ set_acl(SessId, FileKey, EntityList) ->
 remove_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
     lfm_perms:remove_acl(CTX, UUID).
 
--spec remove_acl(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+-spec remove_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
     ok | error_reply().
 remove_acl(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
@@ -436,11 +449,11 @@ remove_acl(SessId, FileKey) ->
 %% Returns file attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec stat(handle()) -> {ok, file_attributes()} | error_reply().
+-spec stat(handle()) -> {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
     lfm_attrs:stat(CTX, {uuid, UUID}).
 
--spec stat(session:id(), file_key()) -> {ok, file_attributes()} | error_reply().
+-spec stat(session:id(), file_key()) -> {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_attrs:stat(CTX, FileKey).
@@ -456,7 +469,8 @@ stat(SessId, FileKey) ->
 get_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}, XattrName) ->
     lfm_attrs:get_xattr(CTX, UUID, XattrName).
 
--spec get_xattr(session:id(), file_key(), xattr:name()) -> {ok, #xattr{}} | error_reply().
+-spec get_xattr(session:id(), file_key(), xattr:name()) ->
+    {ok, #xattr{}} | error_reply().
 get_xattr(SessId, FileKey, XattrName) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -503,7 +517,8 @@ remove_xattr(SessId, FileKey, XattrName) ->
 list_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
     list_xattr(CTX, UUID).
 
--spec list_xattr(session:id(), file_key()) -> {ok, [xattr:name()]} | error_reply().
+-spec list_xattr(session:id(), file_key()) ->
+    {ok, [xattr:name()]} | error_reply().
 list_xattr(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -513,7 +528,7 @@ list_xattr(SessId, FileKey) ->
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(session:id(), file_key()) ->
-    {ok, transfer_encoding()} | error_reply().
+    {ok, xattr:transfer_encoding()} | error_reply().
 get_transfer_encoding(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -522,7 +537,7 @@ get_transfer_encoding(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(session:id(), file_key(), transfer_encoding()) ->
+-spec set_transfer_encoding(session:id(), file_key(), xattr:transfer_encoding()) ->
     ok | error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
     CTX = fslogic_context:new(SessId),
@@ -536,7 +551,7 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_completion_status(session:id(), file_key()) ->
-    {ok, completion_status()} | error_reply().
+    {ok, xattr:completion_status()} | error_reply().
 get_completion_status(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -548,7 +563,7 @@ get_completion_status(SessId, FileKey) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(session:id(), file_key(), completion_status()) ->
+-spec set_completion_status(session:id(), file_key(), xattr:completion_status()) ->
     ok | error_reply().
 set_completion_status(SessId, FileKey, CompletionStatus) ->
     CTX = fslogic_context:new(SessId),
@@ -559,7 +574,7 @@ set_completion_status(SessId, FileKey, CompletionStatus) ->
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), file_key()) ->
-    {ok, mimetype()} | error_reply().
+    {ok, xattr:mimetype()} | error_reply().
 get_mimetype(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -568,7 +583,7 @@ get_mimetype(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(session:id(), file_key(), mimetype()) ->
+-spec set_mimetype(session:id(), file_key(), xattr:mimetype()) ->
     ok | error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     CTX = fslogic_context:new(SessId),
@@ -580,7 +595,8 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% Creates a symbolic link.
 %% @end
 %%--------------------------------------------------------------------
--spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) -> {ok, file_uuid()} | error_reply().
+-spec create_symlink(Path :: binary(), TargetFileKey :: file_key()) ->
+    {ok, file_meta:uuid()} | error_reply().
 create_symlink(Path, TargetFileKey) ->
     lfm_links:create_symlink(Path, TargetFileKey).
 
@@ -590,7 +606,8 @@ create_symlink(Path, TargetFileKey) ->
 %% Returns the symbolic link's target file.
 %% @end
 %%--------------------------------------------------------------------
--spec read_symlink(FileKey :: file_key()) -> {ok, {file_uuid(), file_name()}} | error_reply().
+-spec read_symlink(FileKey :: file_key()) ->
+    {ok, {file_meta:uuid(), file_meta:name()}} | error_reply().
 read_symlink(FileKey) ->
     lfm_links:read_symlink(FileKey).
 
@@ -611,8 +628,8 @@ remove_symlink(FileKey) ->
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
-    {ok, ShareID :: share_id()} | error_reply().
+-spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, onedata_user:id()} | {group, onedata_group:id()}]) ->
+    {ok, lfm_shares:share_id()} | error_reply().
 create_share(Path, ShareWith) ->
     lfm_shares:create_share(Path, ShareWith).
 
@@ -622,7 +639,8 @@ create_share(Path, ShareWith) ->
 %% Returns shared file by share_id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
+-spec get_share(lfm_shares:share_id()) ->
+    {ok, {file_meta:uuid(), file_meta:name()}} | error_reply().
 get_share(ShareID) ->
     lfm_shares:get_share(ShareID).
 
@@ -632,7 +650,7 @@ get_share(ShareID) ->
 %% Removes file share by ShareID.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(ShareID :: share_id()) -> ok | error_reply().
+-spec remove_share(lfm_shares:share_id()) -> ok | error_reply().
 remove_share(ShareID) ->
     lfm_shares:remove_share(ShareID).
 
@@ -642,7 +660,8 @@ remove_share(ShareID) ->
 %% Converts given file entry to UUID.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:file()) -> {uuid, file_uuid()}.
+-spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:file()) ->
+    {uuid, file_meta:uuid()}.
 ensure_uuid(_CTX, {uuid, UUID}) ->
     {uuid, UUID};
 ensure_uuid(_CTX, #document{key = UUID}) ->

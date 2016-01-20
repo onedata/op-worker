@@ -10,7 +10,6 @@
 %%%-------------------------------------------------------------------
 -module(lfm_files).
 
--include("types.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -19,6 +18,10 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+-type block_range() :: term(). % TODO should be a proper record
+
+-export_type([block_range/0]).
 
 %% API
 %% Functions operating on directories or files
@@ -39,7 +42,8 @@
 %% Checks if a file or directory exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(FileKey :: file_key()) -> {ok, boolean()} | error_reply().
+-spec exists(FileKey :: logical_file_manager:file_key()) ->
+    {ok, boolean()} | logical_file_manager:error_reply().
 exists(_FileKey) ->
     {ok, false}.
 
@@ -49,7 +53,8 @@ exists(_FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
+-spec mv(FileKeyFrom :: logical_file_manager:file_key(), PathTo :: file_meta:path()) ->
+    ok | logical_file_manager:error_reply().
 mv(_FileKeyFrom, _PathTo) ->
     ok.
 
@@ -59,7 +64,8 @@ mv(_FileKeyFrom, _PathTo) ->
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
--spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
+-spec cp(FileKeyFrom :: logical_file_manager:file_key(), PathTo :: file_meta:path()) ->
+    ok | logical_file_manager:error_reply().
 cp(_PathFrom, _PathTo) ->
     ok.
 
@@ -69,8 +75,8 @@ cp(_PathFrom, _PathTo) ->
 %% Returns uuid of parent for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(fslogic_worker:ctx(), {uuid, file_uuid()}) ->
-    {ok, file_meta:uuid()} | error_reply().
+-spec get_parent(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
 get_parent(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     lfm_utils:call_fslogic(SessId, #get_parent{uuid = UUID},
         fun(#dir{uuid = ParentUUID}) ->
@@ -83,7 +89,8 @@ get_parent(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
 %% Removes a file or an empty directory.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(fslogic_worker:ctx(), {uuid, file_uuid()}) -> ok | error_reply().
+-spec unlink(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    ok | logical_file_manager:error_reply().
 unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
     lfm_utils:call_fslogic(SessId, #unlink{uuid = UUID},
         fun(_) ->
@@ -96,8 +103,8 @@ unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
 %% Creates a new file.
 %% @end
 %%--------------------------------------------------------------------
--spec create(fslogic_worker:ctx(), Path :: file_path(), Mode :: file_meta:posix_permissions()) ->
-    {ok, file_uuid()} | error_reply().
+-spec create(fslogic_worker:ctx(), Path :: file_meta:path(), Mode :: file_meta:posix_permissions()) ->
+    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
 create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
     case file_meta:resolve_path(ParentPath) of
@@ -117,7 +124,8 @@ create(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %% Opens a file in selected mode and returns a file handle used to read or write.
 %% @end
 %%--------------------------------------------------------------------
--spec open(fslogic_worker:ctx(), {uuid, file_uuid()}, OpenType :: open_mode()) -> {ok, file_handle()} | error_reply().
+-spec open(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, OpenType :: helper:open_mode()) ->
+    {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, FileUUID}, OpenType) ->
     lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileUUID, flags = OpenType},
         fun(#file_location{uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
@@ -139,7 +147,8 @@ open(#fslogic_ctx{session_id = SessId} = CTX, {uuid, FileUUID}, OpenType) ->
 %% Flushes waiting events for session connected with handler.
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(FileHandle :: file_handle()) -> ok | {error, Reason :: term()}.
+-spec fsync(FileHandle :: logical_file_manager:handle()) ->
+    ok | logical_file_manager:error_reply().
 fsync(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     event:flush(?FSLOGIC_SUB_ID, self(), SessId),
     receive
@@ -162,8 +171,8 @@ fsync(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
 %% Writes data to a file. Returns number of written bytes.
 %% @end
 %%--------------------------------------------------------------------
--spec write(FileHandle :: file_handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
-    {ok, file_handle(), non_neg_integer()} | error_reply().
+-spec write(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
+    {ok, logical_file_manager:handle(), non_neg_integer()} | logical_file_manager:error_reply().
 write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer) ->
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, byte_size(Buffer)),
@@ -187,8 +196,8 @@ write(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTy
 %% Reads requested part of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: file_handle(), Offset :: integer(), MaxSize :: integer()) ->
-    {ok, file_handle(), binary()} | error_reply().
+-spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize) ->
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, MaxSize),
@@ -213,7 +222,8 @@ read(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenTyp
 %% Truncates a file.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(fslogic_worker:ctx(), FileUUID :: file_uuid(), Size :: non_neg_integer()) -> ok | error_reply().
+-spec truncate(fslogic_worker:ctx(), FileUUID :: file_meta:uuid(), Size :: non_neg_integer()) ->
+    ok | logical_file_manager:error_reply().
 truncate(#fslogic_ctx{session_id = SessId}, FileUUID, Size) ->
     lfm_utils:call_fslogic(SessId, #truncate{uuid = FileUUID, size = Size},
         fun(_) ->
@@ -226,7 +236,8 @@ truncate(#fslogic_ctx{session_id = SessId}, FileUUID, Size) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_block_map(fslogic_worker:ctx(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+-spec get_block_map(fslogic_worker:ctx(), FileKey :: file_meta:uuid_or_path()) ->
+    {ok, [block_range()]} | logical_file_manager:error_reply().
 get_block_map(_CTX, File) ->
     #document{value = LocalLocation} = fslogic_utils:get_local_file_location(File),
     #file_location{blocks = Blocks} = LocalLocation,
@@ -241,7 +252,7 @@ get_block_map(_CTX, File) ->
 %% and default locations shall be used instead.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+-spec get_sfm_handle_key(file_meta:uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size) ->
     #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, UUID}),
@@ -254,7 +265,7 @@ get_sfm_handle_key(UUID, Offset, Size) ->
 %% Internal impl. of get_sfm_handle_key/3
 %% @end
 %%--------------------------------------------------------------------
--spec get_sfm_handle_key(file_uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer(), fslogic_blocks:blocks() | fslogic_blocks:block()) ->
+-spec get_sfm_handle_key(file_meta:uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer(), fslogic_blocks:blocks() | fslogic_blocks:block()) ->
     {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(UUID, Offset, Size, [#file_block{offset = O, size = S} | T]) when O + S =< Offset ->
     get_sfm_handle_key(UUID, Offset, Size, T);
@@ -275,11 +286,11 @@ get_sfm_handle_key(_UUID, _Offset, Size, []) ->
 %% Helper function for read/write handles caching. Returns given handle or creates new and updates master handle.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sfm_handle_n_update_handle(Handle :: file_handle(), Key :: term(), SFMHandles :: sfm_handles_map(),
+-spec get_sfm_handle_n_update_handle(Handle :: logical_file_manager:handle(), Key :: term(), SFMHandles :: sfm_handles_map(),
     OpenType :: helpers:open_mode()) ->
-    {{StorageId :: storage:id(), FileId :: file_uuid()},
+    {{StorageId :: storage:id(), FileId :: file_meta:uuid()},
         SFMHandle :: storage_file_manager:handle(),
-        NewHandle :: file_handle()} |  no_return().
+        NewHandle :: logical_file_manager:handle()} |  no_return().
 get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
     Key, SFMHandles, OpenType) ->
     {{StorageId, FileId}, SFMHandle} =

@@ -15,7 +15,6 @@
 -include_lib("common_test/include/ct.hrl").
 -include("modules/fslogic/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("types.hrl").
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4,
@@ -60,7 +59,8 @@ teardown(Config) ->
             Pid ! exit
         end, ?config(servers, Config)).
 
--spec stat(node(), session:id(), file_key()) -> {ok, file_attributes()} | error_reply().
+-spec stat(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, lfm_attrs:file_attributes()} | logical_file_manager:error_reply().
 stat(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
@@ -69,7 +69,8 @@ stat(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec truncate(node(), session:id(), file_key(), non_neg_integer()) -> term().
+-spec truncate(node(), session:id(), logical_file_manager:file_key(), non_neg_integer()) ->
+    term().
 truncate(Worker, SessId, FileKey, Size) ->
     exec(Worker,
         fun(Host) ->
@@ -78,8 +79,8 @@ truncate(Worker, SessId, FileKey, Size) ->
             Host ! {self(), Result}
         end).
 
--spec create(node(), session:id(), file_path(), file_meta:posix_permissions()) ->
-    {ok, file_uuid()} | error_reply().
+-spec create(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->
+    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
 create(Worker, SessId, FilePath, Mode) ->
     exec(Worker,
         fun(Host) ->
@@ -88,7 +89,8 @@ create(Worker, SessId, FilePath, Mode) ->
             Host ! {self(), Result}
         end).
 
--spec unlink(node(), session:id(), fslogic_worker:file()) -> ok | error_reply().
+-spec unlink(node(), session:id(), fslogic_worker:file()) ->
+    ok | logical_file_manager:error_reply().
 unlink(Worker, SessId, File) ->
     exec(Worker,
         fun(Host) ->
@@ -97,8 +99,8 @@ unlink(Worker, SessId, File) ->
             Host ! {self(), Result}
         end).
 
--spec open(node(), session:id(), FileKey :: file_id_or_path(), OpenType :: open_mode()) ->
-    {ok, logical_file_manager:handle()} | error_reply().
+-spec open(node(), session:id(), FileKey :: file_meta:uuid_or_path(), OpenType :: helpers:open_mode()) ->
+    {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(Worker, SessId, FileKey, OpenMode) ->
     exec(Worker,
         fun(Host) ->
@@ -114,7 +116,7 @@ open(Worker, SessId, FileKey, OpenMode) ->
         end).
 
 -spec read(node(), logical_file_manager:handle(), integer(), integer()) ->
-    {ok, binary()} | error_reply().
+    {ok, binary()} | logical_file_manager:error_reply().
 read(Worker, TestHandle, Offset, Size) ->
     exec(Worker,
         fun(Host) ->
@@ -130,7 +132,7 @@ read(Worker, TestHandle, Offset, Size) ->
         end).
 
 -spec write(node(), logical_file_manager:handle(), integer(), binary()) ->
-    {ok, integer()} | error_reply().
+    {ok, integer()} | logical_file_manager:error_reply().
 write(Worker, TestHandle, Offset, Bytes) ->
     exec(Worker,
         fun(Host) ->
@@ -146,8 +148,8 @@ write(Worker, TestHandle, Offset, Bytes) ->
         end).
 
 -spec write_and_check(node(), logical_file_manager:handle(), integer(), binary()) ->
-    {ok, integer(), StatAns} | error_reply() when
-    StatAns :: {ok, file_attributes()} | error_reply().
+    {ok, integer(), StatAns} | logical_file_manager:error_reply() when
+    StatAns :: {ok, lfm_attrs:file_attributes()} | logical_file_manager:error_reply().
 write_and_check(Worker, TestHandle, Offset, Bytes) ->
     exec(Worker,
         fun(Host) ->
@@ -170,7 +172,8 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
             Host ! {self(), Result}
         end).
 
--spec mkdir(node(), session:id(), binary()) -> {ok, file_uuid()} | error_reply().
+-spec mkdir(node(), session:id(), binary()) ->
+    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(Worker, SessId, Path) ->
     exec(Worker,
         fun(Host) ->
@@ -180,7 +183,7 @@ mkdir(Worker, SessId, Path) ->
         end).
 
 -spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) ->
-    {ok, DirUUID :: file_uuid()} | error_reply().
+    {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     exec(Worker,
         fun(Host) ->
@@ -189,7 +192,8 @@ mkdir(Worker, SessId, Path, Mode) ->
             Host ! {self(), Result}
         end).
 
--spec ls(node(), session:id(), file_id_or_path(), integer(), integer()) -> {ok, [{file_uuid(), file_name()}]} | error_reply().
+-spec ls(node(), session:id(), file_meta:uuid_or_path(), integer(), integer()) ->
+    {ok, [{file_meta:uuid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(Worker, SessId, FileKey, Offset, Limit) ->
     exec(Worker,
         fun(Host) ->
@@ -198,7 +202,8 @@ ls(Worker, SessId, FileKey, Offset, Limit) ->
             Host ! {self(), Result}
         end).
 
--spec set_perms(node(), session:id(), file_key(), file_meta:posix_permissions()) -> ok | error_reply().
+-spec set_perms(node(), session:id(), logical_file_manager:file_key(), file_meta:posix_permissions()) ->
+    ok | logical_file_manager:error_reply().
 set_perms(Worker, SessId, FileKey, NewPerms) ->
   exec(Worker,
     fun(Host) ->
@@ -207,8 +212,8 @@ set_perms(Worker, SessId, FileKey, NewPerms) ->
       Host ! {self(), Result}
     end).
 
--spec get_xattr(node(), session:id(), file_id_or_path(), xattr:name()) ->
-    {ok, #xattr{}} | error_reply().
+-spec get_xattr(node(), session:id(), file_meta:uuid_or_path(), xattr:name()) ->
+    {ok, #xattr{}} | logical_file_manager:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey) ->
     exec(Worker,
         fun(Host) ->
@@ -217,7 +222,8 @@ get_xattr(Worker, SessId, FileKey, XattrKey) ->
             Host ! {self(), Result}
         end).
 
--spec set_xattr(node(), session:id(), file_id_or_path(), #xattr{}) -> ok | error_reply().
+-spec set_xattr(node(), session:id(), file_meta:uuid_or_path(), #xattr{}) ->
+    ok | logical_file_manager:error_reply().
 set_xattr(Worker, SessId, FileKey, Xattr) ->
     exec(Worker,
         fun(Host) ->
@@ -226,7 +232,8 @@ set_xattr(Worker, SessId, FileKey, Xattr) ->
             Host ! {self(), Result}
         end).
 
--spec remove_xattr(node(), session:id(), file_id_or_path(), xattr:name()) -> ok | error_reply().
+-spec remove_xattr(node(), session:id(), file_meta:uuid_or_path(), xattr:name()) ->
+    ok | logical_file_manager:error_reply().
 remove_xattr(Worker, SessId, FileKey, XattrKey) ->
     exec(Worker,
         fun(Host) ->
@@ -235,7 +242,8 @@ remove_xattr(Worker, SessId, FileKey, XattrKey) ->
             Host ! {self(), Result}
         end).
 
--spec list_xattr(node(), session:id(), file_id_or_path()) -> {ok, [xattr:name()]} | error_reply().
+-spec list_xattr(node(), session:id(), file_meta:uuid_or_path()) ->
+    {ok, [xattr:name()]} | logical_file_manager:error_reply().
 list_xattr(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
@@ -244,8 +252,8 @@ list_xattr(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec get_acl(node(), session:id(), file_id_or_path()) ->
-    {ok, [access_control_entity()]} | error_reply().
+-spec get_acl(node(), session:id(), file_meta:uuid_or_path()) ->
+    {ok, [lfm_perms:access_control_entity()]} | logical_file_manager:error_reply().
 get_acl(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
@@ -254,8 +262,8 @@ get_acl(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec set_acl(node(), session:id(), file_id_or_path(), [access_control_entity()]) ->
-    ok | error_reply().
+-spec set_acl(node(), session:id(), file_meta:uuid_or_path(), [lfm_perms:access_control_entity()]) ->
+    ok | logical_file_manager:error_reply().
 set_acl(Worker, SessId, FileKey, EntityList) ->
     exec(Worker,
         fun(Host) ->
@@ -264,8 +272,8 @@ set_acl(Worker, SessId, FileKey, EntityList) ->
             Host ! {self(), Result}
         end).
 
--spec get_transfer_encoding(node(), session:id(), file_key()) ->
-    {ok, transfer_encoding()} | error_reply().
+-spec get_transfer_encoding(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
 get_transfer_encoding(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
@@ -274,8 +282,8 @@ get_transfer_encoding(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec set_transfer_encoding(node(), session:id(), file_key(), transfer_encoding()) ->
-    ok | error_reply().
+-spec set_transfer_encoding(node(), session:id(), logical_file_manager:file_key(), xattr:transfer_encoding()) ->
+    ok | logical_file_manager:error_reply().
 set_transfer_encoding(Worker, SessId, FileKey, Encoding) ->
     exec(Worker,
         fun(Host) ->
@@ -284,8 +292,8 @@ set_transfer_encoding(Worker, SessId, FileKey, Encoding) ->
             Host ! {self(), Result}
         end).
 
--spec get_completion_status(node(), session:id(), file_key()) ->
-    {ok, completion_status()} | error_reply().
+-spec get_completion_status(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, xattr:completion_status()} | logical_file_manager:error_reply().
 get_completion_status(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
@@ -294,8 +302,8 @@ get_completion_status(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec set_completion_status(node(), session:id(), file_key(), completion_status()) ->
-    ok | error_reply().
+-spec set_completion_status(node(), session:id(), logical_file_manager:file_key(), xattr:completion_status()) ->
+    ok | logical_file_manager:error_reply().
 set_completion_status(Worker, SessId, FileKey, CompletionStatus) ->
     exec(Worker,
         fun(Host) ->
@@ -304,8 +312,8 @@ set_completion_status(Worker, SessId, FileKey, CompletionStatus) ->
             Host ! {self(), Result}
         end).
 
--spec get_mimetype(node(), session:id(), file_key()) ->
-    {ok, mimetype()} | error_reply().
+-spec get_mimetype(node(), session:id(), logical_file_manager:file_key()) ->
+    {ok, xattr:mimetype()} | logical_file_manager:error_reply().
 get_mimetype(Worker, SessId, FileKey) ->
     exec(Worker,
         fun(Host) ->
@@ -314,8 +322,8 @@ get_mimetype(Worker, SessId, FileKey) ->
             Host ! {self(), Result}
         end).
 
--spec set_mimetype(node(), session:id(), file_key(), mimetype()) ->
-ok | error_reply().
+-spec set_mimetype(node(), session:id(), logical_file_manager:file_key(), xattr:mimetype()) ->
+ok | logical_file_manager:error_reply().
 set_mimetype(Worker, SessId, FileKey, Mimetype) ->
     exec(Worker,
         fun(Host) ->
