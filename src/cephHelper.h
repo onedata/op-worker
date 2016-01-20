@@ -28,8 +28,6 @@ public:
 
     std::unordered_map<std::string, std::string> getUserCTX();
 
-    void setFlags(int flags) {}
-
     /**
      * Establishes connection to the Ceph storage cluster.
      * @param reconnect Flag that defines whether close current connection (if
@@ -107,10 +105,11 @@ private:
             asio::mutable_buffer _buffer,
             GeneralCallback<asio::mutable_buffer> _callback)
             : fileId{std::move(_fileId)}
-            , bufferlist{static_cast<unsigned int>(_size)}
             , buffer{std::move(_buffer)}
             , callback{std::move(_callback)}
         {
+            bufferlist.append(ceph::buffer::create_static(
+                _size, asio::buffer_cast<char *>(buffer)));
         }
 
         std::string fileId;

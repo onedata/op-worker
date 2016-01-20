@@ -73,20 +73,14 @@ public:
         throw std::system_error{std::make_error_code(std::errc::not_supported)};
     }
 
-    virtual void setFlags(int flags)
-    {
-        throw std::system_error{std::make_error_code(std::errc::not_supported)};
-    }
+    virtual void setFlags(int flags) {}
 
     virtual std::vector<Flag> getFlags()
     {
         throw std::system_error{std::make_error_code(std::errc::not_supported)};
     }
 
-    virtual int getFlagValue(Flag flag)
-    {
-        return 0;
-    }
+    virtual int getFlagValue(Flag flag) { return 0; }
 
 protected:
     static error_t makePosixError(int posixCode)

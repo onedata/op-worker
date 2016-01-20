@@ -54,6 +54,7 @@ void CephHelper::ash_unlink(
     ret = ctx->ioCTX.aio_remove(callbackDataPtr->fileId, completion);
     if (ret < 0) {
         completion->release();
+        delete callbackDataPtr;
         return callback(makePosixError(ret));
     }
 }
@@ -80,8 +81,6 @@ void CephHelper::ash_read(CTXPtr rawCTX, const boost::filesystem::path &p,
                 data->callback(asio::mutable_buffer(), makePosixError(result));
             }
             else {
-                asio::buffer_copy(data->buffer,
-                    asio::mutable_buffer(data->bufferlist.c_str(), result));
                 data->callback(
                     asio::buffer(data->buffer, result), SUCCESS_CODE);
             }
@@ -95,6 +94,7 @@ void CephHelper::ash_read(CTXPtr rawCTX, const boost::filesystem::path &p,
         &callbackDataPtr->bufferlist, size, offset);
     if (ret < 0) {
         completion->release();
+        delete callbackDataPtr;
         return callback(asio::mutable_buffer(), makePosixError(ret));
     }
 }
@@ -132,6 +132,7 @@ void CephHelper::ash_write(CTXPtr rawCTX, const boost::filesystem::path &p,
         callbackDataPtr->bufferlist, size, offset);
     if (ret < 0) {
         completion->release();
+        delete callbackDataPtr;
         return callback(0, makePosixError(ret));
     }
 }
@@ -193,7 +194,7 @@ void CephHelperCTX::setUserCTX(
 
 std::unordered_map<std::string, std::string> CephHelperCTX::getUserCTX()
 {
-    return {{"user_name", m_args.at("user_name")}, {"key", m_args.at("key")}};
+    return m_args;
 }
 
 int CephHelperCTX::connect(bool reconnect)
