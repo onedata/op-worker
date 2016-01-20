@@ -14,6 +14,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("types.hrl").
+-include("modules/events/types.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -68,8 +69,11 @@ chmod(#fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     {ok, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
-    %% @todo: replace with events
-    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+    spawn(
+        fun() ->
+            fslogic_event:emit_permission_changed(FileUuid),
+            fslogic_event:emit_file_attr_update(FileEntry, [])
+        end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -263,6 +267,7 @@ remove_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
         ok ->
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
             ok = chmod_storage_files(SessId, {uuid, FileUuid}, Mode),
+            ok = fslogic_event:emit_permission_changed(FileUuid),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}

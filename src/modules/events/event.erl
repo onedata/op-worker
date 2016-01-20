@@ -175,6 +175,9 @@ set_key(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) 
     Evt#event{key = Uuid};
 
 set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->
+    Evt#event{key = Uuid};
+
+set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid}.
 
 %%--------------------------------------------------------------------

@@ -63,6 +63,25 @@ inject_event_stream_definition(#subscription{object = #file_location_subscriptio
         init_handler = open_sequencer_stream_handler(),
         terminate_handler = close_sequencer_stream_handler(),
         event_handler = send_events_handler()
+    }};
+
+inject_event_stream_definition(#subscription{object = #permission_changed_subscription{
+    file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{event_stream = ?PERMISSION_CHANGED_EVENT_STREAM#event_stream_definition{
+        admission_rule = fun
+            (#event{object = #permission_changed_event{file_uuid = Uuid}})
+                when Uuid =:= FileUuid -> true;
+            (_) -> false
+                         end,
+        emission_rule = fun(_) -> true end,
+        init_handler = fun
+                           (_, SessId, _) ->
+                               #{session_id => SessId}
+                       end,
+        event_handler = fun
+                            ([Event], #{session_id := SessId}) ->
+                                communicator:send(Event, SessId)
+                        end
     }}.
 
 %%--------------------------------------------------------------------
