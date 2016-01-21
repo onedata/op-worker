@@ -13,6 +13,7 @@
 
 -ifdef(TEST).
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/helpers.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -21,21 +22,27 @@
 %%%===================================================================
 
 new_obj_test() ->
+    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
+    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
     ok = helpers_nif:init(),
-    ?assertMatch({ok, _}, helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{"root_path" => "/tmp"})),
+    ?assertMatch({ok, _}, helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>})),
     ok.
 
 new_ctx_test() ->
+    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
+    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
     ok = helpers_nif:init(),
-    {ok, Helper} = helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{"root_path" => "/tmp"}),
+    {ok, Helper} = helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>}),
     ?assertMatch({ok, _}, helpers_nif:new_helper_ctx(Helper)),
     ok.
 
 ctx_test_() ->
     {setup,
         fun() ->
+            application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
+            application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
             ok = helpers_nif:init(),
-            {ok, Helper} = helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{"root_path" => "/tmp"}),
+            {ok, Helper} = helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>}),
             {ok, CTX} = helpers_nif:new_helper_ctx(Helper),
             CTX
         end,
@@ -72,19 +79,19 @@ ctx_test_() ->
                     end},
                 {"User is set correctly",
                     fun() ->
-                        UserCTX0 = #{"uid" => "0", "gid" => "0"},
+                        UserCTX0 = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
                         ?assertMatch(ok, helpers_nif:set_user_ctx(CTX, UserCTX0)),
                         ?assertMatch({ok, UserCTX0}, helpers_nif:get_user_ctx(CTX)),
 
-                        UserCTX1 = #{"uid" => "-1", "gid" => "-1"},
+                        UserCTX1 = #{<<"uid">> => <<"-1">>, <<"gid">> => <<"-1">>},
                         ?assertMatch(ok, helpers_nif:set_user_ctx(CTX, UserCTX1)),
                         ?assertNotMatch({ok, UserCTX1}, helpers_nif:get_user_ctx(CTX)),
 
-                        UserCTX2 = #{"uid" => "1001", "gid" => "1002"},
+                        UserCTX2 = #{<<"uid">> => <<"1001">>, <<"gid">> => <<"1002">>},
                         ?assertMatch(ok, helpers_nif:set_user_ctx(CTX, UserCTX2)),
                         ?assertMatch({ok, UserCTX2}, helpers_nif:get_user_ctx(CTX)),
 
-                        UserCTX3 = #{"uid" => "432423", "gid" => "8953275"},
+                        UserCTX3 = #{<<"uid">> => <<"432423">>, <<"gid">> => <<"8953275">>},
                         ?assertMatch(ok, helpers_nif:set_user_ctx(CTX, UserCTX3)),
                         ?assertMatch({ok, UserCTX3}, helpers_nif:get_user_ctx(CTX)),
 
@@ -95,15 +102,19 @@ ctx_test_() ->
     }.
 
 username_to_uid_test() ->
+    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
+    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
     ok = helpers_nif:init(),
-    ?assertMatch({ok, 0}, helpers_nif:username_to_uid("root")),
-    ?assertMatch({error, einval}, helpers_nif:username_to_uid("sadmlknfqlwknd")),
+    ?assertMatch({ok, 0}, helpers_nif:username_to_uid(<<"root">>)),
+    ?assertMatch({error, einval}, helpers_nif:username_to_uid(<<"sadmlknfqlwknd">>)),
     ok.
 
 groupname_to_gid_test() ->
+    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
+    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
     ok = helpers_nif:init(),
-    ?assertMatch({ok, 0}, helpers_nif:groupname_to_gid("root")),
-    ?assertMatch({error, einval}, helpers_nif:groupname_to_gid("sadmlknfqlwknd")),
+    ?assertMatch({ok, 0}, helpers_nif:groupname_to_gid(<<"root">>)),
+    ?assertMatch({error, einval}, helpers_nif:groupname_to_gid(<<"sadmlknfqlwknd">>)),
     ok.
 
 -endif.

@@ -26,7 +26,7 @@
 -export_type([nif_string/0, resource_handle/0, file_type/0, helper_args/0]).
 
 %% API
--export([init/0]).
+-export([init/0, set_threads_number/1]).
 -export([new_helper_obj/2, new_helper_ctx/1, set_user_ctx/2, get_user_ctx/1]).
 -export([username_to_uid/1, groupname_to_gid/1]).
 -export([set_flags/2, get_flags/1, get_flag_value/2]).
@@ -36,6 +36,14 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Sets number of threads for IO service associated with helper.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_threads_number(#{HelperName :: nif_string() => Threads :: non_neg_integer()}) -> ok.
+set_threads_number(_ThreadsByHelper) ->
+    erlang:error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
 %% @doc Creates new helper object. Returned handle is only valid within local Erlang-VM.
@@ -322,9 +330,27 @@ init() ->
         end,
 
     case erlang:load_nif(LibPath, 0) of
-        ok -> ok;
+        ok ->
+            set_threads_number(),
+            ok;
         {error, {reload, "Reload not supported by this NIF library."}} ->
+            set_threads_number(),
             ok;
         {error, Reason} ->
             {error, Reason}
-    end .
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets default number of threads for each storage helper.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_threads_number() -> ok.
+set_threads_number() ->
+    {ok, CephThreads} = application:get_env(?APP_NAME, ceph_helper_threads_number),
+    {ok, DioThreads} = application:get_env(?APP_NAME, direct_io_helper_threads_number),
+    set_threads_number(#{
+        ?CEPH_HELPER_NAME => CephThreads,
+        ?DIRECTIO_HELPER_NAME => DioThreads
+    }).
