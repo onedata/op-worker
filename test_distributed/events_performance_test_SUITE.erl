@@ -36,14 +36,15 @@
     subscribe_should_work_for_multiple_sessions/1
 ]).
 
--performance({test_cases, [
-    emit_should_aggregate_events_with_the_same_key,
-    emit_should_not_aggregate_events_with_different_key,
-    emit_should_execute_event_handler_when_counter_threshold_exceeded,
-    emit_should_execute_event_handler_when_size_threshold_exceeded,
-    multiple_subscribe_should_create_multiple_subscriptions,
-    subscribe_should_work_for_multiple_sessions
-]}).
+%% -performance({test_cases, [
+%%     emit_should_aggregate_events_with_the_same_key,
+%%     emit_should_not_aggregate_events_with_different_key,
+%%     emit_should_execute_event_handler_when_counter_threshold_exceeded,
+%%     emit_should_execute_event_handler_when_size_threshold_exceeded,
+%%     multiple_subscribe_should_create_multiple_subscriptions,
+%%     subscribe_should_work_for_multiple_sessions
+%% ]}).
+-performance({test_cases, []}).
 all() -> [
     emit_should_aggregate_events_with_the_same_key,
     emit_should_not_aggregate_events_with_different_key,
