@@ -203,6 +203,10 @@ bitmask_to_flag_list2(_, _) -> undefined.
 %%--------------------------------------------------------------------
 -spec bitmask_to_perm_list(non_neg_integer()) -> [binary()].
 bitmask_to_perm_list(Hex) -> lists:reverse(bitmask_to_perm_list2(Hex, [])).
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?all_perms_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?all_perms_mask, [?all_perms | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?rw_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?rw_mask, [?rw | List]);
 bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_mask) ->
     bitmask_to_perm_list2(Hex bxor ?read_mask, [?read | List]);
 bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_mask) ->
@@ -271,6 +275,8 @@ perm_list_to_bitmask(MaskNames) when is_binary(MaskNames) ->
     FlagList = lists:map(fun utils:trim_spaces/1, binary:split(MaskNames, <<",">>, [global])),
     perm_list_to_bitmask(FlagList);
 perm_list_to_bitmask([]) -> ?no_flags_mask;
+perm_list_to_bitmask([?all_perms | Rest]) -> ?all_perms_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?rw | Rest]) -> ?rw_mask bor perm_list_to_bitmask(Rest);
 perm_list_to_bitmask([?read | Rest]) -> ?read_mask bor perm_list_to_bitmask(Rest);
 perm_list_to_bitmask([?write | Rest]) -> ?write_mask bor perm_list_to_bitmask(Rest);
 perm_list_to_bitmask([?read_object | Rest]) -> ?read_object_mask bor perm_list_to_bitmask(Rest);
