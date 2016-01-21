@@ -31,10 +31,11 @@
     route_message_should_work_for_multiple_streams/1
 ]).
 
--performance({test_cases, [
-    route_message_should_forward_messages_in_right_order,
-    route_message_should_work_for_multiple_streams
-]}).
+%% -performance({test_cases, [
+%%     route_message_should_forward_messages_in_right_order,
+%%     route_message_should_work_for_multiple_streams
+%% ]}).
+-performance({test_cases, []}).
 all() -> [
     route_message_should_forward_messages_in_right_order,
     route_message_should_work_for_multiple_streams
