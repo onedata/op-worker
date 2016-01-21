@@ -14,6 +14,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -26,30 +27,7 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 
--record(change, {
-    seq,
-    doc,
-    model
-}).
 
--record(seq_range, {
-    since,
-    until
-}).
-
--record(batch, {
-    changes = #{},
-    since,
-    until
-}).
-
-
--record(queue, {
-    key,
-    current_batch,
-    last_send,
-    removed = false
-}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -102,6 +80,7 @@ handle({reemit, Msg}) ->
     dbsync_proto:reemit(Msg);
 
 handle(bcast_status) ->
+    ?info("ZOMFG"),
     ok = bcast_status(),
     timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status});
 
@@ -226,6 +205,10 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key} = Doc, model = ModelN
     try
         ModelConfig = ModelName:model_init(),
         {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+        spawn(
+            fun() ->
+                dbsync_events:change_replicated(SpaceId, Change)
+            end),
         apply_changes(SpaceId, T)
     catch
         _:Reason ->
@@ -319,10 +302,11 @@ get_current_seq(ProviderId) ->
 bcast_status() ->
     CurrentSeq = get_current_seq(),
     {ok, SpaceIds} = gr_providers:get_spaces(provider),
+    ?info("BCast ~p ~p", [CurrentSeq, SpaceIds]),
     lists:foreach(
         fun(SpaceId) ->
             {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
-            dbsync_proto:status_report(SpaceId, Providers, CurrentSeq)
+            dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
 
 

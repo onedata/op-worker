@@ -154,8 +154,6 @@ translate_from_protobuf(#'XattrList'{names = Names}) ->
 %% DBSync
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
     #dbsync_request{message_body = translate_from_protobuf(MessageBody)};
-translate_from_protobuf(#'DBSyncResponse'{status = Status}) ->
-    #dbsync_response{status = translate_from_protobuf(Status)};
 translate_from_protobuf(#'TreeBroadcast'{message_body = {_, MessageBody}, depth = Depth, excluded_providers = ExcludedProv,
     l_edge = LEdge, r_edge = REgde, request_id = ReqId, space_id = SpaceId}) ->
     #tree_broadcast{
@@ -309,8 +307,6 @@ translate_to_protobuf(#xattr_list{names = Names}) ->
 
 translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->
     {dbsync_request, #'DBSyncRequest'{message_body = translate_to_protobuf(MessageBody)}};
-translate_to_protobuf(#dbsync_response{status = Status}) ->
-    {dbsync_response, #'DBSyncResponse'{status = translate_to_protobuf(Status)}};
 translate_to_protobuf(#tree_broadcast{message_body = MessageBody, depth = Depth, excluded_providers = ExcludedProv,
     l_edge = LEdge, r_edge = REgde, request_id = ReqId, space_id = SpaceId}) ->
     {tree_broadcast, #'TreeBroadcast'{

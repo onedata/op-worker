@@ -45,6 +45,8 @@ preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg,
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
+preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
+    router:route_message(Msg);
 preroute_message(Msg, SessId) ->
     sequencer:route_message(Msg, SessId).
 
@@ -61,6 +63,10 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = server,
     recipient = undefined}}) ->
     route_and_ignore_answer(Msg);
 route_message(Msg = #client_message{message_id = #message_id{issuer = server,
+    recipient = Pid}}) ->
+    Pid ! Msg,
+    ok;
+route_message(Msg = #server_message{message_id = #message_id{issuer = client,
     recipient = Pid}}) ->
     Pid ! Msg,
     ok;

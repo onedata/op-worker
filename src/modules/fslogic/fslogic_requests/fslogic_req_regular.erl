@@ -64,7 +64,7 @@ get_helper_params(_Ctx, SpaceId, StorageId, true = _ForceCL) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #helper_params{helper_name = <<"ProxyIO">>,
             helper_args = [
-                #helper_arg{key = <<"storage_id">>, value = StorageId}
+                #helper_arg{key = <<"storage_id">>, value = StorageId},
                 #helper_arg{key = <<"space_id">>, value = SpaceId}]}};
 get_helper_params(_Ctx, _SpaceId, StorageId, false = _ForceCL) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),

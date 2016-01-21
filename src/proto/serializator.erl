@@ -81,7 +81,7 @@ serialize_server_message(#server_message{message_id = MsgId, message_stream = Ms
         message_stream = translator:translate_to_protobuf(MsgStm),
         message_body = translator:translate_to_protobuf(MsgBody)
     },
-    {ok, messages:encode_msg(ServerMessage)}.
+    {ok, messages:encode_msg(ServerMessage, [verify])}.
 
 
 %%--------------------------------------------------------------------

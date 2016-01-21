@@ -12,40 +12,11 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/common.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 %%-include_lib("cluster_worker/include/modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
-
--record(change, {
-    seq,
-    doc,
-    model
-}).
-
--record(seq_range, {
-    since,
-    until
-}).
-
--record(batch, {
-    changes = #{},
-    since,
-    until
-}).
-
-
--record(queue, {
-    key,
-    current_batch,
-    last_send,
-    removed = false
-}).
-
--record(space_info, {
-    space_id,
-    providers
-}).
 
 
 -export([send_batch/2, changes_request/3, status_report/3]).
@@ -214,14 +185,14 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
     {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle(ProviderId, MessageBody) of
         ok ->
-            #dbsync_response{status = #status{code = ?OK}};
+            #status{code = ?OK};
         {error, Reason} ->
             ?error("DBSync error ~p", [Reason]),
-            #dbsync_response{status = #status{code = ?EAGAIN}}
+            #status{code = ?EAGAIN}
     catch
         _:Reason0 ->
             ?error_stacktrace("DBSync error ~p", [Reason0]),
-            #dbsync_response{status = #status{code = ?EAGAIN}}
+            #status{code = ?EAGAIN}
     end;
 %% Handle tree_broadcast{} message
 handle(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
@@ -291,4 +262,5 @@ handle_broadcast(From, #status_request{} = _Request, _BaseRequest) ->
 
 communicate(ProviderId, Message) ->
     SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    spawn(fun() -> provider_communicator:communicate(#dbsync_request{message_body = Message}, SessId) end).
+    spawn(fun() -> provider_communicator:communicate(#dbsync_request{message_body = Message}, SessId) end),
+    ok.

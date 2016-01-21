@@ -43,7 +43,8 @@
     socket :: ssl2:socket(),
     transport :: module(),
     session_id :: session:id(),
-    connection_type :: incoming | outgoing
+    connection_type :: incoming | outgoing,
+    response_map = #{}
 }).
 
 -define(TIMEOUT, timer:minutes(1)).
@@ -197,7 +198,13 @@ handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection
     transport = Transport}) ->
     ?info("Sending msg ~p", [ServerMsg]),
     send_client_message(Socket, Transport, ServerMsg),
-    {reply, ok, State};
+    NewState = case ServerMsg of
+        #client_message{message_id = #message_id{recipient = Pid, id = MessageId}} when is_pid(Pid) ->
+            State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)};
+        _ ->
+            State
+    end,
+    {reply, ok, NewState};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -320,8 +327,7 @@ handle_client_message(State = #state{session_id = SessId, certificate = Cert}, D
                     handle_normal_message(State#state{session_id = NewSessId}, Msg);
                 false ->
                     handle_handshake(State, Msg)
-            end,
-            handle_handshake(State, Msg);
+            end;
         {ok, Msg} ->
             handle_normal_message(State, Msg)
     catch
@@ -383,9 +389,18 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 -spec handle_normal_message(#state{}, #client_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_normal_message(State = #state{session_id = SessId, socket = Sock,
-    transport = Transp}, Msg) ->
-    case router:preroute_message(Msg#client_message{session_id = SessId}, SessId) of
+handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
+    transport = Transp}, Msg0) ->
+    Msg1 = case Msg0 of
+              #client_message{} ->
+                  Msg0#client_message{session_id = SessId};
+              _ ->
+                  Msg0
+          end,
+    ?info("Handle normal message 1 ~p", [Msg1]),
+    {State, Msg} = update_message_id(State0, Msg1),
+    ?info("Handle normal message 2 ~p", [Msg]),
+    case router:preroute_message(Msg, SessId) of
         ok ->
             {noreply, State, ?TIMEOUT};
         {ok, ServerMsg} ->
@@ -395,6 +410,14 @@ handle_normal_message(State = #state{session_id = SessId, socket = Sock,
             ?warning("Message ~p handling error: ~p", [Msg, Reason]),
             {stop, {error, Reason}, State}
     end.
+
+update_message_id(State = #state{connection_type = outgoing, response_map = RMap},
+    Msg = #server_message{message_id = #message_id{id = ID} = MID}) ->
+    NewMsg = Msg#server_message{message_id = MID#message_id{recipient = maps:get(ID, RMap, undefined)}},
+    NewState = State#state{response_map = maps:remove(ID, RMap)},
+    {NewState, NewMsg};
+update_message_id(State, Msg) ->
+    {State, Msg}.
 
 %%--------------------------------------------------------------------
 %% @private

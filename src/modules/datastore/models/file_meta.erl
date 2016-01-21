@@ -53,7 +53,7 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
--export([snapshot_name/2]).
+-export([snapshot_name/2, fix_parent_links/2, fix_parent_links/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -160,6 +160,19 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                  end)
 
          end).
+
+
+fix_parent_links(Entry) ->
+    {ok, Parent} = get_parent(Entry),
+    fix_parent_links(Parent, Entry).
+
+fix_parent_links(Parent, Entry) ->
+    {ok, #document{} = ParentDoc} = get(Parent),
+    {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
+    {ok, Scope} = get_scope(Parent),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}, {scope, Scope}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -490,7 +503,8 @@ setup_onedata_user(UUID) ->
         lists:foreach(fun(SpaceId) ->
             SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             case exists({uuid, SpaceDirUuid}) of
-                true -> ok;
+                true ->
+                    fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
                 false ->
                     ?info("WUT ~p", [SpaceId]),
                     {ok, #space_details{name = SpaceName}} =
