@@ -291,4 +291,4 @@ handle_broadcast(From, #status_request{} = _Request, _BaseRequest) ->
 
 communicate(ProviderId, Message) ->
     SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    provider_communicator:communicate(#dbsync_request{message_body = Message}, SessId).
+    spawn(fun() -> provider_communicator:communicate(#dbsync_request{message_body = Message}, SessId) end).
