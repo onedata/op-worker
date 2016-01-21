@@ -30,7 +30,7 @@
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
-    'after'/5, before/4, list/0]).
+    'after'/5, before/4, list/0, get_by_name/1, id/1]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -154,3 +154,41 @@ list() ->
             {ok, Doc} = get(Key),
             [Doc | AccIn]
         end, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage document by storage name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_by_name(Name :: name()) -> {ok, datastore:document()} | datastore:get_error().
+get_by_name(Name) ->
+    {ok, Docs} = list(),
+    get_by_name(Name, Docs).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns storage ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec id(Doc :: #document{}) -> StorageId :: id().
+id(#document{key = StorageId, value = #storage{}}) ->
+    StorageId.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns storage document by storage name.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_by_name(Name :: name(), Docs :: [#document{}]) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_by_name(_, []) ->
+    {error, {not_found, ?MODULE}};
+get_by_name(Name, [#document{value = #storage{name = Name}} = Doc | _]) ->
+    {ok, Doc};
+get_by_name(Name, [_, Docs]) ->
+    get_by_name(Name, Docs).
