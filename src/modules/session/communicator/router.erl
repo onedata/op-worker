@@ -67,8 +67,12 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = server,
     Pid ! Msg,
     ok;
 route_message(Msg = #server_message{message_id = #message_id{issuer = client,
-    recipient = Pid}}) ->
+    recipient = Pid}}) when is_pid(Pid) ->
     Pid ! Msg,
+    ok;
+route_message(Msg = #server_message{message_id = #message_id{issuer = client,
+    recipient = Pid}}) ->
+    ?warning("Unknown recipient ~p for msg ~p ", [Pid, Msg]),
     ok;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).
@@ -151,7 +155,7 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
         DBSyncResponse = worker_proxy:call(dbsync_worker,
             {dbsync_request, SessId, DBSyncRequest}),
 
-        ?info("DBSyncresponse ~p", [DBSyncResponse]),
+        ?info("DBSync response ~p", [DBSyncResponse]),
         communicator:send(#server_message{message_id = Id,
             message_body = DBSyncResponse}, SessId)
           end),

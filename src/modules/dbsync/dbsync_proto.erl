@@ -34,7 +34,7 @@ send_batch(global, #batch{changes = Changes, since = Since, until = Until} = Bat
     ?debug("[ DBSync ] Sending batch to all providers: ~p", [Batch]),
     lists:foreach(
         fun({SpaceId, ChangeList}) ->
-            ?info("Processing space ~p", [SpaceId]),
+            ?info("Processing space ~p ~p", [SpaceId, ChangeList]),
             ToSend = #batch_update{ since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
                 changes_encoded = dbsync_utils:encode_term(maps:from_list([{SpaceId, ChangeList}]))},
             Providers = dbsync_utils:get_providers_for_space(SpaceId),
@@ -43,11 +43,11 @@ send_batch(global, #batch{changes = Changes, since = Since, until = Until} = Bat
     ok;
 send_batch({provider, ProviderId, _}, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?info("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
-    SpaceIds = dbsync_utils:get_spaces_for_provider(ProviderId),
+%%    SpaceIds = dbsync_utils:get_spaces_for_provider(ProviderId),
     NewChanges = lists:foldl(
         fun(SpaceId, CMap) ->
             maps:remove(SpaceId, CMap)
-        end, Changes, SpaceIds),
+        end, Changes, []),
 
     send_direct_message(ProviderId, #batch_update{since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
         changes_encoded = dbsync_utils:encode_term(NewChanges)}, 3).
@@ -224,7 +224,8 @@ handle(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseR
     end;
 
 handle(From, #changes_request{since_seq = Since, until_seq = Until} = _BaseRequest) ->
-    ok = dbsync_worker:init_stream(Since, Until, {provider, From, dbsync_utils:gen_request_id()}).
+    ?info("Changes request ~p ~p ~p", [From, Since, Until]),
+    {ok, _} = dbsync_worker:init_stream(dbsync_utils:decode_term(Since), dbsync_utils:decode_term(Until), {provider, From, dbsync_utils:gen_request_id()}).
 
 
 

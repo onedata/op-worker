@@ -397,9 +397,8 @@ handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
               _ ->
                   Msg0
           end,
-    ?info("Handle normal message 1 ~p", [Msg1]),
+    ?debug("Handle normal message 1 ~p", [Msg1]),
     {State, Msg} = update_message_id(State0, Msg1),
-    ?info("Handle normal message 2 ~p", [Msg]),
     case router:preroute_message(Msg, SessId) of
         ok ->
             {noreply, State, ?TIMEOUT};
@@ -455,7 +454,4 @@ send_server_message(Socket, Transport, ServerMsg) ->
     ServerMessage :: #server_message{}) -> ok.
 send_client_message(Socket, Transport, ServerMsg) ->
     {ok, Data} = serializator:serialize_client_message(ServerMsg),
-    ?info("Send data ~p", [Data]),
-    ok = Transport:send(Socket, Data),
-    ?info("Transport send ~p", [Socket]),
-    ok.
+    ok = Transport:send(Socket, Data).

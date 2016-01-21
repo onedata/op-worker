@@ -29,7 +29,7 @@ get_providers_for_space(SpaceId) ->
     ProviderIds.
 
 get_spaces_for_provider(ProviderId) ->
-    {ok, SpaceIds} = gr_providers:get_spaces(provider, ProviderId),
+    {ok, SpaceIds} = gr_providers:get_spaces( ProviderId),
     SpaceIds.
 
 

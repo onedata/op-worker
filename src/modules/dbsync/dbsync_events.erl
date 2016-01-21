@@ -23,11 +23,12 @@
 %%% API
 %%%===================================================================
 
-change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID}}) ->
+change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
     ?info("NOTIFY changed file ~p", [FileUUID]),
     fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(_SpaceId, #change{model = file_location, doc = #document{value = #file_location{uuid = FileUUID}}}) ->
-    fslogic_event:emit_file_location_update(FileUUID, []);
+    fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
+    fslogic_event:emit_file_location_update({uuid, FileUUID}, []);
 change_replicated(_SpaceId, _Change) ->
     ok.
 

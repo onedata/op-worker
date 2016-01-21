@@ -98,7 +98,7 @@ serialize_client_message(#client_message{message_id = MsgId, message_stream = Ms
         message_stream = translator:translate_to_protobuf(MsgStm),
         message_body = translator:translate_to_protobuf(MsgBody)
     },
-    {ok, messages:encode_msg(ClientMessage)}.
+    {ok, messages:encode_msg(ClientMessage, [verify])}.
 
 %%%===================================================================
 %%% Internal functions

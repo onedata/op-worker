@@ -43,17 +43,18 @@
 init(_Args) ->
     timer:sleep(5000),
     ?info("[ DBSync ]: Starting dbsync..."),
-    timer:send_after(100, dbsync_worker, {timer, bcast_status}),
+    timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status}),
     Since = 0,
     {ok, ChangesStream} = init_stream(Since, infinity, global),
-    {ok, #{changes_stream => ChangesStream, {queue, global} => #queue{last_send = now(), current_batch = #batch{since = Since, until = Since}}}}.
+    {ok, #{changes_stream => ChangesStream}}.
 
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
+    state_put({queue, Queue}, #queue{last_send = now(), current_batch = #batch{since = Since, until = Since}}),
     timer:send_after(100, dbsync_worker, {timer, {flush_queue, Queue}}),
     couchdb_datastore_driver:changes_start_link(fun
         (_, stream_ended, _) ->
-            worker_proxy:call(dbsync_worker, {Queue, cleanup});
+            worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
         (Seq, Doc, Model) ->
             worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
         end, Since, Until).
@@ -81,17 +82,17 @@ handle({reemit, Msg}) ->
 
 handle(bcast_status) ->
     ?info("ZOMFG"),
-    ok = bcast_status(),
-    timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status});
+    timer:send_after(timer:seconds(15), dbsync_worker, {timer, bcast_status}),
+    catch bcast_status();
 
 handle(requested_bcast_status) ->
-    ok = bcast_status();
+    bcast_status();
 
 
-handle({QueueKey, cleanup}) ->
-    queue_remove(QueueKey);
+handle({QueueKey, {cleanup, Until}}) ->
+    queue_remove(QueueKey, Until);
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}) ->
-%%    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     case is_file_scope(Doc) of
         true ->
             case get_space_id(Doc) of
@@ -121,6 +122,7 @@ handle({flush_queue, QueueKey}) ->
         fun(#queue{current_batch = #batch{until = Until} = BatchToSend, removed = IsRemoved} = Queue) ->
 %%            ?info("[ DBSync ] Flush queue ~p ~p", [QueueKey, BatchToSend]),
             dbsync_proto:send_batch(QueueKey, BatchToSend),
+            update_current_seq(oneprovider:get_provider_id(), Until),
             case IsRemoved of
                 true ->
                     ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
@@ -128,7 +130,10 @@ handle({flush_queue, QueueKey}) ->
                 false ->
                     timer:send_after(200, dbsync_worker, {timer, {flush_queue, QueueKey}}),
                     Queue#queue{current_batch = #batch{since = Until, until = Until}}
-            end
+            end;
+            (undefined) ->
+                ?warning("Unknown operation on empty queue ~p", [QueueKey]),
+                undefined
         end);
 handle({dbsync_request, SessId, DBSyncRequest}) ->
     dbsync_proto:handle(SessId, DBSyncRequest);
@@ -158,13 +163,13 @@ handle(_Request) ->
 cleanup() ->
     ok.
 
-queue_remove(QueueKey) ->
+queue_remove(QueueKey, Until) ->
     worker_host:state_update(dbsync_worker, {queue, QueueKey},
         fun(Queue) ->
             case Queue of
                 undefined ->
                     undefined;
-                #queue{} = Q -> Q#queue{removed = true}
+                #queue{current_batch = #batch{} = Batch} = Q -> Q#queue{removed = true, current_batch = Batch#batch{until = Until}}
             end
         end).
 
@@ -197,10 +202,11 @@ apply_batch_changes(FromProvider, #batch{changes = Changes, since = Since, until
             lists:foreach(fun({SpaceId, ChangeList}) ->
                 ok = apply_changes(SpaceId, ChangeList)
                           end, maps:to_list(Changes)),
-            update_current_seq(oneprovider:get_provider_id(), Until)
+            ?info("Changes applied ~p ~p", [FromProvider, Until]),
+            update_current_seq(FromProvider, Until)
     end.
 
-apply_changes(SpaceId, [#change{doc = #document{key = Key} = Doc, model = ModelName} = Change | T]) ->
+apply_changes(SpaceId, [#change{seq = Seq, doc = #document{key = Key} = Doc, model = ModelName} = Change | T]) ->
 %%    ?info("Apply in ~p change ~p", [SpaceId, Change]),
     try
         ModelConfig = ModelName:model_init(),
@@ -284,18 +290,30 @@ get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
 
 
 update_current_seq(ProviderId, SeqNum) ->
-    worker_host:state_update(dbsync_worker, {current_seq, ProviderId},
+    OP =
         fun (undefined) ->
-            SeqNum;
+                SeqNum;
             (CurrentSeq) ->
                 max(SeqNum, CurrentSeq)
-        end).
+        end,
+    case self() =:= whereis(dbsync_worker) of
+        true ->
+            state_put({current_seq, ProviderId}, OP(state_get({current_seq, ProviderId})));
+        false ->
+            worker_host:state_update(dbsync_worker, {current_seq, ProviderId}, OP)
+    end.
 
 get_current_seq() ->
-    get_current_seq(oneprovider:get_provider_id()).
+    case get_current_seq(oneprovider:get_provider_id()) of
+        undefined -> 0;
+        O -> O
+    end.
 
 get_current_seq(ProviderId) ->
-    worker_host:state_get(dbsync_worker, {current_seq, ProviderId}).
+    case worker_host:state_get(dbsync_worker, {current_seq, ProviderId}) of
+        undefined -> 0;
+        O -> O
+    end.
 
 
 
@@ -312,7 +330,7 @@ bcast_status() ->
 
 on_status_received(ProviderId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId),
-    ?info("Received status ~p ~p", [ProviderId, SeqNum, CurrentSeq]),
+    ?info("Received status ~p ~p ~p", [ProviderId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);
