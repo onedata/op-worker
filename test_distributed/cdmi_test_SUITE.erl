@@ -442,21 +442,21 @@ metadata_test(Config) ->
     UserName1 = ?config({user_name, 1}, Config),
     FileName2 = "acl_test_file.txt",
     Ace1 = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?read}
     ],
     Ace2 = [
-        {<<"acetype">>, <<"DENY">>},
+        {<<"acetype">>, ?deny},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, <<(?read)/binary, ", ", (?execute)/binary>>}
     ],
     Ace3 = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write}
     ],
 
@@ -484,9 +484,9 @@ metadata_test(Config) ->
 
     %%-- create forbidden by acl ---
     Ace4 = [
-        {<<"acetype">>, <<"DENY">>},
+        {<<"acetype">>, ?deny},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace4]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
@@ -1266,33 +1266,33 @@ acl_test(Config) ->
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
     Read = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?read}
     ],
     Write = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write}
     ],
     Execute = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?execute}
     ],
     WriteAcl = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write_acl}
     ],
     Delete = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?delete}
     ],
 
