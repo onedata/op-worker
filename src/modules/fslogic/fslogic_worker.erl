@@ -95,9 +95,9 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
-    maybe_handle_fuse_request(SessId, FuseRequest);
+    run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request);
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    handle_proxyio_request(SessId, ProxyIORequest);
+    run_and_catch_exceptions(fun handle_proxyio_request/2, SessId, ProxyIORequest, proxyio_request);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -120,31 +120,28 @@ cleanup() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handles or forwards FUSE request. In case of error translates it using
+%% Handles or forwards request. In case of error translates it using
 %% fslogic_errors:translate_error/1 function.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_handle_fuse_request(SessId :: session:id(), FuseRequest :: #fuse_request{}) ->
-    FuseResponse :: #fuse_response{}.
-maybe_handle_fuse_request(SessId, FuseRequest) ->
+-spec run_and_catch_exceptions(Function :: function(), ctx() | session:id(), any(),
+    fuse_request | proxyio_request) -> #fuse_response{} | #proxyio_response{}.
+run_and_catch_exceptions(Function, Context, Request, Type) ->
     try
-        ?debug("Processing request: ~p", [FuseRequest]),
-        Resp = handle_fuse_request(fslogic_context:new(SessId), FuseRequest),
-        ?debug("Fuse request ~p from user ~p: ~p", [FuseRequest, SessId, Resp]),
-        Resp
+        apply(Function, [Context, Request])
     catch
         Reason ->
             %% Manually thrown error, normal interrupt case.
-            report_error(FuseRequest, Reason, debug);
+            report_error(Request, Type, Reason, debug);
         error:{badmatch, Reason} ->
             %% Bad Match assertion - something went wrong, but it could be expected (e.g. file not found assertion).
-            report_error(FuseRequest, Reason, warning);
+            report_error(Request, Type, Reason, warning);
         error:{case_clause, Reason} ->
             %% Case Clause assertion - something went seriously wrong and we should know about it.
-            report_error(FuseRequest, Reason, error);
+            report_error(Request, Type, Reason, error);
         error:Reason ->
             %% Something went horribly wrong. This should not happen.
-            report_error(FuseRequest, Reason, error)
+            report_error(Request, Type, Reason, error)
     end.
 
 %%--------------------------------------------------------------------
@@ -154,19 +151,30 @@ maybe_handle_fuse_request(SessId, FuseRequest) ->
 %% Logs an error with given log level.
 %% @end
 %%--------------------------------------------------------------------
--spec report_error(FuseRequest :: #fuse_request{}, Error :: term(),
-    LogLevel :: debug | warning | error) -> FuseResponse :: #fuse_response{}.
-report_error(FuseRequest, Error, LogLevel) ->
+-spec report_error(Request :: any(), fuse_request | proxyio_request, Error :: term(),
+    LogLevel :: debug | warning | error) ->  #fuse_response{} | #proxyio_response{}.
+report_error(Request, Type, Error, LogLevel) ->
     Status = #status{code = Code, description = Description} =
         fslogic_errors:gen_status_message(Error),
     MsgFormat = "Cannot process request ~p due to error: ~p (code: ~p)",
     case LogLevel of
-        debug -> ?debug_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-%%      info -> ?info(MsgFormat, [FuseRequest, Description, Code]);  %% Not used right now
-        warning -> ?warning_stacktrace(MsgFormat, [FuseRequest, Description, Code]);
-        error -> ?error_stacktrace(MsgFormat, [FuseRequest, Description, Code])
+        debug -> ?debug_stacktrace(MsgFormat, [Request, Description, Code]);
+%%      info -> ?info(MsgFormat, [Request, Description, Code]);  %% Not used right now
+        warning -> ?warning_stacktrace(MsgFormat, [Request, Description, Code]);
+        error -> ?error_stacktrace(MsgFormat, [Request, Description, Code])
     end,
-    #fuse_response{status = Status}.
+    error_response(Type, Status).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns response with given status, matching given request.
+%% @end
+%%--------------------------------------------------------------------
+-spec error_response(fuse_request | proxyio_request, #status{}) -> #fuse_response{}.
+error_response(fuse_request, Status) ->
+    #fuse_response{status = Status};
+error_response(proxyio_request, Status) ->
+    #proxyio_response{status = Status}.
 
 %%--------------------------------------------------------------------
 %% @private

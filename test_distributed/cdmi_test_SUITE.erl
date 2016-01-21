@@ -1522,13 +1522,10 @@ errors_test(Config) ->
 accept_header_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     AcceptHeader = {<<"Accept">>, <<"*/*">>},
-    tracer:start(Worker),
-    tracer:trace_calls(plugin_callback_selector),
 
     {ok, Code1, _Headers1, _Response1} =
         do_request(Worker, [], get,
             [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, AcceptHeader], []),
-    tracer:stop(),
 
     ?assertEqual(200, Code1).
 

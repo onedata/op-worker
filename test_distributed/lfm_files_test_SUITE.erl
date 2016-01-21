@@ -333,7 +333,7 @@ lfm_acl_test(Config) ->
     DirName = <<"/test_dir_acl">>,
 
     {ok, FileUuid} = lfm_proxy:create(W, SessId1, FileName, 8#755),
-    ok = lfm_proxy:mkdir(W, SessId1, DirName),
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, DirName),
 
     % test setting and getting acl
     Acl = [
