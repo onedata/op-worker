@@ -150,11 +150,16 @@ ensure_connected(SessId) ->
             {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
             Connections = lists:map(
                 fun(URL) ->
-                    Port = 5555,
+                    Port = 5556,
                     connection:start_link(SessId, URL, Port, ranch_ssl2, timer:seconds(5))
                 end, URLs),
             ok;
         {ok, Pid} ->
-            case is_alive(Pid)
-            ok
+            case process_info(Pid) of
+                undefined ->
+                    ok = session:remove_connection(SessId, Pid),
+                    ensure_connected(SessId);
+                _ ->
+                    ok
+            end
     end.

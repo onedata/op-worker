@@ -207,6 +207,7 @@ queue_push(QueueKey, #change{seq = Since} = Change, SpaceId) ->
 
 
 apply_batch_changes(FromProvider, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+    ?info("Apply changes from ~p: ~p", [FromProvider, Batch]),
     CurrentUntil = get_current_seq(FromProvider),
     case CurrentUntil < Since of
         true ->
@@ -317,11 +318,17 @@ get_current_seq(ProviderId) ->
 
 bcast_status() ->
     CurrentSeq = get_current_seq(),
-    dbsync_proto:status_report(CurrentSeq).
+    {ok, SpaceIds} = gr_providers:get_spaces(provider),
+    lists:foreach(
+        fun(SpaceId) ->
+            {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
+            dbsync_proto:status_report(SpaceId, Providers, CurrentSeq)
+        end, SpaceIds).
 
 
 on_status_received(ProviderId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId),
+    ?info("Received status ~p ~p", [ProviderId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);

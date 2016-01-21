@@ -48,9 +48,9 @@
 }).
 
 
--export([send_batch/2, changes_request/3, status_report/1]).
+-export([send_batch/2, changes_request/3, status_report/3]).
 
--export([send_tree_broadcast/3, send_tree_broadcast/4, send_direct_message/3]).
+-export([send_tree_broadcast/4, send_tree_broadcast/5, send_direct_message/3]).
 -export([handle/2]).
 -export([reemit/1]).
 
@@ -60,14 +60,14 @@
 
 
 send_batch(global, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?info("[ DBSync ] Sending batch to all providers: ~p", [Batch]),
+    ?debug("[ DBSync ] Sending batch to all providers: ~p", [Batch]),
     lists:foreach(
         fun({SpaceId, ChangeList}) ->
             ?info("Processing space ~p", [SpaceId]),
             ToSend = #batch_update{ since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
                 changes_encoded = dbsync_utils:encode_term(maps:from_list([{SpaceId, ChangeList}]))},
             Providers = dbsync_utils:get_providers_for_space(SpaceId),
-            send_tree_broadcast(Providers, ToSend, 3)
+            send_tree_broadcast(SpaceId, Providers, ToSend, 3)
         end, maps:to_list(Changes)),
     ok;
 send_batch({provider, ProviderId, _}, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
@@ -83,13 +83,15 @@ send_batch({provider, ProviderId, _}, #batch{changes = Changes, since = Since, u
 
 
 changes_request(ProviderId, Since, Until) ->
+    ?info("Requesting direct changes ~p ~p ~p", [ProviderId, Since, Until]),
     send_direct_message(ProviderId, #changes_request{since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until)}, 3).
 
 
 
-status_report(CurrentSeq) ->
-    AllProviders = [],
-    send_tree_broadcast(AllProviders, #status_report{seq = dbsync_utils:encode_term(CurrentSeq)}, 3).
+status_report(SpaceId, Providers, CurrentSeq) ->
+    AllProviders = Providers,
+    ?info("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
+    send_tree_broadcast(SpaceId, AllProviders, #status_report{seq = dbsync_utils:encode_term(CurrentSeq)}, 3).
 
 
 
@@ -116,19 +118,19 @@ send_direct_message(_ProviderId, _Request, 0) ->
 %%      SyncWith has to be sorted.
 %% @end
 %%--------------------------------------------------------------------
--spec send_tree_broadcast(SyncWith :: [ProviderId :: binary()], Request :: term(), Attempts :: non_neg_integer()) ->
+-spec send_tree_broadcast(SpaceId :: binary(), SyncWith :: [ProviderId :: binary()], Request :: term(), Attempts :: non_neg_integer()) ->
     ok | no_return().
-send_tree_broadcast(SyncWith, Request, Attempts) ->
-    BaseRequest = #tree_broadcast{request_id = dbsync_utils:gen_request_id(), message_body = Request, excluded_providers = [], l_edge = <<"">>, r_edge = <<"">>, depth = 0, space_id = <<"">>},
-    send_tree_broadcast(SyncWith, Request, BaseRequest, Attempts).
-send_tree_broadcast(SyncWith, Request, BaseRequest, Attempts) ->
+send_tree_broadcast(SpaceId, SyncWith, Request, Attempts) ->
+    BaseRequest = #tree_broadcast{space_id = SpaceId, request_id = dbsync_utils:gen_request_id(), message_body = Request, excluded_providers = [], l_edge = <<"">>, r_edge = <<"">>, depth = 0},
+    send_tree_broadcast(SpaceId, SyncWith, Request, BaseRequest, Attempts).
+send_tree_broadcast(SpaceId, SyncWith, Request, BaseRequest, Attempts) ->
     SyncWith1 = SyncWith -- [oneprovider:get_provider_id()],
     case SyncWith1 of
         [] -> ok;
         _  ->
             {LSync, RSync} = lists:split(crypto:rand_uniform(0, length(SyncWith1)), SyncWith1),
             ExclProviders = [oneprovider:get_provider_id() | BaseRequest#tree_broadcast.excluded_providers],
-            NewBaseRequest = BaseRequest#tree_broadcast{excluded_providers = lists:usort(ExclProviders)},
+            NewBaseRequest = BaseRequest#tree_broadcast{excluded_providers = lists:usort(ExclProviders), space_id = SpaceId},
             do_emit_tree_broadcast(LSync, Request, NewBaseRequest, Attempts),
             do_emit_tree_broadcast(RSync, Request, NewBaseRequest, Attempts)
     end.
@@ -204,11 +206,12 @@ reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, messa
     Providers2 = lists:dropwhile(fun(Elem) -> Elem =/= LEdge end, Providers1),
     Providers3 = lists:takewhile(fun(Elem) -> Elem =/= REdge end, Providers2),
     Providers4 = lists:usort([REdge | Providers3]),
-    ok = send_tree_broadcast(Providers4, Request, BaseRequest, 3).
+    ok = send_tree_broadcast(SpaceId, Providers4, Request, BaseRequest, 3).
 
 
 handle(SessId, #dbsync_request{message_body = MessageBody}) ->
-    #session{identity = #identity{provider_id = ProviderId}} = session:get(SessId),
+    ?info("Request from  ~p", [SessId]),
+    {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle(ProviderId, MessageBody) of
         ok ->
             #dbsync_response{status = #status{code = ?OK}};
@@ -284,48 +287,6 @@ handle_broadcast(From, #status_request{} = _Request, _BaseRequest) ->
 %%--------------------------------------------------------------------
 %% Misc
 %%--------------------------------------------------------------------
-
-%% a2l/1
-%%--------------------------------------------------------------------
-%% @doc Converts given list/atom to atom.
-%% @end
--spec a2l(AtomOrList :: atom() | list()) -> Result :: atom().
-%%--------------------------------------------------------------------
-a2l(Atom) when is_atom(Atom) ->
-    atom_to_list(Atom);
-a2l(List) when is_list(List) ->
-    List.
-
-
-%%--------------------------------------------------------------------
-%% @doc Get name of protobuf's encoder method for given message type.
-%% @end
-%%--------------------------------------------------------------------
--spec encoder_method(MType :: atom() | list()) -> EncoderName :: atom().
-encoder_method(MType) when is_atom(MType) ->
-    encoder_method(atom_to_list(MType));
-encoder_method(MType) when is_list(MType) ->
-    list_to_atom("encode_" ++ MType).
-
-
-%%--------------------------------------------------------------------
-%% @doc Get name of protobuf's decoder method for given message type.
-%% @end
-%%--------------------------------------------------------------------
--spec decoder_method(MType :: atom() | list()) -> DecoderName :: atom().
-decoder_method(MType) when is_atom(MType) ->
-    decoder_method(atom_to_list(MType));
-decoder_method(MType) when is_list(MType) ->
-    list_to_atom("decode_" ++ MType).
-
-
-%%--------------------------------------------------------------------
-%% @doc Get protobuf's decoder's module name for given decoder's name.
-%% @end
-%%--------------------------------------------------------------------
--spec pb_module(ModuleName :: atom() | list()) -> PBModule :: atom().
-pb_module(ModuleName) ->
-    list_to_atom(utils:ensure_list(ModuleName) ++ "_pb").
 
 
 communicate(ProviderId, Message) ->

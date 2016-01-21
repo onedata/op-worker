@@ -66,7 +66,8 @@ db_nodes() ->
 listeners() -> node_manager:cluster_worker_listeners() ++ [
     gui_listener,
     protocol_listener,
-    rest_listener
+    rest_listener,
+    provider_listener
 ].
 
 %%--------------------------------------------------------------------

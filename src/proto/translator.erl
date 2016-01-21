@@ -331,6 +331,8 @@ translate_to_protobuf(#status_report{seq = SeqNum}) ->
 translate_to_protobuf(#batch_update{since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
     {batch_update, #'BatchUpdate'{since_seq = Since, until_seq = Until, changes_encoded = Changes}};
 
+translate_to_protobuf(#dir{}) ->
+    undefined;
 translate_to_protobuf(undefined) ->
     undefined.
 

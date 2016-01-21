@@ -98,6 +98,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [{certfile, gr_plugin:get_cert_path()}, {keyfile, gr_plugin:get_key_path()}],
     ?info("Connecting to ~p ~p", [Hostname, Port]),
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
+    ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
     ?info("OK Connecting to ~p ~p", [Hostname, Port]),
 
     {Ok, Closed, Error} = Transport:messages(),
@@ -307,13 +308,16 @@ code_change(_OldVsn, State, _Extra) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_client_message(State = #state{session_id = SessId, certificate = Cert}, Data) ->
+%%    ?info("handle_client_message from ~p ~p", [SessId, Cert]),
     try serializator:deserialize_client_message(Data, SessId) of
         {ok, Msg} when SessId == undefined ->
             IsProvider = provider_auth_manager:is_provider(Cert),
+%%            ?info("Connection from ~p ~p", [Cert, IsProvider]),
             case IsProvider of
                 true ->
-                    SessId = provider_auth_manager:handshake(Cert, self()),
-                    handle_normal_message(State#state{session_id = SessId}, Msg);
+                    NewSessId = provider_auth_manager:handshake(Cert, self()),
+                    ?info("OK Connection from ~p ~p", [NewSessId, Msg]),
+                    handle_normal_message(State#state{session_id = NewSessId}, Msg);
                 false ->
                     handle_handshake(State, Msg)
             end,
@@ -381,7 +385,7 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_normal_message(State = #state{session_id = SessId, socket = Sock,
     transport = Transp}, Msg) ->
-    case router:preroute_message(Msg, SessId) of
+    case router:preroute_message(Msg#client_message{session_id = SessId}, SessId) of
         ok ->
             {noreply, State, ?TIMEOUT};
         {ok, ServerMsg} ->
@@ -428,4 +432,7 @@ send_server_message(Socket, Transport, ServerMsg) ->
     ServerMessage :: #server_message{}) -> ok.
 send_client_message(Socket, Transport, ServerMsg) ->
     {ok, Data} = serializator:serialize_client_message(ServerMsg),
-    ok = Transport:send(Socket, Data).
+    ?info("Send data ~p", [Data]),
+    ok = Transport:send(Socket, Data),
+    ?info("Transport send ~p", [Socket]),
+    ok.
