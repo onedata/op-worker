@@ -30,8 +30,10 @@ namespace helpers {
 
 using error_t = std::error_code;
 
+namespace {
 constexpr std::chrono::seconds ASYNC_OPS_TIMEOUT{2};
-static const error_t SUCCESS_CODE = error_t();
+const error_t SUCCESS_CODE;
+}
 
 class IStorageHelperCTX {
 public:
@@ -58,33 +60,27 @@ public:
 
     virtual void setUserCTX(std::unordered_map<std::string, std::string> args)
     {
-        throw std::system_error(ENOTSUP, std::system_category());
+        throw std::system_error{std::make_error_code(std::errc::not_supported)};
     }
 
     virtual std::unordered_map<std::string, std::string> getUserCTX()
     {
-        throw std::system_error(ENOTSUP, std::system_category());
+        throw std::system_error{std::make_error_code(std::errc::not_supported)};
     }
 
     virtual void setFlags(std::vector<Flag> flags)
     {
-        throw std::system_error(ENOTSUP, std::system_category());
+        throw std::system_error{std::make_error_code(std::errc::not_supported)};
     }
 
-    virtual void setFlags(int flags)
-    {
-        throw std::system_error(ENOTSUP, std::system_category());
-    }
+    virtual void setFlags(int flags) {}
 
     virtual std::vector<Flag> getFlags()
     {
-        throw std::system_error(ENOTSUP, std::system_category());
+        throw std::system_error{std::make_error_code(std::errc::not_supported)};
     }
 
-    virtual int getFlagValue(Flag flag)
-    {
-        throw std::system_error(ENOTSUP, std::system_category());
-    }
+    virtual int getFlagValue(Flag flag) { return 0; }
 
 protected:
     static error_t makePosixError(int posixCode)
@@ -255,7 +251,7 @@ public:
                 promise->set_value(input);
         };
 
-        ash_read(ctx, p, buf, offset, std::move(callback));
+        ash_read(std::move(ctx), p, buf, offset, std::move(callback));
         return waitFor(future);
     }
 
@@ -275,7 +271,7 @@ public:
                 promise->set_value(wrote);
         };
 
-        ash_write(ctx, p, buf, offset, std::move(callback));
+        ash_write(std::move(ctx), p, buf, offset, std::move(callback));
         return waitFor(future);
     }
 

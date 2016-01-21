@@ -38,24 +38,55 @@ using helper_args_t = std::unordered_map<std::string, std::string>;
  * Static resource holder.
  */
 struct HelpersNIF {
-    asio::io_service dioService;
-    asio::executor_work<asio::io_service::executor_type> dio_work =
-        asio::make_work(dioService);
+    asio::io_service cephService;
+    asio::executor_work<asio::io_service::executor_type> cephWork =
+        asio::make_work(cephService);
+    std::vector<std::thread> dioWorkers;
 
-    std::vector<std::thread> workers;
+    asio::io_service dioService;
+    asio::executor_work<asio::io_service::executor_type> dioWork =
+        asio::make_work(dioService);
+    std::vector<std::thread> cephWorkers;
 
     one::helpers::StorageHelperFactory SHFactory =
-        one::helpers::StorageHelperFactory(dioService, dioService);
+        one::helpers::StorageHelperFactory(cephService, dioService);
 
     HelpersNIF() { umask(0); }
 
     ~HelpersNIF()
     {
         dioService.stop();
-
-        for (auto &th : workers) {
+        for (auto &th : dioWorkers) {
             th.join();
         }
+
+        cephService.stop();
+        for (auto &th : cephWorkers) {
+            th.join();
+        }
+    }
+
+    /**
+     * Adjusts number of threads held by IO service. Allows only to increase
+     * size of thread pool.
+     * @param ioService reference to IO service which thread pool should be
+     * adjusted
+     * @param threads reference to pool of threads held by IO service
+     * @param number number of threads that IO service should hold
+     * @return true if number of IO service threads has been adjusted
+     * (increased) otherwise false.
+     */
+    bool adjust_io_service_threads(asio::io_service &ioService,
+        std::vector<std::thread> &threads, std::size_t number)
+    {
+        if (threads.size() > number)
+            return false;
+
+        for (std::size_t i = 0; i < threads.size() - number; ++i) {
+            threads.push_back(std::thread([&]() { ioService.run(); }));
+        }
+
+        return true;
     }
 
 } application;
@@ -251,14 +282,14 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, const T &fun)
     try {
         return fun();
     }
-    catch (nifpp::badarg &) {
+    catch (const nifpp::badarg &) {
         return enif_make_badarg(env);
     }
-    catch (std::system_error &e) {
+    catch (const std::system_error &e) {
         return nifpp::make(
             env, std::make_tuple(error, nifpp::str_atom{e.code().message()}));
     }
-    catch (std::exception &e) {
+    catch (const std::exception &e) {
         return nifpp::make(env, std::make_tuple(error, std::string{e.what()}));
     }
 }
@@ -402,6 +433,36 @@ template <class... T> void handle_result(NifCTX ctx, error_t e, T... value)
 *       All functions below are described in helpers_nif.erl
 *
 *********************************************************************/
+
+ERL_NIF_TERM set_threads_number(
+    ErlNifEnv *env, std::unordered_map<std::string, std::size_t> args)
+{
+    return handle_errors(env, [&]() {
+        auto result = args.find("Ceph");
+        if (result != args.end())
+            if (!application.adjust_io_service_threads(application.cephService,
+                    application.cephWorkers, result->second)) {
+                return nifpp::make(
+                    env,
+                    std::make_tuple(error,
+                        std::make_tuple(nifpp::str_atom("wrong_thread_number"),
+                                        "Ceph", result->second)));
+            }
+
+        result = args.find("DirectIO");
+        if (result != args.end())
+            if (!application.adjust_io_service_threads(application.dioService,
+                    application.dioWorkers, result->second)) {
+                return nifpp::make(
+                    env,
+                    std::make_tuple(error,
+                        std::make_tuple(nifpp::str_atom("wrong_thread_number"),
+                                        "DirectIO", result->second)));
+            }
+
+        return nifpp::make(env, ok);
+    });
+}
 
 ERL_NIF_TERM new_helper_obj(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -672,16 +733,17 @@ extern "C" {
 
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
-    for (auto i = 0; i < 100; ++i) {
-        application.workers.push_back(
-            std::thread([]() { application.dioService.run(); }));
-    }
-
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
         nifpp::register_resource<helper_ctx_ptr>(
                  env, nullptr, "helper_ctx_ptr") &&
         nifpp::register_resource<fuse_file_info>(
                  env, nullptr, "fuse_file_info"));
+}
+
+static ERL_NIF_TERM sh_set_threads_number(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(set_threads_number, env, argv);
 }
 
 static ERL_NIF_TERM sh_set_flags(
@@ -825,15 +887,17 @@ static ERL_NIF_TERM sh_fsync(
     return wrap(fsync, env, argv);
 }
 
-static ErlNifFunc nif_funcs[] = {{"getattr", 3, sh_getattr},
-    {"access", 4, sh_access}, {"mknod", 5, sh_mknod}, {"mkdir", 4, sh_mkdir},
-    {"unlink", 3, sh_unlink}, {"rmdir", 3, sh_rmdir},
-    {"symlink", 4, sh_symlink}, {"rename", 4, sh_rename}, {"link", 4, sh_link},
-    {"chmod", 4, sh_chmod}, {"chown", 5, sh_chown},
-    {"truncate", 4, sh_truncate}, {"open", 3, sh_open}, {"read", 5, sh_read},
-    {"write", 5, sh_write}, {"release", 3, sh_release}, {"flush", 3, sh_flush},
-    {"fsync", 4, sh_fsync}, {"set_flags", 2, sh_set_flags},
-    {"get_flags", 1, sh_get_flags}, {"username_to_uid", 1, username_to_uid},
+static ErlNifFunc nif_funcs[] = {
+    {"set_threads_number", 1, sh_set_threads_number},
+    {"getattr", 3, sh_getattr}, {"access", 4, sh_access},
+    {"mknod", 5, sh_mknod}, {"mkdir", 4, sh_mkdir}, {"unlink", 3, sh_unlink},
+    {"rmdir", 3, sh_rmdir}, {"symlink", 4, sh_symlink},
+    {"rename", 4, sh_rename}, {"link", 4, sh_link}, {"chmod", 4, sh_chmod},
+    {"chown", 5, sh_chown}, {"truncate", 4, sh_truncate}, {"open", 3, sh_open},
+    {"read", 5, sh_read}, {"write", 5, sh_write}, {"release", 3, sh_release},
+    {"flush", 3, sh_flush}, {"fsync", 4, sh_fsync},
+    {"set_flags", 2, sh_set_flags}, {"get_flags", 1, sh_get_flags},
+    {"username_to_uid", 1, username_to_uid},
     {"groupname_to_gid", 1, groupname_to_gid},
     {"new_helper_obj", 2, new_helper_obj},
     {"new_helper_ctx", 1, sh_new_helper_ctx},
