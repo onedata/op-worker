@@ -79,8 +79,8 @@ inject_event_stream_definition(#subscription{object = #permission_changed_subscr
                                #{session_id => SessId}
                        end,
         event_handler = fun
-                            ([Event], #{session_id := SessId}) ->
-                                communicator:send(Event, SessId)
+                            (Events, #{session_id := SessId}) ->
+                                communicator:send(#server_message{message_body = #events{events = Events}}, SessId)
                         end
     }}.
 
