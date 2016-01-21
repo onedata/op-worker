@@ -43,7 +43,7 @@
 %%--------------------------------------------------------------------
 -spec set_threads_number(#{HelperName :: nif_string() => Threads :: non_neg_integer()}) -> ok.
 set_threads_number(_ThreadsByHelper) ->
-    erlang:error(helpers_nif_not_loaded).
+    erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
 %% @doc Creates new helper object. Returned handle is only valid within local Erlang-VM.
