@@ -1,24 +1,25 @@
-%% ===================================================================
-%% @author Lukasz Opiola
-%% @copyright (C): 2015 ACK CYFRONET AGH
-%% This software is released under the MIT license
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This library is used to authenticate users that have been redirected
-%% from global registry.
-%% @end
-%% ===================================================================
+%%%-------------------------------------------------------------------
+%%% @author Lukasz Opiola
+%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module handles authentication of users redirected for login from GR.
+%%% @end
+%%%-------------------------------------------------------------------
 -module(gui_auth_manager).
+-author("Lukasz Opiola").
 
 -include_lib("ctool/include/logging.hrl").
 -include("proto/common/credentials.hrl").
 
+-export([authenticate/1]).
 
 %% ====================================================================
-%% API functions
+%% API
 %% ====================================================================
--export([authorize/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -26,8 +27,8 @@
 %% record that can be used to perform operations on behalf of the user.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(SrlzdMacaroon :: binary()) -> {ok, #auth{}} | {error, term()}.
-authorize(SrlzdMacaroon) ->
+-spec authenticate(SrlzdMcroon :: binary()) -> {ok, #auth{}} | {error, term()}.
+authenticate(SrlzdMacaroon) ->
     try
         {ok, Macaroon} = macaroon:deserialize(SrlzdMacaroon),
         {ok, Caveats} = macaroon:third_party_caveats(Macaroon),
