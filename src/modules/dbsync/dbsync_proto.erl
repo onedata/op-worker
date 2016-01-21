@@ -225,9 +225,14 @@ handle(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseR
 
 handle(From, #changes_request{since_seq = Since, until_seq = Until} = _BaseRequest) ->
     ?info("Changes request ~p ~p ~p", [From, Since, Until]),
-    {ok, _} = dbsync_worker:init_stream(dbsync_utils:decode_term(Since), dbsync_utils:decode_term(Until), {provider, From, dbsync_utils:gen_request_id()}).
+    {ok, _} = dbsync_worker:init_stream(dbsync_utils:decode_term(Since), dbsync_utils:decode_term(Until), {provider, From, dbsync_utils:gen_request_id()});
 
 
+handle(From, #batch_update{since_seq = Since, until_seq = Until, changes_encoded = ChangesBin}) ->
+    ProviderId = From,
+
+    Batch = #batch{since = dbsync_utils:decode_term(Since), until = dbsync_utils:decode_term(Until), changes = dbsync_utils:decode_term(ChangesBin)},
+    dbsync_worker:apply_batch_changes(ProviderId, Batch).
 
 %%--------------------------------------------------------------------
 %% @doc General handler for tree_broadcast{} inner-messages. Shall return whether
