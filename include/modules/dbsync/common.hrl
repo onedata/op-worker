@@ -22,7 +22,7 @@
 }).
 
 -record(batch, {
-    changes = #{},
+    changes = [],
     since,
     until
 }).
@@ -30,7 +30,8 @@
 
 -record(queue, {
     key,
-    current_batch,
+    since = 0,
+    batch_map = #{},
     last_send,
     removed = false
 }).

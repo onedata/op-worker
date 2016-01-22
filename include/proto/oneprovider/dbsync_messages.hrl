@@ -29,12 +29,14 @@
 }).
 
 -record(batch_update, {
+    space_id,
     since_seq,
     until_seq,
     changes_encoded
 }).
 
 -record(status_report, {
+    space_id,
     seq
 }).
 

@@ -170,10 +170,10 @@ translate_from_protobuf(#'ChangesRequest'{since_seq = Since, until_seq = Until})
 
 translate_from_protobuf(#'StatusRequest'{}) ->
     #status_request{};
-translate_from_protobuf(#'StatusReport'{seq_num = SeqNum}) ->
-    #status_report{seq = SeqNum};
-translate_from_protobuf(#'BatchUpdate'{since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
-    #batch_update{since_seq = Since, until_seq = Until, changes_encoded = Changes};
+translate_from_protobuf(#'StatusReport'{space_id = SpaceId, seq_num = SeqNum}) ->
+    #status_report{space_id = SpaceId, seq = SeqNum};
+translate_from_protobuf(#'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
+    #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes};
 
 
 translate_from_protobuf(undefined) ->
@@ -323,10 +323,10 @@ translate_to_protobuf(#changes_request{since_seq = Since, until_seq = Until}) ->
 
 translate_to_protobuf(#status_request{}) ->
     {status_request, #'StatusRequest'{}};
-translate_to_protobuf(#status_report{seq = SeqNum}) ->
-    {status_report, #'StatusReport'{seq_num = SeqNum}};
-translate_to_protobuf(#batch_update{since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
-    {batch_update, #'BatchUpdate'{since_seq = Since, until_seq = Until, changes_encoded = Changes}};
+translate_to_protobuf(#status_report{space_id = SpaceId, seq = SeqNum}) ->
+    {status_report, #'StatusReport'{space_id = SpaceId, seq_num = SeqNum}};
+translate_to_protobuf(#batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
+    {batch_update, #'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}};
 
 translate_to_protobuf(#dir{}) ->
     undefined;

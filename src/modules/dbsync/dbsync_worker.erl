@@ -22,11 +22,11 @@
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
 -export([state_get/1, state_put/2]).
--export([apply_batch_changes/2, init_stream/3]).
--export([bcast_status/0, on_status_received/2]).
+-export([apply_batch_changes/3, init_stream/3]).
+-export([bcast_status/0, on_status_received/3]).
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
-
+-compile([export_all]).
 
 
 %%%===================================================================
@@ -45,12 +45,22 @@ init(_Args) ->
     ?info("[ DBSync ]: Starting dbsync..."),
     timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status}),
     Since = 0,
+    state_put(global_resume_seq, Since),
     {ok, ChangesStream} = init_stream(Since, infinity, global),
     {ok, #{changes_stream => ChangesStream}}.
 
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
-    state_put({queue, Queue}, #queue{last_send = now(), current_batch = #batch{since = Since, until = Since}}),
+    case Queue of
+        {provider, _, _} ->
+            BatchMap = maps:from_list(lists:map(
+                fun(SpaceId) ->
+                    {SpaceId, #batch{since = Since, until = Since}}
+                end, get_spaces_for_provider())),
+            state_put({queue, Queue}, #queue{batch_map = BatchMap, last_send = now(), since = Since});
+        _ -> ok
+    end,
+%%
     timer:send_after(100, dbsync_worker, {timer, {flush_queue, Queue}}),
     couchdb_datastore_driver:changes_start_link(fun
         (_, stream_ended, _) ->
@@ -119,18 +129,27 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
     worker_host:state_update(dbsync_worker, {queue, QueueKey},
-        fun(#queue{current_batch = #batch{until = Until} = BatchToSend, removed = IsRemoved} = Queue) ->
+        fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
 %%            ?info("[ DBSync ] Flush queue ~p ~p", [QueueKey, BatchToSend]),
-            dbsync_proto:send_batch(QueueKey, BatchToSend),
-            update_current_seq(oneprovider:get_provider_id(), Until),
+            NewBatchMap = maps:map(
+                fun(SpaceId, #batch{until = Until} = B) ->
+                    dbsync_proto:send_batch(QueueKey, SpaceId, B),
+                    update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    #batch{since = Until, until = Until}
+                end,
+            BatchMap),
+
             case IsRemoved of
                 true ->
                     ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
                     undefined;
                 false ->
                     timer:send_after(200, dbsync_worker, {timer, {flush_queue, QueueKey}}),
-                    Queue#queue{current_batch = #batch{since = Until, until = Until}}
+                    Queue#queue{batch_map = NewBatchMap}
             end;
+            (undefined) when QueueKey =:= global ->
+                timer:send_after(200, dbsync_worker, {timer, {flush_queue, QueueKey}}),
+                undefined;
             (undefined) ->
                 ?warning("Unknown operation on empty queue ~p", [QueueKey]),
                 undefined
@@ -140,7 +159,7 @@ handle({dbsync_request, SessId, DBSyncRequest}) ->
 handle({'EXIT', Stream, Reason}) ->
     case state_get(changes_stream) of
         Stream ->
-            #queue{current_batch = #batch{until = Since}} = state_get({queue, global}),
+            Since = state_get(global_resume_seq),
             worker_host:state_update(dbsync_worker, changes_stream,
                 fun(_) ->
                     {ok, NewStream} = init_stream(Since, infinity, global),
@@ -169,41 +188,46 @@ queue_remove(QueueKey, Until) ->
             case Queue of
                 undefined ->
                     undefined;
-                #queue{current_batch = #batch{} = Batch} = Q -> Q#queue{removed = true, current_batch = Batch#batch{until = Until}}
+                #queue{batch_map = BatchMap} = Q ->
+                    NewBatchMap = maps:map(
+                        fun(_SpaceId, #batch{} = B) ->
+                            B#batch{until = Until}
+                        end,
+                    BatchMap),
+                    ?info("Removing queue wuth Batch ~p", [NewBatchMap]),
+                    Q#queue{removed = true, batch_map = NewBatchMap}
             end
         end).
 
-queue_push(QueueKey, #change{seq = Since} = Change, SpaceId) ->
+queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
     worker_host:state_update(dbsync_worker, {queue, QueueKey},
         fun(Queue) ->
             Queue1 =
                 case Queue of
                     undefined ->
-                        ?info("New queue ~p", [Since]),
-                        #queue{last_send = now(), current_batch = #batch{since = Since, until = Since}};
+                        #queue{batch_map = #{}, last_send = now()};
                     #queue{} = Q -> Q
                 end,
-            CurrentBatch = Queue1#queue.current_batch,
-            ChangesList = maps:get(SpaceId, CurrentBatch#batch.changes, []),
-            ?info("!! Since ~p", [CurrentBatch#batch.since]),
-            Queue1#queue{current_batch = CurrentBatch#batch{until = Since, changes = maps:put(SpaceId, [Change | ChangesList], CurrentBatch#batch.changes)}}
+            BatchMap = Queue1#queue.batch_map,
+            Since = Queue1#queue.since,
+            Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
+            Batch  = Batch0#batch{changes = [Change | Batch0#batch.changes], until = Until},
+            Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap)}
         end).
 
 
-apply_batch_changes(FromProvider, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?info("Apply changes from ~p: ~p", [FromProvider, Batch]),
-    CurrentUntil = get_current_seq(FromProvider),
+apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+    ?info("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
+    CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil < Since of
         true ->
-            ?error("Unable to apply changes from provider ~p. Current 'until': ~p, batch 'since': ~p", [FromProvider, CurrentUntil, Since]),
-            stash_batch(FromProvider, Batch),
+            ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p", [FromProvider, SpaceId, CurrentUntil, Since]),
+            stash_batch(FromProvider, SpaceId, Batch),
             do_request_changes(FromProvider, CurrentUntil, Since);
         false ->
-            lists:foreach(fun({SpaceId, ChangeList}) ->
-                ok = apply_changes(SpaceId, ChangeList)
-                          end, maps:to_list(Changes)),
-            ?info("Changes applied ~p ~p", [FromProvider, Until]),
-            update_current_seq(FromProvider, Until)
+            ok = apply_changes(SpaceId, Changes),
+            ?info("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
+            update_current_seq(FromProvider, SpaceId, Until)
     end.
 
 apply_changes(SpaceId, [#change{seq = Seq, doc = #document{key = Key} = Doc, model = ModelName} = Change | T]) ->
@@ -289,7 +313,8 @@ get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
     end.
 
 
-update_current_seq(ProviderId, SeqNum) ->
+update_current_seq(ProviderId, SpaceId, SeqNum) ->
+    Key = {current_seq, ProviderId, SpaceId},
     OP =
         fun (undefined) ->
                 SeqNum;
@@ -298,19 +323,19 @@ update_current_seq(ProviderId, SeqNum) ->
         end,
     case self() =:= whereis(dbsync_worker) of
         true ->
-            state_put({current_seq, ProviderId}, OP(state_get({current_seq, ProviderId})));
+            state_put(Key, OP(state_get(Key)));
         false ->
-            worker_host:state_update(dbsync_worker, {current_seq, ProviderId}, OP)
+            worker_host:state_update(dbsync_worker, Key, OP)
     end.
 
-get_current_seq() ->
-    case get_current_seq(oneprovider:get_provider_id()) of
+get_current_seq(SpaceId) ->
+    case get_current_seq(oneprovider:get_provider_id(), SpaceId) of
         undefined -> 0;
         O -> O
     end.
 
-get_current_seq(ProviderId) ->
-    case worker_host:state_get(dbsync_worker, {current_seq, ProviderId}) of
+get_current_seq(ProviderId, SpaceId) ->
+    case worker_host:state_get(dbsync_worker, {current_seq, ProviderId, SpaceId}) of
         undefined -> 0;
         O -> O
     end.
@@ -318,19 +343,19 @@ get_current_seq(ProviderId) ->
 
 
 bcast_status() ->
-    CurrentSeq = get_current_seq(),
-    {ok, SpaceIds} = gr_providers:get_spaces(provider),
-    ?info("BCast ~p ~p", [CurrentSeq, SpaceIds]),
+    SpaceIds = get_spaces_for_provider(),
     lists:foreach(
         fun(SpaceId) ->
+            CurrentSeq = get_current_seq(SpaceId),
+            ?info("BCast ~p ~p", [CurrentSeq, SpaceId]),
             {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
 
 
-on_status_received(ProviderId, SeqNum) ->
-    CurrentSeq = get_current_seq(ProviderId),
-    ?info("Received status ~p ~p ~p", [ProviderId, SeqNum, CurrentSeq]),
+on_status_received(ProviderId, SpaceId, SeqNum) ->
+    CurrentSeq = get_current_seq(ProviderId, SpaceId),
+    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);
@@ -342,10 +367,25 @@ do_request_changes(ProviderId, Since, Until) ->
     dbsync_proto:changes_request(ProviderId, Since, Until).
 
 
-stash_batch(ProviderId, Batch) ->
-    worker_host:state_update(dbsync_worker, {stash, ProviderId},
+stash_batch(ProviderId, SpaceId, Batch) ->
+    worker_host:state_update(dbsync_worker, {stash, ProviderId, SpaceId},
         fun (undefined) ->
             [Batch];
             (Batches) ->
                 [Batch | Batches]
         end).
+
+
+get_spaces_for_provider() ->
+    get_spaces_for_provider(oneprovider:get_provider_id()).
+
+get_spaces_for_provider(ProviderId) ->
+    {ok, SpaceIds} = gr_providers:get_spaces(provider),
+    lists:foldl(
+        fun(SpaceId, Acc) ->
+            {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
+            case lists:member(ProviderId, Providers) of
+                true -> [SpaceId | Acc];
+                false -> Acc
+            end
+        end, [], SpaceIds).
