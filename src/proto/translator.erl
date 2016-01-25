@@ -236,6 +236,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         type = FileAttr#file_attr.type,
         size = FileAttr#file_attr.size
     }};
+translate_to_protobuf(#dir{}) ->
+    undefined;
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
         translate_to_protobuf(ChildLink)

@@ -18,7 +18,7 @@
 -include("types.hrl").
 
 %% API
--export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4,
+-export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2,
     read/4, write/4, mkdir/3, mkdir/4, ls/5, set_perms/4, get_xattr/4,
     set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4, get_completion_status/3, set_completion_status/4, get_mimetype/3, set_mimetype/4]).
@@ -113,6 +113,14 @@ open(Worker, SessId, FileKey, OpenMode) ->
             Host ! {self(), Result}
         end).
 
+-spec close(node(), logical_file_manager:handle()) -> ok| error_reply().
+close(Worker, TestHandle) ->
+    exec(Worker,
+        fun(Host) ->
+            ets:delete(lfm_handles, TestHandle),
+            Host ! {self(), ok}
+        end).
+
 -spec read(node(), logical_file_manager:handle(), integer(), integer()) ->
     {ok, binary()} | error_reply().
 read(Worker, TestHandle, Offset, Size) ->
@@ -163,8 +171,7 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
                                 {ok, Res, logical_file_manager:stat(SessId, {uuid, UUID})};
                             Other2 ->
                                 Other2
-                        end,
-                        {ok, Res, logical_file_manager:stat(SessId, {uuid, UUID})};
+                        end;
                     Other -> Other
                 end,
             Host ! {self(), Result}
