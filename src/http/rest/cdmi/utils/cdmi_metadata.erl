@@ -43,7 +43,7 @@
 %%--------------------------------------------------------------------
 -spec get_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
     [{Name :: binary(), Value :: binary()}].
-get_user_metadata(Auth, FileKey) -> % todo add prefix as argument
+get_user_metadata(Auth, FileKey) ->
     {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey),
     Metadata = lists:map(
         fun

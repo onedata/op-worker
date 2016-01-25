@@ -35,7 +35,7 @@
 -spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{?write_object, 2}, {traverse_ancestors, 2}]).
-truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
+truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(Entry),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
     Results = lists:map(

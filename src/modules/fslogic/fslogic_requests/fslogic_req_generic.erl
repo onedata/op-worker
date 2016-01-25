@@ -60,8 +60,8 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
 -check_permissions([{owner, 2}, {traverse_ancestors, 2}]).
-chmod(#fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
-    chmod_storage_files(SessId, FileEntry, Mode),
+chmod(CTX, FileEntry, Mode) ->
+    chmod_storage_files(CTX, FileEntry, Mode),
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
@@ -250,10 +250,13 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 -spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-set_acl(_CTX, {uuid, FileUuid}, #acl{value = Val}) ->
+set_acl(CTX, {uuid, FileUuid}, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
         {ok, _} ->
-            ok = chmod_storage_files(?ROOT_SESS_ID, {uuid, FileUuid}, 8#000),
+            ok = chmod_storage_files(
+                CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
+                {uuid, FileUuid}, 8#000
+            ),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -397,7 +400,7 @@ delete_file(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
-delete_impl(#fslogic_ctx{session_id = SessId}, File) ->
+delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
     {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
     {ok, FileChildren} =
@@ -473,8 +476,8 @@ rename_impl(_CTX, SourceEntry, TargetPath) ->
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_storage_files(session:id(), file_meta:entry(), file_meta:posix_permissions()) -> ok | no_return().
-chmod_storage_files(SessId, FileEntry, Mode) ->
+-spec chmod_storage_files(fslogic_worker:ctx(), file_meta:entry(), file_meta:posix_permissions()) -> ok | no_return().
+chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     case file_meta:get(FileEntry) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
