@@ -270,16 +270,19 @@ parse_opts(<<>>) ->
 parse_opts(RawOpts) ->
     Opts = binary:split(RawOpts, <<";">>, [global]),
     lists:map(
-        fun(Opt) ->
-            case binary:split(Opt, <<":">>) of
-                [SimpleOpt] -> SimpleOpt;
-                [SimpleOpt, Range] ->
-                    case binary:split(Range, <<"-">>) of
-                        [SimpleVal] -> {SimpleOpt, SimpleVal};
-                        [From, To] ->
-                            {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
-                    end
-            end
+        fun
+            (Opt) when is_binary(Opt) ->
+                case binary:split(Opt, <<":">>) of
+                    [SimpleOpt] -> SimpleOpt;
+                    [SimpleOpt, Range] ->
+                        case binary:split(Range, <<"-">>) of
+                            [SimpleVal] -> {SimpleOpt, SimpleVal};
+                            [From, To] ->
+                                {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
+                        end
+                end;
+            (Other) ->
+                throw(?ERROR_MALFORMED_QS)
         end,
         Opts
     ).

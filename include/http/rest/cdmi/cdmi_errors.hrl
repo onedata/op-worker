@@ -39,6 +39,8 @@
   {?BAD_REQUEST, [{<<"error_invalid_acl">>, <<"Given access control list is invalid.">>}]}).
 -define(ERROR_INVALID_METADATA,
   {?BAD_REQUEST, [{<<"error_invalid_metadata">>, <<"Given metadata is invalid.">>}]}).
+-define(ERROR_MALFORMED_QS,
+  {?BAD_REQUEST, [{<<"error_malformed_qs">>, <<"Request's query string is malformed.">>}]}).
 
 %% HTTP 401 errors
 -define(ERROR_UNAUTHORIZED,
