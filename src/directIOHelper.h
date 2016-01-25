@@ -130,7 +130,7 @@ public:
     void ash_open(
         CTXPtr ctx, const boost::filesystem::path &p, GeneralCallback<int>);
     void ash_read(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::mutable_buffer buf, off_t offset, const std::string &fileUuid
+        asio::mutable_buffer buf, off_t offset, const std::string &fileUuid,
         GeneralCallback<asio::mutable_buffer>);
     void ash_write(CTXPtr ctx, const boost::filesystem::path &p,
         asio::const_buffer buf, off_t offset, const std::string &fileUuid,
