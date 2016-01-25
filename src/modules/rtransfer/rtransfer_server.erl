@@ -181,9 +181,10 @@ retry(_Why, #gw_fetch{file_id = FileId, offset = Offset, size = Size, retry = Re
 %%--------------------------------------------------------------------
 -spec pick_gw_node() -> node().
 pick_gw_node() ->
-    Nodes = [node() | nodes()],
-    NodeNo = random:uniform(length(Nodes)),
-    lists:nth(NodeNo, Nodes).
+    node().
+%%     Nodes = [node() | nodes()],
+%%     NodeNo = random:uniform(length(Nodes)),
+%%     lists:nth(NodeNo, Nodes).
 
 
 %%--------------------------------------------------------------------

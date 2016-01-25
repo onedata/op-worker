@@ -53,9 +53,6 @@ all() ->
 -define(TEST_OFFSET, 0).
 -define(TIMEOUT, timer:seconds(120)).
 
--define(COOKIE_OP1, 'test_cookie').
--define(COOKIE_OP2, 'test_cookie2').
-
 -define(DEFAULT_RTRANSFER_OPTS,
     [
         {block_size, ?TEST_BLOCK_SIZE},
@@ -480,8 +477,8 @@ init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
-    start_applier(Worker1, ?REMOTE_APPLIER, ?COOKIE_OP2),
-    start_applier(Worker2, ?REMOTE_APPLIER, ?COOKIE_OP1),
+    start_applier(Worker1, ?REMOTE_APPLIER),
+    start_applier(Worker2, ?REMOTE_APPLIER),
     NewConfig.
 
 end_per_testcase(_, Config) ->
@@ -490,6 +487,7 @@ end_per_testcase(_, Config) ->
     hackney:stop(),
     application:stop(ssl2),
     test_node_starter:clean_environment(Config).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -546,8 +544,8 @@ change_rtransfer_opt({OptKey, OptValue}, Opts) ->
 make_opt_fun(OptName, Expected) ->
     {OptName, apply(?MODULE, OptName, [Expected])}.
 
-start_applier(Node, ApplierName, Cookie) ->
-    ct_rpc:call(Node, erlang, register,
+start_applier(Node, ApplierName) ->
+    rpc:call(Node, erlang, register,
         [ApplierName, spawn_link(Node,
             fun Loop() ->
                 receive
@@ -557,7 +555,7 @@ start_applier(Node, ApplierName, Cookie) ->
                     stop -> ok
                 end
             end)
-        ], ?TIMEOUT, Cookie
+        ], ?TIMEOUT
     ).
 
 stop_applier(Node) ->
