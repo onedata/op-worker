@@ -22,8 +22,8 @@
     end_per_testcase/2]).
 
 -export([less_than_block_fetch_test/1, exact_block_size_fetch_test/1,
-    more_than_block_fetch_test/1, cancel_fetch_test/1, error_open_fun_test/1,
-    error_read_fun_test/1, error_write_fun_test/1, many_requests_test/1,
+    more_than_block_fetch_test/1, more_than_block_fetch_test2/1, cancel_fetch_test/1,
+    error_open_fun_test/1, error_read_fun_test/1, error_write_fun_test/1, many_requests_test/1,
     many_requests_to_one_file/1, bad_formatted_request_test/1, bad_file_offset_test/1]).
 
 -export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1]).
@@ -34,6 +34,7 @@ all() ->
         less_than_block_fetch_test,
         exact_block_size_fetch_test,
         more_than_block_fetch_test,
+        more_than_block_fetch_test2,
         cancel_fetch_test,
         many_requests_test,
         many_requests_to_one_file,
@@ -148,11 +149,13 @@ exact_block_size_fetch_test(Config) ->
 
 more_than_block_fetch_test(Config) ->
     %% test fetching data of size bigger then rtransfer block_size
+    %% data size is the multiple of block size
 
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
-    DataSize = 1024 * ?TEST_BLOCK_SIZE,
+    Blocks = 1024,
+    DataSize = Blocks * ?TEST_BLOCK_SIZE,
     Data = generate_binary(DataSize),
     CounterPid = spawn(?MODULE, counter, [0]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, ?TEST_BLOCK_SIZE}),
@@ -183,7 +186,54 @@ more_than_block_fetch_test(Config) ->
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
     stop_counter(CounterPid),
-    ?assertReceivedMatch({counter, 1024}, ?TIMEOUT).
+    ?assertReceivedMatch({counter, Blocks}, ?TIMEOUT).
+
+more_than_block_fetch_test2(Config) ->
+    %% test fetching data of size bigger then rtransfer block_size
+    %% data size is not the multiple of block size
+
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    Blocks = 1025,
+    DataSize = (Blocks - 1) * ?TEST_BLOCK_SIZE + 576,
+    Data = generate_binary(DataSize),
+    CounterPid = spawn(?MODULE, counter, [0]),
+    %% write will return different values beacuse DataSize is not
+    %% the multiple of block size
+    WriteFunOpt = {write_fun, fun(_Handle, _Offset, _Data) ->
+        {ok, ?FILE_HANDLE2, byte_size(_Data) }
+    end},
+
+
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    ?assertMatch({ok, _},
+        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    ),
+
+    ?assertMatch({ok, _},
+        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
+    ),
+
+    Ref1 = remote_apply(
+        Worker1, rtransfer, prepare_request,
+        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
+    ),
+
+    ?assertEqual(ok,
+        remote_apply(Worker1, rtransfer, fetch,
+            [Ref1, notify_fun(CounterPid), on_complete_fun(self())]
+        )
+    ),
+
+    %% then
+    ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
+    stop_counter(CounterPid),
+    ?assertReceivedMatch({counter, Blocks}, ?TIMEOUT).
 
 cancel_fetch_test(Config) ->
     %% test cancelling request during fetching
@@ -473,7 +523,13 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(_, Config) ->
+%%     tracer:start(node()),
+%%     tracer:trace_calls(test_node_starter, prepare_test_environment),
+%%     tracer:trace_calls(test_node_starter, get_cookies),
+%%     tracer:trace_calls(test_node_starter, set_cookies),
+%%     tracer:trace_calls(test_node_starter, ping_nodes),
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+%%     tracer:stop(),
     application:start(ssl2),
     hackney:start(),
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
@@ -630,3 +686,22 @@ get_node_ip(Node) ->
     CMD = "docker inspect --format '{{ .NetworkSettings.IPAddress }}'" ++ " " ++
         utils:get_host(Node),
     re:replace(os:cmd(CMD), "\\s+", "", [global, {return, list}]).
+
+%% test_when({Worker1, ROpts1}, {Worker2, ROpts2}, Data, Notify, OnComplete) ->
+%%     %% when
+%%     ?assertMatch({ok, _},
+%%         remote_apply(Worker1, rtransfer, start_link, [ROpts1])
+%%     ),
+%%     ?assertMatch({ok, _},
+%%         remote_apply(Worker2, rtransfer, start_link, [ROpts2])
+%%     ),
+%%
+%%     Ref1 = remote_apply(
+%%         Worker1, rtransfer, prepare_request,
+%%         [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
+%%     ),
+%%
+%%     remote_apply(
+%%         Worker1, rtransfer, fetch,
+%%         [Ref1, notify_fun(), on_complete_fun(self())]
+%%     ),
