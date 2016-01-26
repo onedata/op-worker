@@ -95,7 +95,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(onedata_group_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,7 +124,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch user from globalregistry and save it in cache.
+%% Fetch group from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
@@ -143,7 +143,7 @@ fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}, GroupI
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get user from cache or fetch from globalregistry and save in cache.
+%% Get group from cache or fetch from globalregistry and save in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(datastore:key(), #auth{}) ->

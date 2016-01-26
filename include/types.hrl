@@ -35,7 +35,7 @@
 -type block_range() :: term(). % TODO should be a proper record
 -type share_id() :: binary().
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
--type completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
+-type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
 %%--------------------------------------------------------------------
 

@@ -127,7 +127,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch group from globalregistry and save it in cache.
+%% Fetch user from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
@@ -154,7 +154,7 @@ fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons} = Auth)
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get group from cache or fetch from globalregistry and save in cache.
+%% Get user from cache or fetch from globalregistry and save in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(datastore:key(), #auth{}) ->

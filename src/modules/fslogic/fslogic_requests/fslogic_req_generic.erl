@@ -22,12 +22,12 @@
 %% Keys of special cdmi attrs
 -define(MIMETYPE_XATTR_NAME, <<"cdmi_mimetype">>).
 -define(TRANSFER_ENCODING_XATTR_NAME, <<"cdmi_valuetransferencoding">>).
--define(COMPLETION_STATUS_XATTR_NAME, <<"cdmi_completion_status">>).
+-define(CDMI_COMPLETION_STATUS_XATTR_NAME, <<"cdmi_completion_status">>).
 
 %% API
 -export([chmod/3, get_file_attr/2, delete/2, rename/3, update_times/5,
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
-    get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2, set_completion_status/3, get_mimetype/2, set_mimetype/3]).
+    get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 
 %%%===================================================================
 %%% API functions
@@ -314,13 +314,13 @@ set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, completion_status()} | error_reply().
+-spec get_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    {ok, cdmi_completion_status()} | error_reply().
 -check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
-get_completion_status(_CTX, {uuid, FileUuid}) ->
-    case xattr:get_by_name(FileUuid, ?COMPLETION_STATUS_XATTR_NAME) of
+get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
+    case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #completion_status{value = Val}};
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #cdmi_completion_status{value = Val}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}};
         {error, {not_found, xattr}} ->
@@ -333,11 +333,11 @@ get_completion_status(_CTX, {uuid, FileUuid}) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, completion_status()) ->
+-spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, cdmi_completion_status()) ->
     ok | error_reply().
 -check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
-set_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
-    case xattr:save(FileUuid, #xattr{name = ?COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
+set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
+    case xattr:save(FileUuid, #xattr{name = ?CDMI_COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
         {ok, _} ->
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->

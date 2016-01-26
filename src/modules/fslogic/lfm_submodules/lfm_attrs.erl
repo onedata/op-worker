@@ -17,8 +17,8 @@
 
 %% API
 -export([stat/2, get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2]).
--export([get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2,
-    set_completion_status/3, get_mimetype/2, set_mimetype/3]).
+-export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
+    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -118,11 +118,11 @@ set_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(session:id(), file_key()) ->
-    {ok, completion_status()} | error_reply().
-get_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid) ->
-    lfm_utils:call_fslogic(SessId, #get_completion_status{uuid = FileUuid},
-        fun(#completion_status{value = Val}) -> {ok, Val} end
+-spec get_cdmi_completion_status(session:id(), file_key()) ->
+    {ok, cdmi_completion_status()} | error_reply().
+get_cdmi_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid) ->
+    lfm_utils:call_fslogic(SessId, #get_cdmi_completion_status{uuid = FileUuid},
+        fun(#cdmi_completion_status{value = Val}) -> {ok, Val} end
     ).
 
 %%--------------------------------------------------------------------
@@ -131,10 +131,10 @@ get_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(session:id(), file_key(), completion_status()) ->
+-spec set_cdmi_completion_status(session:id(), file_key(), cdmi_completion_status()) ->
     ok | error_reply().
-set_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid, CompletionStatus) ->
-    lfm_utils:call_fslogic(SessId, #set_completion_status{uuid = FileUuid, value = CompletionStatus},
+set_cdmi_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid, CompletionStatus) ->
+    lfm_utils:call_fslogic(SessId, #set_cdmi_completion_status{uuid = FileUuid, value = CompletionStatus},
         fun(_) -> ok end
     ).
 

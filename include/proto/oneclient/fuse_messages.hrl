@@ -139,11 +139,11 @@
     value :: binary()
 }).
 
--record(get_completion_status, {
+-record(get_cdmi_completion_status, {
     uuid :: file_meta:uuid()
 }).
 
--record(set_completion_status, {
+-record(set_cdmi_completion_status, {
     uuid :: file_meta:uuid(),
     value :: binary()
 }).
@@ -162,8 +162,8 @@
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
                         #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
-                        #get_transfer_encoding{} | #set_transfer_encoding{} | #get_completion_status{} |
-                        #set_completion_status{} | #get_mimetype{} | #set_mimetype{}.
+                        #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
+                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{}.
 
 
 -record(file_children, {
@@ -192,7 +192,7 @@
     value :: binary()
 }).
 
--record(completion_status, {
+-record(cdmi_completion_status, {
     value :: binary()
 }).
 
@@ -202,7 +202,7 @@
 
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
-    #completion_status{} | #mimetype{} | #dir{}.
+    #cdmi_completion_status{} | #mimetype{} | #dir{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()
