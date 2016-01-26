@@ -1,6 +1,4 @@
-<!--
-    This is a prototype model representing a file in file browser.
--->
+// This is a prototype model representing a file in file browser.
 
 App.File = DS.Model.extend({
 
