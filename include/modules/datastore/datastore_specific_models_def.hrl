@@ -32,7 +32,9 @@
     watcher :: pid(),
     event_manager :: pid(),
     sequencer_manager :: pid(),
-    connections = [] :: [pid()]
+    connections = [] :: [pid()],
+    % Key-value in-session memory
+    memory = [] :: [{Key :: term(), Value :: term()}]
 }).
 
 %% Local, cached version of globalregistry user
@@ -78,6 +80,16 @@
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     size = 0 :: non_neg_integer() | undefined
+}).
+
+%% Model that maps space to storage
+-record(space_storage, {
+    storage_ids = [] :: [storage:id()]
+}).
+
+%% Model that maps onedata user to Ceph user
+-record(ceph_user, {
+    credentials :: #{storage:id() => ceph_user:credentials()}
 }).
 
 -endif.

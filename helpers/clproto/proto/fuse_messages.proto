@@ -42,6 +42,10 @@ message FuseRequest {
         GetHelperParams get_helper_params = 10;
         Close close = 11;
         Truncate truncate = 12;
+        GetXattr get_xattr = 13;
+        SetXattr set_xattr = 14;
+        RemoveXattr remove_xattr = 15;
+        ListXattr list_xattr = 16;
     }
 }
 
@@ -96,8 +100,9 @@ message GetFileLocation {
 }
 
 message GetHelperParams {
-    required bytes storage_id = 1;
-    optional bool force_cluster_proxy = 2 [default = false];
+    required bytes space_id = 1;
+    required bytes storage_id = 2;
+    optional bool force_cluster_proxy = 3 [default = false];
 }
 
 message Truncate {
@@ -118,6 +123,8 @@ message FuseResponse {
         FileChildren file_children = 3;
         FileLocation file_location = 4;
         HelperParams helper_params = 5;
+        Xattr xattr = 6;
+        XattrList xattr_list = 7;
     }
 }
 
@@ -141,9 +148,10 @@ message FileChildren {
 message FileLocation {
     required bytes uuid = 1;
     required bytes provider_id = 2;
-    required bytes storage_id = 3;
-    required bytes file_id = 4;
-    repeated FileBlock blocks = 5;
+    required bytes space_id = 3;
+    required bytes storage_id = 4;
+    required bytes file_id = 5;
+    repeated FileBlock blocks = 6;
 }
 
 message HelperArg {
@@ -154,4 +162,32 @@ message HelperArg {
 message HelperParams {
     required bytes helper_name = 1;
     repeated HelperArg helper_args = 2;
+}
+
+message GetXattr {
+    required bytes uuid = 1;
+    required bytes name = 2;
+}
+
+message SetXattr {
+    required bytes uuid = 1;
+    required Xattr xattr = 2;
+}
+
+message RemoveXattr {
+    required bytes uuid = 1;
+    required bytes name = 2;
+}
+
+message ListXattr {
+    required bytes uuid = 1;
+}
+
+message Xattr {
+    required bytes name = 1;
+    required bytes value = 2;
+}
+
+message XattrList {
+    repeated bytes names = 1;
 }

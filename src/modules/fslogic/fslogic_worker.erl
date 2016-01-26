@@ -188,6 +188,8 @@ handle_fuse_request(Ctx, #create_dir{parent_uuid = ParentUUID, name = Name, mode
     fslogic_req_special:mkdir(Ctx, ParentUUID, Name, Mode);
 handle_fuse_request(Ctx, #get_file_children{uuid = UUID, offset = Offset, size = Size}) ->
     fslogic_req_special:read_dir(Ctx, {uuid, UUID}, Offset, Size);
+handle_fuse_request(Ctx, #get_parent{uuid = UUID}) ->
+    fslogic_req_regular:get_parent(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #change_mode{uuid = UUID, mode = Mode}) ->
     fslogic_req_generic:chmod(Ctx, {uuid, UUID}, Mode);
 handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
@@ -198,9 +200,11 @@ handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
 handle_fuse_request(Ctx, #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, UUID}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #get_new_file_location{name = Name, parent_uuid = ParentUUID, flags = Flags, mode = Mode}) ->
-    fslogic_req_regular:get_new_file_location(Ctx, ParentUUID, Name, Mode, Flags);
+    NewCtx = fslogic_context:set_space_id(Ctx, {uuid, ParentUUID}),
+    fslogic_req_regular:get_new_file_location(NewCtx, ParentUUID, Name, Mode, Flags);
 handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
-    fslogic_req_regular:get_file_location(Ctx, {uuid, UUID}, Flags);
+    NewCtx = fslogic_context:set_space_id(Ctx, {uuid, UUID}),
+    fslogic_req_regular:get_file_location(NewCtx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
 handle_fuse_request(Ctx, #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCL}) ->

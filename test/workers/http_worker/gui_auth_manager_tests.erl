@@ -69,6 +69,6 @@ authorize_test_() ->
         fun() ->
             CorrectAuth = #auth{
                 macaroon = ?SRLZD_MACAROON, disch_macaroons = ?ALL_DISCH_MACAROONS},
-            ?assertEqual({ok, CorrectAuth}, gui_auth_manager:authorize(?SRLZD_MACAROON))
+            ?assertEqual({ok, CorrectAuth}, gui_auth_manager:authenticate(?SRLZD_MACAROON))
         end
     }.

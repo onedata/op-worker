@@ -1326,6 +1326,9 @@ init_per_testcase(choose_adequate_handler, Config) ->
 init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
+    Workers = ?config(op_worker_nodes, Config),
+    StorageId = ?config(storage_id, Config),
+    initializer:space_storage_mock(Workers, StorageId),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     mock_user_auth(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -1335,9 +1338,11 @@ end_per_testcase(choose_adequate_handler, Config) ->
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     unmock_user_auth(Config),
     initializer:clean_test_users_and_spaces(Config),
+    test_utils:mock_validate_and_unload(Workers, space_storage),
     hackney:stop(),
     application:stop(ssl2).
 
@@ -1363,7 +1368,7 @@ cdmi_endpoint(Node) ->
     Port =
         case get(port) of
             undefined ->
-                {ok, P} = test_utils:get_env(Node, ?APP_NAME, http_worker_rest_port),
+                {ok, P} = test_utils:get_env(Node, ?APP_NAME, rest_port),
                 PStr = integer_to_list(P),
                 put(port, PStr),
                 PStr;
@@ -1396,7 +1401,7 @@ create_test_dir_and_file(Config) ->
 
     case object_exists(Config, TestDirName) of
         false ->
-            ok = mkdir(Config, TestDirName),
+            {ok, _} = mkdir(Config, TestDirName),
             ?assert(object_exists(Config, TestDirName)),
             {ok, _} = create_file(Config, FullTestFileName),
             ?assert(object_exists(Config, FullTestFileName)),
@@ -1431,15 +1436,19 @@ open_file(Config, Path, OpenMode) ->
 write_to_file(Config, Path, Data, Offset) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, FileHandle} = open_file(Config, Path, write),
-    lfm_proxy:write(Worker, FileHandle, Offset, Data).
+    Result = lfm_proxy:write(Worker, FileHandle, Offset, Data),
+    lfm_proxy:close(Worker, FileHandle),
+    Result.
 
 get_file_content(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, FileHandle} = open_file(Config, Path, write),
-    case lfm_proxy:read(Worker, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
+    {ok, FileHandle} = open_file(Config, Path, read),
+    Result = case lfm_proxy:read(Worker, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
         {error, Error} -> {error, Error};
         {ok, Content} -> Content
-    end.
+    end,
+    lfm_proxy:close(Worker, FileHandle),
+    Result.
 
 mkdir(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
