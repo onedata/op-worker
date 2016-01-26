@@ -48,35 +48,6 @@ ctx_test_() ->
         end,
         fun(CTX) ->
             [
-                {"Flags are set correctly",
-                    fun() ->
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, [])),
-                        ?assertMatch({ok, ['O_RDONLY']}, helpers_nif:get_flags(CTX)),
-
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, ['O_RDWR'])),
-                        ?assertMatch({ok, ['O_RDWR']}, helpers_nif:get_flags(CTX)),
-
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK'])),
-                        Res0 = helpers_nif:get_flags(CTX),
-                        ?assertMatch({ok, [_, _]}, Res0),
-                        {ok, Flags0} = Res0,
-                        ?assert(lists:member('O_RDONLY', Flags0)),
-                        ?assert(lists:member('O_NONBLOCK', Flags0)),
-
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, ['O_WRONLY', 'O_NONBLOCK', 'O_ASYNC', 'O_TRUNC'])),
-                        Res1 = helpers_nif:get_flags(CTX),
-                        ?assertMatch({ok, [_, _, _, _]}, Res1),
-                        {ok, Flags1} = Res1,
-                        ?assert(lists:member('O_WRONLY', Flags1)),
-                        ?assert(lists:member('O_NONBLOCK', Flags1)),
-                        ?assert(lists:member('O_ASYNC', Flags1)),
-                        ?assert(lists:member('O_TRUNC', Flags1)),
-
-                        ?assertError(badarg, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK', "unknown_type"])),
-                        ?assertError(badarg, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK', 'unknown_flag'])),
-
-                        ok
-                    end},
                 {"User is set correctly",
                     fun() ->
                         UserCTX0 = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},

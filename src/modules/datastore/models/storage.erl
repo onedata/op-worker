@@ -190,5 +190,5 @@ get_by_name(_, []) ->
     {error, {not_found, ?MODULE}};
 get_by_name(Name, [#document{value = #storage{name = Name}} = Doc | _]) ->
     {ok, Doc};
-get_by_name(Name, [_, Docs]) ->
+get_by_name(Name, [_ | Docs]) ->
     get_by_name(Name, Docs).

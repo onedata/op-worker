@@ -113,9 +113,8 @@ access(#helper_handle{} = HelperHandle, File, Mask) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mknod(handle(), File :: file(), Mode :: non_neg_integer(), Type :: reg) -> ok | {error, term()}.
-mknod(#helper_handle{ctx = CTX} = HelperHandle, File, Mode, reg) ->
-    Flag = helpers_nif:get_flag_value(CTX, 'S_IFREG'),
-    apply_helper_nif(HelperHandle, mknod, [File, Mode bor Flag, 0]).
+mknod(#helper_handle{} = HelperHandle, File, Mode, reg) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFREG'], 0]).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
@@ -205,14 +204,11 @@ truncate(#helper_handle{} = HelperHandle, File, Size) ->
 %%--------------------------------------------------------------------
 -spec open(handle(), File :: file(), OpenMode :: open_mode()) -> {ok, FD :: non_neg_integer()} | {error, term()}.
 open(#helper_handle{} = HelperHandle, File, write) ->
-    helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_WRONLY']),
-    apply_helper_nif(HelperHandle, open, [File]);
+    apply_helper_nif(HelperHandle, open, [File, ['O_WRONLY']]);
 open(#helper_handle{} = HelperHandle, File, read) ->
-    helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDONLY']),
-    apply_helper_nif(HelperHandle, open, [File]);
+    apply_helper_nif(HelperHandle, open, [File, ['O_RDONLY']]);
 open(#helper_handle{} = HelperHandle, File, rdwr) ->
-    helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDWR']),
-    apply_helper_nif(HelperHandle, open, [File]).
+    apply_helper_nif(HelperHandle, open, [File, ['O_RDWR']]).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
@@ -267,7 +263,6 @@ fsync(#helper_handle{} = HelperHandle, File, false) ->
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc Calls given helpers_nif method with given args while inserting HelperInstance :: resource_handle() and
@@ -284,8 +279,3 @@ apply_helper_nif(#helper_handle{instance = Instance, ctx = CTX, timeout = Timeou
     after Timeout ->
         {error, nif_timeout}
     end.
-
-
--spec get_helper_ctx(handle()) -> helpers_nif:resource_handle().
-get_helper_ctx(#helper_handle{ctx = CTX}) ->
-    CTX.

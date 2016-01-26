@@ -2,7 +2,6 @@
 
 #include <asio/executor_work.hpp>
 #include <asio.hpp>
-#include <boost/bimap.hpp>
 
 #include <string>
 #include <memory>
@@ -12,6 +11,7 @@
 #include <map>
 #include <sstream>
 #include <system_error>
+#include <unordered_map>
 #include "nifpp.h"
 
 #include <sys/types.h>
@@ -103,40 +103,47 @@ struct HelpersNIF {
 
 namespace {
 
-using Translation =
-    boost::bimap<nifpp::str_atom, one::helpers::IStorageHelperCTX::Flag>;
-
 /**
  * @defgroup ModeTranslators Maps translating nifpp::str_atom into corresponding
  *           POSIX open mode / flag.
  * @{
  */
-Translation createAtomToFlagTranslation()
+const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
+    {"O_NONBLOCK", one::helpers::Flag::NONBLOCK},
+    {"O_APPEND", one::helpers::Flag::APPEND},
+    {"O_ASYNC", one::helpers::Flag::ASYNC},
+    {"O_FSYNC", one::helpers::Flag::FSYNC},
+    {"O_NOFOLLOW", one::helpers::Flag::NOFOLLOW},
+    {"O_CREAT", one::helpers::Flag::CREAT},
+    {"O_TRUNC", one::helpers::Flag::TRUNC},
+    {"O_EXCL", one::helpers::Flag::EXCL},
+    {"O_RDONLY", one::helpers::Flag::RDONLY},
+    {"O_WRONLY", one::helpers::Flag::WRONLY},
+    {"O_RDWR", one::helpers::Flag::RDWR},
+    {"S_IFREG", one::helpers::Flag::IFREG},
+    {"S_IFCHR", one::helpers::Flag::IFCHR},
+    {"S_IFBLK", one::helpers::Flag::IFBLK},
+    {"S_IFIFO", one::helpers::Flag::IFIFO},
+    {"S_IFSOCK", one::helpers::Flag::IFSOCK}};
+
+std::vector<one::helpers::Flag> translateFlags(
+    std::vector<nifpp::str_atom> atoms)
 {
-    using namespace one::helpers;
+    std::vector<one::helpers::Flag> flags;
 
-    const std::vector<Translation::value_type> pairs{
-        {"O_NONBLOCK", IStorageHelperCTX::Flag::NONBLOCK},
-        {"O_APPEND", IStorageHelperCTX::Flag::APPEND},
-        {"O_ASYNC", IStorageHelperCTX::Flag::ASYNC},
-        {"O_FSYNC", IStorageHelperCTX::Flag::FSYNC},
-        {"O_NOFOLLOW", IStorageHelperCTX::Flag::NOFOLLOW},
-        {"O_CREAT", IStorageHelperCTX::Flag::CREAT},
-        {"O_TRUNC", IStorageHelperCTX::Flag::TRUNC},
-        {"O_EXCL", IStorageHelperCTX::Flag::EXCL},
-        {"O_RDONLY", IStorageHelperCTX::Flag::RDONLY},
-        {"O_WRONLY", IStorageHelperCTX::Flag::WRONLY},
-        {"O_RDWR", IStorageHelperCTX::Flag::RDWR},
-        {"S_IFREG", IStorageHelperCTX::Flag::IFREG},
-        {"S_IFCHR", IStorageHelperCTX::Flag::IFCHR},
-        {"S_IFBLK", IStorageHelperCTX::Flag::IFBLK},
-        {"S_IFIFO", IStorageHelperCTX::Flag::IFIFO},
-        {"S_IFSOCK", IStorageHelperCTX::Flag::IFSOCK}};
+    for (const auto &atom : atoms) {
+        auto result = atom_to_flag.find(atom);
+        if (result != atom_to_flag.end()) {
+            flags.push_back(result->second);
+        }
+        else {
+            throw std::system_error{
+                std::make_error_code(std::errc::invalid_argument)};
+        }
+    }
 
-    return {pairs.begin(), pairs.end()};
+    return flags;
 }
-
-const Translation atom_to_flag = createAtomToFlagTranslation();
 }
 
 /** @} */
@@ -534,15 +541,6 @@ ERL_NIF_TERM set_user_ctx(ErlNifEnv *env, helper_ctx_ptr ctx,
     });
 }
 
-ERL_NIF_TERM get_flag_value(
-    ErlNifEnv *env, helper_ctx_ptr ctx, nifpp::str_atom flag)
-{
-    auto searchResult = atom_to_flag.left.find(flag);
-    if (searchResult != atom_to_flag.left.end())
-        return nifpp::make(env, ctx->getFlagValue(searchResult->second));
-    throw nifpp::badarg();
-}
-
 ERL_NIF_TERM new_helper_ctx(ErlNifEnv *env, helper_ptr helperObj)
 {
     auto ctx = helperObj->createCTX();
@@ -553,42 +551,6 @@ ERL_NIF_TERM new_helper_ctx(ErlNifEnv *env, helper_ptr helperObj)
 ERL_NIF_TERM get_user_ctx(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
     return nifpp::make(env, std::make_tuple(ok, ctx->getUserCTX()));
-}
-
-ERL_NIF_TERM get_flags(ErlNifEnv *env, helper_ctx_ptr ctx)
-{
-    std::vector<nifpp::str_atom> atomFlags;
-    auto flags = ctx->getFlags();
-    for (const auto &flag : flags) {
-        auto searchResult = atom_to_flag.right.find(flag);
-        if (searchResult != atom_to_flag.right.end()) {
-            atomFlags.push_back(searchResult->second);
-        }
-        else {
-            throw nifpp::badarg();
-        }
-    }
-
-    return nifpp::make(env, std::make_tuple(ok, atomFlags));
-}
-
-ERL_NIF_TERM set_flags(
-    ErlNifEnv *env, helper_ctx_ptr ctx, std::vector<nifpp::str_atom> flagAtoms)
-{
-    std::vector<one::helpers::IStorageHelperCTX::Flag> flags;
-    for (const auto &flagAtom : flagAtoms) {
-        auto searchResult = atom_to_flag.left.find(flagAtom);
-        if (searchResult != atom_to_flag.left.end()) {
-            flags.push_back(searchResult->second);
-        }
-        else {
-            throw nifpp::badarg();
-        }
-    }
-
-    ctx->setFlags(std::move(flags));
-
-    return nifpp::make(env, ok);
 }
 
 ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
@@ -609,10 +571,11 @@ ERL_NIF_TERM access(NifCTX ctx, const std::string file, const int mask)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM mknod(
-    NifCTX ctx, const std::string file, const mode_t mode, const dev_t dev)
+ERL_NIF_TERM mknod(NifCTX ctx, const std::string file, const mode_t mode,
+    std::vector<nifpp::str_atom> flags, const dev_t dev)
 {
-    ctx.helperObj->ash_mknod(ctx.helperCTX, file, mode, dev,
+    ctx.helperObj->ash_mknod(ctx.helperCTX, file, mode,
+        translateFlags(std::move(flags)), dev,
         [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -691,9 +654,11 @@ ERL_NIF_TERM truncate(NifCTX ctx, const std::string file, const off_t size)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
-ERL_NIF_TERM open(NifCTX ctx, const std::string file)
+ERL_NIF_TERM open(
+    NifCTX ctx, const std::string file, std::vector<nifpp::str_atom> flags)
 {
     ctx.helperObj->ash_open(ctx.helperCTX, file,
+        translateFlags(std::move(flags)),
         [=](int fh, error_t e) { handle_result(ctx, e, fh); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -767,18 +732,6 @@ static ERL_NIF_TERM sh_set_threads_number(
     return noctx_wrap(set_threads_number, env, argv);
 }
 
-static ERL_NIF_TERM sh_set_flags(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    return noctx_wrap(set_flags, env, argv);
-}
-
-static ERL_NIF_TERM sh_get_flags(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    return noctx_wrap(get_flags, env, argv);
-}
-
 static ERL_NIF_TERM sh_new_helper_ctx(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -795,12 +748,6 @@ static ERL_NIF_TERM sh_set_user_ctx(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return noctx_wrap(set_user_ctx, env, argv);
-}
-
-static ERL_NIF_TERM sh_get_flag_value(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    return noctx_wrap(get_flag_value, env, argv);
 }
 
 static ERL_NIF_TERM sh_getattr(
@@ -911,19 +858,17 @@ static ERL_NIF_TERM sh_fsync(
 static ErlNifFunc nif_funcs[] = {
     {"set_threads_number", 1, sh_set_threads_number},
     {"getattr", 3, sh_getattr}, {"access", 4, sh_access},
-    {"mknod", 5, sh_mknod}, {"mkdir", 4, sh_mkdir}, {"unlink", 3, sh_unlink},
+    {"mknod", 6, sh_mknod}, {"mkdir", 4, sh_mkdir}, {"unlink", 3, sh_unlink},
     {"rmdir", 3, sh_rmdir}, {"symlink", 4, sh_symlink},
     {"rename", 4, sh_rename}, {"link", 4, sh_link}, {"chmod", 4, sh_chmod},
-    {"chown", 5, sh_chown}, {"truncate", 4, sh_truncate}, {"open", 3, sh_open},
+    {"chown", 5, sh_chown}, {"truncate", 4, sh_truncate}, {"open", 4, sh_open},
     {"read", 5, sh_read}, {"write", 5, sh_write}, {"release", 3, sh_release},
     {"flush", 3, sh_flush}, {"fsync", 4, sh_fsync},
-    {"set_flags", 2, sh_set_flags}, {"get_flags", 1, sh_get_flags},
     {"username_to_uid", 1, username_to_uid},
     {"groupname_to_gid", 1, groupname_to_gid},
     {"new_helper_obj", 2, new_helper_obj},
     {"new_helper_ctx", 1, sh_new_helper_ctx},
-    {"set_user_ctx", 2, sh_set_user_ctx}, {"get_user_ctx", 1, sh_get_user_ctx},
-    {"get_flag_value", 2, sh_get_flag_value}};
+    {"set_user_ctx", 2, sh_set_user_ctx}, {"get_user_ctx", 1, sh_get_user_ctx}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
