@@ -89,11 +89,6 @@ less_than_block_fetch_test(Config) ->
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
-    fetch_test(
-        {Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
-        DataSize, notify_fun(CounterPid), on_complete_fun(self())
-    ),
-
     %% when
     ?assertMatch({ok, _},
         remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
@@ -528,13 +523,7 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(_, Config) ->
-%%     tracer:start(node()),
-%%     tracer:trace_calls(test_node_starter, prepare_test_environment),
-%%     tracer:trace_calls(test_node_starter, get_cookies),
-%%     tracer:trace_calls(test_node_starter, set_cookies),
-%%     tracer:trace_calls(test_node_starter, ping_nodes),
     NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-%%     tracer:stop(),
     application:start(ssl2),
     hackney:start(),
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, NewConfig),
