@@ -261,7 +261,7 @@ type_to_bitmask(?audit) -> ?audit_mask.
 %%--------------------------------------------------------------------
 %% @doc maps coma separated binary of aceflags to bitmask
 %%--------------------------------------------------------------------
--spec flags_to_bitmask(binary()) -> non_neg_integer().
+-spec flags_to_bitmask(binary() | [binary()]) -> non_neg_integer().
 flags_to_bitmask(Flags) when is_binary(Flags) -> flags_to_bitmask(csv_to_binary_list(Flags));
 flags_to_bitmask([]) -> ?no_flags_mask;
 flags_to_bitmask([?no_flags | Rest]) -> ?no_flags_mask bor flags_to_bitmask(Rest);
@@ -270,7 +270,7 @@ flags_to_bitmask([?identifier_group | Rest]) -> ?identifier_group_mask bor flags
 %%--------------------------------------------------------------------
 %% @doc maps coma separated binary of permissions to bitmask
 %%--------------------------------------------------------------------
--spec perm_list_to_bitmask(binary()) -> non_neg_integer().
+-spec perm_list_to_bitmask(binary() | [binary()]) -> non_neg_integer().
 perm_list_to_bitmask(MaskNames) when is_binary(MaskNames) ->
     FlagList = lists:map(fun utils:trim_spaces/1, binary:split(MaskNames, <<",">>, [global])),
     perm_list_to_bitmask(FlagList);
@@ -315,6 +315,6 @@ binary_list_to_csv(List) ->
 %% i. e. binary_list_to_csv(<<"a, b">>) -> [<<"a">>, <<"b">>]
 %% @end
 %%--------------------------------------------------------------------
--spec csv_to_binary_list([binary()]) -> binary().
+-spec csv_to_binary_list(binary()) -> [binary()].
 csv_to_binary_list(BinaryCsv) ->
     lists:map(fun utils:trim_spaces/1, binary:split(BinaryCsv, <<",">>, [global])).

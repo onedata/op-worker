@@ -350,9 +350,10 @@ truncate(SessId, FileKey, Size) ->
 
 -spec get_block_map(FileHandle :: handle()) -> {ok, [block_range()]} | error_reply().
 get_block_map(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
-    lfm_files:get_block_map(CTX, UUID).
+    lfm_files:get_block_map(CTX, {uuid, UUID}).
 
--spec get_block_map(SessId :: session:id(), FileKey :: file_id_or_path()) -> {ok, [block_range()]} | error_reply().
+-spec get_block_map(SessId :: session:id(), FileKey :: file_id_or_path()) ->
+    {ok, [block_range()]} | error_reply().
 get_block_map(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     lfm_files:get_block_map(CTX, ensure_uuid(CTX, FileKey)).
@@ -363,7 +364,8 @@ get_block_map(SessId, FileKey) ->
 %% Changes the permissions of a file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_perms(SessId :: session:id(), FileKey :: file_key(), NewPerms :: file_meta:posix_permissions()) -> ok | error_reply().
+-spec set_perms(SessId :: session:id(), FileKey :: file_key(), NewPerms :: file_meta:posix_permissions()) ->
+    ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = ensure_uuid(CTX, FileKey),
@@ -375,7 +377,8 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% Checks if current user has given permissions for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
+-spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) ->
+    {ok, boolean()} | error_reply().
 check_perms(Path, PermType) ->
     lfm_perms:check_perms(Path, PermType).
 
@@ -501,7 +504,7 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(handle()) -> {ok, [xattr:name()]} | error_reply().
 list_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
-    list_xattr(CTX, UUID).
+    lfm_attrs:list_xattr(CTX, UUID).
 
 -spec list_xattr(session:id(), file_key()) -> {ok, [xattr:name()]} | error_reply().
 list_xattr(SessId, FileKey) ->

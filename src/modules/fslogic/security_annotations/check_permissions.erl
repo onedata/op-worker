@@ -77,7 +77,7 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %% Expand access definition to form allowing it to be verified by rules module.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_access_definitions([access_definition()], datastore:document(), list(), #{}, #{}, #{}) ->
+-spec expand_access_definitions([access_definition()], onedata_user:id(), list(), #{}, #{}, #{}) ->
     [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
 expand_access_definitions([], _UserId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];

@@ -24,7 +24,7 @@
 -export_type([key/0, object/0, update_object/0, counter/0, subscription/0, manager_ref/0]).
 
 -type key() :: term().
--type object() :: #read_event{} | #update_event{} | #write_event{}.
+-type object() :: #read_event{} | #update_event{} | #write_event{} | #permission_changed_event{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.

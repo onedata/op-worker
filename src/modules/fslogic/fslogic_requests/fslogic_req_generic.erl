@@ -268,11 +268,14 @@ set_acl(CTX, {uuid, FileUuid}, #acl{value = Val}) ->
 -spec remove_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
 -check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-remove_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
+remove_acl(CTX = #fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
-            ok = chmod_storage_files(SessId, {uuid, FileUuid}, Mode),
+            ok = chmod_storage_files(
+                CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
+                {uuid, FileUuid}, Mode
+            ),
             ok = fslogic_event:emit_permission_changed(FileUuid),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->

@@ -36,11 +36,11 @@
 write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
         session:get(SessionId),
-    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceId, FileUuid, Storage, FileId),
+        storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
 
     {Status, Response} =
         case storage_file_manager:open(SFMHandle, write) of
@@ -76,11 +76,11 @@ write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
 read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
         session:get(SessionId),
-    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceId, FileUuid, Storage, FileId),
+        storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
 
     {Status, Response} =
         case storage_file_manager:open(SFMHandle, read) of

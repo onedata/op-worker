@@ -95,7 +95,7 @@ list_xattr(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec get_transfer_encoding(session:id(), file_key()) ->
+-spec get_transfer_encoding(fslogic_worker:ctx(), file_meta:uuid()) ->
     {ok, transfer_encoding()} | error_reply().
 get_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #get_transfer_encoding{uuid = FileUuid},
@@ -105,7 +105,7 @@ get_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(session:id(), file_key(), transfer_encoding()) ->
+-spec set_transfer_encoding(fslogic_worker:ctx(), file_meta:uuid(), transfer_encoding()) ->
     ok | error_reply().
 set_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid, Encoding) ->
     lfm_utils:call_fslogic(SessId, #set_transfer_encoding{uuid = FileUuid, value = Encoding},
@@ -118,7 +118,7 @@ set_transfer_encoding(#fslogic_ctx{session_id = SessId}, FileUuid, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_cdmi_completion_status(session:id(), file_key()) ->
+-spec get_cdmi_completion_status(fslogic_worker:ctx(), file_meta:uuid()) ->
     {ok, cdmi_completion_status()} | error_reply().
 get_cdmi_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #get_cdmi_completion_status{uuid = FileUuid},
@@ -131,7 +131,7 @@ get_cdmi_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status(session:id(), file_key(), cdmi_completion_status()) ->
+-spec set_cdmi_completion_status(fslogic_worker:ctx(), file_meta:uuid(), cdmi_completion_status()) ->
     ok | error_reply().
 set_cdmi_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid, CompletionStatus) ->
     lfm_utils:call_fslogic(SessId, #set_cdmi_completion_status{uuid = FileUuid, value = CompletionStatus},
@@ -141,7 +141,7 @@ set_cdmi_completion_status(#fslogic_ctx{session_id = SessId}, FileUuid, Completi
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
--spec get_mimetype(session:id(), file_key()) ->
+-spec get_mimetype(fslogic_worker:ctx(), file_meta:uuid()) ->
     {ok, mimetype()} | error_reply().
 get_mimetype(#fslogic_ctx{session_id = SessId}, FileUuid) ->
     lfm_utils:call_fslogic(SessId, #get_mimetype{uuid = FileUuid},
@@ -151,7 +151,7 @@ get_mimetype(#fslogic_ctx{session_id = SessId}, FileUuid) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(session:id(), file_key(), mimetype()) ->
+-spec set_mimetype(fslogic_worker:ctx(), file_meta:uuid(), mimetype()) ->
     ok | error_reply().
 set_mimetype(#fslogic_ctx{session_id = SessId}, FileUuid, Mimetype) ->
     lfm_utils:call_fslogic(SessId, #set_mimetype{uuid = FileUuid, value = Mimetype},

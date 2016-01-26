@@ -30,8 +30,8 @@
 %% Check if given access_definition is granted to given user.
 %% @end
 %%--------------------------------------------------------------------
--spec check({term(), FileDoc :: datastore:document(), UserDoc :: datastore:document(),
-    Acl :: [#accesscontrolentity{}]}) -> ok | no_return().
+-spec check({term(), FileDoc :: datastore:document() | undefined, UserDoc :: datastore:document(),
+    Acl :: [#accesscontrolentity{}] | undefined}) -> ok | no_return().
 % standard posix checks
 check({_, _, #document{key = ?ROOT_USER_ID}, _}) ->
     ok;

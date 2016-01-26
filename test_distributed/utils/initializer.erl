@@ -132,7 +132,7 @@ clear_models(Worker, Names) ->
 %% @doc Setup test users' sessions on server
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
-    [Spaces :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
+    [Spaces :: {binary(), binary()}], [Groups :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
 setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
