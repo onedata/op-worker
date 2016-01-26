@@ -89,6 +89,11 @@ less_than_block_fetch_test(Config) ->
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
+    fetch_test(
+        {Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        DataSize, notify_fun(CounterPid), on_complete_fun(self())
+    ),
+
     %% when
     ?assertMatch({ok, _},
         remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
@@ -687,21 +692,22 @@ get_node_ip(Node) ->
         utils:get_host(Node),
     re:replace(os:cmd(CMD), "\\s+", "", [global, {return, list}]).
 
-%% test_when({Worker1, ROpts1}, {Worker2, ROpts2}, Data, Notify, OnComplete) ->
-%%     %% when
-%%     ?assertMatch({ok, _},
-%%         remote_apply(Worker1, rtransfer, start_link, [ROpts1])
-%%     ),
-%%     ?assertMatch({ok, _},
-%%         remote_apply(Worker2, rtransfer, start_link, [ROpts2])
-%%     ),
-%%
-%%     Ref1 = remote_apply(
-%%         Worker1, rtransfer, prepare_request,
-%%         [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-%%     ),
-%%
-%%     remote_apply(
-%%         Worker1, rtransfer, fetch,
-%%         [Ref1, notify_fun(), on_complete_fun(self())]
-%%     ),
+fetch_test({Worker1, ROpts1}, {Worker2, ROpts2}, DataSize, NotifyFun, OnCompleteFun) ->
+
+    %% when
+    ?assertMatch({ok, _},
+        remote_apply(Worker1, rtransfer, start_link, [ROpts1])
+    ),
+    ?assertMatch({ok, _},
+        remote_apply(Worker2, rtransfer, start_link, [ROpts2])
+    ),
+
+    Ref1 = remote_apply(
+        Worker1, rtransfer, prepare_request,
+        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
+    ),
+
+    remote_apply(
+        Worker1, rtransfer, fetch,
+        [Ref1, NotifyFun, OnCompleteFun]
+    ).
