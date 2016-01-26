@@ -91,7 +91,7 @@ put(ContainerRef, Block) ->
 %%--------------------------------------------------------------------
 -spec get(ContainerRef, FileId, Offset, Size) -> {ok, [#rt_block{}]} | {error, Error :: term()} when
     ContainerRef :: container_ref(),
-    FileId :: string(),
+    FileId :: binary(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer().
 get(ContainerRef, FileId, Offset, Size) ->
@@ -106,7 +106,7 @@ get(ContainerRef, FileId, Offset, Size) ->
 %%--------------------------------------------------------------------
 -spec remove(ContainerRef, FileId, Offset, Size) -> ok when
     ContainerRef :: container_ref(),
-    FileId :: string(),
+    FileId :: binary(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer().
 remove(ContainerRef, FileId, Offset, Size) ->
@@ -277,7 +277,7 @@ load_nif() ->
 -spec init_nif() ->
     {ok, ContainerPtr :: container_ptr()} | no_return().
 init_nif() ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).
 
 
 %%--------------------------------------------------------------------
@@ -288,7 +288,7 @@ init_nif() ->
 -spec put_nif(ContainerPtr :: container_ptr(), Block :: #rt_block{}) ->
     ok | no_return().
 put_nif(_ContainerPtr, _Block) ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).
 
 
 %%--------------------------------------------------------------------
@@ -299,11 +299,11 @@ put_nif(_ContainerPtr, _Block) ->
 %%--------------------------------------------------------------------
 -spec get_nif(ContainerPtr :: container_ptr(), FileId, Offset, Size) ->
     {ok, [#rt_block{}]} | {error, Error :: term()} | no_return() when
-    FileId :: string(),
+    FileId :: binary(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer().
 get_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).
 
 
 %%--------------------------------------------------------------------
@@ -314,8 +314,8 @@ get_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
 %%--------------------------------------------------------------------
 -spec remove_nif(ContainerPtr :: container_ptr(), FileId, Offset, Size) ->
     ok | {error, Error :: term()} | no_return() when
-    FileId :: string(),
+    FileId :: binary(),
     Offset :: non_neg_integer(),
     Size :: non_neg_integer().
 remove_nif(_ContainerPtr, _FileId, _Offset, _Size) ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).

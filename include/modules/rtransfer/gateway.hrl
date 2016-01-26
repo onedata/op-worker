@@ -19,7 +19,7 @@
 
 %% Description for a `fetch` action commissioned to the gateway module
 -record(gw_fetch, {
-    file_id :: string(),
+    file_id :: binary(),
     offset :: non_neg_integer(),
     size :: pos_integer(),
     remote :: {inet:ip_address(), inet:port_number()}, %% IP address and port of remote node that should fulfill the request

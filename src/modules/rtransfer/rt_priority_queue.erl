@@ -258,18 +258,14 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 handle_cast({push, Block}, #state{size = Size, container_ptr = ContainerPtr, subscribers = Subscribers} = State) ->
-    case push_nif(ContainerPtr, Block) of
-        {ok, NewSize} ->
-            case Size of
-                0 -> lists:foreach(fun({Id, Pid}) ->
-                    Pid ! {not_empty, Id}
-                end, Subscribers);
-                _ -> ok
-            end,
-            {noreply, State#state{size = NewSize}};
-        _ ->
-            {noreply, State}
-    end;
+    {ok, NewSize} = push_nif(ContainerPtr, Block),
+    case Size of
+        0 -> lists:foreach(fun({Id, Pid}) ->
+            Pid ! {not_empty, Id}
+        end, Subscribers);
+        _ -> ok
+    end,
+    {noreply, State#state{size = NewSize}};
 
 handle_cast({change_counter, FileId, Offset, Size, Change}, #state{container_ptr = ContainerPtr} = State) ->
     case change_counter_nif(ContainerPtr, FileId, Offset, Size, Change) of
@@ -373,7 +369,7 @@ load_nif() ->
 -spec init_nif(BlockSize :: integer()) ->
     {ok, ContainerPtr :: container_ptr()} | no_return().
 init_nif(_BlockSize) ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).
 
 
 %%--------------------------------------------------------------------
@@ -384,7 +380,7 @@ init_nif(_BlockSize) ->
 -spec push_nif(ContainerPtr :: container_ptr(), Block :: #rt_block{}) ->
     {ok, Size :: non_neg_integer()} | no_return().
 push_nif(_ContainerPtr, _Block) ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).
 
 
 %%--------------------------------------------------------------------
@@ -396,7 +392,7 @@ push_nif(_ContainerPtr, _Block) ->
     {ok, Size :: non_neg_integer(), Block :: #rt_block{}} |
     {error, Error :: term()} | no_return().
 pop_nif(_ContainerPtr) ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).
 
 
 %%--------------------------------------------------------------------
@@ -413,4 +409,4 @@ pop_nif(_ContainerPtr) ->
     Size :: non_neg_integer(),
     Change :: integer().
 change_counter_nif(_ContainerPtr, _FileId, _Offset, _Size, _Change) ->
-    throw(nif_library_not_loaded).
+    erlang:nif_error(nif_library_not_loaded).

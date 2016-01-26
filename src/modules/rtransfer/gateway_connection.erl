@@ -65,10 +65,11 @@ start_link(RtransferOpts, Remote, Local, ConnectionManager) ->
 %% oneproxy state.
 %% @end
 %%--------------------------------------------------------------------
--spec init({Remote, Local, ConnectionManager}) -> Result when
+-spec init({Remote, Local, ConnectionManager, RtransferOpts}) -> Result when
     Remote :: {inet:ip_address(), inet:port_number()},
     Local :: inet:ip_address(),
     ConnectionManager :: pid(),
+    RtransferOpts :: [rtransfer:opt()],
     Result :: {ok, State} | {ok, State, Timeout} | {ok, State, hibernate}
     | {stop, Reason} | ignore,
     State :: #gwcstate{},
@@ -237,7 +238,7 @@ terminate(Reason, #gwcstate{remote = Remote, socket = Socket, connection_manager
     NewState :: #gwcstate{},
     Reason :: term().
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State, ?connection_close_timeout}.
+    {ok, State}.
 
 
 %%%===================================================================

@@ -15,7 +15,7 @@
 -include("modules/rtransfer/rtransfer.hrl").
 
 -type address() :: {inet:hostname() | inet:ip_address(), inet:port_number()}.
--opaque ref() :: #request_transfer{}.
+-type ref() :: #request_transfer{}.
 -type error_reason() ::
 canceled | {connection | storage | other, Reason :: any()}.
 

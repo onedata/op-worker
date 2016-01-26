@@ -1,0 +1,56 @@
+<!--
+    This is the main page, it includes entry points for compenents and
+    templates that are defined in different files.
+-->
+
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>File manager</title>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+
+    <link rel="stylesheet" href="/index/css/style.css">
+</head>
+<body>
+
+<script type="text/x-handlebars" data-template-name="main">
+    {{top-menu user=global.userName clickAction='syncAndReload'
+    syncMessage=global.syncMessage syncMessageStyle=global.syncMessageStyle}}
+    {{outlet 'modal'}}
+    <div class="container" style="margin-top: 100px;">
+        {{render 'file_list' model}}
+    </div>
+</script>
+
+<script src="/common/js/jquery-1.11.2.min.js"></script>
+<script src="/common/js/handlebars-v1.3.0.js"></script>
+<script src="/common/js/ember.js"></script>
+<script src="/common/js/ember-data.js"></script>
+<script src="/index/js/adapter_ws.js"></script>
+<script src="/index/js/application.js"></script>
+<script src="/index/js/controllers/global_controller.js"></script>
+<script src="/index/js/controllers/sorted_file_children_controller.js"></script>
+<script src="/index/js/router.js"></script>
+<script src="/index/js/models/file.js"></script>
+<script src="/index/js/controllers/file_list_controller.js"></script>
+<script src="/index/js/controllers/main_controller.js"></script>
+<script src="/index/components/components.top-menu.js"></script>
+<script src="/index/components/components.modal-dialog.js"></script>
+<script src="/index/components/modal-dialog.js"></script>
+<script src="/index/components/components.file-tree-node.js"></script>
+<script src="/index/components/file-tree-node.js"></script>
+<script src="/index/components/top-menu.js"></script>
+<script src="/index/templates/file_list.js"></script>
+<script src="/index/templates/create_file_modal.js"></script>
+<script src="/index/templates/create_dir_modal.js"></script>
+<script src="/index/templates/rename_file_modal.js"></script>
+<script src="/index/templates/change_attr_modal.js"></script>
+<!-- Bootstrap JS -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js">
+</script>
+</body>
+</html>
