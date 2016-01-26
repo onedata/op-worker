@@ -35,7 +35,7 @@ all() ->
     [basic_operations_test, rename_test].
 
 -define(REPEATS, 100).
--define(SUCCESS_RATE, 90).
+-define(SUCCESS_RATE, 99).
 
 %%%===================================================================
 %%% Test functions
