@@ -142,7 +142,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, {event_handler, []}),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -216,7 +216,7 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, {event_handler, []}),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
@@ -271,7 +271,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, event_handler),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -330,7 +330,7 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
         end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, event_handler),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
@@ -399,7 +399,7 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     end, FileUuids),
 
     lists:foreach(fun(SubId) ->
-        unsubscribe(Worker, SubId)
+        unsubscribe(Worker, SubId, {event_handler, []})
     end, SubIds),
 
     ok.
@@ -464,7 +464,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
         end, SessIds)
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, event_handler),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, SessIds),
@@ -611,10 +611,12 @@ subscribe(Worker, EmTime, AdmRule, EmRule, TrRule, Handler) ->
 %% Removes event subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(Worker :: node(), SubId :: subscription:id()) ->
+-spec unsubscribe(Worker :: node(), SubId :: subscription:id(), HandlerMsg :: term()) ->
     ok.
-unsubscribe(Worker, SubId) ->
-    ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])).
+unsubscribe(Worker, SubId, HandlerMsg) ->
+    ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])),
+    ?assertReceivedMatch(HandlerMsg, ?TIMEOUT),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -2,6 +2,7 @@
 
 #include <asio/executor_work.hpp>
 #include <asio.hpp>
+#include <boost/bimap.hpp>
 
 #include <string>
 #include <memory>
@@ -28,7 +29,7 @@ nifpp::str_atom error{"error"};
 /** @} */
 
 using helper_ptr = std::shared_ptr<one::helpers::IStorageHelper>;
-using helper_ctx_ptr = std::shared_ptr<one::helpers::StorageHelperCTX>;
+using helper_ctx_ptr = std::shared_ptr<one::helpers::IStorageHelperCTX>;
 using reqid_t = std::tuple<int, int, int>;
 using one::helpers::error_t;
 using helper_args_t = std::unordered_map<std::string, std::string>;
@@ -37,62 +38,96 @@ using helper_args_t = std::unordered_map<std::string, std::string>;
  * Static resource holder.
  */
 struct HelpersNIF {
-    asio::io_service dioService;
-    asio::executor_work<asio::io_service::executor_type> dio_work =
-        asio::make_work(dioService);
+    asio::io_service cephService;
+    asio::executor_work<asio::io_service::executor_type> cephWork =
+        asio::make_work(cephService);
+    std::vector<std::thread> dioWorkers;
 
-    std::vector<std::thread> workers;
+    asio::io_service dioService;
+    asio::executor_work<asio::io_service::executor_type> dioWork =
+        asio::make_work(dioService);
+    std::vector<std::thread> cephWorkers;
 
     one::helpers::StorageHelperFactory SHFactory =
-        one::helpers::StorageHelperFactory(dioService);
+        one::helpers::StorageHelperFactory(cephService, dioService);
 
-    HelpersNIF()
-    {
-        umask(0);
-    }
+    HelpersNIF() { umask(0); }
 
     ~HelpersNIF()
     {
         dioService.stop();
+        for (auto &th : dioWorkers) {
+            th.join();
+        }
 
-        for (auto &th : workers) {
+        cephService.stop();
+        for (auto &th : cephWorkers) {
             th.join();
         }
     }
 
+    /**
+     * Adjusts number of threads held by IO service. Allows only to increase
+     * size of thread pool.
+     * @param ioService reference to IO service which thread pool should be
+     * adjusted
+     * @param threads reference to pool of threads held by IO service
+     * @param number number of threads that IO service should hold
+     * @return true if number of IO service threads has been adjusted
+     * (increased) otherwise false.
+     */
+    bool adjust_io_service_threads(asio::io_service &ioService,
+        std::vector<std::thread> &threads, std::size_t number)
+    {
+        if (threads.size() > number)
+            return false;
+
+        for (std::size_t i = 0; i < threads.size() - number; ++i) {
+            threads.push_back(std::thread([&]() { ioService.run(); }));
+        }
+
+        return true;
+    }
+
 } application;
+
+namespace {
+
+using Translation =
+    boost::bimap<nifpp::str_atom, one::helpers::IStorageHelperCTX::Flag>;
 
 /**
  * @defgroup ModeTranslators Maps translating nifpp::str_atom into corresponding
  *           POSIX open mode / flag.
  * @{
  */
-std::map<nifpp::str_atom, int> atom_to_flag = {
-    {"O_NONBLOCK", O_NONBLOCK},
-    {"O_APPEND",   O_APPEND},
-    {"O_ASYNC",    O_ASYNC},
-    {"O_FSYNC",    O_FSYNC},
-    {"O_NOFOLLOW", O_NOFOLLOW},
-    {"O_CREAT",    O_CREAT},
-    {"O_TRUNC",    O_TRUNC},
-    {"O_EXCL",     O_EXCL}
-};
+Translation createAtomToFlagTranslation()
+{
+    using namespace one::helpers;
 
+    const std::vector<Translation::value_type> pairs{
+        {"O_NONBLOCK", IStorageHelperCTX::Flag::NONBLOCK},
+        {"O_APPEND", IStorageHelperCTX::Flag::APPEND},
+        {"O_ASYNC", IStorageHelperCTX::Flag::ASYNC},
+        {"O_FSYNC", IStorageHelperCTX::Flag::FSYNC},
+        {"O_NOFOLLOW", IStorageHelperCTX::Flag::NOFOLLOW},
+        {"O_CREAT", IStorageHelperCTX::Flag::CREAT},
+        {"O_TRUNC", IStorageHelperCTX::Flag::TRUNC},
+        {"O_EXCL", IStorageHelperCTX::Flag::EXCL},
+        {"O_RDONLY", IStorageHelperCTX::Flag::RDONLY},
+        {"O_WRONLY", IStorageHelperCTX::Flag::WRONLY},
+        {"O_RDWR", IStorageHelperCTX::Flag::RDWR},
+        {"S_IFREG", IStorageHelperCTX::Flag::IFREG},
+        {"S_IFCHR", IStorageHelperCTX::Flag::IFCHR},
+        {"S_IFBLK", IStorageHelperCTX::Flag::IFBLK},
+        {"S_IFIFO", IStorageHelperCTX::Flag::IFIFO},
+        {"S_IFSOCK", IStorageHelperCTX::Flag::IFSOCK}};
 
-std::map<nifpp::str_atom, int> atom_to_open_mode = {
-    {"O_RDONLY",    O_RDONLY},
-    {"O_WRONLY",    O_WRONLY},
-    {"O_RDWR",      O_RDWR}
-};
+    return {pairs.begin(), pairs.end()};
+}
 
-
-std::map<nifpp::str_atom, int> atom_to_file_type = {
-    {"S_IFREG",    S_IFREG},
-    {"S_IFCHR",    S_IFCHR},
-    {"S_IFBLK",    S_IFBLK},
-    {"S_IFIFO",    S_IFIFO},
-    {"S_IFSOCK",   S_IFSOCK}
-};
+const Translation atom_to_flag = createAtomToFlagTranslation();
+}
 
 /** @} */
 
@@ -107,85 +142,88 @@ template <class T> error_t make_sys_error_code(T code)
  * @{
  */
 std::map<error_t, nifpp::str_atom> error_to_atom = {
-    {make_sys_error_code(std::errc::address_family_not_supported),        "eafnosupport"},
-    {make_sys_error_code(std::errc::address_in_use),                      "eaddrinuse"},
-    {make_sys_error_code(std::errc::address_not_available),               "eaddrnotavail"},
-    {make_sys_error_code(std::errc::already_connected),                   "eisconn"},
-    {make_sys_error_code(std::errc::argument_list_too_long),              "e2big"},
-    {make_sys_error_code(std::errc::argument_out_of_domain),              "edom"},
-    {make_sys_error_code(std::errc::bad_address),                         "efault"},
-    {make_sys_error_code(std::errc::bad_file_descriptor),                 "ebadf"},
-    {make_sys_error_code(std::errc::bad_message),                         "ebadmsg"},
-    {make_sys_error_code(std::errc::broken_pipe),                         "epipe"},
-    {make_sys_error_code(std::errc::connection_aborted),                  "econnaborted"},
-    {make_sys_error_code(std::errc::connection_already_in_progress),      "ealready"},
-    {make_sys_error_code(std::errc::connection_refused),                  "econnrefused"},
-    {make_sys_error_code(std::errc::connection_reset),                    "econnreset"},
-    {make_sys_error_code(std::errc::cross_device_link),                   "exdev"},
-    {make_sys_error_code(std::errc::destination_address_required),        "edestaddrreq"},
-    {make_sys_error_code(std::errc::device_or_resource_busy),             "ebusy"},
-    {make_sys_error_code(std::errc::directory_not_empty),                 "enotempty"},
-    {make_sys_error_code(std::errc::executable_format_error),             "enoexec"},
-    {make_sys_error_code(std::errc::file_exists),                         "eexist"},
-    {make_sys_error_code(std::errc::file_too_large),                      "efbig"},
-    {make_sys_error_code(std::errc::filename_too_long),                   "enametoolong"},
-    {make_sys_error_code(std::errc::function_not_supported),              "enosys"},
-    {make_sys_error_code(std::errc::host_unreachable),                    "ehostunreach"},
-    {make_sys_error_code(std::errc::identifier_removed),                  "eidrm"},
-    {make_sys_error_code(std::errc::illegal_byte_sequence),               "eilseq"},
-    {make_sys_error_code(std::errc::inappropriate_io_control_operation),  "enotty"},
-    {make_sys_error_code(std::errc::interrupted),                         "eintr"},
-    {make_sys_error_code(std::errc::invalid_argument),                    "einval"},
-    {make_sys_error_code(std::errc::invalid_seek),                        "espipe"},
-    {make_sys_error_code(std::errc::io_error),                            "eio"},
-    {make_sys_error_code(std::errc::is_a_directory),                      "eisdir"},
-    {make_sys_error_code(std::errc::message_size),                        "emsgsize"},
-    {make_sys_error_code(std::errc::network_down),                        "enetdown"},
-    {make_sys_error_code(std::errc::network_reset),                       "enetreset"},
-    {make_sys_error_code(std::errc::network_unreachable),                 "enetunreach"},
-    {make_sys_error_code(std::errc::no_buffer_space),                     "enobufs"},
-    {make_sys_error_code(std::errc::no_child_process),                    "echild"},
-    {make_sys_error_code(std::errc::no_link),                             "enolink"},
-    {make_sys_error_code(std::errc::no_lock_available),                   "enolck"},
-    {make_sys_error_code(std::errc::no_message_available),                "enodata"},
-    {make_sys_error_code(std::errc::no_message),                          "enomsg"},
-    {make_sys_error_code(std::errc::no_protocol_option),                  "enoprotoopt"},
-    {make_sys_error_code(std::errc::no_space_on_device),                  "enospc"},
-    {make_sys_error_code(std::errc::no_stream_resources),                 "enosr"},
-    {make_sys_error_code(std::errc::no_such_device_or_address),           "enxio"},
-    {make_sys_error_code(std::errc::no_such_device),                      "enodev"},
-    {make_sys_error_code(std::errc::no_such_file_or_directory),           "enoent"},
-    {make_sys_error_code(std::errc::no_such_process),                     "esrch"},
-    {make_sys_error_code(std::errc::not_a_directory),                     "enotdir"},
-    {make_sys_error_code(std::errc::not_a_socket),                        "enotsock"},
-    {make_sys_error_code(std::errc::not_a_stream),                        "enostr"},
-    {make_sys_error_code(std::errc::not_connected),                       "enotconn"},
-    {make_sys_error_code(std::errc::not_enough_memory),                   "enomem"},
-    {make_sys_error_code(std::errc::not_supported),                       "enotsup"},
-    {make_sys_error_code(std::errc::operation_canceled),                  "ecanceled"},
-    {make_sys_error_code(std::errc::operation_in_progress),               "einprogress"},
-    {make_sys_error_code(std::errc::operation_not_permitted),             "eperm"},
-    {make_sys_error_code(std::errc::operation_not_supported),             "eopnotsupp"},
-    {make_sys_error_code(std::errc::operation_would_block),               "ewouldblock"},
-    {make_sys_error_code(std::errc::owner_dead),                          "eownerdead"},
-    {make_sys_error_code(std::errc::permission_denied),                   "eacces"},
-    {make_sys_error_code(std::errc::protocol_error),                      "eproto"},
-    {make_sys_error_code(std::errc::protocol_not_supported),              "eprotonosupport"},
-    {make_sys_error_code(std::errc::read_only_file_system),               "erofs"},
-    {make_sys_error_code(std::errc::resource_deadlock_would_occur),       "edeadlk"},
-    {make_sys_error_code(std::errc::resource_unavailable_try_again),      "eagain"},
-    {make_sys_error_code(std::errc::result_out_of_range),                 "erange"},
-    {make_sys_error_code(std::errc::state_not_recoverable),               "enotrecoverable"},
-    {make_sys_error_code(std::errc::stream_timeout),                      "etime"},
-    {make_sys_error_code(std::errc::text_file_busy),                      "etxtbsy"},
-    {make_sys_error_code(std::errc::timed_out),                           "etimedout"},
-    {make_sys_error_code(std::errc::too_many_files_open_in_system),       "enfile"},
-    {make_sys_error_code(std::errc::too_many_files_open),                 "emfile"},
-    {make_sys_error_code(std::errc::too_many_links),                      "emlink"},
-    {make_sys_error_code(std::errc::too_many_symbolic_link_levels),       "eloop"},
-    {make_sys_error_code(std::errc::value_too_large),                     "eoverflow"},
-    {make_sys_error_code(std::errc::wrong_protocol_type),                 "eprototype"}
-};
+    {make_sys_error_code(std::errc::address_family_not_supported),
+        "eafnosupport"},
+    {make_sys_error_code(std::errc::address_in_use), "eaddrinuse"},
+    {make_sys_error_code(std::errc::address_not_available), "eaddrnotavail"},
+    {make_sys_error_code(std::errc::already_connected), "eisconn"},
+    {make_sys_error_code(std::errc::argument_list_too_long), "e2big"},
+    {make_sys_error_code(std::errc::argument_out_of_domain), "edom"},
+    {make_sys_error_code(std::errc::bad_address), "efault"},
+    {make_sys_error_code(std::errc::bad_file_descriptor), "ebadf"},
+    {make_sys_error_code(std::errc::bad_message), "ebadmsg"},
+    {make_sys_error_code(std::errc::broken_pipe), "epipe"},
+    {make_sys_error_code(std::errc::connection_aborted), "econnaborted"},
+    {make_sys_error_code(std::errc::connection_already_in_progress),
+        "ealready"},
+    {make_sys_error_code(std::errc::connection_refused), "econnrefused"},
+    {make_sys_error_code(std::errc::connection_reset), "econnreset"},
+    {make_sys_error_code(std::errc::cross_device_link), "exdev"},
+    {make_sys_error_code(std::errc::destination_address_required),
+        "edestaddrreq"},
+    {make_sys_error_code(std::errc::device_or_resource_busy), "ebusy"},
+    {make_sys_error_code(std::errc::directory_not_empty), "enotempty"},
+    {make_sys_error_code(std::errc::executable_format_error), "enoexec"},
+    {make_sys_error_code(std::errc::file_exists), "eexist"},
+    {make_sys_error_code(std::errc::file_too_large), "efbig"},
+    {make_sys_error_code(std::errc::filename_too_long), "enametoolong"},
+    {make_sys_error_code(std::errc::function_not_supported), "enosys"},
+    {make_sys_error_code(std::errc::host_unreachable), "ehostunreach"},
+    {make_sys_error_code(std::errc::identifier_removed), "eidrm"},
+    {make_sys_error_code(std::errc::illegal_byte_sequence), "eilseq"},
+    {make_sys_error_code(std::errc::inappropriate_io_control_operation),
+        "enotty"},
+    {make_sys_error_code(std::errc::interrupted), "eintr"},
+    {make_sys_error_code(std::errc::invalid_argument), "einval"},
+    {make_sys_error_code(std::errc::invalid_seek), "espipe"},
+    {make_sys_error_code(std::errc::io_error), "eio"},
+    {make_sys_error_code(std::errc::is_a_directory), "eisdir"},
+    {make_sys_error_code(std::errc::message_size), "emsgsize"},
+    {make_sys_error_code(std::errc::network_down), "enetdown"},
+    {make_sys_error_code(std::errc::network_reset), "enetreset"},
+    {make_sys_error_code(std::errc::network_unreachable), "enetunreach"},
+    {make_sys_error_code(std::errc::no_buffer_space), "enobufs"},
+    {make_sys_error_code(std::errc::no_child_process), "echild"},
+    {make_sys_error_code(std::errc::no_link), "enolink"},
+    {make_sys_error_code(std::errc::no_lock_available), "enolck"},
+    {make_sys_error_code(std::errc::no_message_available), "enodata"},
+    {make_sys_error_code(std::errc::no_message), "enomsg"},
+    {make_sys_error_code(std::errc::no_protocol_option), "enoprotoopt"},
+    {make_sys_error_code(std::errc::no_space_on_device), "enospc"},
+    {make_sys_error_code(std::errc::no_stream_resources), "enosr"},
+    {make_sys_error_code(std::errc::no_such_device_or_address), "enxio"},
+    {make_sys_error_code(std::errc::no_such_device), "enodev"},
+    {make_sys_error_code(std::errc::no_such_file_or_directory), "enoent"},
+    {make_sys_error_code(std::errc::no_such_process), "esrch"},
+    {make_sys_error_code(std::errc::not_a_directory), "enotdir"},
+    {make_sys_error_code(std::errc::not_a_socket), "enotsock"},
+    {make_sys_error_code(std::errc::not_a_stream), "enostr"},
+    {make_sys_error_code(std::errc::not_connected), "enotconn"},
+    {make_sys_error_code(std::errc::not_enough_memory), "enomem"},
+    {make_sys_error_code(std::errc::not_supported), "enotsup"},
+    {make_sys_error_code(std::errc::operation_canceled), "ecanceled"},
+    {make_sys_error_code(std::errc::operation_in_progress), "einprogress"},
+    {make_sys_error_code(std::errc::operation_not_permitted), "eperm"},
+    {make_sys_error_code(std::errc::operation_not_supported), "eopnotsupp"},
+    {make_sys_error_code(std::errc::operation_would_block), "ewouldblock"},
+    {make_sys_error_code(std::errc::owner_dead), "eownerdead"},
+    {make_sys_error_code(std::errc::permission_denied), "eacces"},
+    {make_sys_error_code(std::errc::protocol_error), "eproto"},
+    {make_sys_error_code(std::errc::protocol_not_supported), "eprotonosupport"},
+    {make_sys_error_code(std::errc::read_only_file_system), "erofs"},
+    {make_sys_error_code(std::errc::resource_deadlock_would_occur), "edeadlk"},
+    {make_sys_error_code(std::errc::resource_unavailable_try_again), "eagain"},
+    {make_sys_error_code(std::errc::result_out_of_range), "erange"},
+    {make_sys_error_code(std::errc::state_not_recoverable), "enotrecoverable"},
+    {make_sys_error_code(std::errc::stream_timeout), "etime"},
+    {make_sys_error_code(std::errc::text_file_busy), "etxtbsy"},
+    {make_sys_error_code(std::errc::timed_out), "etimedout"},
+    {make_sys_error_code(std::errc::too_many_files_open_in_system), "enfile"},
+    {make_sys_error_code(std::errc::too_many_files_open), "emfile"},
+    {make_sys_error_code(std::errc::too_many_links), "emlink"},
+    {make_sys_error_code(std::errc::too_many_symbolic_link_levels), "eloop"},
+    {make_sys_error_code(std::errc::value_too_large), "eoverflow"},
+    {make_sys_error_code(std::errc::wrong_protocol_type), "eprototype"}};
 /** @} */
 
 /**
@@ -228,12 +266,6 @@ struct NifCTX {
     {
     }
 
-    ~NifCTX()
-    {
-        // @todo: get valid file_id instead of empty one (its still works though since we are closing descriptor from CTX)
-        helperObj->ash_release(*helperCTX, "", [=](error_t e) {  });
-    }
-
     ErlNifEnv *env;
     Env localEnv;
     ErlNifPid reqPid;
@@ -272,8 +304,8 @@ ERL_NIF_TERM wrap_helper(ERL_NIF_TERM (*fun)(NifCTX ctx, Args...),
 
         std::random_device rd;
         std::mt19937 gen(rd());
-
         auto reqId = std::make_tuple(std::rand(), std::rand(), std::rand());
+
         return fun(
             NifCTX(env, Env(), pid, reqId, nifpp::get<helper_ptr>(env, args[0]),
                 nifpp::get<helper_ctx_ptr>(env, args[1])),
@@ -378,8 +410,7 @@ void handle_value(NifCTX &ctx)
 /**
  * Handles result from helpers callback either process return value or error.
  */
-template <class... T>
-void handle_result(NifCTX ctx, error_t e, T... value)
+template <class... T> void handle_result(NifCTX ctx, error_t e, T... value)
 {
     if (!e) {
         handle_value(ctx, value...);
@@ -392,7 +423,7 @@ void handle_result(NifCTX ctx, error_t e, T... value)
 
         enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
             nifpp::make(ctx.localEnv, std::make_tuple(ctx.reqId,
-                                     std::make_tuple(error, reason))));
+                                          std::make_tuple(error, reason))));
     }
 }
 
@@ -402,6 +433,36 @@ void handle_result(NifCTX ctx, error_t e, T... value)
 *       All functions below are described in helpers_nif.erl
 *
 *********************************************************************/
+
+ERL_NIF_TERM set_threads_number(
+    ErlNifEnv *env, std::unordered_map<std::string, std::size_t> args)
+{
+    return handle_errors(env, [&]() {
+        auto result = args.find("Ceph");
+        if (result != args.end())
+            if (!application.adjust_io_service_threads(application.cephService,
+                    application.cephWorkers, result->second)) {
+                return nifpp::make(
+                    env,
+                    std::make_tuple(error,
+                        std::make_tuple(nifpp::str_atom("wrong_thread_number"),
+                                        "Ceph", result->second)));
+            }
+
+        result = args.find("DirectIO");
+        if (result != args.end())
+            if (!application.adjust_io_service_threads(application.dioService,
+                    application.dioWorkers, result->second)) {
+                return nifpp::make(
+                    env,
+                    std::make_tuple(error,
+                        std::make_tuple(nifpp::str_atom("wrong_thread_number"),
+                                        "DirectIO", result->second)));
+            }
+
+        return nifpp::make(env, ok);
+    });
+}
 
 ERL_NIF_TERM new_helper_obj(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -442,111 +503,77 @@ ERL_NIF_TERM groupname_to_gid(
     return nifpp::make(env, std::make_tuple(error, error_to_atom[einval]));
 }
 
-ERL_NIF_TERM set_user_ctx(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM set_user_ctx(ErlNifEnv *env, helper_ctx_ptr ctx,
+    std::unordered_map<std::string, std::string> args)
 {
     return handle_errors(env, [&]() {
-        auto ctx = nifpp::get<helper_ctx_ptr>(env, argv[0]);
-
-        auto uidTerm = argv[1];
-        auto gidTerm = argv[2];
-        long uid = -1;
-        long gid = -1;
-
-        if (!nifpp::get(env, uidTerm, uid)) {
-            ctx->uid = uNameToUID(nifpp::get<std::string>(env, uidTerm));
-        }
-        else {
-            ctx->uid = uid;
-        }
-
-        if (!nifpp::get(env, gidTerm, gid)) {
-            ctx->gid = gNameToGID(nifpp::get<std::string>(env, gidTerm));
-        }
-        else {
-            ctx->gid = gid;
-        }
+        ctx->setUserCTX(args);
 
         return nifpp::make(env, ok);
     });
 }
 
-ERL_NIF_TERM get_flag_value(ErlNifEnv *env, nifpp::str_atom flag)
+ERL_NIF_TERM get_flag_value(
+    ErlNifEnv *env, helper_ctx_ptr ctx, nifpp::str_atom flag)
 {
-    auto it = atom_to_flag.find(flag);
-    if (it != atom_to_flag.end())
-        return nifpp::make(env, it->second);
-
-    it = atom_to_open_mode.find(flag);
-    if (it != atom_to_open_mode.end())
-        return nifpp::make(env, it->second);
-
-    it = atom_to_file_type.find(flag);
-    if (it != atom_to_file_type.end())
-        return nifpp::make(env, it->second);
-
+    auto searchResult = atom_to_flag.left.find(flag);
+    if (searchResult != atom_to_flag.left.end())
+        return nifpp::make(env, ctx->getFlagValue(searchResult->second));
     throw nifpp::badarg();
 }
 
-ERL_NIF_TERM new_helper_ctx(ErlNifEnv *env)
+ERL_NIF_TERM new_helper_ctx(ErlNifEnv *env, helper_ptr helperObj)
 {
-    auto ctx = std::make_shared<one::helpers::StorageHelperCTX>();
+    auto ctx = helperObj->createCTX();
     auto ctx_resource = nifpp::construct_resource<helper_ctx_ptr>(ctx);
     return nifpp::make(env, std::make_tuple(ok, ctx_resource));
 }
 
 ERL_NIF_TERM get_user_ctx(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
-    return nifpp::make(
-        env, std::make_tuple(ok, std::make_tuple(ctx->uid, ctx->gid)));
+    return nifpp::make(env, std::make_tuple(ok, ctx->getUserCTX()));
 }
 
 ERL_NIF_TERM get_flags(ErlNifEnv *env, helper_ctx_ptr ctx)
 {
-    std::vector<nifpp::str_atom> flags;
-    for (auto &flag : atom_to_flag) {
-        if (ctx->flags & flag.second) {
-            flags.push_back(flag.first);
+    std::vector<nifpp::str_atom> atomFlags;
+    auto flags = ctx->getFlags();
+    for (const auto &flag : flags) {
+        auto searchResult = atom_to_flag.right.find(flag);
+        if (searchResult != atom_to_flag.right.end()) {
+            atomFlags.push_back(searchResult->second);
+        }
+        else {
+            throw nifpp::badarg();
         }
     }
 
-    for (auto &flag : atom_to_open_mode) {
-        // Mask only open mode (ACCMODE) and compare by value
-        if ((ctx->flags & O_ACCMODE) == flag.second) {
-            flags.push_back(flag.first);
-        }
-    }
-
-    return nifpp::make(env, std::make_tuple(ok, flags));
+    return nifpp::make(env, std::make_tuple(ok, atomFlags));
 }
 
 ERL_NIF_TERM set_flags(
     ErlNifEnv *env, helper_ctx_ptr ctx, std::vector<nifpp::str_atom> flagAtoms)
 {
-    ctx->flags = 0;
-    for (auto &atom : flagAtoms) {
-        auto flagTerm = get_flag_value(env, atom);
-        auto flag = nifpp::get<int>(env, flagTerm);
-        ctx->flags |= flag;
+    std::vector<one::helpers::IStorageHelperCTX::Flag> flags;
+    for (const auto &flagAtom : flagAtoms) {
+        auto searchResult = atom_to_flag.left.find(flagAtom);
+        if (searchResult != atom_to_flag.left.end()) {
+            flags.push_back(searchResult->second);
+        }
+        else {
+            throw nifpp::badarg();
+        }
     }
 
-    return nifpp::make(env, ok);
-}
+    ctx->setFlags(std::move(flags));
 
-ERL_NIF_TERM get_fd(ErlNifEnv *env, helper_ctx_ptr ctx)
-{
-    return nifpp::make(env, std::make_tuple(ok, ctx->fh));
-}
-
-ERL_NIF_TERM set_fd(ErlNifEnv *env, helper_ctx_ptr ctx, int fh)
-{
-    ctx->fh = fh;
     return nifpp::make(env, ok);
 }
 
 ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_getattr(
-        *ctx.helperCTX, file, [=](struct stat statbuf, error_t e) {
+        ctx.helperCTX, file, [=](struct stat statbuf, error_t e) {
             handle_result(ctx, e, statbuf);
         });
 
@@ -556,7 +583,7 @@ ERL_NIF_TERM getattr(NifCTX ctx, const std::string file)
 ERL_NIF_TERM access(NifCTX ctx, const std::string file, const int mask)
 {
     ctx.helperObj->ash_access(
-        *ctx.helperCTX, file, mask, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, mask, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -564,7 +591,7 @@ ERL_NIF_TERM access(NifCTX ctx, const std::string file, const int mask)
 ERL_NIF_TERM mknod(
     NifCTX ctx, const std::string file, const mode_t mode, const dev_t dev)
 {
-    ctx.helperObj->ash_mknod(*ctx.helperCTX, file, mode, dev,
+    ctx.helperObj->ash_mknod(ctx.helperCTX, file, mode, dev,
         [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -573,7 +600,7 @@ ERL_NIF_TERM mknod(
 ERL_NIF_TERM mkdir(NifCTX ctx, const std::string file, const mode_t mode)
 {
     ctx.helperObj->ash_mkdir(
-        *ctx.helperCTX, file, mode, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, mode, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -581,7 +608,7 @@ ERL_NIF_TERM mkdir(NifCTX ctx, const std::string file, const mode_t mode)
 ERL_NIF_TERM unlink(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_unlink(
-        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -589,7 +616,7 @@ ERL_NIF_TERM unlink(NifCTX ctx, const std::string file)
 ERL_NIF_TERM rmdir(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_rmdir(
-        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -597,7 +624,7 @@ ERL_NIF_TERM rmdir(NifCTX ctx, const std::string file)
 ERL_NIF_TERM symlink(NifCTX ctx, const std::string from, const std::string to)
 {
     ctx.helperObj->ash_symlink(
-        *ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -605,7 +632,7 @@ ERL_NIF_TERM symlink(NifCTX ctx, const std::string from, const std::string to)
 ERL_NIF_TERM rename(NifCTX ctx, const std::string from, const std::string to)
 {
     ctx.helperObj->ash_rename(
-        *ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -613,7 +640,7 @@ ERL_NIF_TERM rename(NifCTX ctx, const std::string from, const std::string to)
 ERL_NIF_TERM link(NifCTX ctx, const std::string from, const std::string to)
 {
     ctx.helperObj->ash_link(
-        *ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, from, to, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -621,7 +648,7 @@ ERL_NIF_TERM link(NifCTX ctx, const std::string from, const std::string to)
 ERL_NIF_TERM chmod(NifCTX ctx, const std::string file, const mode_t mode)
 {
     ctx.helperObj->ash_chmod(
-        *ctx.helperCTX, file, mode, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, mode, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -629,7 +656,7 @@ ERL_NIF_TERM chmod(NifCTX ctx, const std::string file, const mode_t mode)
 ERL_NIF_TERM chown(
     NifCTX ctx, const std::string file, const int uid, const int gid)
 {
-    ctx.helperObj->ash_chown(*ctx.helperCTX, file, uid, gid,
+    ctx.helperObj->ash_chown(ctx.helperCTX, file, uid, gid,
         [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -638,14 +665,14 @@ ERL_NIF_TERM chown(
 ERL_NIF_TERM truncate(NifCTX ctx, const std::string file, const off_t size)
 {
     ctx.helperObj->ash_truncate(
-        *ctx.helperCTX, file, size, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, size, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM open(NifCTX ctx, const std::string file)
 {
-    ctx.helperObj->ash_open(*ctx.helperCTX, file,
+    ctx.helperObj->ash_open(ctx.helperCTX, file,
         [=](int fh, error_t e) { handle_result(ctx, e, fh); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -654,7 +681,7 @@ ERL_NIF_TERM open(NifCTX ctx, const std::string file)
 ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
 {
     auto buf = std::make_shared<std::vector<char>>(size);
-    ctx.helperObj->ash_read(*ctx.helperCTX, file,
+    ctx.helperObj->ash_read(ctx.helperCTX, file,
         asio::mutable_buffer(buf->data(), size), offset,
         [ctx, buf](asio::mutable_buffer mbuf, error_t e) {
             handle_result(ctx, e, mbuf);
@@ -667,9 +694,11 @@ ERL_NIF_TERM write(
     NifCTX ctx, const std::string file, const off_t offset, std::string data)
 {
     auto sData = std::make_shared<std::string>(std::move(data));
-    ctx.helperObj->ash_write(*ctx.helperCTX, file,
+    ctx.helperObj->ash_write(ctx.helperCTX, file,
         asio::const_buffer(sData->data(), sData->size()), offset,
-        [ctx, file, offset, sData](int size, error_t e) { handle_result(ctx, e, size); });
+        [ctx, file, offset, sData](int size, error_t e) {
+            handle_result(ctx, e, size);
+        });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -677,7 +706,7 @@ ERL_NIF_TERM write(
 ERL_NIF_TERM release(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_release(
-        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -685,14 +714,14 @@ ERL_NIF_TERM release(NifCTX ctx, const std::string file)
 ERL_NIF_TERM flush(NifCTX ctx, const std::string file)
 {
     ctx.helperObj->ash_flush(
-        *ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
+        ctx.helperCTX, file, [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM fsync(NifCTX ctx, const std::string file, const int isdatasync)
 {
-    ctx.helperObj->ash_fsync(*ctx.helperCTX, file, isdatasync,
+    ctx.helperObj->ash_fsync(ctx.helperCTX, file, isdatasync,
         [=](error_t e) { handle_result(ctx, e); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
@@ -704,16 +733,17 @@ extern "C" {
 
 static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
-    for (auto i = 0; i < 100; ++i) {
-        application.workers.push_back(
-            std::thread([]() { application.dioService.run(); }));
-    }
-
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
-               nifpp::register_resource<helper_ctx_ptr>(
-                   env, nullptr, "helper_ctx") &&
-               nifpp::register_resource<fuse_file_info>(
-                   env, nullptr, "fuse_file_info"));
+        nifpp::register_resource<helper_ctx_ptr>(
+                 env, nullptr, "helper_ctx_ptr") &&
+        nifpp::register_resource<fuse_file_info>(
+                 env, nullptr, "fuse_file_info"));
+}
+
+static ERL_NIF_TERM sh_set_threads_number(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(set_threads_number, env, argv);
 }
 
 static ERL_NIF_TERM sh_set_flags(
@@ -728,18 +758,6 @@ static ERL_NIF_TERM sh_get_flags(
     return noctx_wrap(get_flags, env, argv);
 }
 
-static ERL_NIF_TERM sh_set_fd(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    return noctx_wrap(set_fd, env, argv);
-}
-
-static ERL_NIF_TERM sh_get_fd(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    return noctx_wrap(get_fd, env, argv);
-}
-
 static ERL_NIF_TERM sh_new_helper_ctx(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -750,6 +768,12 @@ static ERL_NIF_TERM sh_get_user_ctx(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return noctx_wrap(get_user_ctx, env, argv);
+}
+
+static ERL_NIF_TERM sh_set_user_ctx(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return noctx_wrap(set_user_ctx, env, argv);
 }
 
 static ERL_NIF_TERM sh_get_flag_value(
@@ -864,37 +888,21 @@ static ERL_NIF_TERM sh_fsync(
 }
 
 static ErlNifFunc nif_funcs[] = {
-    {"getattr",         3, sh_getattr},
-    {"access",          4, sh_access},
-    {"mknod",           5, sh_mknod},
-    {"mkdir",           4, sh_mkdir},
-    {"unlink",          3, sh_unlink},
-    {"rmdir",           3, sh_rmdir},
-    {"symlink",         4, sh_symlink},
-    {"rename",          4, sh_rename},
-    {"link",            4, sh_link},
-    {"chmod",           4, sh_chmod},
-    {"chown",           5, sh_chown},
-    {"truncate",        4, sh_truncate},
-    {"open",            3, sh_open},
-    {"read",            5, sh_read},
-    {"write",           5, sh_write},
-    {"release",         3, sh_release},
-    {"flush",           3, sh_flush},
-    {"fsync",           4, sh_fsync},
-
-    {"set_flags",       2, sh_set_flags},
-    {"get_flags",       1, sh_get_flags},
-    {"set_fd",          2, sh_set_fd},
-    {"get_fd",          1, sh_get_fd},
+    {"set_threads_number", 1, sh_set_threads_number},
+    {"getattr", 3, sh_getattr}, {"access", 4, sh_access},
+    {"mknod", 5, sh_mknod}, {"mkdir", 4, sh_mkdir}, {"unlink", 3, sh_unlink},
+    {"rmdir", 3, sh_rmdir}, {"symlink", 4, sh_symlink},
+    {"rename", 4, sh_rename}, {"link", 4, sh_link}, {"chmod", 4, sh_chmod},
+    {"chown", 5, sh_chown}, {"truncate", 4, sh_truncate}, {"open", 3, sh_open},
+    {"read", 5, sh_read}, {"write", 5, sh_write}, {"release", 3, sh_release},
+    {"flush", 3, sh_flush}, {"fsync", 4, sh_fsync},
+    {"set_flags", 2, sh_set_flags}, {"get_flags", 1, sh_get_flags},
     {"username_to_uid", 1, username_to_uid},
-    {"groupname_to_gid",1, groupname_to_gid},
-    {"new_helper_obj",  2, new_helper_obj},
-    {"new_helper_ctx",  0, sh_new_helper_ctx},
-    {"set_user_ctx",    3, set_user_ctx},
-    {"get_user_ctx",    1, sh_get_user_ctx},
-    {"get_flag_value",  1, sh_get_flag_value}
-};
+    {"groupname_to_gid", 1, groupname_to_gid},
+    {"new_helper_obj", 2, new_helper_obj},
+    {"new_helper_ctx", 1, sh_new_helper_ctx},
+    {"set_user_ctx", 2, sh_set_user_ctx}, {"get_user_ctx", 1, sh_get_user_ctx},
+    {"get_flag_value", 2, sh_get_flag_value}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
