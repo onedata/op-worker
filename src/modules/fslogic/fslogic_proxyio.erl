@@ -13,6 +13,8 @@
 
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% API
 -export([write/6, read/6]).
@@ -32,7 +34,9 @@
     Offset :: non_neg_integer(), Data :: binary()) ->
     #proxyio_response{}.
 write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
-    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
+    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
@@ -70,7 +74,9 @@ write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     #proxyio_response{}.
 read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
-    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
+    {ok, SpaceId} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
