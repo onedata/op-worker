@@ -194,8 +194,13 @@ rename_file(_CTX, SourceEntry, TargetPath) ->
         true ->
             #fuse_response{status = #status{code = ?EEXIST}};
         false ->
-            ok = file_meta:rename(SourceEntry, {path, TargetPath}),
-            #fuse_response{status = #status{code = ?OK}}
+            case moving_into_itself(SourceEntry, TargetPath) of
+                true ->
+                    #fuse_response{status = #status{code = ?EINVAL}};
+                false ->
+                    ok = file_meta:rename(SourceEntry, {path, TargetPath}),
+                    #fuse_response{status = #status{code = ?OK}}
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -263,3 +268,18 @@ list_xattr(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 %% Internal functions
 %%--------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if renamed entry is one of target path parents.
+%% @end
+%%--------------------------------------------------------------------
+-spec moving_into_itself(SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
+    boolean().
+moving_into_itself(SourceEntry, TargetPath) ->
+    {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
+    TargetTokens = fslogic_path:split(TargetPath),
+    [_ | ParentTokensReversed] = lists:reverse(TargetTokens),
+    ParentPath = fslogic_path:join(lists:reverse(ParentTokensReversed)),
+    {ok, {_, ParentUUIDs}} = file_meta:resolve_path(ParentPath),
+    lists:any(fun(ParentUUID) -> ParentUUID =:= SourceUUID end, ParentUUIDs).
