@@ -130,7 +130,8 @@ protobuf_msg_test(Config) ->
     ok = ssl2:close(Sock).
 
 -performance([
-    {repeats, 3},
+    {repeats, 5},
+    {success_rate, 80},
     {parameters, [
         [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
         [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
@@ -262,7 +263,8 @@ client_communicate_async_test(Config) ->
     ok = ssl2:close(Sock).
 
 -performance([
-    {repeats, 3},
+    {repeats, 5},
+    {success_rate, 80},
     {parameters, [
         [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
         [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
@@ -323,7 +325,8 @@ multi_ping_pong_test(Config) ->
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
 -performance([
-    {repeats, 3},
+    {repeats, 5},
+    {success_rate, 80},
     {parameters, [
         [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
     ]},
@@ -369,6 +372,7 @@ sequential_ping_pong_test(Config) ->
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [
         [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
     ]},
@@ -397,7 +401,8 @@ multi_connection_test(Config) ->
     lists:foreach(fun({ok, {Sock, _}}) -> ssl2:close(Sock) end, Connections).
 
 -performance([
-    {repeats, 3},
+    {repeats, 5},
+    {success_rate, 80},
     {parameters, [
         [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
         [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
@@ -448,7 +453,8 @@ bandwidth_test(Config) ->
     ].
 
 -performance([
-    {repeats, 3},
+    {repeats, 5},
+    {success_rate, 80},
     {parameters, [
         [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
         [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
