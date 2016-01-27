@@ -261,7 +261,7 @@ start() ->
     meck:expect(session, get, 1, {ok,
         #document{value = #session{identity = #identity{user_id = <<"UserId">>}}}}),
 
-    meck:expect(fslogic_spaces, get_space, 1, {ok, ?SPACE_ID}),
+    meck:expect(fslogic_spaces, get_space, 2, {ok, ?SPACE_ID}),
 
     ok.
 
