@@ -90,22 +90,12 @@ less_than_block_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    ?assertEqual(ok,
-        remote_apply(Worker1, rtransfer, fetch,
-            [Ref1, notify_fun(CounterPid), on_complete_fun(self())])
-    ),
+    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -126,21 +116,12 @@ exact_block_size_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])),
-
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
-
-    ?assertEqual(ok,
-        remote_apply(Worker1, rtransfer, fetch,
-            [Ref1, notify_fun(CounterPid), on_complete_fun(self())])
-    ),
+    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -164,24 +145,14 @@ more_than_block_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
 
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    ?assertEqual(ok,
-        remote_apply(Worker1, rtransfer, fetch,
-            [Ref1, notify_fun(CounterPid), on_complete_fun(self())]
-        )
-    ),
+    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -199,36 +170,24 @@ more_than_block_fetch_test2(Config) ->
     DataSize = (Blocks - 1) * ?TEST_BLOCK_SIZE + 576,
     Data = generate_binary(DataSize),
     CounterPid = spawn(?MODULE, counter, [0]),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     %% write will return different values beacuse DataSize is not
     %% the multiple of block size
-    WriteFunOpt = {write_fun, fun(_Handle, _Offset, _Data) ->
-        {ok, ?FILE_HANDLE2, byte_size(_Data) }
-    end},
-
-
-    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    WriteFunOpt = {write_fun,
+        fun(_Handle, _Offset, _Data) ->
+            {ok, ?FILE_HANDLE2, byte_size(_Data) }
+        end
+    },
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
-
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    ?assertEqual(ok,
-        remote_apply(Worker1, rtransfer, fetch,
-            [Ref1, notify_fun(CounterPid), on_complete_fun(self())]
-        )
-    ),
+    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -253,24 +212,13 @@ cancel_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
-
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    remote_apply(
-        Worker1, rtransfer, fetch,
-        [Ref1, notify_fun(), on_complete_fun(self())]
-    ),
-    remote_apply(Worker1, rtransfer, cancel, [Ref1]),
+    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
+    cancel_fetching(Worker1, Ref1),
 
     timer:sleep(?TIMEOUT),
     %% then
@@ -291,16 +239,9 @@ many_requests_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
-    ),
-
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
     Refs = generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize),
-
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
     timer:sleep(?TIMEOUT),
@@ -327,15 +268,9 @@ many_requests_to_one_file(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
-    ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
     Refs = generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk),
-
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
     timer:sleep(?TIMEOUT),
@@ -359,22 +294,12 @@ error_open_fun_test(Config) ->
         change_rtransfer_opt({open_fun, {error, test_error}}, RtransferOpts),
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [[get_binding(Worker1) | RtransferOpts2]])
+    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts2]]),
+    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [[get_binding(Worker2) | RtransferOpts2]])
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    remote_apply(
-        Worker1, rtransfer, fetch,
-        [Ref1, notify_fun(), on_complete_fun(self())]
-    ),
+    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
@@ -391,22 +316,12 @@ error_read_fun_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts1]]),
+    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    remote_apply(
-        Worker1, rtransfer, fetch,
-        [Ref1, notify_fun(), on_complete_fun(self())]
-    ),
+    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
@@ -424,22 +339,12 @@ error_write_fun_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
+    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts1]]),
+    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
     ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    remote_apply(
-        Worker1, rtransfer, fetch,
-        [Ref1, notify_fun(), on_complete_fun(self())]
-    ),
+    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
@@ -457,15 +362,9 @@ bad_formatted_request_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
-    ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    remote_apply(Worker1, rtransfer, fetch,
-        [{bad_request}, notify_fun(), on_complete_fun(self())]),
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    fetch_data(Worker1, {bad_request}, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error, _}}, ?TIMEOUT).
@@ -485,29 +384,10 @@ bad_file_offset_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [RtransferOpts1])
-    ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [RtransferOpts2])
-    ),
-
-    ?assertMatch({error, _},
-        remote_apply(Worker1, rtransfer, fetch,
-            [{bad_request}, notify_fun(), on_complete_fun(self())]
-        )
-    ),
-
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, Offset, DataSize]
-    ),
-
-    ?assertMatch({error, _},
-        remote_apply(Worker1, rtransfer, fetch,
-            [Ref1, notify_fun(), on_complete_fun(self())]
-        )
-    ),
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    Ref1 = prepare_fetch_request(Worker1, Worker2, ?TEST_FILE_UUID, Offset, DataSize),
+    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error, _}}, ?TIMEOUT).
@@ -681,9 +561,11 @@ get_node_ip(Node) ->
         utils:get_host(Node),
     re:replace(os:cmd(CMD), "\\s+", "", [global, {return, list}]).
 
+%% TODO refactor, call defined later functions
 fetch_test({Worker1, ROpts1}, {Worker2, ROpts2}, DataSize, NotifyFun, OnCompleteFun) ->
+    %% Worker1 is the one who fetches data from Worker2
 
-    %% when
+    %% start rtransfer on Worker1 and Worker2 nodes
     ?assertMatch({ok, _},
         remote_apply(Worker1, rtransfer, start_link, [ROpts1])
     ),
@@ -691,12 +573,29 @@ fetch_test({Worker1, ROpts1}, {Worker2, ROpts2}, DataSize, NotifyFun, OnComplete
         remote_apply(Worker2, rtransfer, start_link, [ROpts2])
     ),
 
+    %% prepare request for fetchin data
     Ref1 = remote_apply(
         Worker1, rtransfer, prepare_request,
         [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
     ),
 
+    %% fetch data
     remote_apply(
         Worker1, rtransfer, fetch,
         [Ref1, NotifyFun, OnCompleteFun]
     ).
+
+start_rtransfer(Node, RtransferOpts) ->
+    remote_apply(Node, rtransfer, start_link, [RtransferOpts]).
+
+prepare_fetch_request(Node1, Node2, FileUUID, Offset, DataSize) ->
+%% Worker1 is the one who fetches data from Worker2
+    remote_apply(
+        Node1, rtransfer, prepare_request, [Node2, FileUUID, Offset, DataSize]
+    ).
+
+fetch_data(Node, Ref, NotifyFun, OnCompleteFun) ->
+    remote_apply(Node, rtransfer, fetch, [Ref, NotifyFun, OnCompleteFun]).
+
+cancel_fetching(Node, Ref) ->
+    remote_apply(Node, rtransfer, cancel, [Ref]).
