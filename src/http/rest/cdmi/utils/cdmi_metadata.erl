@@ -14,6 +14,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("http/rest/cdmi/cdmi_errors.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
@@ -30,7 +31,7 @@
 -define(USER_METADATA_FORBIDDEN_PREFIX_STRING, "cdmi_").
 -define(USER_METADATA_FORBIDDEN_PREFIX, <<?USER_METADATA_FORBIDDEN_PREFIX_STRING>>).
 -define(DEFAULT_STORAGE_SYSTEM_METADATA,
-    [<<"cdmi_size">>, <<"cdmi_ctime">>, <<"cdmi_atime">>, <<"cdmi_mtime">>, <<"cdmi_owner">>, <<"cdmi_acl">>]).
+    [<<"cdmi_size">>, <<"cdmi_ctime">>, <<"cdmi_atime">>, <<"cdmi_mtime">>, <<"cdmi_owner">>, ?ACL_XATTR_NAME]).
 
 %%%===================================================================
 %%% API
@@ -85,12 +86,12 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
     BodyMetadataNames = get_metadata_names(BodyMetadata),
     DeleteAttributeFunction =
         fun
-            (<<"cdmi_acl">>) -> ok = onedata_file_api:remove_acl(Auth, FileKey);
+            (?ACL_XATTR_NAME) -> ok = onedata_file_api:remove_acl(Auth, FileKey);
             (Name) -> ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
         end,
     ReplaceAttributeFunction =
         fun
-            ({<<"cdmi_acl">>, Value}) ->
+            ({?ACL_XATTR_NAME, Value}) ->
                 ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
                       catch _:Error ->
                           ?warning_stacktrace("Acl conversion error ~p", [Error]),
@@ -220,9 +221,9 @@ set_cdmi_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
 filter_user_metadata(UserMetadata) when is_list(UserMetadata) ->
     lists:filter(
         fun
-            ({<<"cdmi_acl">>, _Value}) -> true;
+            ({?ACL_XATTR_NAME, _Value}) -> true;
             ({Name, _Value}) -> not binary_with_prefix(Name, ?USER_METADATA_FORBIDDEN_PREFIX);
-            (<<"cdmi_acl">>) -> true;
+            (?ACL_XATTR_NAME) -> true;
             (Name) -> not binary_with_prefix(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
         end,
         UserMetadata);
@@ -272,10 +273,10 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                     [{<<"cdmi_mtime">>, integer_to_binary(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_owner">> ->
                     [{<<"cdmi_owner">>, integer_to_binary(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
-                <<"cdmi_acl">> ->
+                ?ACL_XATTR_NAME ->
                     case onedata_file_api:get_acl(Auth, FileKey) of
                         {ok, Acl} ->
-                            [{<<"cdmi_acl">>, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                            [{?ACL_XATTR_NAME, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                         {error, ?ENOATTR} ->
                             prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)
                     end

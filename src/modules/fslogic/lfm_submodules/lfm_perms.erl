@@ -16,8 +16,6 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
--define(CDMI_ACL_XATTR_KEY, <<"cdmi_acl">>).
-
 %% API
 -export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 
