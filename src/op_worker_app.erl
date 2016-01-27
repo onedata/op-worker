@@ -57,7 +57,6 @@ start(_StartType, _StartArgs) ->
         {ok, false} ->
             application:set_env(ctool, verify_gr_cert, false)
     end,
-    ok = application:start(cluster_worker, permanent),
     op_worker_sup:start_link().
 
 %%--------------------------------------------------------------------
@@ -67,6 +66,5 @@ start(_StartType, _StartArgs) ->
 %%--------------------------------------------------------------------
 -spec stop(State :: term()) -> ok.
 stop(_State) ->
-    ok = application:stop(cluster_worker),
     test_node_starter:maybe_stop_cover(),
     ok.
