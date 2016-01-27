@@ -18,7 +18,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}
 -define(run(B),
@@ -492,14 +491,12 @@ setup_onedata_user(UUID) ->
             case exists({uuid, SpaceDirUuid}) of
                 true -> ok;
                 false ->
-                    {ok, #space_details{name = SpaceName}} =
-                        gr_spaces:get_details(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
-                                name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                                is_scope = true
+                                name = SpaceId, type = ?DIRECTORY_TYPE,
+                                mode = 8#1770, mtime = CTime, atime = CTime,
+                                ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                             }})
             end
         end, Spaces),

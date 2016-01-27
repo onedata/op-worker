@@ -34,5 +34,6 @@ models() -> [
   file_location,
   xattr,
   space_storage,
+  space_details,
   ceph_user
 ].

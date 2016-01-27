@@ -14,6 +14,7 @@
 
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% Identity containing user_id
 -record(identity, {

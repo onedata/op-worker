@@ -106,16 +106,34 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
     UserId = fslogic_context:get_user_id(Ctx),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME]),
     {path, Path};
-get_canonical_file_entry(_Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]) ->
-    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]),
+get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
+    UserId = fslogic_context:get_user_id(Ctx),
+    {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
+    Docs = lists:map(fun(SpaceId) ->
+        {ok, Doc} = space_details:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+        Doc
+    end, SpaceIds),
+
+    [#document{value = #space_details{id = SpaceId}}] =
+        case binary:split(SpaceName, <<"#">>, [global]) of
+            [Name] ->
+                lists:filter(fun(#document{value = #space_details{name = SName}}) ->
+                    Name =:= SName
+                end, Docs);
+            [_ | _] = Parts ->
+                [PartId | NameParts] = lists:reverse(Parts),
+                PartIdLen = size(PartId),
+                Name = binary_join(lists:reverse(NameParts), <<"#">>),
+                lists:filter(fun(#document{value = #space_details{id = Id, name = SName}}) ->
+                    Name =:= SName andalso binary:longest_common_prefix([PartId, Id]) =:= PartIdLen
+                end, Docs)
+        end,
+
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens]),
     {path, Path};
 get_canonical_file_entry(Ctx, Tokens) ->
-    UserId = fslogic_context:get_user_id(Ctx),
-    {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
-        onedata_user:get(UserId),
-    {ok, #document{value = #file_meta{name = DefaultSpaceName}}} = file_meta:get_space_dir(DefaultSpaceId),
-    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME,
-        DefaultSpaceName | Tokens]),
+    {ok, DefaultSpaceId} = fslogic_spaces:get_default_space_id(Ctx),
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, DefaultSpaceId | Tokens]),
     {path, Path}.
 
 %%--------------------------------------------------------------------
