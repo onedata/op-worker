@@ -561,29 +561,6 @@ get_node_ip(Node) ->
         utils:get_host(Node),
     re:replace(os:cmd(CMD), "\\s+", "", [global, {return, list}]).
 
-%% TODO refactor, call defined later functions
-fetch_test({Worker1, ROpts1}, {Worker2, ROpts2}, DataSize, NotifyFun, OnCompleteFun) ->
-    %% Worker1 is the one who fetches data from Worker2
-
-    %% start rtransfer on Worker1 and Worker2 nodes
-    ?assertMatch({ok, _},
-        remote_apply(Worker1, rtransfer, start_link, [ROpts1])
-    ),
-    ?assertMatch({ok, _},
-        remote_apply(Worker2, rtransfer, start_link, [ROpts2])
-    ),
-
-    %% prepare request for fetchin data
-    Ref1 = remote_apply(
-        Worker1, rtransfer, prepare_request,
-        [Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize]
-    ),
-
-    %% fetch data
-    remote_apply(
-        Worker1, rtransfer, fetch,
-        [Ref1, NotifyFun, OnCompleteFun]
-    ).
 
 start_rtransfer(Node, RtransferOpts) ->
     remote_apply(Node, rtransfer, start_link, [RtransferOpts]).
