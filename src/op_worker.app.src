@@ -30,7 +30,8 @@
             ssl2,
             hackney,
             web_client,
-            cowboy
+            cowboy,
+            cluster_worker
         ]},
         {mod, {op_worker_app, []}},
         {env, []}
