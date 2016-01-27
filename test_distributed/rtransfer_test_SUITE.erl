@@ -302,7 +302,7 @@ error_open_fun_test(Config) ->
     fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
-    ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {error,{storage,_}}}, ?TIMEOUT).
 
 error_read_fun_test(Config) ->
     %% test with read_fun callback returning an error
@@ -324,7 +324,7 @@ error_read_fun_test(Config) ->
     fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
-    ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {error,{storage,_}}}, ?TIMEOUT).
 
 error_write_fun_test(Config) ->
     %% test with write_fun callback returning an error
@@ -347,7 +347,7 @@ error_write_fun_test(Config) ->
     fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
-    ?assertReceivedMatch({on_complete, {error,{other,{send_error,normal}}}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {error,{storage,_}}}, ?TIMEOUT).
 
 bad_formatted_request_test(Config) ->
     %% test calling fetch with bad _request
