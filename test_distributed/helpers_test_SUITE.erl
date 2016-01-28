@@ -37,6 +37,7 @@
     release_test/1, flush_test/1, fsync_test/1
 ]).
 
+-performance({test_cases, []}).
 all() ->
     [
         getattr_test, access_test, mknod_test, mkdir_test, unlink_test, rmdir_test, symlink_test, rename_test,
