@@ -116,7 +116,7 @@ check({?write_metadata, _, UserDoc, Acl}) ->
 check({?execute, _, UserDoc, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?execute_mask);
 check({?traverse_container, #document{value = #file_meta{is_scope = true}} = FileDoc, #document{key = UserId} = UserDoc, Acl}) ->
-    validate_scope_access(FileDoc, UserId),
+    ok = validate_scope_access(FileDoc, UserId),
     fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
 check({?traverse_container, _, UserDoc, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
@@ -148,7 +148,7 @@ check({Perm, File, User, Acl}) ->
 %%--------------------------------------------------------------------
 %% @doc Checks whether given user has given permission on given file (POSIX permission check).
 %%--------------------------------------------------------------------
--spec validate_posix_access(AccessType :: check_permissions:access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
+-spec validate_posix_access(AccessType :: check_permissions:check_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mode = Mode}} = FileDoc, UserId) ->
     ReqBit =
         case AccessType of
@@ -185,9 +185,7 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
 %% @doc Checks whether given user has permission to see given scope file.
 %%      This function is always called before validate_posix_access/3 and shall handle all special cases.
 %%--------------------------------------------------------------------
--spec validate_scope_access(FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
-validate_scope_access(#document{value = #file_meta{is_scope = false}}, _) ->
-    ok;
+-spec validate_scope_access(FileDoc :: file_meta:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_scope_access(FileDoc, UserId) ->
     case file_meta:is_root_dir(FileDoc)
         orelse file_meta:is_spaces_base_dir(FileDoc)
