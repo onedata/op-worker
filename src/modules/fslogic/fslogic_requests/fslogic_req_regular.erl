@@ -34,7 +34,7 @@
 %%--------------------------------------------------------------------
 -spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?write_object, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(Entry),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
@@ -114,7 +114,7 @@ get_file_location(CTX, File, rdwr) ->
 -spec get_new_file_location(fslogic_worker:ctx(), Parent :: file_meta:entry(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
--check_permissions([{?add_object, 2}, {?traverse_container, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
 get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags) ->
     NormalizedParentUUID =
         case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
@@ -172,7 +172,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
 %%--------------------------------------------------------------------
 -spec get_parent(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{none, 2}]).
+-check_permissions([{traverse_ancestors, 2}]).
 get_parent(_CTX, File) ->
     {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
     #fuse_response{status = #status{code = ?OK}, fuse_response =
@@ -188,7 +188,7 @@ get_parent(_CTX, File) ->
 %%--------------------------------------------------------------------
 -spec get_file_location_for_read(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
--check_permissions([{?read_object, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
 get_file_location_for_read(CTX, File) ->
     get_file_location(CTX, File).
 
@@ -197,7 +197,7 @@ get_file_location_for_read(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec get_file_location_for_write(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
--check_permissions([{?write_object, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
 get_file_location_for_write(CTX, File) -> get_file_location(CTX, File).
 
 %%--------------------------------------------------------------------
@@ -205,7 +205,7 @@ get_file_location_for_write(CTX, File) -> get_file_location(CTX, File).
 %%--------------------------------------------------------------------
 -spec get_file_location_for_rdwr(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
--check_permissions([{?read_object, 2}, {?write_object, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
 get_file_location_for_rdwr(CTX, File) -> get_file_location(CTX, File).
 
 %%--------------------------------------------------------------------

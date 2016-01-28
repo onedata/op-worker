@@ -16,7 +16,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([check/1]).
@@ -49,7 +48,7 @@ check({owner_if_parent_sticky, Doc, UserDoc, Acl}) ->
     end;
 check({AccessType, #document{value = #file_meta{is_scope = true}} = Doc, #document{key = UserId}, undefined}) when
     AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
-    ok = validate_scope_access(AccessType, Doc, UserId),
+    ok = validate_scope_access(Doc, UserId),
     ok = validate_posix_access(AccessType, Doc, UserId);
 check({AccessType, Doc, #document{key = UserId}, undefined}) when
     AccessType =:= read orelse AccessType =:= write orelse AccessType =:= exec orelse AccessType =:= rdwr ->
@@ -60,8 +59,7 @@ check({AccessType, Doc, #document{key = UserId}, undefined}) when
 check({?read_object, Doc, UserDoc, undefined}) ->
     ok = check({read, Doc, UserDoc, undefined});
 check({?list_container, Doc, UserDoc, undefined}) ->
-    ok = check({read, Doc, UserDoc, undefined}),
-    ok = check({exec, Doc, UserDoc, undefined});
+    ok = check({read, Doc, UserDoc, undefined});
 check({?write_object, Doc, UserDoc, undefined}) ->
     ok = check({write, Doc, UserDoc, undefined});
 check({?add_object, Doc, UserDoc, undefined}) ->
@@ -117,6 +115,9 @@ check({?write_metadata, _, UserDoc, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?write_metadata_mask);
 check({?execute, _, UserDoc, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?execute_mask);
+check({?traverse_container, #document{value = #file_meta{is_scope = true}} = FileDoc, #document{key = UserId} = UserDoc, Acl}) ->
+    validate_scope_access(FileDoc, UserId),
+    fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
 check({?traverse_container, _, UserDoc, Acl}) ->
     fslogic_acl:check_permission(Acl, UserDoc, ?traverse_container_mask);
 check({?delete_object, _, UserDoc, Acl}) ->
@@ -181,10 +182,22 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks whether given user has given permission on scope given file.
+%% @doc Checks whether given user has permission to see given scope file.
 %%      This function is always called before validate_posix_access/3 and shall handle all special cases.
-%% @todo: Implement this method. Currently expected behaviour is to throw ENOENT instead EACCES for all spaces dirs.
 %%--------------------------------------------------------------------
--spec validate_scope_access(AccessType :: check_permissions:access_type(), FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
-validate_scope_access(_AccessType, _FileDoc, _UserId) ->
-    ok.
+-spec validate_scope_access(FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
+validate_scope_access(#document{value = #file_meta{is_scope = false}}, _) ->
+    ok;
+validate_scope_access(FileDoc, UserId) ->
+    case file_meta:is_root_dir(FileDoc)
+        orelse file_meta:is_spaces_base_dir(FileDoc)
+        orelse file_meta:is_spaces_dir(FileDoc, UserId)
+    of
+        true -> ok;
+        false ->
+            try fslogic_spaces:get_space(FileDoc, UserId) of
+                _ -> ok
+            catch
+                {not_a_space, _} -> throw(?ENOENT)
+            end
+    end.

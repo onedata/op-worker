@@ -43,7 +43,8 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
--export([snapshot_name/2, to_uuid/1]).
+-export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
+    is_spaces_dir/2]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -553,6 +554,33 @@ to_uuid({path, Path}) ->
              {ok, {Doc, _}} = resolve_path(Path),
              to_uuid(Doc)
          end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file doc represents root directory with empty path.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root_dir(datastore:document()) -> boolean().
+is_root_dir(#document{key = Key}) ->
+    Key =:= ?ROOT_DIR_UUID.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file doc represents "spaces" directory dedicated for user.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_spaces_dir(datastore:document(), onedata_user:id()) -> boolean().
+is_spaces_dir(#document{key = Key}, UserId) ->
+    Key =:= fslogic_uuid:spaces_uuid(UserId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file doc represents "spaces" directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_spaces_base_dir(datastore:document()) -> boolean().
+is_spaces_base_dir(#document{key = Key}) ->
+    Key =:= ?SPACES_BASE_DIR_UUID.
 
 %%%===================================================================
 %%% Internal functions

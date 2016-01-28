@@ -40,7 +40,7 @@
 %%--------------------------------------------------------------------
 -spec update_times(fslogic_worker:ctx(), File :: fslogic_worker:file(),
                    ATime :: file_meta:time(), MTime :: file_meta:time(), CTime :: file_meta:time()) -> #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
+-check_permissions([{traverse_ancestors, 2}]).
 update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
@@ -59,7 +59,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
--check_permissions([{owner, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
 chmod(CTX, FileEntry, Mode) ->
     chmod_storage_files(CTX, FileEntry, Mode),
 
@@ -129,6 +129,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 %%--------------------------------------------------------------------
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{traverse_ancestors, 2}]).
 delete(CTX, File) ->
     case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
@@ -167,7 +168,7 @@ rename(CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
--check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_xattr(_CTX, _, <<"cdmi_", _/binary>>) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:get_by_name(FileUuid, XattrName) of
@@ -186,7 +187,7 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 %%--------------------------------------------------------------------
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
 set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
@@ -203,7 +204,7 @@ set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
 %%--------------------------------------------------------------------
 -spec remove_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
@@ -233,7 +234,7 @@ list_xattr(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 -spec get_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
--check_permissions([{?read_acl, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
 get_acl(_CTX, {uuid, FileUuid})  ->
     case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
@@ -249,7 +250,7 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 %%--------------------------------------------------------------------
 -spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
 set_acl(CTX, {uuid, FileUuid}, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
         {ok, _} ->
@@ -267,8 +268,8 @@ set_acl(CTX, {uuid, FileUuid}, #acl{value = Val}) ->
 %%--------------------------------------------------------------------
 -spec remove_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-remove_acl(CTX = #fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
+-check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
+remove_acl(CTX, {uuid, FileUuid}) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
@@ -287,7 +288,7 @@ remove_acl(CTX = #fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     {ok, transfer_encoding()} | error_reply().
--check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
@@ -303,7 +304,7 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, transfer_encoding()) ->
     ok | error_reply().
--check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
         {ok, _} ->
@@ -319,7 +320,7 @@ set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     {ok, cdmi_completion_status()} | error_reply().
--check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
@@ -338,7 +339,7 @@ get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, cdmi_completion_status()) ->
     ok | error_reply().
--check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
     case xattr:save(FileUuid, #xattr{name = ?CDMI_COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
         {ok, _} ->
@@ -351,7 +352,7 @@ set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
 %%--------------------------------------------------------------------
 -spec get_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     {ok, mimetype()} | error_reply().
--check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
@@ -367,7 +368,7 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 -spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, mimetype()) ->
     ok | error_reply().
--check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(_CTX, {uuid, FileUuid}, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
         {ok, _} ->
@@ -385,7 +386,7 @@ set_mimetype(_CTX, {uuid, FileUuid}, Mimetype) ->
 %%--------------------------------------------------------------------
 -spec delete_dir(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}]).
 delete_dir(CTX, File) ->
     delete_impl(CTX, File).
 
@@ -394,7 +395,7 @@ delete_dir(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}]).
 delete_file(CTX, File) ->
     delete_impl(CTX, File).
 

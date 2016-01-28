@@ -31,7 +31,7 @@
 -spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: fslogic_worker:file(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?add_subcontainer, 2}, {?traverse_container, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
 mkdir(CTX, ParentUUID, Name, Mode) ->
     NormalizedParentUUID =
         case {uuid, fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX))} =:= ParentUUID of
@@ -70,7 +70,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
 -spec read_dir(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file(),
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?list_container, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
 read_dir(CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
