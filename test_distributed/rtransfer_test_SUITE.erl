@@ -90,12 +90,10 @@ less_than_block_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(CounterPid), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -116,12 +114,10 @@ exact_block_size_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(CounterPid), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -145,14 +141,10 @@ more_than_block_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
-
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(CounterPid), on_complete_fun(self())
     ),
-
-    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -182,12 +174,10 @@ more_than_block_fetch_test2(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(CounterPid), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(CounterPid), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {ok, DataSize}}, ?TIMEOUT),
@@ -212,13 +202,11 @@ cancel_fetch_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    Ref = prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
-    cancel_fetching(Worker1, Ref1),
+    cancel_fetching(Worker1, Ref),
 
     timer:sleep(?TIMEOUT),
     %% then
@@ -289,17 +277,16 @@ error_open_fun_test(Config) ->
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     RtransferOpts = [ReadFunOpt, WriteFunOpt | ?DEFAULT_RTRANSFER_OPTS],
-
     RtransferOpts2 =
         change_rtransfer_opt({open_fun, {error, test_error}}, RtransferOpts),
 
     %% when
-    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts2]]),
-    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    prepare_rtransfer(
+        {Worker1, [[get_binding(Worker1) | RtransferOpts2]]},
+        {Worker2, [[get_binding(Worker2) | RtransferOpts2]]},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error,{storage,_}}}, ?TIMEOUT).
@@ -316,12 +303,12 @@ error_read_fun_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts1]]),
-    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    prepare_rtransfer(
+        {Worker1, [[get_binding(Worker1) | RtransferOpts1]]},
+        {Worker2, [[get_binding(Worker2) | RtransferOpts2]]},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error,{storage,_}}}, ?TIMEOUT).
@@ -339,12 +326,12 @@ error_write_fun_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts1]]),
-    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize
+    prepare_rtransfer(
+        {Worker1, [[get_binding(Worker1) | RtransferOpts1]]},
+        {Worker2, [[get_binding(Worker2) | RtransferOpts2]]},
+        ?TEST_FILE_UUID, ?TEST_OFFSET, DataSize,
+        notify_fun(), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
     ?assertReceivedMatch({on_complete, {error,{storage,_}}}, ?TIMEOUT).
@@ -384,9 +371,11 @@ bad_file_offset_test(Config) ->
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
-    Ref1 = prepare_fetch_request(Worker1, Worker2, ?TEST_FILE_UUID, Offset, DataSize),
+    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts1]]),
+    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
+    Ref1 = prepare_fetch_request(
+        Worker1, Worker2, ?TEST_FILE_UUID, Offset, DataSize
+    ),
     fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
@@ -576,3 +565,11 @@ fetch_data(Node, Ref, NotifyFun, OnCompleteFun) ->
 
 cancel_fetching(Node, Ref) ->
     remote_apply(Node, rtransfer, cancel, [Ref]).
+
+prepare_rtransfer({Worker1, Ropts1}, {Worker2, Ropts2}, FileUUID, Offset, DataSize, NotifyFun, OnCompleteFun) ->
+
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, Ropts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, Ropts2)),
+    Ref = prepare_fetch_request(Worker1, Worker2, FileUUID, Offset, DataSize),
+    fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
+    Ref.
