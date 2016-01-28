@@ -138,7 +138,7 @@ read_should_get_space_id(_) ->
     fslogic_proxyio:read(<<"a">>, <<"FileUuid">>, <<"c">>,
         <<"d">>, 0, 10),
 
-    ?_assert(meck:called(fslogic_spaces, get_space, [{uuid, <<"FileUuid">>}])).
+    ?_assert(meck:called(fslogic_spaces, get_space, [{uuid, <<"FileUuid">>}, <<"UserId">>])).
 
 
 read_should_create_storage_file_manager_handle(_) ->
@@ -261,7 +261,7 @@ start() ->
     meck:expect(session, get, 1, {ok,
         #document{value = #session{identity = #identity{user_id = <<"UserId">>}}}}),
 
-    meck:expect(fslogic_spaces, get_space, 2, {ok, ?SPACE_ID}),
+    meck:expect(fslogic_spaces, get_space, 2, {ok, #document{key = ?SPACE_ID}}),
 
     ok.
 
