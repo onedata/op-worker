@@ -125,7 +125,8 @@ read_dir(CTX, File, Offset, Size) ->
                                 {ok, 0} ->
                                     #child_link{uuid = UUID, name = Name};
                                 {ok, Len} ->
-                                    #child_link{uuid = UUID, name = <<Name/binary, "#", Id:Len/binary>>}
+                                    #child_link{uuid = UUID,name = <<Name/binary,
+                                        ?SPACE_NAME_ID_SEPARATOR, Id:Len/binary>>}
                             end
                         end, Spaces);
                     false ->

@@ -122,26 +122,24 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
             end, SpaceIds)
     end,
 
-    Result = case binary:split(SpaceName, <<"#">>, [global]) of
-        [Name] ->
-            lists:filter(fun(#document{value = #space_details{name = SName}}) ->
-                Name =:= SName
-            end, Spaces);
-        [_ | _] = Parts ->
-            [PartId | NameParts] = lists:reverse(Parts),
-            PartIdLen = size(PartId),
-            Name = binary_join(lists:reverse(NameParts), <<"#">>),
-            lists:filter(fun(#document{value = #space_details{id = Id, name = SName}}) ->
-                Name =:= SName andalso binary:longest_common_prefix([PartId, Id]) =:= PartIdLen
-            end, Spaces)
-    end,
+    Len = size(SpaceName),
+    MatchedSpacesIds = lists:filtermap(fun
+        (#document{value = #space_details{id = Id, name = Name}}) ->
+            CommonPrefixLen = binary:longest_common_prefix([
+                SpaceName,
+                <<Name/binary, ?SPACE_NAME_ID_SEPARATOR, Id/binary>>
+            ]),
+            case CommonPrefixLen of
+                Len -> {true, Id};
+                _ -> false
+            end
+    end, Spaces),
 
-    case Result of
+    case MatchedSpacesIds of
         [] ->
             throw(?ENOENT);
-        [#document{value = #space_details{id = SpaceId}}] ->
-            Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens]),
-            {path, Path}
+        [SpaceId] ->
+            {path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
     end;
 get_canonical_file_entry(Ctx, Tokens) ->
     {ok, DefaultSpaceId} = fslogic_spaces:get_default_space_id(Ctx),
