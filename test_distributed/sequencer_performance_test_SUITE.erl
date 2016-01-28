@@ -64,6 +64,7 @@ all() -> [
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?MSG_NUM(10), ?MSG_ORD(reverse)]},
     {description, "Check whether sequencer stream forwards messages in right order."},
     ?SEQ_CFG(small_msg_norm_ord, "Small number of messages in the right order", 100, normal),
@@ -116,6 +117,7 @@ route_message_should_forward_messages_in_right_order(Config) ->
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?MSG_NUM(10), ?STM_NUM(5)]},
     {description, "Check whether messages are forwarded in right order for each "
     "stream despite of worker routing the message."},

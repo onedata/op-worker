@@ -85,6 +85,7 @@ all() -> [
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CTR_THR(5), ?EVT_NUM(20), ?EVT_SIZE(10)]},
     {description, "Check whether events for the same file are properly aggregated."},
     {config, [{name, small_counter_threshold},
@@ -149,6 +150,7 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CTR_THR(10), ?EVT_NUM(1000), ?EVT_SIZE(10), ?FILE_NUM(2)]},
     {description, "Check whether events for different files are properly aggregated."},
     {config, [{name, small_files_number},
@@ -223,6 +225,7 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CTR_THR(5), ?EVT_NUM(20)]},
     {description, "Check whether event stream executes handlers when events number "
     "exceeds counter threshold."},
@@ -278,6 +281,7 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?SIZE_THR(100), ?EVT_NUM(20), ?EVT_SIZE(10)]},
     {description, "Check whether event stream executes handlers when summary events size "
     "exceeds size threshold."},
@@ -337,6 +341,7 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?SUB_NUM(2), ?EVT_NUM(1000)]},
     {description, "Check whether multiple subscriptions are properly processed."},
     {config, [{name, small_subs_num},
@@ -406,6 +411,7 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CLI_NUM(3), ?CTR_THR(5), ?EVT_NUM(1000)]},
     {description, "Check whether event stream executes handlers for multiple clients."},
     {config, [{name, small_client_number},

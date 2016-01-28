@@ -35,6 +35,7 @@ all() ->
     [basic_operations_test, rename_test].
 
 -define(REPEATS, 100).
+-define(SUCCESS_RATE, 99).
 
 %%%===================================================================
 %%% Test functions
@@ -42,6 +43,7 @@ all() ->
 
 -performance([
     {repeats, ?REPEATS},
+    {success_rate, ?SUCCESS_RATE},
     {description, "Performs operations on file meta model"},
     {config, [{name, basic_config}, {description, "Basic config for test"}]}
 ]).
