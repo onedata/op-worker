@@ -25,6 +25,10 @@
 namespace one {
 namespace helpers {
 
+/**
+* The PosixHelperCTX class represents context for all POSIX compliant helpers and
+* its object is passed to all helper functions.
+*/
 class PosixHelperCTX : public IStorageHelperCTX {
 public:
     ~PosixHelperCTX();
@@ -47,14 +51,14 @@ public:
     int fh = -1;
 
 private:
-    static const std::map<IStorageHelperCTX::Flag, int> openFlagTranslation;
-    static const std::map<IStorageHelperCTX::Flag, int> openModeTranslation;
-    static const std::map<IStorageHelperCTX::Flag, int> fileTypeTranslation;
+    static const std::map<IStorageHelperCTX::Flag, int> s_openFlagTranslation;
+    static const std::map<IStorageHelperCTX::Flag, int> s_openModeTranslation;
+    static const std::map<IStorageHelperCTX::Flag, int> s_fileTypeTranslation;
 };
 
 /**
- * The DirectIOHelper class
- * Storage helper used to access files on mounted as local filesystem.
+ * The DirectIOHelper class provides access to files on mounted as local
+ * filesystem.
  */
 class DirectIOHelper : public IStorageHelper {
 public:
@@ -199,7 +203,7 @@ protected:
 
 private:
     boost::filesystem::path root(const boost::filesystem::path &path);
-    std::shared_ptr<PosixHelperCTX> getCTX(CTXPtr rawCtx) const;
+    std::shared_ptr<PosixHelperCTX> getCTX(CTXPtr rawCTX) const;
 
     const boost::filesystem::path m_rootPath;
     asio::io_service &m_workerService;
