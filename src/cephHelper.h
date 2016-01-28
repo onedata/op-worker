@@ -20,8 +20,7 @@ namespace helpers {
 
 /**
 * The CephHelperCTX class represents context for Ceph helpers and its object is
-* passed
-* to all helper functions.
+* passed to all helper functions.
 */
 class CephHelperCTX : public IStorageHelperCTX {
 public:
@@ -43,7 +42,7 @@ public:
 
     /**
      * Sets user context.
-     * @param args Map with parameters required to set user context. Is should
+     * @param args Map with parameters required to set user context. It should
      * contain 'user_name' and 'key' values.
      */
     void setUserCTX(std::unordered_map<std::string, std::string> args);
@@ -75,8 +74,8 @@ public:
 
     CTXPtr createCTX();
 
-    void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
-        std::vector<Flag> flags, GeneralCallback<int> callback)
+    void ash_open(CTXPtr ctx, const boost::filesystem::path &p, FlagsSet flags,
+        GeneralCallback<int> callback)
     {
         callback(0, SUCCESS_CODE);
     }
@@ -95,7 +94,7 @@ public:
         VoidCallback callback);
 
     void ash_mknod(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
-        std::vector<Flag> flags, dev_t rdev, VoidCallback callback)
+        FlagsSet flags, dev_t rdev, VoidCallback callback)
     {
         callback(SUCCESS_CODE);
     }
