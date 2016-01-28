@@ -85,6 +85,7 @@ all() -> [
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CTR_THR(5), ?EVT_NUM(20), ?EVT_SIZE(10)]},
     {description, "Check whether events for the same file are properly aggregated."},
     {config, [{name, small_counter_threshold},
@@ -142,13 +143,14 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, {event_handler, []}),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CTR_THR(10), ?EVT_NUM(1000), ?EVT_SIZE(10), ?FILE_NUM(2)]},
     {description, "Check whether events for different files are properly aggregated."},
     {config, [{name, small_files_number},
@@ -216,13 +218,14 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, {event_handler, []}),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CTR_THR(5), ?EVT_NUM(20)]},
     {description, "Check whether event stream executes handlers when events number "
     "exceeds counter threshold."},
@@ -271,13 +274,14 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
         end, lists:seq(1, EvtNum div CtrThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, event_handler),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?SIZE_THR(100), ?EVT_NUM(20), ?EVT_SIZE(10)]},
     {description, "Check whether event stream executes handlers when summary events size "
     "exceeds size threshold."},
@@ -330,13 +334,14 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
         end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, event_handler),
 
     [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
         evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?SUB_NUM(2), ?EVT_NUM(1000)]},
     {description, "Check whether multiple subscriptions are properly processed."},
     {config, [{name, small_subs_num},
@@ -399,13 +404,14 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     end, FileUuids),
 
     lists:foreach(fun(SubId) ->
-        unsubscribe(Worker, SubId)
+        unsubscribe(Worker, SubId, {event_handler, []})
     end, SubIds),
 
     ok.
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?CLI_NUM(3), ?CTR_THR(5), ?EVT_NUM(1000)]},
     {description, "Check whether event stream executes handlers for multiple clients."},
     {config, [{name, small_client_number},
@@ -464,7 +470,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
         end, SessIds)
     end),
 
-    unsubscribe(Worker, SubId),
+    unsubscribe(Worker, SubId, event_handler),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, SessIds),
@@ -611,10 +617,12 @@ subscribe(Worker, EmTime, AdmRule, EmRule, TrRule, Handler) ->
 %% Removes event subscription.
 %% @end
 %%--------------------------------------------------------------------
--spec unsubscribe(Worker :: node(), SubId :: subscription:id()) ->
+-spec unsubscribe(Worker :: node(), SubId :: subscription:id(), HandlerMsg :: term()) ->
     ok.
-unsubscribe(Worker, SubId) ->
-    ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])).
+unsubscribe(Worker, SubId, HandlerMsg) ->
+    ?assertEqual(ok, rpc:call(Worker, event, unsubscribe, [SubId])),
+    ?assertReceivedMatch(HandlerMsg, ?TIMEOUT),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @private
