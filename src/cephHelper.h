@@ -76,7 +76,7 @@ public:
     CTXPtr createCTX();
 
     void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
-        GeneralCallback<int> callback)
+        std::vector<Flag> flags, GeneralCallback<int> callback)
     {
         callback(0, SUCCESS_CODE);
     }
@@ -95,7 +95,7 @@ public:
         VoidCallback callback);
 
     void ash_mknod(CTXPtr ctx, const boost::filesystem::path &p, mode_t mode,
-        dev_t rdev, VoidCallback callback)
+        std::vector<Flag> flags, dev_t rdev, VoidCallback callback)
     {
         callback(SUCCESS_CODE);
     }
