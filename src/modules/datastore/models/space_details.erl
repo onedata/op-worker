@@ -16,7 +16,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
 %%%===================================================================
@@ -65,11 +65,20 @@ get(Key) ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Key),
             {ok, #space_details{} = SpaceDetails} = gr_spaces:get_details(provider, SpaceId),
             Doc = #document{key = Key, value = SpaceDetails},
-            %% {ok, _} = save(Doc), @todo Uncomment when cache invalidation mechanism will be implemented
+            {ok, _} = save(Doc),
             {ok, Doc};
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -96,7 +105,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_details_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(space_details_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc

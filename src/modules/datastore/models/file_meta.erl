@@ -491,6 +491,7 @@ setup_onedata_user(UUID) ->
             case exists({uuid, SpaceDirUuid}) of
                 true -> ok;
                 false ->
+                    space_details:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
@@ -676,14 +677,18 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error() | no_return().
-gen_path2(Entry, Acc) ->
-    {ok, #document{} = Doc} = get(Entry),
+gen_path2(Entry, Tokens) ->
+    SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
+    {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = get(Entry),
     case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
         {ok, {?ROOT_DIR_UUID, _}} ->
-            Tokens = [Token || #document{value = #file_meta{name = Token}} <- [Doc | Acc]],
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens])};
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
+        {ok, {SpaceBaseDirUUID, _}} ->
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+            {ok, #document{value = #space_details{name = SpaceName}}} = space_details:get(UUID),
+            gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
-            gen_path2({uuid, ParentUUID}, [Doc | Acc])
+            gen_path2({uuid, ParentUUID}, [Name | Tokens])
     end.
 
 %%--------------------------------------------------------------------

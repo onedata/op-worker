@@ -41,14 +41,17 @@ create_test_users_and_spaces(Config) ->
     Space2 = {<<"space_id2">>, <<"space_name2">>},
     Space3 = {<<"space_id3">>, <<"space_name3">>},
     Space4 = {<<"space_id4">>, <<"space_name4">>},
-    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
+    Space5 = {<<"space_id5">>, <<"space_name">>},
+    Space6 = {<<"space_id6">>, <<"space_name">>},
+    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4, Space5, Space6]),
 
     User1 = {1, [Space1, Space2, Space3, Space4]},
     User2 = {2, [Space2, Space3, Space4]},
     User3 = {3, [Space3, Space4]},
     User4 = {4, [Space4]},
+    User5 = {5, [Space5, Space6]},
 
-    initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
+    initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config).
 
 %%--------------------------------------------------------------------
 %% @doc Cleanup and unmocking related with users and spaces
@@ -249,7 +252,7 @@ gr_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_expect(Workers, gr_spaces, get_details,
         fun(provider, SpaceId) ->
             {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
-            {ok, #space_details{name = SpaceName}}
+            {ok, #space_details{id = SpaceId, name = SpaceName}}
         end
     ).
 
