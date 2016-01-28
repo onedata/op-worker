@@ -264,7 +264,9 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::string &var)
 }
 inline TERM make(ErlNifEnv *env, const std::string &var)
 {
-    return TERM(enif_make_string_len(env, &(*(var.begin())), var.size(), ERL_NIF_LATIN1));
+    nifpp::binary bin{var.size()};
+    std::memcpy(bin.data, var.data(), var.size());
+    return nifpp::make(env, bin);
 }
 
 

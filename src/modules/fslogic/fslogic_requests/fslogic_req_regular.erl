@@ -33,8 +33,8 @@
 -spec truncate(fslogic_worker:ctx(), File :: fslogic_worker:file(), Size :: non_neg_integer()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{write, 2}]).
-truncate(#fslogic_ctx{session_id = SessionId}, Entry, Size) ->
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry),
+truncate(#fslogic_ctx{session_id = SessionId} = CTX, Entry, Size) ->
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)),
     Results = lists:map(
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),
@@ -66,14 +66,25 @@ get_helper_params(_Ctx, SpaceId, StorageId, true = _ForceCL) ->
             helper_args = [
                 #helper_arg{key = <<"storage_id">>, value = StorageId},
                 #helper_arg{key = <<"space_id">>, value = SpaceId}]}};
-get_helper_params(_Ctx, _SpaceId, StorageId, false = _ForceCL) ->
+get_helper_params(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}},
+    _SpaceId, StorageId, false = _ForceCL) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
-    {ok, #helper_init{name = Name, args = HelperArgsMap}} = fslogic_storage:select_helper(StorageDoc),
+    {HelperName, HelperArgsMap} = case fslogic_storage:select_helper(StorageDoc) of
+        {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args}} ->
+            {ok, #document{value = #ceph_user{credentials = UserCredentials}}} = ceph_user:get(UserId),
+            {ok, Credentials} = maps:find(StorageId, UserCredentials),
+            {?CEPH_HELPER_NAME, Args#{
+                <<"user_name">> => ceph_user:name(Credentials),
+                <<"key">> => ceph_user:key(Credentials)
+            }};
+        {ok, #helper_init{name = Name, args = Args}} ->
+            {Name, Args}
+    end,
 
     HelperArgs = [#helper_arg{key = K, value = V} || {K, V} <- maps:to_list(HelperArgsMap)],
 
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #helper_params{helper_name = Name, helper_args = HelperArgs}}.
+        fuse_response = #helper_params{helper_name = HelperName, helper_args = HelperArgs}}.
 
 
 %%--------------------------------------------------------------------
@@ -95,7 +106,7 @@ get_file_location(#fslogic_ctx{} = CTX, File, OpenFlags) ->
 
     #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
 
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{
@@ -121,7 +132,8 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, ParentUUID, Name,
             false ->
                 ParentUUID
         end,
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}),
+
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{

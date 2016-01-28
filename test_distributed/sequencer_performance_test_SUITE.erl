@@ -12,7 +12,6 @@
 -module(sequencer_performance_test_SUITE).
 -author("Krzysztof Trzepla").
 
--include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -65,6 +64,7 @@ all() -> [
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?MSG_NUM(10), ?MSG_ORD(reverse)]},
     {description, "Check whether sequencer stream forwards messages in right order."},
     ?SEQ_CFG(small_msg_norm_ord, "Small number of messages in the right order", 100, normal),
@@ -78,8 +78,7 @@ all() -> [
     ?SEQ_CFG(large_msg_rnd_ord, "Large number of messages in the random order", 10000, random)
 ]).
 route_message_should_forward_messages_in_right_order(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     StmId = 1,
     MsgNum = ?config(msg_num, Config),
     MsgOrd = ?config(msg_ord, Config),
@@ -89,6 +88,9 @@ route_message_should_forward_messages_in_right_order(Config) ->
         reverse -> lists:seq(MsgNum - 1, 0, -1);
         random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
     end,
+
+    initializer:remove_pending_messages(),
+    {ok, SessId} = session_setup(Worker),
 
     % Send 'MsgNum' messages in 'MsgOrd' order.
     {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
@@ -108,11 +110,14 @@ route_message_should_forward_messages_in_right_order(Config) ->
         ?assertEqual(SeqNum, MsgStm#message_stream.sequence_number)
     end, lists:zip(lists:seq(0, MsgNum - 1), Msgs)),
 
+    session_teardown(Worker, SessId),
+
     [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
         msg_per_sec(MsgNum, SendUs + RecvUs)].
 
 -performance([
     {repeats, 10},
+    {success_rate, 90},
     {parameters, [?MSG_NUM(10), ?STM_NUM(5)]},
     {description, "Check whether messages are forwarded in right order for each "
     "stream despite of worker routing the message."},
@@ -130,14 +135,16 @@ route_message_should_forward_messages_in_right_order(Config) ->
     ]}
 ]).
 route_message_should_work_for_multiple_streams(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
     StmNum = ?config(stm_num, Config),
 
     Msgs = [#message_stream{sequence_number = SeqNum} ||
         SeqNum <- lists:seq(0, MsgNum - 1)],
     RevSeqNums = lists:seq(MsgNum - 1, 0, -1),
+
+    initializer:remove_pending_messages(),
+    {ok, SessId} = session_setup(Worker),
 
     % Production of 'MsgNum' messages in random order belonging to 'StmsCount'
     % streams. Requests are routed through random workers.
@@ -172,6 +179,8 @@ route_message_should_work_for_multiple_streams(Config) ->
         ?assertEqual(RevSeqNums, maps:get(StmId, MsgsMap))
     end, lists:seq(1, StmNum)),
 
+    session_teardown(Worker, SessId),
+
     [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
         msg_per_sec(MsgNum * StmNum, SendUs + RecvUs)].
 
@@ -186,17 +195,13 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    initializer:remove_pending_messages(),
+    Workers = ?config(op_worker_nodes, Config),
     mock_router(Workers),
     mock_communicator(Workers),
-    {ok, SessId} = session_setup(Worker),
-    [{session_id, SessId} | Config].
+    Config.
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    SessId = ?config(session_id, Config),
-    session_teardown(Worker, SessId),
+    Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, [communicator, router]).
 
 %%%===================================================================
@@ -206,17 +211,18 @@ end_per_testcase(_, Config) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv session_setup(Worker, <<"session_id">>
+%% Creates session document in datastore with random ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"session_id">>).
+    SessId = base64:encode(crypto:rand_bytes(20)),
+    session_setup(Worker, SessId).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session document in datastore.
+%% Creates session document in datastore with given ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id()) ->

@@ -21,7 +21,7 @@
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
-    remove_pending_messages/1, clear_models/2]).
+    remove_pending_messages/1, clear_models/2, space_storage_mock/2]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -212,6 +212,16 @@ teardown_storage(Config) ->
     TmpDir = ?config(storage_dir, Config),
     [Worker | _] = ?config(op_worker_nodes, Config),
     "" = rpc:call(Worker, os, cmd, ["rm -rf " ++ TmpDir]).
+
+%%--------------------------------------------------------------------
+%% @doc Mocks space_storage module, so that it returns default storage for all spaces.
+%%--------------------------------------------------------------------
+-spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
+space_storage_mock(Workers, StorageId) ->
+    test_utils:mock_new(Workers, space_storage),
+    test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
+        {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
+    end).
 
 %%%===================================================================
 %%% Internal functions
