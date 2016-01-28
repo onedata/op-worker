@@ -14,7 +14,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% API
 -export([verify_file_path/1, get_canonical_file_entry/2]).
@@ -112,19 +111,19 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
 
     Spaces = case UserId of
         ?ROOT_USER_ID ->
-            {ok, Docs} = space_details:list(),
+            {ok, Docs} = space_info:list(),
             Docs;
         _ ->
             {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
             lists:map(fun(SpaceId) ->
-                {ok, Doc} = space_details:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                {ok, Doc} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
                 Doc
             end, SpaceIds)
     end,
 
     Len = size(SpaceName),
     MatchedSpacesIds = lists:filtermap(fun
-        (#document{value = #space_details{id = Id, name = Name}}) ->
+        (#document{value = #space_info{id = Id, name = Name}}) ->
             CommonPrefixLen = binary:longest_common_prefix([
                 SpaceName,
                 <<Name/binary, ?SPACE_NAME_ID_SEPARATOR, Id/binary>>

@@ -26,6 +26,7 @@
 -define(SPACES_BASE_DIR_UUID, base64:encode(?SPACES_BASE_DIR_NAME)).
 -define(DIRECTORY_SEPARATOR, "/").
 -define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
+%% Separator between space name and ID used in case of space name clash
 -define(SPACE_NAME_ID_SEPARATOR, "#").
 
 %% Context definition
@@ -34,9 +35,6 @@
     session_id :: session:id(),
     space_id :: file_meta:uuid()
 }).
-
-%% Stub record
--record(space_info, {}).
 
 %% root user definitions
 -define(ROOT_USER_ID, <<"0">>).

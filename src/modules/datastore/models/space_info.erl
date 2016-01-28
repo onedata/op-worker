@@ -8,12 +8,16 @@
 %%% @doc Cache for space details fetched from Global Registry.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_details).
+-module(space_info).
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
+-include_lib("ctool/include/global_registry/gr_spaces.hrl").
+
+%% API
+-export([fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -58,18 +62,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
-        {ok, Doc} ->
-            {ok, Doc};
-        {error, {not_found, _}} ->
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Key),
-            {ok, #space_details{} = SpaceDetails} = gr_spaces:get_details(provider, SpaceId),
-            Doc = #document{key = Key, value = SpaceDetails},
-            {ok, _} = save(Doc),
-            {ok, Doc};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,7 +98,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_details_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(space_info_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -131,3 +124,26 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetches space details from Global Registry and stores them in database.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(Client :: gr_endpoint:client(), SpaceId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+fetch(Client, SpaceId) ->
+    Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    {ok, #space_details{id = Id, name = Name}} = gr_spaces:get_details(Client, SpaceId),
+    case space_info:get(Key) of
+        {ok, #document{value = SpaceInfo} = Doc} ->
+            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
+            {ok, _} = space_info:save(NewDoc),
+            {ok, NewDoc};
+        {error, {not_found, _}} ->
+            Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
+            {ok, _} = space_info:create(Doc),
+            {ok, Doc};
+        {error, Reason} ->
+            {error, Reason}
+    end.

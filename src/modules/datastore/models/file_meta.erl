@@ -491,7 +491,7 @@ setup_onedata_user(UUID) ->
             case exists({uuid, SpaceDirUuid}) of
                 true -> ok;
                 false ->
-                    space_details:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                    space_info:fetch(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
@@ -684,8 +684,7 @@ gen_path2(Entry, Tokens) ->
         {ok, {?ROOT_DIR_UUID, _}} ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, {SpaceBaseDirUUID, _}} ->
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
-            {ok, #document{value = #space_details{name = SpaceName}}} = space_details:get(UUID),
+            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
             gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
             gen_path2({uuid, ParentUUID}, [Name | Tokens])

@@ -101,27 +101,22 @@ read_dir(CTX, File, Offset, Size) ->
                     true ->
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
                         Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_details:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                            {ok, Space} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
                             Space
                         end, SpacesIdsChunk),
 
                         SpaceUuidByName = lists:foldl(fun(Space, Map) ->
-                            #document{value = #space_details{id = Id, name = Name}} = Space,
-                            case maps:find(Name, Map) of
-                                {ok, Ids} ->
-                                    maps:put(Name, [Id | Ids], Map);
-                                error ->
-                                    maps:put(Name, [Id], Map)
-                            end
+                            #document{value = #space_info{id = Id, name = Name}} = Space,
+                            maps:put(Name, [Id | maps:get(Name, Map, [])], Map)
                         end, #{}, Spaces),
 
-                        MinDiffPrefPrefLenByName = maps:map(fun
+                        MinDiffPrefLenByName = maps:map(fun
                             (_, [_]) -> 0;
                             (_, UUIDs) -> binary:longest_common_prefix(UUIDs) + 1
                         end, SpaceUuidByName),
 
-                        lists:map(fun(#document{key = UUID, value = #space_details{id = Id, name = Name}}) ->
-                            case maps:find(Name, MinDiffPrefPrefLenByName) of
+                        lists:map(fun(#document{key = UUID, value = #space_info{id = Id, name = Name}}) ->
+                            case maps:find(Name, MinDiffPrefLenByName) of
                                 {ok, 0} ->
                                     #child_link{uuid = UUID, name = Name};
                                 {ok, Len} ->

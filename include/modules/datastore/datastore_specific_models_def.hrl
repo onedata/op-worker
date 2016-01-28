@@ -14,7 +14,6 @@
 
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% Identity containing user_id
 -record(identity, {
@@ -81,6 +80,12 @@
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     size = 0 :: non_neg_integer() | undefined
+}).
+
+%% Model for caching space details fetched from Global Registry
+-record(space_info, {
+    id :: binary(),
+    name :: binary()
 }).
 
 %% Model that maps space to storage
