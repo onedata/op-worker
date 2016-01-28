@@ -91,7 +91,6 @@ handle({reemit, Msg}) ->
     dbsync_proto:reemit(Msg);
 
 handle(bcast_status) ->
-    ?info("ZOMFG"),
     timer:send_after(timer:seconds(15), dbsync_worker, {timer, bcast_status}),
     catch bcast_status();
 
@@ -102,15 +101,15 @@ handle(requested_bcast_status) ->
 handle({QueueKey, {cleanup, Until}}) ->
     queue_remove(QueueKey, Until);
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}) ->
-    ?info("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
+    ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
     case is_file_scope(Doc) of
         true ->
             case get_space_id(Doc) of
                 {ok, <<"spaces">>} ->
-                    ?info("Skipping1 doc ~p", [Doc]),
+                    ?debug("Skipping1 doc ~p", [Doc]),
                     skip;
                 {ok, <<"">>} ->
-                    ?info("Skipping2 doc ~p", [Doc]),
+                    ?debug("Skipping2 doc ~p", [Doc]),
                     skip;
                 {ok, SpaceId} ->
 %%                    ?info("Document ~p assigned to space ~p", [Key, SpaceId]),
@@ -194,7 +193,7 @@ queue_remove(QueueKey, Until) ->
                             B#batch{until = Until}
                         end,
                     BatchMap),
-                    ?info("Removing queue wuth Batch ~p", [NewBatchMap]),
+                    ?debug("Removing queue with Batch ~p", [NewBatchMap]),
                     Q#queue{removed = true, batch_map = NewBatchMap}
             end
         end).
@@ -226,7 +225,7 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Sin
             do_request_changes(FromProvider, CurrentUntil, Since);
         false ->
             ok = apply_changes(SpaceId, Changes),
-            ?info("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
+            ?debug("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
             update_current_seq(FromProvider, SpaceId, Until)
     end.
 

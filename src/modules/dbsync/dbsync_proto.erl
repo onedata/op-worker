@@ -33,14 +33,14 @@ send_batch(_, _, #batch{since = X, until = X}) ->
     skip;
 send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("[ DBSync ] Sending batch to all providers: ~p", [Batch]),
-    ?info("Processing space ~p ~p", [SpaceId, Changes]),
+    ?debug("Processing space ~p ~p", [SpaceId, Changes]),
     ToSend = #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
                 changes_encoded = dbsync_utils:encode_term(Changes)},
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
     send_tree_broadcast(SpaceId, Providers, ToSend, 3),
     ok;
 send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
-    ?info("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
+    ?debug("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
 %%    SpaceIds = dbsync_utils:get_spaces_for_provider(ProviderId),
 
     send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
@@ -123,38 +123,6 @@ do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{depth = Depth} = BaseR
             ?error("Unable to send tree message to ~p due to: ~p", [PushTo, Reason]),
             do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{} = BaseRequest, Attempts)
     end;
-%%    SyncRequestData = dbsync_pb:encode_tree_broadcast(SyncRequest),
-%%    MsgId = provider_proxy_con:get_msg_id(),
-%%    {AnswerDecoderName, AnswerType} = {rtcore, atom},
-%%
-%%
-%%    RTRequest = #rtrequest{answer_decoder_name = a2l(AnswerDecoderName), answer_type = a2l(AnswerType), input = SyncRequestData, message_decoder_name = a2l(dbsync),
-%%        message_id = MsgId, message_type = a2l(utils:record_type(SyncRequest)), module_name = a2l(dbsync), protocol_version = 1, synch = true},
-%%    RTRequestData = iolist_to_binary(rtcore_pb:encode_rtrequest(RTRequest)),
-%%
-%%    URL = dbsync_utils:get_provider_url(PushTo),
-%%    Timeout = 1000,
-%%    provider_proxy_con:send({URL, <<"oneprovider">>}, MsgId, RTRequestData),
-%%    receive
-%%        {response, MsgId, AnswerStatus, WorkerAnswer} ->
-%%            provider_proxy_con:report_ack({URL, <<"oneprovider">>}),
-%%            ?debug("Answer for inter-provider pull request: ~p ~p", [AnswerStatus, WorkerAnswer]),
-%%            case AnswerStatus of
-%%                ?VOK ->
-%%                    #atom{value = RValue} = erlang:apply(pb_module(AnswerDecoderName), decoder_method(AnswerType), [WorkerAnswer]),
-%%                    case RValue of
-%%                        ?VOK -> ok;
-%%                        _ -> throw(RValue)
-%%                    end;
-%%                InvalidStatus ->
-%%                    ?error("Cannot send message ~p due to invalid answer status: ~p", [get_message_type(SyncRequest), InvalidStatus]),
-%%                    do_emit_tree_broadcast(SyncWith, Request, BaseRequest, Attempts - 1)
-%%            end
-%%    after Timeout ->
-%%        provider_proxy_con:report_timeout({URL, <<"oneprovider">>}),
-%%        do_emit_tree_broadcast(SyncWith, Request, BaseRequest, Attempts - 1)
-%%    end;
-
 do_emit_tree_broadcast(_SyncWith, _Request, _BaseRequest, 0) ->
     {error, unable_to_connect}.
 
