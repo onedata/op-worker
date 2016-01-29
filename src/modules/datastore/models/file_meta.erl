@@ -19,7 +19,6 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% How many processes shall be process single set_scope operation.
 -define(SET_SCOPER_WORKERS, 25).
@@ -483,14 +482,13 @@ setup_onedata_user(UUID) ->
             case exists({uuid, SpaceDirUuid}) of
                 true -> ok;
                 false ->
-                    {ok, #space_details{name = SpaceName}} =
-                        gr_spaces:get_details(provider, SpaceId),
+                    space_info:fetch(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
-                                name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                                is_scope = true
+                                name = SpaceId, type = ?DIRECTORY_TYPE,
+                                mode = 8#1770, mtime = CTime, atime = CTime,
+                                ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                             }})
             end
         end, Spaces),
@@ -713,14 +711,17 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error() | no_return().
-gen_path2(Entry, Acc) ->
-    {ok, #document{} = Doc} = get(Entry),
+gen_path2(Entry, Tokens) ->
+    SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
+    {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = get(Entry),
     case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
         {ok, {?ROOT_DIR_UUID, _}} ->
-            Tokens = [Token || #document{value = #file_meta{name = Token}} <- [Doc | Acc]],
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens])};
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
+        {ok, {SpaceBaseDirUUID, _}} ->
+            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
+            gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
-            gen_path2({uuid, ParentUUID}, [Doc | Acc])
+            gen_path2({uuid, ParentUUID}, [Name | Tokens])
     end.
 
 

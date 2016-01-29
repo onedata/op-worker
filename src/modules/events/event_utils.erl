@@ -95,9 +95,9 @@ send_subscription_handler() ->
         (#subscription{id = SubId} = Sub, SessId, fuse) ->
             {ok, StmId} = sequencer:open_stream(SessId),
             sequencer:send_message(Sub, StmId, SessId),
-            #{subsctipion_id => SubId, stream_id => StmId, session_id => SessId};
+            #{subscription_id => SubId, stream_id => StmId, session_id => SessId};
         (#subscription{id = SubId}, SessId, _) ->
-            #{subsctipion_id => SubId, session_id => SessId}
+            #{subscription_id => SubId, session_id => SessId}
     end.
 
 %%--------------------------------------------------------------------
@@ -109,7 +109,7 @@ send_subscription_handler() ->
     Handler :: event_stream:terminate_handler().
 send_subscription_cancellation_handler() ->
     fun
-        (#{subsctipion_id := SubId, stream_id := StmId, session_id := SessId}) ->
+        (#{subscription_id := SubId, stream_id := StmId, session_id := SessId}) ->
             sequencer:send_message(#subscription_cancellation{id = SubId}, StmId, SessId),
             sequencer:close_stream(StmId, SessId);
         (_) ->

@@ -217,8 +217,6 @@ handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
 handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
-handle_fuse_request(Ctx, #unlink{uuid = UUID}) ->
-    fslogic_req_generic:delete(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
     fslogic_req_generic:get_xattr(Ctx, {uuid, UUID}, XattrName);
 handle_fuse_request(Ctx, #set_xattr{uuid = UUID, xattr = Xattr}) ->

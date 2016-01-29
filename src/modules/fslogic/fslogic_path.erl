@@ -13,7 +13,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% API
 -export([verify_file_path/1, get_canonical_file_entry/2]).
@@ -98,7 +98,7 @@ binary_join(List, Sep) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_canonical_file_entry(Ctx :: fslogic_worker:ctx(), Tokens :: [file_meta:path()]) ->
-    FileEntry :: file_meta:entry().
+    FileEntry :: file_meta:entry() | no_return().
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {uuid, fslogic_uuid:default_space_uuid(UserId)};
@@ -106,16 +106,43 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
     UserId = fslogic_context:get_user_id(Ctx),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME]),
     {path, Path};
-get_canonical_file_entry(_Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]) ->
-    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME | Tokens]),
-    {path, Path};
-get_canonical_file_entry(Ctx, Tokens) ->
+get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
-        onedata_user:get(UserId),
-    {ok, #document{value = #file_meta{name = DefaultSpaceName}}} = file_meta:get_space_dir(DefaultSpaceId),
-    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME,
-        DefaultSpaceName | Tokens]),
+
+    Spaces = case UserId of
+        ?ROOT_USER_ID ->
+            {ok, Docs} = space_info:list(),
+            Docs;
+        _ ->
+            {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
+            lists:map(fun(SpaceId) ->
+                {ok, Doc} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                Doc
+            end, SpaceIds)
+    end,
+
+    Len = size(SpaceName),
+    MatchedSpacesIds = lists:filtermap(fun
+        (#document{value = #space_info{id = Id, name = Name}}) ->
+            CommonPrefixLen = binary:longest_common_prefix([
+                SpaceName,
+                <<Name/binary, ?SPACE_NAME_ID_SEPARATOR, Id/binary>>
+            ]),
+            case CommonPrefixLen of
+                Len -> {true, Id};
+                _ -> false
+            end
+    end, Spaces),
+
+    case MatchedSpacesIds of
+        [] ->
+            throw(?ENOENT);
+        [SpaceId] ->
+            {path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
+    end;
+get_canonical_file_entry(Ctx, Tokens) ->
+    {ok, DefaultSpaceId} = fslogic_spaces:get_default_space_id(Ctx),
+    Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, DefaultSpaceId | Tokens]),
     {path, Path}.
 
 %%--------------------------------------------------------------------

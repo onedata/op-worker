@@ -98,15 +98,35 @@ read_dir(CTX, File, Offset, Size) ->
         SpacesKey ->
             {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
                 onedata_user:get(UserId),
-            SpaceRes = [file_meta:get_space_dir(SpaceId) || SpaceId <- SpacesIds],
 
             Children =
                 case Offset < length(SpacesIds) of
                     true ->
-                        SpaceLinks = [#child_link{uuid = SpaceDirUuid, name = SpaceName} ||
-                            {ok, #document{key = SpaceDirUuid, value = #file_meta{name = SpaceName}}} <- SpaceRes],
+                        SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
+                        Spaces = lists:map(fun(SpaceId) ->
+                            {ok, Space} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                            Space
+                        end, SpacesIdsChunk),
 
-                        lists:sublist(SpaceLinks, Offset + 1, Size);
+                        SpaceUuidByName = lists:foldl(fun(Space, Map) ->
+                            #document{value = #space_info{id = Id, name = Name}} = Space,
+                            maps:put(Name, [Id | maps:get(Name, Map, [])], Map)
+                        end, #{}, Spaces),
+
+                        MinDiffPrefLenByName = maps:map(fun
+                            (_, [_]) -> 0;
+                            (_, UUIDs) -> binary:longest_common_prefix(UUIDs) + 1
+                        end, SpaceUuidByName),
+
+                        lists:map(fun(#document{key = UUID, value = #space_info{id = Id, name = Name}}) ->
+                            case maps:find(Name, MinDiffPrefLenByName) of
+                                {ok, 0} ->
+                                    #child_link{uuid = UUID, name = Name};
+                                {ok, Len} ->
+                                    #child_link{uuid = UUID,name = <<Name/binary,
+                                        ?SPACE_NAME_ID_SEPARATOR, Id:Len/binary>>}
+                            end
+                        end, Spaces);
                     false ->
                         []
                 end,
