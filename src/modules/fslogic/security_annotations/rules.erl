@@ -185,7 +185,7 @@ validate_posix_access(AccessType, #document{value = #file_meta{uid = OwnerId, mo
 %% @doc Checks whether given user has permission to see given scope file.
 %%      This function is always called before validate_posix_access/3 and shall handle all special cases.
 %%--------------------------------------------------------------------
--spec validate_scope_access(FileDoc :: file_meta:document(), UserId :: onedata_user:id()) -> ok | no_return().
+-spec validate_scope_access(FileDoc :: datastore:document(), UserId :: onedata_user:id()) -> ok | no_return().
 validate_scope_access(FileDoc, UserId) ->
     case file_meta:is_root_dir(FileDoc)
         orelse file_meta:is_spaces_base_dir(FileDoc)
