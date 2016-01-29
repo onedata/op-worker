@@ -43,6 +43,13 @@ parser.add_argument(
     dest='src')
 
 parser.add_argument(
+    '--no-cache',
+    action='store_false',
+    default=True,
+    help='disable mounting /tmp/ccache and /tmp/beamcache',
+    dest='mount_cache')
+
+parser.add_argument(
     '-k', '--keys',
     action='store',
     default=expanduser("~/.ssh"),
@@ -134,6 +141,8 @@ command = command.format(
 
 reflect = [(args.src, 'rw')]
 reflect.extend(zip(args.reflect, ['rw'] * len(args.reflect)))
+if args.mount_cache:
+    reflect.extend([('/tmp/ccache', 'rw'), ('/tmp/beamcache', 'rw')])
 
 split_envs = [e.split('=') for e in args.envs]
 envs = {kv[0]: kv[1] for kv in split_envs}
