@@ -83,6 +83,6 @@ event_stream_spec(SessType) ->
         start => {event_stream, start_link, [SessType]},
         restart => transient,
         shutdown => timer:seconds(10),
-        type =>worker,
+        type => worker,
         modules => [event_stream]
     }.

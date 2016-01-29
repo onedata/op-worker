@@ -90,7 +90,7 @@ event_stream_sup_spec(SessType) ->
         start => {event_stream_sup, start_link, [SessType]},
         restart => permanent,
         shutdown => infinity,
-        type =>supervisor,
+        type => supervisor,
         modules => [event_stream_sup]
     }.
 
@@ -108,6 +108,6 @@ event_manager_spec(EvtManSup, SessId) ->
         start => {event_manager, start_link, [EvtManSup, SessId]},
         restart => transient,
         shutdown => timer:seconds(10),
-        type =>worker,
+        type => worker,
         modules => [event_manager]
     }.
