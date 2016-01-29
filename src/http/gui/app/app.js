@@ -15,14 +15,15 @@ App = Ember.Application.extend({
 
 loadInitializers(App, config.modulePrefix);
 
+// If the app is started in development mode, load livereload script.
 if (config.environment === 'development') {
-  console.log("Loading livereload script");
   var head = document.getElementsByTagName('head')[0];
   var script = document.createElement('script');
   script.type = 'text/javascript';
   script.src = 'https://' + (location.host || 'localhost').split(':')[0] +
     ':35729/livereload.js?snipver=1';
   head.appendChild(script);
+  console.log("Loaded livereload script");
 }
 
 export default App;

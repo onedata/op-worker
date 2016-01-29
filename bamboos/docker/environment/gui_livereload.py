@@ -34,7 +34,6 @@ def run(container_id, gui_config_file, docker_src_dir, docker_bin_dir):
     Runs automatic rebuilding of project and livereload of web pages when
     their code changes.
     """
-    print(gui_config_file)
     watch_changes(container_id, gui_config_file, docker_src_dir, docker_bin_dir)
     start_livereload(container_id, gui_config_file, docker_bin_dir)
 
@@ -46,10 +45,8 @@ def watch_changes(container_id, gui_config_file, docker_src_dir,
     rebuilds the project when something changes.
     """
     source_gui_dir = _parse_erl_config(gui_config_file, 'source_gui_dir')
-    print(source_gui_dir)
     source_gui_dir = os.path.join(docker_src_dir, source_gui_dir)
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
-    print(release_gui_dir)
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
 
     buildnwatch_command = '''. /usr/lib/nvm/nvm.sh
@@ -73,7 +70,8 @@ def start_livereload(container_id, gui_config_file,
     """
     Starts a process on given docker that monitors changes in GUI release and
     forces a page reload using websocket connection to client. The WS connection
-    is created when livereload script is injected on the page.
+    is created when livereload script is injected on the page. This must be
+    done from the Ember client app.
     """
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
@@ -102,7 +100,7 @@ node gui_livereload.js .'''
 def _parse_erl_config(file, param_name):
     """
     Parses an erlang-style config file finding a tuple by key and extracting
-    the value. the tuple must be in form {key, "value"} (and in one line).
+    the value. The tuple must be in form {key, "value"} (and in one line).
     """
     file = open(file, 'r')
     file_content = file.read()
