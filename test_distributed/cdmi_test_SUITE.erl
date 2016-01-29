@@ -1548,9 +1548,6 @@ init_per_testcase(choose_adequate_handler, Config) ->
 init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
-    Workers = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
-    initializer:space_storage_mock(Workers, StorageId),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     mock_user_auth(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -1560,11 +1557,9 @@ end_per_testcase(choose_adequate_handler, Config) ->
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     unmock_user_auth(Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, space_storage),
     hackney:stop(),
     application:stop(ssl2).
 

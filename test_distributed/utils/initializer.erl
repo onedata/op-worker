@@ -37,6 +37,10 @@
 -spec create_test_users_and_spaces(Config :: list()) -> list().
 create_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    StorageId = ?config(storage_id, Config),
+
+    test_node_starter:load_modules(Workers, [?MODULE]),
+    initializer:space_storage_mock(Workers, StorageId),
 
     Space1 = {<<"space_id1">>, <<"space_name1">>},
     Space2 = {<<"space_id2">>, <<"space_name2">>},
@@ -70,7 +74,7 @@ clean_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     initializer:teardown_sesion(Worker, Config),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups, space_storage]).
 
 %%--------------------------------------------------------------------
 %% @doc

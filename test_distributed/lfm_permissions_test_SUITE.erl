@@ -1022,15 +1022,9 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
-    initializer:space_storage_mock(Workers, StorageId),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, space_storage).
-
+    initializer:clean_test_users_and_spaces(Config).
