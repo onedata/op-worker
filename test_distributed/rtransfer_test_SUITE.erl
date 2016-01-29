@@ -35,7 +35,8 @@ all() ->
         exact_block_size_fetch_test,
         more_than_block_fetch_test,
         more_than_block_fetch_test2,
-        cancel_fetch_test,
+        %% TODO - VFS-1573
+        %% cancel_fetch_test,
         many_requests_test,
         many_requests_to_one_file,
         error_open_fun_test,
@@ -363,17 +364,19 @@ request_bigger_than_file_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     %% given
-    DataSize = ?TEST_BLOCK_SIZE,
+    DataSize = 8 * ?TEST_BLOCK_SIZE,
     %% offset is bigger than DataSize
-    Offset = DataSize,
-%%     Data = generate_binary(DataSize),
-    DataCounterPid = spawn(?MODULE, data_counter, [DataSize]),
+    Offset = DataSize div 3,
+    SizeToFetch = DataSize - Offset,
+    DataCounterPid = spawn(?MODULE, data_counter, [SizeToFetch]),
 
     WriteFunOpt = {write_fun,
-        fun(_Handle, _Offset, _Data) ->
-            {ok, ?FILE_HANDLE2, byte_size(_Data) }
+        fun(_Handle, _Offset, Data) ->
+            {ok, ?FILE_HANDLE2, byte_size(Data) }
         end
     },
+    %% read_fun that will simulate subsequent reads from file
+    %% last read will return <<"">> when it reaches end of file
     ReadFunOpt = {read_fun,
         fun(_Handle, _Offset, Size) ->
             DataCounterPid ! {self(), request, Size},
@@ -384,7 +387,6 @@ request_bigger_than_file_test(Config) ->
         end
     },
 
-%%     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, <<"">>}),
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
@@ -393,12 +395,7 @@ request_bigger_than_file_test(Config) ->
         ?TEST_FILE_UUID, Offset, DataSize, notify_fun(), on_complete_fun(self())
     ),
 
-%%     receive
-%%         Whatever -> ct:pal("RECEIVED: ~p~n", [Whatever])
-%%     end.
-%%
-%%     then
-    ?assertReceivedMatch({on_complete, {error, _}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {ok, SizeToFetch}}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -432,47 +429,38 @@ end_per_testcase(_, Config) ->
 
 get_nodes() ->
     fun(ProviderId) ->
-        ?info_stacktrace("DEBUG: get_nodes~n"),
         [{utils:get_host(ProviderId), ?RTRANSFER_PORT}]
     end.
 
 read_fun(Expected) ->
     fun(_Handle, _Offset, _Size) ->
-        ?info_stacktrace("DEBUG: read_fun~n"),
         Expected
     end.
 
 write_fun(Expected) ->
     fun(_Handle, _Offset, _Data) ->
-        ?info_stacktrace("DEBUG: write_fun~n"),
         Expected
     end.
 
 open_fun(Expected) ->
-    fun(_UUID, _Mode) -> ?info_stacktrace("DEBUG: open_fun~n"), Expected end.
+    fun(_UUID, _Mode) -> Expected end.
 
 close_fun() ->
-    fun(_Handle) -> ?info_stacktrace("DEBUG: close_fun~n"), ok end.
+    fun(_Handle) -> ok end.
 
 notify_fun() ->
     fun(_Ref, _Offset,_Size) ->
-        ct:pal("NOTIFY FUN~n"),
-        ?info_stacktrace("DEBUG:notify_fun~n"),
         ok
     end.
 
 notify_fun(CounterPid) ->
     fun(_Ref, _Offset,_Size) ->
-        ct:pal("NOTIFY FUN~n"),
-        ?info_stacktrace("DEBUG:notify_fun~n"),
         CounterPid ! increase,
         ok
     end.
 
 on_complete_fun(Pid) ->
     fun(_Ref, Arg) ->
-        ?info_stacktrace("DEBUG:on_complete_fun: ~p~n", [Arg]),
-        ct:pal("ON_COMPLETE FUN: ~p~n", [Arg]),
         Pid ! {on_complete, Arg},
         ok
     end.
@@ -531,12 +519,8 @@ generate_binary(Length) ->
 counter(State) ->
     receive
         increase ->
-            ct:pal("COUNTER GOT increase: ~p~n", [State]),
-            ?info_stacktrace("COUNTER GOTreba increase: ~p~n", [State]),
             counter(State + 1);
         {return, Pid} ->
-            ct:pal("COUNTER GOT return: ~p~n", [State]),
-            ?info_stacktrace("COUNTER GOT return: ~p~n", [State]),
             Pid ! {counter, State}
     end.
 
@@ -546,11 +530,9 @@ stop_counter(CounterPid) ->
 data_counter(ActualSize) ->
     receive
         {Pid, request, RequestedSize} when RequestedSize >= ActualSize ->
-            ct:pal("Data counter received request actual size is ~p~n", [ActualSize]),
             Pid ! {data_counter, ActualSize},
             data_counter(0);
         {Pid, request, RequestedSize} ->
-            ct:pal("Data counter received request actual size is ~p~n", [ActualSize]),
             Pid ! {data_counter, RequestedSize},
             data_counter(ActualSize - RequestedSize)
     end.
@@ -562,8 +544,6 @@ onCompleteCounter(#{ok := OK, errors := Errors} = State) ->
         {on_complete, {error, _Error}} ->
             onCompleteCounter(State#{errors => Errors + 1});
         {return, Pid} ->
-            ct:pal("ON_COMPLETE_COUNTER GOT return: ok=~p errors=~p~n", [maps:get(ok, State), maps:get(errors, State)]),
-            ?info_stacktrace("ON_COMPLETE_COUNTER GOT return: ok=~p errors=~p~n", [maps:get(ok, State), maps:get(errors, State)]),
             Pid ! {counterOnComplete, {ok, maps:get(ok, State)}, {errors, maps:get(errors, State)}}
     end.
 
