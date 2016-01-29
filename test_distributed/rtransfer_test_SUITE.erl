@@ -24,9 +24,9 @@
 -export([less_than_block_fetch_test/1, exact_block_size_fetch_test/1,
     more_than_block_fetch_test/1, more_than_block_fetch_test2/1, cancel_fetch_test/1,
     error_open_fun_test/1, error_read_fun_test/1, error_write_fun_test/1, many_requests_test/1,
-    many_requests_to_one_file/1, bad_formatted_request_test/1, bad_file_offset_test/1]).
+    many_requests_to_one_file/1, request_bigger_than_file_test/1, offset_greater_than_file_size_test/1]).
 
--export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1]).
+-export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1, data_counter/1]).
 
 -performance({test_cases, []}).
 all() ->
@@ -41,8 +41,8 @@ all() ->
         error_open_fun_test,
         error_read_fun_test,
         error_write_fun_test,
-        bad_formatted_request_test,
-        bad_file_offset_test
+        request_bigger_than_file_test,
+        offset_greater_than_file_size_test
     ].
 
 -define(FILE_HANDLE, <<"file_handle">>).
@@ -336,27 +336,7 @@ error_write_fun_test(Config) ->
     %% then
     ?assertReceivedMatch({on_complete, {error,{storage,_}}}, ?TIMEOUT).
 
-bad_formatted_request_test(Config) ->
-    %% test calling fetch with bad _request
-    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
-
-    %% given
-    DataSize = ?TEST_BLOCK_SIZE,
-    Data = generate_binary(DataSize),
-    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
-    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
-    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
-    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
-
-    %% when
-    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
-    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
-    fetch_data(Worker1, {bad_request}, notify_fun(), on_complete_fun(self())),
-
-    %% then
-    ?assertReceivedMatch({on_complete, {error, _}}, ?TIMEOUT).
-
-bad_file_offset_test(Config) ->
+offset_greater_than_file_size_test(Config) ->
     %% test calling fetch with file offset greater than file size
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
@@ -364,21 +344,60 @@ bad_file_offset_test(Config) ->
     DataSize = ?TEST_BLOCK_SIZE,
     %% offset is bigger than DataSize
     Offset = DataSize + 10,
-    Data = generate_binary(DataSize),
-    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
-    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, 0}),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, <<"">>}),
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
     RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
 
     %% when
-    start_rtransfer(Worker1, [[get_binding(Worker1) | RtransferOpts1]]),
-    start_rtransfer(Worker2, [[get_binding(Worker2) | RtransferOpts2]]),
-    Ref1 = prepare_fetch_request(
-        Worker1, Worker2, ?TEST_FILE_UUID, Offset, DataSize
+    prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        ?TEST_FILE_UUID, Offset, DataSize,
+        notify_fun(), on_complete_fun(self())
     ),
-    fetch_data(Worker1, Ref1, notify_fun(), on_complete_fun(self())),
 
     %% then
+    ?assertReceivedMatch({on_complete, {ok, 0}}, ?TIMEOUT).
+
+request_bigger_than_file_test(Config) ->
+    %% testing case when requested size is greater than file's size
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    DataSize = ?TEST_BLOCK_SIZE,
+    %% offset is bigger than DataSize
+    Offset = DataSize,
+%%     Data = generate_binary(DataSize),
+    DataCounterPid = spawn(?MODULE, data_counter, [DataSize]),
+
+    WriteFunOpt = {write_fun,
+        fun(_Handle, _Offset, _Data) ->
+            {ok, ?FILE_HANDLE2, byte_size(_Data) }
+        end
+    },
+    ReadFunOpt = {read_fun,
+        fun(_Handle, _Offset, Size) ->
+            DataCounterPid ! {self(), request, Size},
+            ReadSize = receive
+                {data_counter, Return} -> Return
+            end,
+            {ok, ?FILE_HANDLE2, generate_binary(ReadSize) }
+        end
+    },
+
+%%     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, <<"">>}),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
+        ?TEST_FILE_UUID, Offset, DataSize, notify_fun(), on_complete_fun(self())
+    ),
+
+%%     receive
+%%         Whatever -> ct:pal("RECEIVED: ~p~n", [Whatever])
+%%     end.
+%%
+%%     then
     ?assertReceivedMatch({on_complete, {error, _}}, ?TIMEOUT).
 
 %%%===================================================================
@@ -413,38 +432,47 @@ end_per_testcase(_, Config) ->
 
 get_nodes() ->
     fun(ProviderId) ->
+        ?info_stacktrace("DEBUG: get_nodes~n"),
         [{utils:get_host(ProviderId), ?RTRANSFER_PORT}]
     end.
 
 read_fun(Expected) ->
     fun(_Handle, _Offset, _Size) ->
+        ?info_stacktrace("DEBUG: read_fun~n"),
         Expected
     end.
 
 write_fun(Expected) ->
     fun(_Handle, _Offset, _Data) ->
+        ?info_stacktrace("DEBUG: write_fun~n"),
         Expected
     end.
 
 open_fun(Expected) ->
-    fun(_UUID, _Mode) -> Expected end.
+    fun(_UUID, _Mode) -> ?info_stacktrace("DEBUG: open_fun~n"), Expected end.
 
 close_fun() ->
-    fun(_Handle) ->ok end.
+    fun(_Handle) -> ?info_stacktrace("DEBUG: close_fun~n"), ok end.
 
 notify_fun() ->
     fun(_Ref, _Offset,_Size) ->
+        ct:pal("NOTIFY FUN~n"),
+        ?info_stacktrace("DEBUG:notify_fun~n"),
         ok
     end.
 
 notify_fun(CounterPid) ->
     fun(_Ref, _Offset,_Size) ->
+        ct:pal("NOTIFY FUN~n"),
+        ?info_stacktrace("DEBUG:notify_fun~n"),
         CounterPid ! increase,
         ok
     end.
 
 on_complete_fun(Pid) ->
     fun(_Ref, Arg) ->
+        ?info_stacktrace("DEBUG:on_complete_fun: ~p~n", [Arg]),
+        ct:pal("ON_COMPLETE FUN: ~p~n", [Arg]),
         Pid ! {on_complete, Arg},
         ok
     end.
@@ -503,13 +531,29 @@ generate_binary(Length) ->
 counter(State) ->
     receive
         increase ->
+            ct:pal("COUNTER GOT increase: ~p~n", [State]),
+            ?info_stacktrace("COUNTER GOTreba increase: ~p~n", [State]),
             counter(State + 1);
         {return, Pid} ->
+            ct:pal("COUNTER GOT return: ~p~n", [State]),
+            ?info_stacktrace("COUNTER GOT return: ~p~n", [State]),
             Pid ! {counter, State}
     end.
 
 stop_counter(CounterPid) ->
     CounterPid ! {return, self()}.
+
+data_counter(ActualSize) ->
+    receive
+        {Pid, request, RequestedSize} when RequestedSize >= ActualSize ->
+            ct:pal("Data counter received request actual size is ~p~n", [ActualSize]),
+            Pid ! {data_counter, ActualSize},
+            data_counter(0);
+        {Pid, request, RequestedSize} ->
+            ct:pal("Data counter received request actual size is ~p~n", [ActualSize]),
+            Pid ! {data_counter, RequestedSize},
+            data_counter(ActualSize - RequestedSize)
+    end.
 
 onCompleteCounter(#{ok := OK, errors := Errors} = State) ->
     receive
@@ -518,6 +562,8 @@ onCompleteCounter(#{ok := OK, errors := Errors} = State) ->
         {on_complete, {error, _Error}} ->
             onCompleteCounter(State#{errors => Errors + 1});
         {return, Pid} ->
+            ct:pal("ON_COMPLETE_COUNTER GOT return: ok=~p errors=~p~n", [maps:get(ok, State), maps:get(errors, State)]),
+            ?info_stacktrace("ON_COMPLETE_COUNTER GOT return: ok=~p errors=~p~n", [maps:get(ok, State), maps:get(errors, State)]),
             Pid ! {counterOnComplete, {ok, maps:get(ok, State)}, {errors, maps:get(errors, State)}}
     end.
 
