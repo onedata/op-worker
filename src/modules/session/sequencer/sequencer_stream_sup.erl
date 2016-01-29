@@ -60,16 +60,9 @@ start_sequencer_stream(SeqStmSup, SeqMan, StmId, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {
-        RestartStrategy :: supervisor:strategy(),
-        Intensity :: non_neg_integer(),
-        Period :: non_neg_integer()
-    }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
+    {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([Child]) ->
-    RestartStrategy = simple_one_for_one,
-    Intensity = 3,
-    Period = 1,
-    {ok, {{RestartStrategy, Intensity, Period}, [
+    {ok, {#{strategy => simple_one_for_one, intensity => 3, period => 1}, [
         sequencer_stream_spec(Child)
     ]}}.
 
@@ -85,11 +78,15 @@ init([Child]) ->
 %%--------------------------------------------------------------------
 -spec sequencer_stream_spec(Module :: atom()) -> supervisor:child_spec().
 sequencer_stream_spec(Module) ->
-    Id = Module,
     Restart = case Module of
-                  sequencer_in_stream -> temporary;
-                  sequencer_out_stream -> transient
-              end,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, []}, Restart, Shutdown, Type, [Module]}.
+        sequencer_in_stream -> temporary;
+        sequencer_out_stream -> transient
+    end,
+    #{
+        id => Module,
+        start => {Module, start_link, []},
+        restart => Restart,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [Module]
+    }.

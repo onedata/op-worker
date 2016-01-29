@@ -48,27 +48,20 @@ start_link(SessId, SessType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-        [ChildSpec :: supervisor:child_spec()]
-    }} |
-    ignore.
+    {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([SessId, SessType]) ->
-    RestartStrategy = one_for_all,
-    MaxRestarts = 0,
-    RestartTimeWindowSecs = 1,
-
+    SupFlags = #{strategy => one_for_all, intensity => 0, period => 1},
     {ok, SessId} = session:update(SessId, #{supervisor => self(), node => node()}),
 
     case SessType of
         fuse ->
-            {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+            {ok, {SupFlags, [
                 session_watcher_spec(SessId, SessType),
                 sequencer_manager_sup_spec(SessId),
                 event_manager_sup_spec(SessId, SessType)
             ]}};
         _ ->
-            {ok, {{RestartStrategy, MaxRestarts, RestartTimeWindowSecs}, [
+            {ok, {SupFlags, [
                 session_watcher_spec(SessId, SessType),
                 event_manager_sup_spec(SessId, SessType)
             ]}}
@@ -87,11 +80,14 @@ init([SessId, SessType]) ->
 -spec session_watcher_spec(SessId :: session:id(), SessType :: session:type()) ->
     supervisor:child_spec().
 session_watcher_spec(SessId, SessType) ->
-    Id = Module = session_watcher,
-    Restart = transient,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, [SessId, SessType]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => session_watcher,
+        start => {session_watcher, start_link, [SessId, SessType]},
+        restart => transient,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [session_watcher]
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,11 +98,14 @@ session_watcher_spec(SessId, SessType) ->
 -spec sequencer_manager_sup_spec(SessId :: session:id()) ->
     supervisor:child_spec().
 sequencer_manager_sup_spec(SessId) ->
-    Id = Module = sequencer_manager_sup,
-    Restart = transient,
-    Shutdown = infinity,
-    Type = supervisor,
-    {Id, {Module, start_link, [SessId]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => sequencer_manager_sup,
+        start => {sequencer_manager_sup, start_link, [SessId]},
+        restart => transient,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [sequencer_manager_sup]
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -117,8 +116,11 @@ sequencer_manager_sup_spec(SessId) ->
 -spec event_manager_sup_spec(SessId :: session:id(), SessType :: session:type()) ->
     supervisor:child_spec().
 event_manager_sup_spec(SessId, SessType) ->
-    Id = Module = event_manager_sup,
-    Restart = transient,
-    Shutdown = infinity,
-    Type = supervisor,
-    {Id, {Module, start_link, [SessId, SessType]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => event_manager_sup,
+        start => {event_manager_sup, start_link, [SessId, SessType]},
+        restart => transient,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [event_manager_sup]
+    }.
