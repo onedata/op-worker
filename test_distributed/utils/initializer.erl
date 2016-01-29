@@ -45,10 +45,16 @@ create_test_users_and_spaces(Config) ->
     Space5 = {<<"space_id5">>, <<"space_name">>},
     Space6 = {<<"space_id6">>, <<"space_name">>},
 
+    Group1 = {<<"group_id1">>, <<"group_name1">>},
+    Group2 = {<<"group_id2">>, <<"group_name2">>},
+    Group3 = {<<"group_id3">>, <<"group_name3">>},
+    Group4 = {<<"group_id4">>, <<"group_name4">>},
+
     User1 = {1, [Space1, Space2, Space3, Space4], [Group1, Group2, Group3, Group4]},
     User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
     User3 = {3, [Space3, Space4], [Group3, Group4]},
     User4 = {4, [Space4], [Group4]},
+    User5 = {5, [Space5, Space6]},
 
     file_meta_mock_setup(Workers),
     gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4, Space5, Space6]),
