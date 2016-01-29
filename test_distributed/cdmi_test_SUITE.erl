@@ -1464,8 +1464,7 @@ ensure_begins_with_slash(Path) ->
 
 % Returns current time in seconds
 now_in_secs() ->
-    {MegaSecs, Secs, _MicroSecs} = erlang:now(),
-    MegaSecs * 1000000 + Secs.
+    erlang:system_time(seconds).
 
 mock_opening_file_without_perms(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
