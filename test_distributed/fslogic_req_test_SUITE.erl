@@ -61,6 +61,7 @@ fslogic_get_file_attr_test(Config) ->
 
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId5, _UserId5} = {?config({session_id, 5}, Config), ?config({user_id, 5}, Config)},
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
@@ -74,10 +75,11 @@ fslogic_get_file_attr_test(Config) ->
         {SessId2, UserId2, 8#1770, 0, <<"/">>},
         {SessId1, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
         {SessId2, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
-        {SessId1, <<"space_name1">>, 8#1770, 0, <<"/spaces/space_name1">>},
-        {SessId2, <<"space_name2">>, 8#1770, 0, <<"/spaces/space_name2">>},
-        {SessId1, <<"space_name3">>, 8#1770, 0, <<"/spaces/space_name3">>},
-        {SessId2, <<"space_name4">>, 8#1770, 0, <<"/spaces/space_name4">>}
+        {SessId1, <<"space_id1">>, 8#1770, 0, <<"/spaces/space_name1">>},
+        {SessId2, <<"space_id2">>, 8#1770, 0, <<"/spaces/space_name2">>},
+        {SessId1, <<"space_id3">>, 8#1770, 0, <<"/spaces/space_name3">>},
+        {SessId5, <<"space_id5">>, 8#1770, 0, <<"/spaces/space_name#space_id5">>},
+        {SessId5, <<"space_id6">>, 8#1770, 0, <<"/spaces/space_name#space_id6">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir">>}}
@@ -99,7 +101,6 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
     MakeTree = fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
         NewPath = <<Path/binary, "/", Leaf/binary>>,
-        %% ct:print("NewPath ~p with parent ~p", [NewPath, ParentUUID]),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId,
             #create_dir{parent_uuid = ParentUUID, name = Leaf, mode = 8#755}
         )),
@@ -146,6 +147,7 @@ fslogic_read_dir_test(Config) ->
     {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
     {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
     {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+    {SessId5, _UserId5} = {?config({session_id, 5}, Config), ?config({user_id, 5}, Config)},
 
     ValidateReadDir = fun({SessId, Path, NameList}) ->
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
@@ -189,30 +191,53 @@ fslogic_read_dir_test(Config) ->
         {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME]},
         {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME]},
         {SessId3, <<"/">>, [?SPACES_BASE_DIR_NAME]},
-        {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]}
+        {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]},
+        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME]}
+    ]),
+
+    ValidateReadDir2 = fun({SessId, Path, Offset, Size, ExpectedNames}) ->
+        FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
+        #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} =
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
+
+        Response = ?req(Worker, SessId, #get_file_children{uuid = FileUUID, offset = Offset, size = Size}),
+        #fuse_response{fuse_response = #file_children{child_links = Links}} =
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
+
+        RespNames = lists:map(fun(#child_link{name = Name}) -> Name end, Links),
+        ?assertEqual(ExpectedNames, lists:sort(RespNames))
+    end,
+
+    lists:foreach(ValidateReadDir2, [
+        {SessId5, <<"/spaces">>, 0, 1, [<<"space_name">>]},
+        {SessId5, <<"/spaces">>, 1, 1, [<<"space_name">>]},
+        {SessId5, <<"/spaces">>, 0, 2, [<<"space_name#space_id5">>, <<"space_name#space_id6">>]}
     ]),
 
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
+    RootUUID5 = get_uuid_privileged(Worker, SessId5, <<"/">>),
 
-    lists:foreach(fun(Name) ->
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
-            Worker, SessId1, #create_dir{parent_uuid = RootUUID1, name = Name, mode = 8#755}
-        ))
-    end, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]),
-
-    lists:foreach(fun(Name) ->
-        ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
-            Worker, SessId2, #create_dir{parent_uuid = RootUUID2, name = Name, mode = 8#755}
-        ))
-    end, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]),
+    lists:foreach(fun({SessId, RootUUID, Dirs}) ->
+        lists:foreach(fun(Name) ->
+            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(
+                Worker, SessId, #create_dir{parent_uuid = RootUUID, name = Name, mode = 8#755}
+            ))
+        end, Dirs)
+    end, [
+        {SessId1, RootUUID1, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
+        {SessId2, RootUUID2, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
+        {SessId5, RootUUID5, [<<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]}
+    ]),
 
     lists:foreach(ValidateReadDir, [
         {SessId1, <<"/spaces/space_name1">>, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
         {SessId1, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
         {SessId2, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
+        {SessId5, <<"/spaces/space_name#space_id5">>, [<<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]},
         {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
-        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]}
+        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
+        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]}
     ]),
 
     ok.
@@ -261,7 +286,6 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
-
                     ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #delete_file{uuid = UUID}))
                 end, SessIds)
 
@@ -330,10 +354,10 @@ default_permissions_test(Config) ->
             {mkdir, <<"/spaces/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/spaces/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/spaces/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
-            {get_attr, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
-            {get_attr, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
-            {get_attr, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?EACCES},
-            {get_attr, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {get_attr, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {get_attr, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {get_attr, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {get_attr, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {delete, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
             {delete, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
             {delete, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?EACCES},

@@ -85,7 +85,7 @@ get_parent(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
 %%--------------------------------------------------------------------
 -spec unlink(fslogic_worker:ctx(), {uuid, file_uuid()}) -> ok | error_reply().
 unlink(#fslogic_ctx{session_id = SessId}, {uuid, UUID}) ->
-    lfm_utils:call_fslogic(SessId, #unlink{uuid = UUID},
+    lfm_utils:call_fslogic(SessId, #delete_file{uuid = UUID},
         fun(_) ->
             ok
         end).
