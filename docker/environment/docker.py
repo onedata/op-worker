@@ -87,8 +87,8 @@ def run(image, docker_host=None, detach=False, dns_list=[], add_host={},
         cmd.extend(['sh', '-c', command])
     elif isinstance(command, list):
         cmd.extend(command)
-    else:
-        raise '{0} is not a string nor list'.format(command)
+    elif command is not None:
+        raise ValueError('{0} is not a string nor list'.format(command))
 
     if detach:
         return subprocess.check_output(cmd, stdin=stdin, stderr=stderr).decode(
@@ -130,7 +130,7 @@ def exec_(container, command, docker_host=None, user=None, group=None,
     elif isinstance(command, list):
         cmd.extend(command)
     else:
-        raise '{0} is not a string nor list'.format(command)
+        raise ValueError('{0} is not a string nor list'.format(command))
 
     if detach or output:
         return subprocess.check_output(cmd, stdin=stdin, stderr=stderr).decode(
