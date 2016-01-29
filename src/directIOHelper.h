@@ -83,7 +83,7 @@ public:
 
     /**
      * This storage helper uses only the first element of args map.
-     * It shall be ablosute path to diretory used by this storage helper as
+     * It shall be absolute path to directory used by this storage helper as
      * root mount point.
      */
     DirectIOHelper(const std::unordered_map<std::string, std::string> &,
@@ -120,10 +120,11 @@ public:
     void ash_open(CTXPtr ctx, const boost::filesystem::path &p, FlagsSet flags,
         GeneralCallback<int>);
     void ash_read(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::mutable_buffer buf, off_t offset,
+        asio::mutable_buffer buf, off_t offset, const std::string &fileUuid,
         GeneralCallback<asio::mutable_buffer>);
     void ash_write(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset, GeneralCallback<std::size_t>);
+        asio::const_buffer buf, off_t offset, const std::string &fileUuid,
+        GeneralCallback<std::size_t>);
     void ash_release(
         CTXPtr ctx, const boost::filesystem::path &p, VoidCallback);
     void ash_flush(CTXPtr ctx, const boost::filesystem::path &p, VoidCallback);
@@ -131,9 +132,9 @@ public:
         bool isDataSync, VoidCallback);
 
     asio::mutable_buffer sh_read(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::mutable_buffer buf, off_t offset);
+        asio::mutable_buffer buf, off_t offset, const std::string &fileUuid);
     std::size_t sh_write(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset);
+        asio::const_buffer buf, off_t offset, const std::string &fileUuid);
 
 protected:
     template <class Result, typename... Args1, typename... Args2>
