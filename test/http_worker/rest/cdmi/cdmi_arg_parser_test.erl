@@ -39,28 +39,28 @@ get_supported_version_test() ->
   Binary41 = <<"aaa,aa,">>,
   Binary42 = <<"aaa,aa ">>,
 
-  ?assertThrow(?unsupported_version, ?version(Binary00)),
-  ?assertThrow(?unsupported_version, ?version(Binary01)),
-  ?assertThrow(?unsupported_version, ?version(Binary02)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary00)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary01)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary02)),
 
   ?assertEqual(<<"1.1.1">>, ?version(Binary10)),
   ?assertEqual(<<"1.1.1">>, ?version(Binary11)),
 
-  ?assertThrow(?unsupported_version, ?version(Binary20)),
-  ?assertThrow(?unsupported_version, ?version(Binary21)),
-  ?assertThrow(?unsupported_version, ?version(Binary22)),
-  ?assertThrow(?unsupported_version, ?version(Binary23)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary20)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary21)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary22)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary23)),
 
 
-  ?assertThrow(?unsupported_version, ?version(Binary30)),
-  ?assertThrow(?unsupported_version, ?version(Binary31)),
-  ?assertThrow(?unsupported_version, ?version(Binary32)),
-  ?assertThrow(?unsupported_version, ?version(Binary33)),
-  ?assertThrow(?unsupported_version, ?version(Binary34)),
-  ?assertThrow(?unsupported_version, ?version(Binary35)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary30)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary31)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary32)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary33)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary34)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary35)),
 
-  ?assertThrow(?unsupported_version, ?version(Binary40)),
-  ?assertThrow(?unsupported_version, ?version(Binary41)),
-  ?assertThrow(?unsupported_version, ?version(Binary42)).
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary40)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary41)),
+  ?assertThrow(?ERROR_UNSUPPORTED_VERSION, ?version(Binary42)).
 
 -endif.

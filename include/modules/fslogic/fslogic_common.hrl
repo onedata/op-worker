@@ -16,7 +16,6 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/helpers.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% helper macro for not implemented functions
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).
@@ -39,6 +38,7 @@
 %% root user definitions
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
+-define(ROOT_SESS, #session{identity = #identity{user_id = ?ROOT_USER_ID}}).
 -define(ROOT_POSIX_CTX, #posix_user_ctx{uid = 0, gid = 0}).
 
 %% fslogic subscription id

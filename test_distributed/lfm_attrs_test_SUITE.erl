@@ -25,12 +25,16 @@
     end_per_testcase/2]).
 
 %% tests
--export([empty_xattr_test/1, crud_xattr_test/1, list_xattr_test/1, remove_file_test/1]).
+-export([empty_xattr_test/1, crud_xattr_test/1, list_xattr_test/1, remove_file_test/1,
+    modify_cdmi_attrs/1]).
 
 -performance({test_cases, []}).
 all() -> [
-    empty_xattr_test, crud_xattr_test, list_xattr_test
-%%     remove_file_test % todo fix removal of datastore links and enable this
+    empty_xattr_test,
+    crud_xattr_test,
+    list_xattr_test,
+    remove_file_test,
+    modify_cdmi_attrs
 ].
 
 %%%====================================================================
@@ -99,8 +103,22 @@ remove_file_test(Config) ->
     ?assertEqual(ok, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
     ?assertEqual({ok, [Name1]}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {uuid, Uuid})),
-    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)).
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
+    {ok, Uuid2} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid2})).
+
+modify_cdmi_attrs(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    Path = <<"/file">>,
+    Name1 = <<"cdmi_attr">>,
+    Value1 = <<"value1">>,
+    Xattr1 = #xattr{name = Name1, value = Value1},
+    {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
+
+    ?assertEqual({error, ?EPERM}, lfm_proxy:set_xattr(Worker, SessId, {uuid, Uuid}, Xattr1)),
+    ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, {uuid, Uuid})).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -116,9 +134,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
     communicator_mock_setup(Workers),
-    initializer:space_storage_mock(Workers, StorageId),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -126,7 +142,7 @@ end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator, space_storage]).
+    test_utils:mock_validate_and_unload(Workers, [communicator]).
 
 %%%===================================================================
 %%% Internal functions
