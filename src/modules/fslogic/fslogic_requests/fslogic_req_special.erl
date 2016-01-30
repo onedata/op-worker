@@ -14,6 +14,8 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([mkdir/4, read_dir/4, link/3, read_link/2]).
@@ -26,16 +28,16 @@
 %% @doc Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: file_meta:uuid(),
+-spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: fslogic_worker:file(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{write, 2}, {exec, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
 mkdir(CTX, ParentUUID, Name, Mode) ->
     NormalizedParentUUID =
-        case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
+        case {uuid, fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX))} =:= ParentUUID of
             true ->
                 {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(CTX),
-                DefaultSpaceUUID;
+                {uuid, DefaultSpaceUUID};
             false ->
                 ParentUUID
         end,
@@ -49,11 +51,12 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
         ctime = CTime,
         uid = fslogic_context:get_user_id(CTX)
     }},
-    case file_meta:create({uuid, NormalizedParentUUID}, File) of
+    case file_meta:create(NormalizedParentUUID, File) of
         {ok, DirUUID} ->
-            {ok, _} = file_meta:update({uuid, NormalizedParentUUID}, #{mtime => CTime}),
+            {ok, _} = file_meta:update(NormalizedParentUUID, #{mtime => CTime}),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-            #dir{uuid = DirUUID}};
+                #dir{uuid = DirUUID}
+            };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}
     end.
@@ -67,7 +70,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
 -spec read_dir(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file(),
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{read, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
 read_dir(CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
@@ -87,11 +90,11 @@ read_dir(CTX, File, Offset, Size) ->
                     _ ->
                         file_meta:list_children(DefaultSpace, Offset - 1, Size)
                 end,
-            #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{
-                    child_links = ChildLinks ++ DefaultSpaceChildLinks
-                }
-            };
+                #fuse_response{status = #status{code = ?OK},
+                    fuse_response = #file_children{
+                        child_links = ChildLinks ++ DefaultSpaceChildLinks
+                    }
+                };
         SpacesKey ->
             {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
                 onedata_user:get(UserId),

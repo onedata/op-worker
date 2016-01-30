@@ -73,6 +73,10 @@ translate_from_protobuf(#'FileLocationSubscription'{} = Record) ->
         counter_threshold = Record#'FileLocationSubscription'.counter_threshold,
         time_threshold = Record#'FileLocationSubscription'.time_threshold
     };
+translate_from_protobuf(#'PermissionChangedSubscription'{} = Record) ->
+    #permission_changed_subscription{
+        file_uuid = Record#'PermissionChangedSubscription'.file_uuid
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
@@ -127,14 +131,14 @@ translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentU
     #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)};
 translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
     #get_file_location{uuid = UUID, flags = translate_open_flags(Flags)};
-translate_from_protobuf(#'GetHelperParams'{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP}) ->
-    #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP};
+translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
+    #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
 translate_from_protobuf(#'Close'{uuid = UUID}) ->
     #close{uuid = UUID};
-translate_from_protobuf(#'ProxyIORequest'{space_id = SPID, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
-    #proxyio_request{space_id = SPID, storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
+    #proxyio_request{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #remote_read{offset = Offset, size = Size};
 translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
@@ -168,6 +172,8 @@ translate_to_protobuf(#event{counter = Counter, object = Type}) ->
     #'Event'{counter = Counter, object = translate_to_protobuf(Type)};
 translate_to_protobuf(#update_event{object = Type}) ->
     {update_event, #'UpdateEvent'{object = translate_to_protobuf(Type)}};
+translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
+    {permission_changed_event, #'PermissionChangedEvent'{file_uuid = FileUuid}};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->

@@ -109,4 +109,13 @@
     end
 }).
 
+
+%% Default permission_changed event stream specialization
+-define(PERMISSION_CHANGED_EVENT_STREAM, #event_stream_definition{
+    admission_rule = fun
+        (#event{object = #permission_changed_event{}}) -> true;
+        (_) -> false
+    end
+}).
+
 -endif.
