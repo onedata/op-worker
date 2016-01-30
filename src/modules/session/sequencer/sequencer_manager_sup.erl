@@ -66,20 +66,14 @@ get_sequencer_stream_sup(SeqManSup, Id) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {
-        RestartStrategy :: supervisor:strategy(),
-        Intensity :: non_neg_integer(),
-        Period :: non_neg_integer()
-    }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
+    {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([SessId]) ->
-    RestartStrategy = one_for_all,
-    Intensity = 3,
-    Period = 1,
-    {ok, {{RestartStrategy, Intensity, Period}, [
+    {ok, {#{strategy => one_for_all, intensity => 3, period => 1}, [
         sequencer_stream_sup_spec(sequencer_in_stream_sup, sequencer_in_stream),
         sequencer_stream_sup_spec(sequencer_out_stream_sup, sequencer_out_stream),
         sequencer_manager_spec(self(), SessId)
     ]}}.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -94,11 +88,14 @@ init([SessId]) ->
 -spec sequencer_stream_sup_spec(Id :: atom(), Child :: atom()) ->
     supervisor:child_spec().
 sequencer_stream_sup_spec(Id, Child) ->
-    Module = sequencer_stream_sup,
-    Restart = permanent,
-    Shutdown = infinity,
-    Type = supervisor,
-    {Id, {Module, start_link, [Child]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => Id,
+        start => {sequencer_stream_sup, start_link, [Child]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [sequencer_stream_sup]
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -109,8 +106,11 @@ sequencer_stream_sup_spec(Id, Child) ->
 -spec sequencer_manager_spec(SeqManSup :: pid(), SessId :: session:id()) ->
     supervisor:child_spec().
 sequencer_manager_spec(SeqManSup, SessId) ->
-    Id = Module = sequencer_manager,
-    Restart = transient,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, [SeqManSup, SessId]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => sequencer_manager,
+        start => {sequencer_manager, start_link, [SeqManSup, SessId]},
+        restart => transient,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [sequencer_manager]
+    }.

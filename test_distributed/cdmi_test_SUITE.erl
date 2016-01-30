@@ -22,6 +22,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
@@ -41,13 +42,15 @@
     choose_adequate_handler/1,
     use_supported_cdmi_version/1,
     use_unsupported_cdmi_version/1,
-    errors_test/1,
     moved_permanently_test/1,
     objectid_test/1,
     request_format_check_test/1,
     mimetype_and_encoding_test/1,
     out_of_range_test/1,
-    partial_upload_test/1
+    partial_upload_test/1,
+    acl_test/1,
+    errors_test/1,
+    accept_header_test/1
 ]).
 
 -performance({test_cases, []}).
@@ -65,13 +68,15 @@ all() ->
         choose_adequate_handler,
         use_supported_cdmi_version,
         use_unsupported_cdmi_version,
-        errors_test,
         moved_permanently_test,
         objectid_test,
         request_format_check_test,
         mimetype_and_encoding_test,
         out_of_range_test,
-        partial_upload_test
+        partial_upload_test,
+        acl_test,
+        errors_test,
+        accept_header_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -326,7 +331,7 @@ metadata_test(Config) ->
     ?assertEqual(201, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
     Metadata1 = proplists:get_value(<<"metadata">>, CdmiResponse1),
-%%     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)), todo fix wrong size (0) in attrs
+    ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
     CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
     ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
     MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
@@ -429,10 +434,70 @@ metadata_test(Config) ->
     ?assertEqual(1, length(CdmiResponse13)),
     Metadata13 = proplists:get_value(<<"metadata">>, CdmiResponse13),
     ?assertEqual(<<"my_dir_value_update">>, proplists:get_value(<<"my_metadata">>, Metadata13)),
-    ?assertEqual(1, length(Metadata13)).
+    ?assertEqual(1, length(Metadata13)),
     %%------------------------------
 
-%todo add acl metadata tests
+    %%------ write acl metadata ----------
+    UserId1 = ?config({user_id, 1}, Config),
+    UserName1 = ?config({user_name, 1}, Config),
+    FileName2 = "acl_test_file.txt",
+    Ace1 = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?read}
+    ],
+    Ace2 = [
+        {<<"acetype">>, ?deny},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, <<(?read)/binary, ", ", (?execute)/binary>>}
+    ],
+    Ace3 = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?write}
+    ],
+
+    create_file(Config, FileName2),
+    write_to_file(Config, FileName2, <<"data">>, 0),
+    RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
+    RawRequestBody15 = json_utils:encode(RequestBody15),
+    RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+
+    {ok, Code15, _Headers15, Response15} = do_request(Worker, FileName2 ++ "?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15),
+    ?assertMatch({204, _}, {Code15, Response15}),
+
+    {ok, Code16, _Headers16, Response16} = do_request(Worker, FileName2 ++ "?metadata", get, RequestHeaders1, []),
+    ?assertEqual(200, Code16),
+    CdmiResponse16 = json_utils:decode(Response16),
+    ?assertEqual(1, length(CdmiResponse16)),
+    Metadata16 = proplists:get_value(<<"metadata">>, CdmiResponse16),
+    ?assertEqual(6, length(Metadata16)),
+    ?assertEqual([Ace1, Ace2, Ace3], proplists:get_value(<<"cdmi_acl">>, Metadata16)),
+
+    {ok, Code17, _Headers17, Response17} = do_request(Worker, FileName2, get, [?USER_1_TOKEN_HEADER], []),
+    ?assertEqual(200, Code17),
+    ?assertEqual(<<"data">>, Response17),
+    %%------------------------------
+
+    %%-- create forbidden by acl ---
+    Ace4 = [
+        {<<"acetype">>, ?deny},
+        {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?write}],
+    RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace4]}]}],
+    RawRequestBody18 = json_utils:encode(RequestBody18),
+    RequestHeaders18 = [?USER_1_TOKEN_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
+
+    {ok, Code18, _Headers18, _Response18} = do_request(Worker, DirName ++ "?metadata:cdmi_acl", put, RequestHeaders18, RawRequestBody18),
+    ?assertEqual(204, Code18),
+
+    {ok, Code19, _Headers19, _Response19} = do_request(Worker, filename:join(DirName, "some_file"), put, [?USER_1_TOKEN_HEADER], []),
+    ?assertEqual(403, Code19).
+    %%------------------------------
 
 % Tests cdmi object DELETE requests
 delete_file_test(Config) ->
@@ -858,7 +923,13 @@ objectid_test(Config) ->
     ?assertEqual( % should be the same as in 6 (except parent)
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6)),
         proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse7))
-    ).
+    ),
+    %%------------------------------
+
+    %%---- unauthorized access to / by objectid -------
+    RequestHeaders8 = [?CDMI_VERSION_HEADER],
+    {ok, Code8, _, _} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders8, []),
+    ?assertEqual(401, Code8).
     %%------------------------------
 
 % tests if capabilities of objects, containers, and whole storage system are set properly
@@ -919,127 +990,6 @@ capabilities_test(Config) ->
         proplists:get_value(<<"objectName">>, CdmiResponse10)),
     Capabilities3 = proplists:get_value(<<"capabilities">>, CdmiResponse10),
     ?assertEqual(?dataobject_capability_list, Capabilities3).
-    %%------------------------------
-
-% test error handling
-errors_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    %%---- unauthorized access -----
-    {ok, Code1, _Headers1, _Response1} =
-        do_request(Worker, "dir", get, [], []),
-    ?assertEqual(401, Code1),
-    %%------------------------------
-
-    %%----- wrong create path ------
-    RequestHeaders2 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code2, _Headers2, _Response2} =
-        do_request(Worker, "dir", put, RequestHeaders2, []),
-    ?assertEqual(400, Code2),
-    %%------------------------------
-
-    %%---- wrong create path 2 -----
-    RequestHeaders3 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code3, _Headers3, _Response3} =
-        do_request(Worker, "dir/", put, RequestHeaders3, []),
-    ?assertEqual(400, Code3),
-    %%------------------------------
-
-    %%-------- wrong base64 --------
-    RequestHeaders4 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-    RequestBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
-    {ok, Code4, _Headers4, _Response4} =
-        do_request(Worker, "some_file_b64", put, RequestHeaders4, RequestBody4),
-    ?assertEqual(400, Code4),
-    %%------------------------------
-
-    %%-- duplicated body fields ----
-    RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
-    RequestBody5 = json_utils:encode(RawBody5),
-    RequestHeaders5 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code5, _Headers5, Response5} =
-        do_request(Worker, "dir_dupl/", put, RequestHeaders5, RequestBody5),
-    ?assertEqual(400, Code5),
-    CdmiResponse5 = json_utils:decode(Response5),
-    ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5),
-
-    %%-- reding non-existing file --
-    RequestHeaders6 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code6, _Headers6, _Response6} =
-        do_request(Worker, "nonexistent_file", get, RequestHeaders6),
-    ?assertMatch(404, Code6),
-    %%------------------------------
-
-    %%--- list nonexisting dir -----
-    RequestHeaders7 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
-    ],
-    {ok, Code7, _Headers7, _Response7} =
-        do_request(Worker, "nonexisting_dir/", get, RequestHeaders7),
-    ?assertEqual(404, Code7),
-    %%------------------------------
-
-    %%--- open binary file without permission -----
-    File8 = "file",
-    FileContent8 = <<"File content...">>,
-    create_file(Config, File8),
-    ?assertEqual(object_exists(Config, File8), true),
-    write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
-    ?assertEqual(get_file_content(Config, File8),FileContent8),
-    RequestHeaders8 = [?USER_1_TOKEN_HEADER],
-
-    mock_opening_file_without_perms(Config),
-    {ok, Code8, _Headers8, _Response8} =
-        do_request(Worker, File8, get, RequestHeaders8),
-    unmock_opening_file_without_perms(Config),
-    ?assertEqual(403, Code8),
-    %%------------------------------
-
-    %%--- open cdmi file without permission -----
-    File9 = "file",
-    FileContent9 = <<"File content...">>,
-    create_file(Config, File9),
-    ?assertEqual(object_exists(Config, File9), true),
-    write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
-    ?assertEqual(get_file_content(Config, File9),FileContent9),
-    RequestHeaders9 = [
-        ?USER_1_TOKEN_HEADER,
-        ?CDMI_VERSION_HEADER,
-        ?OBJECT_CONTENT_TYPE_HEADER
-    ],
-
-    mock_opening_file_without_perms(Config),
-    {ok, Code9, _Headers9, _Response9} =
-        do_request(Worker, File9, get, RequestHeaders9),
-    unmock_opening_file_without_perms(Config),
-    ?assertEqual(403, Code9),
-    %%------------------------------
-
-    %%--- unauthorized access to / by objectid ---
-    {ok, Code10, _, _} = do_request(Worker, "", get, [?CDMI_VERSION_HEADER], []),
-    ?assertEqual(401, Code10).
     %%------------------------------
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path
@@ -1118,7 +1068,7 @@ request_format_check_test(Config) ->
     RawRequestBody3 = json_utils:encode(RequestBody3),
     {ok, Code3, _Headers3, _Response3} = do_request(Worker, DirToCreate, put, RequestHeaders3, RawRequestBody3),
     ?assertEqual(415, Code3).
-%%------------------------------
+    %%------------------------------
 
 % tests mimetype and valuetransferencoding properties, they are part of cdmi-object and cdmi-container
 % and should be changeble
@@ -1228,7 +1178,7 @@ out_of_range_test(Config) ->
     CdmiResponse4 = json_utils:decode(Response4),
 
     ?assertMatch([{<<"error_invalid_childrenrange">>, _}], CdmiResponse4).
-%%------------------------------
+    %%------------------------------
 
 %todo put copy_move_test from demo here, after implementing mv and cp in logical_file_manager
 
@@ -1306,7 +1256,279 @@ partial_upload_test(Config) ->
     ?assertEqual(<<Chunk1/binary, Chunk2/binary, Chunk3/binary>>, base64:decode(proplists:get_value(<<"value">>, CdmiResponse8))).
     %%------------------------------
 
-%todo put acl_test from demo here, after implementing acls
+% tests access control lists
+acl_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Filename1 = "acl_test_file1",
+    Dirname1 = "acl_test_dir1/",
+    UserId1 = ?config({user_id, 1}, Config),
+    UserName1 = ?config({user_name, 1}, Config),
+    Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
+
+    Read = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?read}
+    ],
+    Write = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?write}
+    ],
+    Execute = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?execute}
+    ],
+    WriteAcl = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?write_acl}
+    ],
+    Delete = [
+        {<<"acetype">>, ?allow},
+        {<<"identifier">>, Identifier1},
+        {<<"aceflags">>, ?no_flags},
+        {<<"acemask">>, ?delete}
+    ],
+
+    MetadataAclRead = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, WriteAcl]}]}]),
+    MetadataAclReadExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, Execute, WriteAcl]}]}]),
+    MetadataAclDelete = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Delete]}]}]),
+    MetadataAclWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write]}]}]),
+    MetadataAclReadWrite = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read]}]}]),
+    MetadataAclReadWriteExecute = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Write, Read, Execute]}]}]),
+
+    %%----- read file test ---------
+    % create test file with dummy data
+    ?assert(not object_exists(Config, Filename1)),
+    create_file(Config, filename:join("/", Filename1)),
+    write_to_file(Config, Filename1, <<"data">>, 0),
+
+    % set acl to 'write' and test cdmi/non-cdmi get request (should return 403 forbidden)
+    RequestHeaders1 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclWrite),
+    {ok, 403, _, _} = do_request(Worker, Filename1, get, RequestHeaders1, []),
+    {ok, 403, _, _} = do_request(Worker, Filename1, get, [?USER_1_TOKEN_HEADER], []),
+    ?assertEqual({error, ?EACCES}, open_file(Config, Filename1, read)),
+
+    % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
+    {ok, 200, _, _} = do_request(Worker, Filename1, get, RequestHeaders1, []),
+    {ok, 200, _, _} = do_request(Worker, Filename1, get, [?USER_1_TOKEN_HEADER], []),
+    %%------------------------------
+
+    %%------- write file test ------
+    % set acl to 'read&write' and test cdmi/non-cdmi put request (should succeed)
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
+    RequestBody4 = json_utils:encode([{<<"value">>, <<"new_data">>}]),
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, RequestBody4),
+    ?assertEqual(<<"new_data">>, get_file_content(Config, Filename1)),
+    write_to_file(Config, Filename1, <<"1">>, 8),
+    ?assertEqual(<<"new_data1">>, get_file_content(Config, Filename1)),
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, [?USER_1_TOKEN_HEADER], <<"new_data2">>),
+    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
+
+    % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclRead),
+    RequestBody6 = json_utils:encode([{<<"value">>, <<"new_data3">>}]),
+    {ok, 403, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, RequestBody6),
+    {ok, 403, _, _} = do_request(Worker, Filename1, put, [?USER_1_TOKEN_HEADER], <<"new_data4">>),
+    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
+    ?assertEqual({error, ?EACCES}, open_file(Config, Filename1, write)),
+    ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
+    %%------------------------------
+
+    %%------ delete file test ------
+    % set acl to 'delete'
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclDelete),
+
+    % delete file
+    {ok, 204, _, _} = do_request(Worker, Filename1, delete, [?USER_1_TOKEN_HEADER], []),
+    ?assert(not object_exists(Config, Filename1)),
+    %%------------------------------
+
+    %%--- read write dir test ------
+    ?assert(not object_exists(Config, Dirname1)),
+    mkdir(Config, filename:join("/", Dirname1)),
+    File1 = filename:join(Dirname1, "1"),
+    File2 = filename:join(Dirname1, "2"),
+    File3 = filename:join(Dirname1, "3"),
+    File4 = filename:join(Dirname1, "4"),
+
+    % set acl to 'read&write' and test cdmi get request (should succeed)
+    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclReadWriteExecute),
+    {ok, 200, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
+
+    % create files in directory (should succeed)
+    {ok, 201, _, _} = do_request(Worker, File1, put, [?USER_1_TOKEN_HEADER], []),
+    ?assert(object_exists(Config, File1)),
+    {ok, 201, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
+    ?assert(object_exists(Config, File2)),
+    create_file(Config, File3),
+    ?assert(object_exists(Config, File3)),
+
+    % delete files (should succeed)
+    {ok, 204, _, _} = do_request(Worker, File1, delete, [?USER_1_TOKEN_HEADER], []),
+    ?assert(not object_exists(Config, File1)),
+    {ok, 204, _, _} = do_request(Worker, File2, delete, [?USER_1_TOKEN_HEADER], []),
+    ?assert(not object_exists(Config, File2)),
+
+    % set acl to 'write' and test cdmi get request (should return 403 forbidden)
+    {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclWrite),
+    {ok, 403, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
+
+    % set acl to 'read' and test cdmi put request (should return 403 forbidden)
+    {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclReadExecute),
+    {ok, 200, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
+    {ok, 403, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, json_utils:encode([{<<"metadata">>, [{<<"my_meta">>, <<"value">>}]}])),
+
+    % create files (should return 403 forbidden)
+    {ok, 403, _, _} = do_request(Worker, File1, put, [?USER_1_TOKEN_HEADER], []),
+    ?assert(not object_exists(Config, File1)),
+    {ok, 403, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
+    ?assert(not object_exists(Config, File2)),
+    ?assertEqual({error,?EACCES}, create_file(Config, File4)),
+    ?assert(not object_exists(Config, File4)),
+
+    % delete files (should return 403 forbidden)
+    {ok, 403, _, _} = do_request(Worker, File3, delete, [?USER_1_TOKEN_HEADER], []),
+    ?assert(object_exists(Config, File3)).
+    %%------------------------------
+
+% test error handling
+errors_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {TestDirName, _TestFileName, _FullTestFileName, _TestFileContent} =
+        create_test_dir_and_file(Config),
+
+    %%---- unauthorized access -----
+    {ok, Code1, _Headers1, _Response1} =
+        do_request(Worker, TestDirName, get, [], []),
+    ?assertEqual(401, Code1),
+    %%------------------------------
+
+    %%----- wrong create path ------
+    RequestHeaders2 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code2, _Headers2, _Response2} =
+        do_request(Worker, "test_dir", put, RequestHeaders2, []),
+    ?assertEqual(400, Code2),
+    %%------------------------------
+
+    %%---- wrong create path 2 -----
+    RequestHeaders3 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code3, _Headers3, _Response3} =
+        do_request(Worker, "test_dir/", put, RequestHeaders3, []),
+    ?assertEqual(400, Code3),
+    %%------------------------------
+
+    %%-------- wrong base64 --------
+    RequestHeaders4 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    RequestBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, <<"#$%">>}]),
+    {ok, Code4, _Headers4, _Response4} =
+        do_request(Worker, "some_file_b64", put, RequestHeaders4, RequestBody4),
+    ?assertEqual(400, Code4),
+    %%------------------------------
+
+    %%-- duplicated body fields ----
+    RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
+    RequestBody5 = json_utils:encode(RawBody5),
+    RequestHeaders5 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code5, _Headers5, Response5} =
+        do_request(Worker, "dir_dupl/", put, RequestHeaders5, RequestBody5),
+    ?assertEqual(400, Code5),
+    CdmiResponse5 = json_utils:decode(Response5),
+    ?assertMatch([{<<"error_duplicated_body_fields">>, _}], CdmiResponse5),
+
+    %%-- reding non-existing file --
+    RequestHeaders6 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code6, _Headers6, _Response6} =
+        do_request(Worker, "nonexistent_file", get, RequestHeaders6),
+    ?assertMatch(404, Code6),
+    %%------------------------------
+
+    %%--- list nonexisting dir -----
+    RequestHeaders7 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    {ok, Code7, _Headers7, _Response7} =
+        do_request(Worker, "nonexisting_dir/", get, RequestHeaders7),
+    ?assertEqual(404, Code7),
+    %%------------------------------
+
+    %%--- open binary file without permission -----
+    File8 = "file",
+    FileContent8 = <<"File content...">>,
+    create_file(Config, File8),
+    ?assertEqual(object_exists(Config, File8), true),
+    write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
+    ?assertEqual(get_file_content(Config, File8), FileContent8),
+    RequestHeaders8 = [?USER_1_TOKEN_HEADER],
+
+    mock_opening_file_without_perms(Config),
+    {ok, Code8, _Headers8, _Response8} =
+        do_request(Worker, File8, get, RequestHeaders8),
+    unmock_opening_file_without_perms(Config),
+    ?assertEqual(403, Code8),
+    %%------------------------------
+
+    %%--- open cdmi file without permission -----
+    File9 = "file",
+    FileContent9 = <<"File content...">>,
+    create_file(Config, File9),
+    ?assertEqual(object_exists(Config, File9), true),
+    write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
+    ?assertEqual(get_file_content(Config, File9), FileContent9),
+    RequestHeaders9 = [
+        ?USER_1_TOKEN_HEADER,
+        ?CDMI_VERSION_HEADER,
+        ?OBJECT_CONTENT_TYPE_HEADER
+    ],
+
+    mock_opening_file_without_perms(Config),
+    {ok, Code9, _Headers9, _Response9} =
+        do_request(Worker, File9, get, RequestHeaders9),
+    unmock_opening_file_without_perms(Config),
+    ?assertEqual(403, Code9).
+    %%------------------------------
+
+accept_header_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    AcceptHeader = {<<"Accept">>, <<"*/*">>},
+
+    {ok, Code1, _Headers1, _Response1} =
+        do_request(Worker, [], get,
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, AcceptHeader], []),
+
+    ?assertEqual(200, Code1).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1326,9 +1548,6 @@ init_per_testcase(choose_adequate_handler, Config) ->
 init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
-    Workers = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
-    initializer:space_storage_mock(Workers, StorageId),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     mock_user_auth(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -1338,11 +1557,9 @@ end_per_testcase(choose_adequate_handler, Config) ->
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     unmock_user_auth(Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, space_storage),
     hackney:stop(),
     application:stop(ssl2).
 
@@ -1416,7 +1633,8 @@ object_exists(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
 
-    case lfm_proxy:stat(Worker, SessionId, {path, absolute_binary_path(Path)}) of
+    case lfm_proxy:stat(Worker, SessionId,
+        {path, absolute_binary_path(Path)}) of
         {ok, _} ->
             true;
         {error, ?ENOENT} ->

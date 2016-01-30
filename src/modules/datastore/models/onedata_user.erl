@@ -14,9 +14,9 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/global_registry/gr_users.hrl").
 
 %% model_behaviour callbacks
@@ -131,14 +131,18 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}) ->
+fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons} = Auth) ->
     try
         {ok, #user_details{id = Id, name = Name}} =
             gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
             gr_users:get_spaces({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
+        {ok, GroupIds} = gr_users:get_groups({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
+        [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
         OnedataUser = #onedata_user{
-            name = Name, space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]]
+            name = Name,
+            space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
+            group_ids = GroupIds
         },
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),

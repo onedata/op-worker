@@ -1,51 +1,33 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
+%%% @author Tomasz Lichon
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Event stream definition model.
+%%% @doc
+%%% Globalregistry group data cache
 %%% @end
 %%%-------------------------------------------------------------------
--module(subscription).
--author("Krzysztof Trzepla").
+-module(onedata_group).
+-author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
--include_lib("ctool/include/logging.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
-
--define(BATCH_SIZE, 100).
-
-%% API
--export([generate_id/0]).
+-include_lib("ctool/include/global_registry/gr_groups.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
--export_type([id/0, object/0, cancellation/0]).
+%% API
+-export([fetch/2, get_or_fetch/2]).
 
--type id() :: integer().
--type object() :: #file_attr_subscription{} | #file_location_subscription{} |
-#read_subscription{} | #write_subscription{} | #permission_changed_subscription{}.
--type cancellation() :: #subscription_cancellation{}.
+-export_type([id/0]).
 
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns increasing subscription IDs based on the timestamp.
-%% @end
-%%--------------------------------------------------------------------
--spec generate_id() -> SubId :: id().
-generate_id() ->
-    % @todo function erlang:now/0 is deprecated, change after migration to Erlang 18.0
-    {MegaSecs, Secs, MicroSecs} = erlang:now(),
-    MegaSecs * 1000000000000 + Secs * 1000000 + MicroSecs.
+-type id() :: binary().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -53,31 +35,29 @@ generate_id() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback save/1. 
+%% {@link model_behaviour} callback save/1.
 %% @end
 %%--------------------------------------------------------------------
--spec save(datastore:document()) ->
-    {ok, datastore:key()} | datastore:generic_error().
+-spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback update/2. 
+%% {@link model_behaviour} callback update/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(datastore:key(), Diff :: datastore:document_diff()) ->
     {ok, datastore:key()} | datastore:update_error().
 update(Key, Diff) ->
-    datastore:update(?STORE_LEVEL, ?MODEL_NAME, Key, Diff).
+    datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback create/1. 
+%% {@link model_behaviour} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(datastore:document()) ->
-    {ok, datastore:key()} | datastore:create_error().
+-spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
 create(Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
@@ -88,16 +68,7 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODEL_NAME, Key).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
+    datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,33 +77,32 @@ list() ->
 %%--------------------------------------------------------------------
 -spec delete(datastore:key()) -> ok | datastore:generic_error().
 delete(Key) ->
-    datastore:delete(?STORE_LEVEL, ?MODEL_NAME, Key).
+    datastore:delete(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback exists/1. 
+%% {@link model_behaviour} callback exists/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODEL_NAME, Key)).
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback model_init/0. 
+%% {@link model_behaviour} callback model_init/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(subscription_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(onedata_group_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback 'after'/5. 
+%% {@link model_behaviour} callback 'after'/5.
 %% @end
 %%--------------------------------------------------------------------
--spec 'after'(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
+-spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
@@ -140,13 +110,47 @@ model_init() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link model_behaviour} callback before/4. 
+%% {@link model_behaviour} callback before/4.
 %% @end
 %%--------------------------------------------------------------------
--spec before(ModelName :: model_behaviour:model_type(),
-    Method :: model_behaviour:model_action(),
-    Level :: datastore:store_level(), Context :: term()) ->
-    ok | datastore:generic_error().
+-spec before(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
+    Level :: datastore:store_level(), Context :: term()) -> ok | datastore:generic_error().
 before(_ModelName, _Method, _Level, _Context) ->
     ok.
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetch group from globalregistry and save it in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}, GroupId) ->
+    try
+        {ok, #group_details{id = Id, name = Name}} =
+            gr_groups:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}, GroupId),
+        %todo consider getting user_details for each group member and storing it as onedata_user
+        OnedataGroupDoc = #document{key = Id, value = #onedata_group{name = Name}},
+        {ok, _} = onedata_user:save(OnedataGroupDoc),
+        {ok, OnedataGroupDoc}
+    catch
+        _:Reason ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get group from cache or fetch from globalregistry and save in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(datastore:key(), #auth{}) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Key, Token) ->
+    case onedata_group:get(Key) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Token, Key);
+        Error -> Error
+    end.

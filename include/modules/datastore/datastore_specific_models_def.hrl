@@ -41,9 +41,14 @@
 %% Local, cached version of globalregistry user
 -record(onedata_user, {
     name :: binary(),
-    space_ids :: [binary()]
+    space_ids :: [binary()],
+    group_ids :: [binary()]
 }).
 
+%% Local, cached version of globalregistry group
+-record(onedata_group, {
+    name :: binary()
+}).
 
 -record(file_meta, {
     name :: file_meta:name(),
@@ -81,6 +86,12 @@
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
     size = 0 :: non_neg_integer() | undefined
+}).
+
+%% Model for caching space details fetched from Global Registry
+-record(space_info, {
+    id :: binary(),
+    name :: binary()
 }).
 
 %% Model that maps space to storage

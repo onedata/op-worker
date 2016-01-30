@@ -128,7 +128,7 @@ get_cdmi(Req, #{options := Options} = State) ->
 %%--------------------------------------------------------------------
 -spec put_cdmi(req(), #{}) -> {term(), req(), #{}}.
 put_cdmi(_, #{cdmi_version := undefined}) ->
-    throw(?no_version_given);
+    throw(?ERROR_NO_VERSION_GIVEN);
 put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
     {ok, Body, Req1} = cdmi_arg_parser:parse_body(Req),
     Attrs = get_attr(Auth, Path),
@@ -185,7 +185,7 @@ put_binary(Req, State = #{auth := Auth, path := Path}) ->
 %%--------------------------------------------------------------------
 -spec error_wrong_path(req(), #{}) -> no_return().
 error_wrong_path(_Req, _State) ->
-    throw(?wrong_path).
+    throw(?ERROR_WRONG_PATH).
 
 %%%===================================================================
 %%% Internal functions

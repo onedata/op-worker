@@ -16,20 +16,9 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
-
-%% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}
--define(run(B),
-    try B of
-        __Other -> __Other
-    catch
-        error:__Reason ->
-            __Reason0 = normalize_error(__Reason),
-            ?error_stacktrace("file_meta error: ~p", [__Reason0]),
-            {error, __Reason0}
-    end).
 
 %% How many processes shall be process single set_scope operation.
 -define(SET_SCOPER_WORKERS, 25).
@@ -53,7 +42,9 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
--export([snapshot_name/2, fix_parent_links/2, fix_parent_links/1]).
+-export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
+    is_spaces_dir/2]).
+-export([ fix_parent_links/2, fix_parent_links/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -506,15 +497,13 @@ setup_onedata_user(UUID) ->
                 true ->
                     fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
                 false ->
-                    ?info("WUT ~p", [SpaceId]),
-                    {ok, #space_details{name = SpaceName}} =
-                        gr_spaces:get_details(provider, SpaceId),
+                    space_info:fetch(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
-                                name = SpaceName, type = ?DIRECTORY_TYPE, mode = 8#1770,
-                                mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
-                                is_scope = true
+                                name = SpaceId, type = ?DIRECTORY_TYPE,
+                                mode = 8#1770, mtime = CTime, atime = CTime,
+                                ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                             }})
             end
         end, Spaces),
@@ -562,6 +551,49 @@ attach_location(Entry, LocId, ProviderId) ->
     {ok, datastore:document()} | datastore:get_error().
 get_space_dir(SpaceId) ->
     get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
+to_uuid({uuid, UUID}) ->
+    {ok, UUID};
+to_uuid(#document{key = UUID}) ->
+    {ok, UUID};
+to_uuid({path, Path}) ->
+    ?run(begin
+             {ok, {Doc, _}} = resolve_path(Path),
+             to_uuid(Doc)
+         end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file doc represents root directory with empty path.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_root_dir(datastore:document()) -> boolean().
+is_root_dir(#document{key = Key}) ->
+    Key =:= ?ROOT_DIR_UUID.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file doc represents "spaces" directory dedicated for user.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_spaces_dir(datastore:document(), onedata_user:id()) -> boolean().
+is_spaces_dir(#document{key = Key}, UserId) ->
+    Key =:= fslogic_uuid:spaces_uuid(UserId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file doc represents "spaces" directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_spaces_base_dir(datastore:document()) -> boolean().
+is_spaces_base_dir(#document{key = Key}) ->
+    Key =:= ?SPACES_BASE_DIR_UUID.
 
 %%%===================================================================
 %%% Internal functions
@@ -694,31 +726,19 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error() | no_return().
-gen_path2(Entry, Acc) ->
-    {ok, #document{} = Doc} = get(Entry),
+gen_path2(Entry, Tokens) ->
+    SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
+    {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = get(Entry),
     case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
         {ok, {?ROOT_DIR_UUID, _}} ->
-            Tokens = [Token || #document{value = #file_meta{name = Token}} <- [Doc | Acc]],
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>> | Tokens])};
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
+        {ok, {SpaceBaseDirUUID, _}} ->
+            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
+            gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
-            gen_path2({uuid, ParentUUID}, [Doc | Acc])
+            gen_path2({uuid, ParentUUID}, [Name | Tokens])
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
-%% @end
-%%--------------------------------------------------------------------
--spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
-to_uuid({uuid, UUID}) ->
-    {ok, UUID};
-to_uuid(#document{key = UUID}) ->
-    {ok, UUID};
-to_uuid({path, Path}) ->
-    ?run(begin
-             {ok, {Doc, _}} = resolve_path(Path),
-             to_uuid(Doc)
-         end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -747,23 +767,6 @@ is_valid_filename(FileName) when is_binary(FileName) ->
         end,
 
     SnapSep andalso DirSep.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns just error reason for given error tuple
-%% @end
-%%--------------------------------------------------------------------
--spec normalize_error(term()) -> term().
-normalize_error({badmatch, Reason}) ->
-    normalize_error(Reason);
-normalize_error({case_clause, Reason}) ->
-    normalize_error(Reason);
-normalize_error({error, Reason}) ->
-    normalize_error(Reason);
-normalize_error({ok, Inv}) ->
-    normalize_error({invalid_response, normalize_error(Inv)});
-normalize_error(Reason) ->
-    Reason.
 
 
 %%--------------------------------------------------------------------
