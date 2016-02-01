@@ -8,6 +8,7 @@ dockers.
 """
 
 import os
+import platform
 import re
 from . import common, docker
 
@@ -39,7 +40,7 @@ def run(container_id, gui_config_file, docker_src_dir, docker_bin_dir):
 
 
 def watch_changes(container_id, gui_config_file, docker_src_dir,
-                  docker_bin_dir, detach=True):
+                  docker_bin_dir, detach=False):
     """
     Starts a process on given docker that monitors changes in GUI sources and
     rebuilds the project when something changes.
@@ -49,20 +50,15 @@ def watch_changes(container_id, gui_config_file, docker_src_dir,
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
 
-    buildnwatch_command = '''. /usr/lib/nvm/nvm.sh
+    command = '''. /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {source_gui_dir}
 ember build --watch --output-path={release_gui_dir}'''
-    buildnwatch_command = buildnwatch_command.format(
+    command = command.format(
         source_gui_dir=source_gui_dir,
         release_gui_dir=release_gui_dir)
 
-    docker.exec_(
-        container=container_id,
-        detach=detach,
-        interactive=True,
-        tty=True,
-        command=buildnwatch_command)
+    _run_as_current_user(container_id, command, detach=detach)
 
 
 def start_livereload(container_id, gui_config_file,
@@ -76,7 +72,7 @@ def start_livereload(container_id, gui_config_file,
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
 
-    livereload_command = '''. /usr/lib/nvm/nvm.sh
+    command = '''. /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {release_gui_dir}
 npm link livereload
@@ -85,16 +81,11 @@ cat <<"EOF" > gui_livereload.js
 EOF
 node gui_livereload.js .'''
     js_path = os.path.join(common.get_script_dir(), 'gui_livereload.js')
-    livereload_command = livereload_command.format(
+    command = command.format(
         release_gui_dir=release_gui_dir,
         gui_livereload=open(js_path, 'r').read())
 
-    docker.exec_(
-        container=container_id,
-        detach=detach,
-        interactive=True,
-        tty=True,
-        command=livereload_command)
+    _run_as_current_user(container_id, command, detach=detach)
 
 
 def _parse_erl_config(file, param_name):
@@ -107,3 +98,47 @@ def _parse_erl_config(file, param_name):
     file.close()
     matches = re.findall("{" + param_name + ".*", file_content)
     return matches[0].split('"')[1]
+
+
+def _run_as_current_user(container_id, command, detach=True):
+    sh_command = '''eval $(ssh-agent) > /dev/null
+ssh-add 2>&1
+{command}
+'''
+    sh_command = sh_command.format(command=command)
+
+    python_command = '''
+import os, shutil, subprocess, sys
+
+os.environ['HOME'] = '/root'
+
+if {shed_privileges}:
+    useradd = ['useradd', '--create-home', '--uid', '{uid}', 'maketmp']
+
+    subprocess.call(useradd)
+
+    os.environ['PATH'] = os.environ['PATH'].replace('sbin', 'bin')
+    os.environ['HOME'] = '/home/maketmp'
+    os.setregid({gid}, {gid})
+    os.setreuid({uid}, {uid})
+
+ret = subprocess.call(['sh', '-c', """{sh_command}"""])
+sys.exit(ret)
+'''
+
+    python_command = python_command.format(
+        sh_command=sh_command,
+        uid=os.geteuid(),
+        gid=os.getegid(),
+        shed_privileges=(platform.system() == 'Linux' and os.geteuid() != 0)
+    )
+
+    print(python_command)
+
+    docker.exec_(
+        container=container_id,
+        detach=detach,
+        interactive=True,
+        tty=True,
+        command=['python', '-c', python_command]
+    )
