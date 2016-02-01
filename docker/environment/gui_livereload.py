@@ -13,18 +13,18 @@ import re
 from . import common, docker
 
 
-def required_volumes(project_src_dir, docker_src_dir):
+def required_volumes(gui_config_file, project_src_dir, docker_src_dir):
     """
     Returns volumes that are required for livereload to work based on:
     project_src_dir - path on host to project root
     docker_src_dir - path on docker to project root
     gui_src_dir - path to gui sources relative to project root
     """
-    gui_src_dir = 'src/http/gui'
+    source_gui_dir = _parse_erl_config(gui_config_file, 'source_gui_dir')
     return [
         (
-            os.path.join(project_src_dir, gui_src_dir),
-            os.path.join(docker_src_dir, gui_src_dir),
+            os.path.join(project_src_dir, source_gui_dir),
+            os.path.join(docker_src_dir, source_gui_dir),
             'rw'
         )
     ]
@@ -40,25 +40,43 @@ def run(container_id, gui_config_file, docker_src_dir, docker_bin_dir):
 
 
 def watch_changes(container_id, gui_config_file, docker_src_dir,
-                  docker_bin_dir, detach=False):
+                  docker_bin_dir, detach=True):
     """
     Starts a process on given docker that monitors changes in GUI sources and
     rebuilds the project when something changes.
     """
     source_gui_dir = _parse_erl_config(gui_config_file, 'source_gui_dir')
     source_gui_dir = os.path.join(docker_src_dir, source_gui_dir)
+    source_tmp_dir = os.path.join(source_gui_dir, 'tmp')
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
 
-    command = '''. /usr/lib/nvm/nvm.sh
+    # Start a process that will chown ember tmp dir
+    # (so that it does not belong to root afterwards)
+    command = '''\
+mkdir -p /root/bin/
+mkdir -p {source_tmp_dir}
+chown -R {uid}:{gid} {source_tmp_dir}
+echo 'while ((1)); do chown -R {uid}:{gid} {source_tmp_dir}; sleep 1; done' > /root/bin/chown_tmp_dir.sh
+chmod +x /root/bin/chown_tmp_dir.sh
+nohup bash /root/bin/chown_tmp_dir.sh &
+. /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {source_gui_dir}
 ember build --watch --output-path={release_gui_dir}'''
     command = command.format(
+        uid=os.geteuid(),
+        gid=os.getegid(),
+        source_tmp_dir=source_tmp_dir,
         source_gui_dir=source_gui_dir,
         release_gui_dir=release_gui_dir)
 
-    _run_as_current_user(container_id, command, detach=detach)
+    docker.exec_(
+        container=container_id,
+        detach=detach,
+        interactive=True,
+        tty=True,
+        command=command)
 
 
 def start_livereload(container_id, gui_config_file,
@@ -72,7 +90,8 @@ def start_livereload(container_id, gui_config_file,
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
 
-    command = '''. /usr/lib/nvm/nvm.sh
+    command = '''
+. /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {release_gui_dir}
 npm link livereload
@@ -85,7 +104,12 @@ node gui_livereload.js .'''
         release_gui_dir=release_gui_dir,
         gui_livereload=open(js_path, 'r').read())
 
-    _run_as_current_user(container_id, command, detach=detach)
+    docker.exec_(
+        container=container_id,
+        detach=detach,
+        interactive=True,
+        tty=True,
+        command=command)
 
 
 def _parse_erl_config(file, param_name):
@@ -98,47 +122,3 @@ def _parse_erl_config(file, param_name):
     file.close()
     matches = re.findall("{" + param_name + ".*", file_content)
     return matches[0].split('"')[1]
-
-
-def _run_as_current_user(container_id, command, detach=True):
-    sh_command = '''eval $(ssh-agent) > /dev/null
-ssh-add 2>&1
-{command}
-'''
-    sh_command = sh_command.format(command=command)
-
-    python_command = '''
-import os, shutil, subprocess, sys
-
-os.environ['HOME'] = '/root'
-
-if {shed_privileges}:
-    useradd = ['useradd', '--create-home', '--uid', '{uid}', 'maketmp']
-
-    subprocess.call(useradd)
-
-    os.environ['PATH'] = os.environ['PATH'].replace('sbin', 'bin')
-    os.environ['HOME'] = '/home/maketmp'
-    os.setregid({gid}, {gid})
-    os.setreuid({uid}, {uid})
-
-ret = subprocess.call(['sh', '-c', """{sh_command}"""])
-sys.exit(ret)
-'''
-
-    python_command = python_command.format(
-        sh_command=sh_command,
-        uid=os.geteuid(),
-        gid=os.getegid(),
-        shed_privileges=(platform.system() == 'Linux' and os.geteuid() != 0)
-    )
-
-    print(python_command)
-
-    docker.exec_(
-        container=container_id,
-        detach=detach,
-        interactive=True,
-        tty=True,
-        command=['python', '-c', python_command]
-    )

@@ -86,7 +86,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 
     # @TODO ZROBIC COS Z RW
     volumes = [(bindir, DOCKER_BINDIR_PATH, 'ro')]
-    volumes += gui_livereload.required_volumes(bindir, DOCKER_BINDIR_PATH)
+    volumes += gui_livereload.required_volumes('rel/gui.config', bindir, DOCKER_BINDIR_PATH)
     volumes += configurator.extra_volumes(config)
 
     if logdir:
