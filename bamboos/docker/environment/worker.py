@@ -47,7 +47,6 @@ def _tweak_config(config, name, instance, uid, configurator):
     sys_config[configurator.domain_env_name()] = cluster_domain(instance, uid)
 
     sys_config['persistence_driver_module'] = _db_driver_module(cfg['db_driver'])
-    print sys_config['persistence_driver_module']
 
     if 'vm.args' not in cfg['nodes']['node']:
         cfg['nodes']['node']['vm.args'] = {}
