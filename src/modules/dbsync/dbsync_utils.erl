@@ -18,7 +18,8 @@
 
 %% API
 -export([get_providers_for_space/1]).
--export([get_provider_url/1, encode_term/1, decode_term/1, gen_request_id/0, get_spaces_for_provider/1]).
+-export([get_spaces_for_provider/0, get_spaces_for_provider/1]).
+-export([get_provider_url/1, encode_term/1, decode_term/1, gen_request_id/0]).
 
 %%%===================================================================
 %%% API
@@ -28,9 +29,20 @@ get_providers_for_space(SpaceId) ->
     {ok, ProviderIds} = gr_spaces:get_providers(provider, SpaceId),
     ProviderIds.
 
+
+get_spaces_for_provider() ->
+    get_spaces_for_provider(oneprovider:get_provider_id()).
+
 get_spaces_for_provider(ProviderId) ->
-    {ok, SpaceIds} = gr_providers:get_spaces( ProviderId),
-    SpaceIds.
+    {ok, SpaceIds} = gr_providers:get_spaces(provider),
+    lists:foldl(
+        fun(SpaceId, Acc) ->
+            {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
+            case lists:member(ProviderId, Providers) of
+                true -> [SpaceId | Acc];
+                false -> Acc
+            end
+        end, [], SpaceIds).
 
 
 %% ====================================================================
