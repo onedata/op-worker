@@ -42,8 +42,8 @@ all() ->
         error_open_fun_test,
         error_read_fun_test,
         error_write_fun_test,
-        request_bigger_than_file_test,
-        offset_greater_than_file_size_test
+        offset_greater_than_file_size_test,
+        request_bigger_than_file_test
     ].
 
 -define(FILE_HANDLE, <<"file_handle">>).
@@ -369,6 +369,7 @@ request_bigger_than_file_test(Config) ->
     Offset = DataSize div 3,
     SizeToFetch = DataSize - Offset,
     DataCounterPid = spawn(?MODULE, data_counter, [SizeToFetch]),
+    CounterPid = spawn(?MODULE, counter, [0]),
 
     WriteFunOpt = {write_fun,
         fun(_Handle, _Offset, Data) ->
@@ -392,10 +393,12 @@ request_bigger_than_file_test(Config) ->
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
-        ?TEST_FILE_UUID, Offset, DataSize, notify_fun(), on_complete_fun(self())
+        ?TEST_FILE_UUID, Offset, DataSize, notify_fun(CounterPid), on_complete_fun(self())
     ),
 
-    ?assertReceivedMatch({on_complete, {ok, SizeToFetch}}, ?TIMEOUT).
+    ?assertReceivedMatch({on_complete, {ok, SizeToFetch}}, ?TIMEOUT),
+    stop_counter(CounterPid),
+    ?assertReceivedMatch({counter, 6}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
