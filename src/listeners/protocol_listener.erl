@@ -59,7 +59,9 @@ start() ->
         ranch_ssl2, [
             {ip, Ip},
             {port, Port},
-            {certfile, CertFile}
+            {certfile, CertFile},
+            {verify_type, verify_peer},
+            {fail_if_no_peer_cert, false}
         ],
         connection, []
     ),

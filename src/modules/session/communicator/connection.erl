@@ -396,7 +396,6 @@ handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
               _ ->
                   Msg0
           end,
-    ?debug("Handle normal message 1 ~p", [Msg1]),
     {State, Msg} = update_message_id(State0, Msg1),
     case router:preroute_message(Msg, SessId) of
         ok ->

@@ -148,9 +148,9 @@ ensure_connected(SessId) ->
     case session:get_random_connection(SessId) of
         {error, _} ->
             {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
-            Connections = lists:map(
+            lists:foreach(
                 fun(URL) ->
-                    Port = 5556,
+                    Port = 5555,
                     connection:start_link(SessId, URL, Port, ranch_ssl2, timer:seconds(5))
                 end, URLs),
             ok;
