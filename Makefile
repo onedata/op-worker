@@ -39,13 +39,24 @@ compile:
 deps:
 	./rebar get-deps
 
+gui_dev:
+	./deps/gui/build_gui.sh dev
+
+gui_prod:
+	./deps/gui/build_gui.sh prod
+
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
 ## Also a release is not nescesary for us.
 ## We prevent reltool from creating a release.
 ## todo: find better solution
 ##
-generate: deps compile
+generate: deps compile gui_dev
+	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
+	./rebar generate $(OVERLAY_VARS)
+	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
+
+generate_production: deps compile gui_prod
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	./rebar generate $(OVERLAY_VARS)
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
