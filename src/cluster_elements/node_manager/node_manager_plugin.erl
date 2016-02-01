@@ -66,7 +66,8 @@ db_nodes() ->
 listeners() -> node_manager:cluster_worker_listeners() ++ [
     gui_listener,
     protocol_listener,
-    rest_listener
+    rest_listener,
+    provider_listener
 ].
 
 %%--------------------------------------------------------------------
@@ -81,7 +82,8 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
         {supervisor_spec, session_manager_worker:supervisor_spec()},
         {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
     ]},
-    {fslogic_worker, []}
+    {fslogic_worker, []},
+    {dbsync_worker, []}
 ].
 
 %%--------------------------------------------------------------------
