@@ -104,7 +104,7 @@ read_dir(CTX, File, Offset, Size) ->
                     true ->
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
                         Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                            {ok, Space} = space_info:fetch(provider, SpaceId),
                             Space
                         end, SpacesIdsChunk),
 
