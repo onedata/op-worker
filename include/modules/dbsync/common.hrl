@@ -35,8 +35,3 @@
     last_send,
     removed = false
 }).
-
--record(space_info, {
-    space_id,
-    providers
-}).
