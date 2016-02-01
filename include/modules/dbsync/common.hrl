@@ -17,7 +17,7 @@
 }).
 
 -record(batch, {
-    changes = [dbsync_worker:change()],
+    changes = [] :: [dbsync_worker:change()],
     since :: non_neg_integer(),
     until :: non_neg_integer()
 }).
