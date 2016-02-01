@@ -23,7 +23,7 @@ class ClusterWorkerConfigurator:
     def configure_started_instance(self, bindir, instance, config, output):
         pass
 
-    def extra_volumes(self, config):
+    def extra_volumes(self, bindir, config):
         return []
 
     def app_name(self):

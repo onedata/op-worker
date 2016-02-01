@@ -8,7 +8,6 @@ dockers.
 """
 
 import os
-import platform
 import re
 from . import common, docker
 
@@ -90,7 +89,7 @@ def start_livereload(container_id, gui_config_file,
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
 
-    command = '''
+    command = '''\
 . /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {release_gui_dir}

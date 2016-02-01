@@ -9,8 +9,7 @@ Script is parametrised by worker type related configurator.
 import copy
 import json
 import os
-from . import common, docker, riak, couchbase, dns, cluster_manager, \
-    gui_livereload
+from . import common, docker, riak, couchbase, dns, cluster_manager
 
 CLUSTER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 # mounting point for op-worker-node docker
@@ -84,10 +83,8 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         executable=configurator.app_name()
     )
 
-    # @TODO ZROBIC COS Z RW
     volumes = [(bindir, DOCKER_BINDIR_PATH, 'ro')]
-    volumes += gui_livereload.required_volumes('rel/gui.config', bindir, DOCKER_BINDIR_PATH)
-    volumes += configurator.extra_volumes(config)
+    volumes += configurator.extra_volumes(config, bindir)
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -232,10 +229,6 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
 
         # Wait for all workers to start
         common.wait_until(_ready, workers, CLUSTER_WAIT_FOR_NAGIOS_SECONDS)
-
-        for worker in workers:
-            gui_livereload.run(worker, os.path.join(bindir, 'rel/gui.config'),
-                               '/root/build', '/root/bin/node')
 
         # Add the domain of current clusters
         domains = {
