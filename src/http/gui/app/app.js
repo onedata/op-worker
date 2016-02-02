@@ -20,7 +20,7 @@ if (config.environment === 'development') {
   var head = document.getElementsByTagName('head')[0];
   var script = document.createElement('script');
   script.type = 'text/javascript';
-  script.src = 'https://' + (location.host || 'localhost').split(':')[0] +
+  script.src = location.protocol + '//' + (location.host || 'localhost').split(':')[0] +
     ':35729/livereload.js?snipver=1';
   head.appendChild(script);
   console.log("Loaded livereload script");
