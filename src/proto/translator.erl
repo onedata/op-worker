@@ -183,7 +183,7 @@ translate_to_protobuf(#read_subscription{} = Sub) ->
         size_threshold = Sub#read_subscription.size_threshold
     }};
 translate_to_protobuf(#write_subscription{} = Sub) ->
-    {write_subscription, #'ReadSubscription'{
+    {write_subscription, #'WriteSubscription'{
         counter_threshold = Sub#write_subscription.counter_threshold,
         time_threshold = Sub#write_subscription.time_threshold,
         size_threshold = Sub#write_subscription.size_threshold
