@@ -47,7 +47,7 @@ all() ->
 
 -performance([
     {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-    {success_rate, 99.9},
+    {success_rate, 99},
     {config, [{name, stress}, {description, "Basic config for stress test"}]}
 ]).
 stress_test(Config) ->

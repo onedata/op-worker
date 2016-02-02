@@ -11,27 +11,13 @@
 -author("Rafal Slota").
 
 -record(change, {
-    seq,
-    doc,
-    model
-}).
-
--record(seq_range, {
-    since,
-    until
+    seq :: non_neg_integer(),
+    doc :: datastore:document(),
+    model :: model_behaviour:model_type()
 }).
 
 -record(batch, {
-    changes = [],
-    since,
-    until
-}).
-
-
--record(queue, {
-    key,
-    since = 0,
-    batch_map = #{},
-    last_send,
-    removed = false
+    changes = [] :: [dbsync_worker:change()],
+    since :: non_neg_integer(),
+    until :: non_neg_integer()
 }).

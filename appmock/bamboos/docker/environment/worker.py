@@ -201,8 +201,6 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
             db_node_mappings, db_out = _riak_up(instance, all_db_nodes, dns_servers, uid)
         elif db_driver == 'couchbase':
             db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes, dns_servers, uid)
-        elif db_driver == 'couchdb':
-            db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes, dns_servers, uid)
         else:
             raise ValueError("Invalid db_driver: {0}".format(db_driver))
 

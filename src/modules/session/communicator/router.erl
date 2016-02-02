@@ -150,12 +150,12 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     ok;
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #dbsync_request{} = DBSyncRequest}) ->
-    ?info("DBSync request ~p", [DBSyncRequest]),
+    ?debug("DBSync request ~p", [DBSyncRequest]),
     spawn(fun() ->
         DBSyncResponse = worker_proxy:call(dbsync_worker,
             {dbsync_request, SessId, DBSyncRequest}),
 
-        ?info("DBSync response ~p", [DBSyncResponse]),
+        ?debug("DBSync response ~p", [DBSyncResponse]),
         communicator:send(#server_message{message_id = Id,
             message_body = DBSyncResponse}, SessId)
           end),

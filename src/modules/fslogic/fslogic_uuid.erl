@@ -60,8 +60,12 @@ spaceid_to_space_dir_uuid(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_dir_uuid_to_spaceid(SpaceUuid :: binary()) -> binary().
 space_dir_uuid_to_spaceid(SpaceUuid) ->
-    {space, SpaceId} = binary_to_term(base64:decode(SpaceUuid)),
-    SpaceId.
+    case binary_to_term(base64:decode(SpaceUuid)) of
+        {space, SpaceId} ->
+            SpaceId;
+        _ ->
+            throw({not_a_space, {uuid, SpaceUuid}})
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Returns UUID of user's main 'spaces' directory.

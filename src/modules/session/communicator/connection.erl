@@ -196,7 +196,6 @@ handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection
     {reply, ok, State};
 handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection_type = outgoing,
     transport = Transport}) ->
-    ?info("Sending msg ~p", [ServerMsg]),
     send_client_message(Socket, Transport, ServerMsg),
     NewState = case ServerMsg of
         #client_message{message_id = #message_id{recipient = Pid, id = MessageId}} when is_pid(Pid) ->

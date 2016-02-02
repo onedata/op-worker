@@ -43,7 +43,9 @@
     gen_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
-    is_spaces_dir/2, fix_parent_links/2, fix_parent_links/1]).
+    is_spaces_dir/2]).
+-export([fix_parent_links/2, fix_parent_links/1]).
+
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
