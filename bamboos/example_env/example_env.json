@@ -69,6 +69,7 @@
         "p1": {
             "db_driver": "couchbase",
             "os_config": "cfg1",
+            "gui_livereload": true,
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -104,6 +105,7 @@
         "p2.gr": {
             "db_driver": "riak",
             "os_config": "cfg2",
+            "gui_livereload": false,
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
