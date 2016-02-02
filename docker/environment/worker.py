@@ -241,7 +241,7 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
         }
         common.merge(current_output, domains)
         configurator.configure_started_instance(bindir, instance, config,
-                                                current_output)
+                                                workers, current_output)
         common.merge(output, current_output)
 
     # Make sure domains are added to the dns server.

@@ -27,17 +27,26 @@ class ProviderWorkerConfigurator:
             sys_config['global_registry_domain'] = gr_hostname
         return cfg
 
-    def configure_started_instance(self, bindir, instance, config, output):
-        gui_livereload.run(instance, os.path.join(bindir, 'rel/gui.config'),
-                           '/root/build', '/root/bin/node')
-        if 'os_config' in config[self.domains_attribute()][instance]:
-            os_config = config[self.domains_attribute()][instance]['os_config']
+    def configure_started_instance(self, bindir, instance, config,
+                                   container_ids, output):
+        this_config = config[self.domains_attribute()][instance]
+        # Check if gui_livereload is enabled in env and turn it on
+        if 'gui_livereload' in this_config:
+            if this_config['gui_livereload']:
+                print 'Starting GUI livereload for provider {0}.'.format(
+                    instance)
+                for container_id in container_ids:
+                    gui_livereload.run(container_id,
+                                       os.path.join(bindir, 'rel/gui.config'),
+                                        '/root/build', '/root/bin/node')
+        if 'os_config' in this_config:
+            os_config = this_config['os_config']
             create_storages(config['os_configs'][os_config]['storages'],
                             output[self.nodes_list_attribute()],
-                            config[self.domains_attribute()][instance][
-                                self.app_name()], bindir)
+                            this_config[self.app_name()], bindir)
 
-    def extra_volumes(self, bindir, config):
+    def extra_volumes(self, config, bindir):
+        print(bindir)
         storage_volumes = [common.volume_for_storage(s) for s in config[
             'os_config']['storages']] if 'os_config' in config else []
         storage_volumes += gui_livereload.required_volumes('rel/gui.config',
