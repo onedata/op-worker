@@ -57,4 +57,10 @@
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
+%% definition of an event triggered when file permission gets changed
+%% file_uuid - UUID of a file
+-record(permission_changed_event, {
+    file_uuid :: file_meta:uuid()
+}).
+
 -endif.

@@ -52,7 +52,7 @@ prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, ?dataobject_capability_path} | prepare(Tail, State)];
 prepare([<<"completionStatus">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
-    CompletionStatus = cdmi_metadata:get_completion_status(Auth, {uuid, Uuid}),
+    CompletionStatus = cdmi_metadata:get_cdmi_completion_status(Auth, {uuid, Uuid}),
     [{<<"completionStatus">>, CompletionStatus} | prepare(Tail, State)];
 prepare([<<"mimetype">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
     Mimetype = cdmi_metadata:get_mimetype(Auth, {uuid, Uuid}),

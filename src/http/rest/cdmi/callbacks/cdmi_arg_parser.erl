@@ -58,7 +58,7 @@ malformed_capability_request(Req, State) ->
     {false, Req, State2} = cdmi_arg_parser:malformed_request(Req, State),
     case maps:find(cdmi_version, State2) of
         {ok, _} -> {false, Req, State2};
-        _ -> throw(?unsupported_version)
+        _ -> throw(?ERROR_UNSUPPORTED_VERSION)
     end.
 
 %%--------------------------------------------------------------------
@@ -88,7 +88,7 @@ get_ranges(Req, Size) ->
         undefined -> {undefined, Req1};
         _ ->
             case parse_byte_range(RawRange, Size) of
-                invalid ->throw(?invalid_range);
+                invalid ->throw(?ERROR_INVALID_RANGE);
                 Ranges -> {Ranges, Req1}
             end
     end.
@@ -220,7 +220,7 @@ add_objectid_path_to_state(Req, State) ->
     Uuid =
         case cdmi_id:objectid_to_uuid(Id) of
             {ok, Uuid_} -> Uuid_;
-            _ -> throw(?invalid_objectid)
+            _ -> throw(?ERROR_INVALID_OBJECTID)
         end,
 
     % get path of object with that uuid
@@ -229,7 +229,7 @@ add_objectid_path_to_state(Req, State) ->
             {true, Req3_1} ->
                 {proplists:get_value(Id, ?CapabilityPathById), Req3_1};
             {false, Req3_1} ->
-                {{ok, Auth}, Req3_2} = onedata_auth_api:authenticate(Req3_1),
+                {Auth, Req3_2} = try_authenticate(Req3_1),
                 {ok, NewPath} = onedata_file_api:get_file_path(Auth, Uuid),
                 {NewPath, Req3_2}
         end,
@@ -252,7 +252,7 @@ get_supported_version(undefined) -> undefined;
 get_supported_version(VersionBinary) when is_binary(VersionBinary) ->
     VersionList = lists:map(fun utils:trim_spaces/1, binary:split(VersionBinary, <<",">>, [global])),
     get_supported_version(VersionList);
-get_supported_version([]) -> throw(?unsupported_version);
+get_supported_version([]) -> throw(?ERROR_UNSUPPORTED_VERSION);
 get_supported_version([<<"1.1.1">> | _Rest]) -> <<"1.1.1">>;
 get_supported_version([_Version | Rest]) -> get_supported_version(Rest).
 
@@ -270,16 +270,19 @@ parse_opts(<<>>) ->
 parse_opts(RawOpts) ->
     Opts = binary:split(RawOpts, <<";">>, [global]),
     lists:map(
-        fun(Opt) ->
-            case binary:split(Opt, <<":">>) of
-                [SimpleOpt] -> SimpleOpt;
-                [SimpleOpt, Range] ->
-                    case binary:split(Range, <<"-">>) of
-                        [SimpleVal] -> {SimpleOpt, SimpleVal};
-                        [From, To] ->
-                            {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
-                    end
-            end
+        fun
+            (Opt) when is_binary(Opt) ->
+                case binary:split(Opt, <<":">>) of
+                    [SimpleOpt] -> SimpleOpt;
+                    [SimpleOpt, Range] ->
+                        case binary:split(Range, <<"-">>) of
+                            [SimpleVal] -> {SimpleOpt, SimpleVal};
+                            [From, To] ->
+                                {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
+                        end
+                end;
+            (Other) ->
+                throw(?ERROR_MALFORMED_QS)
         end,
         Opts
     ).
@@ -295,10 +298,10 @@ validate_body(Body) ->
     case length(Keys) =:= length(Body) of
         true ->
             case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
-                N when N > 1 -> throw(?conflicting_body_fields);
+                N when N > 1 -> throw(?ERROR_CONFLICTING_BODY_FIELDS);
                 _ -> ok
             end;
-        false -> throw(?duplicated_body_fields)
+        false -> throw(?ERROR_DUPLICATED_BODY_FIELDS)
     end.
 
 %%--------------------------------------------------------------------
@@ -342,3 +345,15 @@ is_capability_object(Req) ->
             _ -> false
         end,
     {Answer, NewReq}.
+
+%%--------------------------------------------------------------------
+%% @doc Authenticate user or throw ERROR_UNAUTHORIZED in case of error
+%%--------------------------------------------------------------------
+-spec try_authenticate(cowboy_req:req()) -> {onedata_auth_api:auth(), cowboy_req:req()}.
+try_authenticate(Req) ->
+    case onedata_auth_api:authenticate(Req) of
+        {{ok, Auth}, Req2} ->
+            {Auth, Req2};
+        _ ->
+            throw(?ERROR_UNAUTHORIZED)
+    end.

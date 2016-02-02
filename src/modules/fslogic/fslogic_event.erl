@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_file_attr_update/2, emit_file_location_update/2]).
+-export([emit_file_attr_update/2, emit_file_location_update/2, emit_permission_changed/1]).
 
 %%%===================================================================
 %%% API
@@ -60,6 +60,16 @@ emit_file_location_update(FileEntry, ExcludedSessions) ->
             ?error_stacktrace("Unable to push new location for file ~p due to: ~p", [FileEntry, Reason]),
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Send event informing subscribed client that permissions of file has changed.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_permission_changed(FileUuid :: file_meta:uuid()) ->
+    ok | {error, Reason :: term()}.
+emit_permission_changed(FileUuid) ->
+    event:emit(#event{object = #permission_changed_event{file_uuid = FileUuid}}).
 
 %%%===================================================================
 %%% Internal functions
