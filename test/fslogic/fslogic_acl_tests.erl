@@ -49,16 +49,16 @@ acl_conversion_test() ->
     Acl = fslogic_acl:from_json_fromat_to_acl(
         [
             [
-                {<<"acetype">>, <<"ALLOW">>},
+                {<<"acetype">>, ?allow},
                 {<<"identifier">>, AceName1},
-                {<<"aceflags">>, <<"NO_FLAGS">>},
-                {<<"acemask">>, <<"READ, WRITE">>}
+                {<<"aceflags">>, ?no_flags},
+                {<<"acemask">>, <<(?read)/binary, ", ", (?write)/binary>>}
             ],
             [
-                {<<"acetype">>, <<"DENY">>},
+                {<<"acetype">>, ?deny},
                 {<<"identifier">>, AceName2},
-                {<<"aceflags">>, <<"IDENTIFIER_GROUP">>},
-                {<<"acemask">>, <<"WRITE">>}
+                {<<"aceflags">>, ?identifier_group},
+                {<<"acemask">>, ?write}
             ]
         ]
     ),

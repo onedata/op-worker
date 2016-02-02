@@ -33,5 +33,8 @@ models() -> [
   file_meta,
   storage,
   file_location,
-  xattr
+  xattr,
+  space_info,
+  space_storage,
+  ceph_user
 ].

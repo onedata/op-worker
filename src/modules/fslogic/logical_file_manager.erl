@@ -72,8 +72,8 @@
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
 %% Functions concerning cdmi attributes
--export([get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2,
-    set_completion_status/3, get_mimetype/2, set_mimetype/3]).
+-export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
+    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -442,10 +442,10 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(session:id(), file_key()) ->
-    {ok, xattr:completion_status()} | error_reply().
-get_completion_status(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_completion_status(SessId, FileKey) end).
+-spec get_cdmi_completion_status(session:id(), file_key()) ->
+    {ok, xattr:cdmi_completion_status()} | error_reply().
+get_cdmi_completion_status(SessId, FileKey) ->
+    ?run(fun() -> lfm_attrs:get_cdmi_completion_status(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -453,10 +453,10 @@ get_completion_status(SessId, FileKey) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(session:id(), file_key(), xattr:completion_status()) ->
+-spec set_cdmi_completion_status(session:id(), file_key(), xattr:cdmi_completion_status()) ->
     ok | error_reply().
-set_completion_status(SessId, FileKey, CompletionStatus) ->
-    ?run(fun() -> lfm_attrs:set_completion_status(SessId, FileKey, CompletionStatus) end).
+set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
+    ?run(fun() -> lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
 
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.

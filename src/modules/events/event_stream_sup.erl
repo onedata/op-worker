@@ -60,16 +60,9 @@ start_event_stream(EvtStmSup, EvtMan, Sub, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {
-        RestartStrategy :: supervisor:strategy(),
-        Intensity :: non_neg_integer(),
-        Period :: non_neg_integer()
-    }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
+    {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([SessType]) ->
-    RestartStrategy = simple_one_for_one,
-    Intensity = 3,
-    Period = 1,
-    {ok, {{RestartStrategy, Intensity, Period}, [
+    {ok, {#{strategy => simple_one_for_one, intensity => 3, period => 1}, [
         event_stream_spec(SessType)
     ]}}.
 
@@ -85,8 +78,11 @@ init([SessType]) ->
 %%--------------------------------------------------------------------
 -spec event_stream_spec(SessType :: session:type()) -> supervisor:child_spec().
 event_stream_spec(SessType) ->
-    Id = Module = event_stream,
-    Restart = transient,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, [SessType]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => event_stream,
+        start => {event_stream, start_link, [SessType]},
+        restart => transient,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [event_stream]
+    }.

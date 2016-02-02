@@ -23,7 +23,7 @@
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
-    remove_pending_messages/1, clear_models/2]).
+    remove_pending_messages/1, clear_models/2, space_storage_mock/2]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -37,11 +37,17 @@
 -spec create_test_users_and_spaces(Config :: list()) -> list().
 create_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    StorageId = ?config(storage_id, Config),
+
+    test_node_starter:load_modules(Workers, [?MODULE]),
+    initializer:space_storage_mock(Workers, StorageId),
 
     Space1 = {<<"space_id1">>, <<"space_name1">>},
     Space2 = {<<"space_id2">>, <<"space_name2">>},
     Space3 = {<<"space_id3">>, <<"space_name3">>},
     Space4 = {<<"space_id4">>, <<"space_name4">>},
+    Space5 = {<<"space_id5">>, <<"space_name">>},
+    Space6 = {<<"space_id6">>, <<"space_name">>},
 
     Group1 = {<<"group_id1">>, <<"group_name1">>},
     Group2 = {<<"group_id2">>, <<"group_name2">>},
@@ -52,12 +58,13 @@ create_test_users_and_spaces(Config) ->
     User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
     User3 = {3, [Space3, Space4], [Group3, Group4]},
     User4 = {4, [Space4], [Group4]},
+    User5 = {5, [Space5, Space6], []},
 
     file_meta_mock_setup(Workers),
-    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
+    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4, Space5, Space6]),
     gr_groups_mock_setup(Workers, [Group1, Group2, Group3, Group4]),
 
-    initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
+    initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config).
 
 %%--------------------------------------------------------------------
 %% @doc Cleanup and unmocking related with users and spaces
@@ -67,7 +74,7 @@ clean_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     initializer:teardown_sesion(Worker, Config),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups, space_storage]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -132,7 +139,7 @@ clear_models(Worker, Names) ->
 %% @doc Setup test users' sessions on server
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
-    [Spaces :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
+    [Spaces :: {binary(), binary()}], [Groups :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
 setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
@@ -227,6 +234,16 @@ teardown_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     "" = rpc:call(Worker, os, cmd, ["rm -rf " ++ TmpDir]).
 
+%%--------------------------------------------------------------------
+%% @doc Mocks space_storage module, so that it returns default storage for all spaces.
+%%--------------------------------------------------------------------
+-spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
+space_storage_mock(Workers, StorageId) ->
+    test_utils:mock_new(Workers, space_storage),
+    test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
+        {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
+    end).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -253,7 +270,7 @@ gr_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_expect(Workers, gr_spaces, get_details,
         fun(provider, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
-            {ok, #space_details{name = SpaceName}}
+            {ok, #space_details{id = SpaceId, name = SpaceName}}
         end
     ).
 

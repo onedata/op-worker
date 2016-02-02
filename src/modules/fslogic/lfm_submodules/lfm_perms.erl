@@ -20,8 +20,6 @@
 
 -export_type([access_control_entity/0]).
 
--define(CDMI_ACL_XATTR_KEY, <<"cdmi_acl">>).
-
 %% API
 -export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
 remove_acl/1, remove_acl/2]).

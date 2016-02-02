@@ -21,6 +21,8 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -333,7 +335,7 @@ lfm_acl_test(Config) ->
     DirName = <<"/test_dir_acl">>,
 
     {ok, FileUuid} = lfm_proxy:create(W, SessId1, FileName, 8#755),
-    ok = lfm_proxy:mkdir(W, SessId1, DirName),
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, DirName),
 
     % test setting and getting acl
     Acl = [
@@ -368,7 +370,7 @@ end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, communicator).
+    test_utils:mock_validate_and_unload(Workers, [communicator]).
 
 %%%===================================================================
 %%% Internal functions

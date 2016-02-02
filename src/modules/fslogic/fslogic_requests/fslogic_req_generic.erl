@@ -13,6 +13,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/events/types.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -20,12 +21,12 @@
 %% Keys of special cdmi attrs
 -define(MIMETYPE_XATTR_NAME, <<"cdmi_mimetype">>).
 -define(TRANSFER_ENCODING_XATTR_NAME, <<"cdmi_valuetransferencoding">>).
--define(COMPLETION_STATUS_XATTR_NAME, <<"cdmi_completion_status">>).
+-define(CDMI_COMPLETION_STATUS_XATTR_NAME, <<"cdmi_completion_status">>).
 
 %% API
 -export([chmod/3, get_file_attr/2, delete/2, rename/3, update_times/5,
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
-    get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2, set_completion_status/3, get_mimetype/2, set_mimetype/3]).
+    get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 
 %%%===================================================================
 %%% API functions
@@ -38,7 +39,7 @@
 %%--------------------------------------------------------------------
 -spec update_times(fslogic_worker:ctx(), File :: fslogic_worker:file(),
                    ATime :: file_meta:time(), MTime :: file_meta:time(), CTime :: file_meta:time()) -> #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
+-check_permissions([{traverse_ancestors, 2}]).
 update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
     UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
@@ -57,9 +58,9 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 %%--------------------------------------------------------------------
 -spec chmod(fslogic_worker:ctx(), File :: fslogic_worker:file(), Perms :: fslogic_worker:posix_permissions()) ->
                    #fuse_response{} | no_return().
--check_permissions([{owner, 2}, {traverse_ancestors, 2}]).
-chmod(#fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
-    chmod_storage_files(SessId, FileEntry, Mode),
+-check_permissions([{traverse_ancestors, 2}, {owner, 2}]).
+chmod(CTX, FileEntry, Mode) ->
+    chmod_storage_files(CTX, FileEntry, Mode),
 
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
 
@@ -67,8 +68,11 @@ chmod(#fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     {ok, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
-    %% @todo: replace with events
-    spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+    spawn(
+        fun() ->
+            fslogic_event:emit_permission_changed(FileUuid),
+            fslogic_event:emit_file_attr_update(FileEntry, [])
+        end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -93,22 +97,25 @@ chown(_, _File, _UserId) ->
 -spec get_file_attr(Ctx :: fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
+get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
     ?info("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
-                                              type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                                              ctime = CTime, uid = UID, name = Name}} = FileDoc} ->
+            type = Type, mode = Mode, atime = ATime, mtime = MTime,
+            ctime = CTime, uid = UID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
-            #posix_user_ctx{gid = GID} = fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID),
-            #fuse_response{status = #status{code = ?OK}, fuse_response =
-                               #file_attr {
-                                  gid = GID,
-                                  uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                                  ctime = CTime, uid = fslogic_utils:gen_storage_uid(UID), size = Size, name = Name
-                                 }};
+            #posix_user_ctx{gid = GID} = try
+                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+                fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID)
+            catch
+                throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
+            end,
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
+                gid = GID,
+                uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
+                ctime = CTime, uid = fslogic_utils:gen_storage_uid(UID), size = Size, name = Name
+            }};
         {error, {not_found, _}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
     end.
@@ -121,6 +128,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId}, File) ->
 %%--------------------------------------------------------------------
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
+-check_permissions([{traverse_ancestors, 2}]).
 delete(CTX, File) ->
     case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
@@ -159,7 +167,7 @@ rename(CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
--check_permissions([{?read_metadata, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_metadata, 2}]).
 get_xattr(_CTX, _, <<"cdmi_", _/binary>>) -> throw(?EPERM);
 get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:get_by_name(FileUuid, XattrName) of
@@ -178,7 +186,7 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
 %%--------------------------------------------------------------------
 -spec set_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #xattr{}) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
 set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
@@ -195,7 +203,7 @@ set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
 %%--------------------------------------------------------------------
 -spec remove_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_metadata, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
@@ -225,7 +233,7 @@ list_xattr(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 -spec get_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
--check_permissions([{?read_acl, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_acl, 2}]).
 get_acl(_CTX, {uuid, FileUuid})  ->
     case xattr:get_by_name(FileUuid, ?ACL_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
@@ -241,11 +249,14 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 %%--------------------------------------------------------------------
 -spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-set_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}, #acl{value = Val}) ->
+-check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
+set_acl(CTX, {uuid, FileUuid}, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
         {ok, _} ->
-            ok = chmod_storage_files(SessId, {uuid, FileUuid}, 8#000),
+            ok = chmod_storage_files(
+                CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
+                {uuid, FileUuid}, 8#000
+            ),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -256,12 +267,16 @@ set_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}, #acl{value = Val}) 
 %%--------------------------------------------------------------------
 -spec remove_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
--check_permissions([{?write_acl, 2}, {traverse_ancestors, 2}]).
-remove_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
+-check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
+remove_acl(CTX, {uuid, FileUuid}) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
-            {ok, #file_meta{mode = Mode}} = file_meta:get({uuid, FileUuid}),
-            ok = chmod_storage_files(SessId, {uuid, FileUuid}, Mode),
+            {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
+            ok = chmod_storage_files(
+                CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
+                {uuid, FileUuid}, Mode
+            ),
+            ok = fslogic_event:emit_permission_changed(FileUuid),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -272,7 +287,7 @@ remove_acl(#fslogic_ctx{session_id = SessId}, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
--check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
@@ -286,9 +301,10 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, xattr:transfer_encoding()) ->
+-spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
+    xattr:transfer_encoding()) ->
     ok | logical_file_manager:error_reply().
--check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
         {ok, _} ->
@@ -302,13 +318,13 @@ set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:completion_status()} | logical_file_manager:error_reply().
--check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
-get_completion_status(_CTX, {uuid, FileUuid}) ->
-    case xattr:get_by_name(FileUuid, ?COMPLETION_STATUS_XATTR_NAME) of
+-spec get_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
+    {ok, xattr:cdmi_completion_status()} | logical_file_manager:error_reply().
+-check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
+get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
+    case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = #completion_status{value = Val}};
+            #fuse_response{status = #status{code = ?OK}, fuse_response = #cdmi_completion_status{value = Val}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}};
         {error, {not_found, xattr}} ->
@@ -321,11 +337,12 @@ get_completion_status(_CTX, {uuid, FileUuid}) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, xattr:completion_status()) ->
+-spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
+    xattr:cdmi_completion_status()) ->
     ok | logical_file_manager:error_reply().
--check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
-set_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
-    case xattr:save(FileUuid, #xattr{name = ?COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
+-check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
+set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
+    case xattr:save(FileUuid, #xattr{name = ?CDMI_COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
         {ok, _} ->
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
@@ -336,7 +353,7 @@ set_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
 %%--------------------------------------------------------------------
 -spec get_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
     {ok, xattr:mimetype()} | logical_file_manager:error_reply().
--check_permissions([{?read_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
         {ok, #document{value = #xattr{value = Val}}} ->
@@ -350,9 +367,10 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, xattr:mimetype()) ->
+-spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
+    xattr:mimetype()) ->
     ok | logical_file_manager:error_reply().
--check_permissions([{?write_attributes, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(_CTX, {uuid, FileUuid}, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
         {ok, _} ->
@@ -370,7 +388,7 @@ set_mimetype(_CTX, {uuid, FileUuid}, Mimetype) ->
 %%--------------------------------------------------------------------
 -spec delete_dir(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{?delete_subcontainer, {parent, 2}}, {?delete, 2}]).
 delete_dir(CTX, File) ->
     delete_impl(CTX, File).
 
@@ -379,7 +397,7 @@ delete_dir(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec delete_file(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{?delete_object, {parent, 2}}, {?delete, 2}]).
 delete_file(CTX, File) ->
     delete_impl(CTX, File).
 
@@ -388,9 +406,9 @@ delete_file(CTX, File) ->
 %%--------------------------------------------------------------------
 -spec delete_impl(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     FuseResponse :: #fuse_response{} | no_return().
-delete_impl(#fslogic_ctx{session_id = SessId}, File) ->
+delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
     {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
     {ok, FileChildren} =
         case Type of
             ?DIRECTORY_TYPE ->
@@ -464,11 +482,11 @@ rename_impl(_CTX, SourceEntry, TargetPath) ->
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_storage_files(session:id(), file_meta:entry(), file_meta:posix_permissions()) -> ok | no_return().
-chmod_storage_files(SessId, FileEntry, Mode) ->
+-spec chmod_storage_files(fslogic_worker:ctx(), file_meta:entry(), file_meta:posix_permissions()) -> ok | no_return().
+chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     case file_meta:get(FileEntry) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc),
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
             Results = lists:map(
                 fun({SID, FID} = Loc) ->
                     {ok, Storage} = storage:get(SID),
@@ -485,3 +503,4 @@ chmod_storage_files(SessId, FileEntry, Mode) ->
             end;
         _ -> ok
     end.
+

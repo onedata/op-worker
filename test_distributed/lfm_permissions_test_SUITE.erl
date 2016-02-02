@@ -62,6 +62,8 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/test/performance.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %%%-------------------------------------------------------------------
 %%% API
@@ -776,20 +778,20 @@ acl_read_attributes_user_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
     ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId2, {uuid, FileUuid}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_completion_status(W, SessId2, {uuid, FileUuid}, <<"Completed">>)),
+    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId2, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId2, {uuid, FileUuid}, <<"text/html">>)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?read_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace1])),
     ?assertEqual({error, ?EACCES}, lfm_proxy:get_transfer_encoding(W, SessId1, {uuid, FileUuid})),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_completion_status(W, SessId1, {uuid, FileUuid})),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {uuid, FileUuid})),
     ?assertEqual({error, ?EACCES}, lfm_proxy:get_mimetype(W, SessId1, {uuid, FileUuid})),
 
     Ace2 = ?allow_user(UserId1, ?read_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace2])),
     ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId1, {uuid, FileUuid})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_completion_status(W, SessId1, {uuid, FileUuid})),
+    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {uuid, FileUuid})),
     ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId1, {uuid, FileUuid})).
 
 acl_read_attributes_group_test(Config) ->
@@ -801,20 +803,20 @@ acl_read_attributes_group_test(Config) ->
     [{GroupId1, _} | _] = ?config({groups, 1}, Config),
     {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
     ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId2, {uuid, FileUuid}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_completion_status(W, SessId2, {uuid, FileUuid}, <<"Completed">>)),
+    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId2, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId2, {uuid, FileUuid}, <<"text/html">>)),
 
     % Verification
     Ace1 = ?deny_group(GroupId1, ?read_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace1])),
     ?assertEqual({error, ?EACCES}, lfm_proxy:get_transfer_encoding(W, SessId1, {uuid, FileUuid})),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:get_completion_status(W, SessId1, {uuid, FileUuid})),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {uuid, FileUuid})),
     ?assertEqual({error, ?EACCES}, lfm_proxy:get_mimetype(W, SessId1, {uuid, FileUuid})),
 
     Ace2 = ?allow_group(GroupId1, ?read_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace2])),
     ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId1, {uuid, FileUuid})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_completion_status(W, SessId1, {uuid, FileUuid})),
+    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId1, {uuid, FileUuid})),
     ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId1, {uuid, FileUuid})).
 
 acl_write_attributes_user_test(Config) ->
@@ -830,18 +832,18 @@ acl_write_attributes_user_test(Config) ->
     Ace1 = ?deny_user(UserId1, ?write_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace1])),
     ?assertEqual({error, ?EACCES}, lfm_proxy:set_transfer_encoding(W, SessId1, {uuid, FileUuid}, <<"base64">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:set_cdmi_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:set_mimetype(W, SessId1, {uuid, FileUuid}, <<"text/html">>)),
 
     Ace2 = ?allow_user(UserId1, ?write_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace2])),
     ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId1, {uuid, FileUuid}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
+    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId1, {uuid, FileUuid}, <<"text/html">>)),
 
     % Check if written attributes are present
     ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId2, {uuid, FileUuid})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_completion_status(W, SessId2, {uuid, FileUuid})),
+    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId2, {uuid, FileUuid})),
     ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId2, {uuid, FileUuid})).
 
 acl_write_attributes_group_test(Config) ->
@@ -857,18 +859,18 @@ acl_write_attributes_group_test(Config) ->
     Ace1 = ?deny_group(GroupId4, ?write_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace1])),
     ?assertEqual({error, ?EACCES}, lfm_proxy:set_transfer_encoding(W, SessId1, {uuid, FileUuid}, <<"base64">>)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:set_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:set_cdmi_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:set_mimetype(W, SessId1, {uuid, FileUuid}, <<"text/html">>)),
 
     Ace2 = ?allow_group(GroupId4, ?write_attributes_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, FileUuid}, [?acl_all(UserId2), Ace2])),
     ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId1, {uuid, FileUuid}, <<"base64">>)),
-    ?assertEqual(ok, lfm_proxy:set_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
+    ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId1, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId1, {uuid, FileUuid}, <<"text/html">>)),
 
     % Check if written attributes are present
     ?assertEqual({ok, <<"base64">>}, lfm_proxy:get_transfer_encoding(W, SessId2, {uuid, FileUuid})),
-    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_completion_status(W, SessId2, {uuid, FileUuid})),
+    ?assertEqual({ok, <<"Completed">>}, lfm_proxy:get_cdmi_completion_status(W, SessId2, {uuid, FileUuid})),
     ?assertEqual({ok, <<"text/html">>}, lfm_proxy:get_mimetype(W, SessId2, {uuid, FileUuid})).
 
 acl_delete_user_test(Config) ->

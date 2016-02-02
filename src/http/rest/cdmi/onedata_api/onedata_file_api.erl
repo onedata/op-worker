@@ -28,8 +28,8 @@
 -export([stat/1, stat/2, set_xattr/2, set_xattr/3, get_xattr/2, get_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
 %% Functions concerning cdmi attributes
--export([get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2,
-    set_completion_status/3, get_mimetype/2, set_mimetype/3]).
+-export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
+    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning symbolic links
 -export([create_symlink/2, read_symlink/1, remove_symlink/1]).
 %% Functions concerning file shares
@@ -58,7 +58,7 @@
 -type block_range() :: term(). % TODO should be a proper record
 -type share_id() :: binary().
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
--type completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
+-type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
 %%--------------------------------------------------------------------
 
@@ -339,10 +339,10 @@ set_transfer_encoding(Auth, FileKey, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(onedata_auth_api:auth(), file_key()) ->
-    {ok, completion_status()} | error_reply().
-get_completion_status(Auth, FileKey) ->
-    logical_file_manager:get_completion_status(Auth, FileKey).
+-spec get_cdmi_completion_status(onedata_auth_api:auth(), file_key()) ->
+    {ok, cdmi_completion_status()} | error_reply().
+get_cdmi_completion_status(Auth, FileKey) ->
+    logical_file_manager:get_cdmi_completion_status(Auth, FileKey).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -350,10 +350,10 @@ get_completion_status(Auth, FileKey) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(onedata_auth_api:auth(), file_key(), completion_status()) ->
+-spec set_cdmi_completion_status(onedata_auth_api:auth(), file_key(), cdmi_completion_status()) ->
     ok | error_reply().
-set_completion_status(Auth, FileKey, CompletionStatus) ->
-    logical_file_manager:set_completion_status(Auth, FileKey, CompletionStatus).
+set_cdmi_completion_status(Auth, FileKey, CompletionStatus) ->
+    logical_file_manager:set_cdmi_completion_status(Auth, FileKey, CompletionStatus).
 
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.

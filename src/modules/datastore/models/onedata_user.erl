@@ -24,7 +24,7 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2]).
+-export([fetch/1, get_or_fetch/2, get_spaces/1]).
 
 -export_type([id/0]).
 
@@ -127,7 +127,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch group from globalregistry and save it in cache.
+%% Fetch user from globalregistry and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
@@ -154,7 +154,7 @@ fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons} = Auth)
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get group from cache or fetch from globalregistry and save in cache.
+%% Get user from cache or fetch from globalregistry and save in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(datastore:key(), #auth{}) ->
@@ -164,4 +164,12 @@ get_or_fetch(Key, Token) ->
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Token);
         Error -> Error
+    end.
+
+get_spaces(UserId) ->
+    case onedata_user:get(UserId) of
+        {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->
+            {ok, SpaceIds};
+        {error, Reason} ->
+            {error, Reason}
     end.

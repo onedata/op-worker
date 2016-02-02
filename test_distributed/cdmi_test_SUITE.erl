@@ -42,14 +42,15 @@
     choose_adequate_handler/1,
     use_supported_cdmi_version/1,
     use_unsupported_cdmi_version/1,
-    errors_test/1,
     moved_permanently_test/1,
     objectid_test/1,
     request_format_check_test/1,
     mimetype_and_encoding_test/1,
     out_of_range_test/1,
     partial_upload_test/1,
-    acl_test/1
+    acl_test/1,
+    errors_test/1,
+    accept_header_test/1
 ]).
 
 -performance({test_cases, []}).
@@ -67,14 +68,15 @@ all() ->
         choose_adequate_handler,
         use_supported_cdmi_version,
         use_unsupported_cdmi_version,
-        errors_test,
         moved_permanently_test,
         objectid_test,
         request_format_check_test,
         mimetype_and_encoding_test,
         out_of_range_test,
         partial_upload_test,
-        acl_test
+        acl_test,
+        errors_test,
+        accept_header_test
     ].
 
 -define(MACAROON, "macaroon").
@@ -440,21 +442,21 @@ metadata_test(Config) ->
     UserName1 = ?config({user_name, 1}, Config),
     FileName2 = "acl_test_file.txt",
     Ace1 = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?read}
     ],
     Ace2 = [
-        {<<"acetype">>, <<"DENY">>},
+        {<<"acetype">>, ?deny},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, <<(?read)/binary, ", ", (?execute)/binary>>}
     ],
     Ace3 = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write}
     ],
 
@@ -482,9 +484,9 @@ metadata_test(Config) ->
 
     %%-- create forbidden by acl ---
     Ace4 = [
-        {<<"acetype">>, <<"DENY">>},
+        {<<"acetype">>, ?deny},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace4]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
@@ -1264,33 +1266,33 @@ acl_test(Config) ->
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
     Read = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?read}
     ],
     Write = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write}
     ],
     Execute = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?execute}
     ],
     WriteAcl = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?write_acl}
     ],
     Delete = [
-        {<<"acetype">>, <<"ALLOW">>},
+        {<<"acetype">>, ?allow},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, <<"NO_FLAGS">>},
+        {<<"aceflags">>, ?no_flags},
         {<<"acemask">>, ?delete}
     ],
 
@@ -1517,6 +1519,16 @@ errors_test(Config) ->
     ?assertEqual(403, Code9).
     %%------------------------------
 
+accept_header_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    AcceptHeader = {<<"Accept">>, <<"*/*">>},
+
+    {ok, Code1, _Headers1, _Response1} =
+        do_request(Worker, [], get,
+            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, AcceptHeader], []),
+
+    ?assertEqual(200, Code1).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1642,15 +1654,19 @@ open_file(Config, Path, OpenMode) ->
 write_to_file(Config, Path, Data, Offset) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, FileHandle} = open_file(Config, Path, write),
-    lfm_proxy:write(Worker, FileHandle, Offset, Data).
+    Result = lfm_proxy:write(Worker, FileHandle, Offset, Data),
+    lfm_proxy:close(Worker, FileHandle),
+    Result.
 
 get_file_content(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, FileHandle} = open_file(Config, Path, read),
-    case lfm_proxy:read(Worker, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
+    Result = case lfm_proxy:read(Worker, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
         {error, Error} -> {error, Error};
         {ok, Content} -> Content
-    end.
+    end,
+    lfm_proxy:close(Worker, FileHandle),
+    Result.
 
 mkdir(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

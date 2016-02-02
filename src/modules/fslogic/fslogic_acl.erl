@@ -138,13 +138,17 @@ uid_to_ace_name(Uid) ->
 
 %%--------------------------------------------------------------------
 %% @doc Transforms acl name representation (name and hash suffix) to global id
-%% i. e. "John Dow#fif3n" -> "fif3nhh238hdfg33f3"
+%% i. e. "John Dow#fif3n" -> "fif3n"
 %% @end
 %%--------------------------------------------------------------------
 -spec ace_name_to_uid(Name :: binary()) -> binary().
 ace_name_to_uid(AceName) ->
-    [_UserName, Uid] = binary:split(AceName, <<"#">>, [global]),
-    Uid.
+    case binary:split(AceName, <<"#">>, [global]) of
+        [_UserName, Uid] ->
+            Uid;
+        Uid ->
+            Uid
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Transforms global group id to acl group name representation (name and hash suffix)
@@ -158,13 +162,17 @@ gid_to_ace_name(GroupId) ->
 
 %%--------------------------------------------------------------------
 %% @doc Transforms acl group name representation (name and hash suffix) to global id
-%% i. e. "group1#fif3n" -> "fif3nhh238hdfg33f3"
+%% i. e. "group1#fif3n" -> "fif3n"
 %% @end
 %%--------------------------------------------------------------------
 -spec ace_name_to_gid(Name :: binary()) -> binary().
 ace_name_to_gid(AceName) ->
-    [_GroupName, GroupId] = binary:split(AceName, <<"#">>, [global]),
-    GroupId.
+    case binary:split(AceName, <<"#">>, [global]) of
+        [_GroupName, GroupId] ->
+            GroupId;
+        GroupId ->
+            GroupId
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -195,6 +203,10 @@ bitmask_to_flag_list2(_, _) -> undefined.
 %%--------------------------------------------------------------------
 -spec bitmask_to_perm_list(non_neg_integer()) -> [binary()].
 bitmask_to_perm_list(Hex) -> lists:reverse(bitmask_to_perm_list2(Hex, [])).
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?all_perms_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?all_perms_mask, [?all_perms | List]);
+bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?rw_mask) ->
+    bitmask_to_perm_list2(Hex bxor ?rw_mask, [?rw | List]);
 bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?read_mask) ->
     bitmask_to_perm_list2(Hex bxor ?read_mask, [?read | List]);
 bitmask_to_perm_list2(Hex, List) when ?has_flag(Hex, ?write_mask) ->
@@ -249,7 +261,7 @@ type_to_bitmask(?audit) -> ?audit_mask.
 %%--------------------------------------------------------------------
 %% @doc maps coma separated binary of aceflags to bitmask
 %%--------------------------------------------------------------------
--spec flags_to_bitmask(binary()) -> non_neg_integer().
+-spec flags_to_bitmask(binary() | [binary()]) -> non_neg_integer().
 flags_to_bitmask(Flags) when is_binary(Flags) -> flags_to_bitmask(csv_to_binary_list(Flags));
 flags_to_bitmask([]) -> ?no_flags_mask;
 flags_to_bitmask([?no_flags | Rest]) -> ?no_flags_mask bor flags_to_bitmask(Rest);
@@ -258,11 +270,13 @@ flags_to_bitmask([?identifier_group | Rest]) -> ?identifier_group_mask bor flags
 %%--------------------------------------------------------------------
 %% @doc maps coma separated binary of permissions to bitmask
 %%--------------------------------------------------------------------
--spec perm_list_to_bitmask(binary()) -> non_neg_integer().
+-spec perm_list_to_bitmask(binary() | [binary()]) -> non_neg_integer().
 perm_list_to_bitmask(MaskNames) when is_binary(MaskNames) ->
     FlagList = lists:map(fun utils:trim_spaces/1, binary:split(MaskNames, <<",">>, [global])),
     perm_list_to_bitmask(FlagList);
 perm_list_to_bitmask([]) -> ?no_flags_mask;
+perm_list_to_bitmask([?all_perms | Rest]) -> ?all_perms_mask bor perm_list_to_bitmask(Rest);
+perm_list_to_bitmask([?rw | Rest]) -> ?rw_mask bor perm_list_to_bitmask(Rest);
 perm_list_to_bitmask([?read | Rest]) -> ?read_mask bor perm_list_to_bitmask(Rest);
 perm_list_to_bitmask([?write | Rest]) -> ?write_mask bor perm_list_to_bitmask(Rest);
 perm_list_to_bitmask([?read_object | Rest]) -> ?read_object_mask bor perm_list_to_bitmask(Rest);
@@ -301,6 +315,6 @@ binary_list_to_csv(List) ->
 %% i. e. binary_list_to_csv(<<"a, b">>) -> [<<"a">>, <<"b">>]
 %% @end
 %%--------------------------------------------------------------------
--spec csv_to_binary_list([binary()]) -> binary().
+-spec csv_to_binary_list(binary()) -> [binary()].
 csv_to_binary_list(BinaryCsv) ->
     lists:map(fun utils:trim_spaces/1, binary:split(BinaryCsv, <<",">>, [global])).

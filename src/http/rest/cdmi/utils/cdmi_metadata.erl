@@ -14,13 +14,14 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("http/rest/cdmi/cdmi_errors.hrl").
 
 -export([get_user_metadata/2, update_user_metadata/3, update_user_metadata/4]).
 -export([prepare_metadata/3, prepare_metadata/4]).
--export([get_mimetype/2, get_encoding/2, get_completion_status/2,
-    update_mimetype/3, update_encoding/3, update_completion_status/3,
-    set_completion_status_according_to_partial_flag/3]).
+-export([get_mimetype/2, get_encoding/2, get_cdmi_completion_status/2,
+    update_mimetype/3, update_encoding/3, update_cdmi_completion_status/3,
+    set_cdmi_completion_status_according_to_partial_flag/3]).
 
 %% Default values of special cdmi attrs
 -define(MIMETYPE_DEFAULT_VALUE, <<"application/octet-stream">>).
@@ -30,7 +31,7 @@
 -define(USER_METADATA_FORBIDDEN_PREFIX_STRING, "cdmi_").
 -define(USER_METADATA_FORBIDDEN_PREFIX, <<?USER_METADATA_FORBIDDEN_PREFIX_STRING>>).
 -define(DEFAULT_STORAGE_SYSTEM_METADATA,
-    [<<"cdmi_size">>, <<"cdmi_ctime">>, <<"cdmi_atime">>, <<"cdmi_mtime">>, <<"cdmi_owner">>, <<"cdmi_acl">>]).
+    [<<"cdmi_size">>, <<"cdmi_ctime">>, <<"cdmi_atime">>, <<"cdmi_mtime">>, <<"cdmi_owner">>, ?ACL_XATTR_NAME]).
 
 %%%===================================================================
 %%% API
@@ -43,7 +44,7 @@
 %%--------------------------------------------------------------------
 -spec get_user_metadata(onedata_auth_api:auth(), onedata_file_api:file_key()) ->
     [{Name :: binary(), Value :: binary()}].
-get_user_metadata(Auth, FileKey) -> % todo add prefix as argument
+get_user_metadata(Auth, FileKey) ->
     {ok, Names} = onedata_file_api:list_xattr(Auth, FileKey),
     Metadata = lists:map(
         fun
@@ -85,12 +86,12 @@ update_user_metadata(Auth, FileKey, UserMetadata, AllURIMetadataNames) ->
     BodyMetadataNames = get_metadata_names(BodyMetadata),
     DeleteAttributeFunction =
         fun
-            (<<"cdmi_acl">>) -> ok = onedata_file_api:remove_acl(Auth, FileKey);
+            (?ACL_XATTR_NAME) -> ok = onedata_file_api:remove_acl(Auth, FileKey);
             (Name) -> ok = onedata_file_api:remove_xattr(Auth, FileKey, Name)
         end,
     ReplaceAttributeFunction =
         fun
-            ({<<"cdmi_acl">>, Value}) ->
+            ({?ACL_XATTR_NAME, Value}) ->
                 ACL = try fslogic_acl:from_json_fromat_to_acl(Value)
                       catch _:Error ->
                           ?warning_stacktrace("Acl conversion error ~p", [Error]),
@@ -161,9 +162,9 @@ get_encoding(Auth, FileKey) ->
 %% binary("Complete") | binary("Processing") | binary("Error")
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
-get_completion_status(Auth, FileKey) ->
-    case onedata_file_api:get_completion_status(Auth, FileKey) of
+-spec get_cdmi_completion_status(onedata_auth_api:auth(), onedata_file_api:file_key()) -> binary().
+get_cdmi_completion_status(Auth, FileKey) ->
+    case onedata_file_api:get_cdmi_completion_status(Auth, FileKey) of
         {ok, Value} ->
             Value;
         {error, ?ENOATTR} ->
@@ -189,24 +190,24 @@ update_encoding(Auth, FileKey, Encoding) ->
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %%--------------------------------------------------------------------
--spec update_completion_status(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
+-spec update_cdmi_completion_status(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
     ok | no_return().
-update_completion_status(_Auth, _FileKey, undefined) -> ok;
-update_completion_status(Auth, FileKey, CompletionStatus)
+update_cdmi_completion_status(_Auth, _FileKey, undefined) -> ok;
+update_cdmi_completion_status(Auth, FileKey, CompletionStatus)
     when CompletionStatus =:= <<"Complete">>
     orelse CompletionStatus =:= <<"Processing">>
     orelse CompletionStatus =:= <<"Error">> ->
-    ok = onedata_file_api:set_completion_status(Auth, FileKey, CompletionStatus).
+    ok = onedata_file_api:set_cdmi_completion_status(Auth, FileKey, CompletionStatus).
 
 %%--------------------------------------------------------------------
 %% @doc Updates completion status associated with file
 %% according to X-CDMI-Partial flag
 %%--------------------------------------------------------------------
--spec set_completion_status_according_to_partial_flag(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
+-spec set_cdmi_completion_status_according_to_partial_flag(onedata_auth_api:auth(), onedata_file_api:file_key(), binary()) ->
     ok | no_return().
-set_completion_status_according_to_partial_flag(_Auth, _FileKey, <<"true">>) -> ok;
-set_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
-    ok = update_completion_status(Auth, FileKey, <<"Complete">>).
+set_cdmi_completion_status_according_to_partial_flag(_Auth, _FileKey, <<"true">>) -> ok;
+set_cdmi_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
+    ok = update_cdmi_completion_status(Auth, FileKey, <<"Complete">>).
 
 %%%===================================================================
 %%% Internal functions
@@ -217,15 +218,17 @@ set_completion_status_according_to_partial_flag(Auth, FileKey, _) ->
 %%--------------------------------------------------------------------
 -spec filter_user_metadata(UserMetadata) -> UserMetadata when
     UserMetadata :: [{CdmiName :: binary(), Value :: binary()}] | [CdmiName :: binary()].
-filter_user_metadata(UserMetadata) ->
+filter_user_metadata(UserMetadata) when is_list(UserMetadata) ->
     lists:filter(
         fun
-            ({<<"cdmi_acl">>, _Value}) -> true;
+            ({?ACL_XATTR_NAME, _Value}) -> true;
             ({Name, _Value}) -> not binary_with_prefix(Name, ?USER_METADATA_FORBIDDEN_PREFIX);
-            (<<"cdmi_acl">>) -> true;
+            (?ACL_XATTR_NAME) -> true;
             (Name) -> not binary_with_prefix(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
         end,
-        UserMetadata).
+        UserMetadata);
+filter_user_metadata(_) ->
+    throw(?ERROR_INVALID_METADATA).
 
 %%--------------------------------------------------------------------
 %% @doc Predicate that tells whether binary starts with given prefix.
@@ -270,10 +273,10 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                     [{<<"cdmi_mtime">>, integer_to_binary(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_owner">> ->
                     [{<<"cdmi_owner">>, integer_to_binary(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
-                <<"cdmi_acl">> ->
+                ?ACL_XATTR_NAME ->
                     case onedata_file_api:get_acl(Auth, FileKey) of
                         {ok, Acl} ->
-                            [{<<"cdmi_acl">>, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                            [{?ACL_XATTR_NAME, fslogic_acl:from_acl_to_json_format(Acl)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                         {error, ?ENOATTR} ->
                             prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)
                     end

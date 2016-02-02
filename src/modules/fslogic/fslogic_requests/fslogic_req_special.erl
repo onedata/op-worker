@@ -31,7 +31,7 @@
 -spec mkdir(CTX :: fslogic_worker:ctx(), ParentUUID :: fslogic_worker:file(),
     Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?add_subcontainer, 2}, {?traverse_container, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?add_subcontainer, 2}, {?traverse_container, 2}]).
 mkdir(CTX, ParentUUID, Name, Mode) ->
     NormalizedParentUUID =
         case {uuid, fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX))} =:= ParentUUID of
@@ -70,7 +70,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
 -spec read_dir(CTX :: fslogic_worker:ctx(), File :: fslogic_worker:file(),
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
--check_permissions([{?list_container, 2}, {traverse_ancestors, 2}]).
+-check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
 read_dir(CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
@@ -98,15 +98,35 @@ read_dir(CTX, File, Offset, Size) ->
         SpacesKey ->
             {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
                 onedata_user:get(UserId),
-            SpaceRes = [file_meta:get_space_dir(SpaceId) || SpaceId <- SpacesIds],
 
             Children =
                 case Offset < length(SpacesIds) of
                     true ->
-                        SpaceLinks = [#child_link{uuid = SpaceDirUuid, name = SpaceName} ||
-                            {ok, #document{key = SpaceDirUuid, value = #file_meta{name = SpaceName}}} <- SpaceRes],
+                        SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
+                        Spaces = lists:map(fun(SpaceId) ->
+                            {ok, Space} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                            Space
+                        end, SpacesIdsChunk),
 
-                        lists:sublist(SpaceLinks, Offset + 1, Size);
+                        SpaceUuidByName = lists:foldl(fun(Space, Map) ->
+                            #document{value = #space_info{id = Id, name = Name}} = Space,
+                            maps:put(Name, [Id | maps:get(Name, Map, [])], Map)
+                        end, #{}, Spaces),
+
+                        MinDiffPrefLenByName = maps:map(fun
+                            (_, [_]) -> 0;
+                            (_, UUIDs) -> binary:longest_common_prefix(UUIDs) + 1
+                        end, SpaceUuidByName),
+
+                        lists:map(fun(#document{key = UUID, value = #space_info{id = Id, name = Name}}) ->
+                            case maps:find(Name, MinDiffPrefLenByName) of
+                                {ok, 0} ->
+                                    #child_link{uuid = UUID, name = Name};
+                                {ok, Len} ->
+                                    #child_link{uuid = UUID,name = <<Name/binary,
+                                        ?SPACE_NAME_ID_SEPARATOR, Id:Len/binary>>}
+                            end
+                        end, Spaces);
                     false ->
                         []
                 end,

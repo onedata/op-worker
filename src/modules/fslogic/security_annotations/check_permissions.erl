@@ -33,9 +33,9 @@
                     | read
                     | exec
                     | rdwr
-                    | term(). %todo define as acl access mask
+                    | acl_access_mask().
 
-
+-type acl_access_mask() :: binary().
 -type access_definition() :: root | {check_type(), item_definition()}.
 
 -export_type([check_type/0, item_definition/0, access_definition/0]).
@@ -77,7 +77,7 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 %% Expand access definition to form allowing it to be verified by rules module.
 %% @end
 %%--------------------------------------------------------------------
--spec expand_access_definitions([access_definition()], datastore:document(), list(), #{}, #{}, #{}) ->
+-spec expand_access_definitions([access_definition()], onedata_user:id(), list(), #{}, #{}, #{}) ->
     [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
 expand_access_definitions([], _UserId, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];
@@ -85,9 +85,17 @@ expand_access_definitions([root | Rest], UserId, Inputs, FileMap, AclMap, UserMa
     {User, NewUserMap} = get_user(UserId, UserMap),
     [{root, undefined, User, undefined}  | expand_access_definitions(Rest, UserId, Inputs, FileMap, AclMap, NewUserMap)];
 expand_access_definitions([{traverse_ancestors, ItemDefinition} | Rest], UserId, Inputs, FileMap, AclMap, UserMap) ->
-    {File, NewFileMap} = get_file(ItemDefinition, FileMap, UserId, Inputs),
     {User, NewUserMap} = get_user(UserId, UserMap),
-    expand_traverse_ancestors_check(File, User, AclMap)
+    {ExpandedTraverseDefs, NewFileMap} = % if file is a scope check scope access also
+        case (catch get_file(ItemDefinition, FileMap, UserId, Inputs)) of
+            {#document{value = #file_meta{is_scope = true}} = File, NewFileMap} ->
+                {expand_traverse_ancestors_check(File, User, AclMap), NewFileMap};
+            _ ->
+                {ParentFile, NewFileMap} = get_file({parent, ItemDefinition}, FileMap, UserId, Inputs),
+                {expand_traverse_ancestors_check(ParentFile, User, AclMap), NewFileMap}
+        end,
+
+    ExpandedTraverseDefs
     ++ expand_access_definitions(Rest, UserId, Inputs, NewFileMap, AclMap, NewUserMap);
 expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, Inputs, FileMap, AclMap, UserMap) ->
     {File = #document{key = Key}, NewFileMap} = get_file(ItemDefinition, FileMap, UserId, Inputs),
@@ -131,20 +139,20 @@ resolve_file_entry({parent, Item}, Inputs) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Expand traverse_ancestors check into list of traverse_container check for
-%% each ancestor
+%% each ancestor and subject document
 %% @end
 %%--------------------------------------------------------------------
 -spec expand_traverse_ancestors_check(datastore:document(), datastore:document(), #{}) ->
     [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
-expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_meta{is_scope = IsScope}},
+expand_traverse_ancestors_check(SubjDoc = #document{key = Uuid, value = #file_meta{type = Type}},
   UserDoc = #document{key = UserId}, AclMap) ->
     {ok, AncestorsIds} = file_meta:get_ancestors(SubjDoc),
     {Acl, _} = get_acl(Uuid, AclMap),
     SubjectCheck =
-        case IsScope of
-            true ->
+        case Type of
+            ?DIRECTORY_TYPE ->
                 [{?traverse_container, SubjDoc, UserDoc, Acl}];
-            false ->
+            _ ->
                 []
         end,
     AncestorsCheck =

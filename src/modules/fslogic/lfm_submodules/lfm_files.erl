@@ -114,7 +114,7 @@ unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_uuid = 
 unlink(SessId, FileEntry) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileEntry),
-    lfm_utils:call_fslogic(SessId, #unlink{uuid = UUID},
+    lfm_utils:call_fslogic(SessId, #delete_file{uuid = UUID},
         fun(_) ->
             ok
         end).
@@ -160,7 +160,7 @@ open(SessId, FileKey, OpenType) ->
     lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileUUID, flags = OpenType},
         fun(#file_location{uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}),
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}, fslogic_context:get_user_id(CTX)),
             SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
@@ -339,14 +339,14 @@ get_sfm_handle_key(_UUID, _Offset, Size, []) ->
     {{StorageId :: storage:id(), FileId :: file_meta:uuid()},
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: logical_file_manager:handle()} |  no_return().
-get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
+get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId} = CTX} = Handle,
     Key, SFMHandles, OpenType) ->
     {{StorageId, FileId}, SFMHandle} =
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
                 {SID, FID} = Key,
                 {ok, #document{value = Storage}} = storage:get(SID),
-                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}),
+                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}, fslogic_context:get_user_id(CTX)),
                 SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
 
                 case storage_file_manager:open(SFMHandle0, OpenType) of

@@ -23,8 +23,9 @@
 %% API
 -export([stat/1, stat/2, get_xattr/2, get_xattr/3, set_xattr/2, set_xattr/3,
     remove_xattr/2, remove_xattr/3, list_xattr/1, list_xattr/2]).
--export([get_transfer_encoding/2, set_transfer_encoding/3, get_completion_status/2,
-    set_completion_status/3, get_mimetype/2, set_mimetype/3]).
+-export([get_transfer_encoding/2, set_transfer_encoding/3,
+    get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
+    set_mimetype/3]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -165,13 +166,13 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec get_completion_status(session:id(), logical_file_manager:file_key()) ->
-    {ok, xattr:completion_status()} | logical_file_manager:error_reply().
-get_completion_status(SessId, FileKey) ->
+-spec get_cdmi_completion_status(session:id(), logical_file_manager:file_key()) ->
+    {ok, xattr:cdmi_completion_status()} | logical_file_manager:error_reply().
+get_cdmi_completion_status(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUuid} = fslogic_uuid:ensure_uuid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #get_completion_status{uuid = FileUuid},
-        fun(#completion_status{value = Val}) -> {ok, Val} end
+    lfm_utils:call_fslogic(SessId, #get_cdmi_completion_status{uuid = FileUuid},
+        fun(#cdmi_completion_status{value = Val}) -> {ok, Val} end
     ).
 
 %%--------------------------------------------------------------------
@@ -180,12 +181,13 @@ get_completion_status(SessId, FileKey) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_completion_status(session:id(), logical_file_manager:file_key(), xattr:completion_status()) ->
+-spec set_cdmi_completion_status(session:id(), logical_file_manager:file_key(),
+    xattr:cdmi_completion_status()) ->
     ok | logical_file_manager:error_reply().
-set_completion_status(SessId, FileKey, CompletionStatus) ->
+set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUuid} = fslogic_uuid:ensure_uuid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #set_completion_status{uuid = FileUuid, value = CompletionStatus},
+    lfm_utils:call_fslogic(SessId, #set_cdmi_completion_status{uuid = FileUuid, value = CompletionStatus},
         fun(_) -> ok end
     ).
 

@@ -44,7 +44,6 @@ handle(Req, State, _Type, {Status, BodyBinary})
     {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
     {halt, Req2, State};
 handle(Req, State, _Type, {Status, Body}) when is_integer(Status) ->
-    ?error_stacktrace("Error in rest request ~p", [{Status, Body}]),
     BodyBinary = json_utils:encode(Body),
     {ok, Req2} = cowboy_req:reply(Status, [], BodyBinary, Req),
     {halt, Req2, State};

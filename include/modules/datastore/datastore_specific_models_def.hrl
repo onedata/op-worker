@@ -87,4 +87,20 @@
     size = 0 :: non_neg_integer() | undefined
 }).
 
+%% Model for caching space details fetched from Global Registry
+-record(space_info, {
+    id :: binary(),
+    name :: binary()
+}).
+
+%% Model that maps space to storage
+-record(space_storage, {
+    storage_ids = [] :: [storage:id()]
+}).
+
+%% Model that maps onedata user to Ceph user
+-record(ceph_user, {
+    credentials :: #{storage:id() => ceph_user:credentials()}
+}).
+
 -endif.
