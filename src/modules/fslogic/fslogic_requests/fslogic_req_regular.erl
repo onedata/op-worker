@@ -85,6 +85,13 @@ get_helper_params(#fslogic_ctx{session = #session{identity = #identity{user_id =
                 <<"user_name">> => ceph_user:name(Credentials),
                 <<"key">> => ceph_user:key(Credentials)
             }};
+        {ok, #helper_init{name = ?S3_HELPER_NAME, args = Args}} ->
+            {ok, #document{value = #s3_user{credentials = UserCredentials}}} = s3_user:get(UserId),
+            {ok, Credentials} = maps:find(StorageId, UserCredentials),
+            {?S3_HELPER_NAME, Args#{
+                <<"access_key">> => s3_user:access_key(Credentials),
+                <<"secret_key">> => s3_user:secret_key(Credentials)
+            }};
         {ok, #helper_init{name = Name, args = Args}} ->
             {Name, Args}
     end,
@@ -124,6 +131,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
             false ->
                 ParentUUID
         end,
+
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),

@@ -16,7 +16,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 %% API
 -export([new_handle/1, new_handle/2, set_user_ctx/2]).
 -export([getattr/2, access/3, mknod/4, mkdir/3, unlink/2, rmdir/2, symlink/3, rename/3, link/3, chmod/3]).
@@ -36,7 +35,7 @@
 -type handle() :: #helper_handle{}.
 -type name() :: binary().
 -type args() :: helpers_nif:helper_args().
--type user_ctx() :: #ceph_user_ctx{} | #posix_user_ctx{}.
+-type user_ctx() :: #ceph_user_ctx{} | #posix_user_ctx{} | #s3_user_ctx{}.
 -type user_ctx_map() :: #{binary() => binary()}.
 -type init() :: #helper_init{}.
 
@@ -83,6 +82,9 @@ set_user_ctx(#helper_handle{ctx = CTX}, #ceph_user_ctx{user_name = UserName, use
 set_user_ctx(#helper_handle{ctx = CTX}, #posix_user_ctx{uid = UID, gid = GID}) ->
     UserCTX = #{<<"uid">> => integer_to_binary(UID), <<"gid">> => integer_to_binary(GID)},
     ok = helpers_nif:set_user_ctx(CTX, UserCTX);
+set_user_ctx(#helper_handle{ctx = CTX}, #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey}) ->
+    UserCTX = #{<<"access_key">> => AccessKey, <<"secret_key">> => SecretKey},
+    ok = helpers_nif:set_user_ctx(CTX, UserCTX);
 set_user_ctx(_, Unknown) ->
     ?error("Unknown user context ~p", [Unknown]),
     erlang:error({unknown_user_ctx_type, erlang:element(1, Unknown)}).
@@ -110,10 +112,17 @@ access(#helper_handle{} = HelperHandle, File, Mask) ->
 %%      First argument shall be #helper_handle{} from new_handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec mknod(handle(), File :: file(), Mode :: non_neg_integer(), Type :: reg) -> ok | {error, term()}.
-mknod(#helper_handle{ctx = CTX} = HelperHandle, File, Mode, reg) ->
-    Flag = helpers_nif:get_flag_value(CTX, 'S_IFREG'),
-    apply_helper_nif(HelperHandle, mknod, [File, Mode bor Flag, 0]).
+-spec mknod(handle(), File :: file(), Mode :: non_neg_integer(), Type :: atom()) -> ok | {error, term()}.
+mknod(#helper_handle{} = HelperHandle, File, Mode, reg) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFREG'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, chr) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFCHR'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, blk) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFBLK'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, fifo) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFIFO'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, sock) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFSOCK'], 0]).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
@@ -203,14 +212,11 @@ truncate(#helper_handle{} = HelperHandle, File, Size) ->
 %%--------------------------------------------------------------------
 -spec open(handle(), File :: file(), OpenMode :: open_mode()) -> {ok, FD :: non_neg_integer()} | {error, term()}.
 open(#helper_handle{} = HelperHandle, File, write) ->
-    helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_WRONLY']),
-    apply_helper_nif(HelperHandle, open, [File]);
+    apply_helper_nif(HelperHandle, open, [File, ['O_WRONLY']]);
 open(#helper_handle{} = HelperHandle, File, read) ->
-    helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDONLY']),
-    apply_helper_nif(HelperHandle, open, [File]);
+    apply_helper_nif(HelperHandle, open, [File, ['O_RDONLY']]);
 open(#helper_handle{} = HelperHandle, File, rdwr) ->
-    helpers_nif:set_flags(get_helper_ctx(HelperHandle), ['O_RDWR']),
-    apply_helper_nif(HelperHandle, open, [File]).
+    apply_helper_nif(HelperHandle, open, [File, ['O_RDWR']]).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.
@@ -265,7 +271,6 @@ fsync(#helper_handle{} = HelperHandle, File, false) ->
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc Calls given helpers_nif method with given args while inserting HelperInstance :: resource_handle() and
@@ -282,8 +287,3 @@ apply_helper_nif(#helper_handle{instance = Instance, ctx = CTX, timeout = Timeou
     after Timeout ->
         {error, nif_timeout}
     end.
-
-
--spec get_helper_ctx(handle()) -> helpers_nif:resource_handle().
-get_helper_ctx(#helper_handle{ctx = CTX}) ->
-    CTX.

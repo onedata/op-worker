@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(script_dir))
 # noinspection PyUnresolvedReferences
 from test_common import *
 # noinspection PyUnresolvedReferences
-from environment import common, docker
+from environment import docker
 from environment import ceph as ceph_server
 import ceph
 
@@ -82,28 +82,28 @@ def test_read_should_read_data(helper):
     assert helper.read(file_id, offset, len(data)) == data
 
 
-def test_delete_should_pass_errors(helper):
+def test_unlink_should_pass_errors(helper):
     file_id = random_str()
 
     with pytest.raises(RuntimeError) as excinfo:
-        helper.delete(file_id)
+        helper.unlink(file_id)
     assert 'No such file or directory' in str(excinfo.value)
 
 
-def test_delete_should_delete_data(helper):
+def test_unlink_should_delete_data(helper):
     file_id = random_str()
     data = random_str()
     offset = random_int()
 
     assert helper.write(file_id, data, offset) == len(data)
-    assert helper.delete(file_id) == True
+    helper.unlink(file_id)
 
 
 def test_truncate_should_truncate_data(helper):
     file_id = random_str()
     data = random_str()
-    size = random_int(len(data))
+    size = random_int(upper_bound=len(data))
 
     assert helper.write(file_id, data, 0) == len(data)
-    assert helper.truncate(file_id, size) == True
+    helper.truncate(file_id, size)
     assert helper.read(file_id, 0, size) == data[0:size]
