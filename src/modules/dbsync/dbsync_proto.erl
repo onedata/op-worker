@@ -83,7 +83,7 @@ status_report(SpaceId, Providers, CurrentSeq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_direct_message(ProviderId :: oneprovider:id(), Request :: term(), Attempts :: non_neg_integer()) ->
-    Reposne :: term() | {error, Reason :: any()}.
+    ok | {error, Reason :: any()}.
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
     PushTo = ProviderId,
     case communicate(PushTo, Request) of
@@ -92,7 +92,7 @@ send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
             ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
             send_direct_message(ProviderId, Request, Attempts - 1)
     end;
-send_direct_message(_ProviderId, _Request, 0) ->
+send_direct_message(_ProviderId, _Request, _) ->
     {error, unable_to_connect}.
 
 
@@ -264,7 +264,7 @@ handle_broadcast(_From, #status_request{} = _Request, _BaseRequest) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(oneprovider:id(), Message :: #tree_broadcast{} | #changes_request{} | #status_request{}) ->
-    {ok, MsgId :: term()}.
+    {ok, MsgId :: term()} | {error, Reason :: term()}.
 communicate(ProviderId, Message) ->
     SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
     provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId).

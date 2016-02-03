@@ -58,7 +58,6 @@
 -spec init(Args :: term()) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    timer:sleep(5000),
     ?info("[ DBSync ]: Starting dbsync..."),
     timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status}),
     Since = 0,
@@ -87,12 +86,13 @@ init_stream(Since, Until, Queue) ->
     end,
 
     timer:send_after(100, dbsync_worker, {timer, {flush_queue, Queue}}),
-    couchdb_datastore_driver:changes_start_link(fun
-                                                    (_, stream_ended, _) ->
-                                                        worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
-                                                    (Seq, Doc, Model) ->
-                                                        worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
-                                                end, Since, Until).
+    couchdb_datastore_driver:changes_start_link(
+        fun
+            (_, stream_ended, _) ->
+                worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
+            (Seq, Doc, Model) ->
+                worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
+        end, Since, Until).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -285,15 +285,14 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Sin
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, [#change{seq = Seq, doc = #document{key = Key} = Doc, model = ModelName} = Change | T]) ->
+apply_changes(SpaceId, [#change{doc = #document{key = _Key} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
         {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            catch caches_controller:flush_document(global_only, ModelName, Key),
-            catch caches_controller:flush_document(local_only, ModelName, Key),
         spawn(
             fun() ->
-                dbsync_events:change_replicated(SpaceId, Change)
+                dbsync_events:change_replicated(SpaceId, Change),
+                ok
             end),
         apply_changes(SpaceId, T)
     catch
@@ -431,10 +430,7 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
 -spec get_current_seq(SpaceId :: binary()) ->
     non_neg_integer().
 get_current_seq(SpaceId) ->
-    case get_current_seq(oneprovider:get_provider_id(), SpaceId) of
-        undefined -> 0;
-        O -> O
-    end.
+    get_current_seq(oneprovider:get_provider_id(), SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -493,7 +489,7 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_request_changes(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
-    ok | no_return().
+    ok | {error, Reason :: term()}.
 do_request_changes(ProviderId, Since, Until) ->
     dbsync_proto:changes_request(ProviderId, Since, Until).
 

@@ -22,13 +22,12 @@
 %%% API
 %%%===================================================================
 
-%% is_provider/1
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc Checks whether given certificate belongs to provider or not.
 %% @end
 %% @todo: improve the implementation by adding internal CA validation
+%%--------------------------------------------------------------------
 -spec is_provider(Cert :: #'OTPCertificate'{}) -> boolean().
-%% ====================================================================
 is_provider(#'OTPCertificate'{} = Cert) ->
     try
         #'OTPCertificate'{tbsCertificate =
@@ -50,6 +49,13 @@ is_provider(_) ->
     false.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes provider's session based on its certificate.
+%% @end
+%%--------------------------------------------------------------------
+-spec handshake(Cert :: #'OTPCertificate'{}, Conn :: pid()) ->
+    session:id() | no_return().
 handshake(Cert, Conn) ->
     ProviderId = get_provider_id(Cert),
     Identity = #identity{provider_id = ProviderId},
@@ -57,16 +63,16 @@ handshake(Cert, Conn) ->
     {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, Identity, Conn),
     SessionId.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%% get_provider_id/1
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc Returns ProviderId based on provider's certificate (issued by globalregistry).
 %% @end
--spec get_provider_id(Cert :: #'OTPCertificate'{}) -> ProviderId :: binary() | no_return().
-%% ====================================================================
+%%--------------------------------------------------------------------
+-spec get_provider_id(Cert :: #'OTPCertificate'{}) -> ProviderId :: oneprovider:id() | no_return().
 get_provider_id(#'OTPCertificate'{} = Cert) ->
     #'OTPCertificate'{tbsCertificate =
     #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,

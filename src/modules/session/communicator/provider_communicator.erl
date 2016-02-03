@@ -41,7 +41,7 @@ send(Msg, Ref) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a message to the client using connection pool associated with client's
+%% Sends a message to the server using connection pool associated with server's
 %% session or chosen connection. No reply is expected. Waits until message is
 %% sent. If an error occurs retries specified number of attempts unless session
 %% has been deleted in the meantime or connection does not exist.
@@ -95,11 +95,11 @@ send_async(Msg, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
-    {ok, #server_message{}} | {error, timeout}.
-communicate(#client_message{} = ServerMsg, Ref) ->
-    {ok, MsgId} = communicate_async(ServerMsg, Ref, self()),
+    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
+communicate(#client_message{} = ClientMsg, Ref) ->
+    {ok, MsgId} = communicate_async(ClientMsg, Ref, self()),
     receive
-        #server_message{message_id = MsgId} = ClientMsg -> {ok, ClientMsg}
+        #server_message{message_id = MsgId} = ServerMsg -> {ok, ServerMsg}
     after
         ?DEFAULT_REQUEST_TIMEOUT ->
             {error, timeout}
@@ -114,10 +114,12 @@ communicate(Msg, Ref) ->
 %% @equiv communicate_async(Msg, SessId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #client_message{}, Ref :: connection:ref()) ->
-    {ok, #message_id{}}.
+-spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
+    {ok, #message_id{}} | {error, Reason :: term()}.
+communicate_async(#client_message{} = ClientMsg, Ref) ->
+    communicate_async(ClientMsg, Ref, undefined);
 communicate_async(Msg, Ref) ->
-    communicate_async(Msg, Ref, undefined).
+    communicate_async(#client_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -151,7 +153,7 @@ communicate_async(Msg, Ref, Recipient) ->
 -spec ensure_connected(session:id()) ->
     ok | no_return().
 ensure_connected(SessId) ->
-    {_, provider, ProviderId} = SessId,
+    ProviderId = session_manager:session_id_to_provider_id(SessId),
     case session:get_random_connection(SessId) of
         {error, _} ->
             {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
