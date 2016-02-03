@@ -14,13 +14,13 @@
   value=currentSpaceId}}
 </form>
 
-<div class="btn-group" role="group" aria-label="...">
+<div style="display: inline-block" class="btn-group" role="group" aria-label="...">
     <button type="button" class="btn btn-default"
-      {{action 'showModal' 'components.create-dir-modal'}}>
+      {{action 'editNewDir'}}>
         Create Directory
     </button>
     <button type="button" class="btn btn-default"
-      {{action 'showModal' 'components.create-file-modal'}}>
+      {{action 'editNewFile'}}>
         Create File
     </button>
     <!--<button type="button" class="btn btn-default"-->
@@ -42,6 +42,15 @@
       <button type="button" class="btn btn-default" id="selectAll"
         {{action 'selectAll'}}>
           SelectAll
+      </button>
+  {{/if}}
+</div>
+<div style="display: inline-block;">
+  {{#if creatingFile}}
+    {{input id='new-file-edit' value=createdFileName placeholder=createdFileHint autofocus=autofocus}}
+      <button type="button" class="btn btn-default" id="selectAll"
+        {{action 'createNewFile'}}>
+          OK
       </button>
   {{/if}}
 </div>

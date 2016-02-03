@@ -27,12 +27,12 @@
 
 %% Convenience macro to log a debug level log dumping given variable.
 -define(log_debug(_Arg),
-    ?debug("~s", [str_utils:format("FILE_DATA_BACKEND: ~s: ~p", [??_Arg, _Arg])])
+    ?alert("~s", [str_utils:format("FILE_DATA_BACKEND: ~s: ~p", [??_Arg, _Arg])])
 ).
 
 
 init() ->
-    ?log_debug(websocket_init),
+    ?log_debug({websocket_init, g_session:get_session_id()}),
     {ok, _Pid} = data_backend:async_process(fun() -> async_loop() end),
     ok.
 

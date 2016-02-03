@@ -4,6 +4,8 @@
 import Ember from 'ember';
 
 export default Ember.Component.extend({
+  store: null,
+
   // Sorting of files by type and name
   sortProperties: ['type:asc', 'name:asc'],
   sortedModel: Ember.computed.sort("model", "sortProperties"),
@@ -12,9 +14,15 @@ export default Ember.Component.extend({
   currentSpaceId: null,
   currentSpace: null,
 
+  // Inputting new dir/file name
+  creatingFile: false,
+  createdFileType: 'file',
+  createdFileHint: 'New file name',
+  createdFileName: '',
+
   // Creating new files / dirs
   newFileName: '',
-  newFileParent: 'root',
+  newFileParent: null,
   fetchNewFileParentId: function () {
     if (this.get('isOneSelected')) {
       var selected = this.get('model').findBy('selected', true);
@@ -36,7 +44,7 @@ export default Ember.Component.extend({
       var fileContentId = 'content#' + this.get('previewedFile.id');
       console.log('fileContentId: ' + fileContentId);
       var controller = this;
-      this.store.find('fileContent', fileContentId).then(function (data) {
+      this.get('store').find('fileContent', fileContentId).then(function (data) {
         controller.set('previewedFileContent', data);
       });
     }
@@ -51,9 +59,8 @@ export default Ember.Component.extend({
       var spaceId = this.get('currentSpaceId');
       spaceId = spaceId.substring(spaceId.indexOf('#') + 1);
       console.log('currentSpaceId ' + spaceId);
-      console.log('currentSpace ' + this.findBy('id', spaceId).get('name'));
       var controller = this;
-      this.store.find('file', spaceId).then(function (data) {
+      this.get('store').find('file', spaceId).then(function (data) {
         data.set('expanded', true);
         controller.set('currentSpace', data);
         console.log(controller.get('currentSpace'));
@@ -63,6 +70,10 @@ export default Ember.Component.extend({
 
   // A virtual dir that contains all spaces
   spacesDir: function () {
+    // Below fun does not fire on page load, probably because the value of
+    // space select does not change. Run it here.
+    this.fetchCurrentSpace();
+    this.fetchNewFileParentId();
     return this.get('model').findBy('id', 'root')
   }.property(),
 
@@ -124,34 +135,31 @@ export default Ember.Component.extend({
 
   // Handling actions
   actions: {
-    createNewDir: function () {
-      this.send('createNew', 'dir');
+    editNewDir: function () {
+      this.set('creatingFile', true);
+      this.set('createdFileType', 'dir');
+      this.set('createdFileHint', 'New directory name');
+    },
+    editNewFile: function () {
+      this.set('creatingFile', true);
+      this.set('createdFileType', 'file');
+      this.set('createdFileHint', 'New file name');
     },
 
     createNewFile: function () {
-      this.send('createNew', 'file');
-    },
-
-    createNew: function (type) {
-      var name = this.get('newFileName');
-      this.set('newFileName', '');
+      var type = this.get('createdFileType');
+      var name = this.get('createdFileName');
+      this.set('createdFileName', '');
       var parentID = this.get('newFileParent.id');
+      this.set('creatingFile', false);
       if (name) {
-        var file = this.store.createRecord('file', {
-          name: name,
-          type: type,
-          parentId: parentID
-        });
-        file.save();
-      }
-    },
-
-    renameFile: function () {
-      var name = this.get('currentFileName');
-      if (name) {
-        var file = this.get('currentFile');
-        file.set('name', name);
-        file.save();
+        this.sendAction('createNewFileAction', name, type, parentID);
+        //var file = this.get('store').createRecord('file', {
+        //  name: name,
+        //  type: type,
+        //  parentId: parentID
+        //});
+        //file.save();
       }
     },
 
@@ -197,10 +205,6 @@ export default Ember.Component.extend({
     discardPreview: function () {
       this.get('previewedFileContent').rollback();
       this.set('editingPreview', false);
-    },
-
-    showModal: function (modal_type) {
-      this.sendAction('modalAction', 'showModal', modal_type, this);
     }
   }
 });

@@ -4,7 +4,18 @@ export default Ember.Controller.extend({
   // Static values that are available globally
   userName: 'TODO NAPRAW ADAPTER I STYLE',
   syncMessageStyle: 'color: #2050aa;',
-  syncMessage: ''
+  syncMessage: '',
+
+  actions: {
+    createNewFile: function(name, type, parentID) {
+      var file = this.get('store').createRecord('file', {
+        name: name,
+        type: type,
+        parentId: parentID
+      });
+      file.save();
+    }
+  }
 
   //// Initialize a value by sending a callback to the server. Value can be
   //// e.g. user name which has to be checked once and then is cached

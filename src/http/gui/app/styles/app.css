@@ -23,3 +23,9 @@ textarea.disabled {
 .modal-textbox {
   width: 500px;
 }
+
+#new-file-edit {
+  margin-left: 30px;
+  height: 34px;
+  width: 300px;
+}
