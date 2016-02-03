@@ -93,8 +93,8 @@ set_acl(SessId, FileKey, Acl) ->
 %% @doc Removes file's Access Control List.
 %%--------------------------------------------------------------------
 -spec remove_acl(logical_file_manager:handle()) -> ok | logical_file_manager:error_reply().
-remove_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
-    remove_acl(CTX, UUID).
+remove_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
+    remove_acl(SessId, {uuid, UUID}).
 
 -spec remove_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
     ok | logical_file_manager:error_reply().

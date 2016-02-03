@@ -79,7 +79,7 @@ get_xattr(SessId, FileKey, XattrName) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(Handle :: logical_file_manager:handle(), XattrName :: xattr:name()) ->
+-spec set_xattr(Handle :: logical_file_manager:handle(), Xattr :: #xattr{}) ->
     ok | logical_file_manager:error_reply().
 set_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, Xattr) ->
     set_xattr(SessId, {uuid, UUID}, Xattr).

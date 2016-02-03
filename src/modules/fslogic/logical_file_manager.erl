@@ -370,8 +370,8 @@ stat(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec get_xattr(Handle :: handle(), XattrName :: xattr:name()) ->
     {ok, #xattr{}} | error_reply().
-get_xattr(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}, XattrName) ->
-    ?run(fun() -> lfm_attrs:get_xattr(CTX, UUID, XattrName) end).
+get_xattr(Handle, XattrName) ->
+    ?run(fun() -> lfm_attrs:get_xattr(Handle, XattrName) end).
 
 -spec get_xattr(session:id(), file_key(), xattr:name()) ->
     {ok, #xattr{}} | error_reply().
@@ -384,7 +384,7 @@ get_xattr(SessId, FileKey, XattrName) ->
 %% Updates file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec set_xattr(Handle :: handle(), XattrName :: xattr:name()) -> ok | error_reply().
+-spec set_xattr(Handle :: handle(), Xattr :: #xattr{}) -> ok | error_reply().
 set_xattr(Handle, Xattr) ->
     ?run(fun() -> lfm_attrs:set_xattr(Handle, Xattr) end).
 
