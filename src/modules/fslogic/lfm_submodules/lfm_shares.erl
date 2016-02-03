@@ -10,11 +10,8 @@
 %%%-------------------------------------------------------------------
 -module(lfm_shares).
 
+-include("types.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
-
--type share_id() :: binary().
-
--export_type([share_id/0]).
 
 %% API
 -export([create_share/2, get_share/1, remove_share/1]).
@@ -30,8 +27,8 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(FileKey :: logical_file_manager:file_key(), ShareWith :: all | [{user, onedata_user:id()} | {group, onedata_group:id()}]) ->
-    {ok, ShareID :: share_id()} | logical_file_manager:error_reply().
+-spec create_share(FileKey :: file_key(), ShareWith :: all | [{user, user_id()} | {group, group_id()}]) ->
+    {ok, ShareID :: share_id()} | error_reply().
 create_share(_Path, _ShareWith) ->
     {ok, <<"">>}.
 
@@ -42,8 +39,7 @@ create_share(_Path, _ShareWith) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_share(ShareID :: share_id()) ->
-    {ok, {file_meta:uuid(), file_meta:name()}} | logical_file_manager:error_reply().
+-spec get_share(ShareID :: share_id()) -> {ok, {file_uuid(), file_name()}} | error_reply().
 get_share(_ShareID) ->
     {ok, {<<"">>, <<"">>}}.
 
@@ -54,7 +50,6 @@ get_share(_ShareID) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(ShareID :: share_id()) ->
-    ok | logical_file_manager:error_reply().
+-spec remove_share(ShareID :: share_id()) -> ok | error_reply().
 remove_share(_ShareID) ->
     ok.

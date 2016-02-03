@@ -10,19 +10,14 @@
 %%%-------------------------------------------------------------------
 -module(lfm_perms).
 
+-include("types.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/lfm_internal.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
--type access_control_entity() :: #accesscontrolentity{}.
-
--export_type([access_control_entity/0]).
-
 %% API
--export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
-remove_acl/1, remove_acl/2]).
+-export([set_perms/3, check_perms/2, set_acl/3, get_acl/2, remove_acl/2]).
 
 %%%===================================================================
 %%% API
@@ -31,12 +26,9 @@ remove_acl/1, remove_acl/2]).
 %%--------------------------------------------------------------------
 %% @doc Changes the permissions of a file.
 %%--------------------------------------------------------------------
--spec set_perms(SessId :: session:id(), FileKey :: logical_file_manager:file_key(),
-    NewPerms :: file_meta:posix_permissions()) ->
-    ok | logical_file_manager:error_reply().
-set_perms(SessId, FileKey, NewPerms) ->
-    CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+-spec set_perms(fslogic_worker:ctx(), file_meta:uuid(), file_meta:posix_permissions()) ->
+    ok | error_reply().
+set_perms(#fslogic_ctx{session_id = SessId}, UUID, NewPerms) ->
     lfm_utils:call_fslogic(SessId, #change_mode{uuid = UUID, mode = NewPerms},
         fun(_) -> ok end).
 
@@ -44,8 +36,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %%--------------------------------------------------------------------
 %% @doc Checks if current user has given permissions for given file.
 %%--------------------------------------------------------------------
--spec check_perms(FileKey :: logical_file_manager:file_key(), PermsType :: check_permissions:check_type()) ->
-    {ok, boolean()} | logical_file_manager:error_reply().
+-spec check_perms(FileKey :: file_key(), PermsType :: permission_type()) -> {ok, boolean()} | error_reply().
 check_perms(_Path, _PermType) ->
     {ok, false}.
 
@@ -53,16 +44,8 @@ check_perms(_Path, _PermType) ->
 %%--------------------------------------------------------------------
 %% @doc Returns file's Access Control List.
 %%--------------------------------------------------------------------
--spec get_acl(Handle :: logical_file_manager:handle()) ->
-    {ok, [access_control_entity()]} | logical_file_manager:error_reply().
-get_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
-    get_acl(SessId, {uuid, UUID}).
-
--spec get_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
-    {ok, [access_control_entity()]} | logical_file_manager:error_reply().
-get_acl(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+-spec get_acl(fslogic_worker:ctx(), file_meta:uuid()) -> {ok, [access_control_entity()]} | error_reply().
+get_acl(#fslogic_ctx{session_id = SessId}, UUID) ->
     lfm_utils:call_fslogic(SessId, #get_acl{uuid = UUID},
         fun(#acl{value = Json}) ->
             Acl = fslogic_acl:from_json_fromat_to_acl(json_utils:decode(Json)), %todo store perms as integers
@@ -73,17 +56,8 @@ get_acl(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Updates file's Access Control List.
 %%--------------------------------------------------------------------
--spec set_acl(logical_file_manager:handle(), EntityList :: [access_control_entity()]) ->
-    ok | logical_file_manager:error_reply().
-set_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}, EntityList) ->
-    set_acl(SessId, {uuid, UUID}, EntityList).
-
--spec set_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
-    EntityList :: [access_control_entity()]) ->
-    ok | logical_file_manager:error_reply().
-set_acl(SessId, FileKey, Acl) ->
-    CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+-spec set_acl(fslogic_worker:ctx(), file_meta:uuid(), [access_control_entity()]) -> ok | error_reply().
+set_acl(#fslogic_ctx{session_id = SessId}, UUID, Acl) ->
     Json = json_utils:encode(fslogic_acl:from_acl_to_json_format(Acl)), %todo store perms as integers
     lfm_utils:call_fslogic(SessId, #set_acl{uuid = UUID, acl = #acl{value = Json}},
         fun(_) -> ok end).
@@ -92,14 +66,7 @@ set_acl(SessId, FileKey, Acl) ->
 %%--------------------------------------------------------------------
 %% @doc Removes file's Access Control List.
 %%--------------------------------------------------------------------
--spec remove_acl(logical_file_manager:handle()) -> ok | logical_file_manager:error_reply().
-remove_acl(#lfm_handle{file_uuid = UUID, fslogic_ctx = CTX}) ->
-    remove_acl(CTX, UUID).
-
--spec remove_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
-    ok | logical_file_manager:error_reply().
-remove_acl(SessId, FileKey) ->
-    CTX = fslogic_context:new(SessId),
-    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+-spec remove_acl(fslogic_worker:ctx(), file_meta:uuid()) -> ok | error_reply().
+remove_acl(#fslogic_ctx{session_id = SessId}, UUID) ->
     lfm_utils:call_fslogic(SessId, #remove_acl{uuid = UUID},
         fun(_) -> ok end).
