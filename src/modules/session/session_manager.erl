@@ -20,8 +20,11 @@
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
+-export([reuse_or_create_provider_session/3]).
 -export([create_gui_session/1]).
 -export([remove_session/1]).
+-export([get_provider_session_id/2, session_id_to_provider_id/1]).
+-export([reuse_or_create_provider_outgoing_session/3]).
 
 %%%===================================================================
 %%% API
@@ -69,6 +72,83 @@ reuse_or_create_fuse_session(SessId, Iden, Auth, Con) ->
                     {ok, created};
                 {error, already_exists} ->
                     reuse_or_create_fuse_session(SessId, Iden, Auth, Con);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates FUSE session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_provider_outgoing_session(SessId :: session:id(), Iden :: session:identity(), Con :: pid()) ->
+    {ok, reused | created} | {error, Reason :: term()}.
+reuse_or_create_provider_outgoing_session(SessId, Iden, Con) ->
+    Sess = #session{status = active, identity = Iden,
+        connections = [Con], type = provider_outgoing},
+    Diff = fun
+               (#session{status = phantom}) ->
+                   {error, {not_found, session}};
+               (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
+                   case Iden of
+                       ValidIden ->
+                           {ok, ExistingSess#session{status = active, connections = [Con | Cons]}};
+                       _ ->
+                           {error, {invalid_identity, Iden}}
+                   end
+           end,
+    case session:update(SessId, Diff) of
+        {ok, SessId} ->
+            {ok, reused};
+        {error, {not_found, _}} ->
+            case session:create(#document{key = SessId, value = Sess}) of
+                {ok, SessId} ->
+                    supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, provider_outgoing]),
+                    {ok, created};
+                {error, already_exists} ->
+                    reuse_or_create_provider_outgoing_session(SessId, Iden, Con);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates provider's session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_provider_session(SessId :: session:id(), Iden :: session:identity(), Con :: pid()) ->
+    {ok, reused | created} | {error, Reason :: term()}.
+reuse_or_create_provider_session(SessId, Iden, Con) ->
+    Sess = #session{status = active, identity = Iden,
+        connections = [Con], type = provider},
+    Diff = fun
+               (#session{status = phantom}) ->
+                   {error, {not_found, session}};
+               (#session{identity = ValidIden, connections = Cons} = ExistingSess) ->
+                   case Iden of
+                       ValidIden ->
+                           {ok, ExistingSess#session{status = active, connections = [Con | Cons]}};
+                       _ ->
+                           {error, {invalid_identity, Iden}}
+                   end
+           end,
+    case session:update(SessId, Diff) of
+        {ok, SessId} ->
+            {ok, reused};
+        {error, {not_found, _}} ->
+            case session:create(#document{key = SessId, value = Sess}) of
+                {ok, SessId} ->
+                    supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, provider]),
+                    {ok, created};
+                {error, already_exists} ->
+                    reuse_or_create_provider_session(SessId, Iden, Con);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -153,6 +233,27 @@ create_gui_session(Auth) ->
 -spec remove_session(SessId :: session:id()) -> ok | {error, Reason :: term()}.
 remove_session(SessId) ->
     worker_proxy:call(?SESSION_MANAGER_WORKER, {remove_session, SessId}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates session id for given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
+get_provider_session_id(Type, ProviderId) ->
+    base64:encode(term_to_binary({Type, provider, ProviderId})).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets provider's id from given session (assumes that the session was created for provider).
+%% @end
+%%--------------------------------------------------------------------
+-spec session_id_to_provider_id(session:id()) -> oneprovider:id().
+session_id_to_provider_id(SessId) ->
+    {_, provider, ProviderId} = binary_to_term(base64:decode(SessId)),
+    ProviderId.
 
 %%%===================================================================
 %%% Internal functions

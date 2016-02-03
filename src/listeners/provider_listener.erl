@@ -8,7 +8,7 @@
 %%% @doc protocol listener starting & stopping
 %%% @end
 %%%--------------------------------------------------------------------
--module(protocol_listener).
+-module(provider_listener).
 -behaviour(listener_behaviour).
 -author("Tomasz Lichon").
 -author("Michal Zmuda").
@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 % Cowboy listener references
--define(TCP_PROTO_LISTENER, tcp_proto).
+-define(TCP_PROTO_LISTENER, tcp_proto_provider).
 
 
 %% listener_behaviour callbacks
@@ -55,13 +55,20 @@ start() ->
              {ok, all} -> {0, 0, 0, 0}
          end,
 
+    CACerts = lists:map(
+        fun(Path) ->
+            {ok, Data} = file:read_file(Path),
+            Data
+        end, [gr_plugin:get_cacert_path()]),
+
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
         ranch_ssl2, [
             {ip, Ip},
-            {port, Port},
+            {port, Port + 1},
             {certfile, CertFile},
+            {cacerts, CACerts},
             {verify_type, verify_peer},
-            {fail_if_no_peer_cert, false}
+            {fail_if_no_peer_cert, true}
         ],
         connection, []
     ),
