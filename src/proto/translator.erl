@@ -83,6 +83,8 @@ translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
     #file_block{offset = Off, size = S};
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'GetConfiguration'{}) ->
+    #get_configuration{};
 translate_from_protobuf(#'MessageStream'{stream_id = StmId, sequence_number = SeqNum}) ->
     #message_stream{stream_id = StmId, sequence_number = SeqNum};
 translate_from_protobuf(#'EndOfMessageStream'{}) ->
@@ -181,16 +183,19 @@ translate_to_protobuf(#read_subscription{} = Sub) ->
         size_threshold = Sub#read_subscription.size_threshold
     }};
 translate_to_protobuf(#write_subscription{} = Sub) ->
-    {write_subscription, #'ReadSubscription'{
+    {write_subscription, #'WriteSubscription'{
         counter_threshold = Sub#write_subscription.counter_threshold,
         time_threshold = Sub#write_subscription.time_threshold,
         size_threshold = Sub#write_subscription.size_threshold
     }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
-translate_to_protobuf(#handshake_response{session_id = Id, subscriptions = Subs}) ->
+translate_to_protobuf(#handshake_response{session_id = Id}) ->
     {handshake_response, #'HandshakeResponse'{
-        session_id = Id,
+        session_id = Id
+    }};
+translate_to_protobuf(#configuration{subscriptions = Subs}) ->
+    {configuration, #'Configuration'{
         subscriptions = lists:map(fun(Sub) ->
             {_, Record} = translate_to_protobuf(Sub),
             Record
