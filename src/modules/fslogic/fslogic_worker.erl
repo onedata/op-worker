@@ -253,6 +253,11 @@ handle_events(Evts, #{session_id := SessId} = Ctx) ->
     }}) ->
         case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
             {ok, size_changed} ->
+                MTime = utils:time(),
+                {ok, _} = file_meta:update({uuid, FileUUID}, #{
+                    mtime => MTime, ctime => MTime
+                }),
+                fslogic_event:emit_file_times_update({uuid, FileUUID}, SessId),
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {ok, size_not_changed} ->

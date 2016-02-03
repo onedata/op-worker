@@ -53,7 +53,12 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     }},
     case file_meta:create(NormalizedParentUUID, File) of
         {ok, DirUUID} ->
-            {ok, _} = file_meta:update(NormalizedParentUUID, #{mtime => CTime}),
+            {ok, _} = file_meta:update({uuid, NormalizedParentUUID}, #{
+                mtime => CTime, ctime => CTime
+            }),
+            spawn(fun() ->
+                fslogic_event:emit_file_attr_update({uuid, NormalizedParentUUID}, [])
+                  end),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = DirUUID}
             };
@@ -78,6 +83,9 @@ read_dir(CTX, File, Offset, Size) ->
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
+    {ok, _} = file_meta:update(FileDoc, #{atime => fslogic_times:calculate_atime(FileDoc)}),
+    spawn(fun() -> fslogic_event:emit_file_attr_update(FileDoc, []) end),
+
     SpacesKey = fslogic_uuid:spaces_uuid(UserId),
     DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
     case Key of
@@ -90,11 +98,12 @@ read_dir(CTX, File, Offset, Size) ->
                     _ ->
                         file_meta:list_children(DefaultSpace, Offset - 1, Size)
                 end,
-                #fuse_response{status = #status{code = ?OK},
-                    fuse_response = #file_children{
-                        child_links = ChildLinks ++ DefaultSpaceChildLinks
-                    }
-                };
+
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = #file_children{
+                    child_links = ChildLinks ++ DefaultSpaceChildLinks
+                }
+            };
         SpacesKey ->
             {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
                 onedata_user:get(UserId),

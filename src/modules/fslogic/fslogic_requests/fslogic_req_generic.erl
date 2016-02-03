@@ -27,7 +27,9 @@
 %% API
 -export([chmod/3, get_file_attr/2, delete/2, rename/3, update_times/5,
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
-    get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
+    get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
+    set_transfer_encoding/3, get_cdmi_completion_status/2,
+    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 
 %%%===================================================================
 %%% API functions
@@ -43,7 +45,7 @@
 -check_permissions([{traverse_ancestors, 2}]).
 update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) ->
     UpdateMap = #{atime => ATime, mtime => MTime, ctime => CTime},
-    UpdateMap1 = maps:from_list([{Key, Value} || {Key, Value} <- maps:to_list(UpdateMap), is_integer(Value)]),
+    UpdateMap1 = maps:filter(fun(_Key, Value) -> is_integer(Value) end, UpdateMap),
     {ok, _} = file_meta:update(FileEntry, UpdateMap1),
 
     spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, [SessId]) end),
@@ -63,7 +65,7 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 chmod(CTX, FileEntry, Mode) ->
     chmod_storage_files(CTX, FileEntry, Mode),
 
-    {ok, _} = file_meta:update(FileEntry, #{mode => Mode}),
+    {ok, _} = file_meta:update(FileEntry, #{mode => Mode, ctime => utils:time()}),
 
     % remove acl
     {ok, FileUuid} = file_meta:to_uuid(FileEntry),
@@ -189,9 +191,11 @@ get_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
     #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
 set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
-set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
+set_xattr(_CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
+            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
+            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -205,9 +209,11 @@ set_xattr(_CTX, {uuid, FileUuid}, Xattr) ->
 -spec remove_xattr(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, xattr:name()) ->
     #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_metadata, 2}]).
-remove_xattr(_CTX, {uuid, FileUuid}, XattrName) ->
+remove_xattr(_CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
+            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
+            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -251,13 +257,15 @@ get_acl(_CTX, {uuid, FileUuid})  ->
 -spec set_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}, #acl{}) ->
     #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
-set_acl(CTX, {uuid, FileUuid}, #acl{value = Val}) ->
+set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
     case xattr:save(FileUuid, #xattr{name = ?ACL_XATTR_NAME, value = Val}) of
         {ok, _} ->
             ok = chmod_storage_files(
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
                 {uuid, FileUuid}, 8#000
             ),
+            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
+            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -269,7 +277,7 @@ set_acl(CTX, {uuid, FileUuid}, #acl{value = Val}) ->
 -spec remove_acl(fslogic_worker:ctx(), {uuid, Uuid :: file_meta:uuid()}) ->
     #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?write_acl, 2}]).
-remove_acl(CTX, {uuid, FileUuid}) ->
+remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
     case xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME) of
         ok ->
             {ok, #document{value = #file_meta{mode = Mode}}} = file_meta:get({uuid, FileUuid}),
@@ -278,6 +286,8 @@ remove_acl(CTX, {uuid, FileUuid}) ->
                 {uuid, FileUuid}, Mode
             ),
             ok = fslogic_event:emit_permission_changed(FileUuid),
+            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
+            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -305,9 +315,11 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
 -spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, transfer_encoding()) ->
     ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
-set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
+set_transfer_encoding(_CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
         {ok, _} ->
+            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
+            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -369,9 +381,11 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
 -spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, mimetype()) ->
     ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
-set_mimetype(_CTX, {uuid, FileUuid}, Mimetype) ->
+set_mimetype(_CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
         {ok, _} ->
+            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
+            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -445,7 +459,11 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
         0 ->
             ok = file_meta:delete(FileDoc),
             {ok, ParentDoc} = file_meta:get_parent(FileDoc),
-            {ok, _} = file_meta:update(ParentDoc, #{mtime => utils:time()}),
+            MTime = utils:time(),
+            {ok, _} = file_meta:update(ParentDoc, #{
+                mtime => MTime, ctime => MTime
+            }),
+            spawn(fun() -> fslogic_event:emit_file_attr_update(ParentDoc, []) end),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
@@ -473,6 +491,15 @@ rename_file(CTX, SourceEntry, TargetPath) ->
 -spec rename_impl(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
 rename_impl(_CTX, SourceEntry, TargetPath) ->
     ok = file_meta:rename(SourceEntry, {path, TargetPath}),
+    {ok, ParentDoc} = file_meta:get_parent({path, TargetPath}),
+    CTime = utils:time(),
+    {ok, _} = file_meta:update({path, TargetPath}, #{ctime => CTime}),
+    {ok, _} = file_meta:update(ParentDoc, #{mtime => CTime, ctime => CTime}),
+    spawn(
+        fun() ->
+            fslogic_event:emit_file_attr_update(ParentDoc, []),
+            fslogic_event:emit_file_attr_update({path, TargetPath}, [])
+        end),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
