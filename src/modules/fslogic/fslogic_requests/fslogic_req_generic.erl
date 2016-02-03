@@ -520,8 +520,6 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     boolean().
 moving_into_itself(SourceEntry, TargetPath) ->
     {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
-    TargetTokens = fslogic_path:split(TargetPath),
-    [_ | ParentTokensReversed] = lists:reverse(TargetTokens),
-    ParentPath = fslogic_path:join(lists:reverse(ParentTokensReversed)),
+    {_, ParentPath} = fslogic_path:basename_and_parent(TargetPath),
     {ok, {_, ParentUUIDs}} = file_meta:resolve_path(ParentPath),
     lists:any(fun(ParentUUID) -> ParentUUID =:= SourceUUID end, ParentUUIDs).
