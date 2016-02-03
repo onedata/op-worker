@@ -61,7 +61,7 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
     {ok, _} = file_meta:update(FileDoc, #{
         mtime => MTime, ctime => MTime
     }),
-    spawn(fun() -> fslogic_event:emit_file_attr_update(FileDoc, []) end),
+    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileDoc) end),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -176,7 +176,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
         mtime => MTime, ctime => MTime
     }),
     spawn(fun() ->
-        fslogic_event:emit_file_attr_update({uuid, NormalizedParentUUID}, [])
+        fslogic_event:emit_file_sizeless_attrs_update({uuid, NormalizedParentUUID})
           end),
 
     #fuse_response{status = #status{code = ?OK},

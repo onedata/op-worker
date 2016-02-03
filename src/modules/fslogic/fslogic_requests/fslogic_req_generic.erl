@@ -73,7 +73,7 @@ chmod(CTX, FileEntry, Mode) ->
     spawn(
         fun() ->
             fslogic_event:emit_permission_changed(FileUuid),
-            fslogic_event:emit_file_attr_update(FileEntry, [])
+            fslogic_event:emit_file_sizeless_attrs_update(FileEntry)
         end),
 
     #fuse_response{status = #status{code = ?OK}}.
@@ -194,7 +194,7 @@ set_xattr(_CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
             {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -212,7 +212,7 @@ remove_xattr(_CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
             {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -264,7 +264,7 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
                 {uuid, FileUuid}, 8#000
             ),
             {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -286,7 +286,7 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
             ),
             ok = fslogic_event:emit_permission_changed(FileUuid),
             {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -319,7 +319,7 @@ set_transfer_encoding(_CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
         {ok, _} ->
             {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -387,7 +387,7 @@ set_mimetype(_CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
         {ok, _} ->
             {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_attr_update(FileEntry, []) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -465,7 +465,7 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
             {ok, _} = file_meta:update(ParentDoc, #{
                 mtime => MTime, ctime => MTime
             }),
-            spawn(fun() -> fslogic_event:emit_file_attr_update(ParentDoc, []) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(ParentDoc) end),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
@@ -499,8 +499,8 @@ rename_impl(_CTX, SourceEntry, TargetPath) ->
     {ok, _} = file_meta:update(ParentDoc, #{mtime => CTime, ctime => CTime}),
     spawn(
         fun() ->
-            fslogic_event:emit_file_attr_update(ParentDoc, []),
-            fslogic_event:emit_file_attr_update({path, TargetPath}, [])
+            fslogic_event:emit_file_sizeless_attrs_update(ParentDoc),
+            fslogic_event:emit_file_sizeless_attrs_update({path, TargetPath})
         end),
     #fuse_response{status = #status{code = ?OK}}.
 

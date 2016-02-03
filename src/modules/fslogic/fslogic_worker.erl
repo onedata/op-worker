@@ -257,10 +257,15 @@ handle_events(Evts, #{session_id := SessId} = Ctx) ->
                 {ok, _} = file_meta:update({uuid, FileUUID}, #{
                     mtime => MTime, ctime => MTime
                 }),
-                fslogic_event:emit_file_times_update({uuid, FileUUID}, SessId),
+                fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUUID}),
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {ok, size_not_changed} ->
+                MTime = utils:time(),
+                {ok, _} = file_meta:update({uuid, FileUUID}, #{
+                    mtime => MTime, ctime => MTime
+                }),
+                fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUUID}),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {error, Reason} ->
                 ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason])

@@ -101,5 +101,5 @@ read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
 
     {ok, _} = file_meta:update({uuid, FileUuid},
         #{atime => fslogic_times:calculate_atime({uuid, FileUuid})}),
-    spawn(fun() -> fslogic_event:emit_file_attr_update({uuid, FileUuid}, []) end),
+    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUuid}) end),
     #proxyio_response{status = Status, proxyio_response = Response}.

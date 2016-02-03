@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([emit_file_attr_update/2, emit_file_times_update/2,
+-export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
     emit_file_location_update/2, emit_permission_changed/1]).
 
 %%%===================================================================
@@ -44,17 +44,17 @@ emit_file_attr_update(FileEntry, ExcludedSessions) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends current file times to subscriber with given SessionId.
+%% Sends current file attributes excluding size to all subscribers.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_times_update(fslogic_worker:file(), session:id()) ->
+-spec emit_file_sizeless_attrs_update(fslogic_worker:file()) ->
     ok | {error, Reason :: term()}.
-emit_file_times_update(FileEntry, SessionId) ->
+emit_file_sizeless_attrs_update(FileEntry) ->
     case logical_file_manager:stat(?ROOT_SESS_ID, FileEntry) of
         {ok, #file_attr{} = FileAttr} ->
-            ?debug("Sending new times for file ~p to session ~p", [FileEntry, SessionId]),
+            ?debug("Sending new times for file ~p to all subscribers", [FileEntry]),
             TimeFileAttr = FileAttr#file_attr{size = -1},
-            event:emit(#event{object = #update_event{object = TimeFileAttr}}, SessionId);
+            event:emit(#event{object = #update_event{object = TimeFileAttr}}, {exclude, []});
         {error, Reason} ->
             ?error("Unable to get new times for file ~p due to: ~p", [FileEntry, Reason]),
             {error, Reason}
