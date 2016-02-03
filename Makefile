@@ -14,7 +14,7 @@ REBAR	        ?= $(BASE_DIR)/rebar
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
 
-.PHONY: deps test package
+.PHONY: deps test package test_gui
 
 all: test_rel
 
@@ -54,7 +54,7 @@ gui_prod:
 generate: deps compile gui_dev
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	# Move gui tmp dir away from sources, so as to prevent
-	# rebar from enter it during spec generation and crashing
+	# rebar from entering it during spec generation and crashing
 	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
 	# Bring back the tmp dir to its normal location
@@ -64,7 +64,7 @@ generate: deps compile gui_dev
 generate_production: deps compile gui_prod
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	# Move gui tmp dir away from sources, so as to prevent
-	# rebar from enter it during spec generation and crashing
+	# rebar from entering it during spec generation and crashing
 	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
 	# Bring back the tmp dir to its normal location
@@ -106,6 +106,9 @@ eunit:
 	./rebar eunit skip_deps=true suites=${SUITES}
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
+
+test_gui:
+	./test_gui.sh
 
 coverage:
 	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR)
