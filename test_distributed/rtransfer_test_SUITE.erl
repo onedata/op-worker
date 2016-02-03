@@ -35,13 +35,14 @@ all() ->
         exact_block_size_fetch_test,
         more_than_block_fetch_test,
         more_than_block_fetch_test2,
-        %% TODO - VFS-1573
+        %% TODO - uncomment below test after resolving VFS-1573
         %% cancel_fetch_test,
         many_requests_test,
         many_requests_to_one_file,
-        error_open_fun_test,
-        error_read_fun_test,
-        error_write_fun_test,
+        %% TODO - uncomment below 3 tests after resolving VFS-1574
+        %% error_open_fun_test,
+        %% error_read_fun_test,
+        %% error_write_fun_test,
         offset_greater_than_file_size_test,
         request_bigger_than_file_test
     ].
