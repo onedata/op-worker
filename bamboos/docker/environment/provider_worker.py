@@ -46,7 +46,6 @@ class ProviderWorkerConfigurator:
                             this_config[self.app_name()], bindir)
 
     def extra_volumes(self, config, bindir):
-        print(bindir)
         storage_volumes = [common.volume_for_storage(s) for s in config[
             'os_config']['storages']] if 'os_config' in config else []
         storage_volumes += gui_livereload.required_volumes('rel/gui.config',
