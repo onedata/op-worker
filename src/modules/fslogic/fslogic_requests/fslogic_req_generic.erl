@@ -457,7 +457,12 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
 -spec rename_dir(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
 -check_permissions([{?delete_subcontainer, {parent, 2}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir(CTX, SourceEntry, TargetPath) ->
-    rename_impl(CTX, SourceEntry, TargetPath).
+    case moving_into_itself(SourceEntry, TargetPath) of
+        true ->
+            #fuse_response{status = #status{code = ?EINVAL}};
+        false ->
+            rename_impl(CTX, SourceEntry, TargetPath)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Checks necessary permissions and renames file
@@ -502,3 +507,19 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
         _ -> ok
     end.
 
+%%--------------------------------------------------------------------
+%% Internal functions
+%%--------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if renamed entry is one of target path parents.
+%% @end
+%%--------------------------------------------------------------------
+-spec moving_into_itself(SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
+    boolean().
+moving_into_itself(SourceEntry, TargetPath) ->
+    {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
+    {_, ParentPath} = fslogic_path:basename_and_parent(TargetPath),
+    {ok, {_, ParentUUIDs}} = file_meta:resolve_path(ParentPath),
+    lists:any(fun(ParentUUID) -> ParentUUID =:= SourceUUID end, ParentUUIDs).
