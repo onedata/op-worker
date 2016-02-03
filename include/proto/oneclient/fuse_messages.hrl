@@ -81,7 +81,6 @@
 }).
 
 -record(get_helper_params, {
-    space_id :: file_meta:uuid(),
     storage_id :: storage:id(),
     force_cluster_proxy = false :: boolean()
 }).
@@ -114,11 +113,58 @@
     uuid :: file_meta:uuid()
 }).
 
+-record(acl, {
+    value :: binary()
+}).
+
+-record(get_acl, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(set_acl, {
+    uuid :: file_meta:uuid(),
+    acl :: #acl{}
+}).
+
+-record(remove_acl, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(get_transfer_encoding, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(set_transfer_encoding, {
+    uuid :: file_meta:uuid(),
+    value :: binary()
+}).
+
+-record(get_cdmi_completion_status, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(set_cdmi_completion_status, {
+    uuid :: file_meta:uuid(),
+    value :: binary()
+}).
+
+-record(get_mimetype, {
+    uuid :: file_meta:uuid()
+}).
+
+-record(set_mimetype, {
+    uuid :: file_meta:uuid(),
+    value :: binary()
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-                        #list_xattr{}.
+                        #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
+                        #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
+                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{}.
+
 
 -record(file_children, {
     child_links :: [#child_link{}]
@@ -142,8 +188,21 @@
     names :: [xattr:name()]
 }).
 
+-record(transfer_encoding, {
+    value :: binary()
+}).
+
+-record(cdmi_completion_status, {
+    value :: binary()
+}).
+
+-record(mimetype, {
+    value :: binary()
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
-#file_location{} | #xattr{} | #xattr_list{} | #dir{}.
+    #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
+    #cdmi_completion_status{} | #mimetype{} | #dir{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

@@ -94,8 +94,11 @@ ERL_NIF_TERM pop_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
         for (const auto &term : block.terms())
             terms.push_back(term.get(env));
 
+        nifpp::binary fileId{block.file_id().size()};
+        std::copy(block.file_id().begin(), block.file_id().end(), fileId.data);
+
         auto record = std::make_tuple(
-            nifpp::str_atom("rt_block"), block.file_id(),
+            nifpp::str_atom("rt_block"), nifpp::make(env, fileId),
             block.provider_ref().get(env), block.offset(), block.size(),
             block.priority(), block.retry(), terms);
 

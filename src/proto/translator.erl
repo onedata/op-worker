@@ -73,12 +73,18 @@ translate_from_protobuf(#'FileLocationSubscription'{} = Record) ->
         counter_threshold = Record#'FileLocationSubscription'.counter_threshold,
         time_threshold = Record#'FileLocationSubscription'.time_threshold
     };
+translate_from_protobuf(#'PermissionChangedSubscription'{} = Record) ->
+    #permission_changed_subscription{
+        file_uuid = Record#'PermissionChangedSubscription'.file_uuid
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
     #file_block{offset = Off, size = S};
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
+translate_from_protobuf(#'GetConfiguration'{}) ->
+    #get_configuration{};
 translate_from_protobuf(#'MessageStream'{stream_id = StmId, sequence_number = SeqNum}) ->
     #message_stream{stream_id = StmId, sequence_number = SeqNum};
 translate_from_protobuf(#'EndOfMessageStream'{}) ->
@@ -125,14 +131,14 @@ translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentU
     #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)};
 translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
     #get_file_location{uuid = UUID, flags = translate_open_flags(Flags)};
-translate_from_protobuf(#'GetHelperParams'{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP}) ->
-    #get_helper_params{space_id = SPID, storage_id = SID, force_cluster_proxy = ForceCP};
+translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
+    #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
 translate_from_protobuf(#'Close'{uuid = UUID}) ->
     #close{uuid = UUID};
-translate_from_protobuf(#'ProxyIORequest'{space_id = SPID, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
-    #proxyio_request{space_id = SPID, storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
+    #proxyio_request{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #remote_read{offset = Offset, size = Size};
 translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
@@ -166,6 +172,8 @@ translate_to_protobuf(#event{counter = Counter, object = Type}) ->
     #'Event'{counter = Counter, object = translate_to_protobuf(Type)};
 translate_to_protobuf(#update_event{object = Type}) ->
     {update_event, #'UpdateEvent'{object = translate_to_protobuf(Type)}};
+translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
+    {permission_changed_event, #'PermissionChangedEvent'{file_uuid = FileUuid}};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
@@ -175,16 +183,19 @@ translate_to_protobuf(#read_subscription{} = Sub) ->
         size_threshold = Sub#read_subscription.size_threshold
     }};
 translate_to_protobuf(#write_subscription{} = Sub) ->
-    {write_subscription, #'ReadSubscription'{
+    {write_subscription, #'WriteSubscription'{
         counter_threshold = Sub#write_subscription.counter_threshold,
         time_threshold = Sub#write_subscription.time_threshold,
         size_threshold = Sub#write_subscription.size_threshold
     }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
-translate_to_protobuf(#handshake_response{session_id = Id, subscriptions = Subs}) ->
+translate_to_protobuf(#handshake_response{session_id = Id}) ->
     {handshake_response, #'HandshakeResponse'{
-        session_id = Id,
+        session_id = Id
+    }};
+translate_to_protobuf(#configuration{subscriptions = Subs}) ->
+    {configuration, #'Configuration'{
         subscriptions = lists:map(fun(Sub) ->
             {_, Record} = translate_to_protobuf(Sub),
             Record
@@ -236,6 +247,7 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
         translate_to_protobuf(ChildLink)
     end, FileEntries)}};
+translate_to_protobuf(#dir{}) -> undefined;
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
         helper_args = lists:map(fun(HelpersArg) ->

@@ -14,7 +14,6 @@
 -define(HANDSHAKE_MESSAGES_HRL, 1).
 
 -include("proto/common/credentials.hrl").
--include("modules/events/subscriptions.hrl").
 
 -record(handshake_request, {
     auth :: #auth{},
@@ -22,8 +21,7 @@
 }).
 
 -record(handshake_response, {
-    session_id :: session:id(),
-    subscriptions = [] :: [#subscription{}]
+    session_id :: session:id()
 }).
 
 -endif.

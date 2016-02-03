@@ -13,6 +13,8 @@
 
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
 %% API
 -export([write/6, read/6]).
@@ -27,15 +29,18 @@
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec write(SessId :: session:id(), SpaceId :: file_meta:uuid(),
+-spec write(SessId :: session:id(), FileUuid :: file_meta:uuid(),
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Data :: binary()) ->
     #proxyio_response{}.
-write(SessionId, SpaceId, StorageId, FileId, Offset, Data) ->
+write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceId, Storage, FileId),
+        storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
 
     {Status, Response} =
         case storage_file_manager:open(SFMHandle, write) of
@@ -64,15 +69,18 @@ write(SessionId, SpaceId, StorageId, FileId, Offset, Data) ->
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(SessId :: session:id(), SpaceId :: file_meta:uuid(),
+-spec read(SessId :: session:id(), FileUuid :: file_meta:uuid(),
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     #proxyio_response{}.
-read(SessionId, SpaceId, StorageId, FileId, Offset, Size) ->
+read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
     {ok, Storage} = storage:get(StorageId),
 
     SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceId, Storage, FileId),
+        storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
 
     {Status, Response} =
         case storage_file_manager:open(SFMHandle, read) of

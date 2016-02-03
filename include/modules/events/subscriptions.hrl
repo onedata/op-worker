@@ -74,4 +74,10 @@
     size_threshold :: non_neg_integer()
 }).
 
+%% definition of a subscription for permission changes
+%% file_uuid         - UUID of a file for which notifications should be sent
+-record(permission_changed_subscription, {
+    file_uuid :: file_meta:uuid()
+}).
+
 -endif.

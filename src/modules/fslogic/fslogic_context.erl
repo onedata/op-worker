@@ -27,7 +27,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%%  Returns newly created fslogic CTX for given session ID.
+%% Returns newly created fslogic CTX for given session ID.
 %% @end
 %%--------------------------------------------------------------------
 -spec new(session:id()) -> fslogic_worker:ctx() | no_return().
@@ -35,7 +35,12 @@ new(SessId) ->
     {ok, #document{value = Session}} = session:get(SessId),
     #fslogic_ctx{session = Session, session_id = SessId}.
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets space ID in fslogic context.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_space_id(CTX :: #fslogic_ctx{}, Entry :: file_meta:entry()) -> NewCTX :: #fslogic_ctx{}.
 set_space_id(#fslogic_ctx{} = CTX, Entry) ->
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, fslogic_context:get_user_id(CTX)),
     CTX#fslogic_ctx{space_id = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID)}.

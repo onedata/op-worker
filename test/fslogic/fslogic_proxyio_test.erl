@@ -16,9 +16,12 @@
 
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(SPACE_ID, <<"SpaceId">>).
 
 %%%===================================================================
 %%% Test generators
@@ -30,6 +33,8 @@ proxyio_successful_write_test_() ->
         fun start/0,
         fun stop/1,
         [
+            fun write_should_get_session/1,
+            fun write_should_get_space_id/1,
             fun write_should_create_storage_file_manager_handle/1,
             fun write_should_open_file_with_write/1,
             fun write_should_write_data/1,
@@ -43,6 +48,8 @@ proxyio_successful_read_test_() ->
         fun start/0,
         fun stop/1,
         [
+            fun read_should_get_session/1,
+            fun read_should_get_space_id/1,
             fun read_should_create_storage_file_manager_handle/1,
             fun read_should_open_file_with_read/1,
             fun read_should_read_data/1,
@@ -75,13 +82,25 @@ proxyio_failed_read_test_() ->
 %%% Test functions
 %%%===================================================================
 
+write_should_get_session(_) ->
+    fslogic_proxyio:write(<<"SessionId">>, <<"b">>, <<"c">>,
+        <<"d">>, 0, <<"f">>),
+
+    ?_assert(meck:called(session, get, [<<"SessionId">>])).
+
+write_should_get_space_id(_) ->
+    fslogic_proxyio:write(<<"a">>, <<"FileUuid">>, <<"c">>,
+        <<"d">>, 0, <<"f">>),
+
+    ?_assert(meck:called(fslogic_spaces, get_space, [{uuid, <<"FileUuid">>}, <<"UserId">>])).
+
 
 write_should_create_storage_file_manager_handle(_) ->
-    fslogic_proxyio:write(<<"SessionID">>, <<"SpaceId">>, <<"StorageId">>,
+    fslogic_proxyio:write(<<"SessionID">>, <<"FileUuid">>, <<"StorageId">>,
         <<"FileId">>, 12, <<"Data">>),
 
     ?_assert(meck:called(storage_file_manager, new_handle,
-        [<<"SessionID">>, <<"SpaceId">>, storage_mock, <<"FileId">>])).
+        [<<"SessionID">>, ?SPACE_ID, <<"FileUuid">>, storage_mock, <<"FileId">>])).
 
 
 write_should_open_file_with_write(_) ->
@@ -108,12 +127,28 @@ successful_write_should_return_success(_) ->
     ).
 
 
+read_should_get_session(_) ->
+    fslogic_proxyio:read(<<"SessionId">>, <<"b">>, <<"c">>,
+        <<"d">>, 0, 5),
+
+    ?_assert(meck:called(session, get, [<<"SessionId">>])).
+
+
+read_should_get_space_id(_) ->
+    fslogic_proxyio:read(<<"a">>, <<"FileUuid">>, <<"c">>,
+        <<"d">>, 0, 10),
+
+    ?_assert(meck:called(fslogic_spaces, get_space, [{uuid, <<"FileUuid">>}, <<"UserId">>])).
+
+
 read_should_create_storage_file_manager_handle(_) ->
-    fslogic_proxyio:read(<<"SessionID">>, <<"SpaceId">>, <<"StorageId">>,
+    fslogic_proxyio:read(<<"SessionID">>, <<"FileUuid">>, <<"StorageId">>,
         <<"FileId">>, 12, 33),
 
+    ?_assert(meck:called(fslogic_spaces, get_space, [{uuid, <<"FileUuid">>}])),
     ?_assert(meck:called(storage_file_manager, new_handle,
-        [<<"SessionID">>, <<"SpaceId">>, storage_mock, <<"FileId">>])).
+        [<<"SessionID">>, ?SPACE_ID, <<"FileUuid">>, storage_mock, <<"FileId">>])).
+
 
 
 read_should_open_file_with_read(_) ->
@@ -210,9 +245,9 @@ read_should_fail_on_failed_write(_) ->
 
 
 start() ->
-    meck:new([storage_file_manager, storage]),
+    meck:new([storage_file_manager, storage, fslogic_spaces, session]),
 
-    meck:expect(storage_file_manager, new_handle, 4, sfm_handle_mock),
+    meck:expect(storage_file_manager, new_handle, 5, sfm_handle_mock),
     meck:expect(storage_file_manager, open, 2, {ok, file_handle_mock}),
 
     meck:expect(storage_file_manager, write, 3,
@@ -223,11 +258,16 @@ start() ->
 
     meck:expect(storage, get, 1, {ok, storage_mock}),
 
+    meck:expect(session, get, 1, {ok,
+        #document{value = #session{identity = #identity{user_id = <<"UserId">>}}}}),
+
+    meck:expect(fslogic_spaces, get_space, 2, {ok, #document{key = ?SPACE_ID}}),
+
     ok.
 
 
 stop(_) ->
-    ?assert(meck:validate([storage_file_manager, storage])),
+    ?assert(meck:validate([storage_file_manager, storage, fslogic_spaces, session])),
     meck:unload().
 
 
