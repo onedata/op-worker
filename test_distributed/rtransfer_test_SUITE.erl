@@ -585,7 +585,7 @@ start_rtransfer(Node, RtransferOpts) ->
     remote_apply(Node, rtransfer, start_link, [RtransferOpts]).
 
 prepare_fetch_request(Node1, Node2, FileUUID, Offset, DataSize) ->
-%% Worker1 is the one who fetches data from Worker2
+%% Node1 is the one who fetches data from Node2
     remote_apply(
         Node1, rtransfer, prepare_request, [Node2, FileUUID, Offset, DataSize]
     ).
