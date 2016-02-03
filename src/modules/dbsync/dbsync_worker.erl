@@ -71,7 +71,7 @@ init(_Args) ->
 %% Global queue will be restarted after crash.
 %% @end
 %%--------------------------------------------------------------------
--spec init_stream(Since :: non_neg_integer(), Until :: non_neg_integer(), Queue :: queue()) ->
+-spec init_stream(Since :: non_neg_integer(), Until :: non_neg_integer() | infinity, Queue :: queue()) ->
     {ok, pid()} | {error, Reason :: term()}.
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
