@@ -53,15 +53,21 @@ gui_prod:
 ##
 generate: deps compile gui_dev
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
+	# Move gui tmp dir away from sources, so as to prevent
+	# rebar from enter it during spec generation and crashing
 	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
+	# Bring back the tmp dir to its normal location
 	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
 generate_production: deps compile gui_prod
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
+	# Move gui tmp dir away from sources, so as to prevent
+	# rebar from enter it during spec generation and crashing
 	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
+	# Bring back the tmp dir to its normal location
 	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
