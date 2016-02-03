@@ -41,7 +41,7 @@ send(Msg, Ref) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a message to the client using connection pool associated with client's
+%% Sends a message to the server using connection pool associated with server's
 %% session or chosen connection. No reply is expected. Waits until message is
 %% sent. If an error occurs retries specified number of attempts unless session
 %% has been deleted in the meantime or connection does not exist.
@@ -114,7 +114,7 @@ communicate(Msg, Ref) ->
 %% @equiv communicate_async(Msg, SessId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec communicate_async(Msg :: #client_message{}, Ref :: connection:ref()) ->
+-spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
     {ok, #message_id{}}.
 communicate_async(#client_message{} = ClientMsg, Ref) ->
     communicate_async(ClientMsg, Ref, undefined);
@@ -153,7 +153,7 @@ communicate_async(Msg, Ref, Recipient) ->
 -spec ensure_connected(session:id()) ->
     ok | no_return().
 ensure_connected(SessId) ->
-    {_, provider, ProviderId} = SessId,
+    ProviderId = session_manager:session_id_to_provider_id(SessId),
     case session:get_random_connection(SessId) of
         {error, _} ->
             {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),

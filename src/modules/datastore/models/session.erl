@@ -30,7 +30,7 @@
 
 -type id() :: binary().
 -type auth() :: #auth{}.
--type type() :: fuse | rest | gui.
+-type type() :: fuse | rest | gui | provider_outgoing | provider.
 -type status() :: active | inactive | phantom.
 -type identity() :: #identity{}.
 

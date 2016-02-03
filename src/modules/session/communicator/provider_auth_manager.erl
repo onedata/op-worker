@@ -49,6 +49,11 @@ is_provider(_) ->
     false.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes provider's session based on its certificate.
+%% @end
+%%--------------------------------------------------------------------
 -spec handshake(Cert :: #'OTPCertificate'{}, Conn :: pid()) ->
     session:id() | no_return().
 handshake(Cert, Conn) ->
@@ -57,6 +62,7 @@ handshake(Cert, Conn) ->
     SessionId = session_manager:get_provider_session_id(incoming, ProviderId),
     {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, Identity, Conn),
     SessionId.
+
 
 %%%===================================================================
 %%% Internal functions

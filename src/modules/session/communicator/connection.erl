@@ -100,7 +100,6 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     ?info("Connecting to ~p ~p", [Hostname, Port]),
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
-    ?info("OK Connecting to ~p ~p", [Hostname, Port]),
 
     {Ok, Closed, Error} = Transport:messages(),
     Certificate =
@@ -128,7 +127,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
 %% Synchronously sends server message to client.
 %% @end
 %%--------------------------------------------------------------------
--spec send(Msg :: #server_message{}, Ref :: ref()) ->
+-spec send(Msg :: #server_message{} | #client_message{}, Ref :: ref()) ->
     ok | {error, Reason :: term()} | {exit, Reason :: term()}.
 send(Msg, Ref) when is_pid(Ref) ->
     try
@@ -147,7 +146,7 @@ send(Msg, Ref) ->
 %% Asynchronously sends server message to client.
 %% @end
 %%--------------------------------------------------------------------
--spec send_async(Msg :: #server_message{}, Ref :: ref()) ->
+-spec send_async(Msg :: #server_message{} | #client_message{}, Ref :: ref()) ->
     ok | {error, Reason :: term()}.
 send_async(Msg, Ref) when is_pid(Ref) ->
     try
@@ -385,7 +384,7 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 %% Handle nomal client_message
 %% @end
 %%--------------------------------------------------------------------
--spec handle_normal_message(#state{}, #client_message{}) ->
+-spec handle_normal_message(#state{}, #client_message{} | #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
