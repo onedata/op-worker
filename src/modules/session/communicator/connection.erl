@@ -193,16 +193,15 @@ handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {reply, ok, State};
-handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection_type = outgoing,
-    transport = Transport}) ->
-    send_client_message(Socket, Transport, ServerMsg),
-    NewState = case ServerMsg of
-                   #client_message{message_id = #message_id{recipient = Pid, id = MessageId}} when is_pid(Pid) ->
-                       State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)};
-                   _ ->
-                       State
-               end,
+handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId}}},
+    _From, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) when is_pid(Pid) ->
+    send_client_message(Socket, Transport, ClientMsg),
+    NewState = State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)},
     {reply, ok, NewState};
+handle_call({send, ClientMsg = #client_message{}},
+    _From, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) ->
+    send_client_message(Socket, Transport, ClientMsg),
+    {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
@@ -222,9 +221,9 @@ handle_cast({send, ServerMsg}, State = #state{socket = Socket, connection_type =
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {noreply, State};
-handle_cast({send, ServerMsg}, State = #state{socket = Socket, connection_type = outgoing,
+handle_cast({send, ClientMsg}, State = #state{socket = Socket, connection_type = outgoing,
     transport = Transport}) ->
-    send_client_message(Socket, Transport, ServerMsg),
+    send_client_message(Socket, Transport, ClientMsg),
     {noreply, State};
 
 handle_cast(disconnect, State) ->
@@ -313,21 +312,15 @@ code_change(_OldVsn, State, _Extra) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_client_message(State = #state{session_id = SessId, certificate = Cert}, Data) ->
-%%    ?info("handle_client_message from ~p ~p", [SessId, Cert]),
+    IsProvider = provider_auth_manager:is_provider(Cert),
     try serializator:deserialize_client_message(Data, SessId) of
+        {ok, Msg} when SessId == undefined, IsProvider ->
+            NewSessId = provider_auth_manager:handshake(Cert, self()),
+            handle_normal_message(State#state{session_id = NewSessId}, Msg#client_message{session_id = NewSessId});
         {ok, Msg} when SessId == undefined ->
-            IsProvider = provider_auth_manager:is_provider(Cert),
-%%            ?info("Connection from ~p ~p", [Cert, IsProvider]),
-            case IsProvider of
-                true ->
-                    NewSessId = provider_auth_manager:handshake(Cert, self()),
-                    ?info("OK Connection from ~p ~p", [NewSessId, Msg]),
-                    handle_normal_message(State#state{session_id = NewSessId}, Msg);
-                false ->
-                    handle_handshake(State, Msg)
-            end;
+            handle_handshake(State, Msg);
         {ok, Msg} ->
-            handle_normal_message(State, Msg)
+            handle_normal_message(State, Msg#client_message{session_id = SessId})
     catch
         _:Error ->
             ?warning_stacktrace("Client message decoding error: ~p", [Error]),
@@ -388,13 +381,7 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
-    transport = Transp}, Msg0) ->
-    Msg1 = case Msg0 of
-               #client_message{} ->
-                   Msg0#client_message{session_id = SessId};
-               _ ->
-                   Msg0
-           end,
+    transport = Transp}, Msg1) ->
     {State, Msg} = update_message_id(State0, Msg1),
     case router:preroute_message(Msg, SessId) of
         ok ->
@@ -407,6 +394,15 @@ handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
             {stop, {error, Reason}, State}
     end.
 
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% For message that is a response fo earlier request, update its recipient with stored, waiting pid.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_message_id(#state{}, #server_message{} | #client_message{}) ->
+    {NewState :: #state{}, NewMsg :: #server_message{}}.
 update_message_id(State = #state{connection_type = outgoing, response_map = RMap},
     Msg = #server_message{message_id = #message_id{id = ID} = MID}) ->
     NewMsg = Msg#server_message{message_id = MID#message_id{recipient = maps:get(ID, RMap, undefined)}},
@@ -429,8 +425,7 @@ activate_socket_once(Socket, Transport) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Activate socket for next message, so it will be send to handling process
-%% via erlang message
+%% Sends #server_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_server_message(Socket :: ssl2:socket(), Transport :: module(),
@@ -443,8 +438,7 @@ send_server_message(Socket, Transport, ServerMsg) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Activate socket for next message, so it will be send to handling process
-%% via erlang message
+%% Sends #client_message via given socket.
 %% @end
 %%--------------------------------------------------------------------
 -spec send_client_message(Socket :: ssl2:socket(), Transport :: module(),

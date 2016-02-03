@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Provider's authentication helper functions.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_auth_manager).
