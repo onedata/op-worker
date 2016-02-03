@@ -14,11 +14,9 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -30,14 +28,17 @@
     route_message_should_work_for_multiple_streams/1
 ]).
 
--performance({test_cases, [
+-define(NORMAL_CASES_NAMES, [
     route_message_should_forward_messages_in_right_order,
     route_message_should_work_for_multiple_streams
-]}).
-all() -> [
+]).
+
+-define(PERFORMANCE_CASES_NAMES, [
     route_message_should_forward_messages_in_right_order,
     route_message_should_work_for_multiple_streams
-].
+]).
+
+all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(TIMEOUT, timer:seconds(15)).
 -define(MSG_NUM(Value), [
@@ -62,127 +63,135 @@ all() -> [
 %%% Test functions
 %%%===================================================================
 
--performance([
-    {repeats, 10},
-    {success_rate, 90},
-    {parameters, [?MSG_NUM(10), ?MSG_ORD(reverse)]},
-    {description, "Check whether sequencer stream forwards messages in right order."},
-    ?SEQ_CFG(small_msg_norm_ord, "Small number of messages in the right order", 100, normal),
-    ?SEQ_CFG(medium_msg_norm_ord, "Medium number of messages in the right order", 1000, normal),
-    ?SEQ_CFG(large_msg_norm_ord, "Large number of messages in the right order", 10000, normal),
-    ?SEQ_CFG(small_msg_rev_ord, "Small number of messages in the reverse order", 100, reverse),
-    ?SEQ_CFG(medium_msg_rev_ord, "Medium number of messages in the reverse order", 1000, reverse),
-    ?SEQ_CFG(large_msg_rev_ord, "Large number of messages in the reverse order", 10000, reverse),
-    ?SEQ_CFG(small_msg_rnd_ord, "Small number of messages in the random order", 100, random),
-    ?SEQ_CFG(medium_msg_rnd_ord, "Medium number of messages in the random order", 1000, random),
-    ?SEQ_CFG(large_msg_rnd_ord, "Large number of messages in the random order", 10000, random)
-]).
 route_message_should_forward_messages_in_right_order(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    StmId = 1,
-    MsgNum = ?config(msg_num, Config),
-    MsgOrd = ?config(msg_ord, Config),
+    ?PERFORMANCE(?MODULE, route_message_should_forward_messages_in_right_order,
+        Config, [
+            {repeats, 10},
+            {success_rate, 90},
+            {parameters, [?MSG_NUM(10), ?MSG_ORD(reverse)]},
+            {description, "Check whether sequencer stream forwards messages in right order."},
+            ?SEQ_CFG(small_msg_norm_ord, "Small number of messages in the right order", 100, normal),
+            ?SEQ_CFG(medium_msg_norm_ord, "Medium number of messages in the right order", 1000, normal),
+            ?SEQ_CFG(large_msg_norm_ord, "Large number of messages in the right order", 10000, normal),
+            ?SEQ_CFG(small_msg_rev_ord, "Small number of messages in the reverse order", 100, reverse),
+            ?SEQ_CFG(medium_msg_rev_ord, "Medium number of messages in the reverse order", 1000, reverse),
+            ?SEQ_CFG(large_msg_rev_ord, "Large number of messages in the reverse order", 10000, reverse),
+            ?SEQ_CFG(small_msg_rnd_ord, "Small number of messages in the random order", 100, random),
+            ?SEQ_CFG(medium_msg_rnd_ord, "Medium number of messages in the random order", 1000, random),
+            ?SEQ_CFG(large_msg_rnd_ord, "Large number of messages in the random order", 10000, random)
+        ],
+        fun(Config) ->
+            [Worker | _] = ?config(op_worker_nodes, Config),
+            StmId = 1,
+            MsgNum = ?config(msg_num, Config),
+            MsgOrd = ?config(msg_ord, Config),
 
-    SeqNums = case MsgOrd of
-        normal -> lists:seq(0, MsgNum - 1);
-        reverse -> lists:seq(MsgNum - 1, 0, -1);
-        random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
-    end,
+            SeqNums = case MsgOrd of
+                          normal -> lists:seq(0, MsgNum - 1);
+                          reverse -> lists:seq(MsgNum - 1, 0, -1);
+                          random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
+                      end,
 
-    initializer:remove_pending_messages(),
-    {ok, SessId} = session_setup(Worker),
+            initializer:remove_pending_messages(),
+            {ok, SessId} = session_setup(Worker),
 
-    % Send 'MsgNum' messages in 'MsgOrd' order.
-    {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
-        lists:foreach(fun(SeqNum) ->
-            route_message(Worker, SessId, client_message(StmId, SeqNum))
-        end, SeqNums)
-    end),
+            % Send 'MsgNum' messages in 'MsgOrd' order.
+            {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
+                lists:foreach(fun(SeqNum) ->
+                    route_message(Worker, SessId, client_message(StmId, SeqNum))
+                              end, SeqNums)
+                                                             end),
 
-    % Check whether messages were forwarded in right order.
-    {Msgs, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
-        lists:map(fun(_) ->
-            ?assertReceivedMatch(#client_message{}, ?TIMEOUT)
-        end, SeqNums)
-    end),
+            % Check whether messages were forwarded in right order.
+            {Msgs, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
+                lists:map(fun(_) ->
+                    ?assertReceivedMatch(#client_message{}, ?TIMEOUT)
+                          end, SeqNums)
+                                                                end),
 
-    lists:foreach(fun({SeqNum, #client_message{message_stream = MsgStm}}) ->
-        ?assertEqual(SeqNum, MsgStm#message_stream.sequence_number)
-    end, lists:zip(lists:seq(0, MsgNum - 1), Msgs)),
+            lists:foreach(fun({SeqNum, #client_message{message_stream = MsgStm}}) ->
+                ?assertEqual(SeqNum, MsgStm#message_stream.sequence_number)
+                          end, lists:zip(lists:seq(0, MsgNum - 1), Msgs)),
 
-    session_teardown(Worker, SessId),
+            session_teardown(Worker, SessId),
 
-    [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
-        msg_per_sec(MsgNum, SendUs + RecvUs)].
+            [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
+                msg_per_sec(MsgNum, SendUs + RecvUs)]
+        end
+    ).
 
--performance([
-    {repeats, 10},
-    {success_rate, 90},
-    {parameters, [?MSG_NUM(10), ?STM_NUM(5)]},
-    {description, "Check whether messages are forwarded in right order for each "
-    "stream despite of worker routing the message."},
-    {config, [{name, small_stm_num},
-        {description, "Small number of streams."},
-        {parameters, [?MSG_NUM(100), ?STM_NUM(10)]}
-    ]},
-    {config, [{name, medium_stm_num},
-        {description, "Medium number of streams."},
-        {parameters, [?MSG_NUM(100), ?STM_NUM(50)]}
-    ]},
-    {config, [{name, large_stm_num},
-        {description, "Large number of streams."},
-        {parameters, [?MSG_NUM(100), ?STM_NUM(100)]}
-    ]}
-]).
 route_message_should_work_for_multiple_streams(Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    MsgNum = ?config(msg_num, Config),
-    StmNum = ?config(stm_num, Config),
+    ?PERFORMANCE(?MODULE, route_message_should_work_for_multiple_streams, Config,
+        [
+            {repeats, 10},
+            {success_rate, 90},
+            {parameters, [?MSG_NUM(10), ?STM_NUM(5)]},
+            {description, "Check whether messages are forwarded in right order for each "
+            "stream despite of worker routing the message."},
+            {config, [{name, small_stm_num},
+                {description, "Small number of streams."},
+                {parameters, [?MSG_NUM(100), ?STM_NUM(10)]}
+            ]},
+            {config, [{name, medium_stm_num},
+                {description, "Medium number of streams."},
+                {parameters, [?MSG_NUM(100), ?STM_NUM(50)]}
+            ]},
+            {config, [{name, large_stm_num},
+                {description, "Large number of streams."},
+                {parameters, [?MSG_NUM(100), ?STM_NUM(100)]}
+            ]}
+        ],
+        fun(Config) ->
+            [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+            MsgNum = ?config(msg_num, Config),
+            StmNum = ?config(stm_num, Config),
 
-    Msgs = [#message_stream{sequence_number = SeqNum} ||
-        SeqNum <- lists:seq(0, MsgNum - 1)],
-    RevSeqNums = lists:seq(MsgNum - 1, 0, -1),
+            Msgs = [#message_stream{sequence_number = SeqNum} ||
+                SeqNum <- lists:seq(0, MsgNum - 1)],
+            RevSeqNums = lists:seq(MsgNum - 1, 0, -1),
 
-    initializer:remove_pending_messages(),
-    {ok, SessId} = session_setup(Worker),
+            initializer:remove_pending_messages(),
+            {ok, SessId} = session_setup(Worker),
 
-    % Production of 'MsgNum' messages in random order belonging to 'StmsCount'
-    % streams. Requests are routed through random workers.
-    {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
-        utils:pforeach(fun(StmId) ->
-            lists:foreach(fun(Msg) ->
-                [Wrk | _] = utils:random_shuffle(Workers),
-                route_message(Wrk, SessId, #client_message{
-                    message_stream = Msg#message_stream{stream_id = StmId}
-                })
-            end, utils:random_shuffle(Msgs))
-        end, lists:seq(1, StmNum))
-    end),
+            % Production of 'MsgNum' messages in random order belonging to 'StmsCount'
+            % streams. Requests are routed through random workers.
+            {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
+                utils:pforeach(fun(StmId) ->
+                    lists:foreach(fun(Msg) ->
+                        [Wrk | _] = utils:random_shuffle(Workers),
+                        route_message(Wrk, SessId, #client_message{
+                            message_stream = Msg#message_stream{stream_id = StmId}
+                        })
+                    end, utils:random_shuffle(Msgs))
+                end, lists:seq(1, StmNum))
+            end),
 
-    InitialMsgsMap = lists:foldl(fun(StmId, Map) ->
-        maps:put(StmId, [], Map)
-    end, #{}, lists:seq(1, StmNum)),
+            InitialMsgsMap = lists:foldl(fun(StmId, Map) ->
+                maps:put(StmId, [], Map)
+            end, #{}, lists:seq(1, StmNum)),
 
-    % Check whether 'MsgsCount' messages have been forwarded in a right order
-    % from each stream.
-    {MsgsMap, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
-        lists:foldl(fun(_, Map) ->
-            #client_message{message_stream = #message_stream{
-                stream_id = StmId, sequence_number = SeqNum}
-            } = ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
-            StmMsgs = maps:get(StmId, Map),
-            maps:update(StmId, [SeqNum | StmMsgs], Map)
-        end, InitialMsgsMap, lists:seq(0, MsgNum * StmNum - 1))
-    end),
+            % Check whether 'MsgsCount' messages have been forwarded in a right order
+            % from each stream.
+            {MsgsMap, RecvUs, RecvTime, RecvUnit} = utils:duration(fun() ->
+                lists:foldl(fun(_, Map) ->
+                    #client_message{message_stream = #message_stream{
+                        stream_id = StmId, sequence_number = SeqNum}
+                    } = ?assertReceivedMatch(#client_message{}, ?TIMEOUT),
+                    StmMsgs = maps:get(StmId, Map),
+                    maps:update(StmId, [SeqNum | StmMsgs], Map)
+                end, InitialMsgsMap, lists:seq(0, MsgNum * StmNum - 1))
+            end),
 
-    lists:foreach(fun(StmId) ->
-        ?assertEqual(RevSeqNums, maps:get(StmId, MsgsMap))
-    end, lists:seq(1, StmNum)),
+            lists:foreach(fun(StmId) ->
+                ?assertEqual(RevSeqNums, maps:get(StmId, MsgsMap))
+            end, lists:seq(1, StmNum)),
 
-    session_teardown(Worker, SessId),
+            session_teardown(Worker, SessId),
 
-    [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
-        msg_per_sec(MsgNum * StmNum, SendUs + RecvUs)].
+            [send_time(SendTime, SendUnit), recv_time(RecvTime, RecvUnit),
+                msg_per_sec(MsgNum * StmNum, SendUs + RecvUs)]
+        end
+    ).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
