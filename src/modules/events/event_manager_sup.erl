@@ -66,16 +66,9 @@ get_event_stream_sup(EvtManSup) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, {SupFlags :: {
-        RestartStrategy :: supervisor:strategy(),
-        Intensity :: non_neg_integer(),
-        Period :: non_neg_integer()
-    }, [ChildSpec :: supervisor:child_spec()]}} | ignore.
+    {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([SessId, SessType]) ->
-    RestartStrategy = one_for_all,
-    Intensity = 3,
-    Period = 1,
-    {ok, {{RestartStrategy, Intensity, Period}, [
+    {ok, {#{strategy => one_for_all, intensity => 3, period => 1}, [
         event_stream_sup_spec(SessType),
         event_manager_spec(self(), SessId)
     ]}}.
@@ -92,11 +85,14 @@ init([SessId, SessType]) ->
 %%--------------------------------------------------------------------
 -spec event_stream_sup_spec(SessType :: session:type()) -> supervisor:child_spec().
 event_stream_sup_spec(SessType) ->
-    Id = Module = event_stream_sup,
-    Restart = permanent,
-    Shutdown = infinity,
-    Type = supervisor,
-    {Id, {Module, start_link, [SessType]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => event_stream_sup,
+        start => {event_stream_sup, start_link, [SessType]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [event_stream_sup]
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -107,8 +103,11 @@ event_stream_sup_spec(SessType) ->
 -spec event_manager_spec(EvtManSup :: pid(), SessId :: session:id()) ->
     supervisor:child_spec().
 event_manager_spec(EvtManSup, SessId) ->
-    Id = Module = event_manager,
-    Restart = transient,
-    Shutdown = timer:seconds(10),
-    Type = worker,
-    {Id, {Module, start_link, [EvtManSup, SessId]}, Restart, Shutdown, Type, [Module]}.
+    #{
+        id => event_manager,
+        start => {event_manager, start_link, [EvtManSup, SessId]},
+        restart => transient,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [event_manager]
+    }.
