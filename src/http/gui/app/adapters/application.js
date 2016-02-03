@@ -16,9 +16,9 @@ var PULL_RESP = 'pullResp';
 var PULL_REQ = 'pullReq';
 var CALLBACK_REQ = 'callbackReq';
 var CALLBACK_RESP = 'callbackResp';
-var PULL_RESULT = "result";
-var MSG_TYPE_PUSH_UPDATED = "pushUpdated";
-var MSG_TYPE_PUSH_DELETED = "pushDeleted";
+//var PULL_RESULT = "result";
+//var MSG_TYPE_PUSH_UPDATED = "pushUpdated";
+//var MSG_TYPE_PUSH_DELETED = "pushDeleted";
 
 DS.WebsocketAdapter = DS.RESTAdapter.extend({
   // Promises that will be resolved when response comes
@@ -37,7 +37,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
   logToConsole: function (fun_name, fun_params) {
     console.log(fun_name + '(');
     for (var i = 0; i < fun_params.length; i++) {
-      console.log('    ' + String(fun_params[i]))
+      console.log('    ' + String(fun_params[i]));
     }
     console.log(')');
   },
@@ -128,37 +128,27 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
   // Transform response received from WebScoket to the format expected
   // by ember.
   transformResponse: function (json, type, operation) {
+    var records_name = Ember.String.pluralize(
+      Ember.String.camelize(type));
+    var result = {};
     switch (operation) {
       case FIND:
-        var records_name = Ember.String.pluralize(
-          Ember.String.camelize(type));
-        var result = {};
         result[records_name] = json;
         return result;
 
       case FIND_ALL:
-        var records_name = Ember.String.pluralize(
-          Ember.String.camelize(type));
-        var result = {};
         result[records_name] = json;
         return result;
 
       case FIND_QUERY:
-        var records_name = Ember.String.pluralize(
-          Ember.String.camelize(type));
-        var result = {};
         result[records_name] = json;
         return result;
 
       case FIND_MANY:
-        var records_name = Ember.String.pluralize(
-          Ember.String.camelize(type));
-        var result = {};
         result[records_name] = json;
         return result;
 
       case CREATE_RECORD:
-        var result = {};
         result[type] = json;
         return result;
 
@@ -173,8 +163,12 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
     var adapter = this;
     adapter.logToConsole('asyncRequest', [operation, type, ids, data]);
     var uuid = adapter.generateUuid();
-    if (!ids) ids = null;
-    if (!data) data = null;
+    if (!ids) {
+      ids = null;
+    }
+    if (!data) {
+      data = null;
+    }
 
     return new Ember.RSVP.Promise(function (resolve, reject) {
       var success = function (json) {
@@ -223,12 +217,12 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
   initializeSocket: function () {
     var adapter = this;
 
-    var protocol = window.location.protocol == 'https:' ? 'wss://' : 'ws://';
+    var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     var querystring = window.location.pathname + window.location.search;
     var host = window.location.hostname;
     var port = window.location.port;
 
-    var url = protocol + host + (port == '' ? '' : ':' + port) + '/ws' + querystring;
+    var url = protocol + host + (port === '' ? '' : ':' + port) + '/ws' + querystring;
     console.log('Connecting: ' + url);
 
     if (adapter.socket === null) {
@@ -246,7 +240,7 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
   },
 
   // WebScoket onopen callback
-  open: function (event) {
+  open: function () {
     var adapter = this;
 
     if (adapter.beforeOpenQueue.length > 0) {
@@ -260,11 +254,12 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
   // WebScoket onmessage callback, resolves promises with received replies.
   message: function (event) {
     var adapter = this;
+    var callback;
     console.log('received: ' + event.data);
     var json = JSON.parse(event.data);
-    if (json.msgType == PULL_RESP) {
-      if (json.result == 'ok') {
-        var callback = adapter.promises[json.uuid];
+    if (json.msgType === PULL_RESP) {
+      if (json.result === 'ok') {
+        callback = adapter.promises[json.uuid];
         console.log('success: ' + json.data);
         var transformed_data = adapter.transformResponse(json.data,
           callback.type, callback.operation);
@@ -286,8 +281,8 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
       //            App.File.store.unloadRecord(post);
       //        });
       //    }
-    } else if (json.msgType == CALLBACK_RESP) {
-      var callback = adapter.promises[json.uuid];
+    } else if (json.msgType === CALLBACK_RESP) {
+      callback = adapter.promises[json.uuid];
       callback.success(json.data);
     }
   },

@@ -53,12 +53,16 @@ gui_prod:
 ##
 generate: deps compile gui_dev
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
+	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
+	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
 generate_production: deps compile gui_prod
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
+	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
+	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
 clean: relclean pkgclean

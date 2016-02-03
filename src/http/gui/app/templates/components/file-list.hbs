@@ -6,15 +6,32 @@
     <label for="select-space" style="margin-right: 10px;">
         Current space:
     </label>
-  {{view 'select'
+  {{!view 'select'
   id='select-space'
   content=spacesDir.children
   optionValuePath='content.id'
   optionLabelPath='content.name'
   value=currentSpaceId}}
+    <div style="display: inline-block" class="btn-group" role="group"
+         aria-label="...">
+        {{#each spaceDirOption in spaceDirOptions}}
+          {{#if spaceDirOption.selected}}
+              <button type="button" class="btn btn-success"
+                {{action 'changeCurrentDir' spaceDirOption.space.id}}>
+              {{spaceDirOption.space.name}}
+            </button>
+          {{else}}
+              <button type="button" class="btn btn-default"
+                {{action 'changeCurrentDir' spaceDirOption.space.id}}>
+                {{spaceDirOption.space.name}}
+              </button>
+          {{/if}}
+        {{/each}}
+    </div>
 </form>
 
-<div style="display: inline-block" class="btn-group" role="group" aria-label="...">
+<div style="display: inline-block" class="btn-group" role="group"
+     aria-label="...">
     <button type="button" class="btn btn-default"
       {{action 'editNewDir'}}>
         Create Directory
@@ -47,7 +64,7 @@
 </div>
 <div style="display: inline-block;">
   {{#if creatingFile}}
-    {{input id='new-file-edit' value=createdFileName placeholder=createdFileHint autofocus=autofocus}}
+    {{input id='new-file-edit' value=createdFileName placeholder=createdFileHint}}
       <button type="button" class="btn btn-default" id="selectAll"
         {{action 'createNewFile'}}>
           OK
@@ -61,12 +78,10 @@
     border: 1px solid black; margin: 30px 20px; display: inline-block;
     min-height: 300px; max-height: 500px; overflow-y: auto;
     min-width: 400px; max-width: 400px; overflow-x: auto;">
-      {{#if currentSpace.children.length}}
-        {{#render "sortedFileChildren" currentSpace.children}}
-          {{#each child in sortedModel}}
-            {{file-tree-node file=child clickAction='fileClicked'}}
-          {{/each}}
-        {{/render}}
+      {{#if sortedChildren.length}}
+        {{#each child in sortedChildren}}
+          {{file-tree-node file=child clickAction='fileClicked'}}
+        {{/each}}
       {{else}}
           <p style="font-size: 20px; font-style: italic;">empty space</p>
       {{/if}}

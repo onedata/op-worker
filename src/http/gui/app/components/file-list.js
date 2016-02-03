@@ -8,7 +8,7 @@ export default Ember.Component.extend({
 
   // Sorting of files by type and name
   sortProperties: ['type:asc', 'name:asc'],
-  sortedModel: Ember.computed.sort("model", "sortProperties"),
+  sortedChildren: Ember.computed.sort('currentSpace.children', 'sortProperties'),
 
   // The space that is currently browsed
   currentSpaceId: null,
@@ -26,7 +26,7 @@ export default Ember.Component.extend({
   fetchNewFileParentId: function () {
     if (this.get('isOneSelected')) {
       var selected = this.get('model').findBy('selected', true);
-      if (selected.get('type') == 'dir') {
+      if (selected.get('type') === 'dir') {
         // Set new ID only if one directory is selected
         this.set('newFileParent', selected);
       }
@@ -54,6 +54,8 @@ export default Ember.Component.extend({
 
   // Resolving current space
   fetchCurrentSpace: function () {
+    console.log('fetchCurrentSpace ' + this.get('currentSpaceId'));
+    console.log('spinner ' + this.$('#select-space').val());
     if (this.get('currentSpaceId')) {
       console.log('currentSpaceId ' + this.get('currentSpaceId'));
       var spaceId = this.get('currentSpaceId');
@@ -70,12 +72,17 @@ export default Ember.Component.extend({
 
   // A virtual dir that contains all spaces
   spacesDir: function () {
-    // Below fun does not fire on page load, probably because the value of
-    // space select does not change. Run it here.
-    this.fetchCurrentSpace();
-    this.fetchNewFileParentId();
-    return this.get('model').findBy('id', 'root')
+    return this.get('model').findBy('id', 'root');
   }.property(),
+  spaceDirOptions: Ember.computed('spacesDir.children,currentSpaceId', function () {
+    var that = this;
+    return this.get('spacesDir.children').map(function (space) {
+      return {
+        space: space,
+        selected: that.get('currentSpaceId') === space.get('id')
+      };
+    });
+  }),
 
   // Number of selected files
   selectedCount: function () {
@@ -101,7 +108,7 @@ export default Ember.Component.extend({
   isNoneSelected: Ember.computed.not('isAnySelected'),
 
   isOneSelected: function () {
-    return this.get('selectedCount') == 1;
+    return this.get('selectedCount') === 1;
   }.property('selectedCount'),
   isNotOneSelected: Ember.computed.not('isOneSelected'),
 
@@ -135,11 +142,16 @@ export default Ember.Component.extend({
 
   // Handling actions
   actions: {
+    changeCurrentDir: function (newSpaceId) {
+      this.set('currentSpaceId', newSpaceId);
+    },
+
     editNewDir: function () {
       this.set('creatingFile', true);
       this.set('createdFileType', 'dir');
       this.set('createdFileHint', 'New directory name');
     },
+
     editNewFile: function () {
       this.set('creatingFile', true);
       this.set('createdFileType', 'file');
@@ -169,7 +181,7 @@ export default Ember.Component.extend({
       }
       this.set('previewedFile', null);
       this.set('editingPreview', false);
-      if (file.get('type') == 'dir') {
+      if (file.get('type') === 'dir') {
         file.set('expanded', !file.get('expanded'));
       } else {
         file.set('expanded', true);
