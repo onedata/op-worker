@@ -5,19 +5,26 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Common records and defines for dbsync module
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").
 
+-ifndef(DBSYNC_COMMON_HRL).
+-define(DBSYNC_COMMON_HRL, 1).
+
+%% Single change from DB.
 -record(change, {
     seq :: non_neg_integer(),
     doc :: datastore:document(),
     model :: model_behaviour:model_type()
 }).
 
+%% Collection of changes from DB.
 -record(batch, {
     changes = [] :: [dbsync_worker:change()],
     since :: non_neg_integer(),
     until :: non_neg_integer()
 }).
+
+-endif.

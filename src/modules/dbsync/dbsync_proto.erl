@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Implementation of TreeBroadcast protocol for DBSync.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_proto).
@@ -15,7 +15,6 @@
 -include("modules/dbsync/common.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
-%%-include_lib("cluster_worker/include/modules/datastore/datastore_engine.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -29,42 +28,61 @@
 %%% API
 %%%===================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends given batch from the queue to providers. Batch may be skipped if empty.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_batch(dbsync_worker:queue(), SpaceId :: binary(), dbsync_worker:batch()) ->
+    skip | ok | no_return().
 send_batch(_, _, #batch{since = X, until = X}) ->
     skip;
 send_batch(global, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("[ DBSync ] Sending batch to all providers: ~p", [Batch]),
     ?debug("Processing space ~p ~p", [SpaceId, Changes]),
     ToSend = #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
-                changes_encoded = dbsync_utils:encode_term(Changes)},
+        changes_encoded = dbsync_utils:encode_term(Changes)},
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
     send_tree_broadcast(SpaceId, Providers, ToSend, 3),
     ok;
 send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("[ DBSync ] Sending batch to provider ~p: ~p", [ProviderId, Batch]),
-%%    SpaceIds = dbsync_utils:get_spaces_for_provider(ProviderId),
-
+    %% @todo: filter spaces for given provider
     send_direct_message(ProviderId, #batch_update{space_id = SpaceId, since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until),
         changes_encoded = dbsync_utils:encode_term(Changes)}, 3).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends request for missing changes to given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec changes_request(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
 changes_request(ProviderId, Since, Until) ->
     ?info("Requesting direct changes ~p ~p ~p", [ProviderId, Since, Until]),
     send_direct_message(ProviderId, #changes_request{since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until)}, 3).
 
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends status report to given providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec status_report(SpaceId :: binary(), Providers :: [oneprovider:id()], CurrentSeq :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
 status_report(SpaceId, Providers, CurrentSeq) ->
     AllProviders = Providers,
     ?info("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
     send_tree_broadcast(SpaceId, AllProviders, #status_report{space_id = SpaceId, seq = dbsync_utils:encode_term(CurrentSeq)}, 3).
 
 
-
 %%--------------------------------------------------------------------
 %% @doc Sends direct message to given provider and block until response arrives.
 %% @end
 %%--------------------------------------------------------------------
--spec send_direct_message(ProviderId :: binary(), Request :: term(), Attempts :: non_neg_integer()) ->
+-spec send_direct_message(ProviderId :: oneprovider:id(), Request :: term(), Attempts :: non_neg_integer()) ->
     Reposne :: term() | {error, Reason :: any()}.
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
     PushTo = ProviderId,
@@ -83,7 +101,7 @@ send_direct_message(_ProviderId, _Request, 0) ->
 %%      SyncWith has to be sorted.
 %% @end
 %%--------------------------------------------------------------------
--spec send_tree_broadcast(SpaceId :: binary(), SyncWith :: [ProviderId :: binary()], Request :: term(), Attempts :: non_neg_integer()) ->
+-spec send_tree_broadcast(SpaceId :: binary(), SyncWith :: [ProviderId :: oneprovider:id()], Request :: term(), Attempts :: non_neg_integer()) ->
     ok | no_return().
 send_tree_broadcast(SpaceId, SyncWith, Request, Attempts) ->
     BaseRequest = #tree_broadcast{space_id = SpaceId, request_id = dbsync_utils:gen_request_id(), message_body = Request, excluded_providers = [], l_edge = <<"">>, r_edge = <<"">>, depth = 0},
@@ -92,7 +110,7 @@ send_tree_broadcast(SpaceId, SyncWith, Request, BaseRequest, Attempts) ->
     SyncWith1 = SyncWith -- [oneprovider:get_provider_id()],
     case SyncWith1 of
         [] -> ok;
-        _  ->
+        _ ->
             {LSync, RSync} = lists:split(crypto:rand_uniform(0, length(SyncWith1)), SyncWith1),
             ExclProviders = [oneprovider:get_provider_id() | BaseRequest#tree_broadcast.excluded_providers],
             NewBaseRequest = BaseRequest#tree_broadcast{excluded_providers = lists:usort(ExclProviders), space_id = SpaceId},
@@ -108,7 +126,7 @@ send_tree_broadcast(SpaceId, SyncWith, Request, BaseRequest, Attempts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_emit_tree_broadcast(SyncWith :: [ProviderId :: binary()], Request :: term(), #tree_broadcast{}, Attempts :: non_neg_integer()) ->
-    Reponse :: term() | {error, Reson :: any()}.
+    Response :: term() | {error, Reason :: any()}.
 do_emit_tree_broadcast([], _Request, _NewBaseRequest, _Attempts) ->
     ok;
 do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{depth = Depth} = BaseRequest, Attempts) when Attempts > 0 ->
@@ -132,7 +150,13 @@ do_emit_tree_broadcast(_SyncWith, _Request, _BaseRequest, 0) ->
 %%%===================================================================
 
 
-%% Reemitting tree broadcast messages
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends given TreeBroadcast message to all remaining providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec reemit(#tree_broadcast{}) ->
+    ok | no_return().
 reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, message_body = Request} = BaseRequest) ->
     Providers = dbsync_utils:get_providers_for_space(SpaceId),
     Providers1 = lists:usort(Providers),
@@ -142,10 +166,17 @@ reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, messa
     ok = send_tree_broadcast(SpaceId, Providers4, Request, BaseRequest, 3).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles request from non-local DBSync server.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle(SessId :: session:id(), #dbsync_request{}) ->
+    #status{}.
 handle(SessId, #dbsync_request{message_body = MessageBody}) ->
-    ?info("Request from  ~p", [SessId]),
+    ?debug("DBSync request from  ~p", [SessId]),
     {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
-    try handle(ProviderId, MessageBody) of
+    try handle_impl(ProviderId, MessageBody) of
         ok ->
             #status{code = ?OK};
         {error, Reason} ->
@@ -155,9 +186,17 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
         _:Reason0 ->
             ?error_stacktrace("DBSync error ~p", [Reason0]),
             #status{code = ?EAGAIN}
-    end;
-%% Handle tree_broadcast{} message
-handle(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles unpacked request from non-local DBSync server.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_impl(From :: oneprovider:id(), #tree_broadcast{} | #changes_request{} | #batch_update{}) ->
+    ok | no_return().
+handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseRequest) ->
     Ignore =
         case worker_host:state_get(dbsync_worker, {request, ReqId}) of
             undefined ->
@@ -184,25 +223,24 @@ handle(From, #tree_broadcast{message_body = Request, request_id = ReqId} = BaseR
             end;
         true -> ok
     end;
-
-handle(From, #changes_request{since_seq = Since, until_seq = Until} = _BaseRequest) ->
-    ?info("Changes request ~p ~p ~p", [From, Since, Until]),
+handle_impl(From, #changes_request{since_seq = Since, until_seq = Until} = _BaseRequest) ->
+    ?info("Changes request form ~p: Since ~p, Until: ~p", [From, Since, Until]),
     {ok, _} = dbsync_worker:init_stream(dbsync_utils:decode_term(Since), dbsync_utils:decode_term(Until), {provider, From, dbsync_utils:gen_request_id()}),
     ok;
-
-
-handle(From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = ChangesBin}) ->
+handle_impl(From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = ChangesBin}) ->
     ProviderId = From,
 
     Batch = #batch{since = dbsync_utils:decode_term(Since), until = dbsync_utils:decode_term(Until), changes = dbsync_utils:decode_term(ChangesBin)},
     dbsync_worker:apply_batch_changes(ProviderId, SpaceId, Batch).
 
+
 %%--------------------------------------------------------------------
-%% @doc General handler for tree_broadcast{} inner-messages. Shall return whether
-%%      broadcast should be canceled (ok | {error, _}) or reemitted (reemit).
+%% @doc
+%% General handler for tree_broadcast{} inner-messages. Shall return whether
+%% broadcast should be canceled (ok | {error, _}) or reemitted (reemit).
 %% @end
 %%--------------------------------------------------------------------
--spec handle_broadcast(From :: binary(), Request :: term(), BaseRequest :: term()) ->
+-spec handle_broadcast(From :: oneprovider:id(), Request :: term(), BaseRequest :: term()) ->
     ok | reemit | {error, Reason :: any()}.
 handle_broadcast(From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = ChangesBin} = Request, BaseRequest) ->
     ProviderId = From,
@@ -210,25 +248,25 @@ handle_broadcast(From, #batch_update{space_id = SpaceId, since_seq = Since, unti
     Batch = #batch{since = dbsync_utils:decode_term(Since), until = dbsync_utils:decode_term(Until), changes = dbsync_utils:decode_term(ChangesBin)},
     dbsync_worker:apply_batch_changes(ProviderId, SpaceId, Batch),
     reemit;
-
 handle_broadcast(From, #status_report{space_id = SpaceId, seq = SeqBin} = _Request, _BaseRequest) ->
-    ?info("Got dbsync report from provider ~p: ~p", [From, SeqBin]),
     dbsync_worker:on_status_received(From, SpaceId, dbsync_utils:decode_term(SeqBin)),
     reemit;
-
-
-handle_broadcast(From, #status_request{} = _Request, _BaseRequest) ->
+handle_broadcast(_From, #status_request{} = _Request, _BaseRequest) ->
     worker_proxy:cast(dbsync_worker, requested_bcast_status),
     reemit.
-
-
 
 
 %%--------------------------------------------------------------------
 %% Misc
 %%--------------------------------------------------------------------
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Send given protocol record to given provider asynchronously.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate(oneprovider:id(), Message :: #tree_broadcast{} | #changes_request{} | #status_request{}) ->
+    ok.
 communicate(ProviderId, Message) ->
     SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
     spawn(fun() -> provider_communicator:communicate(#dbsync_request{message_body = Message}, SessId) end),

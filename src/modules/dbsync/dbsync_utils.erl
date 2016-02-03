@@ -25,14 +25,19 @@
 %%% API
 %%%===================================================================
 
+-spec get_providers_for_space(SpaceId :: binary()) ->
+    [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
     {ok, ProviderIds} = gr_spaces:get_providers(provider, SpaceId),
     ProviderIds.
 
-
+-spec get_spaces_for_provider() ->
+    [SpaceId :: binary()].
 get_spaces_for_provider() ->
     get_spaces_for_provider(oneprovider:get_provider_id()).
 
+-spec get_spaces_for_provider(oneprovider:id()) ->
+    [SpaceId :: binary()].
 get_spaces_for_provider(ProviderId) ->
     {ok, SpaceIds} = gr_providers:get_spaces(provider),
     lists:foldl(
@@ -45,53 +50,38 @@ get_spaces_for_provider(ProviderId) ->
         end, [], SpaceIds).
 
 
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc Selects URL of the provider
-%% ====================================================================
+%% @end
+%%--------------------------------------------------------------------
 -spec get_provider_url(ProviderId :: binary()) -> URL :: string() | no_return().
 get_provider_url(ProviderId) ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
 
-%%%% ====================================================================
-%%%% @doc Normalizes sequence info format
-%%%% ====================================================================
-%%-spec normalize_seq_info(term()) -> {SeqNum :: integer(), SeqHash :: binary()}.
-%%normalize_seq_info(SeqNum) when is_integer(SeqNum) ->
-%%    normalize_seq_info({SeqNum, <<>>});
-%%normalize_seq_info({SeqNum, SeqHash}) when is_integer(SeqNum), is_binary(SeqHash) ->
-%%    {SeqNum, SeqHash};
-%%normalize_seq_info({SeqNum, [SeqHash | _]}) when is_integer(SeqNum), is_binary(SeqHash) ->
-%%    normalize_seq_info({SeqNum, SeqHash});
-%%normalize_seq_info([SeqNum, SeqHash]) ->
-%%    normalize_seq_info({SeqNum, SeqHash}).
-
-
-
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc Encodes given erlang term to binary
-%% ====================================================================
+%% @end
+%%--------------------------------------------------------------------
 -spec encode_term(term()) -> binary().
 encode_term(Doc) ->
     term_to_binary(Doc).
 
 
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc Decodes given binary to erlang term (reverses encode_term/1)
-%% ====================================================================
+%% @end
+%%--------------------------------------------------------------------
 -spec decode_term(binary()) -> term().
 decode_term(Doc) ->
     binary_to_term(Doc).
 
 
-%% ====================================================================
+%%--------------------------------------------------------------------
 %% @doc Generates UUID for inter-provider dbsync's requests
-%% ====================================================================
+%% @end
+%%--------------------------------------------------------------------
 -spec gen_request_id() -> binary().
 gen_request_id() ->
     base64:encode(crypto:rand_bytes(32)).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

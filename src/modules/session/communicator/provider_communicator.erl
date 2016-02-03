@@ -143,6 +143,13 @@ communicate_async(Msg, Ref, Recipient) ->
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Ensures that there is at least one outgoing connection for given session.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_connected(session:id()) ->
+    ok | no_return().
 ensure_connected(SessId) ->
     {_, provider, ProviderId} = SessId,
     case session:get_random_connection(SessId) of
@@ -150,7 +157,7 @@ ensure_connected(SessId) ->
             {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
             lists:foreach(
                 fun(URL) ->
-                    Port = 5555,
+                    Port = 5556,
                     connection:start_link(SessId, URL, Port, ranch_ssl2, timer:seconds(5))
                 end, URLs),
             ok;

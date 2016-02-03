@@ -198,11 +198,11 @@ handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection
     transport = Transport}) ->
     send_client_message(Socket, Transport, ServerMsg),
     NewState = case ServerMsg of
-        #client_message{message_id = #message_id{recipient = Pid, id = MessageId}} when is_pid(Pid) ->
-            State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)};
-        _ ->
-            State
-    end,
+                   #client_message{message_id = #message_id{recipient = Pid, id = MessageId}} when is_pid(Pid) ->
+                       State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)};
+                   _ ->
+                       State
+               end,
     {reply, ok, NewState};
 
 handle_call(_Request, _From, State) ->
@@ -391,11 +391,11 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
     transport = Transp}, Msg0) ->
     Msg1 = case Msg0 of
-              #client_message{} ->
-                  Msg0#client_message{session_id = SessId};
-              _ ->
-                  Msg0
-          end,
+               #client_message{} ->
+                   Msg0#client_message{session_id = SessId};
+               _ ->
+                   Msg0
+           end,
     {State, Msg} = update_message_id(State0, Msg1),
     case router:preroute_message(Msg, SessId) of
         ok ->
