@@ -160,7 +160,7 @@ translate_read_subscription_to_protobuf_test() ->
     })).
 
 translate_write_subscription_to_protobuf_test() ->
-    ?assertEqual({write_subscription, #'ReadSubscription'{
+    ?assertEqual({write_subscription, #'WriteSubscription'{
         counter_threshold = 12,
         time_threshold = 500,
         size_threshold = 1024

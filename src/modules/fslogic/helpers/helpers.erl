@@ -112,9 +112,17 @@ access(#helper_handle{} = HelperHandle, File, Mask) ->
 %%      First argument shall be #helper_handle{} from new_handle/2.
 %% @end
 %%--------------------------------------------------------------------
--spec mknod(handle(), File :: file(), Mode :: non_neg_integer(), Type :: reg) -> ok | {error, term()}.
+-spec mknod(handle(), File :: file(), Mode :: non_neg_integer(), Type :: atom()) -> ok | {error, term()}.
 mknod(#helper_handle{} = HelperHandle, File, Mode, reg) ->
-    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFREG'], 0]).
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFREG'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, chr) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFCHR'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, blk) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFBLK'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, fifo) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFIFO'], 0]);
+mknod(#helper_handle{} = HelperHandle, File, Mode, sock) ->
+    apply_helper_nif(HelperHandle, mknod, [File, Mode, ['S_IFSOCK'], 0]).
 
 %%--------------------------------------------------------------------
 %% @doc Calls the corresponding helper_nif method and receives result.

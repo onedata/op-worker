@@ -38,6 +38,8 @@ check({root, _, _, _}) ->
     throw(?EACCES);
 check({owner, #document{value = #file_meta{uid = OwnerId}}, #document{key = OwnerId}, _}) ->
     ok;
+check({owner, _, _, _}) ->
+    throw(?EACCES);
 check({owner_if_parent_sticky, Doc, UserDoc, Acl}) ->
     #document{value = #file_meta{mode = Mode}} = fslogic_utils:get_parent(Doc),
     case (Mode band (8#1 bsl 9)) > 0 of
