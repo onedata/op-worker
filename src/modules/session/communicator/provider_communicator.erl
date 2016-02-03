@@ -95,7 +95,7 @@ send_async(Msg, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
-    {ok, #server_message{}} | {error, timeout}.
+    {ok, #server_message{}} | {error, timeout} | {error, Reason :: term()}.
 communicate(#client_message{} = ClientMsg, Ref) ->
     {ok, MsgId} = communicate_async(ClientMsg, Ref, self()),
     receive
@@ -115,7 +115,7 @@ communicate(Msg, Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate_async(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
-    {ok, #message_id{}}.
+    {ok, #message_id{}} | {error, Reason :: term()}.
 communicate_async(#client_message{} = ClientMsg, Ref) ->
     communicate_async(ClientMsg, Ref, undefined);
 communicate_async(Msg, Ref) ->
