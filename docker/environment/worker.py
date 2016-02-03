@@ -46,7 +46,8 @@ def _tweak_config(config, name, instance, uid, configurator):
     # Set the cluster domain (needed for nodes to start)
     sys_config[configurator.domain_env_name()] = cluster_domain(instance, uid)
 
-    sys_config['persistence_driver_module'] = _db_driver_module(cfg['db_driver'])
+    sys_config['persistence_driver_module'] = _db_driver_module(
+        cfg['db_driver'])
 
     if 'vm.args' not in cfg['nodes']['node']:
         cfg['nodes']['node']['vm.args'] = {}
@@ -57,7 +58,8 @@ def _tweak_config(config, name, instance, uid, configurator):
     return cfg, sys_config['db_nodes']
 
 
-def _node_up(image, bindir, config, dns_servers, db_node_mappings, logdir, configurator):
+def _node_up(image, bindir, config, dns_servers, db_node_mappings, logdir,
+             configurator):
     node_name = config['nodes']['node']['vm.args']['name']
     db_nodes = config['nodes']['node']['sys.config']['db_nodes']
     for i in range(len(db_nodes)):
@@ -82,7 +84,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     )
 
     volumes = [(bindir, DOCKER_BINDIR_PATH, 'ro')]
-    volumes += configurator.extra_volumes(config)
+    volumes += configurator.extra_volumes(config, bindir)
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -130,7 +132,8 @@ def _riak_up(cluster_name, db_nodes, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    riak_output = riak.up('onedata/riak', dns, uid, None, cluster_name, len(db_node_mappings))
+    riak_output = riak.up('onedata/riak', dns, uid, None, cluster_name,
+                          len(db_node_mappings))
 
     return db_node_mappings, riak_output
 
@@ -147,7 +150,8 @@ def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    couchbase_output = couchbase.up('couchbase/server:community-4.0.0', dns, uid, cluster_name, len(db_node_mappings))
+    couchbase_output = couchbase.up('couchbase/server:community-4.0.0', dns,
+                                    uid, cluster_name, len(db_node_mappings))
 
     return db_node_mappings, couchbase_output
 
@@ -174,13 +178,16 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
                 'input_dir': input_dir,
                 'target_dir': '/root/bin'
             },
-            'nodes': config[configurator.domains_attribute()][instance][configurator.app_name()],
-            'db_driver': _db_driver(config[configurator.domains_attribute()][instance])
+            'nodes': config[configurator.domains_attribute()][instance][
+                configurator.app_name()],
+            'db_driver': _db_driver(
+                config[configurator.domains_attribute()][instance])
         }
 
         # If present, include os_config
         if 'os_config' in config[configurator.domains_attribute()][instance]:
-            os_config = config[configurator.domains_attribute()][instance]['os_config']
+            os_config = config[configurator.domains_attribute()][instance][
+                'os_config']
             gen_dev_cfg['os_config'] = config['os_configs'][os_config]
 
         # Tweak configs, retrieve lis of riak nodes to start
@@ -188,19 +195,23 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
         all_db_nodes = []
 
         for worker_node in gen_dev_cfg['nodes']:
-            tw_cfg, db_nodes = _tweak_config(gen_dev_cfg, worker_node, instance, uid, configurator)
+            tw_cfg, db_nodes = _tweak_config(gen_dev_cfg, worker_node, instance,
+                                             uid, configurator)
             configs.append(tw_cfg)
             all_db_nodes.extend(db_nodes)
 
         db_node_mappings = None
         db_out = None
-        db_driver = _db_driver(config[configurator.domains_attribute()][instance])
+        db_driver = _db_driver(
+            config[configurator.domains_attribute()][instance])
 
         # Start db nodes, obtain mappings
         if db_driver == 'riak':
-            db_node_mappings, db_out = _riak_up(instance, all_db_nodes, dns_servers, uid)
-        elif db_driver == 'couchbase':
-            db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes, dns_servers, uid)
+            db_node_mappings, db_out = _riak_up(instance, all_db_nodes,
+                                                dns_servers, uid)
+        elif db_driver in ['couchbase', 'couchdb']:
+            db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes,
+                                                     dns_servers, uid)
         else:
             raise ValueError("Invalid db_driver: {0}".format(db_driver))
 
@@ -210,7 +221,8 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
         workers = []
         worker_ips = []
         for cfg in configs:
-            worker, node_out = _node_up(image, bindir, cfg, dns_servers, db_node_mappings, logdir, configurator)
+            worker, node_out = _node_up(image, bindir, cfg, dns_servers,
+                                        db_node_mappings, logdir, configurator)
             workers.append(worker)
             worker_ips.append(common.get_docker_ip(worker))
             common.merge(current_output, node_out)
@@ -228,7 +240,8 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
             }
         }
         common.merge(current_output, domains)
-        configurator.configure_started_instance(bindir, instance, config, current_output)
+        configurator.configure_started_instance(bindir, instance, config,
+                                                workers, current_output)
         common.merge(output, current_output)
 
     # Make sure domains are added to the dns server.
