@@ -209,7 +209,7 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
         if db_driver == 'riak':
             db_node_mappings, db_out = _riak_up(instance, all_db_nodes,
                                                 dns_servers, uid)
-        elif db_driver == 'couchbase':
+        elif db_driver in ['couchbase', 'couchdb']:
             db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes,
                                                      dns_servers, uid)
         else:
