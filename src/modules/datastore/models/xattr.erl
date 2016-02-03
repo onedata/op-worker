@@ -25,11 +25,8 @@
 
 -type name() :: binary().
 -type value() :: binary().
--type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
--type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
--type mimetype() :: binary().
 
--export_type([name/0, value/0, transfer_encoding/0, cdmi_completion_status/0, mimetype/0]).
+-export_type([name/0, value/0]).
 
 -define(XATTR_LINK_NAME(XattrName), <<"xattr_", XattrName/binary>>).
 

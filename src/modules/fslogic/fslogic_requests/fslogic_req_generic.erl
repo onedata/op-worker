@@ -13,6 +13,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("types.hrl").
 -include("modules/events/types.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -286,7 +287,7 @@ remove_acl(CTX, {uuid, FileUuid}) ->
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
+    {ok, transfer_encoding()} | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
@@ -301,9 +302,8 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:transfer_encoding()) ->
-    ok | logical_file_manager:error_reply().
+-spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, transfer_encoding()) ->
+    ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
@@ -319,7 +319,7 @@ set_transfer_encoding(_CTX, {uuid, FileUuid}, Encoding) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:cdmi_completion_status()} | logical_file_manager:error_reply().
+    {ok, cdmi_completion_status()} | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
@@ -337,9 +337,8 @@ get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:cdmi_completion_status()) ->
-    ok | logical_file_manager:error_reply().
+-spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, cdmi_completion_status()) ->
+    ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
     case xattr:save(FileUuid, #xattr{name = ?CDMI_COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
@@ -352,7 +351,7 @@ set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
 -spec get_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:mimetype()} | logical_file_manager:error_reply().
+    {ok, mimetype()} | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
@@ -367,9 +366,8 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:mimetype()) ->
-    ok | logical_file_manager:error_reply().
+-spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, mimetype()) ->
+    ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(_CTX, {uuid, FileUuid}, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
