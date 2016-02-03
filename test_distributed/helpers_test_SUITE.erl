@@ -44,12 +44,6 @@ all() ->
         chmod_test, chown_test, truncate_test, open_test, read_test, write_test, release_test, flush_test, fsync_test
     ].
 
-%%-performance({test_cases,
-%%    [
-%%        mkdir_test
-%%    ]
-%%}).
-
 
 %%%===================================================================
 %%% Test functions
@@ -76,18 +70,11 @@ mknod_test(Config) ->
         ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)]))
     end, [{regular, reg}, {device, chr}, {device, blk}, {other, fifo}, {other, sock}]).
 
-
 mkdir_test(Config) ->
-    lists:foreach(
-        fun(N) ->
-%%            spawn(fun() ->
-                File = gen_filename(),
-            ct:print("~p: ~p", [N, File]),
+    File = gen_filename(),
 
-            ?assertMatch(ok, call(Config, mkdir, [File, 8#755])),
-            ?assertMatch(ok, call(Config, file, del_dir, [?path(Config, File)]))
-        end, lists:seq(1, 10000)),
-    timer:sleep(10).
+    ?assertMatch(ok, call(Config, mkdir, [File, 8#755])),
+    ?assertMatch(ok, call(Config, file, del_dir, [?path(Config, File)])).
 
 unlink_test(Config) ->
     File = gen_filename(),
@@ -219,8 +206,7 @@ gen_filename() ->
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),
     ctx_server(Config, CTX).
-ctx_server(Config, _) ->
-    CTX = helpers:new_handle(<<"DirectIO">>, [?path(Config, "")]),
+ctx_server(Config, CTX) ->
     receive
         {Pid, get} ->
             Pid ! CTX;
