@@ -104,4 +104,9 @@
     credentials :: #{storage:id() => ceph_user:credentials()}
 }).
 
+%% Model that maps onedata user to Amazon S3 user
+-record(s3_user, {
+    credentials :: #{storage:id() => s3_user:credentials()}
+}).
+
 -endif.
