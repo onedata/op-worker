@@ -87,7 +87,7 @@ status_report(SpaceId, Providers, CurrentSeq) ->
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
     PushTo = ProviderId,
     case communicate(PushTo, Request) of
-        ok -> ok;
+        {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
             send_direct_message(ProviderId, Request, Attempts - 1)
@@ -136,7 +136,7 @@ do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{depth = Depth} = BaseR
     SyncRequest = BaseRequest#tree_broadcast{l_edge = LEdge, r_edge = REdge, depth = Depth + 1},
 
     case communicate(PushTo, SyncRequest) of
-        ok -> ok;
+        {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send tree message to ~p due to: ~p", [PushTo, Reason]),
             do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{} = BaseRequest, Attempts)
@@ -178,10 +178,7 @@ handle(SessId, #dbsync_request{message_body = MessageBody}) ->
     {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle_impl(ProviderId, MessageBody) of
         ok ->
-            #status{code = ?OK};
-        {error, Reason} ->
-            ?error("DBSync error ~p", [Reason]),
-            #status{code = ?EAGAIN}
+            #status{code = ?OK}
     catch
         _:Reason0 ->
             ?error_stacktrace("DBSync error ~p", [Reason0]),
@@ -208,16 +205,17 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
 
     case Ignore of
         false ->
-            case handle_broadcast(From, Request, BaseRequest) of
-                ok -> ok;
+            try handle_broadcast(From, Request, BaseRequest) of
+%%                ok -> ok; %% This case should be safely ignored but is not used right now.
                 reemit ->
                     case worker_proxy:cast(dbsync_worker, {reemit, BaseRequest}) of
                         ok -> ok;
                         {error, Reason} ->
                             ?debug("Cannot reemit tree broadcast due to: ~p", [Reason]),
                             {error, Reason}
-                    end;
-                {error, Reason} ->
+                    end
+            catch
+                _:Reason ->
                     ?debug("Error while handling tree broadcast: ~p", [Reason]),
                     {error, Reason}
             end;
@@ -266,8 +264,7 @@ handle_broadcast(_From, #status_request{} = _Request, _BaseRequest) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(oneprovider:id(), Message :: #tree_broadcast{} | #changes_request{} | #status_request{}) ->
-    ok.
+    {ok, MsgId :: term()}.
 communicate(ProviderId, Message) ->
     SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    spawn(fun() -> provider_communicator:communicate(#dbsync_request{message_body = Message}, SessId) end),
-    ok.
+    provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId).

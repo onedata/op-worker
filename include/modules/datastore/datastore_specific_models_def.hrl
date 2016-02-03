@@ -18,7 +18,7 @@
 %% Identity containing user_id
 -record(identity, {
     user_id :: onedata_user:id(),
-    provider_id :: binary()
+    provider_id :: oneprovider:id()
 }).
 
 %% User session

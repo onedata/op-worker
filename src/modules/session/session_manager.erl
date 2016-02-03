@@ -240,9 +240,9 @@ remove_session(SessId) ->
 %% Generates session id for given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> term().
+-spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
 get_provider_session_id(Type, ProviderId) ->
-    {Type, provider, ProviderId}.
+    base64:encode(term_to_binary({Type, provider, ProviderId})).
 
 
 %%--------------------------------------------------------------------
@@ -250,8 +250,9 @@ get_provider_session_id(Type, ProviderId) ->
 %% Gets provider's id from given session (assumes that the session was created for provider).
 %% @end
 %%--------------------------------------------------------------------
--spec session_id_to_provider_id(term()) -> oneprovider:id().
-session_id_to_provider_id({_, provider, ProviderId}) ->
+-spec session_id_to_provider_id(session:id()) -> oneprovider:id().
+session_id_to_provider_id(SessId) ->
+    {_, provider, ProviderId} = binary_to_term(base64:decode(SessId)),
     ProviderId.
 
 %%%===================================================================

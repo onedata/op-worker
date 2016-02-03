@@ -462,7 +462,7 @@ bcast_status() ->
     lists:foreach(
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
-            ?info("BCast ~p ~p", [CurrentSeq, SpaceId]),
+            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
             {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
