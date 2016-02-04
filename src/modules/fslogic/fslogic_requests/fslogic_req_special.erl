@@ -53,11 +53,11 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     }},
     case file_meta:create(NormalizedParentUUID, File) of
         {ok, DirUUID} ->
-            {ok, _} = file_meta:update({uuid, NormalizedParentUUID}, #{
+            {ok, _} = file_meta:update(NormalizedParentUUID, #{
                 mtime => CTime, ctime => CTime
             }),
             spawn(fun() ->
-                fslogic_event:emit_file_sizeless_attrs_update({uuid, NormalizedParentUUID})
+                fslogic_event:emit_file_sizeless_attrs_update(NormalizedParentUUID)
                   end),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = DirUUID}
