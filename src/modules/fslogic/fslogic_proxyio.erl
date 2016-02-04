@@ -99,12 +99,4 @@ read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
                 {fslogic_errors:gen_status_message(Error2), undefined}
         end,
 
-    case fslogic_times:calculate_atime({uuid, FileUuid}) of
-        actual ->
-            ok;
-        NewATime ->
-            {ok, _} = file_meta:update({uuid, FileUuid}, #{atime => NewATime}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUuid}) end)
-    end,
-
     #proxyio_response{status = Status, proxyio_response = Response}.

@@ -48,35 +48,63 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    {ok, CounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
-    {ok, TimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
-    {ok, SizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
-    SubId = ?FSLOGIC_SUB_ID,
-    Sub = #subscription{
-        id = SubId,
+    {ok, WriteCounterThreshold} = application:get_env(?APP_NAME, default_write_event_counter_threshold),
+    {ok, WriteTimeThreshold} = application:get_env(?APP_NAME, default_write_event_time_threshold_miliseconds),
+    {ok, WriteSizeThreshold} = application:get_env(?APP_NAME, default_write_event_size_threshold),
+    WriteSubId = ?FSLOGIC_SUB_ID,
+    WriteSub = #subscription{
+        id = WriteSubId,
         object = #write_subscription{
-            counter_threshold = CounterThreshold,
-            time_threshold = TimeThreshold,
-            size_threshold = SizeThreshold
+            counter_threshold = WriteCounterThreshold,
+            time_threshold = WriteTimeThreshold,
+            size_threshold = WriteSizeThreshold
         },
         event_stream = ?WRITE_EVENT_STREAM#event_stream_definition{
             metadata = 0,
             emission_rule = fun(_) -> true end,
             init_handler = event_utils:send_subscription_handler(),
             event_handler = fun(Evts, Ctx) ->
-                handle_events(Evts, Ctx)
+                handle_write_events(Evts, Ctx)
             end,
             terminate_handler = event_utils:send_subscription_cancellation_handler()
         }
     },
 
-    case event:subscribe(Sub) of
-        {ok, SubId} ->
+    case event:subscribe(WriteSub) of
+        {ok, WriteSubId} ->
             ok;
         {error, already_exists} ->
             ok
     end,
-    {ok, #{sub_id => SubId}}.
+
+    {ok, ReadCounterThreshold} = application:get_env(?APP_NAME, default_read_event_counter_threshold),
+    {ok, ReadTimeThreshold} = application:get_env(?APP_NAME, default_read_event_time_threshold_miliseconds),
+    {ok, ReadSizeThreshold} = application:get_env(?APP_NAME, default_read_event_size_threshold),
+    ReadSub = #subscription{
+        object = #read_subscription{
+            counter_threshold = ReadCounterThreshold,
+            time_threshold = ReadTimeThreshold,
+            size_threshold = ReadSizeThreshold
+        },
+        event_stream = ?READ_EVENT_STREAM#event_stream_definition{
+            metadata = 0,
+            emission_rule = fun(_) -> true end,
+            init_handler = event_utils:send_subscription_handler(),
+            event_handler = fun(Evts, Ctx) ->
+                handle_read_events(Evts, Ctx)
+            end,
+            terminate_handler = event_utils:send_subscription_cancellation_handler()
+        }
+    },
+
+    case event:subscribe(ReadSub) of
+        {ok, _ReadSubId} ->
+            ok;
+        {error, already_exists} ->
+            ok
+    end,
+
+    {ok, #{sub_id => WriteSubId}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -247,7 +275,7 @@ handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
-handle_events(Evts, #{session_id := SessId} = Ctx) ->
+handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
     }}) ->
@@ -278,6 +306,17 @@ handle_events(Evts, #{session_id := SessId} = Ctx) ->
     end,
 
     Results.
+
+handle_read_events(Evts, Ctx) ->
+    lists:map(fun(#event{object = #read_event{file_uuid = FileUUID}}) ->
+        case fslogic_times:calculate_atime({uuid, FileUUID}) of
+            actual ->
+                ok;
+            NewATime ->
+                {ok, _} = file_meta:update({uuid, FileUUID}, #{atime => NewATime}),
+                spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUUID}) end)
+        end
+    end, Evts).
 
 handle_proxyio_request(SessionId, #proxyio_request{
     file_uuid = FileUuid, storage_id = SID, file_id = FID,
