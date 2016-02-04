@@ -38,41 +38,39 @@ using helper_args_t = std::unordered_map<std::string, std::string>;
  * Static resource holder.
  */
 struct HelpersNIF {
-    asio::io_service cephService;
-    asio::executor_work<asio::io_service::executor_type> cephWork =
-        asio::make_work(cephService);
-    std::vector<std::thread> dioWorkers;
+    class HelperIOService {
+    public:
+        asio::io_service service;
+        asio::executor_work<asio::io_service::executor_type> work =
+            asio::make_work(service);
+        std::vector<std::thread> workers;
+    };
 
-    asio::io_service dioService;
-    asio::executor_work<asio::io_service::executor_type> dioWork =
-        asio::make_work(dioService);
-    std::vector<std::thread> cephWorkers;
+    std::unordered_map<std::string, std::unique_ptr<HelperIOService>>
+        helperServices;
 
-    asio::io_service s3Service;
-    asio::executor_work<asio::io_service::executor_type> s3Work =
-        asio::make_work(s3Service);
-    std::vector<std::thread> s3Workers;
+    std::unique_ptr<one::helpers::StorageHelperFactory> SHFactory;
 
-    one::helpers::StorageHelperFactory SHFactory =
-        one::helpers::StorageHelperFactory(cephService, dioService, s3Service);
+    HelpersNIF()
+    {
+        helperServices.emplace("AmazonS3", std::make_unique<HelperIOService>());
+        helperServices.emplace("Ceph", std::make_unique<HelperIOService>());
+        helperServices.emplace("DirectIO", std::make_unique<HelperIOService>());
 
-    HelpersNIF() { umask(0); }
+        SHFactory = std::make_unique<one::helpers::StorageHelperFactory>(
+            helperServices["Ceph"]->service,
+            helperServices["DirectIO"]->service,
+            helperServices["AmazonS3"]->service);
+        umask(0);
+    }
 
     ~HelpersNIF()
     {
-        dioService.stop();
-        for (auto &th : dioWorkers) {
-            th.join();
-        }
-
-        cephService.stop();
-        for (auto &th : cephWorkers) {
-            th.join();
-        }
-
-        s3Service.stop();
-        for (auto &th : s3Workers) {
-            th.join();
+        for (auto &helperService : helperServices) {
+            helperService.second->service.stop();
+            for (auto &th : helperService.second->workers) {
+                th.join();
+            }
         }
     }
 
@@ -455,38 +453,22 @@ ERL_NIF_TERM set_threads_number(
     ErlNifEnv *env, std::unordered_map<std::string, std::size_t> args)
 {
     return handle_errors(env, [&]() {
-        auto result = args.find("Ceph");
-        if (result != args.end())
-            if (!application.adjust_io_service_threads(application.cephService,
-                    application.cephWorkers, result->second)) {
-                return nifpp::make(
-                    env,
-                    std::make_tuple(error,
-                        std::make_tuple(nifpp::str_atom("wrong_thread_number"),
-                                        "Ceph", result->second)));
+        std::vector<std::string> names{"AmazonS3", "Ceph", "DirectIO"};
+        for (const auto &name : names) {
+            auto result = args.find(name);
+            if (result != args.end()) {
+                auto &service = application.helperServices[name]->service;
+                auto &workers = application.helperServices[name]->workers;
+                if (!application.adjust_io_service_threads(
+                        service, workers, result->second)) {
+                    return nifpp::make(
+                        env, std::make_tuple(error,
+                                 std::make_tuple(nifpp::str_atom(
+                                                     "wrong_thread_number"),
+                                                 name, result->second)));
+                }
             }
-
-        result = args.find("DirectIO");
-        if (result != args.end())
-            if (!application.adjust_io_service_threads(application.dioService,
-                    application.dioWorkers, result->second)) {
-                return nifpp::make(
-                    env,
-                    std::make_tuple(error,
-                        std::make_tuple(nifpp::str_atom("wrong_thread_number"),
-                                        "DirectIO", result->second)));
-            }
-
-        result = args.find("AmazonS3");
-        if (result != args.end())
-            if (!application.adjust_io_service_threads(application.s3Service,
-                    application.s3Workers, result->second)) {
-                return nifpp::make(
-                    env,
-                    std::make_tuple(error,
-                        std::make_tuple(nifpp::str_atom("wrong_thread_number"),
-                                        "AmazonS3", result->second)));
-            }
+        }
 
         return nifpp::make(env, ok);
     });
@@ -497,7 +479,7 @@ ERL_NIF_TERM new_helper_obj(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     auto helperName = nifpp::get<std::string>(env, argv[0]);
     auto helperArgs = nifpp::get<helper_args_t>(env, argv[1]);
     auto helperObj =
-        application.SHFactory.getStorageHelper(helperName, helperArgs);
+        application.SHFactory->getStorageHelper(helperName, helperArgs);
     if (!helperObj)
         return nifpp::make(
             env, std::make_tuple(error, nifpp::str_atom("invalid_helper")));
