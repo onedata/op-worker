@@ -102,9 +102,9 @@ stop() ->
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
     {ok, ProtoPort} = application:get_env(?APP_NAME, provider_protocol_handler_port),
-    case ssl2:connect("127.0.0.1", ProtoPort, [{packet, 4}, {active, false}]) of
+    case gen_tcp:connect("127.0.0.1", ProtoPort, [{packet, 4}, {active, false}]) of
         {ok, Sock} ->
-            ssl2:close(Sock),
+            gen_tcp:close(Sock),
             ok;
         _ ->
             {error, server_not_responding}
