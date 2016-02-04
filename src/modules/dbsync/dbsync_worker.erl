@@ -58,6 +58,7 @@
 -spec init(Args :: term()) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    timer:sleep(5000),
     ?info("[ DBSync ]: Starting dbsync..."),
     timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status}),
     Since = 0,
