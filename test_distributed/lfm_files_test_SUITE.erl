@@ -21,6 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -39,16 +40,17 @@
 ]).
 
 -performance({test_cases, []}).
-all() -> [
-    fslogic_new_file_test,
-    lfm_create_and_unlink_test,
-    lfm_create_and_access_test,
-    lfm_write_test,
-    lfm_stat_test,
-    lfm_synch_stat_test,
-    lfm_truncate_test,
-    lfm_acl_test
-].
+all() ->
+    ?ALL([
+        fslogic_new_file_test,
+        lfm_create_and_unlink_test,
+        lfm_create_and_access_test,
+        lfm_write_test,
+        lfm_stat_test,
+        lfm_synch_stat_test,
+        lfm_truncate_test,
+        lfm_acl_test
+    ]).
 
 -define(TIMEOUT, timer:seconds(10)).
 -define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).

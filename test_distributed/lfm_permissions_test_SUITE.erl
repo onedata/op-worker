@@ -59,6 +59,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -113,8 +114,8 @@
     acl_write_acl_group_test/1
 ]).
 
--performance({test_cases, []}).
 all() ->
+    ?ALL(
     [
         posix_read_file_user_test,
         posix_read_file_group_test,
@@ -156,7 +157,7 @@ all() ->
         acl_read_acl_group_test,
         acl_write_acl_user_test,
         acl_write_acl_group_test
-    ].
+    ]).
 
 %%%===================================================================
 %%% Test functions
