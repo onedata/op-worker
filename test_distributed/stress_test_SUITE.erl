@@ -38,7 +38,7 @@
 ]).
 
 all() ->
-    ?ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
+    ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
 
 %%%===================================================================
 %%% Test functions

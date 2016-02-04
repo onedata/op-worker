@@ -17,7 +17,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 -define(call(N, M, A), ?call(N, file_meta, M, A)).
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
@@ -30,9 +29,8 @@
 -export([basic_operations_test/1, rename_test/1]).
 -export([basic_operations_test_core/1]).
 
--performance({test_cases, [basic_operations_test]}).
 all() ->
-    [basic_operations_test, rename_test].
+    ?ALL([basic_operations_test, rename_test], [basic_operations_test ]).
 
 -define(REPEATS, 100).
 -define(SUCCESS_RATE, 99).
@@ -41,14 +39,17 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
--performance([
-    {repeats, ?REPEATS},
-    {success_rate, ?SUCCESS_RATE},
-    {description, "Performs operations on file meta model"},
-    {config, [{name, basic_config}, {description, "Basic config for test"}]}
-]).
 basic_operations_test(Config) ->
-    basic_operations_test_core(Config).
+    ?PERFORMANCE(Config, [
+            {repeats, ?REPEATS},
+            {success_rate, ?SUCCESS_RATE},
+            {description, "Performs operations on file meta model"},
+            {config, [{name, basic_config}, {description, "Basic config for test"}]}
+        ],
+        fun(Config) ->
+            basic_operations_test_core(Config)
+        end
+    ).
 
 rename_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),

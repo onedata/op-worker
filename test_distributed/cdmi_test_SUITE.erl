@@ -20,10 +20,10 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -53,9 +53,8 @@
     accept_header_test/1
 ]).
 
--performance({test_cases, []}).
 all() ->
-    [
+    ?ALL([
         list_dir_test,
         get_file_test,
         metadata_test,
@@ -77,7 +76,7 @@ all() ->
         acl_test,
         errors_test,
         accept_header_test
-    ].
+    ]).
 
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
