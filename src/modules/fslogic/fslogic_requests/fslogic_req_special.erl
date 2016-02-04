@@ -83,8 +83,13 @@ read_dir(CTX, File, Offset, Size) ->
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
-    {ok, _} = file_meta:update(FileDoc, #{atime => fslogic_times:calculate_atime(FileDoc)}),
-    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileDoc) end),
+    case fslogic_times:calculate_atime(FileDoc) of
+        actual ->
+            ok;
+        NewATime ->
+            {ok, _} = file_meta:update(FileDoc, #{atime => NewATime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileDoc) end)
+    end,
 
     SpacesKey = fslogic_uuid:spaces_uuid(UserId),
     DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),

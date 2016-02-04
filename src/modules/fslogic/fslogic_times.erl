@@ -23,9 +23,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc Returns value of atime to be set for given file
+%% or atom "actual" if time should not be changed
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_atime(FileEntry :: fslogic_worker:file()) -> integer().
+-spec calculate_atime(FileEntry :: fslogic_worker:file()) -> integer() | atom().
 calculate_atime(FileEntry) ->
     {ok, #document{value = #file_meta{
         atime = ATime,
@@ -41,6 +42,6 @@ calculate_atime(FileEntry) ->
                 TooLongTime when TooLongTime > (24 * 60 * 60) ->
                     CurrentTime;
                 _ ->
-                    ATime
+                    actual
             end
     end.
