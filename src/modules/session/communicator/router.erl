@@ -34,7 +34,7 @@
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec preroute_message(Msg :: #client_message{}, SessId :: session:id()) ->
+-spec preroute_message(Msg :: #client_message{} | #server_message{}, SessId :: session:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
 preroute_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
     sequencer:route_message(Msg, SessId);
