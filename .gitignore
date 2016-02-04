@@ -24,7 +24,6 @@ rel/*.rpm
 test/eunit_results
 test_distributed/cover_tmp.spec
 test_coverage
-src/http/gui/tests/TEST-gui.xml
 
 deps
 doc
