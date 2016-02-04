@@ -83,7 +83,7 @@ def start_livereload(container_id, gui_config_file,
     """
     Starts a process on given docker that monitors changes in GUI release and
     forces a page reload using websocket connection to client. The WS connection
-    is created when livereload script is injected on the page. This must be
+    is created when livereload script is injected on the page - this must be
     done from the Ember client app.
     """
     release_gui_dir = _parse_erl_config(gui_config_file, 'release_gui_dir')
