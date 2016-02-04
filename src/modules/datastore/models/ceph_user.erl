@@ -24,13 +24,15 @@
     model_init/0, 'after'/5, before/4]).
 
 -record(ceph_user_credentials, {
-    user_name :: binary(),
-    user_key :: binary()
+    user_name :: name(),
+    user_key :: key()
 }).
 
+-type name() :: binary().
+-type key() :: binary().
 -type credentials() :: #ceph_user_credentials{}.
 
--export_type([credentials/0]).
+-export_type([name/0, key/0, credentials/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -125,6 +127,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds Ceph storage credentials for onedata user.
+%% @end
+%%--------------------------------------------------------------------
+-spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), UserName :: name(),
+    UserKey :: key()) -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
 add(UserId, StorageId, UserName, UserKey) ->
     case ceph_user:get(UserId) of
         {ok, #document{value = CephUser} = Doc} ->
@@ -141,7 +150,36 @@ add(UserId, StorageId, UserName, UserKey) ->
         {error, Reason} ->
             {error, Reason}
     end.
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns Ceph user name.
+%% @end
+%%--------------------------------------------------------------------
+-spec name(Credentials :: #ceph_user_credentials{}) -> UserName :: name().
+name(#ceph_user_credentials{user_name = UserName}) ->
+    UserName.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns Ceph user key.
+%% @end
+%%--------------------------------------------------------------------
+-spec key(Credentials :: #ceph_user_credentials{}) -> UserKey :: key().
+key(#ceph_user_credentials{user_key = UserKey}) ->
+    UserKey.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns Ceph user datastore document.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(UserId :: onedata_user:id(), StorageId :: storage:id(),
+    UserName :: name(), UserKey :: key()) -> Doc :: #document{}.
 new(UserId, StorageId, UserName, UserKey) ->
     #document{key = UserId, value = #ceph_user{
         credentials = maps:put(StorageId, #ceph_user_credentials{
@@ -150,15 +188,16 @@ new(UserId, StorageId, UserName, UserKey) ->
         }, #{})}
     }.
 
-
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds credentials to existing Ceph user.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_credentials(CephUser :: #ceph_user{}, StorageId :: storage:id(),
+    UserName :: name(), UserKey :: key()) -> NewCephUser :: #ceph_user{}.
 add_credentials(#ceph_user{credentials = Credentials} = CephUser, StorageId, UserName, UserKey) ->
     CephUser#ceph_user{credentials = maps:put(StorageId, #ceph_user_credentials{
         user_name = UserName,
         user_key = UserKey
     }, Credentials)}.
-
-name(#ceph_user_credentials{user_name = UserName}) ->
-    UserName.
-
-key(#ceph_user_credentials{user_key = UserKey}) ->
-    UserKey.

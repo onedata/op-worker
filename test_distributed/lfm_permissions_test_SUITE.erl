@@ -63,6 +63,8 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/test/performance.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %%%-------------------------------------------------------------------
 %%% API

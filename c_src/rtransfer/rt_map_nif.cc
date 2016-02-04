@@ -89,7 +89,7 @@ ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
         nifpp::get_throws(env, argv[2], offset);
         nifpp::get_throws(env, argv[3], size);
 
-        std::list<std::tuple<nifpp::str_atom, std::string, nifpp::TERM,
+        std::list<std::tuple<nifpp::str_atom, nifpp::TERM, nifpp::TERM,
                              ErlNifUInt64, ErlNifUInt64, ErlNifUInt64, int,
                              std::list<nifpp::TERM>>> records;
 
@@ -97,8 +97,13 @@ ERL_NIF_TERM get_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
             std::list<nifpp::TERM> terms;
             for (const auto &term : block.terms())
                 terms.push_back(term.get(env));
+
+            nifpp::binary fileId{block.file_id().size()};
+            std::copy(block.file_id().begin(), block.file_id().end(),
+                      fileId.data);
+
             records.push_back(std::make_tuple(
-                nifpp::str_atom("rt_block"), block.file_id(),
+                nifpp::str_atom("rt_block"), nifpp::make(env, fileId),
                 block.provider_ref().get(env), block.offset(), block.size(),
                 block.priority(), block.retry(), terms));
         }
