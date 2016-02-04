@@ -33,7 +33,7 @@
 %%--------------------------------------------------------------------
 -spec port() -> integer().
 port() ->
-    {ok, Port} = application:get_env(?CLUSTER_WORKER_APP_NAME, provider_protocol_handler_port),
+    {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
     Port.
 
 
