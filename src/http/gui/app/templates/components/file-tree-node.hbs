@@ -34,13 +34,13 @@
     </div>
 </div>
 {{#if file.expanded}}
-  {{#render "sortedFileChildren" file.children}}
-    {{#each sortedModel as |child|}}
+  {{#if sortedChildren.length}}
+    {{#each sortedChildren as |child|}}
         <div style="padding-left: 40px;">
           {{file-tree-node file=child clickAction='fileClicked'}}
         </div>
     {{/each}}
-  {{/render}}
+  {{/if}}
 {{/if}}
 
 

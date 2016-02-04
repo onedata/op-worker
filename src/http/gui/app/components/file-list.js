@@ -23,6 +23,7 @@ export default Ember.Component.extend({
   // Creating new files / dirs
   newFileName: '',
   newFileParent: null,
+  newFileParentName: '',
   fetchNewFileParentId: function () {
     if (this.get('isOneSelected')) {
       var selected = this.get('model').findBy('selected', true);
@@ -33,8 +34,13 @@ export default Ember.Component.extend({
     } else {
       this.set('newFileParent', this.get('currentSpace'));
     }
+    if (this.get('newFileParent') == null) {
+      this.set('newFileParentName', this.get('currentSpace.name'));
+    } else {
+      this.set('newFileParentName', this.get('newFileParent.name'));
+    }
     console.log('newFileParent ' + this.get('newFileParent.id'));
-  }.observes('currentSpace,@each.selected'),
+  }.observes('currentSpace,model.@each.selected'),
 
   // File preview
   previewedFile: null,
@@ -90,7 +96,7 @@ export default Ember.Component.extend({
     var res = visibleFiles.filterBy('selected').length;
     console.log('selectedCount: ' + res);
     return res;
-  }.property('@each.selected'),
+  }.property('model.@each.selected'),
 
   areAllSelected: function (key, value) {
     if (value === undefined) {
@@ -100,7 +106,7 @@ export default Ember.Component.extend({
       this.get('model').filterBy('isVisible').setEach('selected', value);
       return value;
     }
-  }.property('@each.isVisible,@each.selected'),
+  }.property('model.@each.isVisible,model.@each.selected'),
 
   isAnySelected: function () {
     return this.get('selectedCount') > 0;

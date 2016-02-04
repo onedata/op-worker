@@ -20,7 +20,7 @@ var CALLBACK_RESP = 'callbackResp';
 //var MSG_TYPE_PUSH_UPDATED = "pushUpdated";
 //var MSG_TYPE_PUSH_DELETED = "pushDeleted";
 
-DS.WebsocketAdapter = DS.RESTAdapter.extend({
+export default DS.RESTAdapter.extend({
   // Promises that will be resolved when response comes
   promises: {},
   // The WebSocket
@@ -336,5 +336,3 @@ DS.WebsocketAdapter = DS.RESTAdapter.extend({
   }
 
 });
-
-export default DS.WebsocketAdapter;
