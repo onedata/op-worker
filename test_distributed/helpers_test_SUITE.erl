@@ -17,7 +17,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 -define(call(N, M, A), ?call(N, helpers, M, A)).
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
@@ -37,12 +36,13 @@
     release_test/1, flush_test/1, fsync_test/1
 ]).
 
--performance({test_cases, []}).
 all() ->
-    [
-        getattr_test, access_test, mknod_test, mkdir_test, unlink_test, rmdir_test, symlink_test, rename_test,
-        chmod_test, chown_test, truncate_test, open_test, read_test, write_test, release_test, flush_test, fsync_test
-    ].
+    ?ALL([
+        getattr_test, access_test, mknod_test, mkdir_test, unlink_test,
+        rmdir_test, symlink_test, rename_test, chmod_test, chown_test,
+        truncate_test, open_test, read_test, write_test, release_test,
+        flush_test, fsync_test
+    ]).
 
 
 %%%===================================================================

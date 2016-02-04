@@ -56,9 +56,6 @@ stress_test(Config) ->   ?STRESS(Config,[
 
 %%%===================================================================
 
-%%-performance([
-%%    {description, "Performs operations on file meta model"}
-%%]).
 file_meta_basic_operations_test(Config) ->
     ?PERFORMANCE(Config, [
         {description, "Performs operations on file meta model"}

@@ -19,6 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -28,14 +29,14 @@
 -export([empty_xattr_test/1, crud_xattr_test/1, list_xattr_test/1, remove_file_test/1,
     modify_cdmi_attrs/1]).
 
--performance({test_cases, []}).
-all() -> [
-    empty_xattr_test,
-    crud_xattr_test,
-    list_xattr_test,
-    remove_file_test,
-    modify_cdmi_attrs
-].
+all() ->
+    ?ALL([
+        empty_xattr_test,
+        crud_xattr_test,
+        list_xattr_test,
+        remove_file_test,
+        modify_cdmi_attrs
+    ]).
 
 %%%====================================================================
 %%% Test function

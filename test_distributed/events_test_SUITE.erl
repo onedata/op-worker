@@ -22,7 +22,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -41,18 +40,18 @@
     flush_should_notify_awaiting_process/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    subscribe_should_create_subscription,
-    unsubscribe_should_remove_subscription,
-    subscribe_should_notify_event_manager,
-    subscribe_should_notify_all_event_managers,
-    emit_read_event_should_execute_handler,
-    emit_write_event_should_execute_handler,
-    emit_file_attr_update_event_should_execute_handler,
-    emit_file_location_update_event_should_execute_handler,
-    flush_should_notify_awaiting_process
-].
+all() ->
+    ?ALL([
+        subscribe_should_create_subscription,
+        unsubscribe_should_remove_subscription,
+        subscribe_should_notify_event_manager,
+        subscribe_should_notify_all_event_managers,
+        emit_read_event_should_execute_handler,
+        emit_write_event_should_execute_handler,
+        emit_file_attr_update_event_should_execute_handler,
+        emit_file_location_update_event_should_execute_handler,
+        flush_should_notify_awaiting_process
+    ]).
 
 -define(TIMEOUT, timer:seconds(15)).
 
