@@ -27,7 +27,7 @@
 
 %% Convenience macro to log a debug level log dumping given variable.
 -define(log_debug(_Arg),
-    ?alert("~s", [str_utils:format("FILE_DATA_BACKEND: ~s: ~p", [??_Arg, _Arg])])
+    ?debug("~s", [str_utils:format("FILE_DATA_BACKEND: ~s: ~p", [??_Arg, _Arg])])
 ).
 
 
