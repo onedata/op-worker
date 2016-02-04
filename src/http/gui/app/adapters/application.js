@@ -2,6 +2,7 @@
 // using a websocket connection.
 
 import Ember from 'ember';
+import DS from 'ember-data';
 
 // Interface between WebSocket Adapter client and server. Corresponding
 // interface is located in gui_ws_handler.erl.
