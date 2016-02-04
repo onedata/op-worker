@@ -65,16 +65,22 @@ update_times(#fslogic_ctx{session_id = SessId}, FileEntry, ATime, MTime, CTime) 
 chmod(CTX, FileEntry, Mode) ->
     chmod_storage_files(CTX, FileEntry, Mode),
 
-    {ok, _} = file_meta:update(FileEntry, #{mode => Mode, ctime => utils:time()}),
-
     % remove acl
     {ok, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
+    CurrTime = utils:time(),
+    {ok, FileDoc} = file_meta:get(FileEntry),
+    #document{value = FileMeta} = FileDoc,
+    {ok, _} = file_meta:update(FileEntry, #{mode => Mode, ctime => CurrTime}),
     spawn(
         fun() ->
-            fslogic_event:emit_permission_changed(FileUuid),
-            fslogic_event:emit_file_sizeless_attrs_update(FileEntry)
+            fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{
+                    value = FileMeta#file_meta{mode = Mode, ctime = CurrTime}
+                }
+            ),
+            fslogic_event:emit_permission_changed(FileUuid)
         end),
 
     #fuse_response{status = #status{code = ?OK}}.
@@ -194,8 +200,13 @@ set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
 set_xattr(_CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
-            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
+            CurrTime = utils:time(),
+            {ok, FileDoc} = file_meta:get(FileEntry),
+            #document{value = FileMeta} = FileDoc,
+            {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}}
+            ) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -212,8 +223,13 @@ set_xattr(_CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
 remove_xattr(_CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
-            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
+            CurrTime = utils:time(),
+            {ok, FileDoc} = file_meta:get(FileEntry),
+            #document{value = FileMeta} = FileDoc,
+            {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}}
+            ) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -264,8 +280,13 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
                 {uuid, FileUuid}, 8#000
             ),
-            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
+            CurrTime = utils:time(),
+            {ok, FileDoc} = file_meta:get(FileEntry),
+            #document{value = FileMeta} = FileDoc,
+            {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}}
+            ) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -286,8 +307,13 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
                 {uuid, FileUuid}, Mode
             ),
             ok = fslogic_event:emit_permission_changed(FileUuid),
-            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
+            CurrTime = utils:time(),
+            {ok, FileDoc} = file_meta:get(FileEntry),
+            #document{value = FileMeta} = FileDoc,
+            {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}}
+            ) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -318,8 +344,13 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
 set_transfer_encoding(_CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
         {ok, _} ->
-            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
+            CurrTime = utils:time(),
+            {ok, FileDoc} = file_meta:get(FileEntry),
+            #document{value = FileMeta} = FileDoc,
+            {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}}
+            ) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -384,8 +415,13 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
 set_mimetype(_CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
         {ok, _} ->
-            {ok, _} = file_meta:update(FileEntry, #{ctime => utils:time()}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileEntry) end),
+            CurrTime = utils:time(),
+            {ok, FileDoc} = file_meta:get(FileEntry),
+            #document{value = FileMeta} = FileDoc,
+            {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}}
+            ) end),
             #fuse_response{status = #status{code = ?OK}};
         {error, {not_found, file_meta}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -457,13 +493,18 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
         end,
     case length(FileChildren) of
         0 ->
-            ok = file_meta:delete(FileDoc),
             {ok, ParentDoc} = file_meta:get_parent(FileDoc),
-            MTime = utils:time(),
+            CurrTime = utils:time(),
+            #document{value = ParentMeta} = ParentDoc,
             {ok, _} = file_meta:update(ParentDoc, #{
-                mtime => MTime, ctime => MTime
+                mtime => CurrTime, ctime => CurrTime
             }),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(ParentDoc) end),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                ParentDoc#document{value = ParentMeta#file_meta{
+                    mtime = CurrTime, ctime = CurrTime}}
+            ) end),
+
+            ok = file_meta:delete(FileDoc),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
@@ -496,15 +537,26 @@ rename_file(CTX, SourceEntry, TargetPath) ->
 -spec rename_impl(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
 rename_impl(_CTX, SourceEntry, TargetPath) ->
     ok = file_meta:rename(SourceEntry, {path, TargetPath}),
+    {ok, FileDoc} = file_meta:get({path, TargetPath}),
     {ok, ParentDoc} = file_meta:get_parent({path, TargetPath}),
-    CTime = utils:time(),
-    {ok, _} = file_meta:update({path, TargetPath}, #{ctime => CTime}),
-    {ok, _} = file_meta:update(ParentDoc, #{mtime => CTime, ctime => CTime}),
+    CurrTime = utils:time(),
+
+    #document{value = ParentMeta} = ParentDoc,
+    {ok, _} = file_meta:update(ParentDoc, #{mtime => CurrTime, ctime => CurrTime}),
+
+    #document{value = FileMeta} = FileDoc,
+    {ok, _} = file_meta:update(FileDoc, #{ctime => CurrTime}),
+
     spawn(
         fun() ->
-            fslogic_event:emit_file_sizeless_attrs_update(ParentDoc),
-            fslogic_event:emit_file_sizeless_attrs_update({path, TargetPath})
+            fslogic_event:emit_file_sizeless_attrs_update(
+                ParentDoc#document{value = ParentMeta#file_meta{
+                    mtime = CurrTime, ctime = CurrTime
+                }}),
+            fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}})
         end),
+
     #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------

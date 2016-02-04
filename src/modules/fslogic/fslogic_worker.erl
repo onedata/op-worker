@@ -307,14 +307,18 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 
     Results.
 
-handle_read_events(Evts, Ctx) ->
+handle_read_events(Evts, _Ctx) ->
     lists:map(fun(#event{object = #read_event{file_uuid = FileUUID}}) ->
         case fslogic_times:calculate_atime({uuid, FileUUID}) of
             actual ->
                 ok;
             NewATime ->
-                {ok, _} = file_meta:update({uuid, FileUUID}, #{atime => NewATime}),
-                spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUUID}) end)
+                {ok, FileDoc} = file_meta:get({uuid, FileUUID}),
+                #document{value = FileMeta} = FileDoc,
+                {ok, _} = file_meta:update(FileDoc, #{atime => NewATime}),
+                spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                    FileDoc#document{value = FileMeta#file_meta{atime = NewATime}}
+                ) end)
         end
     end, Evts).
 
