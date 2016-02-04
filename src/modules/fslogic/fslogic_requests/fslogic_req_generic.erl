@@ -13,6 +13,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("types.hrl").
 -include("modules/events/types.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -296,7 +297,7 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
 %% @doc Returns encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:transfer_encoding()} | logical_file_manager:error_reply().
+    {ok, transfer_encoding()} | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?TRANSFER_ENCODING_XATTR_NAME) of
@@ -311,9 +312,8 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 %% @doc Sets encoding suitable for rest transfer.
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:transfer_encoding()) ->
-    ok | logical_file_manager:error_reply().
+-spec set_transfer_encoding(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, transfer_encoding()) ->
+    ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_transfer_encoding(_CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
@@ -331,7 +331,7 @@ set_transfer_encoding(_CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:cdmi_completion_status()} | logical_file_manager:error_reply().
+    {ok, cdmi_completion_status()} | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?CDMI_COMPLETION_STATUS_XATTR_NAME) of
@@ -349,9 +349,8 @@ get_cdmi_completion_status(_CTX, {uuid, FileUuid}) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:cdmi_completion_status()) ->
-    ok | logical_file_manager:error_reply().
+-spec set_cdmi_completion_status(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, cdmi_completion_status()) ->
+    ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
     case xattr:save(FileUuid, #xattr{name = ?CDMI_COMPLETION_STATUS_XATTR_NAME, value = CompletionStatus}) of
@@ -364,7 +363,7 @@ set_cdmi_completion_status(_CTX, {uuid, FileUuid}, CompletionStatus) ->
 %% @doc Returns mimetype of file.
 %%--------------------------------------------------------------------
 -spec get_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}) ->
-    {ok, xattr:mimetype()} | logical_file_manager:error_reply().
+    {ok, mimetype()} | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?read_attributes, 2}]).
 get_mimetype(_CTX, {uuid, FileUuid}) ->
     case xattr:get_by_name(FileUuid, ?MIMETYPE_XATTR_NAME) of
@@ -379,9 +378,8 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
 %%--------------------------------------------------------------------
 %% @doc Sets mimetype of file.
 %%--------------------------------------------------------------------
--spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()},
-    xattr:mimetype()) ->
-    ok | logical_file_manager:error_reply().
+-spec set_mimetype(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, mimetype()) ->
+    ok | error_reply().
 -check_permissions([{traverse_ancestors, 2}, {?write_attributes, 2}]).
 set_mimetype(_CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
@@ -477,7 +475,12 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
 -spec rename_dir(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
 -check_permissions([{?delete_subcontainer, {parent, 2}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir(CTX, SourceEntry, TargetPath) ->
-    rename_impl(CTX, SourceEntry, TargetPath).
+    case moving_into_itself(SourceEntry, TargetPath) of
+        true ->
+            #fuse_response{status = #status{code = ?EINVAL}};
+        false ->
+            rename_impl(CTX, SourceEntry, TargetPath)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Checks necessary permissions and renames file
@@ -531,3 +534,19 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
         _ -> ok
     end.
 
+%%--------------------------------------------------------------------
+%% Internal functions
+%%--------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if renamed entry is one of target path parents.
+%% @end
+%%--------------------------------------------------------------------
+-spec moving_into_itself(SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
+    boolean().
+moving_into_itself(SourceEntry, TargetPath) ->
+    {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
+    {_, ParentPath} = fslogic_path:basename_and_parent(TargetPath),
+    {ok, {_, ParentUUIDs}} = file_meta:resolve_path(ParentPath),
+    lists:any(fun(ParentUUID) -> ParentUUID =:= SourceUUID end, ParentUUIDs).

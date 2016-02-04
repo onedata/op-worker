@@ -78,13 +78,13 @@ prepare([{<<"children">>, From, To} | Tail], #{attributes := #file_attr{uuid = U
     {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
     {ok, ChildNum} = onedata_file_api:get_children_count(Auth, {uuid, Uuid}),
     {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
-    {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, From1, To1 - From1 + 1),
+    {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, To1 - From1 + 1, From1),
     Children = lists:map(
         fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Auth) end, List),
     [{<<"children">>, Children} | prepare(Tail, State)];
 prepare([<<"children">> | Tail], #{attributes := #file_attr{uuid = Uuid}, auth := Auth} = State) ->
     {ok, MaxChildren} = application:get_env(?APP_NAME, max_children_per_request),
-    {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, 0, MaxChildren + 1),
+    {ok, List} = onedata_file_api:ls(Auth, {uuid, Uuid}, MaxChildren + 1, 0),
     terminate_if_too_many_children(List, MaxChildren),
     Children = lists:map(
         fun({Uuid, Name}) -> distinguish_files(Uuid, Name, Auth) end, List),
