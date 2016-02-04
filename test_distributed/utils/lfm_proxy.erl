@@ -113,7 +113,7 @@ open(Worker, SessId, FileKey, OpenMode) ->
             Host ! {self(), Result}
         end).
 
--spec close(node(), logical_file_manager:handle()) -> ok| error_reply().
+-spec close(node(), logical_file_manager:handle()) -> ok | error_reply().
 close(Worker, TestHandle) ->
     exec(Worker,
         fun(Host) ->

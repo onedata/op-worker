@@ -68,14 +68,14 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
 -spec get_helper_params(fslogic_worker:ctx(),
     StorageId :: storage:id(), ForceCL :: boolean()) ->
     FuseResponse :: #fuse_response{} | no_return().
-get_helper_params(_Ctx, StorageId, true = _ForceCL) ->
+get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #helper_params{helper_name = <<"ProxyIO">>,
             helper_args = [
                 #helper_arg{key = <<"storage_id">>, value = StorageId}
             ]}};
 get_helper_params(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}},
-    StorageId, false = _ForceCL) ->
+    StorageId, false = _ForceProxy) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
     {HelperName, HelperArgsMap} = case fslogic_storage:select_helper(StorageDoc) of
         {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args}} ->

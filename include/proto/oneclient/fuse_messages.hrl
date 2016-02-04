@@ -82,7 +82,7 @@
 
 -record(get_helper_params, {
     storage_id :: storage:id(),
-    force_cluster_proxy = false :: boolean()
+    force_proxy_io = false :: boolean()
 }).
 
 -record(truncate, {
@@ -157,13 +157,26 @@
     value :: binary()
 }).
 
+-record(create_storage_test_file, {
+    storage_id :: storage:id(),
+    file_uuid :: file_meta:uuid()
+}).
+
+-record(verify_storage_test_file, {
+    storage_id :: storage:id(),
+    space_uuid :: file_meta:uuid(),
+    file_id :: helpers:file(),
+    file_content :: binary()
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
                         #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
                         #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
-                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{}.
+                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
+                        #create_storage_test_file{} | #verify_storage_test_file{}.
 
 
 -record(file_children, {
@@ -200,9 +213,22 @@
     value :: binary()
 }).
 
+-record(storage_test_file, {
+    storage_id :: storage:id(),
+    helper_params :: #helper_params{},
+    space_uuid :: file_meta:uuid(),
+    file_id :: helpers:file(),
+    file_content :: binary()
+}).
+
+-record(storage_test_file_verification, {
+    storage_id :: storage:id()
+}).
+
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
-    #cdmi_completion_status{} | #mimetype{} | #dir{}.
+    #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
+    #storage_test_file_verification{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

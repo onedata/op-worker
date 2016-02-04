@@ -131,8 +131,8 @@ translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentU
     #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)};
 translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
     #get_file_location{uuid = UUID, flags = translate_open_flags(Flags)};
-translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
-    #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
+translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}) ->
+    #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
 translate_from_protobuf(#'Close'{uuid = UUID}) ->
@@ -155,6 +155,12 @@ translate_from_protobuf(#'Xattr'{name = Name, value = Value}) ->
     #xattr{name = Name, value = Value};
 translate_from_protobuf(#'XattrList'{names = Names}) ->
     #xattr_list{names = Names};
+translate_from_protobuf(#'CreateStorageTestFile'{storage_id = Id, file_uuid = FileUuid}) ->
+    #create_storage_test_file{storage_id = Id, file_uuid = FileUuid};
+translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_uuid = SpaceUuid,
+    file_id = FId, file_content = FContent}) ->
+    #verify_storage_test_file{storage_id = SId, space_uuid = SpaceUuid,
+        file_id = FId, file_content = FContent};
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -177,7 +183,7 @@ translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
-    {read_subscription, #'ReadSubscription'{
+    {read_subscription, #'WriteSubscription'{
         counter_threshold = Sub#read_subscription.counter_threshold,
         time_threshold = Sub#read_subscription.time_threshold,
         size_threshold = Sub#read_subscription.size_threshold
@@ -247,7 +253,6 @@ translate_to_protobuf(#file_children{child_links = FileEntries}) ->
     {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
         translate_to_protobuf(ChildLink)
     end, FileEntries)}};
-translate_to_protobuf(#dir{}) -> undefined;
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
         helper_args = lists:map(fun(HelpersArg) ->
@@ -290,6 +295,13 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
     {xattr, #'Xattr'{name = Name, value = Value}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
+translate_to_protobuf(#storage_test_file{storage_id = StoargeId, helper_params = HelperParams,
+    space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}) ->
+    {_, Record} = translate_to_protobuf(HelperParams),
+    {storage_test_file, #'StorageTestFile'{storage_id = StoargeId, helper_params = Record,
+        space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
+translate_to_protobuf(#storage_test_file_verification{storage_id = StorageId}) ->
+    {storage_test_file_verification, #'StorageTestFileVerification'{storage_id = StorageId}};
 translate_to_protobuf(undefined) ->
     undefined.
 
