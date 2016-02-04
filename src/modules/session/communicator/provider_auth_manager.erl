@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Provider's authentication helper functions.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_auth_manager).
@@ -33,14 +33,15 @@ is_provider(#'OTPCertificate'{} = Cert) ->
         #'OTPCertificate'{tbsCertificate =
         #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
 
-        OU = lists:filtermap(fun([Attribute]) ->
-            case Attribute#'AttributeTypeAndValue'.type of
-                ?'id-at-organizationalUnitName' ->
-                    {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                    {true, str_utils:to_binary(Id)};
-                _ -> false
-            end
-                             end, Attrs),
+        OU = lists:filtermap(
+            fun([Attribute]) ->
+                case Attribute#'AttributeTypeAndValue'.type of
+                    ?'id-at-organizationalUnitName' ->
+                        {_, Id} = Attribute#'AttributeTypeAndValue'.value,
+                        {true, str_utils:to_binary(Id)};
+                    _ -> false
+                end
+            end, Attrs),
         [<<"Providers">>] =:= OU
     catch
         _:_ -> false
@@ -60,7 +61,7 @@ handshake(Cert, Conn) ->
     ProviderId = get_provider_id(Cert),
     Identity = #identity{provider_id = ProviderId},
     SessionId = session_manager:get_provider_session_id(incoming, ProviderId),
-    {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, Identity, Conn),
+    {ok, _} = session_manager:reuse_or_create_provider_session(SessionId, provider, Identity, Conn),
     SessionId.
 
 

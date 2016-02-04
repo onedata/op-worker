@@ -190,11 +190,11 @@ get_max_inactivity_period(rest) ->
     timer:seconds(Period);
 get_max_inactivity_period(provider) ->
     {ok, Period} = application:get_env(?APP_NAME,
-        fuse_session_max_inactivity_period_in_seconds_before_removal),
+        provider_session_max_inactivity_period_in_seconds_before_removal),
     timer:seconds(Period);
 get_max_inactivity_period(provider_outgoing) ->
     {ok, Period} = application:get_env(?APP_NAME,
-        fuse_session_max_inactivity_period_in_seconds_before_removal),
+        provider_session_max_inactivity_period_in_seconds_before_removal),
     timer:seconds(Period).
 
 %%--------------------------------------------------------------------

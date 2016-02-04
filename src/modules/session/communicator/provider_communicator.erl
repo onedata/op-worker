@@ -1,20 +1,21 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @author Rafal Slota
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides communication API between remote client and server.
+%%% This module provides communication API between providers.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_communicator).
--author("Krzysztof Trzepla").
+-author("Rafal Slota").
 
 -include("proto/oneclient/message_id.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -50,12 +51,7 @@ send(Msg, Ref) ->
 -spec send(Msg :: #client_message{} | term(), Ref :: connection:ref(),
     Retry :: non_neg_integer() | infinity) -> ok | {error, Reason :: term()}.
 send(#client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
-    case Ref of
-        Pid when is_pid(Pid) ->
-            ok;
-        SessId ->
-            ensure_connected(SessId)
-    end,
+    ensure_connected(Ref),
     case connection:send(Msg, Ref) of
         ok -> ok;
         {error, _} ->
@@ -66,12 +62,7 @@ send(#client_message{} = Msg, Ref, Retry) when Retry > 1; Retry == infinity ->
             end
     end;
 send(#client_message{} = Msg, Ref, 1) ->
-    case Ref of
-        Pid when is_pid(Pid) ->
-            ok;
-        SessId ->
-            ensure_connected(SessId)
-    end,
+    ensure_connected(Ref),
     connection:send(Msg, Ref);
 send(Msg, Ref, Retry) ->
     provider_communicator:send(#client_message{message_body = Msg}, Ref, Retry).
@@ -87,11 +78,11 @@ send(Msg, Ref, Retry) ->
 send_async(#client_message{} = Msg, Ref) ->
     connection:send_async(Msg, Ref);
 send_async(Msg, Ref) ->
-    communicator:send_async(#client_message{message_body = Msg}, Ref).
+    send_async(#client_message{message_body = Msg}, Ref).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends a message to the client and waits for a reply.
+%% Sends a message to the provider and waits for a reply.
 %% @end
 %%--------------------------------------------------------------------
 -spec communicate(Msg :: #client_message{} | term(), Ref :: connection:ref()) ->
@@ -150,8 +141,10 @@ communicate_async(Msg, Ref, Recipient) ->
 %% Ensures that there is at least one outgoing connection for given session.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_connected(session:id()) ->
+-spec ensure_connected(session:id() | pid()) ->
     ok | no_return().
+ensure_connected(Conn) when is_pid(Conn) ->
+    ok;
 ensure_connected(SessId) ->
     ProviderId = session_manager:session_id_to_provider_id(SessId),
     case session:get_random_connection(SessId) of
@@ -159,7 +152,7 @@ ensure_connected(SessId) ->
             {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
             lists:foreach(
                 fun(URL) ->
-                    Port = 5556,
+                    {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
                     connection:start_link(SessId, URL, Port, ranch_ssl2, timer:seconds(5))
                 end, URLs),
             ok;
