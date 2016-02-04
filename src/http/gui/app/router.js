@@ -1,3 +1,5 @@
+// Top router for the prototype app.
+
 import Ember from 'ember';
 import config from './config/environment';
 

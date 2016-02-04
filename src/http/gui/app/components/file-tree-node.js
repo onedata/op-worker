@@ -1,3 +1,10 @@
+<!--
+    This is a prototype template for file-tree-node component - a component
+    that renders a single file or directory in tree view, and recursively
+    renders the same component with its children (if it is a dir).
+-->
+
+
 import Ember from 'ember';
 
 export default Ember.Component.extend({

@@ -1,3 +1,5 @@
+// Main javascript file that initializes the prototype app.
+
 import Ember from 'ember';
 import Resolver from 'ember/resolver';
 import loadInitializers from 'ember/load-initializers';

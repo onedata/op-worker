@@ -1,3 +1,5 @@
+// This is a prototype model representing a file in file browser.
+
 import DS from 'ember-data';
 
 export default DS.Model.extend({

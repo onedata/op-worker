@@ -1,3 +1,5 @@
+// Main controller of prototype filebrowser the app.
+
 import Ember from 'ember';
 
 export default Ember.Controller.extend({
