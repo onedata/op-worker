@@ -8,8 +8,8 @@ Brings up dockers with full onedata environment.
 
 import os
 import copy
-import subprocess
 import json
+import sys
 from . import appmock, client, common, globalregistry, cluster_manager, \
     worker, provider_worker, cluster_worker, docker, dns
 
@@ -116,9 +116,10 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
         print('')
         # Run env configurator with gathered args
         command = '''epmd -daemon
-        ./env_configurator.escript \'{0}\''''
+./env_configurator.escript \'{0}\'
+echo $?'''
         command = command.format(json.dumps(env_configurator_input))
-        docker.run(
+        docker_output = docker.run(
             image='onedata/builder',
             interactive=True,
             tty=True,
@@ -127,8 +128,20 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
             name=common.format_hostname('env_configurator', uid),
             volumes=[(env_configurator_dir, '/root/build', 'ro')],
             dns_list=[dns_server],
-            command=command
+            command=command,
+            output=True
         )
+        # Result will contain output from env_configurator and result code in
+        # the last line
+        lines = docker_output.split('\n')
+        command_res_code = lines[-1]
+        command_output = '\n'.join(lines[:-1])
+        # print the output
+        print(command_output)
+        # check of env configuration succeeded
+        if command_res_code != '0':
+            sys.exit(1)
+
 
     return output
 
