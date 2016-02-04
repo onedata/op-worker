@@ -85,6 +85,7 @@
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
+    version_vector = #{},
     size = 0 :: non_neg_integer() | undefined
 }).
 

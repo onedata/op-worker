@@ -21,6 +21,9 @@
     'after'/5, before/4]).
 -export([run_synchronized/2]).
 
+-type doc() :: datastore:document().
+
+-export_type([doc/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
