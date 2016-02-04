@@ -64,7 +64,8 @@ all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 %%%===================================================================
 
 route_message_should_forward_messages_in_right_order(Config) ->
-    ?PERFORMANCE(?MODULE, route_message_should_forward_messages_in_right_order,
+    ?PERFORMANCE(
+%%        ?MODULE, route_message_should_forward_messages_in_right_order,
         Config, [
             {repeats, 10},
             {success_rate, 90},
@@ -121,7 +122,9 @@ route_message_should_forward_messages_in_right_order(Config) ->
     ).
 
 route_message_should_work_for_multiple_streams(Config) ->
-    ?PERFORMANCE(?MODULE, route_message_should_work_for_multiple_streams, Config,
+    ?PERFORMANCE(
+%%        ?MODULE, route_message_should_work_for_multiple_streams,
+        Config,
         [
             {repeats, 10},
             {success_rate, 90},
