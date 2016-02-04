@@ -17,7 +17,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("proto/oneclient/client_messages.hrl").
 -include_lib("proto/oneclient/stream_messages.hrl").
 
