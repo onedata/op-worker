@@ -1,17 +1,16 @@
 %%%--------------------------------------------------------------------
-%%% @author Michal Zmuda
+%%% @author Rafal Slota
 %%% @copyright (C) 2015 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc protocol listener starting & stopping
+%%% @doc provider's protocol listener starting & stopping
 %%% @end
 %%%--------------------------------------------------------------------
 -module(provider_listener).
 -behaviour(listener_behaviour).
--author("Tomasz Lichon").
--author("Michal Zmuda").
+-author("Rafal Slota").
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -34,7 +33,7 @@
 %%--------------------------------------------------------------------
 -spec port() -> integer().
 port() ->
-    {ok, Port} = application:get_env(?CLUSTER_WORKER_APP_NAME, protocol_handler_port),
+    {ok, Port} = application:get_env(?CLUSTER_WORKER_APP_NAME, provider_protocol_handler_port),
     Port.
 
 
@@ -45,7 +44,7 @@ port() ->
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
-    {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
+    {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
     {ok, DispatcherPoolSize} =
         application:get_env(?APP_NAME, protocol_handler_pool_size),
     {ok, CertFile} =
@@ -64,7 +63,7 @@ start() ->
     Result = ranch:start_listener(?TCP_PROTO_LISTENER, DispatcherPoolSize,
         ranch_ssl2, [
             {ip, Ip},
-            {port, Port + 1},
+            {port, Port},
             {certfile, CertFile},
             {cacerts, CACerts},
             {verify_type, verify_peer},
@@ -102,7 +101,7 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    {ok, ProtoPort} = application:get_env(?APP_NAME, protocol_handler_port),
+    {ok, ProtoPort} = application:get_env(?APP_NAME, provider_protocol_handler_port),
     case ssl2:connect("127.0.0.1", ProtoPort, [{packet, 4}, {active, false}]) of
         {ok, Sock} ->
             ssl2:close(Sock),

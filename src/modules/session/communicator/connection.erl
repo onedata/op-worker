@@ -79,11 +79,7 @@ init(Ref, Socket, Transport, _Opts) ->
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
     {Ok, Closed, Error} = Transport:messages(),
-    Certificate =
-        case ssl2:peercert(Socket) of
-            {error, _} -> undefined;
-            {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
-        end,
+    Certificate = get_cert(Socket),
 
     gen_server:enter_loop(?MODULE, [], #state{
         socket = Socket,
@@ -95,6 +91,14 @@ init(Ref, Socket, Transport, _Opts) ->
         connection_type = incoming
     }, ?TIMEOUT).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes the outgoing connection.
+%% @end
+%%--------------------------------------------------------------------
+-spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
+    no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
     TLSSettings = [{certfile, gr_plugin:get_cert_path()}, {keyfile, gr_plugin:get_key_path()}],
     ?info("Connecting to ~p ~p", [Hostname, Port]),
@@ -102,13 +106,9 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
 
     {Ok, Closed, Error} = Transport:messages(),
-    Certificate =
-        case ssl2:peercert(Socket) of
-            {error, _} -> undefined;
-            {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
-        end,
+    Certificate = get_cert(Socket),
 
-    session_manager:reuse_or_create_provider_outgoing_session(SessionId, #identity{
+    session_manager:reuse_or_create_provider_session(SessionId, provider_outgoing, #identity{
         provider_id = session_manager:session_id_to_provider_id(SessionId)}, self()),
 
     ok = proc_lib:init_ack({ok, self()}),
@@ -446,3 +446,18 @@ send_server_message(Socket, Transport, ServerMsg) ->
 send_client_message(Socket, Transport, ClientMsg) ->
     {ok, Data} = serializator:serialize_client_message(ClientMsg),
     ok = Transport:send(Socket, Data).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns OTP certificate for given socket or 'undefined' if there isn't one.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_cert(Socket :: ssl2:socket()) ->
+    undefined | #'OTPCertificate'{}.
+get_cert(Socket) ->
+    case ssl2:peercert(Socket) of
+        {error, _} -> undefined;
+        {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
+    end.
