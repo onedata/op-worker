@@ -137,8 +137,8 @@ wrap_response(Response, Code) ->
 %% Wraps response in a fuse response record.
 %% @end
 %%--------------------------------------------------------------------
--spec wrap_response(Response :: tuple(), Code :: atom(), Description :: binary()) ->
-    Msg :: #fuse_response{}.
+-spec wrap_response(Response :: tuple(), Code :: atom(),
+    Description :: binary() | undefined) -> Msg :: #fuse_response{}.
 wrap_response(Response, Code, Description) ->
     #fuse_response{
         status = #status{code = Code, description = Description},
