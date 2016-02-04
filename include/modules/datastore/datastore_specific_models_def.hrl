@@ -18,7 +18,7 @@
 %% Identity containing user_id
 -record(identity, {
     user_id :: onedata_user:id(),
-    provider_id :: binary()
+    provider_id :: oneprovider:id()
 }).
 
 %% User session
@@ -103,6 +103,11 @@
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
     credentials :: #{storage:id() => ceph_user:credentials()}
+}).
+
+%% Model that maps onedata user to Amazon S3 user
+-record(s3_user, {
+    credentials :: #{storage:id() => s3_user:credentials()}
 }).
 
 -endif.

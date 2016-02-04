@@ -100,7 +100,6 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
     ?info("Connecting to ~p ~p", [Hostname, Port]),
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
-    ?info("OK Connecting to ~p ~p", [Hostname, Port]),
 
     {Ok, Closed, Error} = Transport:messages(),
     Certificate =
@@ -128,7 +127,7 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
 %% Synchronously sends server message to client.
 %% @end
 %%--------------------------------------------------------------------
--spec send(Msg :: #server_message{}, Ref :: ref()) ->
+-spec send(Msg :: #server_message{} | #client_message{}, Ref :: ref()) ->
     ok | {error, Reason :: term()} | {exit, Reason :: term()}.
 send(Msg, Ref) when is_pid(Ref) ->
     try
@@ -147,7 +146,7 @@ send(Msg, Ref) ->
 %% Asynchronously sends server message to client.
 %% @end
 %%--------------------------------------------------------------------
--spec send_async(Msg :: #server_message{}, Ref :: ref()) ->
+-spec send_async(Msg :: #server_message{} | #client_message{}, Ref :: ref()) ->
     ok | {error, Reason :: term()}.
 send_async(Msg, Ref) when is_pid(Ref) ->
     try
@@ -198,11 +197,11 @@ handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection
     transport = Transport}) ->
     send_client_message(Socket, Transport, ServerMsg),
     NewState = case ServerMsg of
-        #client_message{message_id = #message_id{recipient = Pid, id = MessageId}} when is_pid(Pid) ->
-            State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)};
-        _ ->
-            State
-    end,
+                   #client_message{message_id = #message_id{recipient = Pid, id = MessageId}} when is_pid(Pid) ->
+                       State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)};
+                   _ ->
+                       State
+               end,
     {reply, ok, NewState};
 
 handle_call(_Request, _From, State) ->
@@ -385,18 +384,17 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 %% Handle nomal client_message
 %% @end
 %%--------------------------------------------------------------------
--spec handle_normal_message(#state{}, #client_message{}) ->
+-spec handle_normal_message(#state{}, #client_message{} | #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
     transport = Transp}, Msg0) ->
     Msg1 = case Msg0 of
-              #client_message{} ->
-                  Msg0#client_message{session_id = SessId};
-              _ ->
-                  Msg0
-          end,
-    ?debug("Handle normal message 1 ~p", [Msg1]),
+               #client_message{} ->
+                   Msg0#client_message{session_id = SessId};
+               _ ->
+                   Msg0
+           end,
     {State, Msg} = update_message_id(State0, Msg1),
     case router:preroute_message(Msg, SessId) of
         ok ->
@@ -450,7 +448,7 @@ send_server_message(Socket, Transport, ServerMsg) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_client_message(Socket :: ssl2:socket(), Transport :: module(),
-    ServerMessage :: #server_message{}) -> ok.
-send_client_message(Socket, Transport, ServerMsg) ->
-    {ok, Data} = serializator:serialize_client_message(ServerMsg),
+    ServerMessage :: #client_message{}) -> ok.
+send_client_message(Socket, Transport, ClientMsg) ->
+    {ok, Data} = serializator:serialize_client_message(ClientMsg),
     ok = Transport:send(Socket, Data).

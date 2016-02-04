@@ -88,13 +88,13 @@
 %% Creates a directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(SessId :: session:id(), Path :: file_path()) ->
+-spec mkdir(SessId :: session:id(), Path :: file_path()) -> 
     {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path) ->
     {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
     mkdir(SessId, Path, Mode).
 
--spec mkdir(SessId :: session:id(), Path :: file_path(),
+-spec mkdir(SessId :: session:id(), Path :: file_path(), 
     Mode :: file_meta:posix_permissions()) ->
     {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(SessId, Path, Mode) ->

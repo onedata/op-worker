@@ -44,12 +44,6 @@ all() ->
         chmod_test, chown_test, truncate_test, open_test, read_test, write_test, release_test, flush_test, fsync_test
     ].
 
-%%-performance({test_cases,
-%%    [
-%%        mkdir_test
-%%    ]
-%%}).
-
 
 %%%===================================================================
 %%% Test functions
@@ -68,23 +62,19 @@ access_test(Config) ->
     ?assertMatch(ok, call(Config, access, [File, 0])).
 
 mknod_test(Config) ->
-    File = gen_filename(),
-
-    ?assertMatch(ok, call(Config, mknod, [File, 8#644, reg])),
-    ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)])).
-
+    lists:foreach(fun({ExpectedType, Type}) ->
+        File = gen_filename(),
+        ?assertMatch(ok, call(Config, mknod, [File, 8#644, Type])),
+        {ok, FileInfo} = ?assertMatch({ok, _}, call(Config, file, read_file_info, [?path(Config, File)])),
+        ?assertMatch(ExpectedType, element(3, FileInfo)),
+        ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)]))
+    end, [{regular, reg}, {device, chr}, {device, blk}, {other, fifo}, {other, sock}]).
 
 mkdir_test(Config) ->
-    lists:foreach(
-        fun(N) ->
-%%            spawn(fun() ->
-                File = gen_filename(),
-            ct:print("~p: ~p", [N, File]),
+    File = gen_filename(),
 
-            ?assertMatch(ok, call(Config, mkdir, [File, 8#755])),
-            ?assertMatch(ok, call(Config, file, del_dir, [?path(Config, File)]))
-        end, lists:seq(1, 10000)),
-    timer:sleep(10).
+    ?assertMatch(ok, call(Config, mkdir, [File, 8#755])),
+    ?assertMatch(ok, call(Config, file, del_dir, [?path(Config, File)])).
 
 unlink_test(Config) ->
     File = gen_filename(),
@@ -135,8 +125,14 @@ truncate_test(Config) ->
 open_test(Config) ->
     File = gen_filename(),
 
-    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch({ok, _}, call(Config, open, [File, read])).
+    call(Config, file, open, [?path(Config, File), write]),
+    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, write])),
+    ?assertMatch({ok, 4}, call(Config, write, [File, 0, <<"test">>])),
+    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, read])),
+    ?assertMatch({ok, <<"test">>}, call(Config, read, [File, 0, 4])),
+    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, rdwr])),
+    ?assertMatch({ok, 5}, call(Config, write, [File, 0, <<"test2">>])),
+    ?assertMatch({ok, <<"test2">>}, call(Config, read, [File, 0, 5])).
 
 read_test(Config) ->
     File = gen_filename(),
@@ -210,8 +206,7 @@ gen_filename() ->
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),
     ctx_server(Config, CTX).
-ctx_server(Config, _) ->
-    CTX = helpers:new_handle(<<"DirectIO">>, [?path(Config, "")]),
+ctx_server(Config, CTX) ->
     receive
         {Pid, get} ->
             Pid ! CTX;

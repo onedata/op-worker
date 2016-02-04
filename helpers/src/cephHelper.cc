@@ -54,7 +54,6 @@ void CephHelper::ash_unlink(
     ret = ctx->ioCTX.aio_remove(callbackDataPtr->fileId, completion);
     if (ret < 0) {
         completion->release();
-        callback(makePosixError(ret));
         delete callbackDataPtr;
         return callback(makePosixError(ret));
     }

@@ -40,12 +40,11 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    gen_path/1, rename/2, setup_onedata_user/1]).
+    gen_path/1, gen_storage_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
     is_spaces_dir/2]).
 -export([fix_parent_links/2, fix_parent_links/1]).
-
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -154,10 +153,26 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
          end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Fixes links to given document in its parent. Assumes that link to parent is valid.
+%% If the parent entry() is known its safer to use fix_parent_links/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec fix_parent_links(entry()) ->
+    ok | no_return().
 fix_parent_links(Entry) ->
     {ok, Parent} = get_parent(Entry),
     fix_parent_links(Parent, Entry).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fixes links to given document in its parent. Also fixes 'parent' link.
+%% @end
+%%--------------------------------------------------------------------
+-spec fix_parent_links(Parent :: entry(), File :: entry()) ->
+    ok | no_return().
 fix_parent_links(Parent, Entry) ->
     {ok, #document{} = ParentDoc} = get(Parent),
     {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
@@ -393,6 +408,19 @@ gen_path(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Generate storage file_meta:path() for given file_meta:entry()
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_path(entry()) -> {ok, path()} | datastore:generic_error().
+gen_storage_path({path, Path}) when is_binary(Path) ->
+    {ok, Path};
+gen_storage_path(Entry) ->
+    ?run(begin
+        gen_storage_path2(Entry, [])
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Resolves given file_meta:path() and returns file_meta:entry() along with list of
 %% all ancestors' UUIDs.
 %% @end
@@ -507,7 +535,7 @@ setup_onedata_user(UUID) ->
                                 ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                             }})
             end
-        end, Spaces),
+                      end, Spaces),
 
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
             #document{key = fslogic_uuid:default_space_uuid(UUID),
@@ -693,7 +721,7 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                  after 200 ->
                      ?error("set_scopes error for entry: ~p", [Entry])
                  end
-             end, Setters),
+                           end, Setters),
              Res
          end).
 
@@ -723,10 +751,11 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Internal helper for gen_path/1. Accumulates all intermediate documents and concatenates them into path().
+%% Internal helper for gen_path/1. Accumulates all file meta names
+%% and concatenates them into path().
 %% @end
 %%--------------------------------------------------------------------
--spec gen_path2(entry(), [datastore:document()]) -> {ok, path()} | datastore:generic_error() | no_return().
+-spec gen_path2(entry(), [name()]) -> {ok, path()} | datastore:generic_error() | no_return().
 gen_path2(Entry, Tokens) ->
     SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
     {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = get(Entry),
@@ -738,6 +767,22 @@ gen_path2(Entry, Tokens) ->
             gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
             gen_path2({uuid, ParentUUID}, [Name | Tokens])
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Internal helper for gen_storage_path/1. Accumulates all file meta names
+%% and concatenates them into storage path().
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_path2(entry(), [name()]) -> {ok, path()} | datastore:generic_error() | no_return().
+gen_storage_path2(Entry, Tokens) ->
+    {ok, #document{value = #file_meta{name = Name}} = Doc} = get(Entry),
+    case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
+        {ok, {?ROOT_DIR_UUID, _}} ->
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
+        {ok, {ParentUUID, _}} ->
+            gen_storage_path2({uuid, ParentUUID}, [Name | Tokens])
     end.
 
 

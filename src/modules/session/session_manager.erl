@@ -120,7 +120,7 @@ reuse_or_create_provider_outgoing_session(SessId, Iden, Con) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates FUSE session or if session exists reuses it.
+%% Creates provider's session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_provider_session(SessId :: session:id(), Iden :: session:identity(), Con :: pid()) ->
@@ -235,10 +235,24 @@ remove_session(SessId) ->
     worker_proxy:call(?SESSION_MANAGER_WORKER, {remove_session, SessId}).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates session id for given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
 get_provider_session_id(Type, ProviderId) ->
-    {Type, provider, ProviderId}.
+    base64:encode(term_to_binary({Type, provider, ProviderId})).
 
-session_id_to_provider_id({_, provider, ProviderId}) ->
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets provider's id from given session (assumes that the session was created for provider).
+%% @end
+%%--------------------------------------------------------------------
+-spec session_id_to_provider_id(session:id()) -> oneprovider:id().
+session_id_to_provider_id(SessId) ->
+    {_, provider, ProviderId} = binary_to_term(base64:decode(SessId)),
     ProviderId.
 
 %%%===================================================================

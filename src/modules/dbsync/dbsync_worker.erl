@@ -33,7 +33,7 @@
 -type change() :: #change{}.
 -type batch() :: #batch{}.
 
--export_type([change/0, batch/0]).
+-export_type([change/0, batch/0, queue/0]).
 
 
 %% Record for storing current state of dbsync stream queue.
@@ -72,7 +72,7 @@ init(_Args) ->
 %% Global queue will be restarted after crash.
 %% @end
 %%--------------------------------------------------------------------
--spec init_stream(Since :: non_neg_integer(), Until :: non_neg_integer(), Queue :: queue()) ->
+-spec init_stream(Since :: non_neg_integer(), Until :: non_neg_integer() | infinity, Queue :: queue()) ->
     {ok, pid()} | {error, Reason :: term()}.
 init_stream(Since, Until, Queue) ->
     ?info("[ DBSync ]: Starting stream ~p ~p ~p", [Since, Until, Queue]),
@@ -87,11 +87,12 @@ init_stream(Since, Until, Queue) ->
     end,
 
     timer:send_after(100, dbsync_worker, {timer, {flush_queue, Queue}}),
-    couchdb_datastore_driver:changes_start_link(fun
-        (_, stream_ended, _) ->
-            worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
-        (Seq, Doc, Model) ->
-            worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
+    couchdb_datastore_driver:changes_start_link(
+        fun
+            (_, stream_ended, _) ->
+                worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
+            (Seq, Doc, Model) ->
+                worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
         end, Since, Until).
 
 %%--------------------------------------------------------------------
@@ -117,7 +118,7 @@ handle({reemit, Msg}) ->
 
 handle(bcast_status) ->
     timer:send_after(timer:seconds(15), dbsync_worker, {timer, bcast_status}),
-    catch bcast_status();
+        catch bcast_status();
 
 handle(requested_bcast_status) ->
     bcast_status();
@@ -145,7 +146,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
                 {error, Reason} ->
                     ?error("Unable to find space id for document ~p due to: ~p", [Doc, Reason]),
                     {error, Reason}
-            end ;
+            end;
         false ->
             ?debug("Skipping doc ~p", [Doc]),
             ok
@@ -162,7 +163,7 @@ handle({flush_queue, QueueKey}) ->
                     update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
                     #batch{since = Until, until = Until}
                 end,
-            BatchMap),
+                BatchMap),
 
             case IsRemoved of
                 true ->
@@ -228,7 +229,7 @@ queue_remove(QueueKey, Until) ->
                         fun(_SpaceId, #batch{} = B) ->
                             B#batch{until = Until}
                         end,
-                    BatchMap),
+                        BatchMap),
                     ?debug("Removing queue with Batch ~p", [NewBatchMap]),
                     Q#queue{removed = true, batch_map = NewBatchMap}
             end
@@ -252,7 +253,7 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
             BatchMap = Queue1#queue.batch_map,
             Since = Queue1#queue.since,
             Batch0 = maps:get(SpaceId, BatchMap, #batch{since = Since, until = Until}),
-            Batch  = Batch0#batch{changes = [Change | Batch0#batch.changes], until = Until},
+            Batch = Batch0#batch{changes = [Change | Batch0#batch.changes], until = Until},
             Queue1#queue{batch_map = maps:put(SpaceId, Batch, BatchMap)}
         end).
 
@@ -285,13 +286,14 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Sin
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, [#change{seq = Seq, doc = #document{key = Key} = Doc, model = ModelName} = Change | T]) ->
+apply_changes(SpaceId, [#change{doc = #document{key = _Key} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
         {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
         spawn(
             fun() ->
-                dbsync_events:change_replicated(SpaceId, Change)
+                dbsync_events:change_replicated(SpaceId, Change),
+                ok
             end),
         apply_changes(SpaceId, T)
     catch
@@ -337,7 +339,7 @@ is_file_scope(#document{value = Value}) when is_tuple(Value) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% For given document returns
+%% For given document returns file's UUID that is associated with this document in some way.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_scope(datastore:document()) ->
@@ -354,6 +356,14 @@ get_file_scope(#document{value = #file_location{uuid = FileUUID}}) ->
     FileUUID.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns cached SpaceId for given document. If there is no cached value
+%% calculates new one and puts into the cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_id(datastore:document()) ->
+    {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id(#document{key = Key} = Doc) ->
     case state_get({space_id, Key}) of
         undefined ->
@@ -362,6 +372,15 @@ get_space_id(#document{key = Key} = Doc) ->
             {ok, SpaceId}
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given document returns SpaceId and puts this value to cache using given key.
+%% This cache may be used later on by get_space_id/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
+    {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
     FileUUID = get_file_scope(Doc),
     case file_meta:get_scope({uuid, FileUUID}) of
@@ -381,11 +400,18 @@ get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates sequence number for given Provider and Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_current_seq(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
+    ok.
 update_current_seq(ProviderId, SpaceId, SeqNum) ->
     Key = {current_seq, ProviderId, SpaceId},
     OP =
-        fun (undefined) ->
-                SeqNum;
+        fun(undefined) ->
+            SeqNum;
             (CurrentSeq) ->
                 max(SeqNum, CurrentSeq)
         end,
@@ -396,12 +422,24 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
             worker_host:state_update(dbsync_worker, Key, OP)
     end.
 
-get_current_seq(SpaceId) ->
-    case get_current_seq(oneprovider:get_provider_id(), SpaceId) of
-        undefined -> 0;
-        O -> O
-    end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets sequence number for local provider and given Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_current_seq(SpaceId :: binary()) ->
+    non_neg_integer().
+get_current_seq(SpaceId) ->
+    get_current_seq(oneprovider:get_provider_id(), SpaceId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets sequence number for given Provider and Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_current_seq(oneprovider:id(), SpaceId :: binary()) ->
+    non_neg_integer().
 get_current_seq(ProviderId, SpaceId) ->
     case worker_host:state_get(dbsync_worker, {current_seq, ProviderId, SpaceId}) of
         undefined -> 0;
@@ -409,18 +447,32 @@ get_current_seq(ProviderId, SpaceId) ->
     end.
 
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends status to all providers that support at least one common space with local provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec bcast_status() ->
+    ok.
 bcast_status() ->
     SpaceIds = dbsync_utils:get_spaces_for_provider(),
     lists:foreach(
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
-            ?info("BCast ~p ~p", [CurrentSeq, SpaceId]),
+            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
             {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Handle received status broadcast. If received status and last updated status
+%% doesn't match, missing changes will be requested.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_status_received(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
+    ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
     ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
@@ -431,13 +483,28 @@ on_status_received(ProviderId, SpaceId, SeqNum) ->
             ok
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Request changes for specific provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_request_changes(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
 do_request_changes(ProviderId, Since, Until) ->
     dbsync_proto:changes_request(ProviderId, Since, Until).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Stash changes batch in memory for further use.
+%% @end
+%%--------------------------------------------------------------------
+-spec stash_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch()) ->
+    ok | no_return().
 stash_batch(ProviderId, SpaceId, Batch) ->
     worker_host:state_update(dbsync_worker, {stash, ProviderId, SpaceId},
-        fun (undefined) ->
+        fun(undefined) ->
             [Batch];
             (Batches) ->
                 [Batch | Batches]

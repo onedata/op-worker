@@ -5,10 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Protocol messages for dbsync
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Rafal Slota").
+
+-ifndef(DBSYNC_MESSAGES_HRL).
+-define(DBSYNC_MESSAGES_HRL, 1).
 
 -record(dbsync_request, {
     message_body
@@ -47,3 +50,5 @@
     since_seq,
     until_seq
 }).
+
+-endif.

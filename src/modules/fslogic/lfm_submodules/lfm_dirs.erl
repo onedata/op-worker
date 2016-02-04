@@ -29,7 +29,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(fslogic_worker:ctx(), Path :: file_path(),
+-spec mkdir(fslogic_worker:ctx(), Path :: file_path(), 
     Mode :: file_meta:posix_permissions()) ->
     {ok, DirUUID :: file_uuid()} | error_reply().
 mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
@@ -52,7 +52,7 @@ mkdir(#fslogic_ctx{session_id = SessId} = _CTX, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: {uuid, file_uuid()},
+-spec ls(SessId :: session:id(), FileKey :: {uuid, file_uuid()}, 
     Limit :: integer(), Offset :: integer()) ->
     {ok, [{file_uuid(), file_name()}]} | error_reply().
 ls(SessId, {uuid, UUID}, Limit, Offset) ->

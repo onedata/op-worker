@@ -29,9 +29,8 @@
 -export([init/0, set_threads_number/1]).
 -export([new_helper_obj/2, new_helper_ctx/1, set_user_ctx/2, get_user_ctx/1]).
 -export([username_to_uid/1, groupname_to_gid/1]).
--export([set_flags/2, get_flags/1, get_flag_value/2]).
--export([getattr/3, access/4, mknod/5, mkdir/4, unlink/3, rmdir/3, symlink/4, rename/4, link/4, chmod/4, chown/5]).
--export([truncate/4, open/3, read/5, write/5, release/3, flush/3, fsync/4]).
+-export([getattr/3, access/4, mknod/6, mkdir/4, unlink/3, rmdir/3, symlink/4, rename/4, link/4, chmod/4, chown/5]).
+-export([truncate/4, open/4, read/5, write/5, release/3, flush/3, fsync/4]).
 
 %%%===================================================================
 %%% API
@@ -62,13 +61,6 @@ new_helper_obj(_HelperName, _HelperArgs) ->
 new_helper_ctx(_HelperObj) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
-%%--------------------------------------------------------------------
-%% @doc Creates new helper context object. Returned handle is only valid within local Erlang-VM.
-%% @end
-%%--------------------------------------------------------------------
--spec get_flag_value(HelperCTX :: resource_handle(), flag() | open_mode() | file_type()) -> non_neg_integer().
-get_flag_value(_HelperCTX, _Flag) ->
-    erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
 %% @doc Sets FS UID / FS GID in given helper context.
@@ -104,22 +96,6 @@ groupname_to_gid(_GName) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
-%% @doc Set 'flags' field in helper context.
-%% @end
-%%--------------------------------------------------------------------
--spec set_flags(HelperCTX :: resource_handle(), [flag()]) -> ok.
-set_flags(_HelperCTX, _Flags) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-%%--------------------------------------------------------------------
-%% @doc Gets 'flags' value from helper context.
-%% @end
-%%----------------------------------------------------
--spec get_flags(HelperCTX :: resource_handle()) -> {ok, Flags :: [flag()]}.
-get_flags(_HelperCTX) ->
-    erlang:nif_error(helpers_nif_not_loaded).
-
-%%--------------------------------------------------------------------
 %% @doc Helper NIF method call. First argument shall be helper object from new_helper_obj/2. Second argument
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
 %% @end
@@ -144,9 +120,10 @@ access(_HelperInstance, _HelperCTX, _File, _Mask) ->
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
 %% @end
 %%--------------------------------------------------------------------
--spec mknod(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(), Mode :: non_neg_integer(), _Dev :: integer()) ->
+-spec mknod(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file(),
+    Mode :: non_neg_integer(), Flags :: [flag()], Dev :: integer()) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-mknod(_HelperInstance, _HelperCTX, _File, _Mode, _Dev) ->
+mknod(_HelperInstance, _HelperCTX, _File, _Mode, _Flags, _Dev) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
@@ -244,9 +221,10 @@ truncate(_HelperInstance, _HelperCTX, _File, _Size) ->
 %%      shall be context object from new_helper_ctx/0. All other arguments are described in corresponding helper documentacion.
 %% @end
 %%--------------------------------------------------------------------
--spec open(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(), File :: helpers:file()) ->
+-spec open(HelperInstance :: resource_handle(), HelperCTX :: resource_handle(),
+    File :: helpers:file(), Flags :: [flag()]) ->
     {ok, request_id()} | {error, Reason :: helpers:error_code()}.
-open(_HelperInstance, _HelperCTX, _File) ->
+open(_HelperInstance, _HelperCTX, _File, _Flags) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 %%--------------------------------------------------------------------
@@ -350,7 +328,9 @@ init() ->
 set_threads_number() ->
     {ok, CephThreads} = application:get_env(?APP_NAME, ceph_helper_threads_number),
     {ok, DioThreads} = application:get_env(?APP_NAME, direct_io_helper_threads_number),
+    {ok, S3Threads} = application:get_env(?APP_NAME, s3_helper_threads_number),
     set_threads_number(#{
         ?CEPH_HELPER_NAME => CephThreads,
-        ?DIRECTIO_HELPER_NAME => DioThreads
+        ?DIRECTIO_HELPER_NAME => DioThreads,
+        ?S3_HELPER_NAME => S3Threads
     }).

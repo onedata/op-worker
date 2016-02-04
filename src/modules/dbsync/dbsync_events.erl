@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc DBSync hooks.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_events).
@@ -23,10 +23,19 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Hook that runs just after change was replicated from remote provider.
+%% Return value and any errors are ignored.
+%% @end
+%%--------------------------------------------------------------------
+-spec change_replicated(SpaceId :: binary(), dbsync_worker:change()) ->
+    any().
 change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
-    ?info("NOTIFY changed file ~p", [FileUUID]),
+    ?debug("change_replicated: changed file_meta ~p", [FileUUID]),
     fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
-change_replicated(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
+change_replicated(_SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
+    ?debug("change_replicated: changed file_location ~p", [FileUUID]),
     replication_dbsync_hook:on_file_location_change(SpaceId, Doc),
     fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
     fslogic_event:emit_file_location_update({uuid, FileUUID}, []);
