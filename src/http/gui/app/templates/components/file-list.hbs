@@ -14,7 +14,7 @@
   value=currentSpaceId}}
     <div style="display: inline-block" class="btn-group" role="group"
          aria-label="...">
-        {{#each spaceDirOption in spaceDirOptions}}
+        {{#each spaceDirOptions as |spaceDirOption|}}
           {{#if spaceDirOption.selected}}
               <button type="button" class="btn btn-success"
                 {{action 'changeCurrentDir' spaceDirOption.space.id}}>
@@ -47,7 +47,7 @@
 <!--Rename-->
     <!--</button>-->
     <button type="button" class="btn btn-default"
-      {{action 'remove'}} {{bind-attr disabled='isNoneSelected'}}>
+      {{action 'remove'}} disabled={{if isNoneSelected 'true' 'false'}}>
         Remove
     </button>
   {{#if areAllSelected}}
@@ -79,7 +79,7 @@
     min-height: 300px; max-height: 500px; overflow-y: auto;
     min-width: 400px; max-width: 400px; overflow-x: auto;">
       {{#if sortedChildren.length}}
-        {{#each child in sortedChildren}}
+        {{#each sortedChildren as |child|}}
           {{file-tree-node file=child clickAction='fileClicked'}}
         {{/each}}
       {{else}}

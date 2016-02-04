@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
 # Path to nvm binary
 NVM_BINARY=/usr/lib/nvm/nvm.sh
 
@@ -10,4 +8,4 @@ NVM_BINARY=/usr/lib/nvm/nvm.sh
 # Make sure NVM loads node binaries
 nvm use default node
 # Run the tests
-cd test_gui && ember test --reporter xunit
+cd test_gui && ember test --reporter xunit > TEST-gui.xml

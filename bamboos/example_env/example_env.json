@@ -236,6 +236,7 @@
         "spaces": {
             "space1": {
                 "displayed_name": "space1",
+                "storage": "/mnt/st1",
                 "users": [
                     "user1",
                     "user2",
@@ -253,6 +254,7 @@
             },
             "space2": {
                 "displayed_name": "space2",
+                "storage": "/mnt/st1",
                 "users": [
                     "user2"
                 ],
