@@ -86,7 +86,7 @@ serialize_server_message(#server_message{message_id = MsgId, message_stream = Ms
 
 %%--------------------------------------------------------------------
 %% @doc
-%% serialize server message to protobuf binary data
+%% serialize client message to protobuf binary data
 %% @end
 %%--------------------------------------------------------------------
 -spec serialize_client_message(#client_message{}) -> {ok, binary()} | no_return().
