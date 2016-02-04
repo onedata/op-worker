@@ -87,8 +87,11 @@ read_dir(CTX, File, Offset, Size) ->
         actual ->
             ok;
         NewATime ->
+            #document{value = FileMeta} = FileDoc,
             {ok, _} = file_meta:update(FileDoc, #{atime => NewATime}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(FileDoc) end)
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{atime = NewATime}}
+            ) end)
     end,
 
     SpacesKey = fslogic_uuid:spaces_uuid(UserId),

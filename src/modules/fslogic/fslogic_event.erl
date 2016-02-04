@@ -54,7 +54,7 @@ emit_file_sizeless_attrs_update(FileEntry) ->
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new times for file ~p to all subscribers", [FileEntry]),
             TimeFileAttr = FileAttr#file_attr{size = -1},
-            event:emit(#event{object = #update_event{object = TimeFileAttr}}, {exclude, []});
+            event:emit(#event{object = #update_event{object = TimeFileAttr}});
         {error, Reason} ->
             ?error("Unable to get new times for file ~p due to: ~p", [FileEntry, Reason]),
             {error, Reason}
