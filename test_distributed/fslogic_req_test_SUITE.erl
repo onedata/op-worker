@@ -40,7 +40,6 @@
     default_permissions_test/1
 ]).
 
--performance({test_cases, []}).
 all() ->
     ?ALL([
         fslogic_get_file_attr_test,

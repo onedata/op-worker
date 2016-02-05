@@ -39,7 +39,6 @@
     lfm_acl_test/1
 ]).
 
--performance({test_cases, []}).
 all() ->
     ?ALL([
         fslogic_new_file_test,

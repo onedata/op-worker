@@ -41,22 +41,22 @@
     sequencer_in_stream_should_unregister_from_sequencer_manager_when_end_of_stream/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    sequencer_in_stream_should_register_with_sequencer_manager_on_init,
-    sequencer_in_stream_should_unregister_from_sequencer_manager_on_terminate,
-    sequencer_in_stream_should_send_message_stream_reset_on_init,
-    sequencer_in_stream_should_send_message_acknowledgement_on_terminate,
-    sequencer_in_stream_should_send_message_request_when_receiving_timout_exceeded,
-    sequencer_in_stream_should_send_message_request_when_missing_message,
-    sequencer_in_stream_should_send_message_request_when_requesting_timeout_exceeded,
-    sequencer_in_stream_should_forward_messages_in_ascending_sequence_number_order,
-    sequencer_in_stream_should_ignore_duplicated_messages,
-    sequencer_in_stream_should_send_message_acknowledgement_when_threshold_exceeded,
-    sequencer_in_stream_should_send_message_request_for_awaited_message,
-    sequecner_in_stream_should_send_message_acknowledgement_when_end_of_stream,
-    sequencer_in_stream_should_unregister_from_sequencer_manager_when_end_of_stream
-].
+all() ->
+    ?ALL([
+        sequencer_in_stream_should_register_with_sequencer_manager_on_init,
+        sequencer_in_stream_should_unregister_from_sequencer_manager_on_terminate,
+        sequencer_in_stream_should_send_message_stream_reset_on_init,
+        sequencer_in_stream_should_send_message_acknowledgement_on_terminate,
+        sequencer_in_stream_should_send_message_request_when_receiving_timout_exceeded,
+        sequencer_in_stream_should_send_message_request_when_missing_message,
+        sequencer_in_stream_should_send_message_request_when_requesting_timeout_exceeded,
+        sequencer_in_stream_should_forward_messages_in_ascending_sequence_number_order,
+        sequencer_in_stream_should_ignore_duplicated_messages,
+        sequencer_in_stream_should_send_message_acknowledgement_when_threshold_exceeded,
+        sequencer_in_stream_should_send_message_request_for_awaited_message,
+        sequecner_in_stream_should_send_message_acknowledgement_when_end_of_stream,
+        sequencer_in_stream_should_unregister_from_sequencer_manager_when_end_of_stream
+    ]).
 
 -define(TIMEOUT, timer:seconds(15)).
 
