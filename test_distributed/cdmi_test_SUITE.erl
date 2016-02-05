@@ -335,12 +335,12 @@ metadata_test(Config) ->
     CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
     ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
     MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
-    ?assert(ATime1 =:= MTime1), % ATime and MTime are set in the moment of file creation and not modified later
-    ?assert(Before =< CTime1),
     ?assert(Before =< ATime1),
-    ?assert(ATime1 =< CTime1), % CTime might be after MTime and ATime due to metadata change
-    ?assert(CTime1 =< After),
+    ?assert(Before =< MTime1),
+    ?assert(Before =< CTime1),
     ?assert(ATime1 =< After),
+    ?assert(MTime1 =< After),
+    ?assert(CTime1 =< After),
     ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(6, length(Metadata1)),
