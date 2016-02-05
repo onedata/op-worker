@@ -40,7 +40,7 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    gen_path/1, gen_storage_path/1, rename/2, setup_onedata_user/1]).
+    gen_path/1, gen_storage_path/1, rename/2, setup_onedata_user/2]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
     is_spaces_dir/2]).
@@ -236,7 +236,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, save}, {onedata_user, update}],
+    ?MODEL_CONFIG(files, [],
         ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
@@ -249,11 +249,11 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(onedata_user, create, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -468,8 +468,8 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.
-setup_onedata_user(UUID) ->
+-spec setup_onedata_user(term(), UUID :: onedata_user:id()) -> ok.
+setup_onedata_user(Client, UUID) ->
     ?info("setup_onedata_user ~p", [UUID]),
     try
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
@@ -495,7 +495,7 @@ setup_onedata_user(UUID) ->
             case exists({uuid, SpaceDirUuid}) of
                 true -> ok;
                 false ->
-                    space_info:fetch(provider, SpaceId),
+                    space_info:fetch(Client, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{

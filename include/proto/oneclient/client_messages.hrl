@@ -14,10 +14,13 @@
 -define(CLIENT_MESSAGES_HRL, 1).
 
 -include("stream_messages.hrl").
+-include("handshake_messages.hrl").
 
 -record(client_message, {
     message_id :: message_id:id(),
     session_id :: session:id(),
+    proxy_session_id :: session:id(),
+    proxy_session_auth :: #auth{},
     message_stream :: #message_stream{},
     message_body :: tuple()
 }).

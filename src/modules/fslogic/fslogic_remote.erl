@@ -12,15 +12,30 @@
 -module(fslogic_remote).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
+-include("modules/events/definitions.hrl").
+-include("proto/common/credentials.hrl").
+-include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([postrouting/3, prerouting/3]).
+-export([reroute/3, postrouting/3, prerouting/3]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+-spec reroute(fslogic_worker:ctx(), oneprovider:id(), term()) ->
+    term().
+reroute(#fslogic_ctx{}, ProviderId, Request) ->
+    provider_communicator:communicate(Request, session_manager:get_provider_session_id(outgoing, ProviderId)).
+
+
 
 
 %%--------------------------------------------------------------------
@@ -29,24 +44,12 @@
 %%      or stop rerouting due to error.
 %% @end
 %%--------------------------------------------------------------------
--spec prerouting(SpaceInfo :: #space_info{}, Request :: term(), [ProviderId :: binary()]) ->
+-spec prerouting(fslogic_worker:ctx(), Request :: term(), [ProviderId :: binary()]) ->
     {ok, {response, Response :: term()}} | {ok, {reroute, ProviderId :: binary(), NewRequest :: term()}} | {error, Reason :: any()}.
 prerouting(_, _, []) ->
     {error, no_providers};
-prerouting(_SpaceInfo, RequestBody, [RerouteTo | _Providers]) ->
-    Path = <<>>,
-
-    %% Replace all paths in this request with their "full" versions (with /spaces prefix).
-    {ok, FullPath} = {ok, undefined}, %% @todo: get non-ambiguous path or file UUID
-    TupleList = lists:map(
-        fun(Elem) ->
-            case Elem of
-                Path -> FullPath;
-                _    -> Elem
-            end
-        end, tuple_to_list(RequestBody)),
-    RequestBody1 = list_to_tuple(TupleList),
-    {ok, {reroute, RerouteTo, RequestBody1}}.
+prerouting(_CTX, RequestBody, [RerouteTo | _Providers]) ->
+    {ok, {reroute, RerouteTo, RequestBody}}.
 
 
 
@@ -57,7 +60,7 @@ prerouting(_SpaceInfo, RequestBody, [RerouteTo | _Providers]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec postrouting(SpaceInfo :: #space_info{}, {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
-postrouting(#space_info{} = _SpaceInfo, {ok, Response}, _Request) ->
+postrouting(_CTX, {ok, Response}, _Request) ->
     Response;
 postrouting(_SpaceInfo, UnkResult, Request) ->
     ?error("Unknown result ~p for request ~p", [UnkResult, Request]),

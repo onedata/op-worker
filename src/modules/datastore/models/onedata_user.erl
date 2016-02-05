@@ -146,6 +146,7 @@ fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons} = Auth)
         },
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
+        file_meta:setup_onedata_user({user, {SrlzdMacaroon, SrlzdDMacaroons}}, Id),
         {ok, OnedataUserDoc}
     catch
         _:Reason ->

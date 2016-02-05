@@ -90,13 +90,15 @@ serialize_server_message(#server_message{message_id = MsgId, message_stream = Ms
 %% @end
 %%--------------------------------------------------------------------
 -spec serialize_client_message(#client_message{}) -> {ok, binary()} | no_return().
-serialize_client_message(#client_message{message_id = MsgId, message_stream = MsgStm,
-    message_body = MsgBody}) ->
+serialize_client_message(#client_message{message_id = MsgId, message_stream = MsgStm, proxy_session_id = PSessID,
+    proxy_session_auth = Auth, message_body = MsgBody}) ->
     {ok, EncodedId} = message_id:encode(MsgId),
     ClientMessage = #'ClientMessage'{
         message_id = EncodedId,
         message_stream = translator:translate_to_protobuf(MsgStm),
-        message_body = translator:translate_to_protobuf(MsgBody)
+        message_body = translator:translate_to_protobuf(MsgBody),
+        proxy_session_id = PSessID,
+        proxy_session_token = translator:translate_to_protobuf(Auth)
     },
     {ok, messages:encode_msg(ClientMessage, [verify])}.
 

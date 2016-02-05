@@ -290,6 +290,8 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
     {xattr, #'Xattr'{name = Name, value = Value}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
+translate_to_protobuf(#auth{macaroon = Val}) ->
+    #'Token'{value = Val};
 translate_to_protobuf(undefined) ->
     undefined.
 

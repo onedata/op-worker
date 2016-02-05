@@ -135,11 +135,11 @@ route_and_send_answer(#client_message{message_id = Id,
         subscriptions = Subs
     }}};
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
-    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
-    ?debug("Fuse request: ~p", [FuseRequest]),
+    message_body = #fuse_request{} = FuseRequest}) ->
+    ?info("Fuse request: ~p", [FuseRequest]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, SessId, FuseRequest}),
-        ?debug("Fuse response: ~p", [FuseResponse]),
+        ?info("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, SessId)
