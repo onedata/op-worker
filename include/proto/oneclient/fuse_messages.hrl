@@ -214,21 +214,15 @@
 }).
 
 -record(storage_test_file, {
-    storage_id :: storage:id(),
     helper_params :: #helper_params{},
     space_uuid :: file_meta:uuid(),
     file_id :: helpers:file(),
     file_content :: binary()
 }).
 
--record(storage_test_file_verification, {
-    storage_id :: storage:id()
-}).
-
 -type fuse_response() :: #file_attr{} | #file_children{} | #helper_params{} |
     #file_location{} | #xattr{} | #xattr_list{} | #acl{} | #transfer_encoding{} |
-    #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{} |
-    #storage_test_file_verification{}.
+    #cdmi_completion_status{} | #mimetype{} | #dir{} | #storage_test_file{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request()

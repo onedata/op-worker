@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Rafal Slota
+%%% @author Krzysztof Trzepla
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -57,11 +57,21 @@ create_storage_test_file_test(Config) ->
     FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
 
-    ?fcm_req(Worker, create_storage_test_file, [SessId1, StorageId, FileUuid]),
-    ?assertReceivedMatch(#fuse_response{status = #status{code = ?OK}}, ?TIMEOUT),
+    Response1 = ?req(Worker, SessId1, #create_storage_test_file{
+        storage_id = StorageId, file_uuid = FileUuid
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK},
+        fuse_response = #storage_test_file{}}, Response1),
 
-    ?fcm_req(Worker, create_storage_test_file, [SessId1, StorageId, FileUuid]),
-    ?assertReceivedMatch(#fuse_response{status = #status{code = ?OK}}, ?TIMEOUT).
+    Response2 = ?req(Worker, SessId1, #create_storage_test_file{
+        storage_id = StorageId, file_uuid = <<"unknown_id">>
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response2),
+
+    Response3 = ?req(Worker, SessId1, #create_storage_test_file{
+        storage_id = <<"unknown_id">>, file_uuid = FileUuid
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?EAGAIN}}, Response3).
 
 verify_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -77,17 +87,29 @@ verify_storage_test_file_test(Config) ->
     FileId = rpc:call(Worker, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}]),
     SpaceUuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [<<"space_id1">>]),
 
-    ?fcm_req(Worker, verify_storage_test_file, [SessId1, StorageId, SpaceUuid, FileId, <<"test">>]),
-    ?assertReceivedMatch(#fuse_response{status = #status{code = ?OK}}, ?TIMEOUT),
+    Response1 = ?req(Worker, SessId1, #verify_storage_test_file{
+        storage_id = StorageId, space_uuid = SpaceUuid,
+        file_id = FileId, file_content = <<"test">>
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response1),
 
-    ?fcm_req(Worker, verify_storage_test_file, [SessId1, StorageId, SpaceUuid, FileId, <<"test2">>]),
-    ?assertReceivedMatch(#fuse_response{status = #status{code = ?EINVAL}}, ?TIMEOUT),
+    Response2 = ?req(Worker, SessId1, #verify_storage_test_file{
+        storage_id = StorageId, space_uuid = SpaceUuid,
+        file_id = FileId, file_content = <<"test2">>
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?EINVAL}}, Response2),
 
-    ?fcm_req(Worker, verify_storage_test_file, [SessId1, StorageId, SpaceUuid, <<"unknown_id">>, <<"test">>]),
-    ?assertReceivedMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?TIMEOUT),
+    Response3 = ?req(Worker, SessId1, #verify_storage_test_file{
+        storage_id = StorageId, space_uuid = SpaceUuid,
+        file_id = <<"unknown_id">>, file_content = <<"test">>
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response3),
 
-    ?fcm_req(Worker, verify_storage_test_file, [SessId1, <<"unknown_id">>, SpaceUuid, FileId, <<"test">>]),
-    ?assertReceivedMatch(#fuse_response{status = #status{code = ?EAGAIN}}, ?TIMEOUT).
+    Response4 = ?req(Worker, SessId1, #verify_storage_test_file{
+        storage_id = <<"unknown_id">>, space_uuid = SpaceUuid,
+        file_id = FileId, file_content = <<"test">>
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?EAGAIN}}, Response4).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -102,32 +124,10 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it forwards all messages to the test process.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    Self = self(),
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(Msg, _) -> Self ! Msg end
-    ).
+    initializer:clean_test_users_and_spaces(Config).
 

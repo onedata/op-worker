@@ -518,14 +518,14 @@ get_uuid(Worker, SessId, Path) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Workers),
+    initializer:communicator_mock(Workers),
     initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
@@ -535,20 +535,3 @@ end_per_testcase(_, Config) ->
 
     ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [], timer:seconds(60))),
     ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, timer:seconds(60))).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).

@@ -243,6 +243,11 @@ handle_fuse_request(Ctx, #get_mimetype{uuid = UUID}) ->
     fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #set_mimetype{uuid = UUID, value = Value}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
+handle_fuse_request(Ctx, #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}) ->
+    fuse_config_manager:create_storage_test_file(Ctx, SID, FileUUID);
+handle_fuse_request(_Ctx, #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
+    file_id = FileId, file_content = FileContent}) ->
+    fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

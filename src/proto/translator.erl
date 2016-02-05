@@ -183,7 +183,7 @@ translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
-    {read_subscription, #'WriteSubscription'{
+    {read_subscription, #'ReadSubscription'{
         counter_threshold = Sub#read_subscription.counter_threshold,
         time_threshold = Sub#read_subscription.time_threshold,
         size_threshold = Sub#read_subscription.size_threshold
@@ -295,13 +295,11 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
     {xattr, #'Xattr'{name = Name, value = Value}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
-translate_to_protobuf(#storage_test_file{storage_id = StoargeId, helper_params = HelperParams,
+translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}) ->
     {_, Record} = translate_to_protobuf(HelperParams),
-    {storage_test_file, #'StorageTestFile'{storage_id = StoargeId, helper_params = Record,
+    {storage_test_file, #'StorageTestFile'{helper_params = Record,
         space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
-translate_to_protobuf(#storage_test_file_verification{storage_id = StorageId}) ->
-    {storage_test_file_verification, #'StorageTestFileVerification'{storage_id = StorageId}};
 translate_to_protobuf(undefined) ->
     undefined.
 

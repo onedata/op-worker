@@ -127,7 +127,7 @@ modify_cdmi_attrs(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
@@ -136,7 +136,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Workers),
+    initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -145,20 +145,3 @@ end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).
