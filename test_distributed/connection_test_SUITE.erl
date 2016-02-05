@@ -133,9 +133,7 @@ protobuf_msg_test(Config) ->
     ok = ssl2:close(Sock).
 
 multi_message_test(Config) ->
-    ?PERFORMANCE(
-%%        ?MODULE, multi_message_test,
-        Config, [
+    ?PERFORMANCE(Config, [
             {repeats, 5},
             {success_rate, 80},
             {parameters, [
@@ -271,9 +269,7 @@ client_communicate_async_test(Config) ->
     ok = ssl2:close(Sock).
 
 multi_ping_pong_test(Config) ->
-    ?PERFORMANCE(
-%%        ?MODULE, multi_ping_pong_test,
-        Config, [
+    ?PERFORMANCE(Config, [
             {repeats, 5},
             {success_rate, 80},
             {parameters, [
@@ -338,9 +334,7 @@ multi_ping_pong_test(Config) ->
 ).
 
 sequential_ping_pong_test(Config) ->
-    ?PERFORMANCE(
-%%        ?MODULE, sequential_ping_pong_test,
-        Config, [
+    ?PERFORMANCE(Config, [
             {repeats, 5},
             {success_rate, 80},
             {parameters, [
@@ -389,9 +383,7 @@ sequential_ping_pong_test(Config) ->
     ).
 
 multi_connection_test(Config) ->
-    ?PERFORMANCE(
-%%        ?MODULE, multi_connection_test,
-        Config,[
+    ?PERFORMANCE(Config,[
             {repeats, 10},
             {success_rate, 90},
             {parameters, [
@@ -424,9 +416,7 @@ multi_connection_test(Config) ->
     ).
 
 bandwidth_test(Config) ->
-    ?PERFORMANCE(
-%%        ?MODULE, bandwidth_test,
-        Config, [
+    ?PERFORMANCE(Config, [
             {repeats, 5},
             {success_rate, 80},
             {parameters, [
@@ -481,9 +471,7 @@ bandwidth_test(Config) ->
     ).
 
 python_client_test(Config) ->
-    ?PERFORMANCE(
-%%        ?MODULE, python_client_test,
-        Config, [
+    ?PERFORMANCE(Config, [
             {repeats, 5},
             {success_rate, 80},
             {parameters, [
