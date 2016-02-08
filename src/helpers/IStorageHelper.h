@@ -19,6 +19,7 @@
 
 #include <chrono>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 #include <memory>
@@ -35,27 +36,36 @@ constexpr std::chrono::seconds ASYNC_OPS_TIMEOUT{2};
 const error_t SUCCESS_CODE;
 }
 
+enum class Flag {
+    NONBLOCK,
+    APPEND,
+    ASYNC,
+    FSYNC,
+    NOFOLLOW,
+    CREAT,
+    TRUNC,
+    EXCL,
+    RDONLY,
+    WRONLY,
+    RDWR,
+    IFREG,
+    IFCHR,
+    IFBLK,
+    IFIFO,
+    IFSOCK
+};
+
+struct FlagHash {
+    template <typename T> std::size_t operator()(T t) const
+    {
+        return static_cast<std::size_t>(t);
+    }
+};
+
+using FlagsSet = std::unordered_set<Flag, FlagHash>;
+
 class IStorageHelperCTX {
 public:
-    enum class Flag {
-        NONBLOCK,
-        APPEND,
-        ASYNC,
-        FSYNC,
-        NOFOLLOW,
-        CREAT,
-        TRUNC,
-        EXCL,
-        RDONLY,
-        WRONLY,
-        RDWR,
-        IFREG,
-        IFCHR,
-        IFBLK,
-        IFIFO,
-        IFSOCK
-    };
-
     virtual ~IStorageHelperCTX() = default;
 
     virtual void setUserCTX(std::unordered_map<std::string, std::string> args)
@@ -67,20 +77,6 @@ public:
     {
         throw std::system_error{std::make_error_code(std::errc::not_supported)};
     }
-
-    virtual void setFlags(std::vector<Flag> flags)
-    {
-        throw std::system_error{std::make_error_code(std::errc::not_supported)};
-    }
-
-    virtual void setFlags(int flags) {}
-
-    virtual std::vector<Flag> getFlags()
-    {
-        throw std::system_error{std::make_error_code(std::errc::not_supported)};
-    }
-
-    virtual int getFlagValue(Flag flag) { return 0; }
 
 protected:
     static error_t makePosixError(int posixCode)
@@ -137,7 +133,7 @@ public:
     }
 
     virtual void ash_mknod(CTXPtr ctx, const boost::filesystem::path &p,
-        mode_t mode, dev_t rdev, VoidCallback callback)
+        mode_t mode, FlagsSet flags, dev_t rdev, VoidCallback callback)
     {
         callback(std::make_error_code(std::errc::not_supported));
     }
@@ -197,20 +193,20 @@ public:
     }
 
     virtual void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
-        GeneralCallback<int> callback)
+        FlagsSet flags, GeneralCallback<int> callback)
     {
         callback({}, SUCCESS_CODE);
     }
 
     virtual void ash_read(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::mutable_buffer buf, off_t offset,
+        asio::mutable_buffer buf, off_t offset, const std::string &fileUuid,
         GeneralCallback<asio::mutable_buffer> callback)
     {
         callback({}, std::make_error_code(std::errc::not_supported));
     }
 
     virtual void ash_write(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset,
+        asio::const_buffer buf, off_t offset, const std::string &fileUuid,
         GeneralCallback<std::size_t> callback)
     {
         callback({}, std::make_error_code(std::errc::not_supported));
@@ -236,7 +232,7 @@ public:
 
     virtual asio::mutable_buffer sh_read(CTXPtr ctx,
         const boost::filesystem::path &p, asio::mutable_buffer buf,
-        off_t offset)
+        off_t offset, const std::string &fileUuid)
     {
         auto promise = std::make_shared<std::promise<asio::mutable_buffer>>();
         auto future = promise->get_future();
@@ -251,12 +247,12 @@ public:
                 promise->set_value(input);
         };
 
-        ash_read(std::move(ctx), p, buf, offset, std::move(callback));
+        ash_read(std::move(ctx), p, buf, offset, fileUuid, std::move(callback));
         return waitFor(future);
     }
 
     virtual std::size_t sh_write(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset)
+        asio::const_buffer buf, off_t offset, const std::string &fileUuid)
     {
         auto promise = std::make_shared<std::promise<std::size_t>>();
         auto future = promise->get_future();
@@ -271,7 +267,7 @@ public:
                 promise->set_value(wrote);
         };
 
-        ash_write(std::move(ctx), p, buf, offset, std::move(callback));
+        ash_write(std::move(ctx), p, buf, offset, fileUuid, std::move(callback));
         return waitFor(future);
     }
 
