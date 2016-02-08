@@ -11,7 +11,6 @@
 %%%-------------------------------------------------------------------
 -module(storage_file_manager).
 
--include("types.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/sfm_handle.hrl").
@@ -62,7 +61,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open(handle(), OpenMode :: helpers:open_mode()) ->
-    {ok, handle()} | error_reply().
+    {ok, handle()} | logical_file_manager:error_reply().
 open(SFMHandle, read) ->
     open_for_read(SFMHandle);
 open(SFMHandle, write) ->
@@ -76,7 +75,7 @@ open(SFMHandle, rdwr) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(handle(), Mode :: non_neg_integer()) ->
-    ok | error_reply().
+    ok | logical_file_manager:error_reply().
 mkdir(Handle, Mode) ->
     mkdir(Handle, Mode, false).
 
@@ -86,7 +85,7 @@ mkdir(Handle, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec mkdir(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
-    ok | error_reply().
+    ok | logical_file_manager:error_reply().
 mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
     Noop = fun(_) -> ok end,
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
@@ -121,7 +120,8 @@ mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileHandleFrom :: handle(), PathOnStorageTo :: file_path()) -> ok | error_reply().
+-spec mv(FileHandleFrom :: handle(), PathOnStorageTo :: file_meta:path()) ->
+    ok | logical_file_manager:error_reply().
 mv(_FileHandleFrom, _PathOnStorageTo) ->
     ok.
 
@@ -132,7 +132,8 @@ mv(_FileHandleFrom, _PathOnStorageTo) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec chmod(handle(), NewMode :: file_meta:posix_permissions()) -> ok | error_reply().
+-spec chmod(handle(), NewMode :: file_meta:posix_permissions()) ->
+    ok | logical_file_manager:error_reply().
 chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Mode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
@@ -146,7 +147,8 @@ chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) -> ok | error_reply().
+-spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) ->
+    ok | logical_file_manager:error_reply().
 chown(_FileHandle, _User, _Group) ->
     ok.
 
@@ -157,7 +159,8 @@ chown(_FileHandle, _User, _Group) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec link(Path :: binary(), TargetFileHandle :: handle()) -> {ok, file_uuid()} | error_reply().
+-spec link(Path :: binary(), TargetFileHandle :: handle()) ->
+    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
 link(_Path, _TargetFileHandle) ->
     {ok, <<"">>}.
 
@@ -168,7 +171,8 @@ link(_Path, _TargetFileHandle) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec stat(FileHandle :: handle()) -> {ok, undefined} | error_reply().
+-spec stat(FileHandle :: handle()) ->
+    {ok, undefined} | logical_file_manager:error_reply().
 stat(_FileHandle) ->
     {ok, undefined}.
 
@@ -180,7 +184,7 @@ stat(_FileHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
-    {ok, non_neg_integer()} | error_reply().
+    {ok, non_neg_integer()} | logical_file_manager:error_reply().
 write(#sfm_handle{open_mode = undefined}, _, _) -> throw(?EPERM);
 write(#sfm_handle{open_mode = read}, _, _) -> throw(?EPERM);
 write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
@@ -194,7 +198,7 @@ write(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: handle(), Offset :: non_neg_integer(), MaxSize :: non_neg_integer()) ->
-    {ok, binary()} | error_reply().
+    {ok, binary()} | logical_file_manager:error_reply().
 read(#sfm_handle{open_mode = undefined}, _, _) -> throw(?EPERM);
 read(#sfm_handle{open_mode = write}, _, _) -> throw(?EPERM);
 read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
@@ -208,12 +212,12 @@ read(#sfm_handle{helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(handle(), Mode :: non_neg_integer()) ->
-    ok | error_reply().
+    ok | logical_file_manager:error_reply().
 create(Handle, Mode) ->
     create(Handle, Mode, false).
 
 -spec create(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
-    ok | error_reply().
+    ok | logical_file_manager:error_reply().
 create(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId} = SFMHandle, Mode, Recursive) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
@@ -242,7 +246,8 @@ create(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, ses
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(handle(), Size :: integer()) -> ok | error_reply().
+-spec truncate(handle(), Size :: integer()) ->
+    ok | logical_file_manager:error_reply().
 truncate(#sfm_handle{open_mode = undefined}, _) -> throw(?EPERM);
 truncate(#sfm_handle{open_mode = read}, _) -> throw(?EPERM);
 truncate(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, Size) ->
@@ -258,7 +263,7 @@ truncate(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, s
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(handle()) -> ok | error_reply().
+-spec unlink(handle()) -> ok | logical_file_manager:error_reply().
 unlink(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
@@ -272,7 +277,8 @@ unlink(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, ses
 %%--------------------------------------------------------------------
 %% @doc Opens file in read mode and checks necessary permissions.
 %%--------------------------------------------------------------------
--spec open_for_read(handle()) -> {ok, handle()} | error_reply().
+-spec open_for_read(handle()) ->
+    {ok, handle()} | logical_file_manager:error_reply().
 -check_permissions([{?read_object, 1}]).
 open_for_read(LfmHandle) ->
     open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read).
@@ -280,7 +286,8 @@ open_for_read(LfmHandle) ->
 %%--------------------------------------------------------------------
 %% @doc Opens file in write mode and checks necessary permissions.
 %%--------------------------------------------------------------------
--spec open_for_write(handle()) -> {ok, handle()} | error_reply().
+-spec open_for_write(handle()) ->
+    {ok, handle()} | logical_file_manager:error_reply().
 -check_permissions([{?write_object, 1}]).
 open_for_write(LfmHandle) ->
     open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write).
@@ -288,7 +295,8 @@ open_for_write(LfmHandle) ->
 %%--------------------------------------------------------------------
 %% @doc Opens file in rdwr mode and checks necessary permissions.
 %%--------------------------------------------------------------------
--spec open_for_rdwr(handle()) -> {ok, handle()} | error_reply().
+-spec open_for_rdwr(handle()) ->
+    {ok, handle()} | logical_file_manager:error_reply().
 -check_permissions([{?read_object, 1}, {?write_object, 1}]).
 open_for_rdwr(LfmHandle) ->
     open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
@@ -299,7 +307,7 @@ open_for_rdwr(LfmHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_impl(handle(), OpenMode :: helpers:open_mode()) ->
-    {ok, handle()} | error_reply().
+    {ok, handle()} | logical_file_manager:error_reply().
 open_impl(#sfm_handle{storage = Storage, file = FileId, session_id = SessionId, space_uuid = SpaceUUID} = SFMHandle, OpenMode) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
