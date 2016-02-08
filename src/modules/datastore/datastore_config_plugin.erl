@@ -28,6 +28,7 @@ models() -> [
   subscription,
   session,
   onedata_user,
+  onedata_group,
   identity,
   file_meta,
   storage,
@@ -35,5 +36,6 @@ models() -> [
   xattr,
   space_info,
   space_storage,
-  ceph_user
+  ceph_user,
+  s3_user
 ].

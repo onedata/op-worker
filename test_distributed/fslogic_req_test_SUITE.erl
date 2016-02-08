@@ -21,6 +21,8 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
+-include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -137,9 +139,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     lists:foreach(fun(UUID) ->
         ?assertMatch(#fuse_response{status = #status{code = ?ENOTEMPTY}},
             ?req(Worker, SessId2, #delete_file{uuid = UUID}))
-    end, lists:reverse(tl(UUIDs2))),
-
-    ok.
+    end, lists:reverse(tl(UUIDs2))).
 
 fslogic_read_dir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
@@ -238,9 +238,7 @@ fslogic_read_dir_test(Config) ->
         {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
         {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
         {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]}
-    ]),
-
-    ok.
+    ]).
 
 chmod_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
@@ -264,9 +262,7 @@ chmod_test(Config) ->
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
             #fuse_response{fuse_response = #file_attr{uuid = UUID, mode = 8#123}} = FileAttr
 
-        end, [SessId1, SessId2, SessId3, SessId4]),
-
-    ok.
+        end, [SessId1, SessId2, SessId3, SessId4]).
 
 
 default_permissions_test(Config) ->
@@ -276,12 +272,7 @@ default_permissions_test(Config) ->
     {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
     {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
 
-    test_utils:mock_new(Worker, check_permissions),
-    test_utils:mock_expect(Worker, check_permissions, validate_scope_access, fun
-        (_, _, _) -> ok
-    end),
-
-    lists:foreach( %% File
+    lists:foreach(
         fun({Path, SessIds}) ->
             lists:foreach(
                 fun(SessId) ->
@@ -292,10 +283,26 @@ default_permissions_test(Config) ->
         end, [
             {<<"/">>, [SessId1, SessId2, SessId3, SessId4]},
             {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
-            {<<"/spaces/space_name1">>, [SessId1, SessId2, SessId3, SessId4]},
-            {<<"/spaces/space_name2">>, [SessId1, SessId2, SessId3, SessId4]},
-            {<<"/spaces/space_name3">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name1">>, [SessId1]},
+            {<<"/spaces/space_name2">>, [SessId1, SessId2]},
+            {<<"/spaces/space_name3">>, [SessId1, SessId2, SessId3]},
             {<<"/spaces/space_name4">>, [SessId1, SessId2, SessId3, SessId4]}
+        ]),
+
+
+    lists:foreach(
+        fun({Path, SessIds}) ->
+            lists:foreach(
+                fun(SessId) ->
+                    UUID = get_uuid_privileged(Worker, SessId, Path),
+
+                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker, SessId, #delete_file{uuid = UUID}))
+                end, SessIds)
+
+        end, [
+            {<<"/spaces/space_name1">>, [SessId2, SessId3, SessId4]},
+            {<<"/spaces/space_name2">>, [SessId3, SessId4]},
+            {<<"/spaces/space_name3">>, [SessId4]}
         ]),
 
     lists:foreach( %% File
@@ -307,7 +314,18 @@ default_permissions_test(Config) ->
                 end, SessIds)
 
         end, [
-            {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]},
+            {<<"/spaces">>, [SessId1, SessId2, SessId3, SessId4]}
+        ]),
+
+    lists:foreach( %% File
+        fun({Path, SessIds}) ->
+            lists:foreach(
+                fun(SessId) ->
+                    UUID = get_uuid_privileged(Worker, SessId, Path),
+                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
+                end, SessIds)
+
+        end, [
             {<<"/spaces/space_name1">>, [SessId2, SessId3, SessId4]},
             {<<"/spaces/space_name2">>, [SessId3, SessId4]},
             {<<"/spaces/space_name3">>, [SessId4]},
@@ -358,10 +376,10 @@ default_permissions_test(Config) ->
             {get_attr, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
-            {delete, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
-            {delete, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?EACCES},
-            {delete, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/spaces/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/spaces/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/spaces/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {delete, <<"/spaces/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {mkdir, <<"/spaces/space_name4">>, <<"test">>, 8#740, [SessId4], ?OK},
             {mkdir, <<"/spaces/space_name4/test">>, <<"test">>, 8#1770, [SessId4], ?OK},
             {mkdir, <<"/spaces/space_name4/test/test">>, <<"test">>, 8#730, [SessId4], ?OK},
@@ -375,17 +393,15 @@ default_permissions_test(Config) ->
             {delete, <<"/spaces/space_name4/test">>, [SessId4], ?OK},
             {chmod, <<"/">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
             {chmod, <<"/spaces">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
-            {chmod, <<"/spaces/space_name1">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
-            {chmod, <<"/spaces/space_name2">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
-            {chmod, <<"/spaces/space_name3">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
+            {chmod, <<"/spaces/space_name1">>, 8#123, [SessId1], ?EACCES},
+            {chmod, <<"/spaces/space_name2">>, 8#123, [SessId1, SessId2], ?EACCES},
+            {chmod, <<"/spaces/space_name3">>, 8#123, [SessId1, SessId2, SessId3], ?EACCES},
             {chmod, <<"/spaces/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EACCES},
             {mkdir, <<"/spaces/space_name4">>, <<"test">>, 8#740, [SessId3], ?OK},
-            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId1, SessId2, SessId4], ?EACCES},
+            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId1, SessId2], ?EACCES},
+            {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId4], ?EACCES},
             {chmod, <<"/spaces/space_name4/test">>, 8#123, [SessId3], ?OK}
-        ]),
-
-    test_utils:mock_unload(Worker, check_permissions),
-    ok.
+        ]).
 
 
 simple_rename_test(Config) ->
@@ -433,9 +449,7 @@ simple_rename_test(Config) ->
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr2),
 
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, MovedFileAttr3),
-    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, MovedFileAttr4),
-
-    ok.
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, MovedFileAttr4).
 
 
 update_times_test(Config) ->
@@ -475,12 +489,9 @@ update_times_test(Config) ->
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
                 ?req(Worker, SessId, #update_times{uuid = UUID, mtime = NewMTime, ctime = NewCTime})),
 
-
             ?assertMatch({NewATime, NewMTime, NewCTime}, GetTimes({uuid, UUID}, SessId))
 
-        end, [SessId1, SessId2, SessId3, SessId4]),
-
-    ok.
+        end, [SessId1, SessId2, SessId3, SessId4]).
 
 
 %% Get uuid of given by path file. Possible as root to bypass permissions checks.

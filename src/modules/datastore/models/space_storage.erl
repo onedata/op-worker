@@ -116,6 +116,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds space-storage mapping.
+%% @end
+%%--------------------------------------------------------------------
+-spec add(SpaceId :: binary(), StorageId :: storage:id()) ->
+    {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 add(SpaceId, StorageId) ->
     case space_storage:get(SpaceId) of
         {ok, #document{value = SpaceStorage} = Doc} ->
@@ -133,8 +140,27 @@ add(SpaceId, StorageId) ->
             {error, Reason}
     end.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns datastore document for space-storage mapping.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(SpaceId :: binary(), StorageId :: storage:id()) -> Doc :: #document{}.
 new(SpaceId, StorageId) ->
     #document{key = SpaceId, value = #space_storage{storage_ids = [StorageId]}}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds storage to existing space-storage mapping.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_storage(SpaceStorage :: #space_storage{}, StorageId :: storage:id()) ->
+    NewSpaceStorage :: #space_storage{}.
 add_storage(#space_storage{storage_ids = StorageIds} = SpaceStorage, StorageId) ->
     SpaceStorage#space_storage{storage_ids = [StorageId | StorageIds]}.
