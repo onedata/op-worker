@@ -56,7 +56,7 @@ async_loop() ->
 find(<<"file">>, [<<"root">>]) ->
     SessionId = g_session:get_session_id(),
     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
-        {path, <<"/spaces">>}, 1000, 0),
+        {path, <<"/spaces">>}, 0, 1000),
     VirtSpaceIds = [<<"space#", SpaceID/binary>> || {SpaceID, _} <- SpaceDirs],
     Res = [
         {<<"id">>, <<"root">>},
@@ -125,7 +125,7 @@ find(<<"file">>, [Id]) ->
                        [];
                    <<"dir">> ->
                        {ok, Chldrn} = logical_file_manager:ls(
-                           SessionId, {uuid, Id}, 1000, 0),
+                           SessionId, {uuid, Id}, 0, 1000),
                        Chldrn
                end,
     ChildrenIds = [ChId || {ChId, _} <- Children],
@@ -170,11 +170,11 @@ find_all(<<"file">>) ->
     {ok, Res}.
 %%     SessionId = g_session:get_session_id(),
 %%     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
-%%         {path, <<"/spaces">>}, 10, 0),
+%%         {path, <<"/spaces">>}, 0, 10),
 %%     Res = lists:map(
 %%         fun({Id, Name}) ->
 %%             {ok, Children} = logical_file_manager:ls(
-%%                 SessionId, {uuid, Id}, 10, 0),
+%%                 SessionId, {uuid, Id}, 0, 10),
 %%             ChildrenIds = [ChId || {ChId, _} <- Children],
 %%             Res = [
 %%                 {<<"id">>, Id},
@@ -282,7 +282,7 @@ get_spaces_dir_uuid() ->
 rm_rf(Id) ->
     SessionId = g_session:get_session_id(),
     {ok, Children} = logical_file_manager:ls(SessionId,
-        {uuid, Id}, 1000, 0),
+        {uuid, Id}, 0, 1000),
     lists:foreach(
         fun({ChId, _}) ->
             ok = rm_rf(ChId)
