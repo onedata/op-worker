@@ -52,7 +52,8 @@ enum class Flag {
     IFCHR,
     IFBLK,
     IFIFO,
-    IFSOCK
+    IFSOCK,
+    COUNT
 };
 
 struct FlagHash {
@@ -271,7 +272,7 @@ public:
         return waitFor(future);
     }
 
-    virtual int sh_open(CTXPtr ctx, const boost::filesystem::path &p)
+    virtual int sh_open(CTXPtr ctx, const boost::filesystem::path &p, FlagsSet flags)
     {
         auto promise = std::make_shared<std::promise<int>>();
         auto future = promise->get_future();
@@ -286,7 +287,7 @@ public:
                 promise->set_value(fh);
         };
 
-        ash_open(std::move(ctx), p, std::move(callback));
+        ash_open(std::move(ctx), p, flags, std::move(callback));
         return waitFor(future);
     }
 
