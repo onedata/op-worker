@@ -28,17 +28,12 @@
     route_message_should_work_for_multiple_streams/1
 ]).
 
--define(NORMAL_CASES_NAMES, [
+-define(TEST_CASES, [
     route_message_should_forward_messages_in_right_order,
     route_message_should_work_for_multiple_streams
 ]).
 
--define(PERFORMANCE_CASES_NAMES, [
-    route_message_should_forward_messages_in_right_order,
-    route_message_should_work_for_multiple_streams
-]).
-
-all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
+all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 
 -define(TIMEOUT, timer:seconds(15)).
 -define(MSG_NUM(Value), [
