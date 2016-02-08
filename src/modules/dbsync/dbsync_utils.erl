@@ -28,8 +28,13 @@
 -spec get_providers_for_space(SpaceId :: binary()) ->
     [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
-    {ok, ProviderIds} = gr_spaces:get_providers(provider, SpaceId),
-    ProviderIds.
+    try
+        {ok, ProviderIds} = gr_spaces:get_providers(provider, SpaceId),
+        ProviderIds
+    catch
+        _:{_, {error, 'No such file or directory'}} ->
+            []
+    end .
 
 -spec get_spaces_for_provider() ->
     [SpaceId :: binary()].
