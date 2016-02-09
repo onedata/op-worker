@@ -36,9 +36,11 @@ class ProviderWorkerConfigurator:
                 print 'Starting GUI livereload for provider {0}.'.format(
                     instance)
                 for container_id in container_ids:
-                    gui_livereload.run(container_id,
-                                       os.path.join(bindir, 'rel/gui.config'),
-                                        '/root/build', '/root/bin/node')
+                    gui_livereload.run(
+                        container_id,
+                        os.path.join(bindir, 'rel/gui.config'),
+                        DOCKER_BINDIR_PATH,
+                        '/root/bin/node')
         if 'os_config' in this_config:
             os_config = this_config['os_config']
             create_storages(config['os_configs'][os_config]['storages'],
@@ -48,9 +50,13 @@ class ProviderWorkerConfigurator:
     def extra_volumes(self, config, bindir):
         storage_volumes = [common.volume_for_storage(s) for s in config[
             'os_config']['storages']] if 'os_config' in config else []
-        storage_volumes += gui_livereload.required_volumes('rel/gui.config',
-                                                           bindir,
-                                                           DOCKER_BINDIR_PATH)
+        # Check if gui_livereload is enabled in env and add required storages
+        if 'gui_livereload' in config:
+            if config['gui_livereload']:
+                storage_volumes += gui_livereload.required_volumes(
+                    os.path.join(bindir, 'rel/gui.config'),
+                    bindir,
+                    DOCKER_BINDIR_PATH)
         return storage_volumes
 
     def app_name(self):
