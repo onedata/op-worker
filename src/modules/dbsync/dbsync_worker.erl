@@ -159,7 +159,7 @@ handle({flush_queue, QueueKey}) ->
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
-                    dbsync_proto:send_batch(QueueKey, SpaceId, B),
+                    catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
                     update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
                     #batch{since = Until, until = Until}
                 end,
