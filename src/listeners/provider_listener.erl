@@ -49,11 +49,8 @@ start() ->
         application:get_env(?APP_NAME, protocol_handler_pool_size),
     {ok, CertFile} =
         application:get_env(?APP_NAME, protocol_handler_ssl_cert_path),
-    Ip = case application:get_env(?APP_NAME, protocol_handler_bind_addr) of
-             {ok, loopback} -> {127, 0, 0, 1};
-             {ok, all} -> {0, 0, 0, 0}
-         end,
 
+    Ip = {0, 0, 0, 0},
     CACerts = lists:map(
         fun(Path) ->
             {ok, Data} = file:read_file(Path),
