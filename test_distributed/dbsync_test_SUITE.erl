@@ -44,11 +44,14 @@ all() -> [
 %%%====================================================================
 
 
-global_stream_test(Config) ->
-    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+global_stream_test(MultiConfig) ->
+    ConfigP1 = ?config(p1, MultiConfig),
+    ConfigP2 = ?config(p1, MultiConfig),
+    [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
+    [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
+    {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
 
     test_utils:mock_new([WorkerP1], dbsync_proto),
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
@@ -65,17 +68,17 @@ global_stream_test(Config) ->
 
             ct:print("Create ~p", [N]),
 
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:create(WorkerP1, SessId1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
+            {ok, _} = lfm_proxy:create(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
 
             D0
         end, lists:seq(1, 10)),
@@ -96,16 +99,16 @@ global_stream_test(Config) ->
             Path9 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>,
             Path10 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary, "/", D0/binary>>,
 
-            {ok, #file_attr{uuid = UUID1}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path1}),
-            {ok, #file_attr{uuid = UUID2}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path2}),
-            {ok, #file_attr{uuid = UUID3}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path3}),
-            {ok, #file_attr{uuid = UUID4}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path4}),
-            {ok, #file_attr{uuid = UUID5}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path5}),
-            {ok, #file_attr{uuid = UUID6}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path6}),
-            {ok, #file_attr{uuid = UUID7}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path7}),
-            {ok, #file_attr{uuid = UUID8}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path8}),
-            {ok, #file_attr{uuid = UUID9}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path9}),
-            {ok, #file_attr{uuid = UUID10}} = lfm_proxy:stat(WorkerP1, SessId1, {path, Path10}),
+            {ok, #file_attr{uuid = UUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
+            {ok, #file_attr{uuid = UUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
+            {ok, #file_attr{uuid = UUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3}),
+            {ok, #file_attr{uuid = UUID4}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path4}),
+            {ok, #file_attr{uuid = UUID5}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path5}),
+            {ok, #file_attr{uuid = UUID6}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path6}),
+            {ok, #file_attr{uuid = UUID7}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path7}),
+            {ok, #file_attr{uuid = UUID8}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path8}),
+            {ok, #file_attr{uuid = UUID9}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path9}),
+            {ok, #file_attr{uuid = UUID10}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path10}),
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
@@ -164,20 +167,28 @@ global_stream_test(Config) ->
                             {error, Reason2} ->
                                 Reason2
                         end,
-                    ct:print("Check UUID ~p: rev ~p should be ~p, link rev ~p should be ~p", [UUID, LocalRev, Rev, LocalLRev, LRev]),
-                    ct:print("Check UUID ~p via path ~p: ~p", [UUID, Path, lfm_proxy:stat(WorkerP2, SessId1, {path, Path})])
+
+                    ?assertMatch(LocalRev, Rev),
+                    ?assertMatch(LocalLRev, LRev),
+
+                    ?assertMatch({ok, #file_attr{uuid = UUID}}, lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}))
+
                 end, maps:to_list(PathMap))
         end, RevPerPath),
 
-    ct:print("ls1: ~p~n", [lfm_proxy:ls(WorkerP1, SessId1, {path, <<"/spaces/space_name1">>}, 0, 100)]),
-    ct:print("ls2: ~p~n", [lfm_proxy:ls(WorkerP2, SessId1, {path, <<"/spaces/space_name1">>}, 0, 100)]),
-    ct:print("ls1: ~p~n", [lfm_proxy:ls(WorkerP1, SessId1, {path, <<"/">>}, 0, 100)]),
-    ct:print("ls2: ~p~n", [lfm_proxy:ls(WorkerP2, SessId1, {path, <<"/">>}, 0, 100)]),
+    {ok, LS1P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/spaces/space_name1">>}, 0, 100),
+    {ok, LS1P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/spaces/space_name1">>}, 0, 100),
+
+    {ok, LS2P1} = lfm_proxy:ls(WorkerP1, SessId1P1, {path, <<"/">>}, 0, 100),
+    {ok, LS2P2} = lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/">>}, 0, 100),
+
+    ?assertMatch(LS1P1, LS1P2),
+    ?assertMatch(LS2P1, LS2P2),
 
     ok.
 
 gen_filename() ->
-    list_to_binary(ibrowse_lib:url_encode("dbsync_test_" ++ binary_to_list(base64:encode(crypto:rand_bytes(20))))).
+    list_to_binary("dbsync_test_" ++ binary_to_list(base64:encode(crypto:rand_bytes(20))) -- [$/]).
 
 
 %%%===================================================================
@@ -193,15 +204,20 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    ConfigP1 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP1]}),
+    ConfigP2 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP2]}),
     communicator_mock_setup(Workers),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
+    ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
+    [{all, Config}, {p1, lfm_proxy:init(ConfigWithSessionInfoP1)}, {p2, lfm_proxy:init(ConfigWithSessionInfoP2)}].
 
-end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
+end_per_testcase(_, MultiConfig) ->
+    Workers = ?config(op_worker_nodes, ?config(all, MultiConfig)),
+    lfm_proxy:teardown(?config(p1, MultiConfig)),
+    lfm_proxy:teardown(?config(p2, MultiConfig)),
+    initializer:clean_test_users_and_spaces(?config(p1, MultiConfig)),
+    initializer:clean_test_users_and_spaces(?config(p2, MultiConfig)),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
 
 
