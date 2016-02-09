@@ -4,6 +4,9 @@
 import Ember from 'ember';
 
 export default Ember.Component.extend({
+  // TODO VFS-1508: model var could be named e.g. "loadedFiles"
+  /** List of loaded files */
+  model: null,
   store: null,
 
   // Sorting of files by type and name
@@ -80,8 +83,11 @@ export default Ember.Component.extend({
   spacesDir: function () {
     return this.get('model').findBy('id', 'root');
   }.property(),
+
+  // TODO VFS-1508: this probably can be written as: function(){...}.property('spacesDir.children', 'currentSpaceId')
   spaceDirOptions: Ember.computed('spacesDir.children,currentSpaceId', function () {
     var that = this;
+    // TODO VFS-1508: use (space) => result operator (should use component this)
     return this.get('spacesDir.children').map(function (space) {
       return {
         space: space,
@@ -90,7 +96,7 @@ export default Ember.Component.extend({
     });
   }),
 
-  // Number of selected files
+  /** Number of selected files */
   selectedCount: function () {
     var visibleFiles = this.get('model').filterBy('isVisible');
     var res = visibleFiles.filterBy('selected').length;

@@ -1,3 +1,4 @@
+// A default adapter of application - Oneprovide WebSocket
 // Custom adapter that handles model synchronization between client and server
 // using a websocket connection.
 

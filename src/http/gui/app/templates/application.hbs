@@ -1,0 +1,20 @@
+{{!-- The main layout --}}
+
+<div id="app">
+  <header>
+    <a class="navbar-brand" href="#"><img src="assets/images/logo.png" alt="Onedata" /></a>
+    <strong>TODO: user name</strong>
+    <a href="/logout.html">Log out</a>
+  </header>
+
+  <nav class="primary-sidebar">
+    <div class="sidebar-content">
+      {{main-menu mains=mains goToItem="goToItem"}}
+    </div>
+  </nav>
+
+  {{!-- The app main part (without top and left navigations) --}}
+  <section id="main-content">
+    {{outlet}}
+  </section>
+</div>
