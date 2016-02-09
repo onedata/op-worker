@@ -32,8 +32,16 @@
     emit_should_execute_event_handler_when_counter_threshold_exceeded/1,
     emit_should_execute_event_handler_when_size_threshold_exceeded/1,
     multiple_subscribe_should_create_multiple_subscriptions/1,
-    subscribe_should_work_for_multiple_sessions/1
-]).
+    subscribe_should_work_for_multiple_sessions/1]).
+
+%% test_bases
+-export([
+    emit_should_aggregate_events_with_the_same_key_base/1,
+    emit_should_not_aggregate_events_with_different_key_base/1,
+    emit_should_execute_event_handler_when_counter_threshold_exceeded_base/1,
+    emit_should_execute_event_handler_when_size_threshold_exceeded_base/1,
+    multiple_subscribe_should_create_multiple_subscriptions_base/1,
+    subscribe_should_work_for_multiple_sessions_base/1]).
 
 -define(TEST_CASES, [
     emit_should_aggregate_events_with_the_same_key,
@@ -94,54 +102,55 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
                 {description, "Aggregates multiple events for stream with large counter threshold."},
                 {parameters, [?CTR_THR(1000), ?EVT_NUM(50000)]}
             ]}
-        ],
-        fun(Config) ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            Self = self(),
-            FileUuid = <<"file_uuid">>,
-            SessId = ?config(session_id, Config),
-            CtrThr = ?config(ctr_thr, Config),
-            EvtNum = ?config(evt_num, Config),
-            EvtSize = ?config(evt_size, Config),
+        ]
+    ).
 
-            initializer:remove_pending_messages(),
-            {ok, SubId} = subscribe(Worker,
-                fun(#event{object = #write_event{}}) -> true; (_) -> false end,
-                fun(Meta) -> Meta >= CtrThr end,
-                fun(Evts, _) -> Self ! {event_handler, Evts} end
-            ),
+emit_should_aggregate_events_with_the_same_key_base(Config) ->
+        [Worker | _] = ?config(op_worker_nodes, Config),
+        Self = self(),
+        FileUuid = <<"file_uuid">>,
+        SessId = ?config(session_id, Config),
+        CtrThr = ?config(ctr_thr, Config),
+        EvtNum = ?config(evt_num, Config),
+        EvtSize = ?config(evt_size, Config),
 
-            % Emit events.
-            {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-                lists:foreach(fun(N) ->
-                    emit(Worker, #write_event{file_uuid = FileUuid, size = EvtSize,
-                        file_size = N * EvtSize, blocks = [#file_block{
-                            offset = (N - 1) * EvtSize, size = EvtSize
-                        }]}, SessId)
-                end, lists:seq(1, EvtNum))
-            end),
+        initializer:remove_pending_messages(),
+        {ok, SubId} = subscribe(Worker,
+            fun(#event{object = #write_event{}}) -> true; (_) -> false end,
+            fun(Meta) -> Meta >= CtrThr end,
+            fun(Evts, _) -> Self ! {event_handler, Evts} end
+        ),
 
-            % Check whether events have been aggregated and handler has been executed.
-            {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-                lists:foreach(fun(N) ->
-                    Size = CtrThr * EvtSize,
-                    Offset = (N - 1) * Size,
-                    FileSize = N * CtrThr * EvtSize,
-                    ?assertReceivedMatch({event_handler, [#event{
-                        counter = CtrThr,
-                        object = #write_event{
-                            file_uuid = FileUuid, size = Size, file_size = FileSize,
-                            blocks = [#file_block{offset = Offset, size = Size}]
-                        }
-                    }]}, ?TIMEOUT)
-                end, lists:seq(1, EvtNum div CtrThr))
-            end),
+        % Emit events.
+        {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
+            lists:foreach(fun(N) ->
+                emit(Worker, #write_event{file_uuid = FileUuid, size = EvtSize,
+                    file_size = N * EvtSize, blocks = [#file_block{
+                        offset = (N - 1) * EvtSize, size = EvtSize
+                    }]}, SessId)
+            end, lists:seq(1, EvtNum))
+        end),
 
-            unsubscribe(Worker, SubId, {event_handler, []}),
+        % Check whether events have been aggregated and handler has been executed.
+        {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
+            lists:foreach(fun(N) ->
+                Size = CtrThr * EvtSize,
+                Offset = (N - 1) * Size,
+                FileSize = N * CtrThr * EvtSize,
+                ?assertReceivedMatch({event_handler, [#event{
+                    counter = CtrThr,
+                    object = #write_event{
+                        file_uuid = FileUuid, size = Size, file_size = FileSize,
+                        blocks = [#file_block{offset = Offset, size = Size}]
+                    }
+                }]}, ?TIMEOUT)
+            end, lists:seq(1, EvtNum div CtrThr))
+        end),
 
-            [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-                evt_per_sec(EvtNum, EmitUs + AggrUs)]
-        end).
+        unsubscribe(Worker, SubId, {event_handler, []}),
+
+        [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+            evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 emit_should_not_aggregate_events_with_different_key(Config) ->
     ?PERFORMANCE(Config, [
@@ -161,64 +170,64 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
                 {description, "Aggregates multiple events for large number of files."},
                 {parameters, [?CTR_THR(500), ?FILE_NUM(50)]}
             ]}
-        ],
-        fun(Config) ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            Self = self(),
-            SessId = ?config(session_id, Config),
-            CtrThr = ?config(ctr_thr, Config),
-            EvtNum = ?config(evt_num, Config),
-            EvtSize = ?config(evt_size, Config),
-            FileNum = ?config(file_num, Config),
+        ]).
 
-            initializer:remove_pending_messages(),
-            {ok, SubId} = subscribe(Worker,
-                fun(#event{object = #write_event{}}) -> true; (_) -> false end,
-                fun(Meta) -> Meta >= CtrThr end,
-                fun(Evts, _) -> Self ! {event_handler, Evts} end
-            ),
+emit_should_not_aggregate_events_with_different_key_base(Config) ->
+        [Worker | _] = ?config(op_worker_nodes, Config),
+        Self = self(),
+        SessId = ?config(session_id, Config),
+        CtrThr = ?config(ctr_thr, Config),
+        EvtNum = ?config(evt_num, Config),
+        EvtSize = ?config(evt_size, Config),
+        FileNum = ?config(file_num, Config),
 
-            Evts = lists:map(fun(Uuid) -> #event{object = #write_event{
-                file_uuid = ?FILE_UUID(Uuid), size = EvtSize, file_size = EvtSize,
-                blocks = [#file_block{offset = 0, size = EvtSize}]
-            }} end, lists:seq(1, FileNum)),
+        initializer:remove_pending_messages(),
+        {ok, SubId} = subscribe(Worker,
+            fun(#event{object = #write_event{}}) -> true; (_) -> false end,
+            fun(Meta) -> Meta >= CtrThr end,
+            fun(Evts, _) -> Self ! {event_handler, Evts} end
+        ),
 
-            % List of events that are supposed to be received multiple times as a result
-            % of event handler execution.
-            BatchSize = CtrThr div FileNum,
-            EvtsToRecv = lists:sort(lists:map(fun(#event{object = #write_event{
-                file_uuid = FileUuid
-            } = Type} = Evt) ->
-                Evt#event{key = FileUuid, counter = BatchSize, object = Type#write_event{
-                    size = BatchSize * EvtSize
-                }}
-            end, Evts)),
+        Evts = lists:map(fun(Uuid) -> #event{object = #write_event{
+            file_uuid = ?FILE_UUID(Uuid), size = EvtSize, file_size = EvtSize,
+            blocks = [#file_block{offset = 0, size = EvtSize}]
+        }} end, lists:seq(1, FileNum)),
 
-            % Emit events for different files.
-            {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-                lists:foreach(fun(_) ->
-                    lists:foreach(fun(Evt) ->
-                        emit(Worker, Evt, SessId)
-                    end, Evts)
-                end, lists:seq(1, EvtNum))
-            end),
+        % List of events that are supposed to be received multiple times as a result
+        % of event handler execution.
+        BatchSize = CtrThr div FileNum,
+        EvtsToRecv = lists:sort(lists:map(fun(#event{object = #write_event{
+            file_uuid = FileUuid
+        } = Type} = Evt) ->
+            Evt#event{key = FileUuid, counter = BatchSize, object = Type#write_event{
+                size = BatchSize * EvtSize
+            }}
+        end, Evts)),
 
-            % Check whether events have been aggregated in terms of the same file ID
-            % and handler has been executed.
-            {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-                lists:foreach(fun(_) ->
-                    {event_handler, AggrEvts} = ?assertReceivedMatch(
-                        {event_handler, _}, ?TIMEOUT
-                    ),
-                    ?assertEqual(EvtsToRecv, lists:sort(AggrEvts))
-                end, lists:seq(1, EvtNum div CtrThr))
-            end),
+        % Emit events for different files.
+        {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
+            lists:foreach(fun(_) ->
+                lists:foreach(fun(Evt) ->
+                    emit(Worker, Evt, SessId)
+                end, Evts)
+            end, lists:seq(1, EvtNum))
+        end),
 
-            unsubscribe(Worker, SubId, {event_handler, []}),
+        % Check whether events have been aggregated in terms of the same file ID
+        % and handler has been executed.
+        {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
+            lists:foreach(fun(_) ->
+                {event_handler, AggrEvts} = ?assertReceivedMatch(
+                    {event_handler, _}, ?TIMEOUT
+                ),
+                ?assertEqual(EvtsToRecv, lists:sort(AggrEvts))
+            end, lists:seq(1, EvtNum div CtrThr))
+        end),
 
-            [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-                evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)]
-        end).
+        unsubscribe(Worker, SubId, {event_handler, []}),
+
+        [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+            evt_per_sec(FileNum * EvtNum, EmitUs + AggrUs)].
 
 emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
     ?PERFORMANCE(Config, [
@@ -239,44 +248,44 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
                 {description, "Executes event handler for stream with large counter threshold."},
                 {parameters, [?CTR_THR(1000), ?EVT_NUM(50000)]}
             ]}
-        ],
-        fun(Config) ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            Self = self(),
-            FileUuid = <<"file_id">>,
-            SessId = ?config(session_id, Config),
-            CtrThr = ?config(ctr_thr, Config),
-            EvtNum = ?config(evt_num, Config),
+        ]).
 
-            initializer:remove_pending_messages(),
-            {ok, SubId} = subscribe(Worker,
-                fun(#event{object = #write_event{}}) -> true; (_) -> false end,
-                fun(Meta) -> Meta >= CtrThr end,
-                fun(_, _) -> Self ! event_handler end
-            ),
+emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) ->
+        [Worker | _] = ?config(op_worker_nodes, Config),
+        Self = self(),
+        FileUuid = <<"file_id">>,
+        SessId = ?config(session_id, Config),
+        CtrThr = ?config(ctr_thr, Config),
+        EvtNum = ?config(evt_num, Config),
 
-            % Emit events.
-            {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-                lists:foreach(fun(_) ->
-                    emit(Worker, #write_event{
-                        file_uuid = FileUuid, size = 0, file_size = 0
-                    }, SessId)
-                end, lists:seq(1, EvtNum))
-            end),
+        initializer:remove_pending_messages(),
+        {ok, SubId} = subscribe(Worker,
+            fun(#event{object = #write_event{}}) -> true; (_) -> false end,
+            fun(Meta) -> Meta >= CtrThr end,
+            fun(_, _) -> Self ! event_handler end
+        ),
 
-            % Check whether events have been aggregated and handler has been executed
-            % when emission rule has been satisfied.
-            {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-                lists:foreach(fun(_) ->
-                    ?assertReceivedEqual(event_handler, ?TIMEOUT)
-                end, lists:seq(1, EvtNum div CtrThr))
-            end),
+        % Emit events.
+        {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
+            lists:foreach(fun(_) ->
+                emit(Worker, #write_event{
+                    file_uuid = FileUuid, size = 0, file_size = 0
+                }, SessId)
+            end, lists:seq(1, EvtNum))
+        end),
 
-            unsubscribe(Worker, SubId, event_handler),
+        % Check whether events have been aggregated and handler has been executed
+        % when emission rule has been satisfied.
+        {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
+            lists:foreach(fun(_) ->
+                ?assertReceivedEqual(event_handler, ?TIMEOUT)
+            end, lists:seq(1, EvtNum div CtrThr))
+        end),
 
-            [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-                evt_per_sec(EvtNum, EmitUs + AggrUs)]
-        end).
+        unsubscribe(Worker, SubId, event_handler),
+
+        [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+            evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
     ?PERFORMANCE(Config, [
@@ -297,48 +306,48 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
                 {description, "Executes event handler for stream with large size threshold."},
                 {parameters, [?SIZE_THR(10000), ?EVT_NUM(50000)]}
             ]}
-        ],
-        fun(Config) ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            Self = self(),
-            FileUuid = <<"file_id">>,
-            SessId = ?config(session_id, Config),
-            SizeThr = ?config(size_thr, Config),
-            EvtNum = ?config(evt_num, Config),
-            EvtSize = ?config(evt_size, Config),
+        ]).
 
-            initializer:remove_pending_messages(),
-            {ok, SubId} = subscribe(Worker,
-                infinity,
-                fun(#event{object = #write_event{}}) -> true; (_) -> false end,
-                fun(Meta) -> Meta >= SizeThr end,
-                fun(Meta, #event{object = #write_event{size = Size}}) ->
-                    Meta + Size end,
-                fun(_, _) -> Self ! event_handler end
-            ),
+emit_should_execute_event_handler_when_size_threshold_exceeded_base(Config) ->
+        [Worker | _] = ?config(op_worker_nodes, Config),
+        Self = self(),
+        FileUuid = <<"file_id">>,
+        SessId = ?config(session_id, Config),
+        SizeThr = ?config(size_thr, Config),
+        EvtNum = ?config(evt_num, Config),
+        EvtSize = ?config(evt_size, Config),
 
-            % Emit events.
-            {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-                lists:foreach(fun(_) ->
-                    emit(Worker, #write_event{
-                        file_uuid = FileUuid, size = EvtSize, file_size = 0
-                    }, SessId)
-                end, lists:seq(1, EvtNum))
-            end),
+        initializer:remove_pending_messages(),
+        {ok, SubId} = subscribe(Worker,
+            infinity,
+            fun(#event{object = #write_event{}}) -> true; (_) -> false end,
+            fun(Meta) -> Meta >= SizeThr end,
+            fun(Meta, #event{object = #write_event{size = Size}}) ->
+                Meta + Size end,
+            fun(_, _) -> Self ! event_handler end
+        ),
 
-            % Check whether events have been aggregated and handler has been executed
-            % when emission rule has been satisfied.
-            {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
-                lists:foreach(fun(_) ->
-                    ?assertReceivedEqual(event_handler, ?TIMEOUT)
-                end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
-            end),
+        % Emit events.
+        {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
+            lists:foreach(fun(_) ->
+                emit(Worker, #write_event{
+                    file_uuid = FileUuid, size = EvtSize, file_size = 0
+                }, SessId)
+            end, lists:seq(1, EvtNum))
+        end),
 
-            unsubscribe(Worker, SubId, event_handler),
+        % Check whether events have been aggregated and handler has been executed
+        % when emission rule has been satisfied.
+        {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
+            lists:foreach(fun(_) ->
+                ?assertReceivedEqual(event_handler, ?TIMEOUT)
+            end, lists:seq(1, (EvtNum * EvtSize) div SizeThr))
+        end),
 
-            [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-                evt_per_sec(EvtNum, EmitUs + AggrUs)]
-        end).
+        unsubscribe(Worker, SubId, event_handler),
+
+        [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+            evt_per_sec(EvtNum, EmitUs + AggrUs)].
 
 multiple_subscribe_should_create_multiple_subscriptions(Config) ->
     ?PERFORMANCE(Config, [
@@ -361,56 +370,56 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
                 "number of different files."},
                 {parameters, [?SUB_NUM(50)]}
             ]}
-        ],
-        fun(Config) ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            SessId = ?config(session_id, Config),
-            Self = self(),
-            SubsNum = ?config(sub_num, Config),
-            EvtsNum = ?config(evt_num, Config),
+        ]).
 
-            initializer:remove_pending_messages(),
-            % Create subscriptions for events associated with different files.
-            {SubIds, FileUuids} = lists:unzip(lists:map(fun(N) ->
-                FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
-                {ok, SubId} = subscribe(Worker,
-                    fun
-                        (#event{object = #write_event{file_uuid = Uuid}}) ->
-                            Uuid =:= FileUuid;
-                        (_) -> false
-                    end,
-                    fun(Meta) -> Meta >= EvtsNum end,
-                    fun(Evts, _) -> Self ! {event_handler, Evts} end
-                ),
-                {SubId, FileUuid}
-            end, lists:seq(1, SubsNum))),
+multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
+        [Worker | _] = ?config(op_worker_nodes, Config),
+        SessId = ?config(session_id, Config),
+        Self = self(),
+        SubsNum = ?config(sub_num, Config),
+        EvtsNum = ?config(evt_num, Config),
 
-            % Emit events.
-            utils:pforeach(fun(FileUuid) ->
-                lists:foreach(fun(N) ->
-                    emit(Worker, #write_event{
-                        file_uuid = FileUuid, size = 1, file_size = N + 1,
-                        blocks = [#file_block{offset = N, size = 1}]
-                    }, SessId)
-                end, lists:seq(0, EvtsNum - 1))
-            end, FileUuids),
+        initializer:remove_pending_messages(),
+        % Create subscriptions for events associated with different files.
+        {SubIds, FileUuids} = lists:unzip(lists:map(fun(N) ->
+            FileUuid = <<"file_id_", (integer_to_binary(N))/binary>>,
+            {ok, SubId} = subscribe(Worker,
+                fun
+                    (#event{object = #write_event{file_uuid = Uuid}}) ->
+                        Uuid =:= FileUuid;
+                    (_) -> false
+                end,
+                fun(Meta) -> Meta >= EvtsNum end,
+                fun(Evts, _) -> Self ! {event_handler, Evts} end
+            ),
+            {SubId, FileUuid}
+        end, lists:seq(1, SubsNum))),
 
-            % Check whether event handlers have been executed.
-            lists:foreach(fun(FileUuid) ->
-                ?assertReceivedMatch({event_handler, [#event{
-                    counter = EvtsNum, object = #write_event{
-                        file_uuid = FileUuid, size = EvtsNum, file_size = EvtsNum,
-                        blocks = [#file_block{offset = 0, size = EvtsNum}]
-                    }
-                }]}, ?TIMEOUT)
-            end, FileUuids),
+        % Emit events.
+        utils:pforeach(fun(FileUuid) ->
+            lists:foreach(fun(N) ->
+                emit(Worker, #write_event{
+                    file_uuid = FileUuid, size = 1, file_size = N + 1,
+                    blocks = [#file_block{offset = N, size = 1}]
+                }, SessId)
+            end, lists:seq(0, EvtsNum - 1))
+        end, FileUuids),
 
-            lists:foreach(fun(SubId) ->
-                unsubscribe(Worker, SubId, {event_handler, []})
-            end, SubIds),
+        % Check whether event handlers have been executed.
+        lists:foreach(fun(FileUuid) ->
+            ?assertReceivedMatch({event_handler, [#event{
+                counter = EvtsNum, object = #write_event{
+                    file_uuid = FileUuid, size = EvtsNum, file_size = EvtsNum,
+                    blocks = [#file_block{offset = 0, size = EvtsNum}]
+                }
+            }]}, ?TIMEOUT)
+        end, FileUuids),
 
-            ok
-        end).
+        lists:foreach(fun(SubId) ->
+            unsubscribe(Worker, SubId, {event_handler, []})
+        end, SubIds),
+
+        ok.
 
 subscribe_should_work_for_multiple_sessions(Config) ->
     ?PERFORMANCE(Config, [
@@ -430,58 +439,58 @@ subscribe_should_work_for_multiple_sessions(Config) ->
                 {description, "Large number of clients connected to the server."},
                 {parameters, [?CLI_NUM(500)]}
             ]}
-        ],
-        fun(Config) ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            Self = self(),
-            FileUuid = <<"file_id">>,
-            CliNum = ?config(cli_num, Config),
-            CtrThr = ?config(ctr_thr, Config),
-            EvtNum = ?config(evt_num, Config),
+        ]).
 
-            initializer:remove_pending_messages(),
-            SessIds = lists:map(fun(N) ->
-                SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-                Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-                session_setup(Worker, SessId, Iden, Self),
-                SessId
-            end, lists:seq(1, CliNum)),
+subscribe_should_work_for_multiple_sessions_base(Config) ->
+        [Worker | _] = ?config(op_worker_nodes, Config),
+        Self = self(),
+        FileUuid = <<"file_id">>,
+        CliNum = ?config(cli_num, Config),
+        CtrThr = ?config(ctr_thr, Config),
+        EvtNum = ?config(evt_num, Config),
 
-            {ok, SubId} = subscribe(Worker,
-                fun(#event{object = #write_event{}}) -> true; (_) -> false end,
-                fun(Meta) -> Meta >= CtrThr end,
-                fun(_, _) -> Self ! event_handler end
-            ),
+        initializer:remove_pending_messages(),
+        SessIds = lists:map(fun(N) ->
+            SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
+            Iden = #identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
+            session_setup(Worker, SessId, Iden, Self),
+            SessId
+        end, lists:seq(1, CliNum)),
 
-            % Emit events.
-            {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-                utils:pforeach(fun(SessId) ->
-                    lists:foreach(fun(_) ->
-                        emit(Worker, #write_event{
-                            file_uuid = FileUuid, size = 0, file_size = 0
-                        }, SessId)
-                    end, lists:seq(1, EvtNum))
-                end, SessIds)
-            end),
+        {ok, SubId} = subscribe(Worker,
+            fun(#event{object = #write_event{}}) -> true; (_) -> false end,
+            fun(Meta) -> Meta >= CtrThr end,
+            fun(_, _) -> Self ! event_handler end
+        ),
 
-            % Check whether events have been aggregated and handler has been executed
-            % when emission rule has been satisfied.
-            {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
+        % Emit events.
+        {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
+            utils:pforeach(fun(SessId) ->
                 lists:foreach(fun(_) ->
-                    lists:foreach(fun(_) ->
-                        ?assertReceivedEqual(event_handler, ?TIMEOUT)
-                    end, lists:seq(1, EvtNum div CtrThr))
-                end, SessIds)
-            end),
+                    emit(Worker, #write_event{
+                        file_uuid = FileUuid, size = 0, file_size = 0
+                    }, SessId)
+                end, lists:seq(1, EvtNum))
+            end, SessIds)
+        end),
 
-            unsubscribe(Worker, SubId, event_handler),
-            lists:foreach(fun(SessId) ->
-                session_teardown(Worker, SessId)
-            end, SessIds),
+        % Check whether events have been aggregated and handler has been executed
+        % when emission rule has been satisfied.
+        {_, AggrUs, AggrTime, AggrUnit} = utils:duration(fun() ->
+            lists:foreach(fun(_) ->
+                lists:foreach(fun(_) ->
+                    ?assertReceivedEqual(event_handler, ?TIMEOUT)
+                end, lists:seq(1, EvtNum div CtrThr))
+            end, SessIds)
+        end),
 
-            [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
-                evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)]
-    end).
+        unsubscribe(Worker, SubId, event_handler),
+        lists:foreach(fun(SessId) ->
+            session_teardown(Worker, SessId)
+        end, SessIds),
+
+        [emit_time(EmitTime, EmitUnit), aggr_time(AggrTime, AggrUnit),
+            evt_per_sec(CliNum * EvtNum, EmitUs + AggrUs)].
 
 %%%===================================================================
 %%% SetUp and TearDown functions

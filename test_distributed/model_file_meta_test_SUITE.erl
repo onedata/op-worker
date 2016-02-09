@@ -26,7 +26,11 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, exec_and_check_time/3]).
+%% tests
 -export([basic_operations_test/1, rename_test/1]).
+%% test_bases
+-export([basic_operations_test_base/1]).
+%% auxiliary function
 -export([basic_operations_test_core/1]).
 
 all() ->
@@ -45,11 +49,11 @@ basic_operations_test(Config) ->
             {success_rate, ?SUCCESS_RATE},
             {description, "Performs operations on file meta model"},
             {config, [{name, basic_config}, {description, "Basic config for test"}]}
-        ],
-        fun(Config) ->
-            basic_operations_test_core(Config)
-        end
+        ]
     ).
+
+basic_operations_test_base(Config) ->
+    basic_operations_test_core(Config).
 
 rename_test(Config) ->
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),

@@ -23,7 +23,7 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([stress_test/1, file_meta_basic_operations_test/1]).
+-export([stress_test/1, file_meta_basic_operations_test/1, file_meta_basic_operations_test_base/1, stress_test_base/1]).
 
 -define(STRESS_CASES, [
     file_meta_basic_operations_test
@@ -49,22 +49,22 @@ stress_test(Config) ->
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
             {success_rate, 99.9},
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
-        ],
-        fun(Config) ->
-            performance_macros:stress_test(Config)
-        end
+        ]
     ).
+
+stress_test_base(Config) ->
+  performance_macros:stress_test(Config).
 
 %%%===================================================================
 
 file_meta_basic_operations_test(Config) ->
     ?PERFORMANCE(Config, [
         {description, "Performs operations on file meta model"}
-      ],
-      fun(Config) ->
-        model_file_meta_test_SUITE:basic_operations_test_core(Config)
-      end
+      ]
     ).
+
+file_meta_basic_operations_test_base(Config) ->
+  model_file_meta_test_SUITE:basic_operations_test_core(Config).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
