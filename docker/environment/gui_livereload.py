@@ -62,7 +62,7 @@ nohup bash /root/bin/chown_tmp_dir.sh &
 . /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {source_gui_dir}
-ember build --watch --output-path={release_gui_dir}'''
+ember build --watch --output-path={release_gui_dir} | tee /tmp/ember_build.log'''
     command = command.format(
         uid=os.geteuid(),
         gid=os.getegid(),
