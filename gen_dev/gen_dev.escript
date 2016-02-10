@@ -126,8 +126,8 @@ prepare_and_print_configuration(AppName, InputDir, ReleaseDir, NodeConfig) ->
     logger:print("===================== sys.config ========================"),
     SysConfig = proplists:get_value('sys.config', NodeConfig),
     lists:foreach(fun({ConfiguredApp, AppConfig}) ->
-        logger:print("-------- APPLICATION -------- ~*s --------", [-18, atom_to_list(ConfiguredApp)]),
-        lists:foreach(fun(X) -> logger:pretty_print_entry(X) end, AppConfig),
+        logger:pretty_print_entry({environment, ConfiguredApp}),
+        lists:foreach(fun(X) -> logger:pretty_print_entry(X, 1) end, AppConfig),
         logger:print("")
     end, SysConfig),
     logger:print(""),
