@@ -278,6 +278,7 @@ export default DS.RESTAdapter.extend({
       if (json.result === 'ok') {
         callback = adapter.promises[json.uuid];
         console.log('success: ' + json.data);
+        // TODO VFS-1508: sometimes, the callback is undefined - debug
         var transformed_data = adapter.transformResponse(json.data,
           callback.type, callback.operation);
         callback.success(transformed_data);
@@ -307,16 +308,17 @@ export default DS.RESTAdapter.extend({
   /** WebSocket onerror callback */
   error: function (event) {
     // TODO @todo better error handling
-    alert(event.data);
+    window.alert('WebSocket error, see console for details.');
+    console.error(`WebSocket error, event data: ` + event.data);
   },
 
   /**
    * Calls back to the server. Useful for getting information like
    * user name etc. from the server or performing some operation that
    * are not model-based.
-   * type - an identifier of resource, e.g. 'global' for global data
-   * operation - function identifier
-   * data - json data
+   * @param {string} type - an identifier of resource, e.g. 'global' for global data
+   * @param {string} operation - function identifier
+   * @param {object} data - json data
    */
   callback: function (type, operation, data) {
     var adapter = this;

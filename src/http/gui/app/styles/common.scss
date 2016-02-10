@@ -8,6 +8,7 @@ $secondary-sidebar-width: 352px !default;
 $content-padding: 12px !default;
 
 $top-bar-background-color: $onedata-snow !default;
+$top-bar-foreground-color: $onedata-topbar-graphite !default;
 $sidebar-background-color: $onedata-graphite !default;
 $content-background-color: #FFF !default;
 
@@ -16,6 +17,8 @@ $sidebar-item-hover-color: $onedata-red;
 /// Font and icon sizes
 $secondary-sidebar-font-size: 13pt !default;
 $secondary-sidebar-icon-font-size: 16pt !default;
+
+$top-bar-icon-font-size: 16pt !default;
 
 $table-font-size: 13pt !default;
 $table-checkbox-size: 16pt !default;
@@ -51,13 +54,34 @@ html, body {
     left: $sidebar-width;
     height: $top-bar-height;
 
+    color: $top-bar-foreground-color;
     background: $top-bar-background-color;
     // TODO
     //transition: left 0.25s;
 
-    .navbar-brand {
-      padding-left: 42px;
+    .navbar {
+      min-height: $top-bar-height;
+      margin-bottom: 0;
+      border: none;
+      border-radius: 0;
+      background: none;
+
+      .navbar-brand {
+        padding-left: 42px;
+      }
+
+      .top-bar-icon {
+        font-size: $top-bar-icon-font-size;
+      }
+
+      .navbar-nav {
+        .profile-dropdown {
+          margin-left: 10px;
+          margin-right: 10px;
+        }
+      }
     }
+
 
   }
 
@@ -145,6 +169,7 @@ html, body {
     left: $sidebar-width;
     bottom: 0;
     min-width: $global-min-width - $sidebar-width;
+    z-index: -1;
 
 
     // TODO

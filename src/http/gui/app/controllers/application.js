@@ -38,7 +38,7 @@ export default Ember.Controller.extend({
   initializeValue: function (key) {
     // TODO VFS-1508: probably use of (returnedValue) => {...}
     var controller = this;
-    this.serverService.callServer(key, function (returnedValue) {
+    this.get('serverService').callServer(key, function (returnedValue) {
       controller.set(key, returnedValue);
     });
   },

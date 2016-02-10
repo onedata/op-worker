@@ -10,6 +10,8 @@
 import Ember from 'ember';
 
 export default Ember.Service.extend({
+  store: Ember.inject.service('store'),
+
   /**
    * Sends a callback to the server. thenFun is evaluated on response from
    * the server.
