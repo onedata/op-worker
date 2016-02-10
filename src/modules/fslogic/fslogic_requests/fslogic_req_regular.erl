@@ -122,7 +122,7 @@ get_file_location(CTX, File, rdwr) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
-get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags) ->
+get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags) ->
     NormalizedParentUUID =
         case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
             true ->
@@ -133,7 +133,6 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
         end,
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = utils:time(),
     File = #document{value = #file_meta{
         name = Name,
@@ -147,25 +146,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
 
     {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
-
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
-        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = UUID},
-    {ok, LocId} = file_location:create(#document{value = Location}),
-
-    file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
-
-    LeafLess = fslogic_path:dirname(FileId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, undefined, Storage, LeafLess),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok -> ok;
-        {error, eexist} ->
-            ok
-    end,
-
-    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
-    storage_file_manager:unlink(SFMHandle1),
-    ok = storage_file_manager:create(SFMHandle1, Mode),
+    {ok, {StorageId, FileId}} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{
@@ -226,7 +207,7 @@ get_file_location_for_rdwr(CTX, File) -> get_file_location(CTX, File).
 get_file_location(CTX, File) ->
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
 
-    {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
+    {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
     #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),

@@ -12,35 +12,56 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/common.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("annotations/include/annotations.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([sample_test/1]).
+-export([dbsync_trigger_should_create_local_file_location/1]).
 
 
 -performance({test_cases, []}).
 all() ->
     [
-        sample_test
+        dbsync_trigger_should_create_local_file_location
     ].
 
--define(REMOTE_APPLIER, applier).
 
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-sample_test(Config) ->
-    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, 1}, Config),
-    ct:print("~p, ~p", [Workers, lfm_proxy:ls(W1, SessId, {path, <<"/">>}, 10, 0)]).
+dbsync_trigger_should_create_local_file_location(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    UserId = <<"user_id1">>,
+    CTime = utils:time(),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    FileMeta = #file_meta{
+        mode = 8#777,
+        name = <<"file">>,
+        type = ?REGULAR_FILE_TYPE,
+        mtime = CTime,
+        atime = CTime,
+        ctime = CTime,
+        uid = UserId
+    },
+    {ok, FileUUID} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+
+    rpc:call(W1, dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = FileMeta}}]),
+
+    ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUUID}])).
+
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -49,7 +70,6 @@ sample_test(Config) ->
 init_per_suite(Config) ->
     ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     initializer:setup_storage(ConfigWithNodes).
-    %todo mock dbsync_utils:get_providers_for_space/1
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),

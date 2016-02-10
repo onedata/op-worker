@@ -307,7 +307,7 @@ teardown_storage(Worker, Config) ->
 %%--------------------------------------------------------------------
 -spec name(Text :: string(), Num :: integer()) -> binary().
 name(Text, Num) ->
-    list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
+    list_to_binary(Text ++ integer_to_list(Num)).
 
 %%--------------------------------------------------------------------
 %% @private
