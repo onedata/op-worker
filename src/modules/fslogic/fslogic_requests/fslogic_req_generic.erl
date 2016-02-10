@@ -11,6 +11,7 @@
 -module(fslogic_req_generic).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/events/types.hrl").
@@ -102,14 +103,15 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
+            ctime = CTime, uid = _UserID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
             #posix_user_ctx{gid = GID, uid = UID} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
                 StorageId = fslogic_utils:get_storage_id(SpaceUUID),
                 StorageType = fslogic_utils:get_storage_type(StorageId),
-                fslogic_utils:get_posix_user_ctx(UserID, StorageId, StorageType)
+                {ok, Enable_LUMA} = application:get_env(?APP_NAME, enable_luma),
+                fslogic_storage:get_posix_user_ctx(Enable_LUMA, StorageType, SessId, SpaceUUID)
             catch
                 throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
             end,

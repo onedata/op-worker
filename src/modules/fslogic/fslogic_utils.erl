@@ -18,8 +18,8 @@
 
 %% API
 -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
--export([get_local_file_location/1, get_local_storage_file_locations/1, get_credentials_from_luma/1]).
--export([get_storage_type/1, get_storage_id/1, get_posix_user_ctx/3]).
+-export([get_local_file_location/1, get_local_storage_file_locations/1, get_credentials_from_luma/3]).
+-export([get_storage_type/1, get_storage_id/1, gen_storage_gid/2, parse_posix_ctx_from_luma/2]).
 
 
 %%%===================================================================
@@ -52,10 +52,22 @@ get_storage_id(SpaceUUID) ->
 %% @doc Retrieves user credentials to storage from LUMA
 %% @end
 %%--------------------------------------------------------------------
--spec get_credentials_from_luma(binary()) -> proplists:proplist().
-get_credentials_from_luma(Params) ->
+-spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
+    StorageId :: storage:id() | helpers:name()) -> proplists:proplist().
+get_credentials_from_luma(UserId, StorageType, StorageId) ->
+    {ok, LUMA_hostname} = application:get_env(?APP_NAME, luma_hostname),
+    Hostname_binary = list_to_binary(LUMA_hostname),
+    {ok, LUMA_port} = application:get_env(?APP_NAME, luma_port),
+    Port_binary = list_to_binary(LUMA_port),
+    {ok, Hostname} = inet:gethostname(),
+    {ok, {hostent, Full_hostname, _, inet, _, [IP]}} = inet:gethostbyname(Hostname),
+    Full_hostname_binary = list_to_binary(Full_hostname),
+    IP_string = inet_parse:ntoa(IP),
+    IP_binary = list_to_binary(IP_string),
     case http_client:get(
-        <<"172.19.160.194:5000/get_user_credentials?",Params/binary>>,
+        <<Hostname_binary/binary,":",Port_binary/binary,"/get_user_credentials?global_id=",UserId/binary,
+            "&storage_type=",StorageType/binary,"&storage_id=",StorageId/binary,"&source_ip=",IP_binary/binary,
+            "&source_hostname=",Full_hostname_binary/binary>>,
         [],
         [],
         [insecure]
@@ -75,6 +87,36 @@ get_credentials_from_luma(Params) ->
 
 
 %%--------------------------------------------------------------------
+%% @doc Parses LUMA response to posix user ctx
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_posix_ctx_from_luma(proplists:proplist(), SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
+parse_posix_ctx_from_luma(Response, SpaceUUID) ->
+    GID = case proplists:get_value(<<"gid">>, Response) of
+              undefined ->
+                  {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+                  gen_storage_gid(SpaceName, SpaceUUID);
+              Val ->
+                  Val
+          end,
+    #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = GID}.
+
+
+%%--------------------------------------------------------------------
+%% @doc Generates storage GID based on SpaceName or SpaceUUID
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_gid(SpaceName :: file_meta:name(), SpaceUUID :: file_meta:uuid()) -> non_neg_integer().
+gen_storage_gid(SpaceName, SpaceUUID) ->
+    case helpers_nif:groupname_to_gid(SpaceName) of
+        {ok, GID} ->
+            GID;
+        {error, _} ->
+            fslogic_utils:gen_storage_uid(SpaceUUID)
+    end.
+
+
+%%--------------------------------------------------------------------
 %% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id, space id, etc)
 %% @end
 %%--------------------------------------------------------------------
@@ -86,23 +128,6 @@ gen_storage_uid(ID) ->
     {ok, LowestUID} = application:get_env(?APP_NAME, lowest_generated_storage_uid),
     {ok, HighestUID} = application:get_env(?APP_NAME, highest_generated_storage_uid),
     LowestUID + UID0 rem HighestUID.
-
-
-%%--------------------------------------------------------------------
-%% @doc Retrieves posix user context from LUMA
-%% @end
-%%--------------------------------------------------------------------
--spec get_posix_user_ctx(onedata_user:id(), storage:id(), helpers:name()) -> #posix_user_ctx{}.
-get_posix_user_ctx(?ROOT_USER_ID, _, _) ->
-    ?ROOT_POSIX_CTX;
-get_posix_user_ctx(UserId, StorageId, StorageType = ?DIRECTIO_HELPER_NAME) ->
-    {ok, Response} = get_credentials_from_luma(<<"global_id=",UserId/binary,"&storage_id=",StorageId/binary,
-        "&storage_type=",StorageType/binary>>),
-    #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = proplists:get_value(<<"gid">>, Response)};
-get_posix_user_ctx(UserId, _, _) ->
-    {ok, Response} = get_credentials_from_luma(<<"global_id=",UserId/binary,
-        "&storage_type=",?DIRECTIO_HELPER_NAME/binary>>),
-    #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = proplists:get_value(<<"gid">>, Response)}.
 
 
 %%--------------------------------------------------------------------

@@ -108,4 +108,9 @@
     credentials :: #{storage:id() => s3_user:credentials()}
 }).
 
+%% Model represents user credentials form luma
+-record(luma_response, {
+    credentials :: helpers:user_ctx()
+}).
+
 -endif.

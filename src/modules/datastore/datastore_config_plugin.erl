@@ -37,5 +37,6 @@ models() -> [
   space_info,
   space_storage,
   ceph_user,
-  s3_user
+  s3_user,
+  luma_response
 ].
