@@ -40,8 +40,8 @@ def _tweak_config(config, name, instance, uid, configurator):
     cfg = copy.deepcopy(config)
     cfg['nodes'] = {'node': cfg['nodes'][name]}
     app_name = configurator.app_name()
-
     sys_config = cfg['nodes']['node']['sys.config']
+
     sys_config[app_name]['cm_nodes'] = [
         cluster_manager.cm_erl_node_name(n, instance, uid) for n in
         sys_config[app_name]['cm_nodes']]
@@ -166,7 +166,7 @@ def _db_driver_module(db_driver):
 
 
 def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
-    config = common.parse_json_file(config_path)
+    config = common.parse_json_config_file(config_path)
     input_dir = config['dirs_config'][configurator.app_name()]['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
 

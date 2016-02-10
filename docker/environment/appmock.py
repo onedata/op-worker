@@ -128,7 +128,7 @@ def _ready(node):
 
 
 def up(image, bindir, dns_server, uid, config_path, logdir=None):
-    config = common.parse_json_file(config_path)
+    config = common.parse_json_config_file(config_path)
     input_dir = config['dirs_config']['appmock']['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
