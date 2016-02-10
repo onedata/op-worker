@@ -32,7 +32,7 @@ def _tweak_config(config, cm_node, op_instance, uid):
     cfg = copy.deepcopy(config)
     cfg['nodes'] = {'node': cfg['nodes'][cm_node]}
 
-    sys_config = cfg['nodes']['node']['sys.config']
+    sys_config = cfg['nodes']['node']['sys.config']['cluster_manager']
     sys_config['cm_nodes'] = [cm_erl_node_name(n, op_instance, uid)
                                for n in sys_config['cm_nodes']]
 

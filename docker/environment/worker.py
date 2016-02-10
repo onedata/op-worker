@@ -9,6 +9,7 @@ Script is parametrised by worker type related configurator.
 import copy
 import json
 import os
+import sys
 from . import common, docker, riak, couchbase, dns, cluster_manager
 
 CLUSTER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
@@ -38,15 +39,18 @@ def worker_erl_node_name(node_name, instance, uid):
 def _tweak_config(config, name, instance, uid, configurator):
     cfg = copy.deepcopy(config)
     cfg['nodes'] = {'node': cfg['nodes'][name]}
+    app_name = configurator.app_name()
 
     sys_config = cfg['nodes']['node']['sys.config']
-    sys_config['cm_nodes'] = [
+    sys_config[app_name]['cm_nodes'] = [
         cluster_manager.cm_erl_node_name(n, instance, uid) for n in
-        sys_config['cm_nodes']]
+        sys_config[app_name]['cm_nodes']]
     # Set the cluster domain (needed for nodes to start)
-    sys_config[configurator.domain_env_name()] = cluster_domain(instance, uid)
+    sys_config[app_name][configurator.domain_env_name()] = cluster_domain(instance, uid)
 
-    sys_config['persistence_driver_module'] = _db_driver_module(cfg['db_driver'])
+    if 'cluster_worker' not in sys_config:
+        sys_config['cluster_worker'] = dict()
+    sys_config['cluster_worker']['persistence_driver_module'] = _db_driver_module(cfg['db_driver'])
 
     if 'vm.args' not in cfg['nodes']['node']:
         cfg['nodes']['node']['vm.args'] = {}
@@ -54,12 +58,13 @@ def _tweak_config(config, name, instance, uid, configurator):
     vm_args['name'] = worker_erl_node_name(name, instance, uid)
 
     cfg = configurator.tweak_config(cfg, uid)
-    return cfg, sys_config['db_nodes']
+    return cfg, sys_config[app_name]['db_nodes']
 
 
 def _node_up(image, bindir, config, dns_servers, db_node_mappings, logdir, configurator):
+    app_name = configurator.app_name()
     node_name = config['nodes']['node']['vm.args']['name']
-    db_nodes = config['nodes']['node']['sys.config']['db_nodes']
+    db_nodes = config['nodes']['node']['sys.config'][app_name]['db_nodes']
     for i in range(len(db_nodes)):
         db_nodes[i] = db_node_mappings[db_nodes[i]]
 
@@ -186,7 +191,7 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
         # Tweak configs, retrieve lis of riak nodes to start
         configs = []
         all_db_nodes = []
-        
+
         for worker_node in gen_dev_cfg['nodes']:
             tw_cfg, db_nodes = _tweak_config(gen_dev_cfg, worker_node, instance, uid, configurator)
             configs.append(tw_cfg)

@@ -53,7 +53,7 @@ def _tweak_config(config, gr_node, gr_instance, uid):
     cfg = copy.deepcopy(config)
     cfg['nodes'] = {'node': cfg['nodes'][gr_node]}
 
-    sys_config = cfg['nodes']['node']['sys.config']
+    sys_config = cfg['nodes']['node']['sys.config']['globalregistry']
     sys_config['db_nodes'] = [db_erl_node_name(n, gr_instance, uid)
                               for n in sys_config['db_nodes']]
 

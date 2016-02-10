@@ -118,13 +118,18 @@ prepare_and_print_configuration(AppName, InputDir, ReleaseDir, NodeConfig) ->
     logger:pretty_print_entry({application, AppName}),
     logger:pretty_print_entry({input_dir, InputDir}),
     logger:pretty_print_entry({release_dir, ReleaseDir}),
+
     logger:print("====================== vm.args =========================="),
     VmArgs = proplists:get_value('vm.args', NodeConfig),
     lists:foreach(fun(X) -> logger:pretty_print_entry(X) end, VmArgs),
+
     logger:print("===================== sys.config ========================"),
     SysConfig = proplists:get_value('sys.config', NodeConfig),
-    lists:foreach(fun(X) -> logger:pretty_print_entry(X) end, SysConfig),
-    logger:print("========================================================="),
+    lists:foreach(fun({ConfiguredApp, AppConfig}) ->
+        logger:print("-------- APPLICATION -------- ~*s --------", [-18, atom_to_list(ConfiguredApp)]),
+        lists:foreach(fun(X) -> logger:pretty_print_entry(X) end, AppConfig),
+        logger:print("")
+    end, SysConfig),
     logger:print(""),
     {SysConfig, VmArgs}.
 

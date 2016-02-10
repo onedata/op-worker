@@ -39,7 +39,7 @@ def _tweak_config(config, name, uid):
     vm_args = cfg['nodes']['node']['vm.args']
     vm_args['name'] = panel_erl_node_name(name, uid)
 
-    sys_config = cfg['nodes']['node']['sys.config']
+    sys_config = cfg['nodes']['node']['sys.config']['op_panel']
     sys_config['provider_domain'] = {"string": panel_provider_domain(uid)}
 
     return cfg
