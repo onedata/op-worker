@@ -44,6 +44,7 @@ dbsync_trigger_should_create_local_file_location(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
     UserId = <<"user_id1">>,
+    SessionId = <<"session_id1">>,
     CTime = utils:time(),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
@@ -59,9 +60,10 @@ dbsync_trigger_should_create_local_file_location(Config) ->
 
     rpc:call(W1, dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = FileMeta}}]),
 
-    ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUUID}])).
-
-
+    ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUUID}])),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUUID}, rdwr)),
+    ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
+    ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
