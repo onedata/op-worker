@@ -53,8 +53,8 @@ emit_file_sizeless_attrs_update(FileEntry) ->
     case logical_file_manager:stat(?ROOT_SESS_ID, FileEntry) of
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new times for file ~p to all subscribers", [FileEntry]),
-            TimeFileAttr = FileAttr#file_attr{size = -1},
-            event:emit(#event{object = #update_event{object = TimeFileAttr}});
+            SizelessFileAttr = FileAttr#file_attr{size = undefined},
+            event:emit(#event{object = #update_event{object = SizelessFileAttr}});
         {error, Reason} ->
             ?error("Unable to get new times for file ~p due to: ~p", [FileEntry, Reason]),
             {error, Reason}
