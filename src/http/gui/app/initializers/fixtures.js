@@ -1,9 +1,29 @@
+/**
+ * Creates some hard-coded records with random relations in store.
+ *
+ * Works onlu on models:
+ * - space
+ * - spaceUser
+ * - spaceGroup
+ * - spaceUserPermission
+ * - spaceGroupPermission
+ *
+ * Firstly, removes records (all of given models) then creates new.
+ * Other models are leaved untouched.
+ *
+ * @module initializers/fixtures
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
+
 import Ember from 'ember';
 
-// TODO causes problems, currently always true
-function ifNoSpacesInStore(store, thenCallback) {
+// TODO causes problems, currently always invokes thenCallback
+let ifNoSpacesInStore = function (store, thenCallback) {
   console.warn('Will generate test spaces data!');
   thenCallback();
+  // TODO: a code for invoking thenCallback only if there are no records
   // store.findAll('space').then((spaces) => {
   //   let spacesCount = spaces.get('length');
   //   if (spacesCount <= 0) {
@@ -13,7 +33,7 @@ function ifNoSpacesInStore(store, thenCallback) {
   //     console.debug(`There are ${spacesCount} spaces already in store`);
   //   }
   // });
-}
+};
 
 function clearStore(store, successCallback) {
   store.findAll('space').then((spaces) => {

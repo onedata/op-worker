@@ -1,6 +1,12 @@
 import DS from 'ember-data';
 
-/** Associates a single onedata user with multiple space permissions */
+/**
+ * Associates a single onedata user with multiple space permissions
+ * @module models/space-user
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+ */
 export default DS.Model.extend({
   /** Name exposed in GUI */
   name: DS.attr('string'),

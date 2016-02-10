@@ -1,9 +1,16 @@
- import ShowPermissionsBase from './show-permissions-base';
-
-/** Route to collection of single Group single Space permissions.
- *  Loads the userPermissions collection for Space loaded in space route.
- *  Renders to main-content.
+/**
+ * Route to collection of single Group single Space permissions.
+ * Loads the userPermissions collection for Space loaded in space route.
+ *
+ * @module routes/spaces/show/groups
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
  */
- export default ShowPermissionsBase.extend({
-   permissionsType: 'group'
- });
+
+import ShowPermissionsBase from './show-permissions-base';
+
+
+export default ShowPermissionsBase.extend({
+ permissionsType: 'group'
+});

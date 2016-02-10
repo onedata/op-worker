@@ -1,5 +1,3 @@
-import Ember from 'ember';
-
 /**
  * Insert a onedata checkbox icon representing four states: true/false unmodified/modified.
  * Eg. a modified false can be a green "x" in circle (depends on styles).
@@ -8,7 +6,16 @@ import Ember from 'ember';
  * @param {Boolean} isModified - true indicates that the value of checkbox
  *   was modified without saving
  * @returns {string} an icon span
- */
+ *
+ * @module helpers/bool-option
+ * @todo maybe it should be a Component
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
+
+import Ember from 'ember';
+
 export default Ember.Helper.helper(function(params) {
   let value = params[0];
   let isModified = params[1];

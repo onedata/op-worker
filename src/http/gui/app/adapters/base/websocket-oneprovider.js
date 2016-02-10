@@ -1,6 +1,12 @@
-// A default adapter of application - Oneprovide WebSocket
-// Custom adapter that handles model synchronization between client and server
-// using a websocket connection.
+/**
+ * A default adapter of application - Oneprovide WebSocket
+ * Custom adapter that handles model synchronization between client and server
+ * using a websocket connection.
+ * @module adapters/base/websocket-oneprovider
+ * @author Łukasz Opioła
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
 
 import Ember from 'ember';
 import DS from 'ember-data';
@@ -33,12 +39,12 @@ export default DS.RESTAdapter.extend({
   // Queue of messages before the socket is open
   beforeOpenQueue: [],
 
-  // Initialize connection
+  /** Initialize connection */
   init: function () {
     this.initializeSocket();
   },
 
-  // Developer function
+  /** Developer function - for logging/debugging */
   logToConsole: function (fun_name, fun_params) {
     console.log(fun_name + '(');
     for (var i = 0; i < fun_params.length; i++) {
@@ -47,43 +53,43 @@ export default DS.RESTAdapter.extend({
     console.log(')');
   },
 
-  // Called when ember store wants to find a record
+  /** Called when ember store wants to find a record */
   find: function (store, type, id, record) {
     this.logToConsole(FIND, [store, type, id, record]);
     return this.asyncRequest(FIND, type.typeKey, id);
   },
 
-  // Called when ember store wants to find all records of a type
+  /** Called when ember store wants to find all records of a type */
   findAll: function (store, type, sinceToken) {
     this.logToConsole(FIND_ALL, [store, type, sinceToken]);
     return this.asyncRequest(FIND_ALL, type.typeKey, null, sinceToken);
   },
 
-  // Called when ember store wants to find all records that match a query
+  /** Called when ember store wants to find all records that match a query */
   findQuery: function (store, type, query) {
     this.logToConsole(FIND_QUERY, [store, type, query]);
     return this.asyncRequest(FIND_QUERY, type.typeKey, null, query);
   },
 
-  // Called when ember store wants to find multiple records by id
+  /** Called when ember store wants to find multiple records by id */
   findMany: function (store, type, ids, records) {
     this.logToConsole(FIND_MANY, [store, type, ids, records]);
     return this.asyncRequest(FIND_MANY, type.typeKey, null, ids);
   },
 
-  // @todo is this needed?
+  /** @todo is this needed? **/
   findHasMany: function (store, record, url, relationship) {
     this.logToConsole(FIND_HAS_MANY, [store, record, url, relationship]);
     return 'not_implemented';
   },
 
-  // @todo is this needed?
+  /** @todo is this needed? */
   findBelongsTo: function (store, record, url, relationship) {
     this.logToConsole(FIND_BELONGS_TO, [store, record, url, relationship]);
     return 'not_implemented';
   },
 
-  // Called when ember store wants to create a record
+  /** Called when ember store wants to create a record */
   createRecord: function (store, type, record) {
     this.logToConsole(CREATE_RECORD, [store, type, record]);
     var data = {};
@@ -92,7 +98,7 @@ export default DS.RESTAdapter.extend({
     return this.asyncRequest(CREATE_RECORD, type.typeKey, null, data);
   },
 
-  // Called when ember store wants to update a record
+  /** Called when ember store wants to update a record */
   updateRecord: function (store, type, record) {
     this.logToConsole(UPDATE_RECORD, [store, type, record]);
     var data = {};
@@ -102,21 +108,23 @@ export default DS.RESTAdapter.extend({
     return this.asyncRequest(UPDATE_RECORD, type.typeKey, id, data);
   },
 
-  // Called when ember store wants to delete a record
+  /** Called when ember store wants to delete a record */
   deleteRecord: function (store, type, record) {
     this.logToConsole(DELETE_RECORD, [store, type, record]);
     var id = Ember.get(record, 'id');
     return this.asyncRequest(DELETE_RECORD, type.typeKey, id);
   },
 
-  // @todo is this needed?
+  /** @todo is this needed? */
   groupRecordsForFindMany: function (store, records) {
     this.logToConsole('groupRecordsForFindMany', [store, records]);
     return [records];
   },
 
-  // Used to transform some types of requests, because they carry different
-  // information.
+  /**
+   * Used to transform some types of requests, because they carry different
+   * information.
+   */
   transformRequest: function (json, type, operation) {
     switch (operation) {
       case UPDATE_RECORD:
@@ -130,8 +138,10 @@ export default DS.RESTAdapter.extend({
     }
   },
 
-  // Transform response received from WebScoket to the format expected
-  // by ember.
+  /**
+   * Transform response received from WebScoket to the format expected
+   * by ember.
+   */
   transformResponse: function (json, type, operation) {
     var records_name = Ember.String.pluralize(
       Ember.String.camelize(type));
@@ -162,8 +172,10 @@ export default DS.RESTAdapter.extend({
     }
   },
 
-  // Performs an sync request to server side and stores a handle to the
-  // promise, which will be resolved in message function.
+  /**
+   * Performs an sync request to server side and stores a handle to the
+   * promise, which will be resolved in message function.
+   */
   asyncRequest: function (operation, type, ids, data) {
     var adapter = this;
     adapter.logToConsole('asyncRequest', [operation, type, ids, data]);
@@ -208,7 +220,7 @@ export default DS.RESTAdapter.extend({
     });
   },
 
-  // Generates a random uuid
+  /** Generates a random uuid */
   generateUuid: function () {
     var date = new Date().getTime();
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (character) {
@@ -218,7 +230,7 @@ export default DS.RESTAdapter.extend({
     });
   },
 
-  // Initializes the WebScoket
+  /** Initializes the WebScoket */
   initializeSocket: function () {
     var adapter = this;
 
@@ -244,7 +256,7 @@ export default DS.RESTAdapter.extend({
     }
   },
 
-  // WebScoket onopen callback
+  /** WebScoket onopen callback */
   open: function () {
     var adapter = this;
 
@@ -256,7 +268,7 @@ export default DS.RESTAdapter.extend({
     }
   },
 
-  // WebScoket onmessage callback, resolves promises with received replies.
+  /** WebScoket onmessage callback, resolves promises with received replies. */
   message: function (event) {
     var adapter = this;
     var callback;
@@ -274,7 +286,7 @@ export default DS.RESTAdapter.extend({
         adapter.promises[json.uuid].error(json.data);
       }
       delete adapter.promises[json.uuid];
-      // @todo implement on generic data type
+      // TODO @todo implement on generic data type
       //} else if (json.msgType == MSG_TYPE_PUSH_UPDATED) {
       //    App.File.store.pushPayload('file', {
       //        file: json.data
@@ -292,18 +304,20 @@ export default DS.RESTAdapter.extend({
     }
   },
 
-  // WebScoket onerror callback
+  /** WebSocket onerror callback */
   error: function (event) {
-    // @todo better error handling
+    // TODO @todo better error handling
     alert(event.data);
   },
 
-  // Calls back to the server. Useful for getting information like
-  // user name etc. from the server or performing some operation that
-  // are not model-based.
-  // type - an identifier of resource, e.g. 'global' for global data
-  // operation - function identifier
-  // data - json data
+  /**
+   * Calls back to the server. Useful for getting information like
+   * user name etc. from the server or performing some operation that
+   * are not model-based.
+   * type - an identifier of resource, e.g. 'global' for global data
+   * operation - function identifier
+   * data - json data
+   */
   callback: function (type, operation, data) {
     var adapter = this;
     adapter.logToConsole('callback', [type, operation, data]);

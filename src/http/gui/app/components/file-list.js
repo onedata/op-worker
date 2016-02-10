@@ -1,19 +1,31 @@
-// This is a prototype controller for file list view.
-// It creates an interface between the view and model.
+/**
+ * A file list view (file brower prototype).
+ *
+ * Sends actions:
+ * - createNewFileAction(name, type, parentID)
+ *
+ * @module components/file-list
+ * @author Łukasz Opioła
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
 
 import Ember from 'ember';
 
 export default Ember.Component.extend({
-  // TODO VFS-1508: model var could be named e.g. "loadedFiles"
+  // TODO VFS-1508: model var could be named e.g. "loadedFiles" to better describe it
   /** List of loaded files */
   model: null,
+
+  // TODO VFS-1508: how this is injected?
+  // TODO maybe: Ember.injecct.service('store') should be used (to test)
   store: null,
 
-  // Sorting of files by type and name
+  /** Sorting of files by type and name */
   sortProperties: ['type:asc', 'name:asc'],
   sortedChildren: Ember.computed.sort('currentSpace.children', 'sortProperties'),
 
-  // The space that is currently browsed
+  /** The space that is currently browsed */
   currentSpaceId: null,
   currentSpace: null,
 
@@ -61,7 +73,7 @@ export default Ember.Component.extend({
   editingPreview: false,
   editAreaDisabled: Ember.computed.not('editingPreview'),
 
-  // Resolving current space
+  /** Resolving current space */
   fetchCurrentSpace: function () {
     console.log('fetchCurrentSpace ' + this.get('currentSpaceId'));
     console.log('spinner ' + this.$('#select-space').val());
@@ -79,7 +91,7 @@ export default Ember.Component.extend({
     }
   }.observes('currentSpaceId'),
 
-  // A virtual dir that contains all spaces
+  /** A virtual dir that contains all spaces */
   spacesDir: function () {
     return this.get('model').findBy('id', 'root');
   }.property(),
@@ -124,7 +136,7 @@ export default Ember.Component.extend({
   }.property('selectedCount'),
   isNotOneSelected: Ember.computed.not('isOneSelected'),
 
-  // File that is selected, if only it is selected
+  /** File that is selected, if only it is selected */
   currentFile: function (key, value) {
     console.log('key ' + key);
     console.log('value ' + value);
@@ -152,7 +164,7 @@ export default Ember.Component.extend({
     }
   }.property('currentFile'),
 
-  // Handling actions
+  /** Handling actions */
   actions: {
     changeCurrentDir: function (newSpaceId) {
       this.set('currentSpaceId', newSpaceId);

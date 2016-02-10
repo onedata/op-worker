@@ -1,9 +1,15 @@
 import DS from 'ember-data';
 
-/** A configuration of a space - entry point for all options
- *  that can be reached from "spaces" button in primary sidebar.
+/**
+ * A configuration of a space - entry point for all options
+ * that can be reached from "spaces" button in primary sidebar.
  *
- *  TODO: don't know if should list attributes here, maybe it's redundant
+ * @module models/space
+ *
+ * @todo TODO: don't know if should list attributes here, maybe it's redundant
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
  */
 export default DS.Model.extend({
   /** User specified name of space that will be exposed in GUI */

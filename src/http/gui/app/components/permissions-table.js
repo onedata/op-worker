@@ -1,26 +1,53 @@
-import Ember from 'ember';
+/**
+ * A Component to show collections of changeable checkboxes with permissions
+ * for each "permission" entity. The entity can be e.g. a userPermission record.
+ * Effectively, on desktop this should be a table, where each row respresents
+ * single permission collection for entity.
+ *
+ * @module components/permissions-table
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
 
+import Ember from 'ember';
 
 /**
  * Callback used when saving permissions table succeeded.
+ * @private
+ * @todo the spaces/show/permissions-base route copies this method
  *
  * @param {SpaceUserPermission} permission - a saved model
  */
-var onSaveSuccess = function(permission) {
+let onSaveSuccess = function(permission) {
   console.debug('permission ' + permission + ' saved successfully');
   permission.setUnmodified();
 };
 
 /**
  * Callback used when saving permissions table failed.
+ * @private
+ * @todo implement real save failure behavior
+ * @todo the spaces/show/permissions-base route copies this method
  *
  * @param {SpaceUserPermission} permission - a model that saving failed
  */
-var onSaveFailure = function(permission) {
+let onSaveFailure = function(permission) {
   console.debug('permission ' + permission + ' saving failed!');
 };
 
 export default Ember.Component.extend({
+  /**
+   * Collection of permissions-base model subclasses instances.
+   * Each represents a sigle entity with some permissions to set.
+   *
+   * It must be injected into component.
+   */
+  permissions: [],
+
+  /** A title of first header in table (e.g. users/groups)
+   * It must be injected into component.
+   */
   title: null,
 
   /** Should permissions table be treated as modified and not saved?
@@ -48,11 +75,6 @@ export default Ember.Component.extend({
       permission.set(modName, !permission.get(modName));
     },
 
-    /*
-     * TODO: try to save User model and check if permissions will be saved too
-     * TODO: saving failure should be handled in onSaveFailure
-     * there should be at least warning and table line revert
-     */
     /** Save all permission models in table */
     saveChanges: function() {
       this.get('permissions').forEach(function(permission) {
@@ -61,6 +83,7 @@ export default Ember.Component.extend({
         }
       });
     },
+
     /** Bring back all permission models from table to state before user modification */
     discardChanges: function() {
       this.get('permissions').forEach(function(permission) {

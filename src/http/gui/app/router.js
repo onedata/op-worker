@@ -1,4 +1,11 @@
-// Top router for the prototype app.
+/**
+ * Defines Ember routes - see code of Router.map callback function for details.
+
+ * @module router
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+ */
 
 import Ember from 'ember';
 import config from './config/environment';

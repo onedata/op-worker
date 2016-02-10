@@ -1,6 +1,12 @@
 import DS from 'ember-data';
 
-/* A base hash to extend *Permission models **/
+/**
+ * A base DS.Model for creating permission models.
+ * @module models/base/permissions-base
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
 export default DS.Model.extend({
   space: DS.belongsTo('space', {async: true}),
 

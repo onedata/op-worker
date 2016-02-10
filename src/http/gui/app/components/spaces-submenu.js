@@ -1,11 +1,19 @@
+/**
+ * A submenu for spaces-menu, displaying options page for Space permissions:
+ * users, groups or providers
+ *
+ * Send actions:
+ * - showUsersConfig(space)
+ * - showGroupsConfig(space)
+ *
+ * @module components/spaces-submenu
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
+
 import Ember from 'ember';
 
-/**
- * TODO: doc
- * External actions:
- * - showUsersConfig
- * - showGroupsConfig
- */
 export default Ember.Component.extend({
   activeOption: null,
   spacesMenu: null,
@@ -26,6 +34,7 @@ export default Ember.Component.extend({
   },
 
   actions: {
+    /** Selects active option page (send external action) */
     changeActiveOption(optionName) {
       this.set('activeOption', optionName);
       let space = this.get('space');

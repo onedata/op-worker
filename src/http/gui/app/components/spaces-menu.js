@@ -1,3 +1,19 @@
+/**
+ * A secondary sidebar for selecting Space to modify its permissions.
+ * Uses internally spaces-submenu component to render select for
+ * users/groups/providers permissions.
+ *
+ * Send actions:
+ * - showSpaceOptions(space)
+ * - showUsersConfig(space)
+ * - showGroupsConfig(space)
+ *
+ * @module components/spaces-menu
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
+
 import Ember from 'ember';
 
 export default Ember.Component.extend({
@@ -8,7 +24,7 @@ export default Ember.Component.extend({
   /*** Bind with main-menu service, TODO: mixin or something? ***/
   SERVICE_API: ['selectSpace', 'clearSpaceSelection', 'selectSubmenu'],
 
-  // Listen on mainMenuService's events
+  /** Listen on mainMenuService's events */
   listen: function() {
     let mainMenuService = this.get('spacesMenuService');
     this.SERVICE_API.forEach(name => mainMenuService.on(name, this, name));

@@ -1,11 +1,24 @@
+/**
+ * An abstract class for routes that show configurable list of permissions.
+ *
+ * Abstract methods/properties to implement in subclasses:
+ * - collectionName - String property - a name of collection from spaces (users or groups)
+ *
+ * @module routes/spaces/show/show-permissions-base
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+ */
+
 import Ember from 'ember';
 
 /**
  * Callback used when saving permissions table succeeded.
  *
  * @param {SpaceUserPermission} permission - a saved model
+ * @private
  */
-var onSaveSuccess = function(permission) {
+let onSaveSuccess = function(permission) {
   console.debug('permission ' + permission + ' saved successfully');
   permission.setUnmodified();
 };
@@ -14,16 +27,12 @@ var onSaveSuccess = function(permission) {
  * Callback used when saving permissions table failed.
  *
  * @param {SpaceUserPermission} permission - a model that saving failed
+ * @private
  */
-var onSaveFailure = function(permission) {
+let onSaveFailure = function(permission) {
   console.debug('permission ' + permission + ' saving failed!');
 };
 
-/**
- * Abstract
- * To implement:
- * - collectionName - String property - a name of collection from spaces (users or groups)
- */
 export default Ember.Route.extend({
   spacesMenuService: Ember.inject.service('spaces-menu'),
 
