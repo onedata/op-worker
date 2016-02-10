@@ -1,14 +1,14 @@
 REPO	        ?= op-worker
 
-# distro for package building
+# distro for package building (oneof: wily, fedora-23-x86_64)
 DISTRIBUTION    ?= none
 export DISTRIBUTION
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
-PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
+PKG_VERSION	?= $(shell git describe --tags --always | tr - .)
 PKG_ID	         = op-worker-$(PKG_VERSION)
-PKG_BUILD	     = 1
-BASE_DIR	     = $(shell pwd)
+PKG_BUILD	 = 1
+BASE_DIR	 = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
 REBAR	        ?= $(BASE_DIR)/rebar
 PKG_VARS_CONFIG  = pkg.vars.config
@@ -116,6 +116,14 @@ dialyzer: plt
 
 export PKG_VERSION PKG_ID PKG_BUILD BASE_DIR ERLANG_BIN REBAR OVERLAY_VARS RELEASE PKG_VARS_CONFIG
 
+check_distribution:
+ifeq ($(DISTRIBUTION), none)
+	@echo "Please provide package distribution. Oneof: 'wily', 'fedora-23-x86_64'"
+	@exit 1
+else
+	@echo "Building package for distribution $(DISTRIBUTION)"
+endif
+
 package/$(PKG_ID).tar.gz: deps
 	mkdir -p package
 	rm -rf package/$(PKG_ID)
@@ -134,7 +142,7 @@ package/$(PKG_ID).tar.gz: deps
 dist: package/$(PKG_ID).tar.gz
 	cp package/$(PKG_ID).tar.gz .
 
-package: package/$(PKG_ID).tar.gz
+package: check_distribution package/$(PKG_ID).tar.gz
 	${MAKE} -C package -f $(PWD)/deps/node_package/Makefile
 
 pkgclean:
