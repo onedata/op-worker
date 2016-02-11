@@ -51,7 +51,8 @@ gui_prod:
 ## We prevent reltool from creating a release.
 ## todo: find better solution
 ##
-generate: deps compile gui_dev
+## Generates a dev release
+generate_dev: deps compile gui_dev
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	# Move gui tmp dir away from sources, so as to prevent
 	# rebar from entering it during spec generation and crashing
@@ -61,7 +62,8 @@ generate: deps compile gui_dev
 	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
-generate_production: deps compile gui_prod
+## Generates a production release
+generate: deps compile gui_prod
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	# Move gui tmp dir away from sources, so as to prevent
 	# rebar from entering it during spec generation and crashing
@@ -83,7 +85,7 @@ distclean:
 
 rel: generate
 
-test_rel: generate cm_rel appmock_rel
+test_rel: generate_dev cm_rel appmock_rel
 
 cm_rel:
 	ln -sf deps/cluster_worker/cluster_manager/
