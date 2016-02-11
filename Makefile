@@ -5,12 +5,12 @@ DISTRIBUTION    ?= none
 export DISTRIBUTION
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
-PKG_VERSION	?= $(shell git describe --tags --always | tr - .)
-PKG_ID	         = op-worker-$(PKG_VERSION)
-PKG_BUILD	 = 1
-BASE_DIR	 = $(shell pwd)
+PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
+PKG_ID           = op-worker-$(PKG_VERSION)
+PKG_BUILD        = 1
+BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
-REBAR	        ?= $(BASE_DIR)/rebar
+REBAR           ?= $(BASE_DIR)/rebar
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
 
