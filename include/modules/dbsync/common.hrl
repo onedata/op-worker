@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Slota
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -8,7 +8,6 @@
 %%% @doc Common records and defines for dbsync module
 %%% @end
 %%%-------------------------------------------------------------------
--author("Rafal Slota").
 
 -ifndef(DBSYNC_COMMON_HRL).
 -define(DBSYNC_COMMON_HRL, 1).

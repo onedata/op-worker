@@ -58,13 +58,11 @@
 -spec init(Args :: term()) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    timer:sleep(5000),
     ?info("[ DBSync ]: Starting dbsync..."),
-    timer:send_after(timer:seconds(5), dbsync_worker, {timer, bcast_status}),
     Since = 0,
-    state_put(global_resume_seq, Since),
-    {ok, ChangesStream} = init_stream(Since, infinity, global),
-    {ok, #{changes_stream => ChangesStream}}.
+    timer:send_after(timer:seconds(10), dbsync_worker, {timer, bcast_status}),
+    timer:send_after(timer:seconds(1), dbsync_worker, {timer, {async_init_stream, Since, infinity, global}}),
+    {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -197,6 +195,14 @@ handle({'EXIT', Stream, Reason}) ->
                 end);
         _ ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
+    end;
+handle({async_init_stream, Since, Until, Queue}) ->
+    case catch init_stream(Since, infinity, global) of
+        {ok, Pid} ->
+            state_put(changes_stream, Pid);
+        Reason ->
+            ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
+            timer:send_after(500, dbsync_worker, {timer, {async_init_stream, Since, Until, Queue}})
     end;
 %% Unknown request
 handle(_Request) ->

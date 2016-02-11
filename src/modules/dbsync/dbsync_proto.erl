@@ -139,7 +139,7 @@ do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{depth = Depth} = BaseR
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send tree message to ~p due to: ~p", [PushTo, Reason]),
-            do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{} = BaseRequest, Attempts)
+            do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{} = BaseRequest, Attempts - 1)
     end;
 do_emit_tree_broadcast(_SyncWith, _Request, _BaseRequest, 0) ->
     {error, unable_to_connect}.
@@ -158,12 +158,12 @@ do_emit_tree_broadcast(_SyncWith, _Request, _BaseRequest, 0) ->
 -spec reemit(#tree_broadcast{}) ->
     ok | no_return().
 reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, message_body = Request} = BaseRequest) ->
-    Providers = dbsync_utils:get_providers_for_space(SpaceId),
-    Providers1 = lists:usort(Providers),
-    Providers2 = lists:dropwhile(fun(Elem) -> Elem =/= LEdge end, Providers1),
-    Providers3 = lists:takewhile(fun(Elem) -> Elem =/= REdge end, Providers2),
-    Providers4 = lists:usort([REdge | Providers3]),
-    ok = send_tree_broadcast(SpaceId, Providers4, Request, BaseRequest, 3).
+    AllProviders = dbsync_utils:get_providers_for_space(SpaceId),
+    SortedProviders = lists:usort(AllProviders),
+    WOLeftEdge = lists:dropwhile(fun(Elem) -> Elem =/= LEdge end, SortedProviders),
+    UpToRightEdge = lists:takewhile(fun(Elem) -> Elem =/= REdge end, WOLeftEdge),
+    ProvidersToSync = lists:usort([REdge | UpToRightEdge]),
+    ok = send_tree_broadcast(SpaceId, ProvidersToSync, Request, BaseRequest, 3).
 
 
 %%--------------------------------------------------------------------
@@ -211,12 +211,12 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                     case worker_proxy:cast(dbsync_worker, {reemit, BaseRequest}) of
                         ok -> ok;
                         {error, Reason} ->
-                            ?debug("Cannot reemit tree broadcast due to: ~p", [Reason]),
+                            ?error("Cannot reemit tree broadcast due to: ~p", [Reason]),
                             {error, Reason}
                     end
             catch
                 _:Reason ->
-                    ?debug("Error while handling tree broadcast: ~p", [Reason]),
+                    ?error("Error while handling tree broadcast: ~p", [Reason]),
                     {error, Reason}
             end;
         true -> ok

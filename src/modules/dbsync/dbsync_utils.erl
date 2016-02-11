@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc @todo: Write me!
+%%% @doc Utility functions for DBSync
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_utils).
@@ -25,6 +25,11 @@
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc Returns list of providers that supports given space. If provider is nor properly configured to work
+%%      as part of onedata system, empty list is returned.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_providers_for_space(SpaceId :: binary()) ->
     [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
@@ -36,11 +41,21 @@ get_providers_for_space(SpaceId) ->
             []
     end .
 
+
+%%--------------------------------------------------------------------
+%% @doc Returns list of spaces supported by this provider.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_spaces_for_provider() ->
     [SpaceId :: binary()].
 get_spaces_for_provider() ->
     get_spaces_for_provider(oneprovider:get_provider_id()).
 
+
+%%--------------------------------------------------------------------
+%% @doc Returns list of spaces supported by both given provider and this provider.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_spaces_for_provider(oneprovider:id()) ->
     [SpaceId :: binary()].
 get_spaces_for_provider(ProviderId) ->

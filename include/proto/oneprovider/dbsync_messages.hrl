@@ -8,7 +8,6 @@
 %%% @doc Protocol messages for dbsync
 %%% @end
 %%%-------------------------------------------------------------------
--author("Rafal Slota").
 
 -ifndef(DBSYNC_MESSAGES_HRL).
 -define(DBSYNC_MESSAGES_HRL, 1).
@@ -22,13 +21,13 @@
 }).
 
 -record(tree_broadcast, {
-    depth,
-    l_edge,
-    r_edge,
-    space_id, %% ??
+    depth :: non_neg_integer(),
+    l_edge :: oneprovider:id(),
+    r_edge :: oneprovider:id(),
+    space_id :: binary(),
     request_id,
-    excluded_providers,
-    message_body
+    excluded_providers :: [oneprovider:id()],
+    message_body :: term()
 }).
 
 -record(batch_update, {
