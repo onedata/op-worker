@@ -62,7 +62,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID, true) ->
             Credentials;
         _ ->
             StorageType = fslogic_utils:get_storage_type(StorageId),
-            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, StorageType, StorageId),
+            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
             User_ctx = #ceph_user_ctx{
                 user_name = proplists:get_value(<<"user_name">>, Response),
                 user_key = proplists:get_value(<<"user_key">>, Response)
@@ -99,7 +99,7 @@ new_posix_user_ctx(SessionId, SpaceUUID, true) ->
             Credentials;
         _ ->
             StorageType = fslogic_utils:get_storage_type(StorageId),
-            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, StorageType, StorageId),
+            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
             User_ctx = fslogic_utils:parse_posix_ctx_from_luma(Response, SpaceUUID),
             luma_response:save(UserId, StorageId, User_ctx),
             User_ctx
@@ -128,7 +128,7 @@ new_s3_user_ctx(SessionId, SpaceUUID, true) ->
             Credentials;
         _ ->
             StorageType = fslogic_utils:get_storage_type(StorageId),
-            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, StorageType, StorageId),
+            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
             User_ctx = #s3_user_ctx{
                 access_key = proplists:get_value(<<"access_key">>, Response),
                 secret_key = proplists:get_value(<<"secret_key">>, Response)
@@ -164,7 +164,8 @@ get_posix_user_ctx(true, _, SessionId, SpaceUUID) ->
         {ok, Credentials} ->
             Credentials;
         _ ->
-            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME, ?DIRECTIO_HELPER_NAME),
+            {ok, Response} = fslogic_utils:get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
+                ?DIRECTIO_HELPER_NAME, SessionId),
             User_ctx = fslogic_utils:parse_posix_ctx_from_luma(Response, SpaceUUID),
             luma_response:save(UserId, ?DIRECTIO_HELPER_NAME, User_ctx),
             User_ctx
