@@ -28,7 +28,8 @@
 
 -export([
     dbsync_trigger_should_create_local_file_location/1,
-    write_should_add_blocks_to_file_location/1
+    write_should_add_blocks_to_file_location/1,
+    truncate_should_change_size_and_blocks/1
 ]).
 
 
@@ -36,7 +37,8 @@
 all() ->
     [
         dbsync_trigger_should_create_local_file_location,
-        write_should_add_blocks_to_file_location
+        write_should_add_blocks_to_file_location,
+        truncate_should_change_size_and_blocks
     ].
 
 
@@ -106,6 +108,24 @@ write_should_add_blocks_to_file_location(Config) ->
 %%    ?assertEqual(#{?GET_DOMAIN(W1) => 2}, VV2), %todo add VV and uncomment
     [Block] = ?assertMatch([#file_block{offset = 0, size = 10}], Blocks2).
 
+truncate_should_change_size_and_blocks(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = <<"session_id1">>,
+    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
+    ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
+
+    %when
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {uuid, FileUuid}, 6)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    %then
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, #document{value = #file_location{blocks = Blocks, size = Size, version_vector = VV}}} =
+        ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
+    ?assertEqual(6, Size),
+%%    ?assertEqual(#{?GET_DOMAIN(W1) => 2}, VV), %todo add VV and uncomment
+    [Block] = ?assertMatch([#file_block{offset = 0, size = 6}], Blocks).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
