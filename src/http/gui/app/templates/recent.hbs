@@ -1,6 +1,8 @@
 {{outlet 'modal'}}
-<div class="container" style="margin-top: 100px;">
-  {{!-- TODO VFS-1508: where is defined "store" for template? --}}
-  {{file-list model=model store=store modalAction='modalAction'
-    createNewFileAction='createNewFile'}}
+<div id="content-scroll">
+  <div class="container-fluid">
+    {{!-- TODO VFS-1508: where is defined "store" for template? --}}
+    {{file-list model=model store=store modalAction='modalAction'
+      createNewFileAction='createNewFile'}}
+  </div>
 </div>
