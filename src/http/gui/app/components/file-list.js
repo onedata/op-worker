@@ -17,8 +17,7 @@ export default Ember.Component.extend({
   /** List of loaded files */
   model: null,
 
-  // TODO VFS-1508: how this is injected?
-  // TODO maybe: Ember.injecct.service('store') should be used (to test)
+  // TODO maybe: Ember.inject.service('store') should be used to avoid store injection from route
   store: null,
 
   /** Sorting of files by type and name */

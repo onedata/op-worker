@@ -15,7 +15,6 @@ const Router = Ember.Router.extend({
 });
 
 Router.map(function() {
-  // TODO: a route from VFS-1508 (not using data - it will be new data)
   this.route('recent');
 
   // spaces/ - all spaces configuration reached from primary sidebar
