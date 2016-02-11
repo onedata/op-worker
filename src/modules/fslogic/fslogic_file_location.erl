@@ -31,7 +31,7 @@
 create_storage_file_if_not_exists(SpaceId, FileUuid, SessId, Mode) ->
     case file_meta:get_locations({uuid, FileUuid}) of
         {ok, []} ->
-            {ok, _} = create_storage_file(SpaceId, FileUuid, SessId, Mode),
+            create_storage_file(SpaceId, FileUuid, SessId, Mode),
             ok;
         _ ->
             ok
@@ -44,7 +44,7 @@ create_storage_file_if_not_exists(SpaceId, FileUuid, SessId, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_file(binary(), file_meta:uuid(), session:id(), file_meta:posix_permissions()) ->
-    {ok, {FileId :: binary(), StorageId :: storage:id()}} | {error, already_exists}.
+    {FileId :: binary(), StorageId :: storage:id()}.
 create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
     FileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}),

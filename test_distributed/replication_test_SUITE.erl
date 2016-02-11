@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/dbsync/common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -25,13 +26,17 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([dbsync_trigger_should_create_local_file_location/1]).
+-export([
+    dbsync_trigger_should_create_local_file_location/1,
+    write_should_add_blocks_to_file_location/1
+]).
 
 
 -performance({test_cases, []}).
 all() ->
     [
-        dbsync_trigger_should_create_local_file_location
+        dbsync_trigger_should_create_local_file_location,
+        write_should_add_blocks_to_file_location
     ].
 
 
@@ -56,14 +61,51 @@ dbsync_trigger_should_create_local_file_location(Config) ->
         ctime = CTime,
         uid = UserId
     },
-    {ok, FileUUID} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
 
-    rpc:call(W1, dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = FileMeta}}]),
+    %when
+    rpc:call(W1, dbsync_events, change_replicated, [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
 
-    ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUUID}])),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUUID}, rdwr)),
+    %then
+    ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
+
+write_should_add_blocks_to_file_location(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = <<"session_id1">>,
+    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
+
+    %when
+    ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    %then
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, LocationDoc = #document{value = Location = #file_location{blocks = Blocks, size = Size, version_vector = VV}}} =
+        ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
+%%    ?assertEqual(10, Size), %todo fix and uncomment
+%%    ?assertEqual(#{?GET_DOMAIN(W1) => 1}, VV), %todo add VV and uncomment
+    [Block] = ?assertMatch([#file_block{offset = 0, size = 10}], Blocks),
+
+    % when
+    LocationWithoutBeginning =
+        LocationDoc#document{value = Location#file_location{blocks = [Block#file_block{offset = 5, size = 5}]}},
+    ?assertMatch({ok, _},
+        rpc:call(W1, file_location, save, [LocationWithoutBeginning])),
+    ?assertMatch({ok, 5}, lfm_proxy:write(W1, Handle, 0, <<"11111">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    % then
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    {ok, #document{value = #file_location{blocks = Blocks2, size = Size2, version_vector = VV2}}} =
+        ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
+    ?assertEqual(10, Size2),
+%%    ?assertEqual(#{?GET_DOMAIN(W1) => 2}, VV2), %todo add VV and uncomment
+    [Block] = ?assertMatch([#file_block{offset = 0, size = 10}], Blocks2).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

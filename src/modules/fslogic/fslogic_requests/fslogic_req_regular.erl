@@ -146,7 +146,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
     {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    {ok, {StorageId, FileId}} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
+    {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{
