@@ -447,7 +447,7 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
         0 ->
             ok = file_meta:delete(FileDoc),
             {ok, ParentDoc} = file_meta:get_parent(FileDoc),
-            {ok, _} = file_meta:update(ParentDoc, #{mtime => utils:time()}),
+            {ok, _} = file_meta:update(ParentDoc, #{mtime => erlang:system_time(seconds)}),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}

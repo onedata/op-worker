@@ -41,7 +41,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
             false ->
                 ParentUUID
         end,
-    CTime = utils:time(),
+    CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
         type = ?DIRECTORY_TYPE,

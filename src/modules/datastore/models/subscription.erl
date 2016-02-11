@@ -38,12 +38,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns increasing subscription IDs based on the timestamp.
+%% Returns increasing subscription IDs based on the monotonic time.
+%% Should be used only for temporary subscriptions.
 %% @end
 %%--------------------------------------------------------------------
 -spec generate_id() -> SubId :: id().
 generate_id() ->
-    erlang:system_time(micro_seconds).
+    erlang:unique_integer([monotonic]) .
 
 %%%===================================================================
 %%% model_behaviour callbacks
