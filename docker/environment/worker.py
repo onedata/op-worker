@@ -190,7 +190,13 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
                 'os_config']
             gen_dev_cfg['os_config'] = config['os_configs'][os_config]
 
-        # Tweak configs, retrieve lis of riak nodes to start
+        # If present, include gui_livereload
+        if 'gui_livereload' in config[configurator.domains_attribute()][instance]:
+            gui_livereload = config[configurator.domains_attribute()][instance][
+                'gui_livereload']
+            gen_dev_cfg['gui_livereload'] = gui_livereload
+
+        # Tweak configs, retrieve list of db nodes to start
         configs = []
         all_db_nodes = []
 
