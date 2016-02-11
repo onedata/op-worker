@@ -134,52 +134,28 @@ get_file_size(Entry) ->
 %%--------------------------------------------------------------------
 -spec update(FileUUID :: file_meta:uuid(), Blocks :: blocks(), FileSize :: non_neg_integer() | undefined) ->
     {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update(FileUUID, Blocks0, FileSize) ->
+update(FileUUID, Blocks, FileSize) ->
     file_location:run_synchronized(FileUUID, fun() ->
         try
-            LProviderId = oneprovider:get_provider_id(),
-            {ok, LocIds} = file_meta:get_locations({uuid, FileUUID}),
-            Locations = [file_location:get(LocId) || LocId <- LocIds],
-            Locations1 = [Loc || {ok, Loc} <- Locations],
-            [LocalLocation = #document{value = #file_location{storage_id = DSID, file_id = DFID}}] =
-                [Location || #document{value = #file_location{provider_id = ProviderId}} = Location <- Locations1, LProviderId =:= ProviderId],
-            RemoteLocations = Locations1 -- [LocalLocation],
+            [Location | _] = fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, insted operating on first one
+            FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
-            %% Make sure that storage_id and file_id are set (assume defaults form location if not)
-            Blocks1 = lists:map(
-                fun(#file_block{storage_id = SID, file_id = FID} = B) ->
-                    NewSID =
-                        case SID of
-                            undefined   ->  DSID;
-                            _           ->  SID
-                        end,
-                    NewFID =
-                        case FID of
-                            undefined   ->  DFID;
-                            _           ->  FID
-                        end,
-
-                    B#file_block{storage_id = NewSID, file_id = NewFID}
-                end, Blocks0),
-
-            BlocksSorted = consolidate(lists:usort(Blocks1)),
-
-            ok = invalidate(RemoteLocations, BlocksSorted),
-            ok = append([LocalLocation], BlocksSorted),
+            ok = append([Location], FullBlocks), %todo update VV
 
             case FileSize of
                 undefined ->
-                    case upper(BlocksSorted) > calculate_file_size(Locations1) of
+                    case upper(FullBlocks) > calculate_file_size(Location) of
                         true -> {ok, size_changed};
                         false -> {ok, size_not_changed}
                     end;
                 _ ->
-                    do_truncate(FileSize, LocalLocation, RemoteLocations),
+                    do_local_truncate(FileSize, Location),
+                    % todo reconcile other local replicas according to this one
                     {ok, size_changed}
             end
         catch
             _:Reason ->
-                ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks0, FileSize, Reason]),
+                ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),
                 {error, Reason}
         end
                                              end).
@@ -334,17 +310,6 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Performs truncate operation on given locations. Note that on remote locations only shrinking will be done.
-%% @end
-%%--------------------------------------------------------------------
--spec do_truncate(FileSize :: non_neg_integer(), LocalLocation :: datastore:document(), RemoteLocations :: [datastore:document()]) ->
-    {LocalResult :: ok, RemoteResults :: [{ProviderId :: oneprovider:id(), ok}]} | no_return().
-do_truncate(FileSize, #document{value = #file_location{}} = LocalLocation, RemoteLocations) ->
-    {do_local_truncate(FileSize, LocalLocation), do_remote_truncate(FileSize, RemoteLocations)}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Truncates blocks from given location. Works for both shrinking and growing file.
 %% @end
 %%--------------------------------------------------------------------
@@ -352,26 +317,34 @@ do_truncate(FileSize, #document{value = #file_location{}} = LocalLocation, Remot
 do_local_truncate(FileSize, #document{value = #file_location{size = FileSize}}) ->
     ok;
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
-    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}]);
+    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}]); %todo update VV
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} = LocalLocation) when LocalSize > FileSize ->
-    invalidate(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}]).
+    invalidate(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}]). %todo update VV
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Truncates blocks from given location. Works only for shrinking file. Growing is ignored.
+%% Make sure that storage_id and file_id are set (assume defaults form location
+%% if not)
 %% @end
 %%--------------------------------------------------------------------
--spec do_remote_truncate(FileSize :: non_neg_integer(), [datastore:document()] | datastore:document()) ->
-    [{ProviderId :: oneprovider:id(), ok}] | {ProviderId :: oneprovider:id(), ok} | no_return().
-do_remote_truncate(_FileSize, []) ->
-    [];
-do_remote_truncate(FileSize, [Location | T]) ->
-    [do_remote_truncate(FileSize, Location) | do_remote_truncate(FileSize, T)];
-do_remote_truncate(FileSize, #document{value = #file_location{provider_id = ProviderId, size = FileSize}}) ->
-    {ProviderId, ok};
-do_remote_truncate(FileSize, #document{value = #file_location{provider_id = ProviderId, size = RemoteSize}}) when RemoteSize < FileSize ->
-    {ProviderId, ok};
-do_remote_truncate(FileSize, #document{key = _LocId, value = #file_location{provider_id = ProviderId, size = RemoteSize}} = Loc) when RemoteSize > FileSize ->
-    {ProviderId, invalidate(Loc, [#file_block{offset = FileSize, size = RemoteSize - FileSize}])}.
+-spec fill_blocks_with_storage_info([#file_block{}], file_location:doc()) ->
+    [#file_block{}].
+fill_blocks_with_storage_info(Blocks, #document{value = #file_location{storage_id = DSID, file_id = DFID}}) ->
+    FilledBlocks = lists:map(
+        fun(#file_block{storage_id = SID, file_id = FID} = B) ->
+            NewSID =
+                case SID of
+                    undefined -> DSID;
+                    _ -> SID
+                end,
+            NewFID =
+                case FID of
+                    undefined -> DFID;
+                    _ -> FID
+                end,
+
+            B#file_block{storage_id = NewSID, file_id = NewFID}
+        end, Blocks),
+
+    consolidate(lists:usort(FilledBlocks)).
