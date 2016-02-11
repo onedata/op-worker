@@ -157,13 +157,19 @@
     value :: binary()
 }).
 
+-record(synchronize_block, {
+    uuid :: file_meta:uuid(),
+    block :: #file_block{}
+}).
+
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
                         #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
                         #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
                         #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
-                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{}.
+                        #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
+                        #synchronize_block{}.
 
 
 -record(file_children, {

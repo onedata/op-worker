@@ -399,6 +399,8 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode 
     {Key, NewSize} = get_sfm_handle_key(UUID, Offset, MaxSize),
     {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
+    lfm_utils:call_fslogic(SessId, #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}},
+        fun(_) -> ok end),
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
             ok = event:emit(#read_event{

@@ -19,7 +19,7 @@
 
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/3]).
--export([get_parent/2]).
+-export([get_parent/2, synchronize_block/3]).
 
 %%%===================================================================
 %%% API functions
@@ -166,6 +166,17 @@ get_parent(_CTX, File) ->
     {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
     #fuse_response{status = #status{code = ?OK}, fuse_response =
     #dir{uuid = ParentUUID}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Synchronizes given block with remote replicas.
+%% @end
+%%--------------------------------------------------------------------
+-spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, #file_block{}) -> ok.
+synchronize_block(_Ctx, {uuid, Uuid}, Block)  ->
+    ok = replica_synchronizer:synchronize(Uuid, Block),
+    #fuse_response{status = #status{code = ?OK}}.
 
 
 %%%===================================================================

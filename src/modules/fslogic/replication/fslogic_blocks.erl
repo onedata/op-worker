@@ -23,10 +23,7 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([aggregate/2, update/3, get_file_size/1]).
-
-%% Test API
--export([upper/1, lower/1]).
+-export([aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1, lower/1]).
 
 %%%===================================================================
 %%% API
@@ -103,115 +100,28 @@ get_file_size(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Appends given blocks to the file's local location and invalidates those blocks in its remote locations.
-%% This function in synchronized on the file.
-%% FileSize argument may be used to truncate file's blocks if needed.
-%% Return value tells whether file size has been changed by this call.
-%% @end
-%%--------------------------------------------------------------------
--spec update(FileUUID :: file_meta:uuid(), Blocks :: blocks(), FileSize :: non_neg_integer() | undefined) ->
-    {ok, size_changed} | {ok, size_not_changed} | {error, Reason :: term()}.
-update(FileUUID, Blocks, FileSize) ->
-    file_location:run_synchronized(FileUUID, fun() ->
-        try
-            [Location | _] = fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, insted operating on first one
-            FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
-
-            ok = append([Location], FullBlocks),
-
-            case FileSize of
-                undefined ->
-                    case upper(FullBlocks) > calculate_file_size(Location) of
-                        true -> {ok, size_changed};
-                        false -> {ok, size_not_changed}
-                    end;
-                _ ->
-                    do_local_truncate(FileSize, Location),
-                    {ok, size_changed}
-            end
-            % todo reconcile other local replicas according to this one
-        catch
-            _:Reason ->
-                ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),
-                {error, Reason}
-        end
-                                             end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Inavlidates given blocks in given locations. File size is also updated.
-%% @end
-%%--------------------------------------------------------------------
--spec invalidate(datastore:document() | [datastore:document()], Blocks :: blocks()) ->
-    ok | no_return().
-invalidate([Location | T], Blocks) ->
-    ok = invalidate(Location, Blocks),
-    ok = invalidate(T, Blocks);
-invalidate(_, []) ->
-    ok;
-invalidate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks) ->
-    ?debug("OldBlocks invalidate ~p, new ~p", [OldBlocks, Blocks]),
-    NewBlocks = invalidate(Doc, OldBlocks, Blocks),
-    ?debug("NewBlocks invalidate ~p", [NewBlocks]),
-    NewBlocks1 = consolidate(NewBlocks),
-    ?debug("NewBlocks1 invalidate ~p", [NewBlocks1]),
-    {ok, _} = file_location:save(Doc#document{rev = undefined, value = Loc#file_location{blocks = NewBlocks1}}), %do not change size
-    ok;
-invalidate([], _) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Inavlidates given blocks in given locations. File size is also updated.
-%% @end
-%%--------------------------------------------------------------------
--spec shrink(datastore:document() | [datastore:document()], Blocks :: blocks(), NewSize :: non_neg_integer()) ->
-    ok | no_return().
-shrink([Location | T], Blocks, NewSize) ->
-    ok = shrink(Location, Blocks, NewSize),
-    ok = shrink(T, Blocks, NewSize);
-shrink(#document{value = #file_location{size = NewSize}}, [], NewSize) ->
-    ok;
-shrink(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, NewSize) ->
-    ?debug("OldBlocks shrink ~p, new ~p", [OldBlocks, Blocks]),
-    NewBlocks = invalidate(Doc, OldBlocks, Blocks),
-    ?debug("NewBlocks shrink ~p", [NewBlocks]),
-    NewBlocks1 = consolidate(NewBlocks),
-    ?debug("NewBlocks1 shrink ~p", [NewBlocks1]),
-    {ok, _} = file_location:save_and_bump_version(
-        Doc#document{rev = undefined, value =
-        Loc#file_location{blocks = NewBlocks1, size = NewSize}}
-    ),
-    ok;
-shrink([], _, _) ->
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Internal impl. of invalidate/2
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate(datastore:document(), blocks(), blocks() | block()) -> blocks().
-invalidate(_Doc, OldBlocks, []) ->
+-spec invalidate(blocks(), blocks() | block()) -> blocks().
+invalidate(OldBlocks, []) ->
     OldBlocks;
-invalidate(Doc, OldBlocks, [#file_block{} = B | T]) ->
-    invalidate(Doc, invalidate(Doc, OldBlocks, B), T);
-invalidate(_Doc, [], #file_block{}) ->
+invalidate(OldBlocks, [#file_block{} = B | T]) ->
+    invalidate(invalidate(OldBlocks, B), T);
+invalidate([], #file_block{}) ->
     [];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = _DS} = D) when CO + CS =< DO ->
-    [C | invalidate(Doc, T, D)];
-invalidate(Doc, [#file_block{offset = CO, size = _CS} = C | T], #file_block{offset = DO, size = DS} = D) when DO + DS =< CO ->
-    [C | invalidate(Doc, T, D)];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = _C | T], #file_block{offset = DO, size = _DS} = D) when CO >= DO, CO + CS =< DO + DO ->
-    invalidate(Doc, T, D);
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO >= DO, CO + CS > DO + DO ->
-    [C#file_block{offset = DO + DS, size = CS - (DO + DS - CO)} | invalidate(Doc, T, D)];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = _DS} = D) when CO < DO, CO + CS =< DO + DO ->
-    [C#file_block{size = DO - CO} | invalidate(Doc, T, D)];
-invalidate(Doc, [#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO =< DO, CO + CS >= DO + DO ->
-    [C#file_block{size = DO - CO}, C#file_block{offset = DO + DS, size = CO + CS - (DO + DS)} | invalidate(Doc, T, D)].
+invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = _DS} = D) when CO + CS =< DO ->
+    [C | invalidate(T, D)];
+invalidate([#file_block{offset = CO, size = _CS} = C | T], #file_block{offset = DO, size = DS} = D) when DO + DS =< CO ->
+    [C | invalidate(T, D)];
+invalidate([#file_block{offset = CO, size = CS} = _C | T], #file_block{offset = DO, size = _DS} = D) when CO >= DO, CO + CS =< DO + DO ->
+    invalidate(T, D);
+invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO >= DO, CO + CS > DO + DO ->
+    [C#file_block{offset = DO + DS, size = CS - (DO + DS - CO)} | invalidate(T, D)];
+invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = _DS} = D) when CO < DO, CO + CS =< DO + DO ->
+    [C#file_block{size = DO - CO} | invalidate(T, D)];
+invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO =< DO, CO + CS >= DO + DO ->
+    [C#file_block{size = DO - CO}, C#file_block{offset = DO + DS, size = CO + CS - (DO + DS)} | invalidate(T, D)].
 
 
 %%--------------------------------------------------------------------
@@ -311,73 +221,3 @@ aggregate_block(#file_block{offset = Offset1, size = Size1} = Block1,
 
 aggregate_block(Block, Blocks) ->
     [Block | Blocks].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Appends given blocks to given locations and updates file size for those locations.
-%% @end
-%%--------------------------------------------------------------------
--spec append(datastore:document() | [datastore:document()], blocks()) -> ok | no_return().
-append([], _Blocks) ->
-    ok;
-append([Location | T], Blocks) ->
-    ok = append(Location, Blocks),
-    ok = append(T, Blocks);
-append(_, []) ->
-    ok;
-append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks) ->
-    ?debug("OldBlocks ~p, NewBlocks ~p", [OldBlocks, Blocks]),
-    NewBlocks = invalidate(Doc, OldBlocks, Blocks) ++ Blocks,
-    NewSize = upper(Blocks),
-    ?debug("NewBlocks ~p", [NewBlocks]),
-    NewBlocks1 = consolidate(lists:sort(NewBlocks)),
-    ?debug("NewBlocks1 ~p", [NewBlocks1]),
-    {ok, _} = file_location:save_and_bump_version(
-        Doc#document{rev = undefined, value =
-        Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}}
-    ),
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Truncates blocks from given location. Works for both shrinking and growing file.
-%% @end
-%%--------------------------------------------------------------------
--spec do_local_truncate(FileSize :: non_neg_integer(), datastore:document()) -> ok | no_return().
-do_local_truncate(FileSize, #document{value = #file_location{size = FileSize}}) ->
-    ok;
-do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
-    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}]);
-do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} = LocalLocation) when LocalSize > FileSize ->
-    shrink(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}], FileSize).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Make sure that storage_id and file_id are set (assume defaults form location
-%% if not)
-%% @end
-%%--------------------------------------------------------------------
--spec fill_blocks_with_storage_info([#file_block{}], file_location:doc()) ->
-    [#file_block{}].
-fill_blocks_with_storage_info(Blocks, #document{value = #file_location{storage_id = DSID, file_id = DFID}}) ->
-    FilledBlocks = lists:map(
-        fun(#file_block{storage_id = SID, file_id = FID} = B) ->
-            NewSID =
-                case SID of
-                    undefined -> DSID;
-                    _ -> SID
-                end,
-            NewFID =
-                case FID of
-                    undefined -> DFID;
-                    _ -> FID
-                end,
-
-            B#file_block{storage_id = NewSID, file_id = NewFID}
-        end, Blocks),
-
-    consolidate(lists:usort(FilledBlocks)).

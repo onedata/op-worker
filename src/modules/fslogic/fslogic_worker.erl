@@ -243,6 +243,8 @@ handle_fuse_request(Ctx, #get_mimetype{uuid = UUID}) ->
     fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #set_mimetype{uuid = UUID, value = Value}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
+handle_fuse_request(Ctx, #synchronize_block{uuid = UUID, block = Block}) ->
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, UUID}, Block);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -251,7 +253,7 @@ handle_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
     }}) ->
-        case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
+        case replica_updater:update(FileUUID, Blocks, FileSize, true) of
             {ok, size_changed} ->
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
