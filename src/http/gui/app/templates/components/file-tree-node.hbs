@@ -14,19 +14,19 @@
       {{#if file.expanded}}
         {{#if file.isDir}}
             <img style="width: 24px; position: absolute; top: 5px; right: 0;"
-                 src="/images/expanded.png"/>
+                 src="/assets/images/expanded.png"/>
         {{else}}
             <img style="width: 24px; position: absolute; top: 5px; right: 0;"
-                 src="/images/previewed.png"/>
+                 src="/assets/images/previewed.png"/>
         {{/if}}
       {{/if}}
 
       {{#if file.isDir}}
           <img style="width: 32px; position: absolute; top: 0; left: 0;"
-               src="/images/dir.png"/>
+               src="/assets/images/dir.png"/>
       {{else}}
           <img style="width: 32px; position: absolute; top: 0; left: 0;"
-               src="/images/file.png"/>
+               src="/assets/images/file.png"/>
       {{/if}}
 
         <p style="padding: 0; line-height: 32px; margin: 0 24px 0 46px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -43,5 +43,3 @@
     {{/each}}
   {{/if}}
 {{/if}}
-
-

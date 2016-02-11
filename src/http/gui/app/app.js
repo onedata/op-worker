@@ -1,4 +1,10 @@
-// Main javascript file that initializes the prototype app.
+/**
+ * Main javascript file that initializes the prototype app.
+ * @file
+ * @author Łukasz Opioła
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
 
 import Ember from 'ember';
 import Resolver from 'ember/resolver';
@@ -29,4 +35,3 @@ if (config.environment === 'development') {
 }
 
 export default App;
-

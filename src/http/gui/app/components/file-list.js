@@ -1,16 +1,30 @@
-// This is a prototype controller for file list view.
-// It creates an interface between the view and model.
+/**
+ * A file list view (file brower prototype).
+ *
+ * Sends actions:
+ * - createNewFileAction(name, type, parentID)
+ *
+ * @module components/file-list
+ * @author Łukasz Opioła
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+*/
 
 import Ember from 'ember';
 
 export default Ember.Component.extend({
+  // TODO VFS-1508: model var could be named e.g. "loadedFiles" to better describe it
+  /** List of loaded files */
+  model: null,
+
+  // TODO maybe: Ember.inject.service('store') should be used to avoid store injection from route
   store: null,
 
-  // Sorting of files by type and name
+  /** Sorting of files by type and name */
   sortProperties: ['type:asc', 'name:asc'],
   sortedChildren: Ember.computed.sort('currentSpace.children', 'sortProperties'),
 
-  // The space that is currently browsed
+  /** The space that is currently browsed */
   currentSpaceId: null,
   currentSpace: null,
 
@@ -58,7 +72,7 @@ export default Ember.Component.extend({
   editingPreview: false,
   editAreaDisabled: Ember.computed.not('editingPreview'),
 
-  // Resolving current space
+  /** Resolving current space */
   fetchCurrentSpace: function () {
     console.log('fetchCurrentSpace ' + this.get('currentSpaceId'));
     console.log('spinner ' + this.$('#select-space').val());
@@ -76,12 +90,15 @@ export default Ember.Component.extend({
     }
   }.observes('currentSpaceId'),
 
-  // A virtual dir that contains all spaces
+  /** A virtual dir that contains all spaces */
   spacesDir: function () {
     return this.get('model').findBy('id', 'root');
   }.property(),
+
+  // TODO VFS-1508: this probably can be written as: function(){...}.property('spacesDir.children', 'currentSpaceId')
   spaceDirOptions: Ember.computed('spacesDir.children,currentSpaceId', function () {
     var that = this;
+    // TODO VFS-1508: use (space) => result operator (should use component this)
     return this.get('spacesDir.children').map(function (space) {
       return {
         space: space,
@@ -90,7 +107,7 @@ export default Ember.Component.extend({
     });
   }),
 
-  // Number of selected files
+  /** Number of selected files */
   selectedCount: function () {
     var visibleFiles = this.get('model').filterBy('isVisible');
     var res = visibleFiles.filterBy('selected').length;
@@ -118,7 +135,7 @@ export default Ember.Component.extend({
   }.property('selectedCount'),
   isNotOneSelected: Ember.computed.not('isOneSelected'),
 
-  // File that is selected, if only it is selected
+  /** File that is selected, if only it is selected */
   currentFile: function (key, value) {
     console.log('key ' + key);
     console.log('value ' + value);
@@ -146,7 +163,7 @@ export default Ember.Component.extend({
     }
   }.property('currentFile'),
 
-  // Handling actions
+  /** Handling actions */
   actions: {
     changeCurrentDir: function (newSpaceId) {
       this.set('currentSpaceId', newSpaceId);
