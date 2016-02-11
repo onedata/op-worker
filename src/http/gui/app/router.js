@@ -15,7 +15,7 @@ const Router = Ember.Router.extend({
 });
 
 Router.map(function() {
-  this.route('recent');
+  this.route('recents');
 
   // spaces/ - all spaces configuration reached from primary sidebar
   this.route('spaces', function() {

@@ -26,15 +26,15 @@
 <div class="one-table normal">
   <div class="one-hbody">
     <div class="one-th one-first">{{title}}</div>
-    <div class="one-th">view<br/>space</div>
-    <div class="one-th">modify<br/>space</div>
-    <div class="one-th">remove<br/>space</div>
-    <div class="one-th">invite<br/>user</div>
-    <div class="one-th">remove<br/>user</div>
-    <div class="one-th">invite<br/>group</div>
-    <div class="one-th">remove<br/>group</div>
-    <div class="one-th">invite<br/>provider</div>
-    <div class="one-th">remove<br/>provider</div>
+    <div class="one-th">{{t 'components.permissionsTable.viewSpace'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.modifySpace'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.removeSpace'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.inviteUser'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.removeUser'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.inviteGroup'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.removeGroup'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.inviteProvider'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.removeProvider'}}</div>
   </div>
   <div class="one-tbody">
     {{#each permissions as |perm|}}
@@ -42,7 +42,7 @@
         <div class="one-td one-first">{{perm.owner.name}}</div>
 
         <div class="one-td">
-          <div class="one-table-label">view space</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.viewSpace'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'ViewSpace'}}>
               {{bool-option perm.permViewSpace perm.modViewSpace}}
@@ -51,7 +51,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">modify space</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.modifySpace'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'ModifySpace'}}>
               {{bool-option perm.permModifySpace perm.modModifySpace}}
@@ -60,7 +60,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">remove space</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.removeSpace'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'RemoveSpace'}}>
               {{bool-option perm.permRemoveSpace perm.modRemoveSpace}}
@@ -69,7 +69,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">invite user</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.inviteUser'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'InviteUser'}}>
               {{bool-option perm.permInviteUser perm.modInviteUser}}
@@ -78,7 +78,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">remove user</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.removeUser'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'RemoveUser'}}>
               {{bool-option perm.permRemoveUser perm.modRemoveUser}}
@@ -87,7 +87,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">invite group</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.inviteGroup'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'InviteGroup'}}>
               {{bool-option perm.permInviteGroup perm.modInviteGroup}}
@@ -96,7 +96,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">remove group</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.removeGroup'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'RemoveGroup'}}>
               {{bool-option perm.permRemoveGroup perm.modRemoveGroup}}
@@ -105,7 +105,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">invite provider</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.inviteProvider'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'InviteProvider'}}>
               {{bool-option perm.permInviteProvider perm.modInviteProvider}}
@@ -114,7 +114,7 @@
         </div>
 
         <div class="one-td">
-          <div class="one-table-label">remove provider</div>
+          <div class="one-table-label">{{t 'components.permissionsTable.removeProvider'}}</div>
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'RemoveProvider'}}>
               {{bool-option perm.permRemoveProvider perm.modRemoveProvider}}
