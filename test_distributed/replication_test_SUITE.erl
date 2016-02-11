@@ -86,7 +86,7 @@ write_should_add_blocks_to_file_location(Config) ->
     {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
     {ok, LocationDoc = #document{value = Location = #file_location{blocks = Blocks, size = Size, version_vector = VV}}} =
         ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
-%%    ?assertEqual(10, Size), %todo fix and uncomment
+    ?assertEqual(10, Size),
 %%    ?assertEqual(#{?GET_DOMAIN(W1) => 1}, VV), %todo add VV and uncomment
     [Block] = ?assertMatch([#file_block{offset = 0, size = 10}], Blocks),
 
