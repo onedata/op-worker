@@ -127,8 +127,7 @@ def parse_json_config_file(path):
 
 
 def fix_sys_config_walk(element, current_app_name, parents, file_path):
-    app_names = ["cluster_manager", "appmock", "cluster_worker",
-                 "op_worker", "globalregistry", "onepanel", "oneclient"]
+    app_names = apps_with_sysconfig()
 
     if isinstance(element, dict):
         for key, next_element in element.items():
@@ -151,6 +150,10 @@ def fix_sys_config_walk(element, current_app_name, parents, file_path):
     elif isinstance(element, list):
         for next_element in element:
             fix_sys_config_walk(next_element, current_app_name, parents, file_path)
+
+
+def apps_with_sysconfig():
+    return ["cluster_manager", "appmock", "cluster_worker", "op_worker", "globalregistry", "onepanel", "oneclient"]
 
 
 def get_docker_name(name_or_container):
