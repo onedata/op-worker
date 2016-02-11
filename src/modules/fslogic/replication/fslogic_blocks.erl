@@ -23,9 +23,10 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([calculate_file_size/1, update/3, get_file_size/1]).
--export([aggregate/2, upper/1, lower/1]).
--export([consolidate/1, invalidate/3]).
+-export([aggregate/2, update/3, get_file_size/1]).
+
+%% Test API
+-export([upper/1, lower/1]).
 
 %%%===================================================================
 %%% API
@@ -78,30 +79,6 @@ lower([]) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% For given file / location or multiple locations, calculates file size based on blocks assigned to those locations.
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_file_size(datastore:document() | #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
-    Size :: non_neg_integer() | no_return().
-calculate_file_size(#document{value = #file_location{} = Value}) ->
-    calculate_file_size(Value);
-calculate_file_size(#file_location{blocks = []}) ->
-    0;
-calculate_file_size(#file_location{blocks = Blocks}) ->
-    upper(Blocks);
-calculate_file_size([Location | T]) ->
-    max(calculate_file_size(Location), calculate_file_size(T));
-calculate_file_size([]) ->
-    0;
-calculate_file_size(Entry) ->
-    {ok, LocIds} = file_meta:get_locations(Entry),
-    Locations = [file_location:get(LocId) || LocId <- LocIds],
-    Locations1 = [Location || {ok, #document{value = #file_location{} = Location}} <- Locations],
-    calculate_file_size(Locations1).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% For given file / location or multiple locations, reads file size assigned to those locations.
 %% @end
 %%--------------------------------------------------------------------
@@ -140,7 +117,7 @@ update(FileUUID, Blocks, FileSize) ->
             [Location | _] = fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, insted operating on first one
             FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
-            ok = append([Location], FullBlocks), %todo update VV
+            ok = append([Location], FullBlocks),
 
             case FileSize of
                 undefined ->
@@ -150,9 +127,9 @@ update(FileUUID, Blocks, FileSize) ->
                     end;
                 _ ->
                     do_local_truncate(FileSize, Location),
-                    % todo reconcile other local replicas according to this one
                     {ok, size_changed}
             end
+            % todo reconcile other local replicas according to this one
         catch
             _:Reason ->
                 ?error_stacktrace("Failed to update blocks for file ~p (blocks ~p, file_size ~p) due to: ~p", [FileUUID, Blocks, FileSize, Reason]),
@@ -171,15 +148,43 @@ update(FileUUID, Blocks, FileSize) ->
 invalidate([Location | T], Blocks) ->
     ok = invalidate(Location, Blocks),
     ok = invalidate(T, Blocks);
+invalidate(_, []) ->
+    ok;
 invalidate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks) ->
     ?debug("OldBlocks invalidate ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = invalidate(Doc, OldBlocks, Blocks),
     ?debug("NewBlocks invalidate ~p", [NewBlocks]),
     NewBlocks1 = consolidate(NewBlocks),
     ?debug("NewBlocks1 invalidate ~p", [NewBlocks1]),
-    {ok, _} = file_location:save(Doc#document{rev = undefined, value = Loc#file_location{blocks = NewBlocks1, size = upper(NewBlocks1)}}),
+    {ok, _} = file_location:save(Doc#document{rev = undefined, value = Loc#file_location{blocks = NewBlocks1}}), %do not change size
     ok;
 invalidate([], _) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Inavlidates given blocks in given locations. File size is also updated.
+%% @end
+%%--------------------------------------------------------------------
+-spec shrink(datastore:document() | [datastore:document()], Blocks :: blocks(), NewSize :: non_neg_integer()) ->
+    ok | no_return().
+shrink([Location | T], Blocks, NewSize) ->
+    ok = shrink(Location, Blocks, NewSize),
+    ok = shrink(T, Blocks, NewSize);
+shrink(#document{value = #file_location{size = NewSize}}, [], NewSize) ->
+    ok;
+shrink(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, NewSize) ->
+    ?debug("OldBlocks shrink ~p, new ~p", [OldBlocks, Blocks]),
+    NewBlocks = invalidate(Doc, OldBlocks, Blocks),
+    ?debug("NewBlocks shrink ~p", [NewBlocks]),
+    NewBlocks1 = consolidate(NewBlocks),
+    ?debug("NewBlocks1 shrink ~p", [NewBlocks1]),
+    {ok, _} = file_location:save_and_bump_version(
+        Doc#document{rev = undefined, value =
+        Loc#file_location{blocks = NewBlocks1, size = NewSize}}
+    ),
+    ok;
+shrink([], _, _) ->
     ok.
 
 
@@ -239,6 +244,29 @@ consolidate([B | T]) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @doc
+%% For given file / location or multiple locations, calculates file size based on blocks assigned to those locations.
+%% @end
+%%--------------------------------------------------------------------
+-spec calculate_file_size(datastore:document() | #file_location{} | [#file_location{}] | fslogic_worker:file()) ->
+    Size :: non_neg_integer() | no_return().
+calculate_file_size(#document{value = #file_location{} = Value}) ->
+    calculate_file_size(Value);
+calculate_file_size(#file_location{blocks = []}) ->
+    0;
+calculate_file_size(#file_location{blocks = Blocks}) ->
+    upper(Blocks);
+calculate_file_size([Location | T]) ->
+    max(calculate_file_size(Location), calculate_file_size(T));
+calculate_file_size([]) ->
+    0;
+calculate_file_size(Entry) ->
+    {ok, LocIds} = file_meta:get_locations(Entry),
+    Locations = [file_location:get(LocId) || LocId <- LocIds],
+    Locations1 = [Location || {ok, #document{value = #file_location{} = Location}} <- Locations],
+    calculate_file_size(Locations1).
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Aggregates lists of 'file_block' records using acumulator AggBlocks.
@@ -296,6 +324,8 @@ append([], _Blocks) ->
 append([Location | T], Blocks) ->
     ok = append(Location, Blocks),
     ok = append(T, Blocks);
+append(_, []) ->
+    ok;
 append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks) ->
     ?debug("OldBlocks ~p, NewBlocks ~p", [OldBlocks, Blocks]),
     NewBlocks = invalidate(Doc, OldBlocks, Blocks) ++ Blocks,
@@ -303,7 +333,10 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
     ?debug("NewBlocks ~p", [NewBlocks]),
     NewBlocks1 = consolidate(lists:sort(NewBlocks)),
     ?debug("NewBlocks1 ~p", [NewBlocks1]),
-    {ok, _} = file_location:save(Doc#document{rev = undefined, value = Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}}),
+    {ok, _} = file_location:save_and_bump_version(
+        Doc#document{rev = undefined, value =
+        Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}}
+    ),
     ok.
 
 
@@ -317,9 +350,9 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 do_local_truncate(FileSize, #document{value = #file_location{size = FileSize}}) ->
     ok;
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
-    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}]); %todo update VV
+    append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}]);
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} = LocalLocation) when LocalSize > FileSize ->
-    invalidate(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}]). %todo update VV
+    shrink(LocalLocation, [#file_block{offset = FileSize, size = LocalSize - FileSize}], FileSize).
 
 
 %%--------------------------------------------------------------------

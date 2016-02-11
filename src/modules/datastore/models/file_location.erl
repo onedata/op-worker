@@ -19,11 +19,12 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([run_synchronized/2]).
+-export([run_synchronized/2, save_and_bump_version/1]).
 
+-type id() :: binary().
 -type doc() :: datastore:document().
 
--export_type([doc/0]).
+-export_type([id/0, doc/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -39,6 +40,14 @@
 run_synchronized(ResourceId, Fun) ->
     datastore:run_synchronized(?MODEL_NAME, ResourceId, Fun).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Increase version in version_vector and save document.
+%% @end
+%%--------------------------------------------------------------------
+-spec save_and_bump_version(doc()) -> {ok, datastore:key()} | datastore:generic_error().
+save_and_bump_version(FileLocationDoc) ->
+    file_location:save(version_vector:bump_version(FileLocationDoc)).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -30,7 +30,8 @@
     dbsync_trigger_should_create_local_file_location/1,
     write_should_add_blocks_to_file_location/1,
     truncate_should_change_size_and_blocks/1,
-    write_and_truncate_should_not_update_remote_file_location/1
+    write_and_truncate_should_not_update_remote_file_location/1,
+    update_should_bump_replica_version/1
 ]).
 
 
@@ -40,7 +41,8 @@ all() ->
         dbsync_trigger_should_create_local_file_location,
         write_should_add_blocks_to_file_location,
         truncate_should_change_size_and_blocks,
-        write_and_truncate_should_not_update_remote_file_location
+        write_and_truncate_should_not_update_remote_file_location,
+        update_should_bump_replica_version
     ].
 
 
@@ -88,11 +90,10 @@ write_should_add_blocks_to_file_location(Config) ->
 
     %then
     {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, LocationDoc = #document{value = Location = #file_location{blocks = Blocks, size = Size, version_vector = VV, provider_id = ProviderId}}} =
+    {ok, LocationDoc = #document{value = Location = #file_location{blocks = Blocks, size = Size, provider_id = ProviderId}}} =
         ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
     ?assertEqual(atom_to_binary(?GET_DOMAIN(W1), unicode), ProviderId),
     ?assertEqual(10, Size),
-%%    ?assertEqual(#{?GET_DOMAIN(W1) => 1}, VV), %todo add VV and uncomment
     [Block] = ?assertMatch([#file_block{offset = 0, size = 10}], Blocks),
 
     % when
@@ -105,10 +106,9 @@ write_should_add_blocks_to_file_location(Config) ->
 
     % then
     {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, #document{value = #file_location{blocks = Blocks2, size = Size2, version_vector = VV2}}} =
+    {ok, #document{value = #file_location{blocks = Blocks2, size = Size2}}} =
         ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
     ?assertEqual(10, Size2),
-%%    ?assertEqual(#{?GET_DOMAIN(W1) => 2}, VV2), %todo add VV and uncomment
     ?assertMatch([Block], Blocks2).
 
 truncate_should_change_size_and_blocks(Config) ->
@@ -124,10 +124,9 @@ truncate_should_change_size_and_blocks(Config) ->
 
     %then
     {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
-    {ok, #document{value = #file_location{blocks = Blocks, size = Size, version_vector = VV}}} =
+    {ok, #document{value = #file_location{blocks = Blocks, size = Size}}} =
         ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
     ?assertEqual(6, Size),
-%%    ?assertEqual(#{?GET_DOMAIN(W1) => 2}, VV), %todo add VV and uncomment
     ?assertMatch([#file_block{offset = 0, size = 6}], Blocks).
 
 write_and_truncate_should_not_update_remote_file_location(Config) ->
@@ -158,6 +157,39 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
     % then
     ?assertMatch({ok, #document{value = RemoteLocation}},
         rpc:call(W1, file_location, get, [RemoteLocationId])).
+
+update_should_bump_replica_version(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    ProviderId = atom_to_binary(?GET_DOMAIN(W1), unicode),
+    SessionId = <<"session_id1">>,
+    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
+
+    %when
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"01">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 2, <<"23">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 4, <<"45">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 6, <<"67">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 8, <<"78">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    %then
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    VV1 = maps:put({ProviderId, LocationId}, 5, #{}),
+    ?assertMatch({ok, #document{value = #file_location{version_vector = VV1, blocks = [#file_block{offset = 0, size = 10}]}}},
+        rpc:call(W1, file_location, get, [LocationId])),
+
+    %when
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {uuid, FileUuid}, 2)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {uuid, FileUuid}, 0)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    %then
+    VV2 = maps:put({ProviderId, LocationId}, 9, #{}),
+    ?assertMatch({ok, #document{value = #file_location{version_vector = VV2}}},
+        rpc:call(W1, file_location, get, [LocationId])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
