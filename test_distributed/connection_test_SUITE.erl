@@ -38,7 +38,9 @@
     python_client_test/1, proto_version_test/1]).
 
 %%test_bases
--export([multi_message_test_base/1, multi_ping_pong_test_base/1, sequential_ping_pong_test_base/1, multi_connection_test_base/1, bandwidth_test_base/1, python_client_test_base/1]).
+-export([multi_message_test_base/1, multi_ping_pong_test_base/1,
+    sequential_ping_pong_test_base/1, multi_connection_test_base/1,
+    bandwidth_test_base/1, python_client_test_base/1]).
 
 -define(NORMAL_CASES_NAMES, [
     token_connection_test, cert_connection_test, protobuf_msg_test,
@@ -152,7 +154,6 @@ multi_message_test(Config) ->
             ]}
         ]
     ).
-
 multi_message_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -292,7 +293,6 @@ multi_ping_pong_test(Config) ->
             ]}
         ]
     ).
-
 multi_ping_pong_test_base(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -353,7 +353,6 @@ sequential_ping_pong_test(Config) ->
             ]}
         ]
     ).
-
 sequential_ping_pong_test_base(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -399,7 +398,6 @@ multi_connection_test(Config) ->
             {config, [{name, multi_connection}]}
         ]
     ).
-
 multi_connection_test_base(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -436,7 +434,6 @@ bandwidth_test(Config) ->
             ]}
         ]
     ).
-
 bandwidth_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -491,7 +488,6 @@ python_client_test(Config) ->
             ]}
         ]
     ).
-
 python_client_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),

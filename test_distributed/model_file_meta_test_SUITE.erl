@@ -51,7 +51,6 @@ basic_operations_test(Config) ->
             {config, [{name, basic_config}, {description, "Basic config for test"}]}
         ]
     ).
-
 basic_operations_test_base(Config) ->
     basic_operations_test_core(Config).
 

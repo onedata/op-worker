@@ -75,7 +75,6 @@ route_message_should_forward_messages_in_right_order(Config) ->
     ?SEQ_CFG(medium_msg_rnd_ord, "Medium number of messages in the random order", 1000, random),
     ?SEQ_CFG(large_msg_rnd_ord, "Large number of messages in the random order", 10000, random)
   ]).
-
 route_message_should_forward_messages_in_right_order_base(Config) ->
   [Worker | _] = ?config(op_worker_nodes, Config),
   StmId = 1,
@@ -134,7 +133,6 @@ route_message_should_work_for_multiple_streams(Config) ->
       {parameters, [?MSG_NUM(100), ?STM_NUM(100)]}
     ]}
   ]).
-
 route_message_should_work_for_multiple_streams_base(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),

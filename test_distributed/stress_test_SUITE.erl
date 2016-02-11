@@ -51,7 +51,6 @@ stress_test(Config) ->
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
-
 stress_test_base(Config) ->
   performance_macros:stress_test(Config).
 
@@ -62,7 +61,6 @@ file_meta_basic_operations_test(Config) ->
         {description, "Performs operations on file meta model"}
       ]
     ).
-
 file_meta_basic_operations_test_base(Config) ->
   model_file_meta_test_SUITE:basic_operations_test_core(Config).
 

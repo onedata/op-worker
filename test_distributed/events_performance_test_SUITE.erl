@@ -104,7 +104,6 @@ emit_should_aggregate_events_with_the_same_key(Config) ->
             ]}
         ]
     ).
-
 emit_should_aggregate_events_with_the_same_key_base(Config) ->
         [Worker | _] = ?config(op_worker_nodes, Config),
         Self = self(),
@@ -171,7 +170,6 @@ emit_should_not_aggregate_events_with_different_key(Config) ->
                 {parameters, [?CTR_THR(500), ?FILE_NUM(50)]}
             ]}
         ]).
-
 emit_should_not_aggregate_events_with_different_key_base(Config) ->
         [Worker | _] = ?config(op_worker_nodes, Config),
         Self = self(),
@@ -249,7 +247,6 @@ emit_should_execute_event_handler_when_counter_threshold_exceeded(Config) ->
                 {parameters, [?CTR_THR(1000), ?EVT_NUM(50000)]}
             ]}
         ]).
-
 emit_should_execute_event_handler_when_counter_threshold_exceeded_base(Config) ->
         [Worker | _] = ?config(op_worker_nodes, Config),
         Self = self(),
@@ -307,7 +304,6 @@ emit_should_execute_event_handler_when_size_threshold_exceeded(Config) ->
                 {parameters, [?SIZE_THR(10000), ?EVT_NUM(50000)]}
             ]}
         ]).
-
 emit_should_execute_event_handler_when_size_threshold_exceeded_base(Config) ->
         [Worker | _] = ?config(op_worker_nodes, Config),
         Self = self(),
@@ -371,7 +367,6 @@ multiple_subscribe_should_create_multiple_subscriptions(Config) ->
                 {parameters, [?SUB_NUM(50)]}
             ]}
         ]).
-
 multiple_subscribe_should_create_multiple_subscriptions_base(Config) ->
         [Worker | _] = ?config(op_worker_nodes, Config),
         SessId = ?config(session_id, Config),
@@ -440,7 +435,6 @@ subscribe_should_work_for_multiple_sessions(Config) ->
                 {parameters, [?CLI_NUM(500)]}
             ]}
         ]).
-
 subscribe_should_work_for_multiple_sessions_base(Config) ->
         [Worker | _] = ?config(op_worker_nodes, Config),
         Self = self(),
