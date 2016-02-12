@@ -141,7 +141,7 @@ package/$(PKG_ID).tar.gz: deps
 	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
 	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
 	done
-	find package/$(PKG_ID) -depth -name ".git" -exec rm -rf {} \;
+	find package/$(PKG_ID) -depth -name ".git" -not -path '*/cluster_worker/*' -exec rm -rf {} \;
 	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
 
 dist: package/$(PKG_ID).tar.gz
