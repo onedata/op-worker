@@ -75,7 +75,7 @@ global_stream_test(MultiConfig) ->
             {ok, _} = lfm_proxy:create(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
 
             D0
-        end, lists:seq(1, 10)),
+        end, lists:seq(1, 2)),
 
     timer:sleep(timer:seconds(10)),
 
@@ -162,7 +162,7 @@ global_stream_document_remove_test(MultiConfig) ->
             D0 = gen_filename(),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
             D0
-        end, lists:seq(1, 10)),
+        end, lists:seq(1, 2)),
 
     timer:sleep(timer:seconds(10)),
 
@@ -288,7 +288,7 @@ global_stream_with_proto_test(MultiConfig) ->
             {ok, _} = lfm_proxy:create(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
 
             D0
-        end, lists:seq(1, 10)),
+        end, lists:seq(1, 2)),
 
     timer:sleep(timer:seconds(10)),
 
