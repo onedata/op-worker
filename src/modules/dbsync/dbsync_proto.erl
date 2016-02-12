@@ -21,7 +21,7 @@
 -export([send_batch/3, changes_request/3, status_report/3]).
 
 -export([send_tree_broadcast/4, send_tree_broadcast/5, send_direct_message/3]).
--export([handle/2]).
+-export([handle/2, handle_impl/2]).
 -export([reemit/1]).
 
 %%%==================================================================
@@ -86,7 +86,7 @@ status_report(SpaceId, Providers, CurrentSeq) ->
     ok | {error, Reason :: any()}.
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
     PushTo = ProviderId,
-    case communicate(PushTo, Request) of
+    case dbsync_utils:communicate(PushTo, Request) of
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
@@ -135,7 +135,7 @@ do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{depth = Depth} = BaseR
     REdge = lists:last(SyncWith),
     SyncRequest = BaseRequest#tree_broadcast{l_edge = LEdge, r_edge = REdge, depth = Depth + 1},
 
-    case communicate(PushTo, SyncRequest) of
+    case dbsync_utils:communicate(PushTo, SyncRequest) of
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send tree message to ~p due to: ~p", [PushTo, Reason]),
@@ -174,7 +174,7 @@ reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, messa
 -spec handle(SessId :: session:id(), #dbsync_request{}) ->
     #status{}.
 handle(SessId, #dbsync_request{message_body = MessageBody}) ->
-    ?debug("DBSync request from  ~p", [SessId]),
+    ?debug("DBSync request from ~p ~p", [SessId, MessageBody]),
     {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle_impl(ProviderId, MessageBody) of
         ok ->
@@ -202,6 +202,8 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
             _MTime ->
                 true
         end,
+
+    ?info("DBSync request (ignored: ~p) from ~p ~p", [Ignore, From, BaseRequest]),
 
     case Ignore of
         false ->
@@ -257,14 +259,3 @@ handle_broadcast(_From, #status_request{} = _Request, _BaseRequest) ->
 %%--------------------------------------------------------------------
 %% Misc
 %%--------------------------------------------------------------------
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Send given protocol record to given provider asynchronously.
-%% @end
-%%--------------------------------------------------------------------
--spec communicate(oneprovider:id(), Message :: #tree_broadcast{} | #changes_request{} | #status_request{}) ->
-    {ok, MsgId :: term()} | {error, Reason :: term()}.
-communicate(ProviderId, Message) ->
-    SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId).

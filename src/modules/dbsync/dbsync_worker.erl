@@ -160,7 +160,7 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
 %% Push changes from queue to providers
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
-    worker_host:state_update(dbsync_worker, {queue, QueueKey},
+    state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
@@ -195,7 +195,7 @@ handle({'EXIT', Stream, Reason}) ->
     case state_get(changes_stream) of
         Stream ->
             Since = state_get(global_resume_seq),
-            worker_host:state_update(dbsync_worker, changes_stream,
+            state_update(changes_stream,
                 fun(_) ->
                     {ok, NewStream} = init_stream(Since, infinity, global),
                     NewStream
@@ -233,7 +233,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec queue_remove(queue(), Until :: non_neg_integer()) -> ok.
 queue_remove(QueueKey, Until) ->
-    worker_host:state_update(dbsync_worker, {queue, QueueKey},
+    state_update({queue, QueueKey},
         fun(Queue) ->
             case Queue of
                 undefined ->
@@ -256,7 +256,7 @@ queue_remove(QueueKey, Until) ->
 %%--------------------------------------------------------------------
 -spec queue_push(queue(), change(), SpaceId :: binary()) -> ok.
 queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
-    worker_host:state_update(dbsync_worker, {queue, QueueKey},
+    state_update({queue, QueueKey},
         fun(Queue) ->
             Queue1 =
                 case Queue of
@@ -335,6 +335,25 @@ state_put(Key, Value) ->
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
     worker_host:state_get(?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates Value for given Key in DBSync KV state using given function. The function gets as argument old Value and
+%% shall return new Value. The function runs in worker_host's process.
+%% @end
+%%--------------------------------------------------------------------
+-spec state_update(Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
+    ok | no_return().
+state_update(Key, UpdateFun) when is_function(UpdateFun) ->
+    DBSyncPid = whereis(?MODULE),
+    case self() of
+        DBSyncPid ->
+            OldValue = state_get(Key),
+            NewValue = UpdateFun(OldValue),
+            state_put(Key, NewValue);
+        _ ->
+            worker_host:state_update(?MODULE, Key, UpdateFun)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -433,7 +452,7 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
         true ->
             state_put(Key, OP(state_get(Key)));
         false ->
-            worker_host:state_update(dbsync_worker, Key, OP)
+            state_update(Key, OP)
     end.
 
 
@@ -517,7 +536,7 @@ do_request_changes(ProviderId, Since, Until) ->
 -spec stash_batch(oneprovider:id(), SpaceId :: binary(), Batch :: batch()) ->
     ok | no_return().
 stash_batch(ProviderId, SpaceId, Batch) ->
-    worker_host:state_update(dbsync_worker, {stash, ProviderId, SpaceId},
+    state_update({stash, ProviderId, SpaceId},
         fun(undefined) ->
             [Batch];
             (Batches) ->

@@ -72,10 +72,9 @@ global_stream_test(MultiConfig) ->
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-            {ok, _} = lfm_proxy:create(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", F/binary>>, 8#755),
 
             D0
-        end, lists:seq(1, 2)),
+        end, lists:seq(1, 20)),
 
     timer:sleep(timer:seconds(10)),
 
@@ -162,7 +161,7 @@ global_stream_document_remove_test(MultiConfig) ->
             D0 = gen_filename(),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
             D0
-        end, lists:seq(1, 2)),
+        end, lists:seq(1, 20)),
 
     timer:sleep(timer:seconds(10)),
 
@@ -259,22 +258,6 @@ global_stream_with_proto_test(MultiConfig) ->
     {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
     {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
 
-    test_utils:mock_expect([WorkerP1], oneprovider, get_provider_id,
-        fun() ->
-            <<"provider_1">>
-        end),
-    test_utils:mock_expect([WorkerP2], oneprovider, get_provider_id,
-        fun() ->
-            <<"provider_2">>
-        end),
-    test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_providers_for_space,
-        fun(_) ->
-            [<<"provider_1">>, <<"provider_2">>]
-        end),
-    test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_spaces_for_provider,
-        fun(_) ->
-            [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>]
-        end),
 
     Dirs = lists:map(
         fun(N) ->
@@ -379,7 +362,33 @@ init_per_testcase(_, Config) ->
     ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
     ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
 
-    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
+    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils, communicator_utils]),
+
+    test_utils:mock_expect([WorkerP1], oneprovider, get_provider_id,
+        fun() ->
+            <<"provider_1">>
+        end),
+    test_utils:mock_expect([WorkerP2], oneprovider, get_provider_id,
+        fun() ->
+            <<"provider_2">>
+        end),
+
+    test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_providers_for_space,
+        fun(_) ->
+            [<<"provider_1">>, <<"provider_2">>]
+        end),
+    test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_spaces_for_provider,
+        fun(_) ->
+            [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>]
+        end),
+
+    test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, communicate,
+        fun
+            (<<"provider_1">>, Message) ->
+                rpc:call(WorkerP1, dbsync_proto, handle_impl, [<<"provider_2">>, Message]);
+            (<<"provider_2">>, Message) ->
+                rpc:call(WorkerP2, dbsync_proto, handle_impl, [<<"provider_1">>, Message])
+        end),
 
     catch task_manager:kill_all(),
 
@@ -395,7 +404,7 @@ end_per_testcase(_, MultiConfig) ->
 
     catch task_manager:kill_all(),
 
-    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils]).
+    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils, communicator_utils]).
 
 
 %%%===================================================================

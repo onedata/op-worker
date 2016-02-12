@@ -11,6 +11,7 @@
 -module(dbsync_utils).
 -author("Rafal Slota").
 
+-include("proto/oneprovider/dbsync_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
@@ -20,6 +21,7 @@
 -export([get_providers_for_space/1]).
 -export([get_spaces_for_provider/0, get_spaces_for_provider/1]).
 -export([get_provider_url/1, encode_term/1, decode_term/1, gen_request_id/0]).
+-export([communicate/2]).
 
 %%%===================================================================
 %%% API
@@ -105,3 +107,15 @@ decode_term(Doc) ->
 -spec gen_request_id() -> binary().
 gen_request_id() ->
     base64:encode(crypto:rand_bytes(32)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Send given protocol record to given provider asynchronously.
+%% @end
+%%--------------------------------------------------------------------
+-spec communicate(oneprovider:id(), Message :: #tree_broadcast{} | #changes_request{} | #status_request{}) ->
+    {ok, MsgId :: term()} | {error, Reason :: term()}.
+communicate(ProviderId, Message) ->
+    SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
+    provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId).
