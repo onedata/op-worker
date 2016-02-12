@@ -5,16 +5,21 @@ DISTRIBUTION    ?= none
 export DISTRIBUTION
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
-PKG_VERSION	?= $(shell git describe --tags --always | tr - .)
-PKG_ID	         = op-worker-$(PKG_VERSION)
-PKG_BUILD	 = 1
-BASE_DIR	 = $(shell pwd)
+PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
+PKG_ID           = op-worker-$(PKG_VERSION)
+PKG_BUILD        = 1
+BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
-REBAR	        ?= $(BASE_DIR)/rebar
+REBAR           ?= $(BASE_DIR)/rebar
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
 
-.PHONY: deps test package test_gui
+GIT_URL := $(shell git config --get remote.origin.url | sed -e 's/\(\/[^/]*\)$$//g')
+GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgrid.pl:7999/vfs'; else echo ${GIT_URL}; fi)
+ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
+export ONEDATA_GIT_URL
+
+.PHONY: deps package test test_gui
 
 all: test_rel
 
@@ -38,15 +43,6 @@ compile:
 
 deps:
 	./rebar get-deps
-
-gui_dev:
-	./deps/gui/build_gui.sh dev
-
-gui_prod:
-	./deps/gui/build_gui.sh prod
-
-gui_doc:
-	jsdoc -c src/http/gui/.jsdoc.conf src/http/gui/app
 
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
@@ -165,7 +161,7 @@ package/$(PKG_ID).tar.gz: deps
 	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
 	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
 	done
-	find package/$(PKG_ID) -depth -name ".git" -exec rm -rf {} \;
+	#find package/$(PKG_ID) -depth -name ".git" -not -path '*/cluster_worker/*' -exec rm -rf {} \;
 	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
 
 dist: package/$(PKG_ID).tar.gz
