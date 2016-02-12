@@ -25,27 +25,37 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
+
+%%tests
 -export([cert_connection_test/1, token_connection_test/1, protobuf_msg_test/1,
     multi_message_test/1, client_send_test/1, client_communicate_test/1,
     client_communicate_async_test/1, multi_ping_pong_test/1,
     sequential_ping_pong_test/1, multi_connection_test/1, bandwidth_test/1,
     python_client_test/1, proto_version_test/1]).
 
--performance({test_cases, [multi_message_test, multi_ping_pong_test,
-    sequential_ping_pong_test, multi_connection_test, bandwidth_test,
-    python_client_test]}).
-all() -> [
+%%test_bases
+-export([multi_message_test_base/1, multi_ping_pong_test_base/1,
+    sequential_ping_pong_test_base/1, multi_connection_test_base/1,
+    bandwidth_test_base/1, python_client_test_base/1]).
+
+-define(NORMAL_CASES_NAMES, [
     token_connection_test, cert_connection_test, protobuf_msg_test,
     multi_message_test, client_send_test, client_communicate_test,
     client_communicate_async_test, multi_ping_pong_test,
     sequential_ping_pong_test, multi_connection_test, bandwidth_test,
     python_client_test, proto_version_test
-].
+]).
+
+-define(PERFORMANCE_CASES_NAMES, [
+    multi_message_test, multi_ping_pong_test, sequential_ping_pong_test,
+    multi_connection_test, bandwidth_test, python_client_test
+]).
+
+all() -> ?ALL(?NORMAL_CASES_NAMES, ?PERFORMANCE_CASES_NAMES).
 
 -define(MACAROON, <<"TOKEN_VALUE">>).
 -define(TIMEOUT, timer:seconds(5)).
@@ -129,20 +139,22 @@ protobuf_msg_test(Config) ->
 % then
     ok = ssl2:close(Sock).
 
--performance([
-    {repeats, 5},
-    {success_rate, 80},
-    {parameters, [
-        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-    ]},
-    {config, [{name, ssl},
-        {parameters, [
-            [{name, msg_num}, {value, 100000}]
-        ]}
-    ]}
-]).
 multi_message_test(Config) ->
+    ?PERFORMANCE(Config, [
+            {repeats, 5},
+            {success_rate, 80},
+            {parameters, [
+                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+            ]},
+            {config, [{name, ssl},
+                {parameters, [
+                    [{name, msg_num}, {value, 100000}]
+                ]}
+            ]}
+        ]
+    ).
+multi_message_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
@@ -174,7 +186,7 @@ multi_message_test(Config) ->
     lists:foreach(fun(E) -> ok = ssl2:send(Sock, E) end, RawEvents),
     T2 = os:timestamp(),
 
-% then
+    % then
     lists:foreach(fun(N) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
@@ -262,24 +274,26 @@ client_communicate_async_test(Config) ->
     ?assertReceivedMatch({router_message_called, MsgId2}, ?TIMEOUT),
     ok = ssl2:close(Sock).
 
--performance([
-    {repeats, 5},
-    {success_rate, 80},
-    {parameters, [
-        [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
-        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
-        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-    ]},
-    {description, "Opens 'connections_num' connections and for each connection, "
-    "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
-    "messages."},
-    {config, [{name, ssl},
-        {parameters, [
-            [{name, msg_num}, {value, 100000}]
-        ]}
-    ]}
-]).
 multi_ping_pong_test(Config) ->
+    ?PERFORMANCE(Config, [
+            {repeats, 5},
+            {success_rate, 80},
+            {parameters, [
+                [{name, connections_num}, {value, 10}, {description, "Number of connections."}],
+                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}],
+                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+            ]},
+            {description, "Opens 'connections_num' connections and for each connection, "
+            "then sends 'msg_num' ping messages and finally receives 'msg_num' pong "
+            "messages."},
+            {config, [{name, ssl},
+                {parameters, [
+                    [{name, msg_num}, {value, 100000}]
+                ]}
+            ]}
+        ]
+    ).
+multi_ping_pong_test_base(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
@@ -324,20 +338,22 @@ multi_ping_pong_test(Config) ->
     T2 = os:timestamp(),
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
--performance([
-    {repeats, 5},
-    {success_rate, 80},
-    {parameters, [
-        [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
-    ]},
-    {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
-    {config, [{name, sequential_ping_pong},
-        {parameters, [
-            [{name, msg_num}, {value, 100000}]
-        ]}
-    ]}
-]).
 sequential_ping_pong_test(Config) ->
+    ?PERFORMANCE(Config, [
+            {repeats, 5},
+            {success_rate, 80},
+            {parameters, [
+                [{name, msg_num}, {value, 1000}, {description, "Number of messages sent and received."}]
+            ]},
+            {description, "Opens connection and then sends and receives ping/pong message 'msg_num' times."},
+            {config, [{name, sequential_ping_pong},
+                {parameters, [
+                    [{name, msg_num}, {value, 100000}]
+                ]}
+            ]}
+        ]
+    ).
+sequential_ping_pong_test_base(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     MsgNum = ?config(msg_num, Config),
@@ -370,17 +386,19 @@ sequential_ping_pong_test(Config) ->
 
     #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
 
--performance([
-    {repeats, 10},
-    {success_rate, 90},
-    {parameters, [
-        [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
-    ]},
-    {description, "Opens 'connections_num' connections to the server, checks "
-    "their state, and closes them."},
-    {config, [{name, multi_connection}]}
-]).
 multi_connection_test(Config) ->
+    ?PERFORMANCE(Config,[
+            {repeats, 10},
+            {success_rate, 90},
+            {parameters, [
+                [{name, connections_num}, {value, 100}, {description, "Number of connections."}]
+            ]},
+            {description, "Opens 'connections_num' connections to the server, checks "
+            "their state, and closes them."},
+            {config, [{name, multi_connection}]}
+        ]
+    ).
+multi_connection_test_base(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     ConnNumbers = ?config(connections_num, Config),
@@ -400,21 +418,23 @@ multi_connection_test(Config) ->
     end, Connections),
     lists:foreach(fun({ok, {Sock, _}}) -> ssl2:close(Sock) end, Connections).
 
--performance([
-    {repeats, 5},
-    {success_rate, 80},
-    {parameters, [
-        [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
-        [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
-        [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
-    ]},
-    {config, [{name, ssl},
-        {parameters, [
-            [{name, packet_num}, {value, 1000}]
-        ]}
-    ]}
-]).
 bandwidth_test(Config) ->
+    ?PERFORMANCE(Config, [
+            {repeats, 5},
+            {success_rate, 80},
+            {parameters, [
+                [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+                [{name, packet_num}, {value, 10}, {description, "Number of packets."}],
+                [{name, transport}, {value, ssl}, {description, "Connection transport type."}]
+            ]},
+            {config, [{name, ssl},
+                {parameters, [
+                    [{name, packet_num}, {value, 1000}]
+                ]}
+            ]}
+        ]
+    ).
+bandwidth_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
@@ -452,21 +472,23 @@ bandwidth_test(Config) ->
         #parameter{name = full_time, value = utils:milliseconds_diff(T3, T1), unit = "ms"}
     ].
 
--performance([
-    {repeats, 5},
-    {success_rate, 80},
-    {parameters, [
-        [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
-        [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
-    ]},
-    {description, "Same as bandwidth_test, but with ssl client written in python."},
-    {config, [{name, python_client},
-        {parameters, [
-            [{name, packet_num}, {value, 1000}]
-        ]}
-    ]}
-]).
 python_client_test(Config) ->
+    ?PERFORMANCE(Config, [
+            {repeats, 5},
+            {success_rate, 80},
+            {parameters, [
+                [{name, packet_size}, {value, 1024}, {unit, "kB"}, {description, "Size of packet."}],
+                [{name, packet_num}, {value, 10}, {description, "Number of packets."}]
+            ]},
+            {description, "Same as bandwidth_test, but with ssl client written in python."},
+            {config, [{name, python_client},
+                {parameters, [
+                    [{name, packet_num}, {value, 1000}]
+                ]}
+            ]}
+        ]
+    ).
+python_client_test_base(Config) ->
     % given
     [Worker1 | _] = Workers = ?config(op_worker_nodes, Config),
     PacketSize = ?config(packet_size, Config),
