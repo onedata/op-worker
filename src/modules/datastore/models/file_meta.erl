@@ -130,6 +130,7 @@ create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
     ?run(begin
+             ?info("CREATE FILE ~p", [FileName]),
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->
@@ -187,20 +188,31 @@ fix_parent_links(Parent, Entry) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
+get(Arg) ->
+    case get1(Arg) of
+        {error, {not_found, _}} = N when is_binary(Arg) ->
+            ?warning("NOT FOUND ~p ~p", [Arg, Arg]),
+            N;
+        {error, {not_found, _}} = N ->
+            ?warning("NOT FOUND ~p ~p", [Arg, to_uuid(Arg)]),
+            N;
+        R -> R
+    end.
+
 -spec get(uuid() | entry()) -> {ok, datastore:document()} | datastore:get_error().
-get({uuid, Key}) ->
+get1({uuid, Key}) ->
     get(Key);
-get(#document{value = #file_meta{}} = Document) ->
+get1(#document{value = #file_meta{}} = Document) ->
     {ok, Document};
-get({path, Path}) ->
+get1({path, Path}) ->
     ?run(begin
              {ok, {Doc, _}} = resolve_path(Path),
              {ok, Doc}
          end);
-get(?ROOT_DIR_UUID) ->
+get1(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
     #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, uid = ?ROOT_USER_ID}}};
-get(Key) ->
+get1(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -433,12 +445,14 @@ resolve_path(Path) ->
 -spec resolve_path(Parent :: entry(), path()) -> {ok, {datastore:document(), [uuid()]}} | datastore:generic_error().
 resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
     ?run(begin
+             ?info("Resolve ~p ~p", [ParentEntry, Path]),
              {ok, #document{key = RootUUID} = Root} = get(ParentEntry),
              case fslogic_path:split(Path) of
                  [] ->
                      {ok, {Root, [RootUUID]}};
                  Tokens ->
-                     case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
+
+                     Res = case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
                          {ok, {Leaf, KeyPath}} ->
                              [_ | [RealParentUUID | _]] = lists:reverse([RootUUID | KeyPath]),
                              {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
@@ -452,7 +466,9 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                              {error, {not_found, ?MODEL_NAME}};
                          {error, Reason} ->
                              {error, Reason}
-                     end
+                     end,
+                     ?info("WALK ~p ~p ~p", [Root, Tokens, Res]),
+                     Res
              end
          end).
 
