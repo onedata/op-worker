@@ -18,7 +18,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -39,20 +38,20 @@
     event_stream_should_reset_metadata_after_event_handler_execution/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    event_stream_should_register_with_event_manager_on_init,
-    event_stream_should_unregister_from_event_manager_on_terminate,
-    event_stream_should_execute_init_handler_on_init,
-    event_stream_should_execute_terminate_handler_on_terminate,
-    event_stream_should_execute_event_handler_on_terminate,
-    event_stream_should_execute_event_handler_when_emission_rule_satisfied,
-    event_stream_should_execute_event_handler_when_emission_time_satisfied,
-    event_stream_should_aggregate_events_with_the_same_key,
-    event_stream_should_not_aggregate_events_with_different_keys,
-    event_stream_should_check_admission_rule,
-    event_stream_should_reset_metadata_after_event_handler_execution
-].
+all() ->
+    ?ALL([
+        event_stream_should_register_with_event_manager_on_init,
+        event_stream_should_unregister_from_event_manager_on_terminate,
+        event_stream_should_execute_init_handler_on_init,
+        event_stream_should_execute_terminate_handler_on_terminate,
+        event_stream_should_execute_event_handler_on_terminate,
+        event_stream_should_execute_event_handler_when_emission_rule_satisfied,
+        event_stream_should_execute_event_handler_when_emission_time_satisfied,
+        event_stream_should_aggregate_events_with_the_same_key,
+        event_stream_should_not_aggregate_events_with_different_keys,
+        event_stream_should_check_admission_rule,
+        event_stream_should_reset_metadata_after_event_handler_execution
+    ]).
 
 -define(TIMEOUT, timer:seconds(15)).
 

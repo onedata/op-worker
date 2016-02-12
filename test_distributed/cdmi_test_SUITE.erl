@@ -20,10 +20,10 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -53,9 +53,8 @@
     accept_header_test/1
 ]).
 
--performance({test_cases, []}).
 all() ->
-    [
+    ?ALL([
         list_dir_test,
         get_file_test,
         metadata_test,
@@ -77,7 +76,7 @@ all() ->
         acl_test,
         errors_test,
         accept_header_test
-    ].
+    ]).
 
 -define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
@@ -335,10 +334,12 @@ metadata_test(Config) ->
     CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
     ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
     MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
+    ?assert(Before =< ATime1),
+    ?assert(Before =< MTime1),
     ?assert(Before =< CTime1),
+    ?assert(ATime1 =< After),
+    ?assert(MTime1 =< After),
     ?assert(CTime1 =< After),
-    ?assert(CTime1 =< ATime1),
-    ?assert(CTime1 =< MTime1),
     ?assertMatch(<<_/binary>>, proplists:get_value(<<"cdmi_owner">>, Metadata1)),
     ?assertEqual(<<"my_value">>, proplists:get_value(<<"my_metadata">>, Metadata1)),
     ?assertEqual(6, length(Metadata1)),
@@ -893,7 +894,11 @@ objectid_test(Config) ->
     {ok, Code4, _Headers4, Response4} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders4, []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
-    ?assertEqual(CdmiResponse1, CdmiResponse4), % should be the same as in 1
+    Meta1 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse1)),
+    CdmiResponse1WithoutAtime = [{<<"metadata">>, Meta1} | proplists:delete(<<"metadata">>, CdmiResponse1)],
+    Meta4 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse4)),
+    CdmiResponse4WithoutAtime = [{<<"metadata">>, Meta4} | proplists:delete(<<"metadata">>, CdmiResponse4)],
+    ?assertEqual(CdmiResponse1WithoutAtime, CdmiResponse4WithoutAtime), % should be the same as in 1 (except access time)
     %%------------------------------
 
     %%--- get /dir/ by objectid ----
@@ -901,9 +906,13 @@ objectid_test(Config) ->
     {ok, Code5, _Headers5, Response5} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
-    ?assertEqual( % should be the same as in 2 (except parent)
-        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse2)),
-        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse5))
+    Meta2 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse2)),
+    CdmiResponse2WithoutAtime = [{<<"metadata">>, Meta2} | proplists:delete(<<"metadata">>, CdmiResponse2)],
+    Meta5 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse5)),
+    CdmiResponse5WithoutAtime = [{<<"metadata">>, Meta5} | proplists:delete(<<"metadata">>, CdmiResponse5)],
+    ?assertEqual( % should be the same as in 2 (except parent and access time)
+        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse2WithoutAtime)),
+        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse5WithoutAtime))
     ),
     %%------------------------------
 
@@ -912,17 +921,23 @@ objectid_test(Config) ->
     {ok, Code6, _Headers6, Response6} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/file.txt", get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
     CdmiResponse6 = json_utils:decode(Response6),
-    ?assertEqual( % should be the same as in 3
-        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse3)),
-        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6))
+    Meta3 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse3)),
+    CdmiResponse3WithoutAtime = [{<<"metadata">>, Meta3} | proplists:delete(<<"metadata">>, CdmiResponse3)],
+    Meta6 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse6)),
+    CdmiResponse6WithoutAtime = [{<<"metadata">>, Meta6} | proplists:delete(<<"metadata">>, CdmiResponse6)],
+    ?assertEqual( % should be the same as in 3 (except access time)
+        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse3WithoutAtime)),
+        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6WithoutAtime))
     ),
 
     {ok, Code7, _Headers7, Response7} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(FileId), get, RequestHeaders6, []),
     ?assertEqual(200, Code7),
     CdmiResponse7 = json_utils:decode(Response7),
-    ?assertEqual( % should be the same as in 6 (except parent)
-        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6)),
-        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse7))
+    Meta7 = proplists:delete(<<"cdmi_atime">>, proplists:get_value(<<"metadata">>, CdmiResponse7)),
+    CdmiResponse7WithoutAtime = [{<<"metadata">>, Meta7} | proplists:delete(<<"metadata">>, CdmiResponse7)],
+    ?assertEqual( % should be the same as in 6 (except parent and access time)
+        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse6WithoutAtime)),
+        proplists:delete(<<"parentURI">>, proplists:delete(<<"parentID">>, CdmiResponse7WithoutAtime))
     ),
     %%------------------------------
 
