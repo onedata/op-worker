@@ -46,7 +46,7 @@ gui_prod:
 	./deps/gui/build_gui.sh prod
 
 gui_doc:
-	jsdoc -c src/http/gui/.jsdoc.conf app
+	jsdoc -c src/http/gui/.jsdoc.conf src/http/gui/app
 
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
