@@ -13,15 +13,13 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
--export([get_local_file_location/1, get_local_storage_file_locations/1, get_credentials_from_luma/4]).
--export([get_storage_type/1, get_storage_id/1, gen_storage_gid/2, parse_posix_ctx_from_luma/2]).
+-export([get_local_file_location/1, get_local_storage_file_locations/1]).
+-export([get_storage_type/1, get_storage_id/1, gen_storage_gid/2]).
 
 
 %%%===================================================================
@@ -48,67 +46,6 @@ get_storage_id(SpaceUUID) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
     StorageId.
-
-
-%%--------------------------------------------------------------------
-%% @doc Retrieves user credentials to storage from LUMA
-%% @end
-%%--------------------------------------------------------------------
--spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
-    StorageId :: storage:id() | helpers:name(), SessionId :: session:id()) -> proplists:proplist().
-get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
-    {ok, LUMA_hostname} = application:get_env(?APP_NAME, luma_hostname),
-    Hostname_binary = list_to_binary(LUMA_hostname),
-    {ok, LUMA_port} = application:get_env(?APP_NAME, luma_port),
-    Port_binary = list_to_binary(LUMA_port),
-    {ok, Hostname} = inet:gethostname(),
-    {ok, {hostent, Full_hostname, _, inet, _, [IP]}} = inet:gethostbyname(Hostname),
-    Full_hostname_binary = list_to_binary(Full_hostname),
-    IP_string = inet_parse:ntoa(IP),
-    IP_binary = list_to_binary(IP_string),
-    Json_data = case session:get_auth(SessionId) of
-        {ok, undefined} ->
-            <<"{}">>;
-        {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
-            {ok, #user_details{data = Data}} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-            list_to_binary(edoc_lib:escape_uri(binary_to_list(json_utils:encode(Data))))
-    end,
-    case http_client:get(
-        <<Hostname_binary/binary,":",Port_binary/binary,"/get_user_credentials?global_id=",UserId/binary,
-            "&storage_type=",StorageType/binary,"&storage_id=",StorageId/binary,"&source_ip=",IP_binary/binary,
-            "&source_hostname=",Full_hostname_binary/binary,"&user_details=",Json_data/binary>>,
-        [],
-        [],
-        [insecure]
-    ) of
-        {ok, 200, _Headers, Body} ->
-            Json = json_utils:decode(Body),
-            Status = proplists:get_value(<<"status">>, Json),
-            case Status of
-                <<"success">> ->
-                    {ok, proplists:get_value(<<"data">>, Json)};
-                <<"error">> ->
-                    {error, proplists:get_value(<<"message">>, Json)}
-            end;
-        Error ->
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc Parses LUMA response to posix user ctx
-%% @end
-%%--------------------------------------------------------------------
--spec parse_posix_ctx_from_luma(proplists:proplist(), SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
-parse_posix_ctx_from_luma(Response, SpaceUUID) ->
-    GID = case proplists:get_value(<<"gid">>, Response) of
-              undefined ->
-                  {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
-                  gen_storage_gid(SpaceName, SpaceUUID);
-              Val ->
-                  Val
-          end,
-    #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = GID}.
 
 
 %%--------------------------------------------------------------------

@@ -110,8 +110,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
                 StorageId = fslogic_utils:get_storage_id(SpaceUUID),
                 StorageType = fslogic_utils:get_storage_type(StorageId),
-                {ok, Enable_LUMA} = application:get_env(?APP_NAME, enable_luma),
-                fslogic_storage:get_posix_user_ctx(Enable_LUMA, StorageType, SessId, SpaceUUID)
+                fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
             catch
                 throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
             end,
