@@ -19,6 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -39,16 +40,16 @@
     default_permissions_test/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    fslogic_get_file_attr_test,
-    fslogic_mkdir_and_rmdir_test,
-    fslogic_read_dir_test,
-    chmod_test,
-    simple_rename_test,
-    update_times_test,
-    default_permissions_test
-].
+all() ->
+    ?ALL([
+        fslogic_get_file_attr_test,
+        fslogic_mkdir_and_rmdir_test,
+        fslogic_read_dir_test,
+        chmod_test,
+        simple_rename_test,
+        update_times_test,
+        default_permissions_test
+    ]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
