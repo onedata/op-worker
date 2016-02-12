@@ -203,7 +203,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                 true
         end,
 
-    ?info("DBSync request (ignored: ~p) from ~p ~p", [Ignore, From, BaseRequest]),
+    ?debug("DBSync request (ignored: ~p) from ~p ~p", [Ignore, From, BaseRequest]),
 
     case Ignore of
         false ->

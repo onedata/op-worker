@@ -20,6 +20,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -32,12 +33,12 @@
     global_stream_with_proto_test/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    global_stream_test,
-    global_stream_document_remove_test,
-    global_stream_with_proto_test
-].
+all() ->
+    ?ALL([
+        global_stream_test,
+        global_stream_document_remove_test,
+        global_stream_with_proto_test
+    ]).
 
 -define(TIMEOUT, timer:seconds(10)).
 -define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).
@@ -362,7 +363,7 @@ init_per_testcase(_, Config) ->
     ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
     ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
 
-    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils, communicator_utils]),
+    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
 
     test_utils:mock_expect([WorkerP1], oneprovider, get_provider_id,
         fun() ->
@@ -390,8 +391,6 @@ init_per_testcase(_, Config) ->
                 rpc:call(WorkerP2, dbsync_proto, handle_impl, [<<"provider_1">>, Message])
         end),
 
-    catch task_manager:kill_all(),
-
     [{all, Config}, {p1, lfm_proxy:init(ConfigWithSessionInfoP1)}, {p2, lfm_proxy:init(ConfigWithSessionInfoP2)}].
 
 end_per_testcase(_, MultiConfig) ->
@@ -404,7 +403,7 @@ end_per_testcase(_, MultiConfig) ->
 
     catch task_manager:kill_all(),
 
-    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils, communicator_utils]).
+    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils]).
 
 
 %%%===================================================================
