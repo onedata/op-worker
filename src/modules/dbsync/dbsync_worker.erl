@@ -26,7 +26,9 @@
 -export([bcast_status/0, on_status_received/3]).
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
--compile([export_all]).
+-define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
+-define(FLUSH_QUEUE_INTERVAL, 200).
+-define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
 
 -type queue_id() :: binary().
 -type queue() :: global | {provider, oneprovider:id(), queue_id()}.
@@ -38,10 +40,9 @@
 
 %% Record for storing current state of dbsync stream queue.
 -record(queue, {
-    key,
+    key :: queue(),
     since = 0 :: non_neg_integer(),
     batch_map = #{} :: #{},
-    last_send,
     removed = false :: boolean()
 }).
 
@@ -60,8 +61,8 @@
 init(_Args) ->
     ?info("[ DBSync ]: Starting dbsync..."),
     Since = 0,
-    timer:send_after(timer:seconds(10), dbsync_worker, {timer, bcast_status}),
-    timer:send_after(timer:seconds(1), dbsync_worker, {timer, {async_init_stream, Since, infinity, global}}),
+    timer:apply_after(?BROADCAST_STATUS_INTERVAL, worker_proxy, cast, [dbsync_worker, bcast_status]),
+    timer:apply_after(timer:seconds(5), worker_proxy, cast, [dbsync_worker, {async_init_stream, Since, infinity, global}]),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -80,11 +81,11 @@ init_stream(Since, Until, Queue) ->
                 fun(SpaceId) ->
                     {SpaceId, #batch{since = Since, until = Since}}
                 end, dbsync_utils:get_spaces_for_provider())),
-            state_put({queue, Queue}, #queue{batch_map = BatchMap, last_send = now(), since = Since});
+            state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
         _ -> ok
     end,
 
-    timer:send_after(100, dbsync_worker, {timer, {flush_queue, Queue}}),
+    timer:apply_after(?FLUSH_QUEUE_INTERVAL, worker_proxy, cast, [dbsync_worker, {flush_queue, Queue}]),
     couchdb_datastore_driver:changes_start_link(
         fun
             (_, stream_ended, _) ->
@@ -109,14 +110,20 @@ handle(ping) ->
     pong;
 
 handle(healthcheck) ->
-    ok;
+    case state_get(changes_stream) of
+        Stream when is_pid(Stream) ->
+            ok;
+        Other ->
+            ?error("DBSync global stream not ready (~p)", [Other]),
+            {error, global_stream_down}
+    end ;
 
 handle({reemit, Msg}) ->
     dbsync_proto:reemit(Msg);
 
 handle(bcast_status) ->
-    timer:send_after(timer:seconds(15), dbsync_worker, {timer, bcast_status}),
-        catch bcast_status();
+    timer:apply_after(?BROADCAST_STATUS_INTERVAL, worker_proxy, cast, [dbsync_worker, bcast_status]),
+    catch bcast_status();
 
 handle(requested_bcast_status) ->
     bcast_status();
@@ -128,7 +135,7 @@ handle({QueueKey, {cleanup, Until}}) ->
 %% Append change to given queue
 handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}) ->
     ?debug("[ DBSync ] Received change on queue ~p with seq ~p: ~p", [QueueKey, Seq, Doc]),
-    case is_file_scope(Doc) of
+    case has_sync_context(Doc) of
         true ->
             case get_space_id(Doc) of
                 {ok, <<"spaces">>} ->
@@ -168,11 +175,11 @@ handle({flush_queue, QueueKey}) ->
                     ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
                     undefined;
                 false ->
-                    timer:send_after(200, dbsync_worker, {timer, {flush_queue, QueueKey}}),
+                    timer:apply_after(?FLUSH_QUEUE_INTERVAL, worker_proxy, cast, [dbsync_worker, {flush_queue, QueueKey}]),
                     Queue#queue{batch_map = NewBatchMap}
             end;
             (undefined) when QueueKey =:= global ->
-                timer:send_after(200, dbsync_worker, {timer, {flush_queue, QueueKey}}),
+                timer:apply_after(?FLUSH_QUEUE_INTERVAL, worker_proxy, cast, [dbsync_worker, {flush_queue, QueueKey}]),
                 undefined;
             (undefined) ->
                 ?warning("Unknown operation on empty queue ~p", [QueueKey]),
@@ -202,7 +209,8 @@ handle({async_init_stream, Since, Until, Queue}) ->
             state_put(changes_stream, Pid);
         Reason ->
             ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
-            timer:send_after(500, dbsync_worker, {timer, {async_init_stream, Since, Until, Queue}})
+            timer:apply_after(?GLOBAL_STREAM_RESTART_INTERVAL, worker_proxy, cast,
+                [dbsync_worker, {async_init_stream, Since, Until, Queue}])
     end;
 %% Unknown request
 handle(_Request) ->
@@ -253,7 +261,7 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
             Queue1 =
                 case Queue of
                     undefined ->
-                        #queue{batch_map = #{}, last_send = now()};
+                        #queue{batch_map = #{}};
                     #queue{} = Q -> Q
                 end,
             BatchMap = Queue1#queue.batch_map,
@@ -334,11 +342,11 @@ state_get(Key) ->
 %% Checks if given document should be synced across providers.
 %% @end
 %%--------------------------------------------------------------------
--spec is_file_scope(datastore:document()) ->
+-spec has_sync_context(datastore:document()) ->
     boolean().
-is_file_scope(#document{value = #links{model = ModelName}}) ->
+has_sync_context(#document{value = #links{model = ModelName}}) ->
     lists:member(ModelName, ?MODELS_TO_SYNC);
-is_file_scope(#document{value = Value}) when is_tuple(Value) ->
+has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     ModelName = element(1, Value),
     lists:member(ModelName, ?MODELS_TO_SYNC).
 
@@ -348,17 +356,17 @@ is_file_scope(#document{value = Value}) when is_tuple(Value) ->
 %% For given document returns file's UUID that is associated with this document in some way.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_scope(datastore:document()) ->
+-spec get_sync_context(datastore:document()) ->
     datastore:key().
-get_file_scope(#document{key = Key, value = #file_meta{}}) ->
+get_sync_context(#document{key = Key, value = #file_meta{}}) ->
     Key;
-get_file_scope(#document{value = #links{key = DocKey, model = file_meta}}) ->
+get_sync_context(#document{value = #links{key = DocKey, model = file_meta}}) ->
     DocKey;
-get_file_scope(#document{value = #links{key = DocKey, model = file_location}}) ->
+get_sync_context(#document{value = #links{key = DocKey, model = file_location}}) ->
     #model_config{store_level = StoreLevel} = file_location:model_init(),
     {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
-    get_file_scope(Doc);
-get_file_scope(#document{value = #file_location{uuid = FileUUID}}) ->
+    get_sync_context(Doc);
+get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
     FileUUID.
 
 
@@ -388,7 +396,7 @@ get_space_id(#document{key = Key} = Doc) ->
 -spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
-    FileUUID = get_file_scope(Doc),
+    FileUUID = get_sync_context(Doc),
     case file_meta:get_scope({uuid, FileUUID}) of
         {ok, #document{key = <<"">> = Root}} ->
             state_put({space_id, KeyToCache}, Root),
@@ -449,7 +457,7 @@ get_current_seq(SpaceId) ->
 get_current_seq(ProviderId, SpaceId) ->
     case worker_host:state_get(dbsync_worker, {current_seq, ProviderId, SpaceId}) of
         undefined -> 0;
-        O -> O
+        Other -> Other
     end.
 
 

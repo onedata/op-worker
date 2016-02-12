@@ -69,8 +69,6 @@ global_stream_test(MultiConfig) ->
 
             F = gen_filename(),
 
-            ct:print("Create ~p", [N]),
-
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
@@ -108,10 +106,6 @@ global_stream_test(MultiConfig) ->
 
     lists:foreach(
         fun(PathMap) ->
-            ct:print("                                                                         "),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("                                                                         "),
             lists:foreach(
                 fun({Path, {UUID, Rev, LRev}}) ->
                     LocalRev =
@@ -164,9 +158,8 @@ global_stream_document_remove_test(MultiConfig) ->
         end),
 
     Dirs = lists:map(
-        fun(N) ->
-            NBin = integer_to_binary(N),
-            D0 = <<"dbsync_test_", NBin/binary>>,
+        fun(_N) ->
+            D0 = gen_filename(),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
             D0
         end, lists:seq(1, 10)),
@@ -189,10 +182,6 @@ global_stream_document_remove_test(MultiConfig) ->
 
     lists:foreach(
         fun(PathMap) ->
-            ct:print("                                                                         "),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("                                                                         "),
             lists:foreach(
                 fun({Path, {UUID, Rev, LRev}}) ->
                     LocalRev =
@@ -236,10 +225,6 @@ global_stream_document_remove_test(MultiConfig) ->
 
     lists:foreach(
         fun(PathMap) ->
-            ct:print("                                                                         "),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("                                                                         "),
             lists:foreach(
                 fun({Path, {UUID, Rev, LRev}}) ->
                     ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, UUID])),
@@ -291,15 +276,11 @@ global_stream_with_proto_test(MultiConfig) ->
             [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>]
         end),
 
-
     Dirs = lists:map(
         fun(N) ->
-            NBin = integer_to_binary(N),
-            D0 = <<"dbsync_test_", NBin/binary>>,
+            D0 = gen_filename(),
 
             F = gen_filename(),
-
-            ct:print("Create ~p", [N]),
 
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
             {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
@@ -338,10 +319,6 @@ global_stream_with_proto_test(MultiConfig) ->
 
     lists:foreach(
         fun(PathMap) ->
-            ct:print("                                                                         "),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"),
-            ct:print("                                                                         "),
             lists:foreach(
                 fun({Path, {UUID, Rev, LRev}}) ->
                     LocalRev =
@@ -399,39 +376,28 @@ init_per_testcase(_, Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     ConfigP1 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP1]}),
     ConfigP2 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP2]}),
-    communicator_mock_setup(Workers),
     ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
     ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
 
     test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
 
+    catch task_manager:kill_all(),
+
     [{all, Config}, {p1, lfm_proxy:init(ConfigWithSessionInfoP1)}, {p2, lfm_proxy:init(ConfigWithSessionInfoP2)}].
 
 end_per_testcase(_, MultiConfig) ->
+    timer:sleep(timer:seconds(10)),
     Workers = ?config(op_worker_nodes, ?config(all, MultiConfig)),
     lfm_proxy:teardown(?config(p1, MultiConfig)),
     lfm_proxy:teardown(?config(p2, MultiConfig)),
     initializer:clean_test_users_and_spaces(?config(p1, MultiConfig)),
     initializer:clean_test_users_and_spaces(?config(p2, MultiConfig)),
 
-    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
+    catch task_manager:kill_all(),
+
+    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils]).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).
