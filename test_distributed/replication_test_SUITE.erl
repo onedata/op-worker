@@ -31,7 +31,8 @@
     write_should_add_blocks_to_file_location/1,
     truncate_should_change_size_and_blocks/1,
     write_and_truncate_should_not_update_remote_file_location/1,
-    update_should_bump_replica_version/1
+    update_should_bump_replica_version/1,
+    read_should_synchronize_file/1
 ]).
 
 
@@ -42,7 +43,8 @@ all() ->
         write_should_add_blocks_to_file_location,
         truncate_should_change_size_and_blocks,
         write_and_truncate_should_not_update_remote_file_location,
-        update_should_bump_replica_version
+        update_should_bump_replica_version,
+        read_should_synchronize_file
     ].
 
 
@@ -190,6 +192,49 @@ update_should_bump_replica_version(Config) ->
     VV2 = maps:put({ProviderId, LocationId}, 9, #{}),
     ?assertMatch({ok, #document{value = #file_location{version_vector = VV2}}},
         rpc:call(W1, file_location, get, [LocationId])).
+
+read_should_synchronize_file(Config) ->
+    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    SessionId = <<"session_id1">>,
+    SpaceId = <<"space_id1">>,
+    ExternalProviderId = <<"external_provider_id">>,
+    ExternalFileId = <<"external_file_id">>,
+    ExternalBlocks = [#file_block{offset = 0, size = 10, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    RemoteLocation = #file_location{size = 10, space_id = SpaceId,
+        storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
+        blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
+        version_vector = #{}},
+    {ok, RemoteLocationId} = ?assertMatch({ok, _},
+        rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])),
+    ?assertEqual(ok, rpc:call(W1, file_meta, attach_location,
+        [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
+    test_utils:mock_new(Workers, rtransfer),
+    test_utils:mock_expect(Workers, rtransfer, prepare_request,
+        fun(_ProvId, _Uuid, 1, 3) ->
+            ref
+        end
+    ),
+    test_utils:mock_expect(Workers, rtransfer, fetch,
+        fun(ref, _NotifyFun, OnCompleteFun) ->
+            OnCompleteFun(ref, {ok, 3})
+        end
+    ),
+
+    % when
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
+    Ans = lfm_proxy:read(W1, Handle, 1, 3),
+
+    % then
+    ?assertEqual({ok, <<>>}, Ans),
+    ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, prepare_request, '_'])),
+    ?assert(rpc:call(W1, meck, called, [rtransfer, prepare_request, [ExternalProviderId, FileUuid, 1, 3]])),
+    ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, fetch, '_'])),
+    ?assert(rpc:call(W1, meck, called, [rtransfer, fetch, [ref, '_', '_']])),
+    test_utils:mock_validate_and_unload(Workers, rtransfer),
+    ?assertMatch(#document{value = #file_location{blocks = [#file_block{offset = 1, size = 3}]}},
+        rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

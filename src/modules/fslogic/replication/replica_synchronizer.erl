@@ -35,16 +35,21 @@
 -spec synchronize(file_meta:uuid(), fslogic_blocks:block()) -> ok.
 synchronize(Uuid, Block) ->
     {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
-    ProvidersAndBlocks = get_blocks_for_sync(Locations, [Block]),
+    LocationDocs = lists:map(
+        fun(LocationId) ->
+            {ok, Loc} = file_location:get(LocationId),
+            Loc
+        end, Locations),
+    ProvidersAndBlocks = get_blocks_for_sync(LocationDocs, [Block]),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(
-                fun(#file_block{offset = O, size = S}) ->
+                fun(BlockToSync = #file_block{offset = O, size = S}) ->
                     Ref = rtransfer:prepare_request(ProviderId, Uuid, O, S),
                     rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
-                    {ok, S} = receive_rtransfer_notification(Ref, ?SYNC_TIMEOUT)
+                    {ok, Size} = receive_rtransfer_notification(Ref, ?SYNC_TIMEOUT),
+                    replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false) %todo check if multiblock does not cause conflicts
                 end, Blocks),
-            replica_updater:update(Uuid, Blocks, undefined, false),
             fslogic_event:emit_file_location_update({uuid, Uuid}, [])
         end, ProvidersAndBlocks).
 
@@ -101,8 +106,8 @@ get_blocks_for_sync(Locations, Blocks) ->
     LocalProviderId = oneprovider:get_provider_id(),
     LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- Locations, Id =:= LocalProviderId],
     RemoteLocations = Locations -- LocalLocations,
-    RemoteBlocks = [Blocks || #document{value = #file_location{blocks = Blocks}} <- RemoteLocations],
-    BlocksToSync = fslogic_blocks:invalidate(Blocks, RemoteBlocks),
+    [LocalBlocks] = [LocalBlocks || #document{value = #file_location{blocks = LocalBlocks}} <- LocalLocations], %todo allow multi location
+    BlocksToSync = fslogic_blocks:invalidate(Blocks, LocalBlocks),
 
     case BlocksToSync of
         [] -> [];

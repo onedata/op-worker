@@ -23,7 +23,8 @@
 -export_type([block/0, blocks/0]).
 
 %% API
--export([aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1, lower/1]).
+-export([aggregate/2, consolidate/1, invalidate/2, get_file_size/1, upper/1,
+    lower/1, calculate_file_size/1]).
 
 %%%===================================================================
 %%% API
@@ -149,9 +150,6 @@ consolidate([B | T]) ->
     [B | consolidate(T)].
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -175,6 +173,10 @@ calculate_file_size(Entry) ->
     Locations = [file_location:get(LocId) || LocId <- LocIds],
     Locations1 = [Location || {ok, #document{value = #file_location{} = Location}} <- Locations],
     calculate_file_size(Locations1).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
