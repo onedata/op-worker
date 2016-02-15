@@ -46,7 +46,7 @@ parser.add_argument(
     '--no-cache',
     action='store_false',
     default=True,
-    help='disable mounting /tmp/ccache and /tmp/beamcache',
+    help='disable mounting /var/cache/ccache and /var/cache/beamcache',
     dest='mount_cache')
 
 parser.add_argument(
@@ -142,7 +142,7 @@ command = command.format(
 reflect = [(args.src, 'rw')]
 reflect.extend(zip(args.reflect, ['rw'] * len(args.reflect)))
 if args.mount_cache:
-    reflect.extend([('/tmp/ccache', 'rw'), ('/tmp/beamcache', 'rw')])
+    reflect.extend([('/var/cache/ccache', 'rw'), ('/var/cache/beamcache', 'rw')])
 
 split_envs = [e.split('=') for e in args.envs]
 envs = {kv[0]: kv[1] for kv in split_envs}
