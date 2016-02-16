@@ -53,6 +53,9 @@ gui_prod:
 gui_doc:
 	jsdoc -c src/http/gui/.jsdoc.conf src/http/gui/app
 
+gui_clean:
+	cd src/http/gui && rm -rf node_modules bower_components dist tmp
+
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
 ## Also a release is not nescesary for us.
