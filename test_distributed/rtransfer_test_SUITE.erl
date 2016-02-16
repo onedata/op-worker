@@ -15,7 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -28,9 +28,8 @@
 
 -export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1, data_counter/1]).
 
--performance({test_cases, []}).
 all() ->
-    [
+    ?ALL([
         less_than_block_fetch_test,
         exact_block_size_fetch_test,
         more_than_block_fetch_test,
@@ -45,7 +44,7 @@ all() ->
         %% error_write_fun_test,
         offset_greater_than_file_size_test,
         request_bigger_than_file_test
-    ].
+    ]).
 
 -define(FILE_HANDLE, <<"file_handle">>).
 -define(FILE_HANDLE2, <<"file_handle2">>).
