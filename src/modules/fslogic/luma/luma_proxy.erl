@@ -155,17 +155,18 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
     Full_hostname_binary = list_to_binary(Full_hostname),
     IP_list_string = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IP_list),
     IP_binary = json_utils:encode(IP_list_string),
-    User_details = case session:get_auth(SessionId) of
+    User_details_json = case session:get_auth(SessionId) of
         {ok, undefined} ->
             <<"{}">>;
         {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
-            {ok, #user_details{data = Data}} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-            list_to_binary(http_uri:encode(binary_to_list(json_utils:encode(Data))))
+            {ok, User_details} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
+            User_details_proplist = lists:zip(record_info(fields, user_details), tl(tuple_to_list(User_details))),
+            list_to_binary(http_uri:encode(binary_to_list(json_utils:encode(User_details_proplist))))
     end,
     case http_client:get(
         <<Hostname_binary/binary,":",Port_binary/binary,"/get_user_credentials?global_id=",UserId/binary,
         "&storage_type=",StorageType/binary,"&storage_id=",StorageId/binary,"&source_ips=",IP_binary/binary,
-        "&source_hostname=",Full_hostname_binary/binary,"&user_details=",User_details/binary>>,
+        "&source_hostname=",Full_hostname_binary/binary,"&user_details=",User_details_json/binary>>,
         [],
         [],
         [insecure]
