@@ -16,11 +16,40 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([create_storage_file_if_not_exists/4, create_storage_file/4]).
+-export([add_change/2, get_changes/2, create_storage_file_if_not_exists/4, create_storage_file/4]).
+
+-define(MAX_CHANGES, 20).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Add changelog to file_location document
+%% @end
+%%--------------------------------------------------------------------
+-spec add_change(file_location:doc(), term()) -> file_location:doc().
+add_change(Doc = #document{value = Location = #file_location{recent_changes = {_Backup, New}}}, Change)
+    when length(New) >= ?MAX_CHANGES ->
+    Doc#document{value = Location#file_location{recent_changes = {New, [Change]}}};
+add_change(Doc = #document{value = Location = #file_location{recent_changes = {Backup, New}}}, Change) ->
+    Doc#document{value = Location#file_location{recent_changes = {Backup, [Change | New]}}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get N recent changes of file_location
+%% @end
+%%--------------------------------------------------------------------
+-spec get_changes(file_location:doc(), non_neg_integer()) -> [term()].
+get_changes(#document{value = #file_location{recent_changes = {Backup, New}}}, N)
+    when N > length(New) + length(Backup) ->
+    undefined;
+get_changes(#document{value = #file_location{recent_changes = {_Backup, New}}}, N)
+    when N =< length(New) ->
+    lists:sublist(New, N);
+get_changes(#document{value = #file_location{recent_changes = {Backup, New}}}, N) ->
+    lists:sublist(New ++ Backup, N).
 
 %%--------------------------------------------------------------------
 %% @doc

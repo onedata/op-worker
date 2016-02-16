@@ -305,7 +305,11 @@ start_rtransfer() ->
         {get_nodes_fun,
             fun(ProviderId) ->
                 {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
-                lists:map(fun(URL) -> {binary_to_list(URL), ?RTRANSFER_PORT} end, URLs)
+                lists:map(
+                    fun(URL) ->
+                        {ok, Ip} = inet:ip(binary_to_list(URL)),
+                        {Ip, ?RTRANSFER_PORT}
+                    end, URLs)
             end},
         {open_fun,
             fun(FileUUID, OpenMode) ->

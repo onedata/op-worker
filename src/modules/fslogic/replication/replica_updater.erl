@@ -105,8 +105,11 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
     case BumpVersion of
         true ->
             {ok, _} = file_location:save_and_bump_version(
-                Doc#document{rev = undefined, value =
-                Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}}
+                fslogic_file_location:add_change(
+                    Doc#document{rev = undefined, value =
+                    Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}},
+                    {update, Blocks}
+                )
             );
         false ->
             {ok, _} = file_location:save(
@@ -135,8 +138,11 @@ shrink(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
     ?debug("NewBlocks1 shrink ~p", [NewBlocks1]),
     {ok, _} = file_location:save_and_bump_version(
-        Doc#document{rev = undefined, value =
-        Loc#file_location{blocks = NewBlocks1, size = NewSize}}
+        fslogic_file_location:add_change(
+            Doc#document{rev = undefined, value =
+            Loc#file_location{blocks = NewBlocks1, size = NewSize}},
+            {shrink, NewSize}
+        )
     ),
     ok;
 shrink([], _, _) ->

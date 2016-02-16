@@ -33,7 +33,8 @@
     write_and_truncate_should_not_update_remote_file_location/1,
     update_should_bump_replica_version/1,
     read_should_synchronize_file/1,
-    external_change_should_invalidate_blocks/1
+    external_change_should_invalidate_blocks/1,
+    update_should_save_recent_changes/1
 ]).
 
 
@@ -46,7 +47,8 @@ all() ->
         write_and_truncate_should_not_update_remote_file_location,
         update_should_bump_replica_version,
         read_should_synchronize_file,
-        external_change_should_invalidate_blocks
+        external_change_should_invalidate_blocks,
+        update_should_save_recent_changes
     ].
 
 
@@ -280,6 +282,48 @@ external_change_should_invalidate_blocks(Config) ->
     ?assertMatch(#document{value = #file_location{version_vector = VV, blocks = [#file_block{offset = 0, size = 2}, #file_block{offset = 7, size = 3}]}},
         rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
+
+update_should_save_recent_changes(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = <<"session_id1">>,
+    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
+
+    %when
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"01">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 2, <<"23">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 4, <<"45">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 6, <<"67">>)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 8, <<"78">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    %then
+    {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
+    ?assertMatch({ok, #document{value = #file_location{blocks = [#file_block{offset = 0, size = 10}]}}},
+        rpc:call(W1, file_location, get, [LocationId])),
+
+    %when
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {uuid, FileUuid}, 2)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {uuid, FileUuid}, 0)),
+    ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    %then
+    ?assertMatch({ok, #document{value = #file_location{recent_changes = {[],
+        [
+            {update, [#file_block{offset = 0, size = 2}]},
+            {shrink, 0},
+            {update, [#file_block{offset = 0, size = 2}]},
+            {shrink, 2},
+            {update, [#file_block{offset = 8, size = 2}]},
+            {update, [#file_block{offset = 6, size = 2}]},
+            {update, [#file_block{offset = 4, size = 2}]},
+            {update, [#file_block{offset = 2, size = 2}]},
+            {update, [#file_block{offset = 0, size = 2}]}
+        ]}
+    }}},
+        rpc:call(W1, file_location, get, [LocationId])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
