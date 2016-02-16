@@ -84,7 +84,7 @@ generate: deps compile gui_prod
 	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
-clean: relclean pkgclean
+clean: relclean pkgclean gui_clean
 	./rebar clean
 
 distclean:
