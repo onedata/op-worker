@@ -44,6 +44,15 @@ compile:
 deps:
 	./rebar get-deps
 
+gui_dev:
+	./deps/gui/build_gui.sh dev
+
+gui_prod:
+	./deps/gui/build_gui.sh prod
+
+gui_doc:
+	jsdoc -c src/http/gui/.jsdoc.conf src/http/gui/app
+
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
 ## Also a release is not nescesary for us.
