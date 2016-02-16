@@ -44,7 +44,7 @@
 %%--------------------------------------------------------------------
 -spec generate_id() -> SubId :: id().
 generate_id() ->
-    erlang:unique_integer([monotonic]) .
+    erlang:unique_integer([monotonic, positive]) .
 
 %%%===================================================================
 %%% model_behaviour callbacks

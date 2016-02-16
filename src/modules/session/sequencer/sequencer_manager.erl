@@ -360,5 +360,5 @@ create_sequencer_in_stream(StmId, #state{sequencer_in_stream_sup = SeqStmSup,
 %%--------------------------------------------------------------------
 -spec generate_stream_id() -> StmId :: stream_id().
 generate_stream_id() ->
-    erlang:unique_integer([monotonic]) .
+    erlang:unique_integer([monotonic, positive]) .
 
