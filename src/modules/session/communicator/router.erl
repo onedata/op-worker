@@ -34,7 +34,7 @@
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec preroute_message(Msg :: #client_message{}, SessId :: session:id()) ->
+-spec preroute_message(Msg :: #client_message{} | #server_message{}, SessId :: session:id()) ->
     ok | {ok, #server_message{}} | {error, term()}.
 preroute_message(#client_message{message_body = #message_request{}} = Msg, SessId) ->
     sequencer:route_message(Msg, SessId);
@@ -43,6 +43,8 @@ preroute_message(#client_message{message_body = #message_acknowledgement{}} = Ms
 preroute_message(#client_message{message_body = #end_of_message_stream{}} = Msg, SessId) ->
     sequencer:route_message(Msg, SessId);
 preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
+    router:route_message(Msg);
+preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
     sequencer:route_message(Msg, SessId).
@@ -62,6 +64,14 @@ route_message(Msg = #client_message{message_id = #message_id{issuer = server,
 route_message(Msg = #client_message{message_id = #message_id{issuer = server,
     recipient = Pid}}) ->
     Pid ! Msg,
+    ok;
+route_message(Msg = #server_message{message_id = #message_id{issuer = client,
+    recipient = Pid}}) when is_pid(Pid) ->
+    Pid ! Msg,
+    ok;
+route_message(Msg = #server_message{message_id = #message_id{issuer = client,
+    recipient = Pid}}) ->
+    ?warning("Unknown recipient ~p for msg ~p ", [Pid, Msg]),
     ok;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).

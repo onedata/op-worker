@@ -1,18 +1,23 @@
 REPO	        ?= op-worker
 
-# distro for package building
+# distro for package building (oneof: wily, fedora-23-x86_64)
 DISTRIBUTION    ?= none
 export DISTRIBUTION
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
-PKG_VERSION	    ?= $(shell git describe --tags --always | tr - .)
-PKG_ID	         = op-worker-$(PKG_VERSION)
-PKG_BUILD	     = 1
-BASE_DIR	     = $(shell pwd)
+PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
+PKG_ID           = op-worker-$(PKG_VERSION)
+PKG_BUILD        = 1
+BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
-REBAR	        ?= $(BASE_DIR)/rebar
+REBAR           ?= $(BASE_DIR)/rebar
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
+
+GIT_URL := $(shell git config --get remote.origin.url | sed -e 's/\(\/[^/]*\)$$//g')
+GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgrid.pl:7999/vfs'; else echo ${GIT_URL}; fi)
+ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
+export ONEDATA_GIT_URL
 
 .PHONY: deps test package
 
@@ -116,6 +121,14 @@ dialyzer: plt
 
 export PKG_VERSION PKG_ID PKG_BUILD BASE_DIR ERLANG_BIN REBAR OVERLAY_VARS RELEASE PKG_VARS_CONFIG
 
+check_distribution:
+ifeq ($(DISTRIBUTION), none)
+	@echo "Please provide package distribution. Oneof: 'wily', 'fedora-23-x86_64'"
+	@exit 1
+else
+	@echo "Building package for distribution $(DISTRIBUTION)"
+endif
+
 package/$(PKG_ID).tar.gz: deps
 	mkdir -p package
 	rm -rf package/$(PKG_ID)
@@ -128,13 +141,13 @@ package/$(PKG_ID).tar.gz: deps
 	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
 	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
 	done
-	find package/$(PKG_ID) -depth -name ".git" -exec rm -rf {} \;
+	find package/$(PKG_ID) -depth -name ".git" -not -path '*/cluster_worker/*' -exec rm -rf {} \;
 	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
 
 dist: package/$(PKG_ID).tar.gz
 	cp package/$(PKG_ID).tar.gz .
 
-package: package/$(PKG_ID).tar.gz
+package: check_distribution package/$(PKG_ID).tar.gz
 	${MAKE} -C package -f $(PWD)/deps/node_package/Makefile
 
 pkgclean:

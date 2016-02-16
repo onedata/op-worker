@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -26,9 +26,10 @@
     custom_code_when_handler_throws_code/1, custom_error_when_handler_throws_error/1]).
 
 %todo reenable rest_cert_auth after appmock repair
--performance({test_cases, []}).
-all() -> [token_auth, internal_error_when_handler_crashes,
-    custom_code_when_handler_throws_code, custom_error_when_handler_throws_error].
+all() -> ?ALL([
+            token_auth, internal_error_when_handler_crashes,
+            custom_code_when_handler_throws_code,
+            custom_error_when_handler_throws_error]).
 
 -define(MACAROON, <<"macaroon">>).
 

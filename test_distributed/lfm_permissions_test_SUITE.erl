@@ -59,6 +59,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -114,8 +115,8 @@
     acl_write_acl_group_test/1
 ]).
 
--performance({test_cases, []}).
 all() ->
+    ?ALL(
     [
         posix_read_file_user_test,
         posix_read_file_group_test,
@@ -157,7 +158,7 @@ all() ->
         acl_read_acl_group_test,
         acl_write_acl_user_test,
         acl_write_acl_group_test
-    ].
+    ]).
 
 %%%===================================================================
 %%% Test functions
@@ -248,10 +249,10 @@ posix_read_dir_user_test(Config) ->
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, DirUuid}, 8#370)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId2, {uuid, DirUuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId2, {uuid, DirUuid}, 0, 5)),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, DirUuid}, 8#470)),
-    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId2, {uuid, DirUuid}, 5, 0)).
+    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId2, {uuid, DirUuid}, 0, 5)).
 
 posix_read_dir_group_test(Config) ->
     % Setup
@@ -263,10 +264,10 @@ posix_read_dir_group_test(Config) ->
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, DirUuid}, 8#730)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 0, 5)),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, DirUuid}, 8#740)),
-    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 5, 0)).
+    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 0, 5)).
 
 posix_write_dir_user_test(Config) ->
     % Setup
@@ -315,11 +316,11 @@ posix_execute_dir_user_test(Config) ->
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#670)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId2, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId2, {uuid, Dir2Uuid}, 0, 5)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId2, {uuid, FileUuid}, rdwr)),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#170)),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId2, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId2, {uuid, Dir2Uuid}, 0, 5)),
     {_, H} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {uuid, FileUuid}, rdwr)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H, 0, <<255:8>>)),
     ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)).
@@ -335,11 +336,11 @@ posix_execute_dir_group_test(Config) ->
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#760)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 0, 5)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId3, {uuid, FileUuid}, rdwr)),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#710)),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 0, 5)),
     {_, H} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {uuid, FileUuid}, rdwr)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H, 0, <<255:8>>)),
     ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H, 0, 1)).
@@ -403,11 +404,11 @@ acl_list_container_user_test(Config) ->
     % Verification
     Ace1 = ?deny_user(UserId1, ?list_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, DirUuid}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 0, 5)),
 
     Ace2 = ?allow_user(UserId1, ?list_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, DirUuid}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 5, 0)).
+    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 0, 5)).
 
 acl_list_container_group_test(Config) ->
     % Setup
@@ -422,11 +423,11 @@ acl_list_container_group_test(Config) ->
     % Verification
     Ace1 = ?deny_group(GroupId1, ?list_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, DirUuid}, [?acl_all(UserId2), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 0, 5)),
 
     Ace2 = ?allow_group(GroupId1, ?list_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId2, {uuid, DirUuid}, [?acl_all(UserId2), Ace2])),
-    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 5, 0)).
+    ?assertMatch({ok, [{FileUuid, _}]}, lfm_proxy:ls(W, SessId1, {uuid, DirUuid}, 0, 5)).
 
 acl_write_object_user_test(Config) ->
     % Setup
@@ -653,12 +654,12 @@ acl_traverse_container_user_test(Config) ->
     % Verification
     Ace1 = ?deny_user(UserId3, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {uuid, Dir1Uuid}, [?acl_all(UserId1), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 0, 5)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId3, {uuid, FileUuid}, read)),
 
     Ace2 = ?allow_user(UserId3, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {uuid, Dir1Uuid}, [?acl_all(UserId1), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 0, 5)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {uuid, FileUuid}, read)),
     ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
 
@@ -679,12 +680,12 @@ acl_traverse_container_group_test(Config) ->
     % Verification
     Ace1 = ?deny_group(GroupId3, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {uuid, Dir1Uuid}, [?acl_all(UserId1), Ace1])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 0, 5)),
     ?assertEqual({error, ?EACCES}, lfm_proxy:open(W, SessId3, {uuid, FileUuid}, read)),
 
     Ace2 = ?allow_group(GroupId3, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {uuid, Dir1Uuid}, [?acl_all(UserId1), Ace2])),
-    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 5, 0)),
+    ?assertMatch({ok, _List}, lfm_proxy:ls(W, SessId3, {uuid, Dir2Uuid}, 0, 5)),
     {_, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId3, {uuid, FileUuid}, read)),
     ?assertEqual({ok, <<255:8>>}, lfm_proxy:read(W, H2, 0, 1)).
 
