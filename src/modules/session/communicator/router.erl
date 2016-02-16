@@ -72,7 +72,7 @@ route_message(Msg = #server_message{message_id = #message_id{issuer = client,
     ok;
 route_message(Msg = #server_message{message_id = #message_id{issuer = client,
     recipient = Pid}}) ->
-    ?warning("Unknown recipient ~p for msg ~p ", [Pid, Msg]),
+%%    ?warning("Unknown recipient ~p for msg ~p ", [Pid, Msg]), %todo fix dbsync sending recipient undefined
     ok;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).
@@ -109,7 +109,10 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #auth{} = Auth}) ->
     % This function performs an async call to session manager worker.
     {ok, SessId} = session:update(SessId, #{auth => Auth}),
-    ok.
+    ok;
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
+    ok = worker_proxy:cast(fslogic_worker, {fuse_request, SessId, FuseRequest}).
 
 %%--------------------------------------------------------------------
 %% @doc
