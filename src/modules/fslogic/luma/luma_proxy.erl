@@ -32,13 +32,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
-  helpers:user_ctx().
+    helpers:user_ctx().
 new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
-  new_ceph_user_ctx(SessionId, SpaceUUID);
+    new_ceph_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
-  new_posix_user_ctx(SessionId, SpaceUUID);
+    new_posix_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-  new_s3_user_ctx(SessionId, SpaceUUID).
+    new_s3_user_ctx(SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -48,19 +48,19 @@ new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
 -spec get_posix_user_ctx(StorageType :: helpers:name(), SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
 get_posix_user_ctx(?DIRECTIO_HELPER_NAME, SessionId, SpaceUUID) ->
-  new_posix_user_ctx(SessionId, SpaceUUID);
+    new_posix_user_ctx(SessionId, SpaceUUID);
 get_posix_user_ctx(_, SessionId, SpaceUUID) ->
-  {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-  case luma_response:get(UserId, ?DIRECTIO_HELPER_NAME) of
-    {ok, Credentials} ->
-      Credentials;
-    _ ->
-      {ok, Response} = get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
-        ?DIRECTIO_HELPER_NAME, SessionId),
-      User_ctx = parse_posix_ctx_from_luma(Response, SpaceUUID),
-      luma_response:save(UserId, ?DIRECTIO_HELPER_NAME, User_ctx),
-      User_ctx
-  end.
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    case luma_response:get(UserId, ?DIRECTIO_HELPER_NAME) of
+        {ok, Credentials} ->
+            Credentials;
+        _ ->
+            {ok, Response} = get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
+            ?DIRECTIO_HELPER_NAME, SessionId),
+            User_ctx = parse_posix_ctx_from_luma(Response, SpaceUUID),
+            luma_response:save(UserId, ?DIRECTIO_HELPER_NAME, User_ctx),
+            User_ctx
+    end.
 
 
 %%%===================================================================
@@ -78,17 +78,17 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     StorageId = fslogic_utils:get_storage_id(SpaceUUID),
     case luma_response:get(UserId, StorageId) of
-      {ok, Credentials} ->
-        Credentials;
-      _ ->
-        StorageType = fslogic_utils:get_storage_type(StorageId),
-        {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
-        User_ctx = #ceph_user_ctx{
-          user_name = proplists:get_value(<<"user_name">>, Response),
-          user_key = proplists:get_value(<<"user_key">>, Response)
-        },
-        luma_response:save(UserId, StorageId, User_ctx),
-        User_ctx
+        {ok, Credentials} ->
+            Credentials;
+        _ ->
+            StorageType = fslogic_utils:get_storage_type(StorageId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
+            User_ctx = #ceph_user_ctx{
+                user_name = proplists:get_value(<<"user_name">>, Response),
+                user_key = proplists:get_value(<<"user_key">>, Response)
+            },
+            luma_response:save(UserId, StorageId, User_ctx),
+            User_ctx
     end.
 
 
@@ -103,14 +103,14 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     StorageId = fslogic_utils:get_storage_id(SpaceUUID),
     case luma_response:get(UserId, StorageId) of
-      {ok, Credentials} ->
-        Credentials;
-      _ ->
-        StorageType = fslogic_utils:get_storage_type(StorageId),
-        {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
-        User_ctx = parse_posix_ctx_from_luma(Response, SpaceUUID),
-        luma_response:save(UserId, StorageId, User_ctx),
-        User_ctx
+        {ok, Credentials} ->
+            Credentials;
+        _ ->
+            StorageType = fslogic_utils:get_storage_type(StorageId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
+            User_ctx = parse_posix_ctx_from_luma(Response, SpaceUUID),
+            luma_response:save(UserId, StorageId, User_ctx),
+            User_ctx
     end.
 
 
@@ -125,17 +125,17 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     StorageId = fslogic_utils:get_storage_id(SpaceUUID),
     case luma_response:get(UserId, StorageId) of
-      {ok, Credentials} ->
-        Credentials;
-      _ ->
-        StorageType = fslogic_utils:get_storage_type(StorageId),
-        {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
-        User_ctx = #s3_user_ctx{
-          access_key = proplists:get_value(<<"access_key">>, Response),
-          secret_key = proplists:get_value(<<"secret_key">>, Response)
-        },
-        luma_response:save(UserId, StorageId, User_ctx),
-        User_ctx
+        {ok, Credentials} ->
+            Credentials;
+        _ ->
+            StorageType = fslogic_utils:get_storage_type(StorageId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
+            User_ctx = #s3_user_ctx{
+                access_key = proplists:get_value(<<"access_key">>, Response),
+                secret_key = proplists:get_value(<<"secret_key">>, Response)
+            },
+            luma_response:save(UserId, StorageId, User_ctx),
+            User_ctx
     end.
 
 
@@ -156,31 +156,31 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
     IP_list_string = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IP_list),
     IP_binary = json_utils:encode(IP_list_string),
     User_details = case session:get_auth(SessionId) of
-                  {ok, undefined} ->
-                    <<"{}">>;
-                  {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
-                    {ok, #user_details{data = Data}} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-                    list_to_binary(http_uri:encode(binary_to_list(json_utils:encode(Data))))
-                end,
+        {ok, undefined} ->
+            <<"{}">>;
+        {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
+            {ok, #user_details{data = Data}} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
+            list_to_binary(http_uri:encode(binary_to_list(json_utils:encode(Data))))
+    end,
     case http_client:get(
-      <<Hostname_binary/binary,":",Port_binary/binary,"/get_user_credentials?global_id=",UserId/binary,
+        <<Hostname_binary/binary,":",Port_binary/binary,"/get_user_credentials?global_id=",UserId/binary,
         "&storage_type=",StorageType/binary,"&storage_id=",StorageId/binary,"&source_ips=",IP_binary/binary,
         "&source_hostname=",Full_hostname_binary/binary,"&user_details=",User_details/binary>>,
-      [],
-      [],
-      [insecure]
+        [],
+        [],
+        [insecure]
     ) of
-      {ok, 200, _Headers, Body} ->
-        Json = json_utils:decode(Body),
-        Status = proplists:get_value(<<"status">>, Json),
-        case Status of
-          <<"success">> ->
-            {ok, proplists:get_value(<<"data">>, Json)};
-          <<"error">> ->
-            {error, proplists:get_value(<<"message">>, Json)}
-        end;
-      Error ->
-        Error
+        {ok, 200, _Headers, Body} ->
+            Json = json_utils:decode(Body),
+            Status = proplists:get_value(<<"status">>, Json),
+            case Status of
+                <<"success">> ->
+                    {ok, proplists:get_value(<<"data">>, Json)};
+                <<"error">> ->
+                    {error, proplists:get_value(<<"message">>, Json)}
+            end;
+        Error ->
+            Error
     end.
 
 
@@ -191,10 +191,10 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
 -spec parse_posix_ctx_from_luma(proplists:proplist(), SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
 parse_posix_ctx_from_luma(Response, SpaceUUID) ->
     GID = case proplists:get_value(<<"gid">>, Response) of
-            undefined ->
-              {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
-              fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID);
-            Val ->
-              Val
-          end,
+        undefined ->
+            {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+            fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID);
+        Val ->
+            Val
+    end,
     #posix_user_ctx{uid = proplists:get_value(<<"uid">>, Response), gid = GID}.

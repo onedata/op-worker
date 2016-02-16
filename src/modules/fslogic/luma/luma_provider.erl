@@ -30,13 +30,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
-  helpers:user_ctx().
+    helpers:user_ctx().
 new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
-  new_ceph_user_ctx(SessionId, SpaceUUID);
+    new_ceph_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
-  new_posix_user_ctx(SessionId, SpaceUUID);
+    new_posix_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-  new_s3_user_ctx(SessionId, SpaceUUID).
+    new_s3_user_ctx(SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -46,7 +46,7 @@ new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
 -spec get_posix_user_ctx(StorageType :: helpers:name(), SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
 get_posix_user_ctx(_, SessionId, SpaceUUID) ->
-  new_posix_user_ctx(SessionId, SpaceUUID).
+    new_posix_user_ctx(SessionId, SpaceUUID).
 
 
 %%%===================================================================
@@ -62,10 +62,19 @@ get_posix_user_ctx(_, SessionId, SpaceUUID) ->
 -spec new_ceph_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-    {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} = ceph_user:get(UserId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
-    {ok, Credentials} = maps:find(StorageId, CredentialsMap),
+
+    Credentials = case get_ceph_user(UserId, StorageId) of
+        undefined ->
+            {ok, #ceph_user_credentials{user_name = UserName, user_key = UserKey} = Credentials} =
+                create_ceph_user(UserId, StorageId),
+            ceph_user:add(UserId, StorageId, UserName, UserKey),
+            Credentials;
+        Credentials ->
+            Credentials
+    end,
+
     #ceph_user_ctx{
       user_name = ceph_user:name(Credentials),
       user_key = ceph_user:key(Credentials)
@@ -96,11 +105,90 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
 -spec new_s3_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_s3_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-    {ok, #document{value = #s3_user{credentials = CredentialsMap}}} = s3_user:get(UserId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
-    {ok, Credentials} = maps:find(StorageId, CredentialsMap),
+
+    Credentials = case get_s3_user(UserId, StorageId) of
+        undefined ->
+            {ok, #s3_user_credentials{access_key = Access_key, secret_key = SecretKey} = Credentials} = create_s3_user(),
+            s3_user:add(UserId, StorageId, Access_key, SecretKey),
+            Credentials;
+        Credentials ->
+            Credentials
+    end,
+
     #s3_user_ctx{
       access_key = s3_user:access_key(Credentials),
       secret_key = s3_user:secret_key(Credentials)
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets Ceph credentials from datastore.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ceph_user(UserId :: binary(), StorageId :: storage:id()) -> ceph_user:credentials() | undefined.
+get_ceph_user(UserId, StorageId) ->
+    case ceph_user:get(UserId) of
+        {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} ->
+            case maps:find(StorageId, CredentialsMap) of
+                {ok, Credentials} ->
+                    Credentials;
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates Ceph user credentials.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_ceph_user(UserId :: binary(), StorageId :: storage:id()) -> ceph_user:credentials().
+create_ceph_user(?ROOT_USER_ID, StorageId) ->
+    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
+    {ok, #ceph_user_credentials{user_name = maps:get(<<"user_name">>, Args),
+        user_key = maps:get(<<"user_key">>, Args)}};
+create_ceph_user(UserId, StorageId) ->
+    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
+    {ok, {User_name, User_key}} = luma_nif:create_ceph_user(binary_to_list(UserId),
+        binary_to_list(maps:get(<<"mon_host">>, Args)),
+        binary_to_list(maps:get(<<"cluster_name">>, Args)),
+        binary_to_list(maps:get(<<"pool_name">>, Args)),
+        binary_to_list(maps:get(<<"user_name">>, Args)),
+        binary_to_list(maps:get(<<"user_key">>, Args))
+        ),
+    {ok, #ceph_user_credentials{user_name = User_name, user_key = User_key}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets S3 credentials from datastore.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_s3_user(UserId :: binary(), StorageId :: storage:id()) -> ceph_user:credentials() | undefined.
+get_s3_user(UserId, StorageId) ->
+    case s3_user:get(UserId) of
+        {ok, #document{value = #s3_user{credentials = CredentialsMap}}} ->
+            case maps:find(StorageId, CredentialsMap) of
+                {ok, Credentials} ->
+                    Credentials;
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates S3 user credentials.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_s3_user() -> s3_user:credentials().
+create_s3_user() ->
+    {ok, #s3_user_credentials{access_key = <<"AccessKey">>, secret_key = <<"SecretKey">>}}.
