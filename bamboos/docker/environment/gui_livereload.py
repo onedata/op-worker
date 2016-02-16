@@ -59,6 +59,7 @@ chown -R {uid}:{gid} {source_tmp_dir}
 echo 'while ((1)); do chown -R {uid}:{gid} {source_tmp_dir}; sleep 1; done' > /root/bin/chown_tmp_dir.sh
 chmod +x /root/bin/chown_tmp_dir.sh
 nohup bash /root/bin/chown_tmp_dir.sh &
+. /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {source_gui_dir}
 ember build --watch --output-path={release_gui_dir} | tee /tmp/ember_build.log'''
@@ -89,6 +90,7 @@ def start_livereload(container_id, gui_config_file,
     release_gui_dir = os.path.join(docker_bin_dir, release_gui_dir)
 
     command = '''\
+. /usr/lib/nvm/nvm.sh
 nvm use default node
 cd {release_gui_dir}
 npm link livereload
