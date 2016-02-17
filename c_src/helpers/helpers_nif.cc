@@ -124,15 +124,15 @@ const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
     {"S_IFIFO", one::helpers::Flag::IFIFO},
     {"S_IFSOCK", one::helpers::Flag::IFSOCK}};
 
-std::vector<one::helpers::Flag> translateFlags(
+one::helpers::IStorageHelper::FlagsSet translateFlags(
     std::vector<nifpp::str_atom> atoms)
 {
-    std::vector<one::helpers::Flag> flags;
+    one::helpers::IStorageHelper::FlagsSet flags;
 
     for (const auto &atom : atoms) {
         auto result = atom_to_flag.find(atom);
         if (result != atom_to_flag.end()) {
-            flags.push_back(result->second);
+            flags.insert(result->second);
         }
         else {
             throw std::system_error{
@@ -650,7 +650,7 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
 {
     auto buf = std::make_shared<std::vector<char>>(size);
     ctx.helperObj->ash_read(ctx.helperCTX, file,
-        asio::mutable_buffer(buf->data(), size), offset,
+        asio::mutable_buffer(buf->data(), size), offset, "", //todo introduce key/value parameters store and ignore fileUuid
         [ctx, buf](asio::mutable_buffer mbuf, error_t e) {
             handle_result(ctx, e, mbuf);
         });
@@ -663,7 +663,7 @@ ERL_NIF_TERM write(
 {
     auto sData = std::make_shared<std::string>(std::move(data));
     ctx.helperObj->ash_write(ctx.helperCTX, file,
-        asio::const_buffer(sData->data(), sData->size()), offset,
+        asio::const_buffer(sData->data(), sData->size()), offset, "", //todo introduce key/value parameters store and ignore fileUuid
         [ctx, file, offset, sData](int size, error_t e) {
             handle_result(ctx, e, size);
         });
