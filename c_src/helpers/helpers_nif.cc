@@ -124,10 +124,10 @@ const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
     {"S_IFIFO", one::helpers::Flag::IFIFO},
     {"S_IFSOCK", one::helpers::Flag::IFSOCK}};
 
-one::helpers::IStorageHelper::FlagsSet translateFlags(
+one::helpers::FlagsSet translateFlags(
     std::vector<nifpp::str_atom> atoms)
 {
-    one::helpers::IStorageHelper::FlagsSet flags;
+    one::helpers::FlagsSet flags;
 
     for (const auto &atom : atoms) {
         auto result = atom_to_flag.find(atom);

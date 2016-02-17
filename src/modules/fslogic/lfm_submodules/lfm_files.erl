@@ -30,6 +30,8 @@
 -export([create/3, open/3, fsync/1, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 
+-export([get_sfm_handle_key/3, get_sfm_handle_n_update_handle/4]).
+
 -compile({no_auto_import, [unlink/1]}).
 
 -define(FSYNC_TIMEOUT, timer:seconds(2)).

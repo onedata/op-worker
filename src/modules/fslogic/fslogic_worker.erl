@@ -22,13 +22,9 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("ctool/include/global_registry/gr_providers.hrl").
 
 
 -export([init/1, handle/1, cleanup/0, handle_fuse_request/2]).
-
--define(RTRANSFER_PORT, 6665).
--define(RTRANSFER_NUM_ACCEPTORS, 10).
 
 %%%===================================================================
 %%% Types
@@ -75,7 +71,7 @@ init(_Args) ->
         }
     },
 
-    start_rtransfer(),
+    rtransfer_config:start_rtransfer(),
 
     case event:subscribe(Sub) of
         {ok, SubId} ->
@@ -293,61 +289,3 @@ handle_proxyio_request(SessionId, #proxyio_request{
 handle_proxyio_request(_SessionId, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Start rtransfer server
-%% @end
-%%--------------------------------------------------------------------
--spec start_rtransfer() -> {ok, pid()}.
-start_rtransfer() ->
-    Opts = [
-        {get_nodes_fun,
-            fun(ProviderId) ->
-                {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
-                lists:map(
-                    fun(URL) ->
-                        {ok, Ip} = inet:ip(binary_to_list(URL)),
-                        {Ip, ?RTRANSFER_PORT}
-                    end, URLs)
-            end},
-        {open_fun,
-            fun(FileUUID, OpenMode) ->
-                case logical_file_manager:open(?ROOT_SESS_ID, {uuid, FileUUID}, OpenMode) of
-                    {ok, Handle} ->
-                        {ok, term_to_binary(Handle)};
-                    Error ->
-                        Error
-                end
-            end},
-        {read_fun,
-            fun(Handle, Offset, Size) ->
-                case logical_file_manager:read(binary_to_term(Handle), Offset, Size) of
-                    {ok, Handle, Data} ->
-                        {ok, term_to_binary(Handle), Data};
-                    Error ->
-                        Error
-                end
-            end},
-        {write_fun,
-            fun(Handle, Offset, Buffer) ->
-                case logical_file_manager:write(binary_to_term(Handle), Offset, Buffer) of
-                    {ok, Handle, Size} ->
-                        {ok, term_to_binary(Handle), Size};
-                    Error ->
-                        Error
-                end
-            end},
-        {close_fun,
-            fun(_Handle) ->
-                ok
-            end},
-        {ranch_opts,
-            [
-                {num_acceptors, ?RTRANSFER_NUM_ACCEPTORS},
-                {transport, ranch_tcp},
-                {trans_opts, [{port, ?RTRANSFER_PORT}]}
-            ]
-        }
-    ],
-    {ok, _} = rtransfer:start_link(Opts).
