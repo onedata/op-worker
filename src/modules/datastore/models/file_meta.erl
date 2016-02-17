@@ -48,7 +48,8 @@
 -type uuid() :: datastore:key().
 -type path() :: binary().
 -type name() :: binary().
--type entry() :: {path, path()} | {uuid, uuid()} | datastore:document().
+-type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
+-type entry() :: uuid_or_path() | datastore:document().
 -type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?LINK_TYPE.
 -type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
@@ -475,7 +476,7 @@ setup_onedata_user(Client, UUID) ->
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
             onedata_user:get(UUID),
 
-        CTime = utils:time(),
+        CTime = erlang:system_time(seconds),
 
         {ok, SpacesRootUUID} =
             case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of

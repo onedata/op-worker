@@ -92,10 +92,10 @@ mkdir(Auth, Path, Mode) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Limit :: integer(), Offset :: integer()) ->
+-spec ls(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path(), Offset :: integer(), Limit :: integer()) ->
     {ok, [{file_uuid(), file_name()}]} | error_reply().
-ls(Auth, FileKey, Limit, Offset) ->
-    logical_file_manager:ls(Auth, FileKey, Limit, Offset).
+ls(Auth, FileKey, Offset, Limit) ->
+    logical_file_manager:ls(Auth, FileKey, Offset, Limit).
 
 
 %%--------------------------------------------------------------------

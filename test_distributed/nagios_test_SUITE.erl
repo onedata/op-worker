@@ -16,15 +16,14 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([nagios_test/1]).
 
--performance({test_cases, []}).
-all() -> [nagios_test].
+all() -> ?ALL([nagios_test]).
 
 % Path to nagios endpoint
 -define(HEALTHCHECK_PATH, "http://127.0.0.1:6666/nagios").
