@@ -15,6 +15,7 @@ src/gui_static/n2o
 *.beam
 *.pyc
 *.o
+*.d
 
 cluster_manager
 rel/op_worker
@@ -31,6 +32,7 @@ doc
 logs
 ebin
 priv
+.rebar
 
 c_lib
 c_src/helpers_nif/*.o

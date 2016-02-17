@@ -13,6 +13,7 @@
 -module(fuse_config_manager).
 -author("Krzysztof Trzepla").
 
+-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -21,10 +22,19 @@
 
 %% API
 -export([get_configuration/0]).
--export([create_storage_test_file/3, verify_storage_test_file/4]).
+-export([create_storage_test_file/3, remove_storage_test_file/2,
+    verify_storage_test_file/4]).
 
--define(TEST_FILE_NAME_SIZE, 32).
--define(TEST_FILE_CONTENT_SIZE, 100).
+-define(TEST_FILE_NAME_SIZE, application:get_env(?APP_NAME,
+    storage_test_file_name_size, 32)).
+-define(TEST_FILE_CONTENT_SIZE, application:get_env(?APP_NAME,
+    storage_test_file_content_size, 100)).
+-define(REMOVE_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
+    remove_storage_test_file_delay_seconds, 300))).
+-define(VERIFY_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
+    verify_storage_test_file_delay_seconds, 30))).
+-define(VERIFY_STORAGE_TEST_FILE_ATTEMPTS, application:get_env(?APP_NAME,
+    remove_storage_test_file_attempts, 10)).
 
 %%%===================================================================
 %%% API
@@ -61,16 +71,17 @@ create_storage_test_file(#fslogic_ctx{session_id = SessId} = Ctx, StorageId, Fil
 
     FileId = fslogic_utils:gen_storage_file_id({uuid, FileUuid}),
     Dirname = fslogic_path:dirname(FileId),
-    TestFileName = re:replace(base64:encode(
-        crypto:rand_bytes(?TEST_FILE_NAME_SIZE)), "\\W", "", [global, {return, binary}]),
+    TestFileName = random_alphanumeric_sequence(?TEST_FILE_NAME_SIZE),
     TestFileId = fslogic_path:join([Dirname, TestFileName]),
-    FileContent = base64:encode(crypto:rand_bytes(?TEST_FILE_CONTENT_SIZE)),
+    FileContent = random_alphanumeric_sequence(?TEST_FILE_CONTENT_SIZE),
 
     Handle = storage_file_manager:new_handle(SessId, SpaceUuid, undefined, Storage, TestFileId),
     ok = storage_file_manager:create(Handle, 8#600),
     RootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUuid, undefined, Storage, TestFileId),
     {ok, RootWriteHandle} = storage_file_manager:open(RootHandle, write),
     {ok, _} = storage_file_manager:write(RootWriteHandle, 0, FileContent),
+
+    spawn(?MODULE, remove_storage_test_file, [RootHandle, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
 
     #fuse_response{
         status = #status{code = ?OK},
@@ -82,21 +93,68 @@ create_storage_test_file(#fslogic_ctx{session_id = SessId} = Ctx, StorageId, Fil
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies storage test file by reading its content and checking it with the one sent by the client.
+%% Creates handle to the test file in ROOT context and tries to verify
+%% its content ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS times.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_storage_test_file(StorageId :: storage:id(), SpaceUuid :: file_meta:uuid(),
     FileId :: helpers:file(), FileContent :: binary()) -> #fuse_response{}.
 verify_storage_test_file(StorageId, SpaceUuid, FileId, FileContent) ->
     {ok, Storage} = storage:get(StorageId),
+    Handle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUuid, undefined, Storage, FileId),
+    verify_storage_test_file_loop(Handle, FileContent, ?ENOENT, ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
-    RootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUuid, undefined, Storage, FileId),
-    {ok, RootReadHandle} = storage_file_manager:open(RootHandle, read),
-    {ok, ActualFileContent} = storage_file_manager:read(RootReadHandle, 0, size(FileContent)),
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes test file referenced by handle after specified delay.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_storage_test_file(Handle :: storage_file_manager:handle(), Delay :: timeout()) ->
+    ok | {error, Reason :: term()}.
+remove_storage_test_file(Handle, Delay) ->
+    timer:sleep(Delay),
+    storage_file_manager:unlink(Handle).
 
-    Code = case FileContent of
-        ActualFileContent -> ?OK;
-        _ -> ?EINVAL
-    end,
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
-    #fuse_response{status = #status{code = Code}}.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Verifies storage test file by reading its content and checking it with the
+%% one sent by the client. Retires 'Attempts' times if file is not found or
+%% its content doesn't match expected one.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_storage_test_file_loop(Handle :: storage_file_manager:handle(),
+    FileContent :: binary(), Code :: atom(), Attempts :: non_neg_integer()) -> #fuse_response{}.
+verify_storage_test_file_loop(_, _, Code, 0) ->
+    #fuse_response{status = #status{code = Code}};
+
+verify_storage_test_file_loop(Handle, FileContent, _, Attempts) ->
+    case storage_file_manager:open(Handle, read) of
+        {ok, ReadHandle} ->
+            {ok, ActualFileContent} = storage_file_manager:read(ReadHandle, 0, size(FileContent)),
+            case FileContent of
+                ActualFileContent ->
+                    remove_storage_test_file(Handle, 0),
+                    #fuse_response{status = #status{code = ?OK}};
+                _ ->
+                    timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
+                    verify_storage_test_file_loop(Handle, FileContent, ?EINVAL, Attempts - 1)
+            end;
+        {error, ?ENOENT} ->
+            timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
+            verify_storage_test_file_loop(Handle, FileContent, ?ENOENT, Attempts - 1)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns random alphanumeric sequence of given length.
+%% @end
+%%--------------------------------------------------------------------
+-spec random_alphanumeric_sequence(Size :: non_neg_integer()) -> Seq :: binary().
+random_alphanumeric_sequence(Size) ->
+    re:replace(base64:encode(crypto:rand_bytes(Size)), "\\W", "", [global, {return, binary}]).
