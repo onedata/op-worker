@@ -27,7 +27,7 @@
 
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
--include_lib("clproto/include/gwproto.hrl").
+-include_lib("clproto/include/messages.hrl").
 
 %% ranch_protocol callbacks
 -export([start_link/4, init/4]).
@@ -63,7 +63,7 @@ loop(Socket, Transport, RtransferOpts) ->
     case Transport:recv(Socket, 0, ?connection_close_timeout) of
         {ok, Data} ->
             #'FetchRequest'{file_id = FileId, offset = Offset, size = Size} =
-                gwproto:decode_msg(Data, 'FetchRequest'),
+                messages:decode_msg(Data, 'FetchRequest'),
 
             Hash = gateway:compute_request_hash(Data),
 
@@ -77,7 +77,7 @@ loop(Socket, Transport, RtransferOpts) ->
             CloseFun(NewHandle),
 
             Reply = #'FetchReply'{request_hash = Hash, content = Content},
-            ok = Transport:send(Socket, gwproto:encode_msg(Reply)),
+            ok = Transport:send(Socket, messages:encode_msg(Reply)),
             loop(Socket, Transport, RtransferOpts);
 
         {error, closed} ->
