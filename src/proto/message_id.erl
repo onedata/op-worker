@@ -16,7 +16,7 @@
 -include("proto/oneclient/message_id.hrl").
 
 %% API
--export([generate/0, generate/1, encode/1, decode/1]).
+-export([generate/0, generate/1, generate/2, encode/1, decode/1]).
 
 -export_type([id/0]).
 
@@ -45,8 +45,18 @@ generate() ->
 %%--------------------------------------------------------------------
 -spec generate(Recipient :: pid() | undefined) -> {ok, MsgId :: #message_id{}}.
 generate(Recipient) ->
+    generate(Recipient, server).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates ID with encoded handler pid and given issuer type.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate(Recipient :: pid() | undefined, Issuer :: client | server) -> {ok, MsgId :: #message_id{}}.
+generate(Recipient, Issuer) ->
     {ok, #message_id{
-        issuer = server,
+        issuer = Issuer,
         id = integer_to_binary(crypto:rand_uniform(0, ?INT64)),
         recipient = Recipient
     }}.

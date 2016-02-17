@@ -59,6 +59,7 @@ get_parent({path, Path}) ->
     {ok, Doc} = file_meta:get({path, ParentPath}),
     Doc;
 get_parent(File) ->
+    ?info("Get parent for ~p", [File]),
     {ok, Doc} = file_meta:get_parent(File),
     Doc.
 

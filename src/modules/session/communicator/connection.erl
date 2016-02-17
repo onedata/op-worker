@@ -380,10 +380,22 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 -spec handle_normal_message(#state{}, #client_message{} | #server_message{}) ->
     {noreply, NewState :: #state{}, timeout()} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_normal_message(State0 = #state{session_id = SessId, socket = Sock,
+handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, socket = Sock,
     transport = Transp}, Msg1) ->
+    IsProvider = provider_auth_manager:is_provider(Cert),
+
     {State, Msg} = update_message_id(State0, Msg1),
-    case router:preroute_message(Msg, SessId) of
+
+    EffectiveSessionId =
+        case {IsProvider, Msg} of
+            {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}} when ProxySessionId =/= undefined ->
+                {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, SessId, Auth, fuse),
+                ProxySessionId;
+            _ ->
+                SessId
+        end,
+    ?info("Handle message ~p ~p ~p ~p", [IsProvider, Msg, EffectiveSessionId, SessId]),
+    case router:preroute_message(Msg, EffectiveSessionId) of
         ok ->
             {noreply, State, ?TIMEOUT};
         {ok, ServerMsg} ->

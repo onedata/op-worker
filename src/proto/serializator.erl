@@ -36,13 +36,17 @@ deserialize_client_message(Message, SessionId) ->
     #'ClientMessage'{
         message_id = MsgId,
         message_stream = MsgStm,
-        message_body = {_, MsgBody}
+        message_body = {_, MsgBody},
+        proxy_session_id = PSessID,
+        proxy_session_token = PToken
     } = messages:decode_msg(Message, 'ClientMessage'),
     {ok, DecodedId} = message_id:decode(MsgId),
     {ok, #client_message{
         message_id = DecodedId,
         message_stream = translator:translate_from_protobuf(MsgStm),
         session_id = SessionId,
+        proxy_session_id = PSessID,
+        proxy_session_auth = translator:translate_from_protobuf(PToken),
         message_body = translator:translate_from_protobuf(MsgBody)
     }}.
 

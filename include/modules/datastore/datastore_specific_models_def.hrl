@@ -34,6 +34,7 @@
     event_manager :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
+    proxy_via :: session:id() | undefined,
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}]
 }).

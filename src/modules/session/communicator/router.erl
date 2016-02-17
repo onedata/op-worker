@@ -127,33 +127,39 @@ route_and_send_answer(#client_message{message_id = Id,
 route_and_send_answer(#client_message{message_id = Id,
     message_body = #get_configuration{}}) ->
     {ok, Docs} = subscription:list(),
-    Subs = lists:filtermap(fun
-        (#document{value = #subscription{object = undefined}}) -> false;
-        (#document{value = #subscription{} = Sub}) -> {true, Sub}
-    end, Docs),
+    Subs = lists:filtermap(
+        fun
+            (#document{value = #subscription{object = undefined}}) -> false;
+            (#document{value = #subscription{} = Sub}) -> {true, Sub}
+        end, Docs),
     {ok, #server_message{message_id = Id, message_body = #configuration{
         subscriptions = Subs
     }}};
-route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{} = FuseRequest}) ->
     ?info("Fuse request: ~p", [FuseRequest]),
     spawn(fun() ->
-        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, SessId, FuseRequest}),
+        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
         ?info("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, SessId)
-    end),
+          end),
     ok;
-route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
     spawn(fun() ->
         ProxyIOResponse = worker_proxy:call(fslogic_worker,
-            {proxyio_request, SessId, ProxyIORequest}),
+            {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
 
         ?debug("ProxyIO response ~p", [ProxyIOResponse]),
         communicator:send(#server_message{message_id = Id,
             message_body = ProxyIOResponse}, SessId)
-    end),
+          end),
     ok.
+
+effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
+    SessionId;
+effective_session_id(#client_message{session_id = _SessionId, proxy_session_id = ProxySessionId}) ->
+    ProxySessionId.

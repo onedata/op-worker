@@ -19,6 +19,8 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -32,8 +34,15 @@
 
 -spec reroute(fslogic_worker:ctx(), oneprovider:id(), term()) ->
     term().
-reroute(#fslogic_ctx{}, ProviderId, Request) ->
-    provider_communicator:communicate(Request, session_manager:get_provider_session_id(outgoing, ProviderId)).
+reroute(#fslogic_ctx{session_id = SessionId}, ProviderId, Request) ->
+    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
+    {ok, #server_message{message_body = MsgBody}} =
+        provider_communicator:communicate(#client_message{
+            message_body = Request,
+            proxy_session_id = SessionId,
+            proxy_session_auth = Auth
+        }, session_manager:get_provider_session_id(outgoing, ProviderId)),
+    MsgBody.
 
 
 

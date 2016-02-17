@@ -23,7 +23,7 @@
 -export([create_gui_session/1]).
 -export([remove_session/1]).
 -export([get_provider_session_id/2, session_id_to_provider_id/1]).
--export([reuse_or_create_provider_session/4]).
+-export([reuse_or_create_provider_session/4, reuse_or_create_proxy_session/4]).
 
 %%%===================================================================
 %%% API
@@ -164,6 +164,48 @@ reuse_or_create_rest_session(Iden, Auth) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates or reuses proxy session and starts session supervisor.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: session:id(), Auth :: session:auth(), SessionType :: atom()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
+    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
+    Sess = #session{
+        status = active, identity = Iden, auth = Auth, type = SessionType,
+        proxy_via = ProxyVia},
+    Diff = fun
+               (#session{status = phantom}) ->
+                   {error, {not_found, session}};
+               (#session{identity = ValidIden} = ExistingSess) ->
+                   case Iden of
+                       ValidIden ->
+                           {ok, ExistingSess#session{status = active}};
+                       _ ->
+                           {error, {invalid_identity, Iden}}
+                   end
+           end,
+    case session:update(SessId, Diff) of
+        {ok, SessId} ->
+            {ok, SessId};
+        {error, {not_found, _}} ->
+            case session:create(#document{key = SessId, value = Sess}) of
+                {ok, SessId} ->
+                    supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessionType]),
+                    {ok, SessId};
+                {error, already_exists} ->
+                    reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
