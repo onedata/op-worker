@@ -29,7 +29,7 @@
 %% Add changelog to file_location document
 %% @end
 %%--------------------------------------------------------------------
--spec add_change(file_location:doc(), term()) -> file_location:doc().
+-spec add_change(file_location:doc(), fslogic_blocks:blocks()) -> file_location:doc().
 add_change(Doc = #document{value = Location = #file_location{recent_changes = {_Backup, New}}}, Change)
     when length(New) >= ?MAX_CHANGES ->
     Doc#document{value = Location#file_location{recent_changes = {New, [Change]}}};
@@ -41,10 +41,10 @@ add_change(Doc = #document{value = Location = #file_location{recent_changes = {B
 %% Get N recent changes of file_location
 %% @end
 %%--------------------------------------------------------------------
--spec get_changes(file_location:doc(), non_neg_integer()) -> [term()].
-get_changes(#document{value = #file_location{recent_changes = {Backup, New}}}, N)
-    when N > length(New) + length(Backup) ->
-    undefined;
+-spec get_changes(file_location:doc(), non_neg_integer()) -> [fslogic_blocks:blocks()].
+get_changes(#document{value = #file_location{recent_changes = {Backup, New}, blocks = Blocks}}, N)
+    when N > (length(New) + length(Backup)) ->
+    [Blocks];
 get_changes(#document{value = #file_location{recent_changes = {_Backup, New}}}, N)
     when N =< length(New) ->
     lists:sublist(New, N);

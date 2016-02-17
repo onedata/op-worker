@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([invalidate/2]).
+-export([invalidate_changes/2, invalidate/2]).
 
 %%%===================================================================
 %%% API
@@ -26,7 +26,20 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Inavlidates given blocks in given locations. File size is also updated.
+%% Invalidate given list of changes in blocks of file_location.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_changes(file_location:doc(), Changes :: list()) -> ok.
+invalidate_changes(Doc, []) ->
+    {ok, _} = file_location:save(Doc#document{rev = undefined}); %todo do we need undefined rev here?
+invalidate_changes(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, [Blocks | Rest]) ->
+    NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
+    NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
+    invalidate_changes(Doc#document{value = Loc#file_location{blocks = NewBlocks1}}, Rest).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Invalidates given blocks in given locations. File size is also updated.
 %% @end
 %%--------------------------------------------------------------------
 -spec invalidate(datastore:document() | [datastore:document()], Blocks :: fslogic_blocks:blocks()) ->
@@ -36,7 +49,7 @@ invalidate([Location | T], Blocks) ->
     ok = invalidate(T, Blocks);
 invalidate(_, []) ->
     ok;
-invalidate(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks) ->
+invalidate(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks) ->
     ?debug("OldBlocks invalidate ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     ?debug("NewBlocks invalidate ~p", [NewBlocks]),

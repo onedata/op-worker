@@ -34,7 +34,8 @@
     update_should_bump_replica_version/1,
     read_should_synchronize_file/1,
     external_change_should_invalidate_blocks/1,
-    update_should_save_recent_changes/1
+    update_should_save_recent_changes/1,
+    remote_change_should_invalidate_only_updated_part_of_file/1
 ]).
 
 
@@ -48,7 +49,8 @@ all() ->
         update_should_bump_replica_version,
         read_should_synchronize_file,
         external_change_should_invalidate_blocks,
-        update_should_save_recent_changes
+        update_should_save_recent_changes,
+        remote_change_should_invalidate_only_updated_part_of_file
     ].
 
 
@@ -263,7 +265,7 @@ external_change_should_invalidate_blocks(Config) ->
     ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
     RemoteLocation = #file_location{size = 10, space_id = SpaceId,
         storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
-        blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
+        blocks = ExternalBlocks, recent_changes = {[], [ExternalBlocks]}, file_id = ExternalFileId, uuid = FileUuid,
         version_vector = VVLocal},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
         rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])),
@@ -312,18 +314,67 @@ update_should_save_recent_changes(Config) ->
     %then
     ?assertMatch({ok, #document{value = #file_location{recent_changes = {[],
         [
-            {update, [#file_block{offset = 0, size = 2}]},
-            {shrink, 0},
-            {update, [#file_block{offset = 0, size = 2}]},
-            {shrink, 2},
-            {update, [#file_block{offset = 8, size = 2}]},
-            {update, [#file_block{offset = 6, size = 2}]},
-            {update, [#file_block{offset = 4, size = 2}]},
-            {update, [#file_block{offset = 2, size = 2}]},
-            {update, [#file_block{offset = 0, size = 2}]}
+            [#file_block{offset = 0, size = 2}],
+            [#file_block{offset = 0, size = 2}],
+            [#file_block{offset = 0, size = 2}],
+            [#file_block{offset = 2, size = 8}],
+            [#file_block{offset = 8, size = 2}],
+            [#file_block{offset = 6, size = 2}],
+            [#file_block{offset = 4, size = 2}],
+            [#file_block{offset = 2, size = 2}],
+            [#file_block{offset = 0, size = 2}]
         ]}
     }}},
         rpc:call(W1, file_location, get, [LocationId])).
+
+remote_change_should_invalidate_only_updated_part_of_file(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = <<"session_id1">>,
+    SpaceId = <<"space_id1">>,
+    ExternalProviderId = <<"external_provider_id">>,
+    ExternalFileId = <<"external_file_id">>,
+
+    % create test file
+    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
+    ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    % attach external location
+    LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
+        rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    ExternalChanges = [
+        [#file_block{offset = 2, size = 2}],
+        [#file_block{offset = 7, size = 3}],
+        [#file_block{offset = 0, size = 10}],
+        [#file_block{offset = 1, size = 5}]
+    ],
+    RemoteLocation = #file_location{size = 10, space_id = SpaceId,
+        storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
+        blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
+        version_vector = VVLocal, recent_changes = {[], ExternalChanges}},
+    {ok, RemoteLocationId} = ?assertMatch({ok, _},
+        rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = rpc:call(W1, file_location, get, [RemoteLocationId]),
+    UpdatedRemoteLocationDoc = #document{value = #file_location{version_vector = VV}} =
+        bump_version(RemoteLocationDoc, 4),
+
+    % prepare local doc version
+    #document{value = #file_location{version_vector = NewLocalVV}} = bump_version(RemoteLocationDoc, 2),
+    rpc:call(W1, file_location, save, [LocalDoc#document{value = LocalLocation#file_location{version_vector = NewLocalVV}}]),
+
+    ?assertMatch({ok, _}, rpc:call(W1, file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, rpc:call(W1, file_meta, attach_location,
+        [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
+
+    % when
+    rpc:call(W1, dbsync_events, change_replicated, [SpaceId,
+        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+
+    % then
+    ?assertMatch(#document{value = #file_location{version_vector = VV, blocks = [#file_block{offset = 0, size = 2}, #file_block{offset = 4, size = 3}]}},
+        rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -369,3 +420,8 @@ mock_provider_id(Config) ->
 unmock_provider_id(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, oneprovider).
+
+bump_version(LocationDoc, 0) ->
+    LocationDoc;
+bump_version(LocationDoc, N) when N > 0 ->
+    bump_version(version_vector:bump_version(LocationDoc), N-1).

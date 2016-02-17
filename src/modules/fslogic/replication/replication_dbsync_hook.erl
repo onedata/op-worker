@@ -38,7 +38,8 @@ on_file_location_change(_SpaceId, ChangedLocationDoc =
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
                     {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
-                    lists:foreach(fun(Id) -> update_location_replica(Id, ChangedLocationDoc) end,
+                    lists:foreach(fun(Id) ->
+                        update_location_replica(Id, ChangedLocationDoc) end,
                         [LocationId || LocationId <- Locations, LocationId =/= Key]);
                 false ->
                     ok
@@ -88,10 +89,13 @@ update_local_location_replica(LocalDoc = #document{value = #file_location{versio
 %% @end
 %%--------------------------------------------------------------------
 -spec update_outdated_local_location_replica(file_location:doc(), file_location:doc()) -> ok.
-update_outdated_local_location_replica(LocalDoc = #document{value = LocalLocation = #file_location{uuid = Uuid, version_vector = VV1}},
-    #document{value = #file_location{version_vector = VV2, blocks = Blocks2}}) ->
+update_outdated_local_location_replica(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1}},
+    ExternalDoc = #document{value = #file_location{version_vector = VV2}}) ->
     ?info("Updating outdated replica ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
-    replica_invalidator:invalidate(LocalDoc#document{value = LocalLocation#file_location{version_vector = VV2}}, Blocks2).
+    LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
+    Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
+    Changes = fslogic_file_location:get_changes(ExternalDoc, Diff),
+    replica_invalidator:invalidate_changes(LocationDocWithNewVersion, Changes).
 
 %%--------------------------------------------------------------------
 %% @doc

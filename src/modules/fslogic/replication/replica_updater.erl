@@ -108,7 +108,7 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
                 fslogic_file_location:add_change(
                     Doc#document{rev = undefined, value =
                     Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}},
-                    {update, Blocks}
+                    Blocks
                 )
             );
         false ->
@@ -131,7 +131,7 @@ shrink([Location | T], Blocks, NewSize) ->
     ok = shrink(T, Blocks, NewSize);
 shrink(#document{value = #file_location{size = NewSize}}, [], NewSize) ->
     ok;
-shrink(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks, NewSize) ->
+shrink(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, NewSize) ->
     ?debug("OldBlocks shrink ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     ?debug("NewBlocks shrink ~p", [NewBlocks]),
@@ -141,7 +141,7 @@ shrink(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks
         fslogic_file_location:add_change(
             Doc#document{rev = undefined, value =
             Loc#file_location{blocks = NewBlocks1, size = NewSize}},
-            {shrink, NewSize}
+            [#file_block{offset = NewSize, size = OldSize - NewSize}]
         )
     ),
     ok;

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([compare/2, reconcile/3, bump_version/1]).
+-export([compare/2, merge_location_versions/2, bump_version/1, version_diff/2]).
 
 -type replica_id() :: {oneprovider:id(), file_location:id()}.
 -type version_vector() :: #{}.
@@ -52,25 +52,37 @@ compare(VV1, VV2) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates version_vector with information about given replica. Which
-%% effectively results in setting version under key of this replica to newest
-%% version
-%% @end
-%%--------------------------------------------------------------------
--spec reconcile(version_vector(), version_vector(), replica_id()) -> version_vector().
-reconcile(BaseVV, ExternalVV, ReplicaId) ->
-    ReplicaVersion = max(get_version(ReplicaId, BaseVV), get_version(ReplicaId, ExternalVV)),
-    maps:update(ReplicaId, ReplicaVersion, BaseVV).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Bumps version of given location. This function is used whenever write event updates location.
 %% @end
 %%--------------------------------------------------------------------
 -spec bump_version(file_location:doc()) -> term().
-bump_version(Doc = #document{key = LocationId, value = Location = #file_location{provider_id = ProviderId, version_vector = VV}}) ->
-    NewVersion = maps:put({ProviderId, LocationId}, get_version({ProviderId, LocationId}, VV) + 1, VV),
+bump_version(Doc = #document{value = Location = #file_location{version_vector = VV}}) ->
+    ReplicaId = get_replica_id(Doc),
+    NewVersion = maps:put(ReplicaId, get_version(ReplicaId, VV) + 1, VV),
     Doc#document{value = Location#file_location{version_vector = NewVersion}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates Local file location version vector with new version of external file location.
+%% @end
+%%--------------------------------------------------------------------
+-spec merge_location_versions(file_location:doc(), file_location:doc()) -> term().
+merge_location_versions(LocalDoc = #document{value = LocalLocation = #file_location{version_vector = LocalVV}},
+    ExternalDoc = #document{value = #file_location{version_vector = ExternalVV}}) ->
+    ExternalReplicaId = get_replica_id(ExternalDoc),
+    LocalDoc#document{value = LocalLocation#file_location{version_vector = merge(LocalVV, ExternalVV, ExternalReplicaId)}}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return diff in version of remote location, and local location's stored version
+%% of remote location.
+%% @end
+%%--------------------------------------------------------------------
+-spec version_diff(Local :: file_location:doc(), Remote :: file_location:doc()) -> integer().
+version_diff(#document{value = #file_location{version_vector = LocalVV}},
+    ExternalDoc = #document{value = #file_location{version_vector = ExternalVV}}) ->
+    ExternalReplicaId = get_replica_id(ExternalDoc),
+    get_version(ExternalReplicaId, ExternalVV) - get_version(ExternalReplicaId, LocalVV).
 
 %%%===================================================================
 %%% Internal functions
@@ -93,3 +105,25 @@ get_version(ReplicaId, VV) ->
 -spec identificators(version_vector()) -> [replica_id()].
 identificators(VVs) ->
     [Key || VV <- VVs, Key <- maps:keys(VV)].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns id of given replica (file_location), which is tuple with
+%% {ProviderId, FileLocationId}
+%% @end
+%%--------------------------------------------------------------------
+-spec get_replica_id(file_location:doc()) -> {oneprovider:id(), file_location:id()}.
+get_replica_id(#document{key = LocationId, value = #file_location{provider_id = ProviderId}}) ->
+    {ProviderId, LocationId}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates version_vector with information about given replica. Which
+%% effectively results in setting version under key of this replica to newest
+%% version
+%% @end
+%%--------------------------------------------------------------------
+-spec merge(version_vector(), version_vector(), replica_id()) -> version_vector().
+merge(LocalVV, ExternalVV, ReplicaId) ->
+    ReplicaVersion = max(get_version(ReplicaId, LocalVV), get_version(ReplicaId, ExternalVV)),
+    maps:put(ReplicaId, ReplicaVersion, LocalVV).
