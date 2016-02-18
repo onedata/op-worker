@@ -58,8 +58,8 @@ get_changes(#document{value = #file_location{recent_changes = {Backup, New}}}, N
 %%--------------------------------------------------------------------
 -spec create_storage_file_if_not_exists(binary(), file_meta:uuid(), session:id(), file_meta:posix_permissions()) -> ok.
 create_storage_file_if_not_exists(SpaceId, FileUuid, SessId, Mode) ->
-    case file_meta:get_locations({uuid, FileUuid}) of
-        {ok, []} ->
+    case fslogic_utils:get_local_file_locations({uuid, FileUuid}) of
+        [] ->
             create_storage_file(SpaceId, FileUuid, SessId, Mode),
             ok;
         _ ->

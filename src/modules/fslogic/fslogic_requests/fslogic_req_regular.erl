@@ -149,10 +149,10 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
     {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
 
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_location{
+        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
-            space_id = SpaceUUID}}.
+            space_id = SpaceUUID})}.
 
 
 %%--------------------------------------------------------------------
@@ -226,7 +226,7 @@ get_file_location(CTX, File) ->
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_location{
+        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_id = SpaceUUID}}.
+            space_id = SpaceUUID})}.

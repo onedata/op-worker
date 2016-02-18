@@ -13,13 +13,14 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
--export([run_synchronized/2, save_and_bump_version/1]).
+-export([run_synchronized/2, save_and_bump_version/1, ensure_blocks_not_empty/1]).
 
 -type id() :: binary().
 -type doc() :: datastore:document().
@@ -27,7 +28,7 @@
 -export_type([id/0, doc/0]).
 
 %%%===================================================================
-%%% model_behaviour callbacks
+%%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -48,6 +49,24 @@ run_synchronized(ResourceId, Fun) ->
 -spec save_and_bump_version(doc()) -> {ok, datastore:key()} | datastore:generic_error().
 save_and_bump_version(FileLocationDoc) ->
     file_location:save(version_vector:bump_version(FileLocationDoc)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Ensures that blocks of file location contains at least one entry (so client
+%% will know the storageId and fileId of file). If blocks are empty, function adds
+%% one block with offset and size set to 0.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_blocks_not_empty(#file_location{}) -> #file_location{}.
+ensure_blocks_not_empty(Loc = #file_location{blocks = [], file_id = FileId, storage_id = StorageId}) ->
+    Loc#file_location{blocks = [#file_block{offset = 0, size = 0,
+        storage_id = StorageId, file_id = FileId}]};
+ensure_blocks_not_empty(Loc) ->
+    Loc.
+
+%%%===================================================================
+%%% model_behaviour callbacks
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc

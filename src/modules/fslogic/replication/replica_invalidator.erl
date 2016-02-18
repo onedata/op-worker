@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec invalidate_changes(file_location:doc(), Changes :: list(), Size :: non_neg_integer()) -> file_location:doc().
 invalidate_changes(Doc = #document{value = Loc}, [], NewSize) ->
-    NewDoc = Doc#document{rev = undefined, value = Loc#file_location{size = NewSize}}, %todo check if rev=undefined is necessary
+    NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     {ok, _} = file_location:save(NewDoc),
     NewDoc;
 invalidate_changes(Doc = #document{value = Loc = #file_location{blocks = OldBlocks, size = OldSize}}, [{shrink, ShrinkSize} | Rest], Size) when OldSize > ShrinkSize ->

@@ -44,16 +44,18 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
                     fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, insted operating on first one
                 FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
-                ok = append([Location], FullBlocks, BumpVersion),
+                UpdatedLocation = append(Location, FullBlocks, BumpVersion),
 
                 case FileSize of
                     undefined ->
+                        file_location:save(UpdatedLocation),
                         case fslogic_blocks:upper(FullBlocks) > OldSize of
                             true -> {ok, size_changed};
                             false -> {ok, size_not_changed}
                         end;
                     _ ->
-                        do_local_truncate(FileSize, Location),
+                        TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
+                        file_location:save(TruncatedLocation),
                         {ok, size_changed}
                 end
                 % todo reconcile other local replicas according to this one
@@ -75,8 +77,8 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_local_truncate(FileSize :: non_neg_integer(), datastore:document()) -> ok | no_return().
-do_local_truncate(FileSize, #document{value = #file_location{size = FileSize}}) ->
-    ok;
+do_local_truncate(FileSize, Doc = #document{value = #file_location{size = FileSize}}) ->
+    Doc;
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
     append(LocalLocation, [#file_block{offset = LocalSize, size = FileSize - LocalSize, file_id = FileId, storage_id = StorageId}], true);
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} = LocalLocation) when LocalSize > FileSize ->
@@ -88,37 +90,26 @@ do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} 
 %% Appends given blocks to given locations and updates file size for those locations.
 %% @end
 %%--------------------------------------------------------------------
--spec append(datastore:document() | [datastore:document()], fslogic_blocks:blocks(), boolean()) -> ok | no_return().
-append([], _Blocks, _) ->
-    ok;
-append([Location | T], Blocks, BumpVersion) ->
-    ok = append(Location, Blocks, BumpVersion),
-    ok = append(T, Blocks, BumpVersion);
-append(_, [], _) ->
-    ok;
+-spec append(datastore:document(), fslogic_blocks:blocks(), boolean()) -> file_location:doc() | no_return().
+append(Doc, [], _) ->
+    Doc;
 append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
-    ?debug("OldBlocks ~p, NewBlocks ~p", [OldBlocks, Blocks]),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks) ++ Blocks,
     NewSize = fslogic_blocks:upper(Blocks),
-    ?debug("NewBlocks ~p", [NewBlocks]),
     NewBlocks1 = fslogic_blocks:consolidate(lists:sort(NewBlocks)),
-    ?debug("NewBlocks1 ~p", [NewBlocks1]),
+
     case BumpVersion of
         true ->
-            {ok, _} = file_location:save_and_bump_version(
+            version_vector:bump_version(
                 fslogic_file_location:add_change(
-                    Doc#document{rev = undefined, value =
+                    Doc#document{value =
                     Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}},
                     Blocks
-                )
-            );
+                ));
         false ->
-            {ok, _} = file_location:save(
-                Doc#document{rev = undefined, value =
+            Doc#document{value =
                 Loc#file_location{blocks = NewBlocks1, size = max(OldSize, NewSize)}}
-            )
-    end,
-    ok.
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,28 +117,19 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 %% @end
 %%--------------------------------------------------------------------
 -spec shrink(datastore:document() | [datastore:document()], Blocks :: fslogic_blocks:blocks(), NewSize :: non_neg_integer()) ->
-    ok | no_return().
-shrink([Location | T], Blocks, NewSize) ->
-    ok = shrink(Location, Blocks, NewSize),
-    ok = shrink(T, Blocks, NewSize);
-shrink(#document{value = #file_location{size = NewSize}}, [], NewSize) ->
-    ok;
+    file_location:doc() | no_return().
+shrink(Doc = #document{value = #file_location{size = NewSize}}, [], NewSize) ->
+    Doc;
 shrink(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks, NewSize) ->
-    ?debug("OldBlocks shrink ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
-    ?debug("NewBlocks shrink ~p", [NewBlocks]),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
-    ?debug("NewBlocks1 shrink ~p", [NewBlocks1]),
-    {ok, _} = file_location:save_and_bump_version(
+    version_vector:bump_version(
         fslogic_file_location:add_change(
-            Doc#document{rev = undefined, value =
+            Doc#document{value =
             Loc#file_location{blocks = NewBlocks1, size = NewSize}},
             {shrink, NewSize}
         )
-    ),
-    ok;
-shrink([], _, _) ->
-    ok.
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc

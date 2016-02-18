@@ -41,9 +41,13 @@ change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = Fil
     fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
     ?debug("change_replicated: changed file_location ~p", [FileUUID]),
-    replication_dbsync_hook:on_file_location_change(SpaceId, Doc);
-%%    fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
-%%    fslogic_event:emit_file_location_update({uuid, FileUUID}, []);
+    case replication_dbsync_hook:on_file_location_change(SpaceId, Doc) of
+        {error,{{badmatch,{error,{not_found,file_meta}}}, _}} ->
+            timer:apply_after(timer:seconds(1), replication_dbsync_hook,
+                on_file_location_change, [SpaceId, Doc]);
+        _ ->
+            ok
+    end;
 change_replicated(_SpaceId, _Change) ->
     ok.
 
