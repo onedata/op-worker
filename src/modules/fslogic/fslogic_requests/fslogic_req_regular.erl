@@ -188,11 +188,17 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
         }
     ) end),
 
+    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle1),
+    HandleId = base64:encode(crypto:rand_bytes(20)),
+    {ok, #document{value = #session{handles = Handles}}} = session:get(SessId),
+    UpdatedHandles = maps:put(HandleId, Handle, Handles),
+    {ok, SessId} = session:update(SessId, #{handles => UpdatedHandles}),
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
-            space_id = SpaceUUID}}.
+            space_id = SpaceUUID, handle_id = HandleId}}.
 
 
 %%--------------------------------------------------------------------

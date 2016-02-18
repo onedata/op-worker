@@ -323,16 +323,16 @@ handle_read_events(Evts, _Ctx) ->
     end, Evts).
 
 handle_proxyio_request(SessionId, #proxyio_request{
-    file_uuid = FileUuid, storage_id = SID, file_id = FID,
+    parameters = Parameters, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
 
-    fslogic_proxyio:write(SessionId, FileUuid, SID, FID, Offset, Data);
+    fslogic_proxyio:write(SessionId, Parameters, SID, FID, Offset, Data);
 
 handle_proxyio_request(SessionId, #proxyio_request{
-    file_uuid = FileUuid, storage_id = SID, file_id = FID,
+    parameters = Parameters, storage_id = SID, file_id = FID,
     proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
 
-    fslogic_proxyio:read(SessionId, FileUuid, SID, FID, Offset, Size);
+    fslogic_proxyio:read(SessionId, Parameters, SID, FID, Offset, Size);
 
 handle_proxyio_request(_SessionId, Req) ->
     ?log_bad_request(Req),

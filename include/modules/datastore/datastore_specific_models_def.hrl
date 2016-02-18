@@ -35,7 +35,9 @@
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
     % Key-value in-session memory
-    memory = [] :: [{Key :: term(), Value :: term()}]
+    memory = [] :: [{Key :: term(), Value :: term()}],
+    % Handles for opened files
+    handles = #{} :: #{binary() => storage_file_manager:handle()}
 }).
 
 %% Local, cached version of globalregistry user
@@ -85,7 +87,8 @@
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
-    size = 0 :: non_neg_integer() | undefined
+    size = 0 :: non_neg_integer() | undefined,
+    handle_id :: binary()
 }).
 
 %% Model for caching space details fetched from Global Registry

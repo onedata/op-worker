@@ -29,21 +29,14 @@
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec write(SessId :: session:id(), FileUuid :: file_meta:uuid(),
+-spec write(SessId :: session:id(), Parameters :: #{binary() => binary()},
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Data :: binary()) ->
     #proxyio_response{}.
-write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
-    {ok, Storage} = storage:get(StorageId),
-
-    SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
+write(SessionId, Parameters, StorageId, FileId, Offset, Data) ->
 
     {Status, Response} =
-        case storage_file_manager:open(SFMHandle, write) of
+        case get_handle(SessionId, Parameters, StorageId, FileId, write) of
             {ok, Handle} ->
                 case storage_file_manager:write(Handle, Offset, Data) of
                     {ok, Wrote} ->
@@ -69,21 +62,14 @@ write(SessionId, FileUuid, StorageId, FileId, Offset, Data) ->
 %% pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(SessId :: session:id(), FileUuid :: file_meta:uuid(),
+-spec read(SessionId :: session:id(), Parameters :: #{binary() => binary()},
     StorageId :: storage:id(), FileId :: helpers:file(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     #proxyio_response{}.
-read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUuid}, UserId),
-    {ok, Storage} = storage:get(StorageId),
-
-    SFMHandle =
-        storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
+read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 
     {Status, Response} =
-        case storage_file_manager:open(SFMHandle, read) of
+        case get_handle(SessionId, Parameters, StorageId, FileId, read) of
             {ok, Handle} ->
                 case storage_file_manager:read(Handle, Offset, Size) of
                     {ok, Data} ->
@@ -100,3 +86,31 @@ read(SessionId, FileUuid, StorageId, FileId, Offset, Size) ->
         end,
 
     #proxyio_response{status = Status, proxyio_response = Response}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns handle by either retrieving it from session or opening file
+%% @end
+%%--------------------------------------------------------------------
+-spec get_handle(SessionId :: session:id(), Parameters :: #{binary() => binary()},
+    StorageId :: storage:id(), FileId :: helpers:file(), OpenMode :: helpers:open_mode()) ->
+    {ok, storage_file_manager:handle()} | logical_file_manager:error_reply().
+get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}, handles = Handles}}} =
+        session:get(SessionId),
+    case maps:get(<<"handle_id">>, Parameters, undefined) of
+        undefined ->
+            FileUuid = maps:get(<<"file_uuid">>, Parameters),
+            {ok, #document{key = SpaceUUID}} =
+                fslogic_spaces:get_space({uuid, FileUuid}, UserId),
+            {ok, Storage} = storage:get(StorageId),
+            SFMHandle =
+                storage_file_manager:new_handle(SessionId, SpaceUUID, FileUuid, Storage, FileId),
+            storage_file_manager:open(SFMHandle, OpenMode);
+        HandleId ->
+            {ok, maps:get(HandleId, Handles)}
+    end.
