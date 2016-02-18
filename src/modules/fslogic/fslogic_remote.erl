@@ -35,6 +35,7 @@
 -spec reroute(fslogic_worker:ctx(), oneprovider:id(), term()) ->
     term().
 reroute(#fslogic_ctx{session_id = SessionId}, ProviderId, Request) ->
+    ?info("Rerouting ~p ~p", [ProviderId, Request]),
     {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
     {ok, #server_message{message_body = MsgBody}} =
         provider_communicator:communicate(#client_message{

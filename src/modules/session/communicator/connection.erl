@@ -399,6 +399,7 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
         ok ->
             {noreply, State, ?TIMEOUT};
         {ok, ServerMsg} ->
+            ?info("Reply ~p", [ServerMsg]),
             send_server_message(Sock, Transp, ServerMsg),
             {noreply, State, ?TIMEOUT};
         {error, Reason} ->
@@ -444,6 +445,7 @@ activate_socket_once(Socket, Transport) ->
     ServerMessage :: #server_message{}) -> ok.
 send_server_message(Socket, Transport, ServerMsg) ->
     {ok, Data} = serializator:serialize_server_message(ServerMsg),
+    ?info("Sending ~p", [ServerMsg]),
     ok = Transport:send(Socket, Data).
 
 
