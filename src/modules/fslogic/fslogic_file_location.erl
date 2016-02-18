@@ -42,9 +42,9 @@ add_change(Doc = #document{value = Location = #file_location{recent_changes = {B
 %% @end
 %%--------------------------------------------------------------------
 -spec get_changes(file_location:doc(), non_neg_integer()) -> [fslogic_blocks:blocks()].
-get_changes(#document{value = #file_location{recent_changes = {Backup, New}, blocks = Blocks}}, N)
+get_changes(#document{value = #file_location{size = Size, recent_changes = {Backup, New}, blocks = Blocks}}, N)
     when N > (length(New) + length(Backup)) ->
-    [Blocks];
+    [Blocks, {shrink, Size}];
 get_changes(#document{value = #file_location{recent_changes = {_Backup, New}}}, N)
     when N =< length(New) ->
     lists:sublist(New, N);

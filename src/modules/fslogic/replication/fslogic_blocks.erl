@@ -93,10 +93,8 @@ get_file_size([Location | T]) ->
 get_file_size([]) ->
     0;
 get_file_size(Entry) ->
-    {ok, LocIds} = file_meta:get_locations(Entry),
-    Locations = [file_location:get(LocId) || LocId <- LocIds],
-    Locations1 = [Location || {ok, #document{value = #file_location{} = Location}} <- Locations],
-    get_file_size(Locations1).
+    LocalLocations = fslogic_utils:get_local_file_locations(Entry),
+    get_file_size(LocalLocations).
 
 
 %%--------------------------------------------------------------------
@@ -115,13 +113,13 @@ invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = D
     [C | invalidate(T, D)];
 invalidate([#file_block{offset = CO, size = _CS} = C | T], #file_block{offset = DO, size = DS} = D) when DO + DS =< CO ->
     [C | invalidate(T, D)];
-invalidate([#file_block{offset = CO, size = CS} = _C | T], #file_block{offset = DO, size = _DS} = D) when CO >= DO, CO + CS =< DO + DO ->
+invalidate([#file_block{offset = CO, size = CS} = _C | T], #file_block{offset = DO, size = DS} = D) when CO >= DO, CO + CS =< DO + DS ->
     invalidate(T, D);
-invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO >= DO, CO + CS > DO + DO ->
+invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO >= DO, CO + CS > DO + DS ->
     [C#file_block{offset = DO + DS, size = CS - (DO + DS - CO)} | invalidate(T, D)];
-invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = _DS} = D) when CO < DO, CO + CS =< DO + DO ->
+invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO < DO, CO + CS =< DO + DS ->
     [C#file_block{size = DO - CO} | invalidate(T, D)];
-invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO =< DO, CO + CS >= DO + DO ->
+invalidate([#file_block{offset = CO, size = CS} = C | T], #file_block{offset = DO, size = DS} = D) when CO =< DO, CO + CS >= DO + DS ->
     [C#file_block{size = DO - CO}, C#file_block{offset = DO + DS, size = CO + CS - (DO + DS)} | invalidate(T, D)].
 
 

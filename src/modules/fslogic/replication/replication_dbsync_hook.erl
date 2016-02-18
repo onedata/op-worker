@@ -90,12 +90,14 @@ update_local_location_replica(LocalDoc = #document{value = #file_location{versio
 %%--------------------------------------------------------------------
 -spec update_outdated_local_location_replica(file_location:doc(), file_location:doc()) -> ok.
 update_outdated_local_location_replica(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1}},
-    ExternalDoc = #document{value = #file_location{version_vector = VV2}}) ->
+    ExternalDoc = #document{value = #file_location{version_vector = VV2, size = NewSize}}) ->
     ?info("Updating outdated replica ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = fslogic_file_location:get_changes(ExternalDoc, Diff),
-    replica_invalidator:invalidate_changes(LocationDocWithNewVersion, Changes).
+    NewDoc = replica_invalidator:invalidate_changes(LocationDocWithNewVersion, Changes, NewSize),
+    notify_block_change_if_necessary(LocationDocWithNewVersion, NewDoc),
+    notify_size_change_if_necessary(LocationDocWithNewVersion, NewDoc).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -107,3 +109,27 @@ reconcile_replicas(LocalDoc = #document{value = LocalLocation = #file_location{u
     #document{value = #file_location{version_vector = VV2, blocks = Blocks2}}) ->
     ?info("Conflicting changes detected on ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
     fslogic_blocks:invalidate(LocalDoc#document{value = LocalLocation#file_location{version_vector = version_vector:reconcile(VV1, VV2)}}, Blocks2). %todo reconcile
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Notify clients if blocks has changed.
+%% @end
+%%--------------------------------------------------------------------
+-spec notify_block_change_if_necessary(file_location:doc(), file_location:doc()) -> ok.
+notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}},
+    #document{value = #file_location{uuid = FileUuid, blocks = SameBlocks}}) ->
+    ok = fslogic_event:emit_file_location_update({uuid, FileUuid}, []);
+notify_block_change_if_necessary(_, _) ->
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Notify clients if file size has changed.
+%% @end
+%%--------------------------------------------------------------------
+-spec notify_size_change_if_necessary(file_location:doc(), file_location:doc()) -> ok.
+notify_size_change_if_necessary(#document{value = #file_location{size = SameSize}},
+    #document{value = #file_location{uuid = FileUuid, size = SameSize}}) ->
+     ok = fslogic_event:emit_file_attr_update({uuid, FileUuid}, []);
+notify_size_change_if_necessary(_, _) ->
+    ok.

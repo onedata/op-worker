@@ -40,14 +40,15 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
     file_location:run_synchronized(FileUUID,
         fun() ->
             try
-                [Location | _] = fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, insted operating on first one
+                [Location = #document{value = #file_location{size = OldSize}} | _] =
+                    fslogic_utils:get_local_file_locations({uuid, FileUUID}), %todo get location as argument, insted operating on first one
                 FullBlocks = fill_blocks_with_storage_info(Blocks, Location),
 
                 ok = append([Location], FullBlocks, BumpVersion),
 
                 case FileSize of
                     undefined ->
-                        case fslogic_blocks:upper(FullBlocks) > fslogic_blocks:calculate_file_size(Location) of
+                        case fslogic_blocks:upper(FullBlocks) > OldSize of
                             true -> {ok, size_changed};
                             false -> {ok, size_not_changed}
                         end;
@@ -131,7 +132,7 @@ shrink([Location | T], Blocks, NewSize) ->
     ok = shrink(T, Blocks, NewSize);
 shrink(#document{value = #file_location{size = NewSize}}, [], NewSize) ->
     ok;
-shrink(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, NewSize) ->
+shrink(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks, NewSize) ->
     ?debug("OldBlocks shrink ~p, new ~p", [OldBlocks, Blocks]),
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     ?debug("NewBlocks shrink ~p", [NewBlocks]),
@@ -141,7 +142,7 @@ shrink(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
         fslogic_file_location:add_change(
             Doc#document{rev = undefined, value =
             Loc#file_location{blocks = NewBlocks1, size = NewSize}},
-            [#file_block{offset = NewSize, size = OldSize - NewSize}]
+            {shrink, NewSize}
         )
     ),
     ok;
