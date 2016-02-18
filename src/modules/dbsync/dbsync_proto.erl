@@ -197,7 +197,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
     Ignore =
         case worker_host:state_get(dbsync_worker, {request, ReqId}) of
             undefined ->
-                worker_host:state_put(dbsync_worker, {request, ReqId}, utils:mtime()),
+                worker_host:state_put(dbsync_worker, {request, ReqId}, erlang:system_time()),
                 false;
             _MTime ->
                 true
