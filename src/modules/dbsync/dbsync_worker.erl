@@ -204,14 +204,17 @@ handle({'EXIT', Stream, Reason}) ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
     end;
 handle({async_init_stream, Since, Until, Queue}) ->
-    case catch init_stream(Since, infinity, global) of
-        {ok, Pid} ->
-            state_put(changes_stream, Pid);
-        Reason ->
-            ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
-            timer:apply_after(?GLOBAL_STREAM_RESTART_INTERVAL, worker_proxy, cast,
-                [dbsync_worker, {async_init_stream, Since, Until, Queue}])
-    end;
+    state_update(changes_stream, fun(_) ->
+        case catch init_stream(Since, infinity, Queue) of
+            {ok, Pid} ->
+                Pid;
+            Reason ->
+                ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
+                timer:apply_after(?GLOBAL_STREAM_RESTART_INTERVAL, worker_proxy, cast,
+                    [dbsync_worker, {async_init_stream, Since, Until, Queue}]),
+                undefined
+        end
+    end);
 %% Unknown request
 handle(_Request) ->
     ?log_bad_request(_Request).
