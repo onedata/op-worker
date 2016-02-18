@@ -10,7 +10,8 @@ import os
 import sys
 import copy
 import json
-import collections
+import sys
+import time
 from . import appmock, client, common, globalregistry, cluster_manager, \
     worker, provider_worker, cluster_worker, docker, dns
 
@@ -138,6 +139,8 @@ echo $?'''
         print(command_output)
         # check of env configuration succeeded
         if command_res_code != '0':
+            # Let the command_output be flushed to console
+            time.sleep(2)
             sys.exit(1)
 
 
