@@ -58,7 +58,7 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
             ok
     end,
 
-    CurrTime = utils:time(),
+    CurrTime = erlang:system_time(seconds),
     #document{value = FileMeta} = FileDoc,
     {ok, _} = file_meta:update(FileDoc, #{mtime => CurrTime, ctime => CurrTime}),
 
@@ -144,7 +144,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
     {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
-    CTime = utils:time(),
+    CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
         type = ?REGULAR_FILE_TYPE,
@@ -178,7 +178,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
     ok = storage_file_manager:create(SFMHandle1, Mode),
 
     {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
-    CurrTime = utils:time(),
+    CurrTime = erlang:system_time(seconds),
     #document{value = ParentMeta} = ParentDoc,
     {ok, _} = file_meta:update(ParentDoc, #{mtime => CurrTime, ctime => CurrTime}),
 

@@ -281,7 +281,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     }}) ->
         case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
             {ok, size_changed} ->
-                MTime = utils:time(),
+                MTime = erlang:system_time(seconds),
                 {ok, _} = file_meta:update({uuid, FileUUID}, #{
                     mtime => MTime, ctime => MTime
                 }),
@@ -289,7 +289,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {ok, size_not_changed} ->
-                MTime = utils:time(),
+                MTime = erlang:system_time(seconds),
                 {ok, _} = file_meta:update({uuid, FileUUID}, #{
                     mtime => MTime, ctime => MTime
                 }),

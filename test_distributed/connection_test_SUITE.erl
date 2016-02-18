@@ -182,20 +182,20 @@ multi_message_test_base(Config) ->
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
-    T1 = os:timestamp(),
+    T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(E) -> ok = ssl2:send(Sock, E) end, RawEvents),
-    T2 = os:timestamp(),
+    T2 = erlang:monotonic_time(milli_seconds),
 
     % then
     lists:foreach(fun(N) ->
         ?assertReceivedMatch(N, ?TIMEOUT)
     end, MsgNumbers),
-    T3 = os:timestamp(),
+    T3 = erlang:monotonic_time(milli_seconds),
     ok = ssl2:close(Sock),
     [
-        #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
-        #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
-        #parameter{name = full_time, value = utils:milliseconds_diff(T3, T1), unit = "ms"}
+        #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
+        #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
+        #parameter{name = full_time, value = T3 - T1, unit = "ms"}
     ].
 
 client_send_test(Config) ->
@@ -308,7 +308,7 @@ multi_ping_pong_test_base(Config) ->
     initializer:remove_pending_messages(),
     Self = self(),
 
-    T1 = os:timestamp(),
+    T1 = erlang:monotonic_time(milli_seconds),
     [
         spawn_link(fun() ->
             % when
@@ -335,8 +335,8 @@ multi_ping_pong_test_base(Config) ->
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(success, infinity)
     end, ConnNumbersList),
-    T2 = os:timestamp(),
-    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
+    T2 = erlang:monotonic_time(milli_seconds),
+    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
 sequential_ping_pong_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -367,7 +367,7 @@ sequential_ping_pong_test_base(Config) ->
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1),
-    T1 = os:timestamp(),
+    T1 = erlang:monotonic_time(milli_seconds),
     lists:foldl(fun(E, N) ->
         % send ping
         ok = ssl2:send(Sock, E),
@@ -379,12 +379,12 @@ sequential_ping_pong_test_base(Config) ->
         }, message_id = BinaryN}, receive_server_message()),
         N + 1
     end, 1, RawPings),
-    T2 = os:timestamp(),
+    T2 = erlang:monotonic_time(milli_seconds),
 
     % then
     ok = ssl2:close(Sock),
 
-    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
+    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
 multi_connection_test(Config) ->
     ?PERFORMANCE(Config,[
@@ -454,22 +454,22 @@ bandwidth_test_base(Config) ->
 
     % when
     {ok, {Sock, _}} = connect_via_token(Worker1, [{active, true}]),
-    T1 = os:timestamp(),
+    T1 = erlang:monotonic_time(milli_seconds),
     lists:foreach(fun(_) ->
         ok = ssl2:send(Sock, PacketRaw)
     end, lists:seq(1, PacketNum)),
-    T2 = os:timestamp(),
+    T2 = erlang:monotonic_time(milli_seconds),
 
     % then
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(router_message_called, ?TIMEOUT)
     end, lists:seq(1, PacketNum)),
-    T3 = os:timestamp(),
+    T3 = erlang:monotonic_time(milli_seconds),
     ssl2:close(Sock),
     [
-        #parameter{name = sending_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"},
-        #parameter{name = receiving_time, value = utils:milliseconds_diff(T3, T2), unit = "ms"},
-        #parameter{name = full_time, value = utils:milliseconds_diff(T3, T1), unit = "ms"}
+        #parameter{name = sending_time, value = T2 - T1, unit = "ms"},
+        #parameter{name = receiving_time, value = T3 - T2, unit = "ms"},
+        #parameter{name = full_time, value = T3 - T1, unit = "ms"}
     ].
 
 python_client_test(Config) ->
@@ -522,7 +522,7 @@ python_client_test_base(Config) ->
     {ok, Port} = test_utils:get_env(Worker1, ?APP_NAME, protocol_handler_port),
 
     % when
-    T1 = os:timestamp(),
+    T1 = erlang:monotonic_time(milli_seconds),
     Args = [
         "--host", Host,
         "--port", integer_to_list(Port),
@@ -536,9 +536,9 @@ python_client_test_base(Config) ->
     lists:foreach(fun(_) ->
         ?assertReceivedMatch(router_message_called, timer:seconds(15))
     end, lists:seq(1, PacketNum)),
-    T2 = os:timestamp(),
+    T2 = erlang:monotonic_time(milli_seconds),
         catch port_close(PythonClient),
-    #parameter{name = full_time, value = utils:milliseconds_diff(T2, T1), unit = "ms"}.
+    #parameter{name = full_time, value = T2 - T1, unit = "ms"}.
 
 proto_version_test(Config) ->
     % given

@@ -522,7 +522,7 @@ setup_onedata_user(UUID) ->
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
             onedata_user:get(UUID),
 
-        CTime = utils:time(),
+        CTime = erlang:system_time(seconds),
 
         {ok, SpacesRootUUID} =
             case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of
