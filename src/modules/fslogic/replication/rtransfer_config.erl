@@ -15,6 +15,7 @@
 -include("modules/fslogic/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/global_registry/gr_providers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(RTRANSFER_PORT, 6665).
 -define(RTRANSFER_NUM_ACCEPTORS, 10).
@@ -45,7 +46,8 @@ start_rtransfer() ->
             end},
         {open_fun,
             fun(FileUUID, OpenMode) ->
-                CTX = fslogic_context:new(?ROOT_SESS_ID),
+                CTX0 = fslogic_context:new(?ROOT_SESS_ID),
+                CTX = fslogic_context:set_space_id(CTX0, {uuid, FileUUID}),
                 {ok, FileDoc} = file_meta:get({uuid, FileUUID}),
                 {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
                 FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),

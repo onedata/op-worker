@@ -46,8 +46,8 @@ synchronize(Uuid, Block) ->
             lists:foreach(
                 fun(BlockToSync = #file_block{offset = O, size = S}) ->
                     Ref = rtransfer:prepare_request(ProviderId, Uuid, O, S),
-                    rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
-                    {ok, Size} = receive_rtransfer_notification(Ref, ?SYNC_TIMEOUT),
+                    NewRef = rtransfer:fetch(Ref, fun notify_fun/3, on_complete_fun()),
+                    {ok, Size} = receive_rtransfer_notification(NewRef, ?SYNC_TIMEOUT),
                     replica_updater:update(Uuid, [BlockToSync#file_block{size = Size}], undefined, false) %todo check if multiblock does not cause conflicts
                 end, Blocks),
             fslogic_event:emit_file_location_update({uuid, Uuid}, [])

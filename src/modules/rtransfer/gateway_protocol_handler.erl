@@ -28,6 +28,7 @@
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
 -include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ranch_protocol callbacks
 -export([start_link/4, init/4]).
