@@ -15,22 +15,28 @@ const Router = Ember.Router.extend({
 });
 
 Router.map(function() {
-  this.route('recents');
+  this.route('lang', {path: '/:lang_id'}, function() {
+    this.route('recent', {resetNamespace: true});
 
-  // spaces/ - all spaces configuration reached from primary sidebar
-  this.route('spaces', function() {
-    // spaces/:space_id - entry for configuration of the single space
-    this.route('show', {path: ':space_id'}, function() {
-      // spaces/:space_id/users - configure users permissions for space
-      this.route('users');
-      // spaces/:space_id/groups - configure groups permissions for space
-      this.route('groups');
+    // spaces/ - all spaces configuration reached from primary sidebar
+    this.route('spaces', {resetNamespace: true}, function() {
+      // spaces/:space_id - entry for configuration of the single space
+      this.route('show', {path: ':space_id'}, function() {
+        // spaces/:space_id/users - configure users permissions for space
+        this.route('users');
+        // spaces/:space_id/groups - configure groups permissions for space
+        this.route('groups');
+      });
     });
+
+    this.route('data', {resetNamespace: true}, function() {});
+    this.route('links', {resetNamespace: true});
+    this.route('collection', {resetNamespace: true});
+    this.route('trash', {resetNamespace: true});
   });
-  this.route('data');
-  this.route('links');
-  this.route('collection');
-  this.route('trash');
+
+  this.route('wildcard', { path: "*path"});
+  this.route('not-found');
 });
 
 export default Router;

@@ -1,0 +1,46 @@
+/**
+ * Handles ``/:lang_id/<single_segment>`` paths.
+ * The ``:lang_id`` should be a locale id, eg. ``en``.
+ * It is used to set the i18n.locale in memory (i18n service).
+ *
+ * If the :lang_id is not a valid language id (valid languages are fetched from
+ * i18n.locales), it redirects to the same route but with :lang_id set to
+ * default locale (fetched from ENV.i18n.defaultLocale).
+ *
+ * Handling of invalid paths with more segments, eg. /spaces/1/groups
+ * is made in ``wildcard`` route.
+ *
+ * @module routes/lang
+ * @author Jakub Liput
+ * @copyright (C) 2016 ACK CYFRONET AGH
+ * @license This software is released under the MIT license cited in 'LICENSE.txt'.
+ */
+
+import Ember from 'ember';
+import ENV from '../config/environment';
+import langDetect from '../utils/lang-detect';
+
+export default Ember.Route.extend({
+  locales: function() {
+    return this.get('i18n.locales');
+  }.property('i18n.locales'),
+  localeId: null,
+  defaultLocale: function() {
+    return ENV.i18n.defaultLocale;
+  }.property(),
+
+  model(params) {
+    this.set('localeId', params.lang_id);
+  },
+
+  afterModel() {
+    let localeId = this.get('localeId');
+    if (this.get('locales').contains(localeId)) {
+      this.set('i18n.locale', localeId);
+    } else {
+      let userLang = langDetect() || this.get('defaultLocale');
+      // this is not a langId but rather a route without lang prefix
+      this.transitionTo(localeId, userLang);
+    }
+  }
+});

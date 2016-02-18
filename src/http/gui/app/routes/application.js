@@ -12,11 +12,6 @@ import Ember from 'ember';
 export default Ember.Route.extend({
   mainMenuService: Ember.inject.service('main-menu'),
 
-  // TODO: use locale based on user preferences or something
-  // afterModel: function(user) {
-  //   this.set('i18n.locale', user.get('locale'));
-  // }
-
   activate() {
     console.debug('app activate');
     Ember.run.scheduleOnce('afterRender', this, function() {

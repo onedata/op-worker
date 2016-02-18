@@ -1,6 +1,7 @@
 /**
  * English translation of GUI strings.
- * Translations dictionary is organized as templates... TODO
+ * Translations dictionary is organized as in routes dir.
+ *
  * @module locales/en/translations
  * @author Jakub Liput
  * @copyright (C) 2016 ACK CYFRONET AGH
@@ -8,6 +9,27 @@
 */
 export default {
   components: {
+    topBar: {
+      logout: 'Log out'
+    },
+    mainMenu: {
+      data: 'data',
+      links: 'links',
+      recent: 'recent',
+      collection: 'collection',
+      trash: 'trash',
+      spaces: 'spaces',
+      groups: 'groups',
+      token: 'token'
+    },
+    spacesMenu: {
+      title: 'spaces',
+    },
+    spacesSubmenu: {
+      users: 'users',
+      groups: 'groups',
+      providers: 'providers'
+    },
     permissionsTable: {
       viewSpace: 'view space',
       modifySpace: 'modify space',
