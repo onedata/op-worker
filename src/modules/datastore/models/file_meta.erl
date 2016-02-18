@@ -127,8 +127,28 @@ create({path, Path}, File) ->
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
-create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
+create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc0) ->
     ?run(begin
+             FileDoc =
+                 case FileDoc0 of
+                     #document{key = undefined} = Doc ->
+                         BinParentUUID = base64:decode(ParentUUID),
+                         NewUUID =
+                             try binary_to_term(BinParentUUID) of
+                                 {space, SpaceId} ->
+                                     base64:encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
+                                 {{space_id, SpaceId}, _FileUUID} ->
+                                     base64:encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
+                                 _ ->
+                                     base64:encode(term_to_binary(crypto:rand_bytes(10)))
+                             catch
+                                _:_ ->
+                                    base64:encode(term_to_binary(crypto:rand_bytes(10)))
+                             end,
+                         Doc#document{key = NewUUID};
+                     _ ->
+                         FileDoc0
+                 end,
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->

@@ -158,10 +158,10 @@ open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileUUID, flags = OpenType},
-        fun(#file_location{uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
+        fun(#file_location{provider_id = ProviderId, uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
             {ok, #document{value = Storage}} = storage:get(StorageId),
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}, fslogic_context:get_user_id(CTX)),
-            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
+            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->

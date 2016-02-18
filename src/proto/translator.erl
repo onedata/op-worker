@@ -128,9 +128,9 @@ translate_from_protobuf(#'ChangeMode'{uuid = UUID, mode = Mode}) ->
 translate_from_protobuf(#'Rename'{uuid = UUID, target_path = TargetPath}) ->
     #rename{uuid = UUID, target_path = TargetPath};
 translate_from_protobuf(#'GetNewFileLocation'{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = Flags}) ->
-    #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)};
+    #get_new_file_location{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = open_flags_translate_from_protobuf(Flags)};
 translate_from_protobuf(#'GetFileLocation'{uuid = UUID, flags = Flags}) ->
-    #get_file_location{uuid = UUID, flags = translate_open_flags(Flags)};
+    #get_file_location{uuid = UUID, flags = open_flags_translate_from_protobuf(Flags)};
 translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}) ->
     #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
@@ -207,7 +207,7 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
         blocks = lists:map(
             fun(Block) ->
                 translate_from_protobuf(Block)
-            end, Record#file_location.blocks)
+            end, Record#'FileLocation'.blocks)
     };
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'file_block'{offset = Off, size = S, file_id = FID, storage_id = SID};
@@ -239,7 +239,8 @@ translate_from_protobuf(#auth{macaroon = Val}) ->
     #'Token'{value = Val};
 translate_from_protobuf(#'GetParent'{uuid = UUID}) ->
     #'get_parent'{uuid = UUID};
-
+translate_from_protobuf(#'Dir'{uuid = UUID}) ->
+    #'dir'{uuid = UUID};
 
 
 
@@ -285,10 +286,11 @@ translate_to_protobuf(#handshake_response{session_id = Id}) ->
     }};
 translate_to_protobuf(#configuration{subscriptions = Subs}) ->
     {configuration, #'Configuration'{
-        subscriptions = lists:map(fun(Sub) ->
-            {_, Record} = translate_to_protobuf(Sub),
-            Record
-                                  end, Subs)
+        subscriptions = lists:map(
+            fun(Sub) ->
+                {_, Record} = translate_to_protobuf(Sub),
+                Record
+            end, Subs)
     }};
 translate_to_protobuf(#message_stream{stream_id = StmId, sequence_number = SeqNum}) ->
     #'MessageStream'{stream_id = StmId, sequence_number = SeqNum};
@@ -331,16 +333,14 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         size = FileAttr#file_attr.size
     }};
 translate_to_protobuf(#file_children{child_links = FileEntries}) ->
-    {file_children, #'FileChildren'{child_links = lists:map(
-        fun(ChildLink) ->
-            translate_to_protobuf(ChildLink)
-        end, FileEntries)}};
+    {file_children, #'FileChildren'{child_links = lists:map(fun(ChildLink) ->
+        translate_to_protobuf(ChildLink)
+    end, FileEntries)}};
 translate_to_protobuf(#helper_params{helper_name = HelperName, helper_args = HelpersArgs}) ->
     {helper_params, #'HelperParams'{helper_name = HelperName,
-        helper_args = lists:map(
-            fun(HelpersArg) ->
-                translate_to_protobuf(HelpersArg)
-            end, HelpersArgs)}};
+        helper_args = lists:map(fun(HelpersArg) ->
+            translate_to_protobuf(HelpersArg)
+        end, HelpersArgs)}};
 translate_to_protobuf(#helper_arg{key = Key, value = Value}) ->
     #'HelperArg'{key = Key, value = Value};
 translate_to_protobuf(#file_location{} = Record) ->
@@ -350,10 +350,9 @@ translate_to_protobuf(#file_location{} = Record) ->
         space_id = Record#file_location.space_id,
         storage_id = Record#file_location.storage_id,
         file_id = Record#file_location.file_id,
-        blocks = lists:map(
-            fun(Block) ->
-                translate_to_protobuf(Block)
-            end, Record#file_location.blocks)
+        blocks = lists:map(fun(Block) ->
+            translate_to_protobuf(Block)
+        end, Record#file_location.blocks)
     }};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
@@ -404,9 +403,9 @@ translate_to_protobuf(#change_mode{uuid = UUID, mode = Mode}) ->
 translate_to_protobuf(#rename{uuid = UUID, target_path = TargetPath}) ->
     {rename, #'Rename'{uuid = UUID, target_path = TargetPath}};
 translate_to_protobuf(#'get_new_file_location'{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = Flags}) ->
-    {get_new_file_location, #'GetNewFileLocation'{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = translate_open_flags(Flags)}};
+    {get_new_file_location, #'GetNewFileLocation'{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = open_flags_translate_to_protobuf(Flags)}};
 translate_to_protobuf(#get_file_location{uuid = UUID, flags = Flags}) ->
-    {get_file_location, #'GetFileLocation'{uuid = UUID, flags = translate_open_flags(Flags)}};
+    {get_file_location, #'GetFileLocation'{uuid = UUID, flags = open_flags_translate_to_protobuf(Flags)}};
 translate_to_protobuf(#get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP}) ->
     {get_helper_params, #'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}};
 translate_to_protobuf(#truncate{uuid = UUID, size = Size}) ->
@@ -461,23 +460,23 @@ translate_to_protobuf(undefined) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Translates open flags for get[_new]_file_location requests.
-%% @end
-%%--------------------------------------------------------------------
--spec translate_open_flags('READ_WRITE' | 'READ' | 'WRITE') -> fslogic_worker:open_flags().
-translate_open_flags('READ_WRITE') ->
-    rdwr;
-translate_open_flags('READ') ->
-    read;
-translate_open_flags('WRITE') ->
-    write;
-translate_open_flags(undefined) ->
-    rdwr;
-translate_open_flags(rdwr) ->
+-spec open_flags_translate_to_protobuf('READ_WRITE' | 'READ' | 'WRITE') -> fslogic_worker:open_flags().
+open_flags_translate_to_protobuf(undefined) ->
     'READ_WRITE';
-translate_open_flags(read) ->
+open_flags_translate_to_protobuf(rdwr) ->
+    'READ_WRITE';
+open_flags_translate_to_protobuf(read) ->
     'READ';
-translate_open_flags(write) ->
+open_flags_translate_to_protobuf(write) ->
     'WRITE'.
+
+
+-spec open_flags_translate_from_protobuf('READ_WRITE' | 'READ' | 'WRITE') -> fslogic_worker:open_flags().
+open_flags_translate_from_protobuf(undefined) ->
+    rdwr;
+open_flags_translate_from_protobuf('READ_WRITE') ->
+    rdwr;
+open_flags_translate_from_protobuf('READ') ->
+    read;
+open_flags_translate_from_protobuf('WRITE') ->
+    write.

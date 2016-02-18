@@ -59,17 +59,33 @@ get_default_space_id(UserId) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
 get_space(FileEntry, UserId) ->
     DefaultSpaceUUID = fslogic_uuid:default_space_uuid(UserId),
-    {ok, SpaceDoc} = case file_meta:get_scope(FileEntry) of
-        {ok, #document{key = DefaultSpaceUUID}} ->
-            get_default_space(UserId);
-        {ok, #document{} = Doc} ->
-            {ok, Doc}
+    SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+
+    SpaceId = case FileUUID of
+        <<"">> ->
+            throw({not_a_space, FileEntry});
+        SpacesDir ->
+            throw({not_a_space, FileEntry});
+        DefaultSpaceUUID ->
+            {ok, DefaultSpaceId} = get_default_space_id(UserId),
+            DefaultSpaceId;
+        _ ->
+            ?info("Decoding UUID ~p ~p", [FileUUID, FileEntry]),
+            BinFileUUID = base64:decode(FileUUID),
+            case binary_to_term(BinFileUUID) of
+                {space, SpaceId0} ->
+                    SpaceId0;
+                {{space_id, SpaceId0}, _FileUUID} ->
+                    SpaceId0
+            end
     end,
-    #document{key = SpaceUUID} = SpaceDoc,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+
     {ok, SpaceIds} = onedata_user:get_spaces(UserId),
     case (is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds)) orelse UserId == ?ROOT_USER_ID of
-        true -> {ok, SpaceDoc};
+        true ->
+            {ok, SpaceDoc} = file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+            {ok, SpaceDoc};
         false -> throw({not_a_space, FileEntry})
     end.
 

@@ -67,14 +67,15 @@ uuid_to_path(#fslogic_ctx{session = #session{identity = #identity{user_id = Uid}
 %%--------------------------------------------------------------------
 -spec spaceid_to_space_dir_uuid(SpaceId :: binary()) -> binary().
 spaceid_to_space_dir_uuid(SpaceId) ->
-    base64:encode(SpaceId).
+    base64:encode(term_to_binary({space, SpaceId})).
 
 %%--------------------------------------------------------------------
 %% @doc Convert file_meta uuid of space directory to SpaceId
 %%--------------------------------------------------------------------
 -spec space_dir_uuid_to_spaceid(SpaceUuid :: binary()) -> binary().
 space_dir_uuid_to_spaceid(SpaceUuid) ->
-    base64:decode(SpaceUuid).
+    {space, SpaceId} = binary_to_term(base64:decode(SpaceUuid)),
+    SpaceId.
 
 %%--------------------------------------------------------------------
 %% @doc Returns UUID of user's main 'spaces' directory.
