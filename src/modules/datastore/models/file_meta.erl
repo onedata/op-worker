@@ -445,14 +445,12 @@ resolve_path(Path) ->
 -spec resolve_path(Parent :: entry(), path()) -> {ok, {datastore:document(), [uuid()]}} | datastore:generic_error().
 resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
     ?run(begin
-             ?info("Resolve ~p ~p", [ParentEntry, Path]),
              {ok, #document{key = RootUUID} = Root} = get(ParentEntry),
              case fslogic_path:split(Path) of
                  [] ->
                      {ok, {Root, [RootUUID]}};
                  Tokens ->
-
-                     Res = case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
+                     case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
                          {ok, {Leaf, KeyPath}} ->
                              [_ | [RealParentUUID | _]] = lists:reverse([RootUUID | KeyPath]),
                              {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
@@ -466,9 +464,7 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                              {error, {not_found, ?MODEL_NAME}};
                          {error, Reason} ->
                              {error, Reason}
-                     end,
-                     ?info("WALK ~p ~p ~p", [Root, Tokens, Res]),
-                     Res
+                     end
              end
          end).
 

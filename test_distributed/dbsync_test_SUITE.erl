@@ -341,7 +341,7 @@ global_stream_with_proto_test(MultiConfig) ->
 
 
 gen_filename() ->
-    list_to_binary("dbsync_test_" ++ binary_to_list(base64:encode(crypto:rand_bytes(20))) -- [$/]).
+    generator:gen_name().
 
 
 %%%===================================================================
