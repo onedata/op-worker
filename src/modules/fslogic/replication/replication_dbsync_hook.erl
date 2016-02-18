@@ -117,10 +117,10 @@ reconcile_replicas(LocalDoc = #document{value = LocalLocation = #file_location{u
 %%--------------------------------------------------------------------
 -spec notify_block_change_if_necessary(file_location:doc(), file_location:doc()) -> ok.
 notify_block_change_if_necessary(#document{value = #file_location{blocks = SameBlocks}},
-    #document{value = #file_location{uuid = FileUuid, blocks = SameBlocks}}) ->
-    ok = fslogic_event:emit_file_location_update({uuid, FileUuid}, []);
-notify_block_change_if_necessary(_, _) ->
-    ok.
+    #document{value = #file_location{blocks = SameBlocks}}) ->
+    ok;
+notify_block_change_if_necessary(#document{value = #file_location{uuid = FileUuid}}, _) ->
+    ok = fslogic_event:emit_file_location_update({uuid, FileUuid}, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -129,7 +129,7 @@ notify_block_change_if_necessary(_, _) ->
 %%--------------------------------------------------------------------
 -spec notify_size_change_if_necessary(file_location:doc(), file_location:doc()) -> ok.
 notify_size_change_if_necessary(#document{value = #file_location{size = SameSize}},
-    #document{value = #file_location{uuid = FileUuid, size = SameSize}}) ->
-     ok = fslogic_event:emit_file_attr_update({uuid, FileUuid}, []);
-notify_size_change_if_necessary(_, _) ->
-    ok.
+        #document{value = #file_location{size = SameSize}}) ->
+    ok;
+notify_size_change_if_necessary(#document{value = #file_location{uuid = FileUuid}}, _) ->
+    ok = fslogic_event:emit_file_attr_update({uuid, FileUuid}, []).
