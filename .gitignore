@@ -3,6 +3,8 @@
 .eunit
 .dialyzer.plt
 .idea
+.rebar
+
 
 cluster_manager
 src/gui_static/common
@@ -17,11 +19,9 @@ src/gui_static/n2o
 *.o
 *.d
 
-cluster_manager
 rel/op_worker
 rel/test_cluster
 rel/*.rpm
-cluster_manager
 
 test/eunit_results
 test_distributed/cover_tmp.spec
