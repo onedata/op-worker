@@ -7,6 +7,7 @@ Brings up dockers with full onedata environment.
 """
 
 import os
+import sys
 import copy
 import json
 import collections
