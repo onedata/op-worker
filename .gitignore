@@ -3,7 +3,10 @@
 .eunit
 .dialyzer.plt
 .idea
+.rebar
 
+
+cluster_manager
 src/gui_static/common
 src/gui_static/flatui
 src/gui_static/fonts
@@ -11,23 +14,26 @@ src/gui_static/n2o
 
 *.iml
 *.sublime*
+*.beam
+*.pyc
+*.o
+rel/op_worker
+rel/test_cluster
+rel/*.rpm
 
-releases/oneprovider_node
-releases/test_cluster
-releases/*.rpm
-
-include/*_pb.hrl
 test/eunit_results
+test_distributed/cover_tmp.spec
+test_coverage
 
 deps
 doc
 logs
 ebin
-distributed_tests_out
+priv
 
 c_lib
-c_src/gpv_nif/*.o
 c_src/helpers_nif/*.o
+c_src/rt_container/*.o
 c_src/oneproxy/build/*
 
 docs/_build/

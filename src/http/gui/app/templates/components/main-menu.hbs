@@ -1,0 +1,16 @@
+<ul>
+  <div class="small-logo">
+    <img src="assets/images/logoshort.png" alt="Onedata" />
+  </div>
+  {{!-- TODO: mains is a bad name... --}}
+  {{#each mains as |mainPage|}}
+    <li>
+      <a id="main-{{mainPage.name}}" {{action 'activateItem' mainPage.name}}>
+        <figure>
+          {{icon mainPage.icon}}
+          <figcaption>{{mainPage.name}}</figcaption>
+        </figure>
+      </a>
+    </li>
+  {{/each}}
+</ul>

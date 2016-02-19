@@ -1,1 +1,0 @@
--workers w1@127.0.0.1 w2@127.0.0.1 -opt_ccms ccm2@127.0.0.1 ccm3@127.0.0.1 -main_ccm ccm1@127.0.0.1 -db_nodes db1@127.0.0.1 db2@127.0.0.1

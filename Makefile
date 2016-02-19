@@ -1,138 +1,186 @@
-BASHO_BENCH_DIR = "deps/basho_bench"
-STRESS_TESTS_SRC_DIR = "stress_test"
-DIST_TESTS_SRC_DIR = "test_distributed"
+REPO	        ?= op-worker
 
-.PHONY: releases deps test docs
+# distro for package building (oneof: wily, fedora-23-x86_64)
+DISTRIBUTION    ?= none
+export DISTRIBUTION
 
-all: generate docs
+PKG_REVISION    ?= $(shell git describe --tags --always)
+PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
+PKG_ID           = op-worker-$(PKG_VERSION)
+PKG_BUILD        = 1
+BASE_DIR         = $(shell pwd)
+ERLANG_BIN       = $(shell dirname $(shell which erl))
+REBAR           ?= $(BASE_DIR)/rebar
+PKG_VARS_CONFIG  = pkg.vars.config
+OVERLAY_VARS    ?=
 
+GIT_URL := $(shell git config --get remote.origin.url | sed -e 's/\(\/[^/]*\)$$//g')
+GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgrid.pl:7999/vfs'; else echo ${GIT_URL}; fi)
+ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
+export ONEDATA_GIT_URL
+
+.PHONY: deps package test test_gui
+
+all: test_rel
+
+##
+## Rebar targets
+##
+
+recompile:
+	./rebar compile skip_deps=true
+
+##
+## If performance is compiled in cluster_worker ten annotations do not work.
+## Make sure they are not included in cluster_worker build.
+## todo: find better solution
+##
 compile:
-	-@if [ -f ebin/.test ]; then rm -rf ebin; fi 
-	cp -R clproto/proto src
+	sed -i "s/ \"deps\/ctool\/annotations\/performance\.erl\"/%%\"deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
+	rm deps/cluster_worker/ebin/performance.beam || true
 	./rebar compile
-	rm -rf src/proto
+	sed -i "s/%%\"deps\/ctool\/annotations\/performance\.erl\"/ \"deps\/ctool\/annotations\/performance\.erl\"/" deps/cluster_worker/rebar.config
 
 deps:
 	./rebar get-deps
-#	./rebar update-deps
-	git submodule init
-	git submodule update
 
-clean:
-	make -C docs clean
+gui_dev:
+	./deps/gui/build_gui.sh dev
+
+gui_prod:
+	./deps/gui/build_gui.sh prod
+
+gui_doc:
+	jsdoc -c src/http/gui/.jsdoc.conf src/http/gui/app
+
+gui_clean:
+	cd src/http/gui && rm -rf node_modules bower_components dist tmp
+
+##
+## Reltool configs introduce dependency on deps directories (which do not exist)
+## Also a release is not nescesary for us.
+## We prevent reltool from creating a release.
+## todo: find better solution
+##
+## Generates a dev release
+generate_dev: deps compile gui_dev
+	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
+	# Move gui tmp dir away from sources, so as to prevent
+	# rebar from entering it during spec generation and crashing
+	mv src/http/gui/tmp /tmp/gui_tmp
+	./rebar generate $(OVERLAY_VARS)
+	# Bring back the tmp dir to its normal location
+	mv /tmp/gui_tmp src/http/gui/tmp
+	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
+
+## Generates a production release
+generate: deps compile gui_prod
+	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
+	# Move gui tmp dir away from sources, so as to prevent
+	# rebar from entering it during spec generation and crashing
+	mv src/http/gui/tmp /tmp/gui_tmp
+	./rebar generate $(OVERLAY_VARS)
+	# Bring back the tmp dir to its normal location
+	mv /tmp/gui_tmp src/http/gui/tmp
+	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
+
+clean: relclean pkgclean gui_clean
 	./rebar clean
 
-distclean: clean
+distclean:
 	./rebar delete-deps
 
+##
+## Release targets
+##
 
-eunit: deps compile
-	./rebar eunit skip_deps=true
+rel: generate
+
+test_rel: generate_dev cm_rel appmock_rel
+
+cm_rel:
+	ln -sf deps/cluster_worker/cluster_manager/
+	make -C cluster_manager/ rel
+
+appmock_rel:
+	make -C appmock/ rel
+
+relclean:
+	rm -rf rel/test_cluster
+	rm -rf rel/op_worker
+	rm -rf appmock/rel/appmock
+	rm -rf cluster_manager/rel/cluster_manager
+
+##
+## Testing targets
+##
+
+eunit:
+	./rebar eunit skip_deps=true suites=${SUITES}
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
-ct: deps compile
-	-@if [ ! -f ebin/.test ]; then rm -rf ebin; fi
-	-@mkdir -p ebin ; touch ebin/.test 
-	 cp -R clproto/proto src
-	./rebar -D TEST compile
-	rm -rf src/proto
-#	./rebar ct skip_deps=true
-	chmod +x test_distributed/start_distributed_test.sh
-	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
-## Remove *_per_suite result from CT test results
-	@for tout in `find distributed_tests_out -name "TEST-*.xml"`; do awk '/testcase/{gsub("<testcase name=\"[a-z]+_per_suite\"(([^/>]*/>)|([^>]*>[^<]*</testcase>))", "")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
+test_gui:
+	cd test_gui && ember test
 
-test: eunit ct
+coverage:
+	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR)
 
+##
+## Dialyzer targets local
+##
 
-generate: deps compile
-	./rebar generate
-	chmod u+x ./releases/oneprovider_node/bin/oneprovider
-	chmod u+x ./releases/oneprovider_node/bin/oneprovider_node
+PLT ?= .dialyzer.plt
 
-docs: deps
-	make -C docs html
-	./rebar doc skip_deps=true
-
-pdf: deps
-	make -C docs latexpdf
-
-upgrade:
-	./rebar generate-appups previous_release=${PREV}
-	./rebar generate-upgrade previous_release=${PREV}
-
-rpm: deps generate
-	make -C onepanel rel CONFIG=config/oneprovider.config
-	./releases/rpm_files/create_rpm
-
-deb: deps generate
-	make -C onepanel rel CONFIG=config/oneprovider.config
-	./releases/rpm_files/create_deb
-
-# Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead
-.dialyzer.plt:
-	-dialyzer --build_plt --output_plt .dialyzer.plt --apps kernel stdlib sasl erts ssl tools runtime_tools crypto inets xmerl snmp public_key eunit syntax_tools compiler ./deps/*/ebin
+# Builds dialyzer's Persistent Lookup Table file.
+.PHONY: plt
+plt:
+	dialyzer --check_plt --plt ${PLT}; \
+	if [ $$? != 0 ]; then \
+	    dialyzer --build_plt --output_plt ${PLT} --apps kernel stdlib sasl erts \
+		ssl tools runtime_tools crypto inets xmerl snmp public_key eunit \
+		mnesia edoc common_test test_server syntax_tools compiler ./deps/*/ebin; \
+	fi; exit 0
 
 
-# Starts dialyzer on whole ./ebin dir. If .dialyzer.plt does not exist, will be generated
-dialyzer: compile .dialyzer.plt
-	-dialyzer ./ebin --plt .dialyzer.plt -Werror_handling -Wrace_conditions
+# Dialyzes the project.
+dialyzer: plt
+	dialyzer ./ebin --plt ${PLT} -Werror_handling -Wrace_conditions --fullpath
 
+##
+## Packaging targets
+##
 
-# Starts full initialization of .dialyzer.plt that is required by dialyzer
-dialyzer_init: compile .dialyzer.plt
+export PKG_VERSION PKG_ID PKG_BUILD BASE_DIR ERLANG_BIN REBAR OVERLAY_VARS RELEASE PKG_VARS_CONFIG
 
+check_distribution:
+ifeq ($(DISTRIBUTION), none)
+	@echo "Please provide package distribution. Oneof: 'wily', 'fedora-23-x86_64'"
+	@exit 1
+else
+	@echo "Building package for distribution $(DISTRIBUTION)"
+endif
 
-##############################
-## TARGETS USED FOR TESTING ##
-##############################
+package/$(PKG_ID).tar.gz: deps
+	mkdir -p package
+	rm -rf package/$(PKG_ID)
+	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION) | (cd package && tar -xf -)
+	${MAKE} -C package/$(PKG_ID) deps
+	for dep in package/$(PKG_ID) package/$(PKG_ID)/deps/*; do \
+	     echo "Processing dependency: `basename $${dep}`"; \
+	     vsn=`git --git-dir=$${dep}/.git describe --tags 2>/dev/null`; \
+	     mkdir -p $${dep}/priv; \
+	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
+	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
+	done
+	find package/$(PKG_ID) -depth -name ".git" -not -path '*/cluster_worker/*' -exec rm -rf {} \;
+	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
 
-### Single node test
-gen_test_node:
-	./gen_dev $(args)
+dist: package/$(PKG_ID).tar.gz
+	cp package/$(PKG_ID).tar.gz .
 
-gen_test_node_from_file:
-	./gen_dev
+package: check_distribution package/$(PKG_ID).tar.gz
+	${MAKE} -C package -f $(PWD)/deps/node_package/Makefile
 
-### Test environment
-gen_test_env:
-	./gen_test $(args)
-
-gen_test_env_from_file:
-	./gen_test
-
-gen_start_test_env:
-	./gen_test $(args) -start
-
-gen_start_test_env_from_file:
-	./gen_test -start
-
-start_test_env:
-	./gen_test $(args) -start_no_generate
-
-start_test_env_from_file:
-	./gen_test -start_no_generate
-
-### Starting a node
-start_node:
-	./releases/test_cluster/$(node)/bin/oneprovider_node start
-
-attach_to_node:
-	./releases/test_cluster/$(node)/bin/oneprovider_node attach
-
-start_node_console:
-	./releases/test_cluster/$(node)/bin/oneprovider_node console
-
-### Basho-Bench build (used by CI)
-basho_bench: deps 
-	@cp -R clproto/proto ${BASHO_BENCH_DIR}/src
-	cp ${STRESS_TESTS_SRC_DIR}/**/*.erl ${BASHO_BENCH_DIR}/src
-	cp ${DIST_TESTS_SRC_DIR}/wss.erl ${BASHO_BENCH_DIR}/src
-	@mkdir -p ${BASHO_BENCH_DIR}/tests
-	@mkdir -p ${BASHO_BENCH_DIR}/ebin
-	@cp ${STRESS_TESTS_SRC_DIR}/**/*.config ${BASHO_BENCH_DIR}/tests
-	@cp -R include/* ${BASHO_BENCH_DIR}/include
-	cd ${BASHO_BENCH_DIR} && make all
-	@cp ${STRESS_TESTS_SRC_DIR}/*.escript ${BASHO_BENCH_DIR}/
-	@cp ${STRESS_TESTS_SRC_DIR}/*.py ${BASHO_BENCH_DIR}/
+pkgclean:
+	rm -rf package

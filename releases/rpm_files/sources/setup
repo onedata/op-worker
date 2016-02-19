@@ -1,5 +1,0 @@
-#!/bin/bash
-
-/opt/oneprovider/scripts/erl_launcher escript /opt/oneprovider/scripts/setup.escript $@
-
-
