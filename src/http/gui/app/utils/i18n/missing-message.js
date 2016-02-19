@@ -8,11 +8,6 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
  */
 
-export default function(i18n, locale, key, context) {
-  if (locale !== 'en') {
-    return 'fallback';
-    // ENV.i18n.fallbackLocale
-  } else {
-    return '<missing translation>';
-  }
+export default function(/*locale, key, context*/) {
+  return '<missing translation>';
 }
