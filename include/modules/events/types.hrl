@@ -35,7 +35,7 @@
 %% blocks    - list of offset, size pairs that describes bytes segments read
 -record(read_event, {
     file_uuid :: file_meta:uuid(),
-    size :: file_meta:size(),
+    size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
@@ -53,7 +53,7 @@
 -record(write_event, {
     file_uuid :: file_meta:uuid(),
     file_size :: file_meta:size(),
-    size :: file_meta:size(),
+    size = 0 :: file_meta:size(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 

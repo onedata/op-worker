@@ -18,6 +18,7 @@
 -behaviour(gen_server).
 
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -125,10 +126,40 @@ handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
 
 handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms} = State) ->
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
-    {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
-        gen_server:cast(EvtStm, Evt),
-        EvtStm
-    end, EvtStms)}};
+    HandleLocally = fun() ->
+        {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
+            gen_server:cast(EvtStm, Evt),
+            EvtStm
+        end, EvtStms)}}
+    end,
+
+    {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc},
+        identity = #identity{user_id = UserId}}}} = session:get(SessId),
+
+    case {event_to_file_entry(Evt), UserId} of
+        {_, undefined} ->
+            HandleLocally();
+        {{file, Entry}, _} ->
+            SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+            case file_meta:to_uuid(Entry) of
+                {ok, SpacesDir} ->
+                    HandleLocally();
+                _ ->
+                    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
+                    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+                    {ok, ProviderIds} = gr_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                    case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                        {_, true} ->
+                            HandleLocally();
+                        {[H | _], false} ->
+                            provider_communicator:send(#events{events = [Evt]}, session_manager:get_provider_session_id(outgoing, H));
+                        {[], _} ->
+                            throw(unsupported_space)
+                    end
+            end;
+        _ ->
+            HandleLocally()
+    end;
 
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms} = State) ->
@@ -215,3 +246,10 @@ start_event_streams(EvtStmSup, SessId) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
         maps:put(SubId, EvtStm, Stms)
     end, #{}, Docs).
+
+event_to_file_entry(#event{object = #write_event{}, key = FileUUID}) ->
+    {file, {uuid, FileUUID}};
+event_to_file_entry(#event{object = #read_event{}, key = FileUUID}) ->
+    {file, {uuid, FileUUID}};
+event_to_file_entry(#event{}) ->
+    not_file_context.

@@ -158,14 +158,14 @@ open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
     {uuid, FileUUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileUUID, flags = OpenType},
-        fun(#file_location{provider_id = ProviderId, uuid = _UUID, file_id = FileId, storage_id = StorageId}) ->
-            {ok, #document{value = Storage}} = storage:get(StorageId),
+        fun(#file_location{provider_id = ProviderId, uuid = _UUID, file_id = FileId, storage_id = StorageId} = Location) ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}, fslogic_context:get_user_id(CTX)),
             SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
-                    {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, NewSFMHandle}}]),
+                    {ok, #lfm_handle{initial_location = Location, provider_id = ProviderId,
+                        sfm_handles = maps:from_list([{default, {{StorageId, FileId}, NewSFMHandle}}]),
                         fslogic_ctx = CTX, file_uuid = _UUID, open_mode = OpenType}};
                 {error, Reason} ->
                     {error, Reason}
@@ -302,9 +302,15 @@ get_block_map(SessId, FileKey) ->
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_key(file_meta:uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     {default | {storage:id(), helpers:file()}, non_neg_integer()}.
-get_sfm_handle_key(UUID, Offset, Size) ->
-    #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, UUID}),
-    #file_location{blocks = Blocks} = LocalLocation,
+get_sfm_handle_key(#lfm_handle{file_uuid = UUID, initial_location = #file_location{blocks = InitBlocks}}, Offset, Size) ->
+    Blocks = try
+        #document{value = LocalLocation} = fslogic_utils:get_local_file_location({uuid, UUID}),
+        #file_location{blocks = Blocks0} = LocalLocation,
+        Blocks0
+    catch
+        _:_ ->
+            InitBlocks
+    end,
     get_sfm_handle_key(UUID, Offset, Size, Blocks).
 
 
@@ -339,15 +345,15 @@ get_sfm_handle_key(_UUID, _Offset, Size, []) ->
     {{StorageId :: storage:id(), FileId :: file_meta:uuid()},
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: logical_file_manager:handle()} |  no_return().
-get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #fslogic_ctx{session_id = SessId} = CTX} = Handle,
+get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_uuid = FileUUID,
+    fslogic_ctx = #fslogic_ctx{session_id = SessId} = CTX} = Handle,
     Key, SFMHandles, OpenType) ->
     {{StorageId, FileId}, SFMHandle} =
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
                 {SID, FID} = Key,
-                {ok, #document{value = Storage}} = storage:get(SID),
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}, fslogic_context:get_user_id(CTX)),
-                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FID),
+                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ProviderId),
 
                 case storage_file_manager:open(SFMHandle0, OpenType) of
                     {ok, NewSFMHandle} ->
@@ -371,7 +377,7 @@ get_sfm_handle_n_update_handle(#lfm_handle{file_uuid = FileUUID, fslogic_ctx = #
     {ok, logical_file_manager:handle(), non_neg_integer()} | logical_file_manager:error_reply().
 write_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer) ->
-    {Key, NewSize} = get_sfm_handle_key(UUID, Offset, byte_size(Buffer)),
+    {Key, NewSize} = get_sfm_handle_key(Handle, Offset, byte_size(Buffer)),
     {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
@@ -396,7 +402,7 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize) ->
-    {Key, NewSize} = get_sfm_handle_key(UUID, Offset, MaxSize),
+    {Key, NewSize} = get_sfm_handle_key(Handle, Offset, MaxSize),
     {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of

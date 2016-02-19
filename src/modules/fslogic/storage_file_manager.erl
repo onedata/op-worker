@@ -64,6 +64,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
         _ ->
             {false, undefined}
     end,
+    ?info("New handle: ~p ~p", [FileUUID, IsLocal]),
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,
@@ -71,7 +72,8 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
         file = FileId,
         provider_id = ProviderId,
         is_local = IsLocal,
-        storage = Storage
+        storage = Storage,
+        storage_id = StorageId
     }.
 
 %%--------------------------------------------------------------------
@@ -83,12 +85,14 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec open(handle(), OpenMode :: helpers:open_mode()) ->
     {ok, handle()} | logical_file_manager:error_reply().
-open(SFMHandle, read) ->
+open(#sfm_handle{is_local = true} = SFMHandle, read) ->
     open_for_read(SFMHandle);
-open(SFMHandle, write) ->
+open(#sfm_handle{is_local = true} = SFMHandle, write) ->
     open_for_write(SFMHandle);
-open(SFMHandle, rdwr) ->
-    open_for_rdwr(SFMHandle).
+open(#sfm_handle{is_local = true} = SFMHandle, rdwr) ->
+    open_for_rdwr(SFMHandle);
+open(#sfm_handle{is_local = false} = SFMHandle, _) ->
+    {ok, SFMHandle}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -211,15 +215,15 @@ write(#sfm_handle{is_local = true, open_mode = read}, _, _) -> throw(?EPERM);
 write(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
     helpers:write(HelperHandle, File, Offset, Buffer);
 
-write(#sfm_handle{is_local = false, session_id = SessionId, file = FileUuid, storage_id = SID, file = FID}, Offset, Data) ->
+write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUuid, storage_id = SID, file = FID}, Offset, Data) ->
     ProxyIORequest = #proxyio_request{
         file_uuid = FileUuid, storage_id = SID, file_id = FID,
         proxyio_request = #remote_write{offset = Offset, data = Data}},
-
+    ?info("remote_write: ~p ~p", [FileUuid, SessionId]),
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
         #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_write_result{wrote = Wrote}} ->
             {ok, Wrote};
-        {#proxyio_response{status = #status{code = Code}}} ->
+        #proxyio_response{status = #status{code = Code}} ->
             {error, Code}
     end.
 
@@ -237,15 +241,15 @@ read(#sfm_handle{is_local = true, open_mode = write}, _, _) -> throw(?EPERM);
 read(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
     helpers:read(HelperHandle, File, Offset, MaxSize);
 
-read(#sfm_handle{is_local = false, session_id = SessionId, file = FileUuid, storage_id = SID, file = FID}, Offset, Size) ->
+read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUuid, storage_id = SID, file = FID}, Offset, Size) ->
     ProxyIORequest = #proxyio_request{
         file_uuid = FileUuid, storage_id = SID, file_id = FID,
         proxyio_request = #remote_read{offset = Offset, size = Size}},
-
+    ?info("remote_read: ~p ~p", [FileUuid, SessionId]),
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
         #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}} ->
             {ok, Data};
-        {#proxyio_response{status = #status{code = Code}}} ->
+        #proxyio_response{status = #status{code = Code}} ->
             {error, Code}
     end.
 
@@ -362,6 +366,4 @@ open_impl(#sfm_handle{is_local = true, storage = Storage, file = FileId, session
             {ok, SFMHandle#sfm_handle{helper_handle = HelperHandle, open_mode = OpenMode}};
         {error, Reason} ->
             {error, Reason}
-    end;
-open_impl(#sfm_handle{is_local = false} = SFMHandle, _OpenMode) ->
-    {ok, SFMHandle}.
+    end.
