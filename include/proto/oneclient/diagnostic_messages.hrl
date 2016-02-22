@@ -15,11 +15,11 @@
 
 -include("modules/events/subscriptions.hrl").
 
--record(ping,{
+-record(ping, {
     data :: binary()
 }).
 
--record(pong,{
+-record(pong, {
     data :: binary()
 }).
 
