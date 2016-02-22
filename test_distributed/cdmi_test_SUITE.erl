@@ -1549,7 +1549,7 @@ accept_header_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->

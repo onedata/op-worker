@@ -1016,7 +1016,7 @@ acl_write_acl_group_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
@@ -1024,7 +1024,8 @@ end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
+    ConfigWithSessionInfo =
+        (Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->
