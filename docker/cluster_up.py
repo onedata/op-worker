@@ -37,7 +37,7 @@ parser.add_argument(
 
 # Prepare config
 args = parser.parse_args()
-config = common.parse_json_file(args.config_path)
+config = common.parse_json_config_file(args.config_path)
 output = {
     'cluster_manager_nodes': [],
     'cluster_worker_nodes': [],
