@@ -21,7 +21,7 @@
 -export([send_batch/3, changes_request/3, status_report/3]).
 
 -export([send_tree_broadcast/4, send_tree_broadcast/5, send_direct_message/3]).
--export([handle/2]).
+-export([handle/2, handle_impl/2]).
 -export([reemit/1]).
 
 %%%==================================================================
@@ -86,7 +86,7 @@ status_report(SpaceId, Providers, CurrentSeq) ->
     ok | {error, Reason :: any()}.
 send_direct_message(ProviderId, Request, Attempts) when Attempts > 0 ->
     PushTo = ProviderId,
-    case communicate(PushTo, Request) of
+    case dbsync_utils:communicate(PushTo, Request) of
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send direct message to ~p due to: ~p", [ProviderId, Reason]),
@@ -135,11 +135,11 @@ do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{depth = Depth} = BaseR
     REdge = lists:last(SyncWith),
     SyncRequest = BaseRequest#tree_broadcast{l_edge = LEdge, r_edge = REdge, depth = Depth + 1},
 
-    case communicate(PushTo, SyncRequest) of
+    case dbsync_utils:communicate(PushTo, SyncRequest) of
         {ok, _} -> ok;
         {error, Reason} ->
             ?error("Unable to send tree message to ~p due to: ~p", [PushTo, Reason]),
-            do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{} = BaseRequest, Attempts)
+            do_emit_tree_broadcast(SyncWith, Request, #tree_broadcast{} = BaseRequest, Attempts - 1)
     end;
 do_emit_tree_broadcast(_SyncWith, _Request, _BaseRequest, 0) ->
     {error, unable_to_connect}.
@@ -158,12 +158,12 @@ do_emit_tree_broadcast(_SyncWith, _Request, _BaseRequest, 0) ->
 -spec reemit(#tree_broadcast{}) ->
     ok | no_return().
 reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, message_body = Request} = BaseRequest) ->
-    Providers = dbsync_utils:get_providers_for_space(SpaceId),
-    Providers1 = lists:usort(Providers),
-    Providers2 = lists:dropwhile(fun(Elem) -> Elem =/= LEdge end, Providers1),
-    Providers3 = lists:takewhile(fun(Elem) -> Elem =/= REdge end, Providers2),
-    Providers4 = lists:usort([REdge | Providers3]),
-    ok = send_tree_broadcast(SpaceId, Providers4, Request, BaseRequest, 3).
+    AllProviders = dbsync_utils:get_providers_for_space(SpaceId),
+    SortedProviders = lists:usort(AllProviders),
+    WOLeftEdge = lists:dropwhile(fun(Elem) -> Elem =/= LEdge end, SortedProviders),
+    UpToRightEdge = lists:takewhile(fun(Elem) -> Elem =/= REdge end, WOLeftEdge),
+    ProvidersToSync = lists:usort([REdge | UpToRightEdge]),
+    ok = send_tree_broadcast(SpaceId, ProvidersToSync, Request, BaseRequest, 3).
 
 
 %%--------------------------------------------------------------------
@@ -174,7 +174,7 @@ reemit(#tree_broadcast{l_edge = LEdge, r_edge = REdge, space_id = SpaceId, messa
 -spec handle(SessId :: session:id(), #dbsync_request{}) ->
     #status{}.
 handle(SessId, #dbsync_request{message_body = MessageBody}) ->
-    ?debug("DBSync request from  ~p", [SessId]),
+    ?debug("DBSync request from ~p ~p", [SessId, MessageBody]),
     {ok, #document{value = #session{identity = #identity{provider_id = ProviderId}}}} = session:get(SessId),
     try handle_impl(ProviderId, MessageBody) of
         ok ->
@@ -197,11 +197,13 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
     Ignore =
         case worker_host:state_get(dbsync_worker, {request, ReqId}) of
             undefined ->
-                worker_host:state_put(dbsync_worker, {request, ReqId}, utils:mtime()),
+                worker_host:state_put(dbsync_worker, {request, ReqId}, erlang:system_time()),
                 false;
             _MTime ->
                 true
         end,
+
+    ?debug("DBSync request (ignored: ~p) from ~p ~p", [Ignore, From, BaseRequest]),
 
     case Ignore of
         false ->
@@ -211,12 +213,12 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
                     case worker_proxy:cast(dbsync_worker, {reemit, BaseRequest}) of
                         ok -> ok;
                         {error, Reason} ->
-                            ?debug("Cannot reemit tree broadcast due to: ~p", [Reason]),
+                            ?error("Cannot reemit tree broadcast due to: ~p", [Reason]),
                             {error, Reason}
                     end
             catch
                 _:Reason ->
-                    ?debug("Error while handling tree broadcast: ~p", [Reason]),
+                    ?error("Error while handling tree broadcast: ~p", [Reason]),
                     {error, Reason}
             end;
         true -> ok
@@ -257,14 +259,3 @@ handle_broadcast(_From, #status_request{} = _Request, _BaseRequest) ->
 %%--------------------------------------------------------------------
 %% Misc
 %%--------------------------------------------------------------------
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Send given protocol record to given provider asynchronously.
-%% @end
-%%--------------------------------------------------------------------
--spec communicate(oneprovider:id(), Message :: #tree_broadcast{} | #changes_request{} | #status_request{}) ->
-    {ok, MsgId :: term()} | {error, Reason :: term()}.
-communicate(ProviderId, Message) ->
-    SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId).

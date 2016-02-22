@@ -192,8 +192,6 @@ session_manager_session_removal_test(Config) ->
     utils:pforeach(fun({SessId, Node, Pids, Worker}) ->
         ?assertEqual(ok, rpc:call(Worker, session_manager,
             remove_session, [SessId])),
-        ?assertMatch({error, _}, rpc:call(Worker, session_manager,
-            remove_session, [SessId])),
 
         % Check whether session has been removed from cache.
         ?assertMatch({error, {not_found, _}}, rpc:call(Worker,

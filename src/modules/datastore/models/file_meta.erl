@@ -130,6 +130,7 @@ create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
     ?run(begin
+             ?info("CREATE FILE ~p", [FileName]),
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->
@@ -187,20 +188,31 @@ fix_parent_links(Parent, Entry) ->
 %% {@link model_behaviour} callback get/1.
 %% @end
 %%--------------------------------------------------------------------
+get(Arg) ->
+    case get1(Arg) of
+        {error, {not_found, _}} = N when is_binary(Arg) ->
+            ?warning("NOT FOUND ~p ~p", [Arg, Arg]),
+            N;
+        {error, {not_found, _}} = N ->
+            ?warning("NOT FOUND ~p ~p", [Arg, to_uuid(Arg)]),
+            N;
+        R -> R
+    end.
+
 -spec get(uuid() | entry()) -> {ok, datastore:document()} | datastore:get_error().
-get({uuid, Key}) ->
+get1({uuid, Key}) ->
     get(Key);
-get(#document{value = #file_meta{}} = Document) ->
+get1(#document{value = #file_meta{}} = Document) ->
     {ok, Document};
-get({path, Path}) ->
+get1({path, Path}) ->
     ?run(begin
              {ok, {Doc, _}} = resolve_path(Path),
              {ok, Doc}
          end);
-get(?ROOT_DIR_UUID) ->
+get1(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
     #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, uid = ?ROOT_USER_ID}}};
-get(Key) ->
+get1(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
 %%--------------------------------------------------------------------
@@ -506,7 +518,7 @@ setup_onedata_user(UUID) ->
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
             onedata_user:get(UUID),
 
-        CTime = utils:time(),
+        CTime = erlang:system_time(seconds),
 
         {ok, SpacesRootUUID} =
             case get({path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])}) of

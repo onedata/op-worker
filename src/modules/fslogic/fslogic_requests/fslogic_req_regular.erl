@@ -58,6 +58,16 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
             ok
     end,
 
+    CurrTime = erlang:system_time(seconds),
+    #document{value = FileMeta} = FileDoc,
+    {ok, _} = file_meta:update(FileDoc, #{mtime => CurrTime, ctime => CurrTime}),
+
+    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+        FileDoc#document{value = FileMeta#file_meta{
+            mtime = CurrTime, ctime = CurrTime
+        }}
+    ) end),
+
     #fuse_response{status = #status{code = ?OK}}.
 
 
@@ -133,7 +143,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         end,
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
-    CTime = utils:time(),
+    CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
         type = ?REGULAR_FILE_TYPE,
@@ -147,6 +157,17 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
     {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
     {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
+
+    {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
+    CurrTime = erlang:system_time(seconds),
+    #document{value = ParentMeta} = ParentDoc,
+    {ok, _} = file_meta:update(ParentDoc, #{mtime => CurrTime, ctime => CurrTime}),
+
+    spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+        ParentDoc#document{value = ParentMeta#file_meta{
+            mtime = CurrTime, ctime = CurrTime}
+        }
+    ) end),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
