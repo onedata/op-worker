@@ -9,10 +9,8 @@ to start.
 
 import copy
 import os
-import sys
-import subprocess
 
-from . import common, docker, dns, globalregistry, worker
+from . import common, docker, dns, worker
 
 
 def client_hostname(node_name, uid):
@@ -34,8 +32,9 @@ def _tweak_config(config, os_config, name, uid):
     for cl in clients:
         client = clients[cl]
         client_config = {'name': client['name'],
-                         'op_domain': worker.cluster_domain(client['op_domain'], uid),
-                         'gr_domain': globalregistry.gr_domain(client['gr_domain'], uid),
+                         'op_domain': worker.cluster_domain(client['op_domain'],
+                                                            uid),
+                         'oz_domain': worker.cluster_domain(client['oz_domain'], uid),
                          'user_key': client['user_key'],
                          'user_cert': client['user_cert'],
                          'mounting_path': client['mounting_path'],
@@ -70,7 +69,7 @@ mkdir /tmp/keys
         client_name = client["name"]
         client_data[client_name] = {'client_name': client_name,
                                     'op_domain': client['op_domain'],
-                                    'gr_domain': client['gr_domain'],
+                                    'oz_domain': client['oz_domain'],
                                     'mounting_path': client['mounting_path'],
                                     'token_for': client['token_for']}
         # cert_file_path and key_file_path can both be an absolute path
@@ -94,8 +93,11 @@ EOF
             cert_file=open(cert_file_path, 'r').read(),
             key_file=open(key_file_path, 'r').read())
 
-        client_data[client_name]['user_cert'] = os.path.join('/tmp', 'certs', client_name, 'cert')
-        client_data[client_name]['user_key'] = os.path.join('/tmp', 'keys', client_name, 'key')
+        client_data[client_name]['user_cert'] = os.path.join('/tmp', 'certs',
+                                                             client_name,
+                                                             'cert')
+        client_data[client_name]['user_key'] = os.path.join('/tmp', 'keys',
+                                                            client_name, 'key')
 
     command += '''bash'''
 
@@ -119,7 +121,8 @@ EOF
     common.create_users(container, os_config['users'])
     common.create_groups(container, os_config['groups'])
 
-    return {'docker_ids': [container], 'client_nodes': [hostname], 'client_data': {shortname: client_data}}
+    return {'docker_ids': [container], 'client_nodes': [hostname],
+            'client_data': {shortname: client_data}}
 
 
 def up(image, bindir, dns_server, uid, config_path):
