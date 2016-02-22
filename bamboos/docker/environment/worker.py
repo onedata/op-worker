@@ -79,7 +79,7 @@ cat <<"EOF" > /root/bin/node/data/dns.config
 EOF
 /root/bin/node/bin/{executable} console >> {logfile}'''
     pre_start_commands = configurator.pre_start_commands(bindir, config,
-                                                         domain, worker_ips)
+                                                           domain, worker_ips)
 
     command = command.format(
         gen_dev_args=json.dumps({configurator.app_name(): gen_dev_args}),
