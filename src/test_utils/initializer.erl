@@ -18,13 +18,15 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include("proto/oneclient/message_id.hrl").
+-include("proto/oneclient/client_messages.hrl").
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
-    communicator_mock/1, communicator_mock/2]).
+    communicator_mock/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -37,9 +39,6 @@
 %%--------------------------------------------------------------------
 -spec create_test_users_and_spaces(Config :: list()) -> list().
 create_test_users_and_spaces(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_node_starter:load_modules(Workers, [?MODULE]),
-
     DomainWorkers = get_different_domain_workers(Config),
     create_test_users_and_spaces(DomainWorkers, Config).
 
@@ -236,16 +235,9 @@ space_storage_mock(Workers, StorageId) ->
 %%--------------------------------------------------------------------
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
-    communicator_mock(Workers, fun(_, _) -> ok end).
-
-%%--------------------------------------------------------------------
-%% @doc Mocks communicator module, so that it calls provided function.
-%%--------------------------------------------------------------------
--spec communicator_mock(Workers :: node() | [node()],
-    SendFun :: fun((Msg :: term(), Ref :: connection:ref()) -> ok)) -> ok.
-communicator_mock(Workers, SendFun) ->
     test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, SendFun).
+    test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
+    test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
 
 %%%===================================================================
 %%% Internal functions
