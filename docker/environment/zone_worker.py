@@ -12,13 +12,14 @@ from . import worker, common
 DOCKER_BINDIR_PATH = '/root/build'
 
 
-def up(image, bindir, dns_server, uid, config_path, logdir=None, dnsconfig_path=None):
+def up(image, bindir, dns_server, uid, config_path, logdir=None,
+       dnsconfig_path=None):
     if dnsconfig_path is None:
         config = common.parse_json_config_file(config_path)
         input_dir = config['dirs_config']['oz_worker']['input_dir']
 
-        # todo: fix as it does not work with env up
-        dnsconfig_path = os.path.join(os.path.abspath(bindir), input_dir, 'data', 'dns.config')
+        dnsconfig_path = os.path.join(os.path.abspath(bindir), input_dir,
+                                      'data', 'dns.config')
 
     return worker.up(image, bindir, dns_server, uid, config_path,
                      OZWorkerConfigurator(dnsconfig_path), logdir)
@@ -34,10 +35,11 @@ class OZWorkerConfigurator:
             sys_config['http_domain'] = {'string': domain}
         return cfg
 
-    def configure_started_instance(self, bindir, instance, config, container_ids, output):
+    def configure_started_instance(self, bindir, instance, config,
+                                   container_ids, output):
         pass
 
-    def additional_commands(self, bindir, config, domain, worker_ips):
+    def pre_start_commands(self, bindir, config, domain, worker_ips):
         dnsconfig_path = self.dnsconfig_path
         dns_config = open(dnsconfig_path).read()
 

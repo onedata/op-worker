@@ -19,7 +19,7 @@ class ClusterWorkerConfigurator:
     def tweak_config(self, cfg, instance, uid):
         return cfg
 
-    def additional_commands(self, bindir, config, domain, worker_ips):
+    def pre_start_commands(self, bindir, config, domain, worker_ips):
         return ''
 
     def configure_started_instance(self, bindir, instance, config, container_ids, output):
