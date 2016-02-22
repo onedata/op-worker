@@ -128,16 +128,15 @@ route_and_send_answer(#client_message{message_id = Id,
 route_and_send_answer(#client_message{message_id = Id,
     message_body = #get_protocol_version{}}) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
-route_and_send_answer(#client_message{message_id = Id,
+route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #get_configuration{}}) ->
-    {ok, Docs} = subscription:list(),
-    Subs = lists:filtermap(fun
-        (#document{value = #subscription{object = undefined}}) -> false;
-        (#document{value = #subscription{} = Sub}) -> {true, Sub}
-    end, Docs),
-    {ok, #server_message{message_id = Id, message_body = #configuration{
-        subscriptions = Subs
-    }}};
+    spawn(fun() ->
+        Configuration = fuse_config_manager:get_configuration(),
+        communicator:send(#server_message{
+            message_id = Id, message_body = Configuration
+        }, SessId)
+    end),
+    ok;
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{fuse_request = FuseRequest}}) ->
     ?debug("Fuse request: ~p", [FuseRequest]),

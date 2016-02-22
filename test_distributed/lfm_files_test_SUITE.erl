@@ -324,12 +324,7 @@ lfm_acl_test(Config) ->
 
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    UserName1 = ?config({user_name, 1}, Config),
-    SessId2 = ?config({session_id, 2}, Config),
-    UserId2 = ?config({user_id, 2}, Config),
-    UserName2 = ?config({user_name, 2}, Config),
-    [{GroupId1, GroupName1}, {GroupId2, GroupName2}, {GroupId3, GroupName3}, {GroupId4, GroupName4}] =
-        ?config({groups, 1}, Config),
+    [{GroupId1, _GroupName1} | _] = ?config({groups, 1}, Config),
     FileName = <<"/test_file_acl">>,
     DirName = <<"/test_dir_acl">>,
 
@@ -352,7 +347,7 @@ lfm_acl_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
@@ -361,7 +356,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Workers),
+    initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -386,19 +381,6 @@ get_uuid(Worker, SessId, Path) ->
         30
     ),
     UUID.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).
 
 for(From, To, Fun) ->
     for(From, To, 1, Fun).

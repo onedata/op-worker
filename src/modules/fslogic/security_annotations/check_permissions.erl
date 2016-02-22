@@ -58,11 +58,11 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{sessio
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
-    case has_acl(FileUUID) of
-        false ->
-            Args;
+    case (catch has_acl(FileUUID)) of
         true ->
-            [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs]
+            [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
+        _ ->
+            Args
     end.
 
 %%--------------------------------------------------------------------
@@ -80,6 +80,8 @@ after_advice(#annotation{}, _M, _F, _Inputs, Result) ->
 -spec expand_access_definitions([access_definition()], onedata_user:id(), list(), #{}, #{}, #{}) ->
     [{check_type(), datastore:document(), datastore:document(), [#accesscontrolentity{}]}].
 expand_access_definitions([], _UserId, _Inputs, _FileMap, _AclMap, _UserMap) ->
+    [];
+expand_access_definitions(_, ?ROOT_USER_ID, _Inputs, _FileMap, _AclMap, _UserMap) ->
     [];
 expand_access_definitions([root | Rest], UserId, Inputs, FileMap, AclMap, UserMap) ->
     {User, NewUserMap} = get_user(UserId, UserMap),
