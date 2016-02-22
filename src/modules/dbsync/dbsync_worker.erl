@@ -116,14 +116,14 @@ handle(healthcheck) ->
         Other ->
             ?error("DBSync global stream not ready (~p)", [Other]),
             {error, global_stream_down}
-    end ;
+    end;
 
 handle({reemit, Msg}) ->
     dbsync_proto:reemit(Msg);
 
 handle(bcast_status) ->
     timer:apply_after(?BROADCAST_STATUS_INTERVAL, worker_proxy, cast, [dbsync_worker, bcast_status]),
-    catch bcast_status();
+        catch bcast_status();
 
 handle(requested_bcast_status) ->
     bcast_status();
@@ -164,7 +164,7 @@ handle({flush_queue, QueueKey}) ->
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
-                    catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
+                        catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
                     update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
                     #batch{since = Until, until = Until}
                 end,
@@ -303,10 +303,20 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Sin
 %%--------------------------------------------------------------------
 -spec apply_changes(SpaceId :: binary(), [change()]) ->
     ok | {error, any()}.
-apply_changes(SpaceId, [#change{doc = #document{key = _Key} = Doc, model = ModelName} = Change | T]) ->
+apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
-        {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+        MainDocKey = case Value of
+            #links{} ->
+                couchdb_datastore_driver:links_key_to_doc_key(Key);
+            _ -> Key
+        end,
+
+        datastore:run_synchronized(ModelName, MainDocKey, fun() ->
+            caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
+            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
+            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey)
+        end),
         spawn(
             fun() ->
                 dbsync_events:change_replicated(SpaceId, Change),
