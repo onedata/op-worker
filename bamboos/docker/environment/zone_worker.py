@@ -29,9 +29,10 @@ class OZWorkerConfigurator:
     def __init__(self, dnsconfig_path):
         self.dnsconfig_path = dnsconfig_path
 
-    def tweak_config(self, cfg, uid, domain):
+    def tweak_config(self, cfg, uid, instance):
         sys_config = cfg['nodes']['node']['sys.config'][self.app_name()]
         if 'http_domain' in sys_config:
+            domain = worker.cluster_domain(instance, uid)
             sys_config['http_domain'] = {'string': domain}
         return cfg
 

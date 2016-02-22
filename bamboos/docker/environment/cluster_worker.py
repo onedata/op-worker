@@ -16,7 +16,7 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
 
 
 class ClusterWorkerConfigurator:
-    def tweak_config(self, cfg, instance, uid):
+    def tweak_config(self, cfg, uid, instance):
         return cfg
 
     def pre_start_commands(self, bindir, config, domain, worker_ips):
