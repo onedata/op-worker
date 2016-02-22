@@ -94,9 +94,9 @@ global_stream_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [<<UUID1/binary, "$$">>]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [<<UUID2/binary, "$$">>]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [<<UUID3/binary, "$$">>]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID1)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID2)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID3)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
@@ -116,7 +116,7 @@ global_stream_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [<<UUID/binary, "$$">>]) of
+                        case rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -174,7 +174,7 @@ global_stream_document_remove_test(MultiConfig) ->
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [<<UUID1/binary, "$$">>]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID1)]),
 
             Map0 = #{},
             _Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0)
@@ -192,7 +192,7 @@ global_stream_document_remove_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [<<UUID/binary, "$$">>]) of
+                        case rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -228,10 +228,10 @@ global_stream_document_remove_test(MultiConfig) ->
             lists:foreach(
                 fun({Path, {UUID, Rev, LRev}}) ->
                     ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, UUID])),
-                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, file_meta, get, [<<UUID/binary, "$$">>])),
+                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)])),
 
                     ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, UUID])),
-                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, file_meta, get, [<<UUID/binary, "$$">>])),
+                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)])),
 
                     ?assertMatch({error, enoent}, lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}))
                 end, maps:to_list(PathMap))
@@ -291,9 +291,9 @@ global_stream_with_proto_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [<<UUID1/binary, "$$">>]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [<<UUID2/binary, "$$">>]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [<<UUID3/binary, "$$">>]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID1)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID2)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID3)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
