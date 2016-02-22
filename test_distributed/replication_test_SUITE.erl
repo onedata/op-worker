@@ -72,7 +72,7 @@ dbsync_trigger_should_create_local_file_location(Config) ->
     SpaceId = <<"space_id1">>,
     UserId = <<"user_id1">>,
     SessionId = <<"session_id1">>,
-    CTime = utils:time(),
+    CTime = erlang:monotonic_time(micro_seconds),
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
