@@ -313,7 +313,7 @@ global_stream_with_proto_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [<<UUID/binary, "$$">>]) of
+                        case rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
