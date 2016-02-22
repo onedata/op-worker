@@ -28,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve(Method :: atom(), Domain :: string(), LbAdvice :: term()) ->
-    refused | nx_domain | {ok, [{A :: byte(), B :: byte(), C :: byte(), D :: byte()}]}.
+    dns_handler_behaviour:handler_reply().
 
 resolve(Method, Domain, LBAdvice) ->
     case parse_domain(Domain) of
@@ -47,7 +47,7 @@ resolve(Method, Domain, LBAdvice) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_resolve(Method :: atom(), Domain :: string(), LbAdvice :: term()) ->
-    refused | nx_domain | {ok, [{A :: byte(), B :: byte(), C :: byte(), D :: byte()}]}.
+    dns_handler_behaviour:handler_reply().
 
 do_resolve(handle_a, Domain, LBAdvice) ->
     Nodes = load_balancing:choose_nodes_for_dns(LBAdvice),
