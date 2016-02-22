@@ -19,7 +19,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -37,17 +36,17 @@
     event_manager_should_terminate_event_stream_on_subscription_cancellation/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    event_manager_should_update_session_on_init,
-    event_manager_should_update_session_on_terminate,
-    event_manager_should_start_event_streams_on_init,
-    event_manager_should_register_event_stream,
-    event_manager_should_unregister_event_stream,
-    event_manager_should_forward_events_to_event_streams,
-    event_manager_should_start_event_stream_on_subscription,
-    event_manager_should_terminate_event_stream_on_subscription_cancellation
-].
+all() ->
+    ?ALL([
+        event_manager_should_update_session_on_init,
+        event_manager_should_update_session_on_terminate,
+        event_manager_should_start_event_streams_on_init,
+        event_manager_should_register_event_stream,
+        event_manager_should_unregister_event_stream,
+        event_manager_should_forward_events_to_event_streams,
+        event_manager_should_start_event_stream_on_subscription,
+        event_manager_should_terminate_event_stream_on_subscription_cancellation
+    ]).
 
 -define(TIMEOUT, timer:seconds(15)).
 

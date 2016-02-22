@@ -50,7 +50,7 @@ decode(undefined, _Encoding) ->
     <<>>;
 decode(Data, Encoding) when Encoding =:= <<"base64">> ->
     try base64:decode(Data)
-    catch _:_ -> throw(?invalid_base64)
+    catch _:_ -> throw(?ERROR_INVALID_BASE64)
     end;
 decode(Data, _) ->
     Data.

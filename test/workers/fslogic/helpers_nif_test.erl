@@ -22,15 +22,13 @@
 %%%===================================================================
 
 new_obj_test() ->
-    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
-    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
+    prepare_environment(),
     ok = helpers_nif:init(),
     ?assertMatch({ok, _}, helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>})),
     ok.
 
 new_ctx_test() ->
-    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
-    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
+    prepare_environment(),
     ok = helpers_nif:init(),
     {ok, Helper} = helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>}),
     ?assertMatch({ok, _}, helpers_nif:new_helper_ctx(Helper)),
@@ -39,8 +37,7 @@ new_ctx_test() ->
 ctx_test_() ->
     {setup,
         fun() ->
-            application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
-            application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
+            prepare_environment(),
             ok = helpers_nif:init(),
             {ok, Helper} = helpers_nif:new_helper_obj(?DIRECTIO_HELPER_NAME, #{<<"root_path">> => <<"/tmp">>}),
             {ok, CTX} = helpers_nif:new_helper_ctx(Helper),
@@ -48,35 +45,6 @@ ctx_test_() ->
         end,
         fun(CTX) ->
             [
-                {"Flags are set correctly",
-                    fun() ->
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, [])),
-                        ?assertMatch({ok, ['O_RDONLY']}, helpers_nif:get_flags(CTX)),
-
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, ['O_RDWR'])),
-                        ?assertMatch({ok, ['O_RDWR']}, helpers_nif:get_flags(CTX)),
-
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK'])),
-                        Res0 = helpers_nif:get_flags(CTX),
-                        ?assertMatch({ok, [_, _]}, Res0),
-                        {ok, Flags0} = Res0,
-                        ?assert(lists:member('O_RDONLY', Flags0)),
-                        ?assert(lists:member('O_NONBLOCK', Flags0)),
-
-                        ?assertMatch(ok, helpers_nif:set_flags(CTX, ['O_WRONLY', 'O_NONBLOCK', 'O_ASYNC', 'O_TRUNC'])),
-                        Res1 = helpers_nif:get_flags(CTX),
-                        ?assertMatch({ok, [_, _, _, _]}, Res1),
-                        {ok, Flags1} = Res1,
-                        ?assert(lists:member('O_WRONLY', Flags1)),
-                        ?assert(lists:member('O_NONBLOCK', Flags1)),
-                        ?assert(lists:member('O_ASYNC', Flags1)),
-                        ?assert(lists:member('O_TRUNC', Flags1)),
-
-                        ?assertError(badarg, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK', "unknown_type"])),
-                        ?assertError(badarg, helpers_nif:set_flags(CTX, ['O_RDONLY', 'O_NONBLOCK', 'unknown_flag'])),
-
-                        ok
-                    end},
                 {"User is set correctly",
                     fun() ->
                         UserCTX0 = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
@@ -102,19 +70,33 @@ ctx_test_() ->
     }.
 
 username_to_uid_test() ->
-    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
-    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
+    prepare_environment(),
     ok = helpers_nif:init(),
     ?assertMatch({ok, 0}, helpers_nif:username_to_uid(<<"root">>)),
     ?assertMatch({error, einval}, helpers_nif:username_to_uid(<<"sadmlknfqlwknd">>)),
     ok.
 
 groupname_to_gid_test() ->
-    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
-    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
+    prepare_environment(),
     ok = helpers_nif:init(),
     ?assertMatch({ok, 0}, helpers_nif:groupname_to_gid(<<"root">>)),
     ?assertMatch({error, einval}, helpers_nif:groupname_to_gid(<<"sadmlknfqlwknd">>)),
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sets required environment variables.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_environment() -> ok.
+prepare_environment() ->
+    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
+    application:set_env(?APP_NAME, direct_io_helper_threads_number, 1),
+    application:set_env(?APP_NAME, s3_helper_threads_number, 1).
 
 -endif.

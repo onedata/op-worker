@@ -13,11 +13,13 @@
 -ifndef(DIAGNOSTIC_MESSAGES_HRL).
 -define(DIAGNOSTIC_MESSAGES_HRL, 1).
 
--record(ping,{
+-include("modules/events/subscriptions.hrl").
+
+-record(ping, {
     data :: binary()
 }).
 
--record(pong,{
+-record(pong, {
     data :: binary()
 }).
 
@@ -26,6 +28,12 @@
 -record(protocol_version, {
     major = 3 :: non_neg_integer(),
     minor = 0 :: non_neg_integer()
+}).
+
+-record(get_configuration, {}).
+
+-record(configuration, {
+    subscriptions = [] :: [#subscription{}]
 }).
 
 -endif.

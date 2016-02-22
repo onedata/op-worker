@@ -1,0 +1,18 @@
+{{!-- The main layout --}}
+
+<div id="app">
+  <header>
+    {{top-bar}}
+  </header>
+
+  <nav class="primary-sidebar">
+    <div class="sidebar-content">
+      {{main-menu mains=mains goToItem="goToItem"}}
+    </div>
+  </nav>
+
+  {{!-- The app main part (without top and left navigations) --}}
+  <section id="main-content">
+    {{outlet}}
+  </section>
+</div>

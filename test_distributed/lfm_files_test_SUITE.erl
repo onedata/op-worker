@@ -16,10 +16,12 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -33,19 +35,21 @@
     lfm_write_test/1,
     lfm_stat_test/1,
     lfm_synch_stat_test/1,
-    lfm_truncate_test/1
+    lfm_truncate_test/1,
+    lfm_acl_test/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    fslogic_new_file_test,
-    lfm_create_and_unlink_test,
-    lfm_create_and_access_test,
-    lfm_write_test,
-    lfm_stat_test,
-    lfm_synch_stat_test,
-    lfm_truncate_test
-].
+all() ->
+    ?ALL([
+        fslogic_new_file_test,
+        lfm_create_and_unlink_test,
+        lfm_create_and_access_test,
+        lfm_write_test,
+        lfm_stat_test,
+        lfm_synch_stat_test,
+        lfm_truncate_test,
+        lfm_acl_test
+    ]).
 
 -define(TIMEOUT, timer:seconds(10)).
 -define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}], ?TIMEOUT)).
@@ -315,6 +319,57 @@ lfm_truncate_test(Config) ->
     ?assertMatch({ok, #file_attr{size = 5}}, lfm_proxy:stat(W, SessId1, {path, <<"/test6">>}), 10),
     ?assertMatch({ok, <<"aabc">>}, lfm_proxy:read(W, Handle11, 0, 4)).
 
+lfm_acl_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    SessId1 = ?config({session_id, 1}, Config),
+    UserId1 = ?config({user_id, 1}, Config),
+    [{GroupId1, _GroupName1} | _] = ?config({groups, 1}, Config),
+    FileName = <<"/test_file_acl">>,
+    DirName = <<"/test_dir_acl">>,
+
+    {ok, FileUuid} = lfm_proxy:create(W, SessId1, FileName, 8#755),
+    {ok, _} = lfm_proxy:mkdir(W, SessId1, DirName),
+
+    % test setting and getting acl
+    Acl = [
+        #accesscontrolentity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
+        #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    ],
+    Ans1 = lfm_proxy:set_acl(W, SessId1, {uuid, FileUuid}, Acl),
+    ?assertEqual(ok, Ans1),
+    Ans2 = lfm_proxy:get_acl(W, SessId1, {uuid, FileUuid}),
+    ?assertEqual({ok, Acl}, Ans2).
+
+
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
+init_per_suite(Config) ->
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
+    initializer:setup_storage(ConfigWithNodes).
+
+end_per_suite(Config) ->
+    initializer:teardown_storage(Config),
+    test_node_starter:clean_environment(Config).
+
+init_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    initializer:communicator_mock(Workers),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
+    lfm_proxy:init(ConfigWithSessionInfo).
+
+end_per_testcase(_, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lfm_proxy:teardown(Config),
+    initializer:clean_test_users_and_spaces(Config),
+    test_utils:mock_validate_and_unload(Workers, [communicator]).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %% Get uuid of given by path file. Possible as root to bypass permissions checks.
 get_uuid_privileged(Worker, SessId, Path) ->
     get_uuid(Worker, SessId, Path).
@@ -326,49 +381,6 @@ get_uuid(Worker, SessId, Path) ->
         30
     ),
     UUID.
-
-%%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
-    initializer:setup_storage(ConfigWithNodes).
-
-end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
-
-init_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
-    communicator_mock_setup(Workers),
-    initializer:space_storage_mock(Workers, StorageId),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
-
-end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator, space_storage]).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).
 
 for(From, To, Fun) ->
     for(From, To, 1, Fun).

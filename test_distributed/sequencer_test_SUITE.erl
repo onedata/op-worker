@@ -19,7 +19,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("proto/oneclient/client_messages.hrl").
 -include_lib("proto/oneclient/server_messages.hrl").
 
@@ -39,17 +38,17 @@
     route_message_should_forward_messages_to_different_streams/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    open_stream_should_return_stream_id,
-    open_stream_should_return_different_stream_ids,
-    close_stream_should_notify_sequencer_manager,
-    send_message_should_forward_message,
-    send_message_should_inject_stream_id_into_message,
-    route_message_should_forward_message,
-    route_message_should_forward_messages_to_the_same_stream,
-    route_message_should_forward_messages_to_different_streams
-].
+all() ->
+    ?ALL([
+        open_stream_should_return_stream_id,
+        open_stream_should_return_different_stream_ids,
+        close_stream_should_notify_sequencer_manager,
+        send_message_should_forward_message,
+        send_message_should_inject_stream_id_into_message,
+        route_message_should_forward_message,
+        route_message_should_forward_messages_to_the_same_stream,
+        route_message_should_forward_messages_to_different_streams
+    ]).
 
 -define(TIMEOUT, timer:seconds(15)).
 

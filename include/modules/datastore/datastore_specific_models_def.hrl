@@ -17,7 +17,8 @@
 
 %% Identity containing user_id
 -record(identity, {
-    user_id :: onedata_user:id()
+    user_id :: onedata_user:id(),
+    provider_id :: oneprovider:id()
 }).
 
 %% User session
@@ -40,9 +41,14 @@
 %% Local, cached version of globalregistry user
 -record(onedata_user, {
     name :: binary(),
-    space_ids :: [binary()]
+    space_ids :: [binary()],
+    group_ids :: [binary()]
 }).
 
+%% Local, cached version of globalregistry group
+-record(onedata_group, {
+    name :: binary()
+}).
 
 -record(file_meta, {
     name :: file_meta:name(),
@@ -82,6 +88,12 @@
     size = 0 :: non_neg_integer() | undefined
 }).
 
+%% Model for caching space details fetched from Global Registry
+-record(space_info, {
+    id :: binary(),
+    name :: binary()
+}).
+
 %% Model that maps space to storage
 -record(space_storage, {
     storage_ids = [] :: [storage:id()]
@@ -90,6 +102,11 @@
 %% Model that maps onedata user to Ceph user
 -record(ceph_user, {
     credentials :: #{storage:id() => ceph_user:credentials()}
+}).
+
+%% Model that maps onedata user to Amazon S3 user
+-record(s3_user, {
+    credentials :: #{storage:id() => s3_user:credentials()}
 }).
 
 -endif.

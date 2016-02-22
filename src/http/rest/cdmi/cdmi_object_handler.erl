@@ -208,47 +208,45 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
     {CdmiPartialFlag, Req} = cowboy_req:header(<<"x-cdmi-partial">>, Req0),
     {Mimetype, Encoding} = cdmi_arg_parser:parse_content(Content),
     {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
-    case onedata_file_api:create(Auth, Path, DefaultMode) of
-        {ok, _} ->
-            cdmi_metadata:update_completion_status(
-                Auth, {path, Path}, <<"Processing">>
-            ),
-            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
-            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
-            Ans = cdmi_streamer:write_body_to_file(Req, State, 0),
-            cdmi_metadata:set_completion_status_according_to_partial_flag(
+    case onedata_file_api:stat(Auth, {path, Path}) of
+        {error, ?ENOENT} ->
+            {ok, Uuid} = onedata_file_api:create(Auth, Path, DefaultMode),
+            cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, Encoding),
+            {ok, FileHandle} = onedata_file_api:open(Auth, {path, Path}, write),
+            cdmi_metadata:update_cdmi_completion_status(Auth, {uuid, Uuid}, <<"Processing">>),
+            {ok, Req1} = cdmi_streamer:write_body_to_file(Req, 0, FileHandle),
+            cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
                 Auth, {path, Path}, CdmiPartialFlag
             ),
-            Ans;
-
-        {error, ?EEXIST} ->
-            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
-            cdmi_metadata:update_mimetype(Auth, {path, Path}, Mimetype),
-            cdmi_metadata:update_encoding(Auth, {path, Path}, Encoding),
+            {true, Req1, State};
+        {ok, #file_attr{uuid = Uuid, size = Size}} ->
+            cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, Mimetype),
+            cdmi_metadata:update_encoding(Auth, {uuid, Uuid}, Encoding),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
             case RawRange of
                 undefined ->
-                    ok = onedata_file_api:truncate(Auth, {path, Path}, 0),
-                    Ans = cdmi_streamer:write_body_to_file(Req1, State, 0),
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(
-                        Auth, {path, Path}, CdmiPartialFlag
+                    {ok, FileHandle} = onedata_file_api:open(Auth, {uuid, Uuid}, write),
+                    cdmi_metadata:update_cdmi_completion_status(Auth, {uuid, Uuid}, <<"Processing">>),
+                    ok = onedata_file_api:truncate(FileHandle, 0),
+                    {ok, Req2} = cdmi_streamer:write_body_to_file(Req1, 0, FileHandle),
+                    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
+                        Auth, {uuid, Uuid}, CdmiPartialFlag
                     ),
-                    Ans;
+                    {true, Req2, State};
                 _ ->
                     {Length, Req2} = cowboy_req:body_length(Req1),
-                    #file_attr{size = Size} = get_attr(Auth, Path),
                     case cdmi_arg_parser:parse_byte_range(RawRange, Size) of
                         [{From, To}] when Length =:= undefined orelse Length =:= To - From + 1 ->
-                            Ans = cdmi_streamer:write_body_to_file(Req2, State, From),
-                            cdmi_metadata:set_completion_status_according_to_partial_flag(
-                                Auth, {path, Path}, CdmiPartialFlag
+                            {ok, FileHandle} = onedata_file_api:open(Auth, {uuid, Uuid}, write),
+                            cdmi_metadata:update_cdmi_completion_status(Auth, {uuid, Uuid}, <<"Processing">>),
+                            {ok, Req3} = cdmi_streamer:write_body_to_file(Req2, From, FileHandle),
+                            cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
+                                Auth, {uuid, Uuid}, CdmiPartialFlag
                             ),
-                            Ans;
+                            {true, Req3, State};
                         _ ->
-                            cdmi_metadata:set_completion_status_according_to_partial_flag(
-                                Auth, {path, Path}, CdmiPartialFlag
-                            ),
-                            throw(?invalid_range)
+                            throw(?ERROR_INVALID_RANGE)
                     end
             end
     end.
@@ -296,9 +294,10 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
     % update value and metadata depending on creation type
     case OperationPerformed of
         created ->
-            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
             {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+            cdmi_metadata:update_cdmi_completion_status(Auth, {path, Path}, <<"Processing">>),
             {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
+            onedata_file_api:fsync(FileHandler),
 
             % return response
             {ok, NewAttrs = #file_attr{uuid = Uuid}} = onedata_file_api:stat(Auth, {path, Path}),
@@ -307,41 +306,40 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             )),
             cdmi_metadata:update_mimetype(Auth, {uuid, Uuid}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {uuid, Uuid}, RequestedUserMetadata),
-            cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {uuid, Uuid}, CdmiPartialFlag),
+            cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {uuid, Uuid}, CdmiPartialFlag),
             Answer = cdmi_object_answer:prepare(?DEFAULT_PUT_FILE_OPTS, State#{attributes => NewAttrs}),
             Response = json_utils:encode(Answer),
             Req2 = cowboy_req:set_resp_body(Response, Req1),
+            cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
             {true, Req2, State};
         CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
-            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
             cdmi_metadata:update_encoding(Auth, {path, Path}, RequestedValueTransferEncoding),
             cdmi_metadata:update_mimetype(Auth, {path, Path}, RequestedMimetype),
+            cdmi_metadata:update_cdmi_completion_status(Auth, {path, Path}, <<"Processing">>),
             cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
-            cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
             {true, Req1, State};
         none ->
-            cdmi_metadata:update_completion_status(Auth, {path, Path}, <<"Processing">>),
             cdmi_metadata:update_encoding(Auth, {path, Path}, RequestedValueTransferEncoding),
             cdmi_metadata:update_mimetype(Auth, {path, Path}, RequestedMimetype),
             cdmi_metadata:update_user_metadata(Auth, {path, Path}, RequestedUserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+                    cdmi_metadata:update_cdmi_completion_status(Auth, {path, Path}, <<"Processing">>),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, From, RawValue),
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
+                    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 undefined when is_binary(Value) ->
                     {ok, FileHandler} = onedata_file_api:open(Auth, {path, Path}, write),
+                    cdmi_metadata:update_cdmi_completion_status(Auth, {path, Path}, <<"Processing">>),
                     ok = onedata_file_api:truncate(FileHandler, 0),
                     {ok, _, RawValueSize} = onedata_file_api:write(FileHandler, 0, RawValue),
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
+                    cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 undefined ->
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
                     {true, Req1, State};
                 _MalformedRange ->
-                    cdmi_metadata:set_completion_status_according_to_partial_flag(Auth, {path, Path}, CdmiPartialFlag),
-                    throw(?invalid_range)
+                    throw(?ERROR_INVALID_RANGE)
             end
     end.
 
@@ -353,7 +351,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
 %%--------------------------------------------------------------------
 -spec error_wrong_path(req(), #{}) -> no_return().
 error_wrong_path(_Req, _State) ->
-    throw(?wrong_path).
+    throw(?ERROR_WRONG_PATH).
 
 %% ====================================================================
 %% Internal functions

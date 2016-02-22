@@ -17,7 +17,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 -define(call(N, M, A), ?call(N, helpers, M, A)).
 -define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
@@ -38,10 +37,12 @@
 ]).
 
 all() ->
-    [
-        getattr_test, access_test, mknod_test, mkdir_test, unlink_test, rmdir_test, symlink_test, rename_test,
-        chmod_test, chown_test, truncate_test, open_test, read_test, write_test, release_test, flush_test, fsync_test
-    ].
+    ?ALL([
+        getattr_test, access_test, mknod_test, mkdir_test, unlink_test,
+        rmdir_test, symlink_test, rename_test, chmod_test, chown_test,
+        truncate_test, open_test, read_test, write_test, release_test,
+        flush_test, fsync_test
+    ]).
 
 
 %%%===================================================================
@@ -61,10 +62,13 @@ access_test(Config) ->
     ?assertMatch(ok, call(Config, access, [File, 0])).
 
 mknod_test(Config) ->
-    File = gen_filename(),
-
-    ?assertMatch(ok, call(Config, mknod, [File, 8#644, reg])),
-    ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)])).
+    lists:foreach(fun({ExpectedType, Type}) ->
+        File = gen_filename(),
+        ?assertMatch(ok, call(Config, mknod, [File, 8#644, Type])),
+        {ok, FileInfo} = ?assertMatch({ok, _}, call(Config, file, read_file_info, [?path(Config, File)])),
+        ?assertMatch(ExpectedType, element(3, FileInfo)),
+        ?assertMatch(ok, call(Config, file, delete, [?path(Config, File)]))
+    end, [{regular, reg}, {device, chr}, {device, blk}, {other, fifo}, {other, sock}]).
 
 mkdir_test(Config) ->
     File = gen_filename(),
@@ -121,8 +125,14 @@ truncate_test(Config) ->
 open_test(Config) ->
     File = gen_filename(),
 
-    {ok, _} = call(Config, file, open, [?path(Config, File), write]),
-    ?assertMatch({ok, _}, call(Config, open, [File, read])).
+    call(Config, file, open, [?path(Config, File), write]),
+    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, write])),
+    ?assertMatch({ok, 4}, call(Config, write, [File, 0, <<"test">>])),
+    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, read])),
+    ?assertMatch({ok, <<"test">>}, call(Config, read, [File, 0, 4])),
+    {ok, _} = ?assertMatch({ok, _}, call(Config, open, [File, rdwr])),
+    ?assertMatch({ok, 5}, call(Config, write, [File, 0, <<"test2">>])),
+    ?assertMatch({ok, <<"test2">>}, call(Config, read, [File, 0, 5])).
 
 read_test(Config) ->
     File = gen_filename(),

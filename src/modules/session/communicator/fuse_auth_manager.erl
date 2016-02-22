@@ -38,38 +38,14 @@
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = SessId, auth = Auth = #auth{}}}, _) when is_binary(SessId) ->
     {ok, Iden} = authenticate_using_token(Auth),
-    case session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()) of
-        {ok, created} ->
-            handle_initial_handshake(SessId);
-        {ok, reused} ->
-            {ok, #server_message{message_body = #handshake_response{session_id = SessId}}}
-    end;
+    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, Auth, self()),
+    {ok, #server_message{message_body = #handshake_response{session_id = SessId}}};
 
 handle_handshake(#client_message{message_body = #handshake_request{
     session_id = SessId}}, OtpCert) when is_binary(SessId) ->
     {ok, Iden} = authenticate_using_certificate(OtpCert),
-    case session_manager:reuse_or_create_fuse_session(SessId, Iden, self()) of
-        {ok, created} ->
-            handle_initial_handshake(SessId);
-        {ok, reused} ->
-            {ok, #server_message{message_body = #handshake_response{session_id = SessId}}}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Handles initial handshake by starting event streams.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_initial_handshake(SessId :: session:id()) -> {ok, #server_message{}}.
-handle_initial_handshake(SessId) ->
-    {ok, Docs} = subscription:list(),
-    Subs = lists:filtermap(fun
-        (#document{value = #subscription{object = undefined}}) -> false;
-        (#document{value = #subscription{} = Sub}) -> {true, Sub}
-    end, Docs),
-    {ok, #server_message{message_body = #handshake_response{
-        session_id = SessId, subscriptions = Subs
-    }}}.
+    {ok, _} = session_manager:reuse_or_create_fuse_session(SessId, Iden, self()),
+    {ok, #server_message{message_body = #handshake_response{session_id = SessId}}}.
 
 %%%===================================================================
 %%% Internal functions

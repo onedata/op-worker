@@ -22,7 +22,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -41,18 +40,18 @@
     flush_should_notify_awaiting_process/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    subscribe_should_create_subscription,
-    unsubscribe_should_remove_subscription,
-    subscribe_should_notify_event_manager,
-    subscribe_should_notify_all_event_managers,
-    emit_read_event_should_execute_handler,
-    emit_write_event_should_execute_handler,
-    emit_file_attr_update_event_should_execute_handler,
-    emit_file_location_update_event_should_execute_handler,
-    flush_should_notify_awaiting_process
-].
+all() ->
+    ?ALL([
+        subscribe_should_create_subscription,
+        unsubscribe_should_remove_subscription,
+        subscribe_should_notify_event_manager,
+        subscribe_should_notify_all_event_managers,
+        emit_read_event_should_execute_handler,
+        emit_write_event_should_execute_handler,
+        emit_file_attr_update_event_should_execute_handler,
+        emit_file_location_update_event_should_execute_handler,
+        flush_should_notify_awaiting_process
+    ]).
 
 -define(TIMEOUT, timer:seconds(15)).
 
@@ -135,7 +134,7 @@ flush_should_notify_awaiting_process(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
     initializer:clear_models(Worker, [subscription]),
     NewConfig.
@@ -173,7 +172,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Worker),
+    initializer:communicator_mock(Worker),
     SessIds = lists:map(fun(N) ->
         SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         session_setup(Worker, SessId),
@@ -184,7 +183,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Worker),
+    initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
     [{session_id, SessId} | Config].
 
@@ -257,19 +256,6 @@ session_setup(Worker, SessId) ->
 -spec session_teardown(Worker :: node(), SessId :: session:id()) -> ok.
 session_teardown(Worker, SessId) ->
     rpc:call(Worker, session_manager, remove_session, [SessId]).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -37,9 +37,19 @@
 new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_ceph_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_posix_user_ctx(SessionId, SpaceUUID).
+    new_posix_user_ctx(SessionId, SpaceUUID);
+new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
+    new_s3_user_ctx(SessionId, SpaceUUID).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for Ceph storage helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_ceph_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+    helpers:user_ctx().
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} = ceph_user:get(UserId),
@@ -51,6 +61,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
         user_key = ceph_user:key(Credentials)
     }.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new user's storage context for all posix-compilant helpers.
@@ -61,7 +72,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
     helpers:user_ctx().
 new_posix_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-    {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceUUID),
     FinalGID =
         case helpers_nif:groupname_to_gid(SpaceName) of
             {ok, GID} ->
@@ -72,6 +83,26 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
 
     FinalUID = fslogic_utils:gen_storage_uid(UserId),
     #posix_user_ctx{uid = FinalUID, gid = FinalGID}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for Amazon S3 storage helper.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_s3_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+    helpers:user_ctx().
+new_s3_user_ctx(SessionId, SpaceUUID) ->
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #s3_user{credentials = CredentialsMap}}} = s3_user:get(UserId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
+    {ok, Credentials} = maps:find(StorageId, CredentialsMap),
+    #s3_user_ctx{
+        access_key = s3_user:access_key(Credentials),
+        secret_key = s3_user:secret_key(Credentials)
+    }.
 
 
 %%--------------------------------------------------------------------

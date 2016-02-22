@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -32,15 +32,15 @@
     session_getters_test/1,
     session_supervisor_child_crash_test/1]).
 
--performance({test_cases, []}).
-all() -> [
-    session_manager_session_creation_and_reuse_test,
-    session_manager_session_components_running_test,
-    session_manager_supervision_tree_structure_test,
-    session_manager_session_removal_test,
-    session_getters_test,
-    session_supervisor_child_crash_test
-].
+all() ->
+    ?ALL([
+        session_manager_session_creation_and_reuse_test,
+        session_manager_session_components_running_test,
+        session_manager_supervision_tree_structure_test,
+        session_manager_session_removal_test,
+        session_getters_test,
+        session_supervisor_child_crash_test
+    ]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -270,7 +270,7 @@ session_supervisor_child_crash_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
     initializer:clear_models(Worker, [subscription]),
     NewConfig.
@@ -280,7 +280,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Workers),
+    initializer:communicator_mock(Workers),
     Config;
 
 init_per_testcase(session_getters_test, Config) ->
@@ -288,13 +288,13 @@ init_per_testcase(session_getters_test, Config) ->
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
-    communicator_mock_setup(Worker),
+    initializer:communicator_mock(Worker),
     initializer:basic_session_setup(Worker, SessId, Iden, Self, Config);
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    communicator_mock_setup(Worker),
+    initializer:communicator_mock(Worker),
     test_utils:mock_new(Worker, logger),
     test_utils:mock_expect(Worker, logger, dispatch_log, fun
         (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
@@ -314,7 +314,7 @@ init_per_testcase(Case, Config) when
     Iden1 = #identity{user_id = <<"user_id_1">>},
     Iden2 = #identity{user_id = <<"user_id_2">>},
 
-    communicator_mock_setup(Workers),
+    initializer:communicator_mock(Workers),
     ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_fuse_session, [SessId1, Iden1, Self])),
     ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
@@ -381,16 +381,3 @@ get_child(Sup, ChildId) ->
         {ChildId, Child, _, _} -> {ok, Child};
         false -> {error, not_found}
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).
