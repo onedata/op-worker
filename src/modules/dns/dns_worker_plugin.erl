@@ -78,7 +78,7 @@ do_resolve(_, _, _) ->
 
 parse_domain(DomainArg) ->
     ProviderDomain = oneprovider:get_provider_domain(),
-    GRDomain = oneprovider:get_gr_domain(),
+    GRDomain = oneprovider:get_oz_domain(),
     % If requested domain starts with 'www.', ignore the suffix
     QueryDomain = case DomainArg of
         "www." ++ Rest -> Rest;

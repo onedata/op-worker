@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Globalregistry group data cache
+%%% OZ group data cache
 %%% @end
 %%%-------------------------------------------------------------------
 -module(onedata_group).
@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/global_registry/gr_groups.hrl").
+-include_lib("ctool/include/oz/oz_groups.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -124,14 +124,14 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch group from globalregistry and save it in cache.
+%% Fetch group from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}, GroupId) ->
     try
         {ok, #group_details{id = Id, name = Name}} =
-            gr_groups:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}, GroupId),
+            oz_groups:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}, GroupId),
         %todo consider getting user_details for each group member and storing it as onedata_user
         OnedataGroupDoc = #document{key = Id, value = #onedata_group{name = Name}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
@@ -143,7 +143,7 @@ fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}, GroupI
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get group from cache or fetch from globalregistry and save in cache.
+%% Get group from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(datastore:key(), #auth{}) ->

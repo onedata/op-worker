@@ -37,7 +37,7 @@ is_authorized(Req, State) ->
         {{ok, Auth}, NewReq} ->
             {true, NewReq, State#{auth => Auth}};
         {{error, {not_found, _}}, NewReq} ->
-            GrUrl = gr_plugin:get_gr_url(),
+            GrUrl = oz_plugin:get_oz_url(),
             ProviderId = oneprovider:get_provider_id(),
             {_, NewReq2} = cowboy_req:host(NewReq),
             {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
