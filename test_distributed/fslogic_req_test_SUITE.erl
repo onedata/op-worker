@@ -84,7 +84,7 @@ fslogic_get_file_attr_test(Config) ->
         {SessId5, <<"space_id6">>, 8#1770, 0, <<"/spaces/space_name#space_id6">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
-        SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir">>}}
+        SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/t1_dir">>}}
     )).
 
 fslogic_mkdir_and_rmdir_test(Config) ->
@@ -116,17 +116,20 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     end,
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId1,
-        #create_dir{parent_uuid = RootUUID1, name = <<"double">>, mode = 8#755}
+        #create_dir{parent_uuid = RootUUID1, name = <<"t2_double">>, mode = 8#755}
     )),
     ?assertMatch(#fuse_response{status = #status{code = ?EEXIST}}, ?req(Worker, SessId1,
-        #create_dir{parent_uuid = RootUUID1, name = <<"double">>, mode = 8#755}
+        #create_dir{parent_uuid = RootUUID1, name = <<"t2_double">>, mode = 8#755}
     )),
 
 
-    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
-    {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<>>, RootUUID2, []}, [<<"dir4">>, <<"dir5">>, <<"dir6">>]),
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []},
+        [<<"t2_dir1">>, <<"t2_dir2">>, <<"t2_dir3">>]),
+    {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<>>, RootUUID2, []},
+        [<<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
 
-    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, <<"space_name2">>, <<"dir4">>, <<"dir5">>, <<"dir6">>]),
+    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, <<"space_name2">>,
+        <<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
     FileAttr = ?req(Worker, SessId1, #get_file_attr{entry = {path, TestPath1}}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
     ?assertEqual(FileAttr, ?req(Worker, SessId2, #get_file_attr{entry = {path, TestPath1}})),
@@ -225,19 +228,19 @@ fslogic_read_dir_test(Config) ->
             ))
         end, Dirs)
     end, [
-        {SessId1, RootUUID1, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
-        {SessId2, RootUUID2, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId5, RootUUID5, [<<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]}
+        {SessId1, RootUUID1, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
+        {SessId2, RootUUID2, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId5, RootUUID5, [<<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]}
     ]),
 
     lists:foreach(ValidateReadDir, [
-        {SessId1, <<"/spaces/space_name1">>, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
-        {SessId1, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId2, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId5, <<"/spaces/space_name#space_id5">>, [<<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]},
-        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
-        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]}
+        {SessId1, <<"/spaces/space_name1">>, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
+        {SessId1, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId2, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId5, <<"/spaces/space_name#space_id5">>, [<<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]},
+        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
+        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]}
     ]).
 
 chmod_test(Config) ->
@@ -249,10 +252,10 @@ chmod_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = <<"/test">>,
+            Path = <<"/t4_test">>,
             ParentUUID = get_uuid_privileged(Worker, SessId, <<"/">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"test">>, mode = 8#000})),
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"t4_test">>, mode = 8#000})),
             UUID = get_uuid(Worker, SessId, Path),
 
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
@@ -310,7 +313,8 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}},
+                        ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
         end, [
@@ -322,7 +326,8 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
+                        ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
         end, [
