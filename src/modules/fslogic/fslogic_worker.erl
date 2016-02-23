@@ -71,7 +71,12 @@ init(_Args) ->
         }
     },
 
-    rtransfer_config:start_rtransfer(),
+    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
+        {ok, true} ->
+            rtransfer_config:start_rtransfer();
+        _ ->
+            ok
+    end,
 
     case event:subscribe(WriteSub) of
         {ok, WriteSubId} ->
