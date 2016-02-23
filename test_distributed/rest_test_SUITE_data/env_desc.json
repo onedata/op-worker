@@ -72,7 +72,7 @@
         }
     },
     "appmock_domains": {
-        "gr": {
+        "oz": {
             "appmock": {
                 "node1": {
                     "mocked_app": "oz_worker",
