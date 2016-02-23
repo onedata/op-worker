@@ -45,8 +45,8 @@ all() ->
 empty_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
+    Path = <<"/t1_file">>,
+    Name1 = <<"t1_name1">>,
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
@@ -55,10 +55,10 @@ empty_xattr_test(Config) ->
 crud_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
-    Value1 = <<"value1">>,
-    Value2 = <<"value2">>,
+    Path = <<"/t2_file">>,
+    Name1 = <<"t2_name1">>,
+    Value1 = <<"t2_value1">>,
+    Value2 = <<"t2_value2">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     UpdatedXattr1 = #xattr{name = Name1, value = Value2},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
@@ -77,12 +77,12 @@ crud_xattr_test(Config) ->
 list_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
-    Value1 = <<"value1">>,
+    Path = <<"/t3_file">>,
+    Name1 = <<"t3_name1">>,
+    Value1 = <<"t3_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
-    Name2 = <<"name2">>,
-    Value2 = <<"value2">>,
+    Name2 = <<"t3_name2">>,
+    Value2 = <<"t3_value2">>,
     Xattr2 = #xattr{name = Name2, value = Value2},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
@@ -95,9 +95,9 @@ list_xattr_test(Config) ->
 remove_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
-    Value1 = <<"value1">>,
+    Path = <<"/t4_file">>,
+    Name1 = <<"t4_name1">>,
+    Value1 = <<"t4_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
@@ -112,9 +112,9 @@ remove_file_test(Config) ->
 modify_cdmi_attrs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"cdmi_attr">>,
-    Value1 = <<"value1">>,
+    Path = <<"/t5_file">>,
+    Name1 = <<"/t5_cdmi_attr">>,
+    Value1 = <<"/t5_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
