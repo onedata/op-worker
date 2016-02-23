@@ -31,10 +31,10 @@
 
 all() ->
     ?ALL([
-        empty_xattr_test,
-        crud_xattr_test,
-        list_xattr_test,
-        remove_file_test,
+%%         empty_xattr_test,
+%%         crud_xattr_test,
+%%         list_xattr_test,
+%%         remove_file_test,
         modify_cdmi_attrs
     ]).
 
@@ -113,8 +113,8 @@ modify_cdmi_attrs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     Path = <<"/t5_file">>,
-    Name1 = <<"/t5_cdmi_attr">>,
-    Value1 = <<"/t5_value1">>,
+    Name1 = <<"cdmi_attr">>,
+    Value1 = <<"t5_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
