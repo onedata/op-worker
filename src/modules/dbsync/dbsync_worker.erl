@@ -284,23 +284,28 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     catch consume_batches(FromProvider, SpaceId),
-    do_apply_batch_changes(FromProvider, SpaceId, Batch).
+    do_apply_batch_changes(FromProvider, SpaceId, Batch, true).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Apply whole batch of changes from remote provider.
 %% @end
 %%--------------------------------------------------------------------
--spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
+-spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch(), ShouldRequest :: boolean()) ->
     ok | no_return().
-do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch, ShouldRequest) ->
     ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil < Since of
         true ->
             ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p", [FromProvider, SpaceId, CurrentUntil, Since]),
             stash_batch(FromProvider, SpaceId, Batch),
-            do_request_changes(FromProvider, CurrentUntil, Since);
+            case ShouldRequest of
+                true ->
+                    do_request_changes(FromProvider, CurrentUntil, Since);
+                false ->
+                    ok
+            end;
         false when Until < CurrentUntil ->
             ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
             ok;
@@ -352,7 +357,8 @@ apply_changes(_, []) ->
 %%--------------------------------------------------------------------
 -spec state_put(Key :: term(), Value :: term()) -> ok.
 state_put(Key, Value) ->
-    worker_host:state_put(?MODULE, Key, Value).
+    {ok, _} = dbsync_state:save(#document{key = Key, value = #dbsync_state{entry = Value}}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -361,7 +367,12 @@ state_put(Key, Value) ->
 %%--------------------------------------------------------------------
 -spec state_get(Key :: term()) -> Value :: term().
 state_get(Key) ->
-    worker_host:state_get(?MODULE, Key).
+    case dbsync_state:get(Key) of
+        {ok, #document{value = #dbsync_state{entry = Value}}} ->
+            Value;
+        {error, {not_found, _}} ->
+            undefined
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -372,14 +383,18 @@ state_get(Key) ->
 -spec state_update(Key :: term(), UpdateFun :: fun((OldValue :: term()) -> NewValue :: term())) ->
     ok | no_return().
 state_update(Key, UpdateFun) when is_function(UpdateFun) ->
+    DoUpdate = fun() ->
+        OldValue = state_get(Key),
+        NewValue = UpdateFun(OldValue),
+        state_put(Key, NewValue)
+    end,
+
     DBSyncPid = whereis(?MODULE),
     case self() of
         DBSyncPid ->
-            OldValue = state_get(Key),
-            NewValue = UpdateFun(OldValue),
-            state_put(Key, NewValue);
+            DoUpdate();
         _ ->
-            worker_host:state_update(?MODULE, Key, UpdateFun)
+            datastore:run_synchronized(dbsync_state, term_to_binary(Key), DoUpdate)
     end.
 
 
@@ -568,7 +583,7 @@ stash_batch(ProviderId, SpaceId, Batch) ->
             (undefined) ->
                 [Batch];
             (Batches) ->
-                case length(Batches) > 50 of
+                case size(term_to_binary(Batches)) > 20 * 1024 of
                     true -> Batches;
                     false ->
                         [Batch | Batches]
@@ -587,6 +602,6 @@ consume_batches(ProviderId, SpaceId) ->
     Batches = lists:sort(state_get({stash, ProviderId, SpaceId})),
     state_put({stash, ProviderId, SpaceId}, undefined),
     lists:foreach(fun(Batch) ->
-        apply_batch_changes(ProviderId, SpaceId, Batch)
+        do_apply_batch_changes(ProviderId, SpaceId, Batch, false)
     end, Batches).
 
