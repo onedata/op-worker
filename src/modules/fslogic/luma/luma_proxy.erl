@@ -56,7 +56,7 @@ get_posix_user_ctx(_, SessionId, SpaceUUID) ->
             Credentials;
         _ ->
             {ok, Response} = get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
-            ?DIRECTIO_HELPER_NAME, SessionId),
+                ?DIRECTIO_HELPER_NAME, SessionId),
             User_ctx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             luma_response:save(UserId, ?DIRECTIO_HELPER_NAME, User_ctx),
             User_ctx
@@ -146,27 +146,27 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 -spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
     StorageId :: storage:id() | helpers:name(), SessionId :: session:id()) -> proplists:proplist().
 get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
-    {ok, LUMA_hostname} = application:get_env(?APP_NAME, luma_hostname),
-    Hostname_binary = list_to_binary(LUMA_hostname),
-    {ok, LUMA_port} = application:get_env(?APP_NAME, luma_port),
-    Port_binary = list_to_binary(LUMA_port),
+    {ok, LUMAHostname} = application:get_env(?APP_NAME, luma_hostname),
+    HostnameBinary = list_to_binary(LUMAHostname),
+    {ok, LUMAPort} = application:get_env(?APP_NAME, luma_port),
+    PortBinary = list_to_binary(LUMAPort),
     {ok, Hostname} = inet:gethostname(),
-    {ok, {hostent, Full_hostname, _, inet, _, IP_list}} = inet:gethostbyname(Hostname),
-    Full_hostname_binary = list_to_binary(Full_hostname),
-    IP_list_string = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IP_list),
-    IP_binary = json_utils:encode(IP_list_string),
-    User_details_json = case session:get_auth(SessionId) of
+    {ok, {hostent, FullHostname, _, inet, _, IPList}} = inet:gethostbyname(Hostname),
+    FullHostnameBinary = list_to_binary(FullHostname),
+    IPListString = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IPList),
+    IPBinary = json_utils:encode(IPListString),
+    UserDetailsJSON = case session:get_auth(SessionId) of
         {ok, undefined} ->
             <<"{}">>;
         {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
-            {ok, User_details} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-            User_details_proplist = lists:zip(record_info(fields, user_details), tl(tuple_to_list(User_details))),
-            list_to_binary(http_uri:encode(binary_to_list(json_utils:encode(User_details_proplist))))
+            {ok, UserDetails} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
+            UserDetailsProplist = lists:zip(record_info(fields, user_details), tl(tuple_to_list(UserDetails))),
+            list_to_binary(http_uri:encode(binary_to_list(json_utils:encode(UserDetailsProplist))))
     end,
     case http_client:get(
-        <<Hostname_binary/binary,":",Port_binary/binary,"/get_user_credentials?global_id=",UserId/binary,
-        "&storage_type=",StorageType/binary,"&storage_id=",StorageId/binary,"&source_ips=",IP_binary/binary,
-        "&source_hostname=",Full_hostname_binary/binary,"&user_details=",User_details_json/binary>>,
+        <<HostnameBinary/binary, ":", PortBinary/binary, "/get_user_credentials?global_id=", UserId/binary,
+            "&storage_type=", StorageType/binary, "&storage_id=", StorageId/binary, "&source_ips=", IPBinary/binary,
+            "&source_hostname=", FullHostnameBinary/binary, "&user_details=", UserDetailsJSON/binary>>,
         [],
         [],
         [insecure]

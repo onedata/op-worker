@@ -76,8 +76,8 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
     end,
 
     #ceph_user_ctx{
-      user_name = ceph_user:name(Credentials),
-      user_key = ceph_user:key(Credentials)
+        user_name = ceph_user:name(Credentials),
+        user_key = ceph_user:key(Credentials)
     }.
 
 
@@ -110,7 +110,8 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 
     Credentials = case get_s3_user(UserId, StorageId) of
         undefined ->
-            {ok, #s3_user_credentials{access_key = Access_key, secret_key = SecretKey} = Credentials} = create_s3_user(),
+            {ok, #s3_user_credentials{access_key = Access_key, secret_key = SecretKey} = Credentials}
+                = create_s3_user(UserId, StorageId),
             s3_user:add(UserId, StorageId, Access_key, SecretKey),
             Credentials;
         Credentials ->
@@ -118,8 +119,8 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
     end,
 
     #s3_user_ctx{
-      access_key = s3_user:access_key(Credentials),
-      secret_key = s3_user:secret_key(Credentials)
+        access_key = s3_user:access_key(Credentials),
+        secret_key = s3_user:secret_key(Credentials)
     }.
 
 %%--------------------------------------------------------------------
@@ -147,7 +148,7 @@ get_ceph_user(UserId, StorageId) ->
 %% Creates Ceph user credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec create_ceph_user(UserId :: binary(), StorageId :: storage:id()) -> ceph_user:credentials().
+-spec create_ceph_user(UserId :: binary(), StorageId :: storage:id()) -> {ok, ceph_user:credentials()}.
 create_ceph_user(?ROOT_USER_ID, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
     {ok, #ceph_user_credentials{user_name = maps:get(<<"user_name">>, Args),
@@ -156,11 +157,11 @@ create_ceph_user(UserId, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
     {ok, {User_name, User_key}} = luma_nif:create_ceph_user(binary_to_list(UserId),
         binary_to_list(maps:get(<<"mon_host">>, Args)),
-        binary_to_list(maps:get(<<"cluster_name">>, Args)),
+        binary_to_list(maps:get(<<"cluster_name">>, Args, <<"Ceph">>)),
         binary_to_list(maps:get(<<"pool_name">>, Args)),
         binary_to_list(maps:get(<<"user_name">>, Args)),
         binary_to_list(maps:get(<<"user_key">>, Args))
-        ),
+    ),
     {ok, #ceph_user_credentials{user_name = User_name, user_key = User_key}}.
 
 
@@ -189,6 +190,20 @@ get_s3_user(UserId, StorageId) ->
 %% Creates S3 user credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec create_s3_user() -> s3_user:credentials().
-create_s3_user() ->
-    {ok, #s3_user_credentials{access_key = <<"AccessKey">>, secret_key = <<"SecretKey">>}}.
+-spec create_s3_user(UserId :: binary(), StorageId :: storage:id()) -> {ok, s3_user:credentials()}.
+create_s3_user(?ROOT_USER_ID, StorageId) ->
+    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
+    {ok, #s3_user_credentials{access_key = maps:get(<<"access_key">>, Args),
+        secret_key = maps:get(<<"secret_key">>, Args)}};
+create_s3_user(UserId, StorageId) ->
+    {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
+    AdminAccessKey = maps:get(<<"access_key">>, Args),
+    AdminSecretKey = maps:get(<<"secret_key">>, Args),
+    BucketName = maps:get(<<"bucket_name">>, Args),
+    IAMHost = maps:get(<<"iam_host">>, Args, <<"iam.amazonaws.com">>),
+    Region = maps:get(<<"region">>, Args, <<"us-east-1">>),
+    ok = amazonaws_iam:create_user(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId),
+    {ok, {AccessKey, SecretKey}} =
+        amazonaws_iam:create_access_key(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId),
+    ok = amazonaws_iam:allow_access_to_bucket(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId, BucketName),
+    {ok, #s3_user_credentials{access_key = AccessKey, secret_key = SecretKey}}.
