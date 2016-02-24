@@ -77,7 +77,7 @@ get_spaces_for_provider(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_url(ProviderId :: oneprovider:id()) -> URL :: binary() | no_return().
-get_provider_url(ProviderId) ->
+get_provider_url(ProviderId)d ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
@@ -90,7 +90,7 @@ get_provider_url(ProviderId) ->
 encode_term(Doc) ->
     Data = term_to_binary(Doc),
     Compressed = zlib:compress(Data),
-    ?info("Commpression diff ~p", [size(Compressed) - size(Data)]),
+    ?debug("[DBSync] Data compression ratio ~p", [size(Compressed) / size(Data)]),
     Compressed.
 
 
