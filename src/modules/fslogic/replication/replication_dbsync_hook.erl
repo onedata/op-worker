@@ -105,10 +105,10 @@ update_outdated_local_location_replica(LocalDoc = #document{value = #file_locati
 %% @end
 %%--------------------------------------------------------------------
 -spec reconcile_replicas(file_location:doc(), file_location:doc()) -> ok.
-reconcile_replicas(LocalDoc = #document{value = LocalLocation = #file_location{uuid = Uuid, version_vector = VV1}},
-    #document{value = #file_location{version_vector = VV2, blocks = Blocks2}}) ->
+reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1}},
+    ExternalDoc = #document{value = #file_location{version_vector = VV2, blocks = Blocks2}}) ->
     ?info("Conflicting changes detected on ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
-    fslogic_blocks:invalidate(LocalDoc#document{value = LocalLocation#file_location{version_vector = version_vector:reconcile(VV1, VV2)}}, Blocks2). %todo reconcile
+    fslogic_blocks:invalidate(version_vector:merge_location_versions(LocalDoc, ExternalDoc), Blocks2). %todo reconcile
 
 %%--------------------------------------------------------------------
 %% @doc
