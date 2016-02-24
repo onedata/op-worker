@@ -490,12 +490,8 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
             (CurrentSeq) ->
                 max(SeqNum, CurrentSeq)
         end,
-    case self() =:= whereis(dbsync_worker) of
-        true ->
-            state_put(Key, OP(state_get(Key)));
-        false ->
-            state_update(Key, OP)
-    end.
+
+    state_update(Key, OP).
 
 
 %%--------------------------------------------------------------------
@@ -516,7 +512,7 @@ get_current_seq(SpaceId) ->
 -spec get_current_seq(oneprovider:id(), SpaceId :: binary()) ->
     non_neg_integer().
 get_current_seq(ProviderId, SpaceId) ->
-    case worker_host:state_get(dbsync_worker, {current_seq, ProviderId, SpaceId}) of
+    case state_get({current_seq, ProviderId, SpaceId}) of
         undefined -> 0;
         Other -> Other
     end.
