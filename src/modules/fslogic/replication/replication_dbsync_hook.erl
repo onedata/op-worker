@@ -34,7 +34,6 @@ on_file_location_change(_SpaceId, ChangedLocationDoc =
     #document{key = Key, value = #file_location{uuid = Uuid, provider_id = ProviderId}}) ->
     file_location:run_synchronized(Uuid,
         fun() ->
-            ?info("Processing change of file ~p, on provider: ~p", [Uuid, ProviderId]),
             case oneprovider:get_provider_id() =/= ProviderId of
                 true ->
                     {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
@@ -91,7 +90,6 @@ update_local_location_replica(LocalDoc = #document{value = #file_location{versio
 -spec update_outdated_local_location_replica(file_location:doc(), file_location:doc()) -> ok.
 update_outdated_local_location_replica(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1}},
     ExternalDoc = #document{value = #file_location{version_vector = VV2, size = NewSize}}) ->
-    ?info("Updating outdated replica ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = fslogic_file_location:get_changes(ExternalDoc, Diff),
