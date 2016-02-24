@@ -433,22 +433,24 @@ simple_rename_test(Config) ->
 
             FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, NewPath}}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-            ?assertEqual(FileAttr, ?req(Worker, SessId, #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
+            ?assertEqual(FileAttr, ?req(Worker, SessId,
+                #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
             #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
             {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
         end,
 
-    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []},
+        [<<"t6_dir1">>, <<"t6_dir2">>, <<"t6_dir3">>]),
     [_, ToMove | _] = lists:reverse(UUIDs1),
 
-    RenameResp1 = ?req(Worker, SessId1, #rename{uuid = ToMove, target_path = <<"/spaces/space_name2/dir4">>}),
+    RenameResp1 = ?req(Worker, SessId1, #rename{uuid = ToMove, target_path = <<"/spaces/space_name2/t6_dir4">>}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RenameResp1),
 
-    MovedFileAttr1 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/dir4">>}}),
-    MovedFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/dir4/dir3">>}}),
-    MovedFileAttr3 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir1/dir2">>}}),
-    MovedFileAttr4 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir1/dir2/dir3">>}}),
+    MovedFileAttr1 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/t6_dir4">>}}),
+    MovedFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/t6_dir4/t6_dir3">>}}),
+    MovedFileAttr3 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/t6_dir1/t6_dir2">>}}),
+    MovedFileAttr4 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/t6_dir1/t6_dir2/t6_dir3">>}}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr2),
@@ -474,10 +476,10 @@ update_times_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = <<"/test">>,
+            Path = <<"/t7_test">>,
             ParentUUID = get_uuid_privileged(Worker, SessId, <<"/">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"test">>, mode = 8#000})),
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"t7_test">>, mode = 8#000})),
             UUID = get_uuid(Worker, SessId, Path),
 
             {_OldATime, OldMTime, OldCTime} = GetTimes({uuid, UUID}, SessId),
@@ -536,7 +538,4 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, communicator),
-
-    ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [], timer:seconds(60))),
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, timer:seconds(60))).
+    test_utils:mock_validate_and_unload(Workers, communicator).
