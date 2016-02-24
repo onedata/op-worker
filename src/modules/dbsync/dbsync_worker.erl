@@ -175,7 +175,7 @@ handle({flush_queue, QueueKey}) ->
                     ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
                     undefined;
                 false ->
-                    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
+                    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
                     Queue#queue{batch_map = NewBatchMap}
             end;
             (undefined) when QueueKey =:= global ->
