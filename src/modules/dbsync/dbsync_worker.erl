@@ -61,8 +61,8 @@
 init(_Args) ->
     ?info("[ DBSync ]: Starting dbsync..."),
     Since = 0,
-    timer:apply_after(?BROADCAST_STATUS_INTERVAL, worker_proxy, cast, [dbsync_worker, bcast_status]),
-    timer:apply_after(timer:seconds(5), worker_proxy, cast, [dbsync_worker, {async_init_stream, Since, infinity, global}]),
+    timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
+    timer:send_after(timer:seconds(5), whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -85,7 +85,7 @@ init_stream(Since, Until, Queue) ->
         _ -> ok
     end,
 
-    timer:apply_after(?FLUSH_QUEUE_INTERVAL, worker_proxy, cast, [dbsync_worker, {flush_queue, Queue}]),
+    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
     couchdb_datastore_driver:changes_start_link(
         fun
             (_, stream_ended, _) ->
@@ -122,7 +122,7 @@ handle({reemit, Msg}) ->
     dbsync_proto:reemit(Msg);
 
 handle(bcast_status) ->
-    timer:apply_after(?BROADCAST_STATUS_INTERVAL, worker_proxy, cast, [dbsync_worker, bcast_status]),
+    timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
         catch bcast_status();
 
 handle(requested_bcast_status) ->
@@ -175,11 +175,11 @@ handle({flush_queue, QueueKey}) ->
                     ?info("[ DBSync ] Queue ~p removed!", [QueueKey]),
                     undefined;
                 false ->
-                    timer:apply_after(?FLUSH_QUEUE_INTERVAL, worker_proxy, cast, [dbsync_worker, {flush_queue, QueueKey}]),
+                    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
                     Queue#queue{batch_map = NewBatchMap}
             end;
             (undefined) when QueueKey =:= global ->
-                timer:apply_after(?FLUSH_QUEUE_INTERVAL, worker_proxy, cast, [dbsync_worker, {flush_queue, QueueKey}]),
+                timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, QueueKey}}),
                 undefined;
             (undefined) ->
                 ?warning("Unknown operation on empty queue ~p", [QueueKey]),
@@ -210,8 +210,7 @@ handle({async_init_stream, Since, Until, Queue}) ->
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
-                timer:apply_after(?GLOBAL_STREAM_RESTART_INTERVAL, worker_proxy, cast,
-                    [dbsync_worker, {async_init_stream, Since, Until, Queue}]),
+                timer:send_after(?GLOBAL_STREAM_RESTART_INTERVAL, whereis(dbsync_worker), {timer, {async_init_stream, Since, Until, Queue}}),
                 undefined
         end
     end);
