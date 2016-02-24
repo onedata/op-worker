@@ -36,17 +36,67 @@ get_blocks_for_sync(Locations, Blocks) ->
     LocalProviderId = oneprovider:get_provider_id(),
     LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- Locations, Id =:= LocalProviderId],
     RemoteLocations = Locations -- LocalLocations,
-    [LocalBlocks] = [LocalBlocks || #document{value = #file_location{blocks = LocalBlocks}} <- LocalLocations], %todo allow multi location
-    BlocksToSync = fslogic_blocks:invalidate(Blocks, LocalBlocks),
+    LocalBlocksList = [LocalBlocks || #document{value = #file_location{blocks = LocalBlocks}} <- LocalLocations],
 
-    case BlocksToSync of
-        [] -> [];
-        _ ->
-            [Loc | _] = RemoteLocations,
-            RemoteProvider = Loc#document.value#file_location.provider_id,
-            [{RemoteProvider, BlocksToSync}] %todo handle multiprovider case
-    end.
+    BlocksToSync = lists:foldl(
+        fun(LocalBlocks, Acc) ->
+            fslogic_blocks:invalidate(Acc, LocalBlocks)
+        end, Blocks, LocalBlocksList),
+
+    RemoteList =
+        [{ProviderId, RemoteBlocks} ||
+            #document{value = #file_location{blocks = RemoteBlocks, provider_id = ProviderId}}
+                <- RemoteLocations],
+    SortedRemoteList = lists:sort(RemoteList),
+    AggregatedRemoteList = lists:foldl(fun
+        ({ProviderId, Blocks}, [{ProviderId, BlocksAcc} | Rest]) ->
+            AggregatedBlocks = aggregate(Blocks, BlocksAcc),
+            [{ProviderId, AggregatedBlocks} | Rest];
+        (ProviderIdWithBlocks, Acc) ->
+            [ProviderIdWithBlocks | Acc]
+    end, [], SortedRemoteList),
+
+    PresentBlocks = lists:map(fun({ProviderId, Blocks}) ->
+        AbsentBlocks = fslogic_blocks:invalidate(BlocksToSync, Blocks),
+        PresentBlocks = fslogic_blocks:invalidate(BlocksToSync, AbsentBlocks),
+        ConsolidatedPresentBlocks = fslogic_blocks:consolidate(PresentBlocks),
+        {ProviderId, ConsolidatedPresentBlocks}
+    end, AggregatedRemoteList),
+
+    minimize_present_blocks(PresentBlocks, []).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Aggregates and consolidates given blocks lists.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate(fslogic_blocks:blocks(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
+aggregate(Blocks1, Blocks2) ->
+    AggregatedBlocks = fslogic_blocks:invalidate(Blocks1, Blocks2) ++ Blocks2,
+    fslogic_blocks:consolidate(lists:sort(AggregatedBlocks)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given list of mappings between provider_id -> available_blocks,
+%% returns minimized version suitable for data transfer, in which providers'
+%% available blocks are disjoint.
+%% @end
+%%--------------------------------------------------------------------
+-spec minimize_present_blocks([{oneprovider:id(), fslogic_blocks:blocks()}], fslogic_blocks:blocks()) ->
+    [{oneprovider:id(), fslogic_blocks:blocks()}].
+minimize_present_blocks([], _) ->
+    [];
+minimize_present_blocks([{ProviderId, Blocks} | Rest], AlreadyPresent) ->
+    MinimizedBlocks = fslogic_blocks:invalidate(Blocks, AlreadyPresent),
+    UpdatedAlreadyPresent = aggregate(AlreadyPresent, MinimizedBlocks),
+    case MinimizedBlocks of
+        [] ->
+            minimize_present_blocks(Rest, UpdatedAlreadyPresent);
+        _ ->
+            [{ProviderId, MinimizedBlocks} | minimize_present_blocks(Rest, UpdatedAlreadyPresent)]
+    end.

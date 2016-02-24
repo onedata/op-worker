@@ -95,8 +95,8 @@ append(Doc, [], _) ->
     Doc;
 append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks) ++ Blocks,
-    NewSize = fslogic_blocks:upper(Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(lists:sort(NewBlocks)),
+    NewSize = fslogic_blocks:upper(Blocks),
 
     case BumpVersion of
         true ->
