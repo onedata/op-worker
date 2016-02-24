@@ -77,7 +77,7 @@ get_spaces_for_provider(ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_url(ProviderId :: oneprovider:id()) -> URL :: binary() | no_return().
-get_provider_url(ProviderId)d ->
+get_provider_url(ProviderId) ->
     {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
