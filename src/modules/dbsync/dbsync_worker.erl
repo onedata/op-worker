@@ -276,12 +276,24 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Apply whole batch of changes from remote provider.
+%% Apply whole batch of changes from remote provider and try to consume batches from stash.
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
+    ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
+    catch consume_batches(FromProvider, SpaceId),
+    do_apply_batch_changes(FromProvider, SpaceId, Batch).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Apply whole batch of changes from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec do_apply_batch_changes(FromProvider :: oneprovider:id(), SpaceId :: binary(), batch()) ->
+    ok | no_return().
+do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
     CurrentUntil = get_current_seq(FromProvider, SpaceId),
     case CurrentUntil < Since of
@@ -289,6 +301,9 @@ apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Sin
             ?error("Unable to apply changes from provider ~p (space id ~p). Current 'until': ~p, batch 'since': ~p", [FromProvider, SpaceId, CurrentUntil, Since]),
             stash_batch(FromProvider, SpaceId, Batch),
             do_request_changes(FromProvider, CurrentUntil, Since);
+        false when Until < CurrentUntil ->
+            ?info("Dropping changes {~p, ~p} since current sequence is ~p", [Since, Until, CurrentUntil]),
+            ok;
         false ->
             ok = apply_changes(SpaceId, Changes),
             ?debug("Changes applied ~p ~p ~p", [FromProvider, SpaceId, Until]),
@@ -549,10 +564,29 @@ do_request_changes(ProviderId, Since, Until) ->
     ok | no_return().
 stash_batch(ProviderId, SpaceId, Batch) ->
     state_update({stash, ProviderId, SpaceId},
-        fun(undefined) ->
-            [Batch];
+        fun
+            (undefined) ->
+                [Batch];
             (Batches) ->
-                [Batch | Batches]
+                case length(Batches) > 50 of
+                    true -> Batches;
+                    false ->
+                        [Batch | Batches]
+                end
         end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Consumes batches from batch-stash.
+%% @end
+%%--------------------------------------------------------------------
+-spec consume_batches(oneprovider:id(), SpaceId :: binary()) ->
+    ok | no_return().
+consume_batches(ProviderId, SpaceId) ->
+    Batches = lists:sort(state_get({stash, ProviderId, SpaceId})),
+    state_put({stash, ProviderId, SpaceId}, undefined),
+    lists:foreach(fun(Batch) ->
+        apply_batch_changes(ProviderId, SpaceId, Batch)
+    end, Batches).
 
