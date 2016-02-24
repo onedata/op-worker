@@ -40,7 +40,7 @@ synchronize(Uuid, Block) ->
             {ok, Loc} = file_location:get(LocationId),
             Loc
         end, Locations),
-    ProvidersAndBlocks = get_blocks_for_sync(LocationDocs, [Block]),
+    ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, [Block]),
     lists:foreach(
         fun({ProviderId, Blocks}) ->
             lists:foreach(
@@ -90,29 +90,4 @@ receive_rtransfer_notification(Ref, Timeout) ->
             Status
     after
         Timeout -> {error, timeout}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if given blocks are synchronized in local file locations. If not,
-%% returns list with tuples informing where to fetch data: {ProviderId, BlocksToFetch}
-%% @end
-%%--------------------------------------------------------------------
--spec get_blocks_for_sync([file_location:doc()], fslogic_blocks:blocks()) ->
-    [{oneprovider:id(), fslogic_blocks:blocks()}].
-get_blocks_for_sync(_, []) ->
-    [];
-get_blocks_for_sync(Locations, Blocks) ->
-    LocalProviderId = oneprovider:get_provider_id(),
-    LocalLocations = [Loc || Loc = #document{value = #file_location{provider_id = Id}} <- Locations, Id =:= LocalProviderId],
-    RemoteLocations = Locations -- LocalLocations,
-    [LocalBlocks] = [LocalBlocks || #document{value = #file_location{blocks = LocalBlocks}} <- LocalLocations], %todo allow multi location
-    BlocksToSync = fslogic_blocks:invalidate(Blocks, LocalBlocks),
-
-    case BlocksToSync of
-        [] -> [];
-        _ ->
-            [Loc | _] = RemoteLocations,
-            RemoteProvider = Loc#document.value#file_location.provider_id,
-            [{RemoteProvider, BlocksToSync}] %todo handle multiprovider case
     end.
