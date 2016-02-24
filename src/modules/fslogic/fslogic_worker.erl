@@ -243,8 +243,8 @@ handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(NewCtx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
+handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
+    fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
 handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
     fslogic_req_generic:get_xattr(Ctx, {uuid, UUID}, XattrName);
 handle_fuse_request(Ctx, #set_xattr{uuid = UUID, xattr = Xattr}) ->
@@ -271,6 +271,11 @@ handle_fuse_request(Ctx, #get_mimetype{uuid = UUID}) ->
     fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #set_mimetype{uuid = UUID, value = Value}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
+handle_fuse_request(Ctx, #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}) ->
+    fuse_config_manager:create_storage_test_file(Ctx, SID, FileUUID);
+handle_fuse_request(_Ctx, #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
+    file_id = FileId, file_content = FileContent}) ->
+    fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

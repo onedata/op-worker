@@ -4,7 +4,7 @@
 CHANGELOG
 ---------
 
-### 3.0.0
+### 3.0.0-alpha
 
 * Dependencies management update
 * Add map for helpers IO service. Test open and mknod flags.
