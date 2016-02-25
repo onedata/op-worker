@@ -387,7 +387,12 @@ state_update(Key, UpdateFun) when is_function(UpdateFun) ->
     DoUpdate = fun() ->
         OldValue = state_get(Key),
         NewValue = UpdateFun(OldValue),
-        state_put(Key, NewValue)
+        case OldValue of
+            NewValue ->
+                ok;
+            _ ->
+                state_put(Key, NewValue)
+        end
     end,
 
     DBSyncPid = whereis(?MODULE),

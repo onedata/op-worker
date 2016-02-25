@@ -130,7 +130,6 @@ create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
     ?run(begin
-             ?info("CREATE FILE ~p", [FileName]),
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
                  fun() ->
