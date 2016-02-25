@@ -53,7 +53,7 @@ clean_test_users_and_spaces(Config) ->
 
     lists:foreach(fun(W) ->
         initializer:teardown_sesion(W, Config),
-        clear_cache(Worker)
+        clear_cache(W)
     end, DomainWorkers),
     test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups, space_storage]).
 
