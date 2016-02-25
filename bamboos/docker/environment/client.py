@@ -34,7 +34,7 @@ def _tweak_config(config, os_config, name, uid):
         client_config = {'name': client['name'],
                          'op_domain': worker.cluster_domain(client['op_domain'],
                                                             uid),
-                         'oz_domain': worker.cluster_domain(client['oz_domain'], uid),
+                         'zone_domain': worker.cluster_domain(client['zone_domain'], uid),
                          'user_key': client['user_key'],
                          'user_cert': client['user_cert'],
                          'mounting_path': client['mounting_path'],
@@ -69,7 +69,7 @@ mkdir /tmp/keys
         client_name = client["name"]
         client_data[client_name] = {'client_name': client_name,
                                     'op_domain': client['op_domain'],
-                                    'oz_domain': client['oz_domain'],
+                                    'zone_domain': client['zone_domain'],
                                     'mounting_path': client['mounting_path'],
                                     'token_for': client['token_for']}
         # cert_file_path and key_file_path can both be an absolute path

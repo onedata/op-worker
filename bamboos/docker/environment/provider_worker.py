@@ -20,14 +20,14 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
 
 
 class ProviderWorkerConfigurator:
-    def tweak_config(self, cfg, instance, uid):
+    def tweak_config(self, cfg, uid, instance):
         sys_config = cfg['nodes']['node']['sys.config'][self.app_name()]
         if 'zone_domain' in sys_config:
             oz_hostname = worker.cluster_domain(sys_config['zone_domain'], uid)
             sys_config['zone_domain'] = oz_hostname
         return cfg
 
-    def additional_commands(self, bindir, config, domain, worker_ips):
+    def pre_start_commands(self, bindir, config, domain, worker_ips):
         return ''
 
     def configure_started_instance(self, bindir, instance, config, container_ids, output):
