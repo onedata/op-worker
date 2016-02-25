@@ -6,22 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements gr_plugin_behaviour in order
+%%% This module implements oz_plugin_behaviour in order
 %%% to customize connection settings to Global Registry.
 %%% @end
 %%%-------------------------------------------------------------------
--module(gr_plugin).
+-module(oz_plugin).
 -author("Krzysztof Trzepla").
 
--behaviour(gr_plugin_behaviour).
+-behaviour(oz_plugin_behaviour).
 
 -include("global_definitions.hrl").
 
-%% gr_plugin_behaviour API
--export([get_gr_url/0, get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
+%% oz_plugin_behaviour API
+-export([get_oz_url/0, get_key_path/0, get_csr_path/0, get_cert_path/0, get_cacert_path/0]).
 
 %%%===================================================================
-%%% gr_plugin_behaviour API
+%%% oz_plugin_behaviour API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -29,11 +29,11 @@
 %% Should return a Global Registry URL.
 %% @end
 %%--------------------------------------------------------------------
--spec get_gr_url() -> string().
-get_gr_url() ->
-    {ok, Hname} = application:get_env(?APP_NAME, global_registry_domain),
+-spec get_oz_url() -> string().
+get_oz_url() ->
+    {ok, Hname} = application:get_env(?APP_NAME, zone_domain),
     Hostname = str_utils:to_list(Hname),
-    {ok, Port} = application:get_env(?APP_NAME, global_registry_rest_port),
+    {ok, Port} = application:get_env(?APP_NAME, oz_rest_port),
     string:join(["https://", Hostname, ":", integer_to_list(Port)], "").
 
 %%--------------------------------------------------------------------
@@ -43,7 +43,7 @@ get_gr_url() ->
 %%--------------------------------------------------------------------
 -spec get_key_path() -> file:name_all().
 get_key_path() ->
-    {ok, KeyFile} = application:get_env(?APP_NAME, global_registry_provider_key_path),
+    {ok, KeyFile} = application:get_env(?APP_NAME, oz_provider_key_path),
     KeyFile.
 
 %%--------------------------------------------------------------------
@@ -53,7 +53,7 @@ get_key_path() ->
 %%--------------------------------------------------------------------
 -spec get_csr_path() -> file:name_all().
 get_csr_path() ->
-    {ok, CSRFile} = application:get_env(?APP_NAME, global_registry_provider_csr_path),
+    {ok, CSRFile} = application:get_env(?APP_NAME, oz_provider_csr_path),
     CSRFile.
 
 %%--------------------------------------------------------------------
@@ -64,7 +64,7 @@ get_csr_path() ->
 %%--------------------------------------------------------------------
 -spec get_cert_path() -> file:name_all().
 get_cert_path() ->
-    {ok, CertFile} = application:get_env(?APP_NAME, global_registry_provider_cert_path),
+    {ok, CertFile} = application:get_env(?APP_NAME, oz_provider_cert_path),
     CertFile.
 
 %%--------------------------------------------------------------------
@@ -75,7 +75,7 @@ get_cert_path() ->
 %%--------------------------------------------------------------------
 -spec get_cacert_path() -> file:name_all().
 get_cacert_path() ->
-    {ok, CACertFile} = application:get_env(?APP_NAME, global_registry_ca_cert_path),
+    {ok, CACertFile} = application:get_env(?APP_NAME, oz_ca_cert_path),
     CACertFile.
 
 %%%===================================================================

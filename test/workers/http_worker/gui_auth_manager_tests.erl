@@ -53,15 +53,15 @@ authorize_test_() ->
                 fun(?SRLZD_MACAROON) -> {ok, ?MACAROON} end),
             meck:expect(macaroon, third_party_caveats,
                 fun(?MACAROON) -> {ok, ?THIRD_PARTY_CAVEATS} end),
-            meck:new(gr_users),
-            meck:expect(gr_users, authorize,
+            meck:new(oz_users),
+            meck:expect(oz_users, authorize,
                 fun(CaveatID) -> {ok, get_disch_macaroon(CaveatID)} end)
         end,
         % Teardown fun
         fun(_) ->
             % Validate mocks
-            ?assert(meck:validate(gr_users)),
-            ok = meck:unload(gr_users),
+            ?assert(meck:validate(oz_users)),
+            ok = meck:unload(oz_users),
             ?assert(meck:validate(macaroon)),
             ok = meck:unload(macaroon)
         end,

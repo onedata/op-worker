@@ -16,7 +16,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("global_definitions.hrl").
--include_lib("ctool/include/global_registry/gr_providers.hrl").
+-include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -149,7 +149,7 @@ ensure_connected(SessId) ->
     ProviderId = session_manager:session_id_to_provider_id(SessId),
     case session:get_random_connection(SessId) of
         {error, _} ->
-            {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
+            {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
             lists:foreach(
                 fun(URL) ->
                     {ok, Port} = application:get_env(?APP_NAME, provider_protocol_handler_port),
