@@ -188,11 +188,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
         }
     ) end),
 
-    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle1),
-    HandleId = base64:encode(crypto:rand_bytes(20)),
-    {ok, #document{value = #session{handles = Handles}}} = session:get(SessId),
-    UpdatedHandles = maps:put(HandleId, Handle, Handles),
-    {ok, SessId} = session:update(SessId, #{handles => UpdatedHandles}),
+    {ok, HandleId} = save_handle(SFMHandle1, SessId),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{
@@ -250,7 +246,7 @@ get_file_location_for_rdwr(CTX, File) -> get_file_location(CTX, File).
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
-get_file_location(CTX, File) ->
+get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File) ->
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
 
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
@@ -260,8 +256,25 @@ get_file_location(CTX, File) ->
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
+    {ok, Storage} = fslogic_storage:select_storage(CTX),
+    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
+    {ok, HandleId} = save_handle(SFMHandle1, SessId),
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_location{
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_id = SpaceUUID}}.
+            space_id = SpaceUUID, handle_id = HandleId}}.
+
+%%--------------------------------------------------------------------
+%% @doc Saves file handle in user's session, returns id of saved handle
+%% @end
+%%--------------------------------------------------------------------
+-spec save_handle(storage_file_manager:handle(), session:id()) -> {ok, binary()}.
+save_handle(SFMHandle, SessionId) ->
+    {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
+    HandleId = base64:encode(crypto:rand_bytes(20)),
+    {ok, #document{value = #session{handles = Handles}}} = session:get(SessionId),
+    UpdatedHandles = maps:put(HandleId, Handle, Handles),
+    {ok, SessionId} = session:update(SessionId, #{handles => UpdatedHandles}),
+    {ok, HandleId}.
