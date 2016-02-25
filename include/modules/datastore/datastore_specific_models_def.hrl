@@ -87,7 +87,10 @@
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
-    recent_changes = {[], []} :: {OldChanges :: [fslogic_blocks:blocks()], NewChanges :: [fslogic_blocks:blocks()]}
+    recent_changes = {[], []} :: {
+        OldChanges :: [fslogic_file_location:change()],
+        NewChanges :: [fslogic_file_location:change()]
+    }
 }).
 
 %% Model for caching space details fetched from Global Registry

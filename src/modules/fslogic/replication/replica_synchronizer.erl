@@ -71,7 +71,7 @@ notify_fun(_, _, _) -> ok.
 %% Rtransfer on complete fun
 %% @end
 %%--------------------------------------------------------------------
--spec on_complete_fun() -> ok.
+-spec on_complete_fun() -> function().
 on_complete_fun() ->
     Self = self(),
     fun(Ref, Status) ->

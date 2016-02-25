@@ -497,7 +497,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     RemoteLocation = #file_location{size = ExternalSize, space_id = SpaceId,
         storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
         blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
-        version_vector = VVLocal, recent_changes = {[], [#file_block{offset = 1, size = 1}]}},
+        version_vector = VVLocal, recent_changes = {[], [[#file_block{offset = 1, size = 1}]]}},
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
         rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])),
     {ok, RemoteLocationDoc} = rpc:call(W1, file_location, get, [RemoteLocationId]),
@@ -577,7 +577,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->

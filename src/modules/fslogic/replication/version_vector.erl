@@ -102,7 +102,7 @@ get_version(ReplicaId, VV) ->
 %% Return list of replica_ids which are stored in given version_vector.
 %% @end
 %%--------------------------------------------------------------------
--spec identificators(version_vector()) -> [replica_id()].
+-spec identificators([version_vector()]) -> [replica_id()].
 identificators(VVs) ->
     [Key || VV <- VVs, Key <- maps:keys(VV)].
 

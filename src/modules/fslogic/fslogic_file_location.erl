@@ -20,6 +20,10 @@
 
 -define(MAX_CHANGES, 20).
 
+-type change() :: fslogic_blocks:blocks() | {shrink, non_neg_integer()}.
+
+-export_type([change/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -29,7 +33,8 @@
 %% Add changelog to file_location document
 %% @end
 %%--------------------------------------------------------------------
--spec add_change(file_location:doc(), fslogic_blocks:blocks()) -> file_location:doc().
+-spec add_change(file_location:doc(), fslogic_file_location:change()) ->
+    file_location:doc().
 add_change(Doc = #document{value = Location = #file_location{recent_changes = {_Backup, New}}}, Change)
     when length(New) >= ?MAX_CHANGES ->
     Doc#document{value = Location#file_location{recent_changes = {New, [Change]}}};
@@ -41,7 +46,7 @@ add_change(Doc = #document{value = Location = #file_location{recent_changes = {B
 %% Get N recent changes of file_location
 %% @end
 %%--------------------------------------------------------------------
--spec get_changes(file_location:doc(), non_neg_integer()) -> [fslogic_blocks:blocks()].
+-spec get_changes(file_location:doc(), non_neg_integer()) -> [fslogic_file_location:change()].
 get_changes(#document{value = #file_location{size = Size, recent_changes = {Backup, New}, blocks = Blocks}}, N)
     when N > (length(New) + length(Backup)) ->
     [Blocks, {shrink, Size}];

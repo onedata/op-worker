@@ -154,7 +154,7 @@ create(SessId, Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
-    OpenType :: helper:open_mode()) ->
+    OpenType :: helpers:open_mode()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),

@@ -76,7 +76,7 @@ update(FileUUID, Blocks, FileSize, BumpVersion) ->
 %% Truncates blocks from given location. Works for both shrinking and growing file.
 %% @end
 %%--------------------------------------------------------------------
--spec do_local_truncate(FileSize :: non_neg_integer(), datastore:document()) -> ok | no_return().
+-spec do_local_truncate(FileSize :: non_neg_integer(), file_location:doc()) -> file_location:doc().
 do_local_truncate(FileSize, Doc = #document{value = #file_location{size = FileSize}}) ->
     Doc;
 do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize, file_id = FileId, storage_id = StorageId}} = LocalLocation) when LocalSize < FileSize ->
@@ -90,7 +90,7 @@ do_local_truncate(FileSize, #document{value = #file_location{size = LocalSize}} 
 %% Appends given blocks to given locations and updates file size for those locations.
 %% @end
 %%--------------------------------------------------------------------
--spec append(datastore:document(), fslogic_blocks:blocks(), boolean()) -> file_location:doc() | no_return().
+-spec append(file_location:doc(), fslogic_blocks:blocks(), boolean()) -> file_location:doc().
 append(Doc, [], _) ->
     Doc;
 append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Loc} = Doc, Blocks, BumpVersion) ->
@@ -116,11 +116,9 @@ append(#document{value = #file_location{blocks = OldBlocks, size = OldSize} = Lo
 %% Inavlidates given blocks in given locations. File size is also updated.
 %% @end
 %%--------------------------------------------------------------------
--spec shrink(datastore:document() | [datastore:document()], Blocks :: fslogic_blocks:blocks(), NewSize :: non_neg_integer()) ->
-    file_location:doc() | no_return().
-shrink(Doc = #document{value = #file_location{size = NewSize}}, [], NewSize) ->
-    Doc;
-shrink(#document{value = #file_location{blocks = OldBlocks} = Loc} = Doc, Blocks, NewSize) ->
+-spec shrink(#document{value :: #file_location{}}, [#file_block{}] | [], non_neg_integer()) ->
+    file_location:doc().
+shrink(Doc = #document{value = Loc = #file_location{blocks = OldBlocks}}, Blocks, NewSize) ->
     NewBlocks = fslogic_blocks:invalidate(OldBlocks, Blocks),
     NewBlocks1 = fslogic_blocks:consolidate(NewBlocks),
     version_vector:bump_version(

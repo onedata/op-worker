@@ -194,7 +194,8 @@ get_parent(_CTX, File) ->
 %% Synchronizes given block with remote replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, #file_block{}) -> ok.
+-spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
+    #fuse_response{}.
 synchronize_block(_Ctx, {uuid, Uuid}, Block)  ->
     ok = replica_synchronizer:synchronize(Uuid, Block),
     #fuse_response{status = #status{code = ?OK}}.

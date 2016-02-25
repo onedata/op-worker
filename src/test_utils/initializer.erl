@@ -246,7 +246,7 @@ communicator_mock(Workers) ->
 %%--------------------------------------------------------------------
 %% @doc Setup and mocking related with users and spaces, done on one provider
 %%--------------------------------------------------------------------
--spec create_test_users_and_spaces(Worker :: node(), Config :: list()) -> list().
+-spec create_test_users_and_spaces([Worker :: node()], Config :: list()) -> list().
 create_test_users_and_spaces([], Config) ->
     Config;
 create_test_users_and_spaces([Worker | Rest], Config) ->
