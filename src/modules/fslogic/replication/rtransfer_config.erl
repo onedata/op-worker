@@ -23,6 +23,9 @@
 %% API
 -export([start_rtransfer/0]).
 
+%% Test API
+-export([rtransfer_opts/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -34,7 +37,16 @@
 %%--------------------------------------------------------------------
 -spec start_rtransfer() -> {ok, pid()}.
 start_rtransfer() ->
-    Opts = [
+    {ok, _} = rtransfer:start_link(rtransfer_opts()).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get default rtransfer config
+%% @end
+%%--------------------------------------------------------------------
+-spec rtransfer_opts() -> list().
+rtransfer_opts() ->
+    [
         {get_nodes_fun,
             fun(ProviderId) ->
                 {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
@@ -97,8 +109,7 @@ start_rtransfer() ->
                 {trans_opts, [{port, ?RTRANSFER_PORT}]}
             ]
         }
-    ],
-    {ok, _} = rtransfer:start_link(Opts).
+    ].
 
 %%%===================================================================
 %%% Internal functions

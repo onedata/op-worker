@@ -76,7 +76,6 @@ ensure_blocks_not_empty(Loc) ->
 -spec save(datastore:document()) ->
     {ok, datastore:key()} | datastore:generic_error().
 save(Document) ->
-%%     ?info("SAVE Bloks: ~p", [Document#document.value#file_location.blocks]),
     datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -133,7 +132,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(file_locations_bucket, [], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(file_locations_bucket, [], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
