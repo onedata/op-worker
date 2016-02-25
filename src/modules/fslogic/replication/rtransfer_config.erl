@@ -58,45 +58,15 @@ rtransfer_opts() ->
             end},
         {open_fun,
             fun(FileUUID, OpenMode) ->
-                CTX0 = fslogic_context:new(?ROOT_SESS_ID),
-                CTX = fslogic_context:set_space_id(CTX0, {uuid, FileUUID}),
-                {ok, FileDoc} = file_meta:get({uuid, FileUUID}),
-                {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
-                FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),
-                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-
-                SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUUID, Storage, FileId),
-                case storage_file_manager:open(SFMHandle0, OpenMode) of
-                    {ok, NewSFMHandle} ->
-                        {ok, #lfm_handle{sfm_handles = maps:from_list([{default, {{StorageId, FileId}, NewSFMHandle}}]),
-                            fslogic_ctx = CTX, file_uuid = FileUUID, open_mode = OpenMode}};
-                    {error, Reason} ->
-                        {error, Reason}
-                end
+                lfm_files:open(?ROOT_SESS_ID, {uuid, FileUUID}, OpenMode)
             end},
         {read_fun,
-            fun(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType} = Handle, Offset, MaxSize) ->
-                {Key, NewSize} = lfm_files:get_sfm_handle_key(UUID, Offset, MaxSize),
-                {{StorageId, FileId}, SFMHandle, NewHandle} = lfm_files:get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
-
-                case storage_file_manager:read(SFMHandle, Offset, NewSize) of
-                    {ok, Data} ->
-                        {ok, NewHandle, Data};
-                    {error, Reason} ->
-                        {error, Reason}
-                end
+            fun(Handle, Offset, MaxSize) ->
+                lfm_files:read_without_events(Handle, Offset, MaxSize)
             end},
         {write_fun,
-            fun(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType} = Handle, Offset, Buffer) ->
-                {Key, NewSize} = lfm_files:get_sfm_handle_key(UUID, Offset, byte_size(Buffer)),
-                {{StorageId, FileId}, SFMHandle, NewHandle} = lfm_files:get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
-
-                case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
-                    {ok, Written} ->
-                        {ok, NewHandle, Written};
-                    {error, Reason2} ->
-                        {error, Reason2}
-                end
+            fun(Handle, Offset, Buffer) ->
+                lfm_files:write_without_events(Handle, Offset, Buffer)
             end},
         {close_fun,
             fun(_Handle) ->

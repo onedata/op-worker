@@ -268,12 +268,12 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_block_map(Handle :: handle()) ->
-    {ok, [lfm_files:block_range()]} | error_reply().
+    {ok, fslogic_blocks:blocks()} | error_reply().
 get_block_map(Handle) ->
     ?run(fun() -> lfm_files:get_block_map(Handle) end).
 
 -spec get_block_map(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
-    {ok, [lfm_files:block_range()]} | error_reply().
+    {ok, fslogic_blocks:blocks()} | error_reply().
 get_block_map(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_block_map(SessId, FileKey) end).
 
