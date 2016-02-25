@@ -25,6 +25,10 @@
 namespace one {
 namespace helpers {
 
+constexpr auto DIRECT_IO_HELPER_UID_ARG = "uid";
+constexpr auto DIRECT_IO_HELPER_GID_ARG = "gid";
+constexpr auto DIRECT_IO_HELPER_PATH_ARG = "root_path";
+
 /**
 * The PosixHelperCTX class represents context for all POSIX compliant helpers
 * and its object is passed to all helper functions.
@@ -117,7 +121,7 @@ public:
     void ash_truncate(
         CTXPtr ctx, const boost::filesystem::path &p, off_t size, VoidCallback);
 
-    void ash_open(CTXPtr ctx, const boost::filesystem::path &p, FlagsSet flags,
+    void ash_open(CTXPtr ctx, const boost::filesystem::path &p, int flags,
         GeneralCallback<int>);
     void ash_read(CTXPtr ctx, const boost::filesystem::path &p,
         asio::mutable_buffer buf, off_t offset, const std::string &fileUuid,
@@ -191,13 +195,10 @@ protected:
 private:
     boost::filesystem::path root(const boost::filesystem::path &path);
     std::shared_ptr<PosixHelperCTX> getCTX(CTXPtr rawCTX) const;
-    static int getFlagsValue(FlagsSet flags);
 
     const boost::filesystem::path m_rootPath;
     asio::io_service &m_workerService;
     UserCTXFactory m_userCTXFactory;
-
-    static const std::map<Flag, int> s_flagTranslation;
 };
 
 } // namespace helpers

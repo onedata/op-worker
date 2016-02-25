@@ -12,6 +12,7 @@
 #endif // linux
 
 #include "directIOHelper.h"
+#include "logging.h"
 
 #include "helpers/storageHelperFactory.h"
 
@@ -340,7 +341,7 @@ void DirectIOHelper::ash_truncate(CTXPtr rawCTX,
 }
 
 void DirectIOHelper::ash_open(CTXPtr rawCTX, const boost::filesystem::path &p,
-    FlagsSet flags, GeneralCallback<int> callback)
+    int flags, GeneralCallback<int> callback)
 {
     auto ctx = getCTX(std::move(rawCTX));
     m_workerService.post(
@@ -351,7 +352,7 @@ void DirectIOHelper::ash_open(CTXPtr rawCTX, const boost::filesystem::path &p,
                 return;
             }
 
-            int res = open(root(p).c_str(), getFlagsValue(std::move(flags)));
+            int res = open(root(p).c_str(), flags);
 
             if (res == -1) {
                 callback(-1, makePosixError(errno));
@@ -528,7 +529,7 @@ asio::mutable_buffer DirectIOHelper::sh_read(CTXPtr rawCTX,
 DirectIOHelper::DirectIOHelper(
     const std::unordered_map<std::string, std::string> &args,
     asio::io_service &service, UserCTXFactory userCTXFactory)
-    : m_rootPath{args.at("root_path")}
+    : m_rootPath{args.at(DIRECT_IO_HELPER_PATH_ARG)}
     , m_workerService{service}
     , m_userCTXFactory{userCTXFactory}
 {
@@ -537,28 +538,11 @@ DirectIOHelper::DirectIOHelper(
 std::shared_ptr<PosixHelperCTX> DirectIOHelper::getCTX(CTXPtr rawCTX) const
 {
     auto ctx = std::dynamic_pointer_cast<PosixHelperCTX>(rawCTX);
-    if (ctx == nullptr)
-        throw std::system_error{
-            std::make_error_code(std::errc::invalid_argument)};
-    return ctx;
-}
-
-int DirectIOHelper::getFlagsValue(FlagsSet flags)
-{
-    int value = 0;
-
-    for (auto flag : flags) {
-        auto searchResult = s_flagTranslation.find(flag);
-        if (searchResult != s_flagTranslation.end()) {
-            value |= searchResult->second;
-        }
-        else {
-            throw std::system_error{
-                std::make_error_code(std::errc::invalid_argument)};
-        }
+    if (ctx == nullptr) {
+        LOG(INFO) << "Helper changed. Creating new context.";
+        return std::make_shared<PosixHelperCTX>();
     }
-
-    return value;
+    return ctx;
 }
 
 PosixHelperCTX::~PosixHelperCTX()
@@ -570,23 +554,15 @@ PosixHelperCTX::~PosixHelperCTX()
 void PosixHelperCTX::setUserCTX(
     std::unordered_map<std::string, std::string> args)
 {
-    uid = std::stoi(args.at("uid"));
-    gid = std::stoi(args.at("gid"));
+    uid = std::stoi(args.at(DIRECT_IO_HELPER_UID_ARG));
+    gid = std::stoi(args.at(DIRECT_IO_HELPER_GID_ARG));
 }
 
 std::unordered_map<std::string, std::string> PosixHelperCTX::getUserCTX()
 {
-    return {{"uid", std::to_string(uid)}, {"gid", std::to_string(gid)}};
+    return {{DIRECT_IO_HELPER_UID_ARG, std::to_string(uid)},
+        {DIRECT_IO_HELPER_GID_ARG, std::to_string(gid)}};
 }
-
-const std::map<Flag, int> DirectIOHelper::s_flagTranslation = {
-    {Flag::NONBLOCK, O_NONBLOCK}, {Flag::APPEND, O_APPEND},
-    {Flag::ASYNC, O_ASYNC}, {Flag::FSYNC, O_FSYNC},
-    {Flag::NOFOLLOW, O_NOFOLLOW}, {Flag::CREAT, O_CREAT},
-    {Flag::TRUNC, O_TRUNC}, {Flag::EXCL, O_EXCL}, {Flag::RDONLY, O_RDONLY},
-    {Flag::WRONLY, O_WRONLY}, {Flag::RDWR, O_RDWR}, {Flag::IFREG, S_IFREG},
-    {Flag::IFCHR, S_IFCHR}, {Flag::IFBLK, S_IFBLK}, {Flag::IFIFO, S_IFIFO},
-    {Flag::IFSOCK, S_IFSOCK}};
 
 } // namespace helpers
 } // namespace one

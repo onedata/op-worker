@@ -124,8 +124,7 @@ const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
     {"S_IFIFO", one::helpers::Flag::IFIFO},
     {"S_IFSOCK", one::helpers::Flag::IFSOCK}};
 
-one::helpers::FlagsSet translateFlags(
-    std::vector<nifpp::str_atom> atoms)
+one::helpers::FlagsSet translateFlags(std::vector<nifpp::str_atom> atoms)
 {
     one::helpers::FlagsSet flags;
 
@@ -650,7 +649,7 @@ ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
 {
     auto buf = std::make_shared<std::vector<char>>(size);
     ctx.helperObj->ash_read(ctx.helperCTX, file,
-        asio::mutable_buffer(buf->data(), size), offset, "", //todo introduce key/value parameters store and ignore fileUuid
+        asio::mutable_buffer(buf->data(), size), offset, "",
         [ctx, buf](asio::mutable_buffer mbuf, error_t e) {
             handle_result(ctx, e, mbuf);
         });
@@ -663,7 +662,7 @@ ERL_NIF_TERM write(
 {
     auto sData = std::make_shared<std::string>(std::move(data));
     ctx.helperObj->ash_write(ctx.helperCTX, file,
-        asio::const_buffer(sData->data(), sData->size()), offset, "", //todo introduce key/value parameters store and ignore fileUuid
+        asio::const_buffer(sData->data(), sData->size()), offset, "",
         [ctx, file, offset, sData](int size, error_t e) {
             handle_result(ctx, e, size);
         });
