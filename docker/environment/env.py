@@ -11,7 +11,6 @@ import sys
 import copy
 import json
 import time
-import collections
 from . import appmock, client, common, zone_worker, cluster_manager, \
     worker, provider_worker, cluster_worker, docker, dns
 

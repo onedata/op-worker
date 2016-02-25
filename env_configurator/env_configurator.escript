@@ -224,9 +224,7 @@ bin_to_atom(Bin) ->
     Provider :: binary()) -> ok.
 register_in_onezone(Workers, Cookie, Provider) ->
     {ok, Provider} = call_node(hd(Workers), Cookie, oneprovider,
-        %% todo: update once provider is rebranded
-        register_in_gr_dev, [Workers, ?DEFAULT_KEY_FILE_PASSWD, Provider]),
-        %% register_in_oz_dev, [Workers, ?DEFAULT_KEY_FILE_PASSWD, Provider]),
+        register_in_oz_dev, [Workers, ?DEFAULT_KEY_FILE_PASSWD, Provider]),
     ok.
 
 %%--------------------------------------------------------------------

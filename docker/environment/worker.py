@@ -46,11 +46,13 @@ def _tweak_config(config, name, instance, uid, configurator):
         cluster_manager.cm_erl_node_name(n, instance, uid) for n in
         sys_config[app_name]['cm_nodes']]
     # Set the cluster domain (needed for nodes to start)
-    sys_config[app_name][configurator.domain_env_name()] = cluster_domain(instance, uid)
+    sys_config[app_name][configurator.domain_env_name()] = cluster_domain(
+        instance, uid)
 
     if 'cluster_worker' not in sys_config:
         sys_config['cluster_worker'] = dict()
-    sys_config['cluster_worker']['persistence_driver_module'] = _db_driver_module(cfg['db_driver'])
+    sys_config['cluster_worker'][
+        'persistence_driver_module'] = _db_driver_module(cfg['db_driver'])
 
     if 'vm.args' not in cfg['nodes']['node']:
         cfg['nodes']['node']['vm.args'] = {}
@@ -61,7 +63,8 @@ def _tweak_config(config, name, instance, uid, configurator):
     return cfg, sys_config[app_name]['db_nodes']
 
 
-def _node_up(worker_id, bindir, config, domain, worker_ips, gen_dev_args, configurator):
+def _node_up(worker_id, bindir, config, domain, worker_ips, gen_dev_args,
+             configurator):
     command = '''set -e
 mkdir -p /root/bin/node/log/
 echo 'while ((1)); do chown -R {uid}:{gid} /root/bin/node/log; sleep 1; done' > /root/bin/chown_logs.sh
@@ -72,14 +75,15 @@ EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 mkdir -p /root/bin/node/data/
 cat <<"EOF" > /root/bin/node/data/dns.config
-{additional_commands}
+{pre_start_commands}
 EOF
 /root/bin/node/bin/{executable} console >> {logfile}'''
-    additional_commands = configurator.additional_commands(bindir, config, domain, worker_ips)
+    pre_start_commands = configurator.pre_start_commands(bindir, config,
+                                                           domain, worker_ips)
 
     command = command.format(
         gen_dev_args=json.dumps({configurator.app_name(): gen_dev_args}),
-        additional_commands=additional_commands,
+        pre_start_commands=pre_start_commands,
         uid=os.geteuid(),
         gid=os.getegid(),
         executable=configurator.app_name(),
@@ -94,7 +98,8 @@ EOF
         command=command)
 
 
-def _docker_up(image, bindir, config, dns_servers, db_node_mappings, logdir, configurator):
+def _docker_up(image, bindir, config, dns_servers, db_node_mappings, logdir,
+               configurator):
     """Starts the docker but does not start OZ
     as dns.config update is needed first
     """
@@ -155,7 +160,8 @@ def _riak_up(cluster_name, db_nodes, dns_servers, uid):
         return db_node_mappings, {}
 
     [dns] = dns_servers
-    riak_output = riak.up('onedata/riak', dns, uid, None, cluster_name, len(db_node_mappings))
+    riak_output = riak.up('onedata/riak', dns, uid, None, cluster_name,
+                          len(db_node_mappings))
 
     return db_node_mappings, riak_output
 
@@ -213,7 +219,8 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
             gen_dev_cfg['os_config'] = config['os_configs'][os_config]
 
         # If present, include gui_livereload
-        if 'gui_livereload' in config[configurator.domains_attribute()][instance]:
+        if 'gui_livereload' in config[configurator.domains_attribute()][
+            instance]:
             gui_livereload = config[configurator.domains_attribute()][instance][
                 'gui_livereload']
             gen_dev_cfg['gui_livereload'] = gui_livereload
@@ -235,9 +242,11 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
 
         # Start db nodes, obtain mappings
         if db_driver == 'riak':
-            db_node_mappings, db_out = _riak_up(instance, all_db_nodes, dns_servers, uid)
+            db_node_mappings, db_out = _riak_up(instance, all_db_nodes,
+                                                dns_servers, uid)
         elif db_driver in ['couchbase', 'couchdb']:
-            db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes, dns_servers, uid)
+            db_node_mappings, db_out = _couchbase_up(instance, all_db_nodes,
+                                                     dns_servers, uid)
         else:
             raise ValueError("Invalid db_driver: {0}".format(db_driver))
 
@@ -248,7 +257,9 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
         worker_ips = []
         worker_configs = {}
         for cfg in configs:
-            worker, node_out = _docker_up(image, bindir, cfg, dns_servers, db_node_mappings, logdir, configurator)
+            worker, node_out = _docker_up(image, bindir, cfg, dns_servers,
+                                          db_node_mappings, logdir,
+                                          configurator)
             workers.append(worker)
             worker_configs[worker] = cfg
             common.merge(current_output, node_out)
@@ -265,7 +276,8 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
 
         domain = cluster_domain(instance, uid)
         for id in worker_configs:
-            _node_up(id, bindir, config, domain, worker_ips, worker_configs[id], configurator)
+            _node_up(id, bindir, config, domain, worker_ips, worker_configs[id],
+                     configurator)
 
         # Wait for all workers to start
         common.wait_until(_ready, workers, CLUSTER_WAIT_FOR_NAGIOS_SECONDS)
