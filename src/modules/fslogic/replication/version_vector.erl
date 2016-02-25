@@ -18,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([compare/2, merge_location_versions/2, bump_version/1, version_diff/2]).
+-export([compare/2, merge_location_versions/2, bump_version/1, version_diff/2,
+    replica_id_is_greater/2]).
 
 -type replica_id() :: {oneprovider:id(), file_location:id()}.
 -type version_vector() :: #{}.
@@ -83,6 +84,16 @@ version_diff(#document{value = #file_location{version_vector = LocalVV}},
     ExternalDoc = #document{value = #file_location{version_vector = ExternalVV}}) ->
     ExternalReplicaId = get_replica_id(ExternalDoc),
     get_version(ExternalReplicaId, ExternalVV) - get_version(ExternalReplicaId, LocalVV).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns true if replica_id associated with first document is grater that
+%% second.
+%% @end
+%%--------------------------------------------------------------------
+-spec replica_id_is_greater(file_location:doc(), file_location:doc()) -> boolean().
+replica_id_is_greater(LocalDoc, ExternalDoc) ->
+    get_replica_id(LocalDoc) > get_replica_id(ExternalDoc).
 
 %%%===================================================================
 %%% Internal functions

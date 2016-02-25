@@ -39,7 +39,8 @@
     remote_change_without_history_should_invalidate_whole_data/1,
     remote_change_of_size_should_notify_clients/1,
     remote_change_of_blocks_should_notify_clients/1,
-    remote_irrelevant_change_should_not_notify_clients/1
+    remote_irrelevant_change_should_not_notify_clients/1,
+    conflicting_remote_changes_should_be_reconciled/1
 ]).
 
 
@@ -58,7 +59,8 @@ all() ->
         remote_change_without_history_should_invalidate_whole_data,
         remote_change_of_size_should_notify_clients,
         remote_change_of_blocks_should_notify_clients,
-        remote_irrelevant_change_should_not_notify_clients
+        remote_irrelevant_change_should_not_notify_clients,
+        conflicting_remote_changes_should_be_reconciled
     ].
 
 
@@ -571,6 +573,64 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
     ?assertEqual(0, rpc:call(W1, meck, num_calls, [fslogic_event, emit_file_location_update, ['_', '_']])),
     ?assertEqual(0, rpc:call(W1, meck, num_calls, [fslogic_event, emit_file_attr_update, ['_', '_']])),
     test_utils:mock_validate_and_unload(W1, fslogic_event).
+
+
+conflicting_remote_changes_should_be_reconciled(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = <<"session_id1">>,
+    SpaceId = <<"space_id1">>,
+    ExternalProviderId = <<"zzz_external_provider_id">>, % should be greater than LocalId
+    ExternalFileId = <<"external_file_id">>,
+
+    % create test file
+    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
+    ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
+    ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
+
+    % attach external location
+    LocalDoc = #document{value = LocalLocation = #file_location{version_vector = VVLocal}} =
+        rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}]),
+    ExternalBlocks = [#file_block{offset = 2, size = 5, file_id = ExternalFileId, storage_id = <<"external_storage_id">>}],
+    ExternalChanges = [
+        [#file_block{offset = 0, size = 2}],
+        [#file_block{offset = 2, size = 2}],
+        {shrink, 8}
+    ],
+    RemoteLocation = #file_location{size = 8, space_id = SpaceId,
+        storage_id = <<"external_storage_id">>, provider_id = ExternalProviderId,
+        blocks = ExternalBlocks, file_id = ExternalFileId, uuid = FileUuid,
+        version_vector = VVLocal, recent_changes = {[], ExternalChanges}},
+    {ok, RemoteLocationId} = ?assertMatch({ok, _},
+        rpc:call(W1, file_location, create, [#document{value = RemoteLocation}])),
+    {ok, RemoteLocationDoc} = rpc:call(W1, file_location, get, [RemoteLocationId]),
+    UpdatedRemoteLocationDoc = #document{value = #file_location{version_vector = ExternalVV}} =
+        bump_version(RemoteLocationDoc, 3),
+    ?assertMatch({ok, _}, rpc:call(W1, file_location, save, [UpdatedRemoteLocationDoc])),
+    ?assertEqual(ok, rpc:call(W1, file_meta, attach_location,
+        [{uuid, FileUuid}, RemoteLocationId, ExternalProviderId])),
+
+    % update local location
+    #document{value = #file_location{version_vector = NewLocalVV}} = bump_version(LocalDoc, 3),
+    LocalChanges = [
+        [#file_block{offset = 2, size = 2}],
+        {shrink, 6},
+        [#file_block{offset = 5, size = 1}]
+    ],
+    rpc:call(W1, file_location, save, [LocalDoc#document{value =
+        LocalLocation#file_location{version_vector = NewLocalVV, recent_changes = {[], LocalChanges}}}]),
+
+    % when
+    rpc:call(W1, dbsync_events, change_replicated, [SpaceId,
+        #change{model = file_location, doc = UpdatedRemoteLocationDoc}]),
+
+    % then
+    #document{value = #file_location{version_vector = MergedVV}} =
+        bump_version(LocalDoc#document{value = LocalLocation#file_location{version_vector = ExternalVV}}, 3),
+    ?assertMatch(#document{value = #file_location{
+        version_vector = MergedVV,
+        blocks = [#file_block{offset = 4, size = 4}]}},
+        rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

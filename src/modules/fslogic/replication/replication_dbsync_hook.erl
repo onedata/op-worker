@@ -12,6 +12,7 @@
 -module(replication_dbsync_hook).
 -author("Tomasz Lichon").
 
+-include("proto/oneclient/common_messages.hrl").
 -include("modules/dbsync/common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -104,12 +105,59 @@ update_outdated_local_location_replica(LocalDoc = #document{value = #file_locati
 %% @end
 %%--------------------------------------------------------------------
 -spec reconcile_replicas(file_location:doc(), file_location:doc()) -> ok.
-reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1, blocks = LocalBlocks}},
-    ExternalDoc = #document{value = #file_location{version_vector = VV2, blocks = ExternalBlocks}}) ->
+reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1, blocks = LocalBlocks, size = LocalSize}},
+    ExternalDoc = #document{value = #file_location{version_vector = VV2, blocks = ExternalBlocks, size = ExternalSize}}) ->
     ?info("Conflicting changes detected on ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
-    NewBlocks = fslogic_blocks:invalidate(LocalBlocks, ExternalBlocks), %todo reconcile
+    ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
+    LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
+    {ExternalChanges, ExternalShrink} = fslogic_file_location:get_merged_changes(ExternalDoc, ExternalChangesNum),
+    {LocalChanges, LocalShrink} = fslogic_file_location:get_merged_changes(LocalDoc, LocalChangesNum),
+
+    NewSize =
+        case {LocalShrink, ExternalShrink} of
+            {undefined, undefined} ->
+                max(LocalSize, ExternalSize);
+            {_, undefined} ->
+                max(LocalShrink, LocalSize);
+            {undefined, _} ->
+                max(ExternalShrink, ExternalSize);
+            {_, _} ->
+                case version_vector:replica_id_is_greater(LocalDoc, ExternalDoc) of
+                    true ->
+                        max(LocalShrink, LocalSize);
+                    false ->
+                        max(ExternalShrink, ExternalSize)
+                end
+        end,
+
+    NewBlocks =
+        case fslogic_blocks:invalidate(LocalChanges, ExternalChanges) of
+            LocalChanges ->
+                fslogic_blocks:invalidate(LocalBlocks, ExternalChanges);
+            IndependentLocalChanges ->
+                CommonChanges = fslogic_blocks:invalidate(LocalChanges, IndependentLocalChanges),
+                IndependentExternalChanges = fslogic_blocks:invalidate(ExternalChanges, CommonChanges),
+                PartiallyInvalidatedLocalBlocks = fslogic_blocks:invalidate(LocalBlocks, IndependentExternalChanges),
+                case version_vector:replica_id_is_greater(LocalDoc, ExternalDoc) of
+                    true ->
+                        PartiallyInvalidatedLocalBlocks;
+                    false ->
+                        fslogic_blocks:invalidate(PartiallyInvalidatedLocalBlocks, CommonChanges)
+                end
+        end,
+
+    TruncatedNewBlocks =
+        case NewSize < LocalSize of
+            true ->
+                fslogic_blocks:consolidate(
+                    fslogic_blocks:invalidate(NewBlocks, [#file_block{offset = NewSize, size = LocalSize - NewSize}])
+                );
+            false ->
+                fslogic_blocks:consolidate(NewBlocks)
+        end,
+
     NewDoc = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
-    {ok, _} = file_meta:save(NewDoc#document{value = NewDoc#document.value#file_location{blocks = NewBlocks}}),
+    {ok, _} = file_meta:save(NewDoc#document{value = NewDoc#document.value#file_location{blocks = TruncatedNewBlocks, size = NewSize}}),
     ok.
 
 %%--------------------------------------------------------------------

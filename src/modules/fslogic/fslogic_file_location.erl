@@ -16,7 +16,8 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([add_change/2, get_changes/2, create_storage_file_if_not_exists/4, create_storage_file/4]).
+-export([add_change/2, get_changes/2, create_storage_file_if_not_exists/4,
+    create_storage_file/4, get_merged_changes/2]).
 
 -define(MAX_CHANGES, 20).
 
@@ -46,7 +47,9 @@ add_change(Doc = #document{value = Location = #file_location{recent_changes = {B
 %% Get N recent changes of file_location
 %% @end
 %%--------------------------------------------------------------------
--spec get_changes(file_location:doc(), non_neg_integer()) -> [fslogic_file_location:change()].
+-spec get_changes(file_location:doc(), integer()) -> [fslogic_file_location:change()].
+get_changes(_, N) when N =< 0 ->
+    [];
 get_changes(#document{value = #file_location{size = Size, recent_changes = {Backup, New}, blocks = Blocks}}, N)
     when N > (length(New) + length(Backup)) ->
     [Blocks, {shrink, Size}];
@@ -55,6 +58,29 @@ get_changes(#document{value = #file_location{recent_changes = {_Backup, New}}}, 
     lists:sublist(New, N);
 get_changes(#document{value = #file_location{recent_changes = {Backup, New}}}, N) ->
     lists:sublist(New ++ Backup, N).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get N changes merged into form: {BlocksChangesList, ShrinkSize | undefined}
+%% @end
+%%--------------------------------------------------------------------
+-spec get_merged_changes(file_location:doc(), integer()) ->
+    {fslogic_blocks:blocks(), integer() | undefined}.
+get_merged_changes(Doc, N) ->
+    Changes = get_changes(Doc, N),
+    Shrink = lists:foldl(fun
+        ({shrink, Size}, MinimalSize) -> min(Size, MinimalSize);
+        (_, MinimalSize) -> MinimalSize
+    end, undefined, Changes),
+    BlockChanges = lists:filter(fun
+        ({shrink, _}) -> false;
+        (_) -> true
+    end, Changes),
+    AggregatedBlocks = lists:foldl(fun(Blocks, Acc) ->
+        aggregate(Acc, Blocks)
+    end, [], BlockChanges),
+    {AggregatedBlocks, Shrink}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,3 +132,13 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Aggregates and consolidates given blocks lists.
+%% @end
+%%--------------------------------------------------------------------
+-spec aggregate(fslogic_blocks:blocks(), fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
+aggregate(Blocks1, Blocks2) ->
+    AggregatedBlocks = fslogic_blocks:invalidate(Blocks1, Blocks2) ++ Blocks2,
+    fslogic_blocks:consolidate(lists:sort(AggregatedBlocks)).
