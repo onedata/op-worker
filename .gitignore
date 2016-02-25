@@ -18,6 +18,7 @@ src/gui_static/n2o
 *.pyc
 *.o
 *.d
+
 rel/op_worker
 rel/test_cluster
 rel/*.rpm
@@ -31,6 +32,7 @@ doc
 logs
 ebin
 priv
+.rebar
 
 c_lib
 c_src/helpers_nif/*.o
