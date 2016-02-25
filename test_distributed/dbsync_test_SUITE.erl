@@ -28,7 +28,6 @@
 
 %% tests
 -export([
-    omg_test/1,
     global_stream_test/1,
     global_stream_document_remove_test/1,
     global_stream_with_proto_test/1
@@ -36,7 +35,6 @@
 
 all() ->
     ?ALL([
-        omg_test,
         global_stream_test,
         global_stream_document_remove_test,
         global_stream_with_proto_test
@@ -49,55 +47,6 @@ all() ->
 %%%====================================================================
 %%% Test function
 %%%====================================================================
-
-
-omg_test(MultiConfig) ->
-    ConfigP1 = ?config(p1, MultiConfig),
-    ConfigP2 = ?config(p1, MultiConfig),
-
-    [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
-    [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
-
-    {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
-    {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
-
-    test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
-        fun(global, SpaceId, BatchToSend) ->
-            rpc:call(WorkerP2, dbsync_worker, apply_batch_changes, [<<"p1">>, SpaceId, BatchToSend])
-        end),
-
-    test_utils:mock_expect([WorkerP2], dbsync_proto, send_batch,
-        fun(global, SpaceId, BatchToSend) ->
-            rpc:call(WorkerP1, dbsync_worker, apply_batch_changes, [<<"p2">>, SpaceId, BatchToSend])
-        end),
-
-
-    Dirs = lists:map(
-        fun(_N) ->
-            D0 = gen_filename(),
-
-            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary>>, 8#755),
-%%            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary>>, 8#755),
-%%            {ok, _} = lfm_proxy:mkdir(WorkerP1, SessId1P1, <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>, 8#755),
-
-            D0
-        end, lists:seq(1, 1)),
-
-    timer:sleep(timer:seconds(10)),
-
-    lists:map(
-        fun(D0) ->
-
-            Path1 = <<"/", D0/binary>>,
-            Path2 = <<"/", D0/binary, "/", D0/binary>>,
-            Path3 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>,
-
-            {ok, #file_attr{uuid = UUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1})
-%%            {ok, #file_attr{uuid = UUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
-%%            {ok, #file_attr{uuid = UUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3})
-
-        end, Dirs),
-    ok.
 
 
 global_stream_test(MultiConfig) ->
@@ -288,12 +237,9 @@ global_stream_document_remove_test(MultiConfig) ->
                     ?assertMatch({ok, []}, GlobalLinks),
                     ?assertMatch({ok, []}, DiskLinks),
 
-%%                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, file_meta, get, [UUID])),
-%%                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)])),
+                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, file_meta, get, [UUID])),
+                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, UUID])),
 
-%%                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, UUID])),
-%%                    ?assertMatch({error, {not_found, _}}, rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, couchdb_datastore_driver:links_doc_key(UUID)])),
-%%
                     ?assertMatch({error, enoent}, lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path})),
                     ?assertMatch({ok, [{_, <<"spaces">>}]}, lfm_proxy:ls(WorkerP2, SessId1P2, {path, <<"/">>}, 0, 10))
                 end, maps:to_list(PathMap))
