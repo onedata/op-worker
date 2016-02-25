@@ -114,4 +114,9 @@
     credentials :: #{storage:id() => s3_user:credentials()}
 }).
 
+%% Model that holds state entries for DBSync worker
+-record(dbsync_state, {
+    entry :: term()
+}).
+
 -endif.

@@ -21,9 +21,9 @@
 
 %% Collection of changes from DB.
 -record(batch, {
-    changes = [] :: [dbsync_worker:change()],
     since :: non_neg_integer(),
-    until :: non_neg_integer()
+    until :: non_neg_integer(),
+    changes = [] :: [dbsync_worker:change()]
 }).
 
 -endif.

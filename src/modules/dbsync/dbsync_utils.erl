@@ -88,7 +88,10 @@ get_provider_url(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec encode_term(term()) -> binary().
 encode_term(Doc) ->
-    term_to_binary(Doc).
+    Data = term_to_binary(Doc),
+    Compressed = zlib:compress(Data),
+    ?debug("[DBSync] Data compression ratio ~p", [size(Compressed) / size(Data)]),
+    Compressed.
 
 
 %%--------------------------------------------------------------------
@@ -96,8 +99,8 @@ encode_term(Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec decode_term(binary()) -> term().
-decode_term(Doc) ->
-    binary_to_term(Doc).
+decode_term(Data) ->
+    binary_to_term(zlib:uncompress(Data)).
 
 
 %%--------------------------------------------------------------------
@@ -118,4 +121,4 @@ gen_request_id() ->
     {ok, MsgId :: term()} | {error, Reason :: term()}.
 communicate(ProviderId, Message) ->
     SessId = session_manager:get_provider_session_id(outgoing, ProviderId),
-    provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId).
+    provider_communicator:communicate_async(#dbsync_request{message_body = Message}, SessId, self()).
