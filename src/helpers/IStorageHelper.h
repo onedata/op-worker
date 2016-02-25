@@ -16,9 +16,11 @@
 #include <asio/buffer.hpp>
 #include <boost/any.hpp>
 #include <boost/filesystem/path.hpp>
+#include <tbb/concurrent_hash_map.h>
 
 #include <chrono>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 #include <memory>
@@ -53,6 +55,15 @@ enum class Flag {
     IFIFO,
     IFSOCK
 };
+
+struct FlagHash {
+    template <typename T> std::size_t operator()(T t) const
+    {
+        return static_cast<std::size_t>(t);
+    }
+};
+
+using FlagsSet = std::unordered_set<Flag, FlagHash>;
 
 class IStorageHelperCTX {
 public:
@@ -123,7 +134,7 @@ public:
     }
 
     virtual void ash_mknod(CTXPtr ctx, const boost::filesystem::path &p,
-        mode_t mode, std::vector<Flag> flags, dev_t rdev, VoidCallback callback)
+        mode_t mode, FlagsSet flags, dev_t rdev, VoidCallback callback)
     {
         callback(std::make_error_code(std::errc::not_supported));
     }
@@ -183,20 +194,27 @@ public:
     }
 
     virtual void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
-        std::vector<Flag> flags, GeneralCallback<int> callback)
+        FlagsSet flags, GeneralCallback<int> callback)
     {
-        callback({}, std::make_error_code(std::errc::not_supported));
+        ash_open(std::move(ctx), p, getFlagsValue(std::move(flags)),
+            std::move(callback));
+    }
+
+    virtual void ash_open(CTXPtr ctx, const boost::filesystem::path &p,
+        int flags, GeneralCallback<int> callback)
+    {
+        callback({}, SUCCESS_CODE);
     }
 
     virtual void ash_read(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::mutable_buffer buf, off_t offset,
+        asio::mutable_buffer buf, off_t offset, const std::string &fileUuid,
         GeneralCallback<asio::mutable_buffer> callback)
     {
         callback({}, std::make_error_code(std::errc::not_supported));
     }
 
     virtual void ash_write(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset,
+        asio::const_buffer buf, off_t offset, const std::string &fileUuid,
         GeneralCallback<std::size_t> callback)
     {
         callback({}, std::make_error_code(std::errc::not_supported));
@@ -205,7 +223,7 @@ public:
     virtual void ash_release(
         CTXPtr ctx, const boost::filesystem::path &p, VoidCallback callback)
     {
-        callback({});
+        callback(SUCCESS_CODE);
     }
 
     virtual void ash_flush(
@@ -222,7 +240,7 @@ public:
 
     virtual asio::mutable_buffer sh_read(CTXPtr ctx,
         const boost::filesystem::path &p, asio::mutable_buffer buf,
-        off_t offset)
+        off_t offset, const std::string &fileUuid)
     {
         auto promise = std::make_shared<std::promise<asio::mutable_buffer>>();
         auto future = promise->get_future();
@@ -237,12 +255,12 @@ public:
                 promise->set_value(input);
         };
 
-        ash_read(std::move(ctx), p, buf, offset, std::move(callback));
+        ash_read(std::move(ctx), p, buf, offset, fileUuid, std::move(callback));
         return waitFor(future);
     }
 
     virtual std::size_t sh_write(CTXPtr ctx, const boost::filesystem::path &p,
-        asio::const_buffer buf, off_t offset)
+        asio::const_buffer buf, off_t offset, const std::string &fileUuid)
     {
         auto promise = std::make_shared<std::promise<std::size_t>>();
         auto future = promise->get_future();
@@ -257,8 +275,59 @@ public:
                 promise->set_value(wrote);
         };
 
-        ash_write(std::move(ctx), p, buf, offset, std::move(callback));
+        ash_write(
+            std::move(ctx), p, buf, offset, fileUuid, std::move(callback));
         return waitFor(future);
+    }
+
+    virtual int sh_open(CTXPtr ctx, const boost::filesystem::path &p, int flags)
+    {
+        auto promise = std::make_shared<std::promise<int>>();
+        auto future = promise->get_future();
+
+        auto callback = [promise = std::move(promise)](
+            const int fh, const std::error_code &ec) mutable
+        {
+            if (ec)
+                promise->set_exception(
+                    std::make_exception_ptr(std::system_error{ec}));
+            else
+                promise->set_value(fh);
+        };
+
+        ash_open(std::move(ctx), p, flags, std::move(callback));
+        return waitFor(future);
+    }
+
+    virtual error_t sh_release(CTXPtr ctx, const boost::filesystem::path &p)
+    {
+        auto promise = std::make_shared<std::promise<error_t>>();
+        auto future = promise->get_future();
+
+        auto callback = [promise = std::move(promise)](
+            const std::error_code &ec) mutable
+        {
+            if (ec)
+                promise->set_exception(
+                    std::make_exception_ptr(std::system_error{ec}));
+            else
+                promise->set_value(SUCCESS_CODE);
+        };
+
+        ash_release(std::move(ctx), p, std::move(callback));
+        return waitFor(future);
+    }
+
+    static int getFlagsValue(FlagsSet flags)
+    {
+        int value = 0;
+
+        for (auto flag : flags) {
+            auto searchResult = s_flagTranslation.find(flag);
+            assert(searchResult != s_flagTranslation.end());
+            value |= searchResult->second;
+        }
+        return value;
     }
 
 protected:
@@ -277,6 +346,8 @@ private:
 
         return f.get();
     }
+
+    static const std::unordered_map<Flag, int, FlagHash> s_flagTranslation;
 };
 
 } // namespace helpers
