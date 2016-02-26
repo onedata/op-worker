@@ -27,22 +27,22 @@
 %% record that can be used to perform operations on behalf of the user.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(SrlzdMcroon :: binary()) -> {ok, #auth{}} | {error, term()}.
-authenticate(SrlzdMacaroon) ->
+-spec authenticate(Macaroon :: macaroon:macaroon()) -> {ok, #auth{}} | {error, term()}.
+authenticate(Macaroon) ->
     try
-        {ok, Macaroon} = macaroon:deserialize(SrlzdMacaroon),
-        {ok, Caveats} = macaroon:third_party_caveats(Macaroon),
+        Caveats = macaroon:third_party_caveats(Macaroon),
         DischMacaroons = lists:map(
             fun({_, CaveatId}) ->
-                {ok, DM} = oz_users:authorize(CaveatId),
+                {ok, SrlzdDM} = oz_users:authorize(CaveatId),
+                {ok, DM} = macaroon:deserialize(SrlzdDM),
                 DM
             end, Caveats),
         {ok, #auth{
-            macaroon = SrlzdMacaroon,
+            macaroon = Macaroon,
             disch_macaroons = DischMacaroons}}
     catch
         T:M ->
             ?error_stacktrace("Cannot authorize user with macaroon ~p - ~p:~p",
-                [SrlzdMacaroon, T, M]),
+                [Macaroon, T, M]),
             {error, M}
     end.

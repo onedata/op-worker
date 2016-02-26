@@ -82,11 +82,17 @@ authenticate(Req) ->
 %%--------------------------------------------------------------------
 -spec authenticate_using_token(req(), Token :: binary()) -> {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
-    Auth = #auth{macaroon = Token},
-    case identity:get_or_fetch(Auth) of
-        {ok, #document{value = Iden}} ->
-            {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
-            {{ok, SessId}, Req};
+    case macaroon:deserialize(Token) of
+        {ok, Macaroon} ->
+            Auth = #auth{macaroon = Macaroon},
+            case identity:get_or_fetch(Auth) of
+                {ok, #document{value = Iden}} ->
+                    {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
+                    {{ok, SessId}, Req};
+                Error ->
+                    {Error, Req}
+            end;
+
         Error ->
             {Error, Req}
     end.
@@ -112,4 +118,3 @@ authenticate_using_cert(Req) ->
         Error ->
             {Error, Req}
     end.
-
