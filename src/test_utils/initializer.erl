@@ -15,6 +15,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/global_registry/gr_groups.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
@@ -40,7 +41,6 @@ create_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     StorageId = ?config(storage_id, Config),
 
-    test_node_starter:load_modules(Workers, [?MODULE]),
     initializer:space_storage_mock(Workers, StorageId),
 
     Space1 = {<<"space_id1">>, <<"space_name1">>},
@@ -75,7 +75,16 @@ clean_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     initializer:teardown_sesion(Worker, Config),
+    clear_cache(Worker),
+
     test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups, space_storage]).
+
+clear_cache(W) ->
+    A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
+%%     A2 = gen_server:call({?NODE_MANAGER_NAME, W}, clear_mem_synch, 60000),
+%%     A3 = gen_server:call({?NODE_MANAGER_NAME, W}, force_clear_node, 60000),
+%%     ?assertMatch({ok, ok, {ok, ok}}, {A1, A2, A3}).
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
