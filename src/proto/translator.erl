@@ -104,7 +104,8 @@ translate_from_protobuf(#'MessageAcknowledgement'{} = Record) ->
         sequence_number = Record#'MessageAcknowledgement'.sequence_number
     };
 translate_from_protobuf(#'Token'{value = Val}) ->
-    #auth{macaroon = Val};
+    {ok, Macaroon} = macaroon:deserialize(Val),
+    #auth{macaroon = Macaroon};
 translate_from_protobuf(#'Ping'{data = Data}) ->
     #ping{data = Data};
 translate_from_protobuf(#'GetProtocolVersion'{}) ->
