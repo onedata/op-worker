@@ -132,7 +132,7 @@ handle_cast(#gw_fetch{} = Action, #gwcstate{socket = Socket, waiting_requests = 
     #gw_fetch{offset = Offset, size = Size, file_id = FileId} = Action,
     Request = #'FetchRequest'{offset = Offset, size = Size, file_id = FileId},
 
-    Data = gwproto:encode_msg(Request),
+    Data = messages:encode_msg(Request),
     case gen_tcp:send(Socket, Data) of
         {error, _} = Reason ->
             {stop, Reason, State};
@@ -166,7 +166,7 @@ handle_cast(_Request, State) ->
 handle_info({tcp, Socket, Data}, #gwcstate{} = State) ->
     ok = inet:setopts(Socket, [{active, once}]),
     try
-        Reply = gwproto:decode_msg(Data, 'FetchReply'),
+        Reply = messages:decode_msg(Data, 'FetchReply'),
         complete_request(Reply, State)
     catch
         Error:Reason ->

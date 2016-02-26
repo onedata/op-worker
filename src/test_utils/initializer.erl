@@ -19,13 +19,15 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include("proto/oneclient/message_id.hrl").
+-include("proto/oneclient/client_messages.hrl").
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
-    communicator_mock/1, communicator_mock/2]).
+    communicator_mock/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -34,49 +36,25 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Setup and mocking related with users and spaces
+%% @doc Setup and mocking related with users and spaces, done on each provider
 %%--------------------------------------------------------------------
 -spec create_test_users_and_spaces(Config :: list()) -> list().
 create_test_users_and_spaces(Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
-
-    initializer:space_storage_mock(Workers, StorageId),
-
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
-    Space5 = {<<"space_id5">>, <<"space_name">>},
-    Space6 = {<<"space_id6">>, <<"space_name">>},
-
-    Group1 = {<<"group_id1">>, <<"group_name1">>},
-    Group2 = {<<"group_id2">>, <<"group_name2">>},
-    Group3 = {<<"group_id3">>, <<"group_name3">>},
-    Group4 = {<<"group_id4">>, <<"group_name4">>},
-
-    User1 = {1, [Space1, Space2, Space3, Space4], [Group1, Group2, Group3, Group4]},
-    User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
-    User3 = {3, [Space3, Space4], [Group3, Group4]},
-    User4 = {4, [Space4], [Group4]},
-    User5 = {5, [Space5, Space6], []},
-
-    file_meta_mock_setup(Workers),
-    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4, Space5, Space6]),
-    gr_groups_mock_setup(Workers, [Group1, Group2, Group3, Group4]),
-
-    initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config).
+    DomainWorkers = get_different_domain_workers(Config),
+    create_test_users_and_spaces(DomainWorkers, Config).
 
 %%--------------------------------------------------------------------
 %% @doc Cleanup and unmocking related with users and spaces
 %%--------------------------------------------------------------------
 -spec clean_test_users_and_spaces(Config :: list()) -> term().
 clean_test_users_and_spaces(Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    DomainWorkers = get_different_domain_workers(Config),
 
-    initializer:teardown_sesion(Worker, Config),
-    clear_cache(Worker),
-
+    lists:foreach(fun(W) ->
+        initializer:teardown_sesion(W, Config),
+        clear_cache(W)
+    end, DomainWorkers),
     test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups, space_storage]).
 
 clear_cache(W) ->
@@ -216,33 +194,42 @@ teardown_sesion(Worker, Config) ->
     end, [], Config).
 
 %%--------------------------------------------------------------------
-%% @doc Setups test storage on server and creates test storage dir
+%% @doc Setups test storage on server and creates test storage dir on each provider
 %%--------------------------------------------------------------------
 -spec setup_storage(Config :: list()) -> list().
 setup_storage(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    TmpDir = generator:gen_storage_dir(Config),
+    DomainWorkers = get_different_domain_workers(Config),
+    setup_storage(DomainWorkers, Config).
+
+%%--------------------------------------------------------------------
+%% @doc Setups test storage on server and creates test storage dir on one provider
+%%--------------------------------------------------------------------
+-spec setup_storage([node()], Config :: list()) -> list().
+setup_storage([], Config) ->
+    Config;
+setup_storage([Worker | Rest], Config) ->
+    TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
     {ok, StorageId} = rpc:call(
         Worker, storage, create, [
             #document{value = fslogic_storage:new_storage(
-                <<"Test">>,
+                <<"Test", (list_to_binary(atom_to_list(?GET_DOMAIN(Worker))))/binary>>,
                 [fslogic_storage:new_helper_init(
                     <<"DirectIO">>,
                     #{<<"root_path">> => list_to_binary(TmpDir)}
                 )]
             )}]),
-    [{storage_id, StorageId}, {storage_dir, TmpDir} | Config].
+    [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
+    setup_storage(Rest, Config).
 
 %%--------------------------------------------------------------------
-%% @doc Removes test storage dir
+%% @doc Removes test storage dir on each provider
 %%--------------------------------------------------------------------
--spec teardown_storage(Config :: list()) -> string().
+-spec teardown_storage(Config :: list()) -> ok.
 teardown_storage(Config) ->
-    TmpDir = ?config(storage_dir, Config),
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    "" = rpc:call(Worker, os, cmd, ["rm -rf " ++ TmpDir]).
+    DomainWorkers = get_different_domain_workers(Config),
+    lists:foreach(fun(Worker) -> teardown_storage(Worker, Config) end, DomainWorkers).
 
 %%--------------------------------------------------------------------
 %% @doc Mocks space_storage module, so that it returns default storage for all spaces.
@@ -259,20 +246,80 @@ space_storage_mock(Workers, StorageId) ->
 %%--------------------------------------------------------------------
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
-    communicator_mock(Workers, fun(_, _) -> ok end).
-
-%%--------------------------------------------------------------------
-%% @doc Mocks communicator module, so that it calls provided function.
-%%--------------------------------------------------------------------
--spec communicator_mock(Workers :: node() | [node()],
-    SendFun :: fun((Msg :: term(), Ref :: connection:ref()) -> ok)) -> ok.
-communicator_mock(Workers, SendFun) ->
     test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send, SendFun).
+    test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
+    test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc Setup and mocking related with users and spaces, done on one provider
+%%--------------------------------------------------------------------
+-spec create_test_users_and_spaces([Worker :: node()], Config :: list()) -> list().
+create_test_users_and_spaces([], Config) ->
+    Config;
+create_test_users_and_spaces([Worker | Rest], Config) ->
+    StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
+    SameDomainWorkers = get_same_domain_workers(Config, ?GET_DOMAIN(Worker)),
+    initializer:space_storage_mock(SameDomainWorkers, StorageId),
+
+    Space1 = {<<"space_id1">>, <<"space_name1">>},
+    Space2 = {<<"space_id2">>, <<"space_name2">>},
+    Space3 = {<<"space_id3">>, <<"space_name3">>},
+    Space4 = {<<"space_id4">>, <<"space_name4">>},
+    Space5 = {<<"space_id5">>, <<"space_name">>},
+    Space6 = {<<"space_id6">>, <<"space_name">>},
+
+    Group1 = {<<"group_id1">>, <<"group_name1">>},
+    Group2 = {<<"group_id2">>, <<"group_name2">>},
+    Group3 = {<<"group_id3">>, <<"group_name3">>},
+    Group4 = {<<"group_id4">>, <<"group_name4">>},
+
+    User1 = {1, [Space1, Space2, Space3, Space4], [Group1, Group2, Group3, Group4]},
+    User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
+    User3 = {3, [Space3, Space4], [Group3, Group4]},
+    User4 = {4, [Space4], [Group4]},
+    User5 = {5, [Space5, Space6], []},
+
+    file_meta_mock_setup(SameDomainWorkers),
+    gr_spaces_mock_setup(SameDomainWorkers, [Space1, Space2, Space3, Space4, Space5, Space6]),
+    gr_groups_mock_setup(SameDomainWorkers, [Group1, Group2, Group3, Group4]),
+
+    proplists:compact(
+        initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config)
+        ++ create_test_users_and_spaces(Rest, Config)
+    ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get one worker from each provider domain.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_different_domain_workers(Config :: list()) -> [node()].
+get_different_domain_workers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:usort(fun(W1, W2) -> ?GET_DOMAIN(W1) =< ?GET_DOMAIN(W2) end, Workers).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get workers with given domain
+%% @end
+%%--------------------------------------------------------------------
+-spec get_same_domain_workers(Config :: list(), Domain :: atom()) -> [node()].
+get_same_domain_workers(Config, Domain) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:filter(fun(W) -> ?GET_DOMAIN(W) =:= Domain end, Workers).
+
+%%--------------------------------------------------------------------
+%% @doc Removes test storage dir on given node
+%%--------------------------------------------------------------------
+-spec teardown_storage(Worker :: node(), Config :: list()) -> string().
+teardown_storage(Worker, Config) ->
+    TmpDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
+    "" = rpc:call(Worker, os, cmd, ["rm -rf " ++ TmpDir]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -280,7 +327,7 @@ communicator_mock(Workers, SendFun) ->
 %%--------------------------------------------------------------------
 -spec name(Text :: string(), Num :: integer()) -> binary().
 name(Text, Num) ->
-    list_to_binary(Text ++ "_" ++ integer_to_list(Num)).
+    list_to_binary(Text ++ integer_to_list(Num)).
 
 %%--------------------------------------------------------------------
 %% @private
