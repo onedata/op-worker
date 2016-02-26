@@ -31,10 +31,10 @@
 
 all() ->
     ?ALL([
-%%         empty_xattr_test,
-%%         crud_xattr_test,
-%%         list_xattr_test,
-%%         remove_file_test,
+        empty_xattr_test,
+        crud_xattr_test,
+        list_xattr_test,
+        remove_file_test,
         modify_cdmi_attrs
     ]).
 
