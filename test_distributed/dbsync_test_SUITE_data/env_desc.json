@@ -7,10 +7,6 @@
         "op_worker": {
             "input_dir": "rel/op_worker",
             "target_dir": "rel/test_cluster"
-        },
-        "appmock": {
-            "input_dir": "rel/appmock",
-            "target_dir": "rel/test_cluster"
         }
     },
     "os_configs": {
@@ -27,20 +23,20 @@
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
-                        "setcookie": "test_cookie"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 2
+                        "worker_num": 1
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
                     "vm.args": {
-                        "setcookie": "test_cookie"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
@@ -49,35 +45,40 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "global_registry_domain": "gr",
-                        "verify_gr_cert": false
-                    }
-                },
-                "worker2": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "global_registry_domain": "gr",
                         "verify_gr_cert": false
                     }
                 }
             }
-        }
-    },
-    "appmock_domains": {
-        "gr": {
-            "appmock": {
-                "node1": {
-                    "mocked_app": "globalregistry",
+        },
+        "p2": {
+            "db_driver": "couchdb",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
                     "sys.config": {
-                        "app_description_file": "./gr_mock_description.erl.cfg"
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "verify_gr_cert": false
                     }
                 }
             }

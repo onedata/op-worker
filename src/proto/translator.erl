@@ -21,6 +21,7 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneprovider/dbsync_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 
@@ -161,6 +162,32 @@ translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_uuid = 
     file_id = FId, file_content = FContent}) ->
     #verify_storage_test_file{storage_id = SId, space_uuid = SpaceUuid,
         file_id = FId, file_content = FContent};
+
+%% DBSync
+translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
+    #dbsync_request{message_body = translate_from_protobuf(MessageBody)};
+translate_from_protobuf(#'TreeBroadcast'{message_body = {_, MessageBody}, depth = Depth, excluded_providers = ExcludedProv,
+    l_edge = LEdge, r_edge = REgde, request_id = ReqId, space_id = SpaceId}) ->
+    #tree_broadcast{
+        message_body = translate_from_protobuf(MessageBody),
+        depth = Depth,
+        l_edge = LEdge,
+        r_edge = REgde,
+        space_id = SpaceId,
+        request_id = ReqId,
+        excluded_providers = ExcludedProv
+    };
+translate_from_protobuf(#'ChangesRequest'{since_seq = Since, until_seq = Until}) ->
+    #changes_request{since_seq = Since, until_seq = Until};
+
+translate_from_protobuf(#'StatusRequest'{}) ->
+    #status_request{};
+translate_from_protobuf(#'StatusReport'{space_id = SpaceId, seq_num = SeqNum}) ->
+    #status_report{space_id = SpaceId, seq = SeqNum};
+translate_from_protobuf(#'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
+    #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes};
+
+
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -300,6 +327,32 @@ translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     {_, Record} = translate_to_protobuf(HelperParams),
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
         space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
+
+translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->
+    {dbsync_request, #'DBSyncRequest'{message_body = translate_to_protobuf(MessageBody)}};
+translate_to_protobuf(#tree_broadcast{message_body = MessageBody, depth = Depth, excluded_providers = ExcludedProv,
+    l_edge = LEdge, r_edge = REgde, request_id = ReqId, space_id = SpaceId}) ->
+    {tree_broadcast, #'TreeBroadcast'{
+        message_body = translate_to_protobuf(MessageBody),
+        depth = Depth,
+        l_edge = LEdge,
+        r_edge = REgde,
+        space_id = SpaceId,
+        request_id = ReqId,
+        excluded_providers = ExcludedProv
+    }};
+translate_to_protobuf(#changes_request{since_seq = Since, until_seq = Until}) ->
+    {changes_request, #'ChangesRequest'{since_seq = Since, until_seq = Until}};
+
+translate_to_protobuf(#status_request{}) ->
+    {status_request, #'StatusRequest'{}};
+translate_to_protobuf(#status_report{space_id = SpaceId, seq = SeqNum}) ->
+    {status_report, #'StatusReport'{space_id = SpaceId, seq_num = SeqNum}};
+translate_to_protobuf(#batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
+    {batch_update, #'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}};
+
+translate_to_protobuf(#dir{}) ->
+    undefined;
 translate_to_protobuf(undefined) ->
     undefined.
 
