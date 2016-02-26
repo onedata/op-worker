@@ -54,6 +54,7 @@ all() ->
 -define(RTRANSFER_PORT, 6665).
 -define(TEST_OFFSET, 0).
 -define(TIMEOUT, timer:seconds(120)).
+-define(SLEEP_TIMEOUT, timer:seconds(120)).
 
 -define(DEFAULT_RTRANSFER_OPTS,
     [
@@ -209,7 +210,7 @@ cancel_fetch_test(Config) ->
     ),
     cancel_fetching(Worker1, Ref),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     %% then
     ?assertReceivedMatch({on_complete, {error, canceled}}, ?TIMEOUT).
 
@@ -233,7 +234,7 @@ many_requests_test(Config) ->
     Refs = generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
@@ -262,7 +263,7 @@ many_requests_to_one_file(Config) ->
     Refs = generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
