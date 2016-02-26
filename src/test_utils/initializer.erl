@@ -40,7 +40,6 @@ create_test_users_and_spaces(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     StorageId = ?config(storage_id, Config),
 
-    test_node_starter:load_modules(Workers, [?MODULE]),
     initializer:space_storage_mock(Workers, StorageId),
 
     Space1 = {<<"space_id1">>, <<"space_name1">>},

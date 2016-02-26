@@ -114,7 +114,7 @@ custom_error_when_handler_throws_error(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
     initializer:clear_models(Worker, [subscription]),
     NewConfig.
