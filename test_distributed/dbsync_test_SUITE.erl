@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 

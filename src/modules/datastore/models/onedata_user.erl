@@ -137,7 +137,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
             oz_users:get_details({user, {Macaroon, DMacaroons}}),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
             oz_users:get_spaces({user, {Macaroon, DMacaroons}}),
-        {ok, GroupIds} = gr_users:get_groups({user, {Macaroon, DMacaroons}}),
+        {ok, GroupIds} = oz_users:get_groups({user, {Macaroon, DMacaroons}}),
         [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
         OnedataUser = #onedata_user{
             name = Name,
