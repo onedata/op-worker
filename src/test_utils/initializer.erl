@@ -55,7 +55,7 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups, space_storage]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
 
 clear_cache(W) ->
     A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
