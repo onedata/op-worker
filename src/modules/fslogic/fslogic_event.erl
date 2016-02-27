@@ -72,7 +72,8 @@ emit_file_location_update(FileEntry, ExcludedSessions) ->
     try
         {ok, #document{} = File} = file_meta:get(FileEntry),
         #document{value = #file_location{} = FileLocation} = fslogic_utils:get_local_file_location(File),
-        event:emit(#event{object = #update_event{object = FileLocation}}, {exclude, ExcludedSessions})
+        event:emit(#event{object = #update_event{object = file_location:ensure_blocks_not_empty(FileLocation)}},
+            {exclude, ExcludedSessions})
     catch
         _:Reason ->
             ?error_stacktrace("Unable to push new location for file ~p due to: ~p", [FileEntry, Reason]),

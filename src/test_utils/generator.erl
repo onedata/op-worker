@@ -15,7 +15,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
--export([gen_name/0, gen_storage_dir/1]).
+-export([gen_name/0, gen_storage_dir/0]).
 
 %%%===================================================================
 %%% API
@@ -26,8 +26,8 @@
 %% Generate random storage dir inside ct priv_dir.
 %% @end
 %%--------------------------------------------------------------------
--spec gen_storage_dir(Config :: list()) -> string().
-gen_storage_dir(_Config) ->
+-spec gen_storage_dir() -> string().
+gen_storage_dir() ->
     filename:join([?TEMP_DIR, "/storage/", erlang:binary_to_list(gen_name())]).
 
 %%--------------------------------------------------------------------

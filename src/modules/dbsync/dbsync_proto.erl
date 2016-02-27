@@ -61,7 +61,7 @@ send_batch({provider, ProviderId, _}, SpaceId, #batch{changes = Changes, since =
 -spec changes_request(oneprovider:id(), Since :: non_neg_integer(), Until :: non_neg_integer()) ->
     ok | {error, Reason :: term()}.
 changes_request(ProviderId, Since, Until) ->
-    ?info("Requesting direct changes ~p ~p ~p", [ProviderId, Since, Until]),
+%%    ?info("Requesting direct changes ~p ~p ~p", [ProviderId, Since, Until]),
     send_direct_message(ProviderId, #changes_request{since_seq = dbsync_utils:encode_term(Since), until_seq = dbsync_utils:encode_term(Until)}, 3).
 
 
@@ -74,7 +74,7 @@ changes_request(ProviderId, Since, Until) ->
     ok | {error, Reason :: term()}.
 status_report(SpaceId, Providers, CurrentSeq) ->
     AllProviders = Providers,
-    ?info("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
+%%    ?info("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
     send_tree_broadcast(SpaceId, AllProviders, #status_report{space_id = SpaceId, seq = dbsync_utils:encode_term(CurrentSeq)}, 3).
 
 
@@ -224,7 +224,7 @@ handle_impl(From, #tree_broadcast{message_body = Request, request_id = ReqId} = 
         true -> ok
     end;
 handle_impl(From, #changes_request{since_seq = Since, until_seq = Until} = _BaseRequest) ->
-    ?info("Changes request form ~p: Since ~p, Until: ~p", [From, Since, Until]),
+%%    ?info("Changes request form ~p: Since ~p, Until: ~p", [From, Since, Until]),
     {ok, _} = dbsync_worker:init_stream(dbsync_utils:decode_term(Since), dbsync_utils:decode_term(Until), {provider, From, dbsync_utils:gen_request_id()}),
     ok;
 handle_impl(From, #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = ChangesBin}) ->

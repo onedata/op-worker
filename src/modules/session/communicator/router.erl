@@ -108,7 +108,10 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #auth{} = Auth}) ->
     % This function performs an async call to session manager worker.
     {ok, SessId} = session:update(SessId, #{auth => Auth}),
-    ok.
+    ok;
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
+    ok = worker_proxy:cast(fslogic_worker, {fuse_request, SessId, FuseRequest}).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -13,7 +13,7 @@
 -ifndef(GATEWAY_HRL).
 -define(GATEWAY_HRL, true).
 
--include_lib("clproto/include/gwproto.hrl").
+-include_lib("clproto/include/messages.hrl").
 
 -define(connection_close_timeout, timer:minutes(5)).
 
