@@ -18,71 +18,50 @@
     },
     "provider_domains": {
         "p1": {
-            "db_driver": "couchbase",
+            "db_driver": "couchdb",
             "os_config": "cfg1",
             "cluster_manager": {
-                "cm1": {
+                "cm": {
                     "vm.args": {
                         "setcookie": "test_cookie"
                     },
                     "sys.config": {
                         "cm_nodes": [
-                            "cm1"
+                            "cm"
                         ],
-                        "worker_num": 1
+                        "worker_num": 2
                     }
                 }
             },
             "op_worker": {
-                "worker": {
+                "worker1": {
                     "vm.args": {
                         "setcookie": "test_cookie"
                     },
                     "sys.config": {
                         "cm_nodes": [
-                            "cm1"
+                            "cm"
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "zone_domain": "oz",
-                        "verify_oz_cert": false,
-                        "start_rtransfer_on_init": false
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
-                }
-            }
-        },
-        "p2": {
-            "db_driver": "couchbase",
-            "os_config": "cfg1",
-            "cluster_manager": {
-                "cm2": {
+                },
+                "worker2": {
                     "vm.args": {
-                        "setcookie": "test_cookie2"
+                        "setcookie": "test_cookie"
                     },
                     "sys.config": {
                         "cm_nodes": [
-                            "cm2"
-                        ],
-                        "worker_num": 1
-                    }
-                }
-            },
-            "op_worker": {
-                "worker": {
-                    "vm.args": {
-                        "setcookie": "test_cookie2"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm2"
+                            "cm"
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "zone_domain": "oz",
-                        "verify_oz_cert": false,
-                        "start_rtransfer_on_init": false
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
                 }
             }
