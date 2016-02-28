@@ -33,7 +33,7 @@ calculate_atime(FileEntry) ->
         mtime = MTime,
         ctime = CTime}}
     } = file_meta:get(FileEntry),
-    CurrentTime = utils:time(),
+    CurrentTime = erlang:system_time(seconds),
     case ATime of
         Outdated when Outdated =< MTime orelse Outdated =< CTime ->
             CurrentTime;

@@ -38,14 +38,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns increasing subscription IDs based on the timestamp.
+%% Returns increasing subscription IDs based on the monotonic time.
+%% Should be used only for temporary subscriptions.
 %% @end
 %%--------------------------------------------------------------------
 -spec generate_id() -> SubId :: id().
 generate_id() ->
-    % @todo function erlang:now/0 is deprecated, change after migration to Erlang 18.0
-    {MegaSecs, Secs, MicroSecs} = erlang:now(),
-    MegaSecs * 1000000000000 + Secs * 1000000 + MicroSecs.
+    erlang:unique_integer([monotonic, positive]) .
 
 %%%===================================================================
 %%% model_behaviour callbacks

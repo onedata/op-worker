@@ -69,7 +69,7 @@ chmod(CTX, FileEntry, Mode) ->
     {ok, FileUuid} = file_meta:to_uuid(FileEntry),
     xattr:delete_by_name(FileUuid, ?ACL_XATTR_NAME),
 
-    CurrTime = utils:time(),
+    CurrTime = erlang:system_time(seconds),
     {ok, FileDoc} = file_meta:get(FileEntry),
     #document{value = FileMeta} = FileDoc,
     {ok, _} = file_meta:update(FileEntry, #{mode => Mode, ctime => CurrTime}),
@@ -202,7 +202,7 @@ set_xattr(_CTX, _, #xattr{name = <<"cdmi_", _/binary>>}) -> throw(?EPERM);
 set_xattr(_CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
     case xattr:save(FileUuid, Xattr) of
         {ok, _} ->
-            CurrTime = utils:time(),
+            CurrTime = erlang:system_time(seconds),
             {ok, FileDoc} = file_meta:get(FileEntry),
             #document{value = FileMeta} = FileDoc,
             {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
@@ -225,7 +225,7 @@ set_xattr(_CTX, {uuid, FileUuid} = FileEntry, Xattr) ->
 remove_xattr(_CTX, {uuid, FileUuid} = FileEntry, XattrName) ->
     case xattr:delete_by_name(FileUuid, XattrName) of
         ok ->
-            CurrTime = utils:time(),
+            CurrTime = erlang:system_time(seconds),
             {ok, FileDoc} = file_meta:get(FileEntry),
             #document{value = FileMeta} = FileDoc,
             {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
@@ -282,7 +282,7 @@ set_acl(CTX, {uuid, FileUuid} = FileEntry, #acl{value = Val}) ->
                 CTX#fslogic_ctx{session_id = ?ROOT_SESS_ID, session = ?ROOT_SESS},
                 {uuid, FileUuid}, 8#000
             ),
-            CurrTime = utils:time(),
+            CurrTime = erlang:system_time(seconds),
             {ok, FileDoc} = file_meta:get(FileEntry),
             #document{value = FileMeta} = FileDoc,
             {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
@@ -309,7 +309,7 @@ remove_acl(CTX, {uuid, FileUuid} = FileEntry) ->
                 {uuid, FileUuid}, Mode
             ),
             ok = fslogic_event:emit_permission_changed(FileUuid),
-            CurrTime = utils:time(),
+            CurrTime = erlang:system_time(seconds),
             {ok, FileDoc} = file_meta:get(FileEntry),
             #document{value = FileMeta} = FileDoc,
             {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
@@ -347,7 +347,7 @@ get_transfer_encoding(_CTX, {uuid, FileUuid}) ->
 set_transfer_encoding(_CTX, {uuid, FileUuid} = FileEntry, Encoding) ->
     case xattr:save(FileUuid, #xattr{name = ?TRANSFER_ENCODING_XATTR_NAME, value = Encoding}) of
         {ok, _} ->
-            CurrTime = utils:time(),
+            CurrTime = erlang:system_time(seconds),
             {ok, FileDoc} = file_meta:get(FileEntry),
             #document{value = FileMeta} = FileDoc,
             {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
@@ -420,7 +420,7 @@ get_mimetype(_CTX, {uuid, FileUuid}) ->
 set_mimetype(_CTX, {uuid, FileUuid} = FileEntry, Mimetype) ->
     case xattr:save(FileUuid, #xattr{name = ?MIMETYPE_XATTR_NAME, value = Mimetype}) of
         {ok, _} ->
-            CurrTime = utils:time(),
+            CurrTime = erlang:system_time(seconds),
             {ok, FileDoc} = file_meta:get(FileEntry),
             #document{value = FileMeta} = FileDoc,
             {ok, _} = file_meta:update(FileEntry, #{ctime => CurrTime}),
@@ -499,7 +499,7 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
     case length(FileChildren) of
         0 ->
             {ok, ParentDoc} = file_meta:get_parent(FileDoc),
-            CurrTime = utils:time(),
+            CurrTime = erlang:system_time(seconds),
             #document{value = ParentMeta} = ParentDoc,
             {ok, _} = file_meta:update(ParentDoc, #{
                 mtime => CurrTime, ctime => CurrTime
@@ -518,7 +518,8 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
 %%--------------------------------------------------------------------
 %% @doc Checks necessary permissions and renames directory
 %%--------------------------------------------------------------------
--spec rename_dir(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
+-spec rename_dir(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) ->
+    #fuse_response{} | no_return().
 -check_permissions([{?delete_subcontainer, {parent, 2}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir(CTX, SourceEntry, TargetPath) ->
     case moving_into_itself(SourceEntry, TargetPath) of
@@ -531,7 +532,8 @@ rename_dir(CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Checks necessary permissions and renames file
 %%--------------------------------------------------------------------
--spec rename_file(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
+-spec rename_file(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) ->
+    #fuse_response{} | no_return().
 -check_permissions([{?delete_object, {parent, 2}}, {?add_object, {parent, {path, 3}}}]).
 rename_file(CTX, SourceEntry, TargetPath) ->
     rename_impl(CTX, SourceEntry, TargetPath).
@@ -539,12 +541,13 @@ rename_file(CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 %% @doc Renames file_meta doc.
 %%--------------------------------------------------------------------
--spec rename_impl(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) -> term().
+-spec rename_impl(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) ->
+    #fuse_response{} | no_return().
 rename_impl(_CTX, SourceEntry, TargetPath) ->
     ok = file_meta:rename(SourceEntry, {path, TargetPath}),
     {ok, FileDoc} = file_meta:get({path, TargetPath}),
     {ok, ParentDoc} = file_meta:get_parent({path, TargetPath}),
-    CurrTime = utils:time(),
+    CurrTime = erlang:system_time(seconds),
 
     #document{value = ParentMeta} = ParentDoc,
     {ok, _} = file_meta:update(ParentDoc, #{mtime => CurrTime, ctime => CurrTime}),
@@ -569,7 +572,8 @@ rename_impl(_CTX, SourceEntry, TargetPath) ->
 %% Change mode of storage files related with given file_meta.
 %% @end
 %%--------------------------------------------------------------------
--spec chmod_storage_files(fslogic_worker:ctx(), file_meta:entry(), file_meta:posix_permissions()) -> ok | no_return().
+-spec chmod_storage_files(fslogic_worker:ctx(), file_meta:entry(), file_meta:posix_permissions()) ->
+    ok | no_return().
 chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     case file_meta:get(FileEntry) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->

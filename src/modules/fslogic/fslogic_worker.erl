@@ -21,6 +21,7 @@
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 
 -export([init/1, handle/1, cleanup/0, handle_fuse_request/2]).
@@ -69,6 +70,13 @@ init(_Args) ->
             terminate_handler = event_utils:send_subscription_cancellation_handler()
         }
     },
+
+    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
+        {ok, true} ->
+            rtransfer_config:start_rtransfer();
+        _ ->
+            ok
+    end,
 
     case event:subscribe(WriteSub) of
         {ok, WriteSubId} ->
@@ -243,8 +251,8 @@ handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(NewCtx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SID, ForceCL);
+handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
+    fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
 handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
     fslogic_req_generic:get_xattr(Ctx, {uuid, UUID}, XattrName);
 handle_fuse_request(Ctx, #set_xattr{uuid = UUID, xattr = Xattr}) ->
@@ -271,6 +279,13 @@ handle_fuse_request(Ctx, #get_mimetype{uuid = UUID}) ->
     fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #set_mimetype{uuid = UUID, value = Value}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
+handle_fuse_request(Ctx, #synchronize_block{uuid = UUID, block = Block}) ->
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, UUID}, Block);
+handle_fuse_request(Ctx, #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}) ->
+    fuse_config_manager:create_storage_test_file(Ctx, SID, FileUUID);
+handle_fuse_request(_Ctx, #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
+    file_id = FileId, file_content = FileContent}) ->
+    fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
@@ -279,9 +294,9 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
     }}) ->
-        case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
+        case replica_updater:update(FileUUID, Blocks, FileSize, true) of
             {ok, size_changed} ->
-                MTime = utils:time(),
+                MTime = erlang:system_time(seconds),
                 {ok, _} = file_meta:update({uuid, FileUUID}, #{
                     mtime => MTime, ctime => MTime
                 }),
@@ -289,7 +304,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {ok, size_not_changed} ->
-                MTime = utils:time(),
+                MTime = erlang:system_time(seconds),
                 {ok, _} = file_meta:update({uuid, FileUUID}, #{
                     mtime => MTime, ctime => MTime
                 }),
