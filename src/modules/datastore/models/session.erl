@@ -26,7 +26,8 @@
 %% API
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
-    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1]).
+    get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1,
+    get_active/0]).
 
 -type id() :: binary().
 -type auth() :: #auth{}.
@@ -179,7 +180,24 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns session supervisor and node on which supervisor is running.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_active() ->
+    {ok, [datastore:document()]} | {error, Reason :: term()}.
 
+get_active() ->
+    Filter = fun
+        ('$end_of_table', Acc) ->
+            {abort, Acc};
+        (#document{value = #session{status = active}} = Doc, Acc) ->
+            {next, [Doc | Acc]};
+        (_X, Acc) ->
+            {next, Acc}
+    end,
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, Filter, []).
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns session supervisor and node on which supervisor is running.

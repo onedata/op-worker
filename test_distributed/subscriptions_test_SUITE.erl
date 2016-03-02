@@ -12,6 +12,7 @@
 -author("Michal Zmuda").
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -20,9 +21,9 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([provider_registers_test/1]).
+-export([provider_registers_test/1, user_registers_test/1]).
 
-all() -> ?ALL([provider_registers_test]).
+all() -> ?ALL([provider_registers_test, user_registers_test]).
 
 
 %%%===================================================================
@@ -31,7 +32,26 @@ all() -> ?ALL([provider_registers_test]).
 
 provider_registers_test(Config) ->
     WorkerNodes = ?config(op_worker_nodes, Config),
-    await_message(WorkerNodes, as_message(1, "https://127.0.0.1/updates")),
+
+    verify_messages(WorkerNodes, [
+        [{<<"last_seq">>, 1}, {<<"endpoint">>, <<"https://127.0.0.1/updates">>}]
+    ], [], 10),
+    ok.
+
+user_registers_test(Config) ->
+    WorkerNodes = [Node | _] = ?config(op_worker_nodes, Config),
+
+    TTL = 123,
+    set_client_ttl(Node, TTL),
+
+    Auth = #auth{macaroon = macaroon:create("a", "b", "c"),
+        disch_macaroons = macaroon:create("d", "e", "f")},
+    save_session(<<"user1">>, Auth, active, Node),
+
+    verify_messages(WorkerNodes, [
+        {[{<<"last_seq">>, 1}, {<<"endpoint">>, <<"https://127.0.0.1/updates">>}], provider},
+        {[{<<"ttl_seconds">>, TTL}, {<<"provider">>, <<"non_global_provider">>}], {user, {Auth#auth.macaroon, Auth#auth.disch_macaroons}}}
+    ], [], 10),
     ok.
 
 
@@ -107,13 +127,15 @@ get_messages(NodeContexts) ->
     {lists:append(Messages), Contexts}.
 
 get_messages(Node, Number) ->
-    Body = mock_capture(Node, [Number, oz_endpoint, auth_request, ['_', "/subscription", '_', '_', '_', '_'], 5]),
-%%    ct:print("~p", [Body]),
+    Filter = ['_', "/subscription", '_', '_', '_', '_'],
+    Body = mock_capture(Node, [Number, oz_endpoint, auth_request, Filter, 5]),
+    Client = mock_capture(Node, [Number, oz_endpoint, auth_request, Filter, 1]),
     case Body of
         {badrpc, _} ->
             not_present;
         _ ->
-            [json_utils:decode(Body)]
+%%            ct:print("~p ~p", [json_utils:decode(Body), Client]),
+            [{json_utils:decode(Body), Client}]
     end.
 
 mock_capture(Node, Args) ->
@@ -123,3 +145,12 @@ as_message(Seq, Endpoint) -> [
     {<<"last_seq">>, Seq},
     {<<"endpoint">>, list_to_binary(Endpoint)}
 ].
+
+set_client_ttl(Node, TTL) ->
+    rpc:call(Node, application, set_env, [op_worker, client_subscription_ttl_seconds, TTL]).
+
+
+save_session(UserName, Auth, Status, Node) ->
+    Identity = #identity{user_id = UserName},
+    Doc = #document{value = #session{auth = Auth, identity = Identity, status = Status}},
+    {ok, _} = rpc:call(Node, session, save, [Doc]).
