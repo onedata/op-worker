@@ -266,7 +266,7 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File) ->
     FileId :: binary()) ->
     {ok, binary()}.
 save_handle(CTX, SessionId, SpaceUUID, FileUUID, FileId) ->
-    {ok, Storage} = fslogic_storage:select_storage(CTX),
+    {ok, Storage} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
     SFMHandle = storage_file_manager:new_handle(
         SessionId, SpaceUUID, FileUUID, Storage, FileId),
     {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
