@@ -27,7 +27,8 @@
 
 -export([token_authentication/1]).
 
--define(MACAROON, <<"macaroon">>).
+-define(MACAROON, macaroon:create("a", "b", "c")).
+-define(MACAROON_TOKEN, element(2, macaroon:serialize(?MACAROON))).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
@@ -44,7 +45,7 @@ token_authentication(Config) ->
     SessionId = <<"SessionId">>,
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
+    {ok, Sock} = connect_via_token(Worker1, ?MACAROON_TOKEN, SessionId),
 
     % then
     ?assertMatch(
@@ -163,9 +164,10 @@ mock_gr_certificates(Config) ->
                     Body, [SSLOpts, insecure | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
+                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
                 http_client:request(Method, Url ++ URN, [
                     {<<"content-type">>, <<"application/json">>},
-                    {<<"macaroon">>, Macaroon} | Headers
+                    {<<"macaroon">>, SrlzdMacaroon} | Headers
                 ], Body, [SSLOpts, insecure | Options])
         end
     ).

@@ -44,6 +44,7 @@
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
     is_spaces_dir/2]).
+-export([fix_parent_links/2, fix_parent_links/1]).
 
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -58,8 +59,8 @@
 -type file_meta() :: model_record().
 -type posix_permissions() :: non_neg_integer().
 
--export_type([uuid/0, path/0, name/0, entry/0, type/0, offset/0, size/0, mode/0,
-    time/0, posix_permissions/0]).
+-export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
+    size/0, mode/0, time/0, posix_permissions/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -152,6 +153,35 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
 
          end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fixes links to given document in its parent. Assumes that link to parent is valid.
+%% If the parent entry() is known its safer to use fix_parent_links/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec fix_parent_links(entry()) ->
+    ok | no_return().
+fix_parent_links(Entry) ->
+    {ok, Parent} = get_parent(Entry),
+    fix_parent_links(Parent, Entry).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fixes links to given document in its parent. Also fixes 'parent' link.
+%% @end
+%%--------------------------------------------------------------------
+-spec fix_parent_links(Parent :: entry(), File :: entry()) ->
+    ok | no_return().
+fix_parent_links(Parent, Entry) ->
+    {ok, #document{} = ParentDoc} = get(Parent),
+    {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
+    {ok, Scope} = get_scope(Parent),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
+    ok = datastore:add_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}, {scope, Scope}]).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback get/1.
@@ -238,7 +268,7 @@ exists(Key) ->
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
     ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL, ?GLOBALLY_CACHED_LEVEL).
+        ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -494,7 +524,8 @@ setup_onedata_user(UUID) ->
         lists:foreach(fun(SpaceId) ->
             SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             case exists({uuid, SpaceDirUuid}) of
-                true -> ok;
+                true ->
+                    fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
                 false ->
                     space_info:fetch(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
@@ -505,7 +536,7 @@ setup_onedata_user(UUID) ->
                                 ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                             }})
             end
-        end, Spaces),
+                      end, Spaces),
 
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
             #document{key = fslogic_uuid:default_space_uuid(UUID),
@@ -691,7 +722,7 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                  after 200 ->
                      ?error("set_scopes error for entry: ~p", [Entry])
                  end
-             end, Setters),
+                           end, Setters),
              Res
          end).
 

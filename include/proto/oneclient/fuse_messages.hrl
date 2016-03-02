@@ -157,6 +157,11 @@
     value :: binary()
 }).
 
+-record(synchronize_block, {
+    uuid :: file_meta:uuid(),
+    block :: #file_block{}
+}).
+
 -record(create_storage_test_file, {
     storage_id :: storage:id(),
     file_uuid :: file_meta:uuid()
@@ -176,7 +181,7 @@
                         #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
                         #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |
                         #set_cdmi_completion_status{} | #get_mimetype{} | #set_mimetype{} |
-                        #create_storage_test_file{} | #verify_storage_test_file{}.
+                        #synchronize_block{} | #create_storage_test_file{} | #verify_storage_test_file{}.
 
 
 -record(file_children, {

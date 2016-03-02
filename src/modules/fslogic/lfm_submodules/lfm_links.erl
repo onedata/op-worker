@@ -25,7 +25,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create_symlink(Path :: binary(), TargetFileKey :: file_meta:key()) ->
+-spec create_symlink(Path :: binary(), TargetFileKey :: file_meta:entry()) ->
     {ok, file_meta:uuid()} | logical_file_manager:error_reply().
 create_symlink(_Path, _TargetFileKey) ->
     {ok, <<"">>}.
@@ -37,7 +37,7 @@ create_symlink(_Path, _TargetFileKey) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec read_symlink(FileKey :: file_meta:key()) ->
+-spec read_symlink(FileKey :: file_meta:entry()) ->
     {ok, {file_meta:uuid(), file_meta:name()}} | logical_file_manager:error_reply().
 read_symlink(_FileKey) ->
     {ok, {<<"">>, <<"">>}}.
@@ -49,7 +49,7 @@ read_symlink(_FileKey) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec remove_symlink(FileKey :: file_meta:key()) ->
+-spec remove_symlink(FileKey :: file_meta:entry()) ->
     ok | logical_file_manager:error_reply().
 remove_symlink(_FileKey) ->
     ok.

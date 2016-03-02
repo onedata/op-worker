@@ -53,7 +53,7 @@ get_configuration_test(Config) ->
 
 create_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
+    StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
     {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
 
     FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
@@ -77,7 +77,7 @@ create_storage_test_file_test(Config) ->
 
 verify_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    StorageId = ?config(storage_id, Config),
+    StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
     {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     test_utils:set_env(Worker, ?APP_NAME, verify_storage_test_file_delay_seconds, 1),
     test_utils:set_env(Worker, ?APP_NAME, remove_storage_test_file_attempts, 1),
@@ -120,7 +120,7 @@ verify_storage_test_file_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->

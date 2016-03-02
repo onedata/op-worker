@@ -18,7 +18,7 @@
   },
   "provider_domains": {
     "p1": {
-      "db_driver": "couchbase",
+      "db_driver": "couchdb",
       "os_config": "cfg1",
       "cluster_manager": {
         "cm1": {
@@ -46,13 +46,14 @@
               "127.0.0.1:49161"
             ],
             "global_registry_domain": "gr",
-            "verify_gr_cert": false
+            "verify_gr_cert": false,
+            "start_rtransfer_on_init": false
           }
         }
       }
     },
     "p2": {
-      "db_driver": "couchbase",
+      "db_driver": "couchdb",
       "os_config": "cfg1",
       "cluster_manager": {
         "cm1": {
@@ -80,7 +81,8 @@
               "127.0.0.1:49161"
             ],
             "global_registry_domain": "gr",
-            "verify_gr_cert": false
+            "verify_gr_cert": false,
+            "start_rtransfer_on_init": false
           }
         }
       }

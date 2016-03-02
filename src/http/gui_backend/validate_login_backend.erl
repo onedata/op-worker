@@ -28,7 +28,8 @@ page_init() ->
             ok;
         false ->
             SrlzdMacaroon = g_ctx:get_url_param(<<"code">>),
-            {ok, Auth = #auth{}} = gui_auth_manager:authenticate(SrlzdMacaroon),
+            {ok, Macaroon} = macaroon:deserialize(SrlzdMacaroon),
+            {ok, Auth = #auth{}} = gui_auth_manager:authenticate(Macaroon),
             {ok, _} = g_session:log_in([Auth])
     end,
     {redirect_relative, <<"/">>}.
