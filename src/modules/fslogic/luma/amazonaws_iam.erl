@@ -183,7 +183,7 @@ get_signature_key(SecretKey, Datestamp, Region, Service) ->
 %% @doc Parses error response from Amazon IAM
 %% @end
 %%--------------------------------------------------------------------
--spec parse_error_response(Body :: binary) -> {Code :: binary(), Message :: binary()}.
+-spec parse_error_response(Body :: binary()) -> {Code :: binary(), Message :: binary()}.
 parse_error_response(Body) ->
     {XML, _} = xmerl_scan:string(binary_to_list(Body)),
     Code = xml_val(xmerl_xpath:string("/ErrorResponse/Error/Code", XML)),
@@ -195,7 +195,7 @@ parse_error_response(Body) ->
 %% @doc Extracts value from xml
 %% @end
 %%--------------------------------------------------------------------
--spec xml_val(Doc :: #xmlElement{}) -> binary().
+-spec xml_val(Doc :: [#xmlElement{}]) -> binary().
 xml_val(Doc) ->
     [#xmlElement{content = [#xmlText{value = V} | _]}] = Doc,
     list_to_binary(V).

@@ -144,7 +144,8 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_credentials_from_luma(UserId :: binary(), StorageType :: helpers:name(),
-    StorageId :: storage:id() | helpers:name(), SessionId :: session:id()) -> proplists:proplist().
+    StorageId :: storage:id() | helpers:name(), SessionId :: session:id()) ->
+    {ok, proplists:proplist()} | {error, binary()}.
 get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
     {ok, LUMAHostname} = application:get_env(?APP_NAME, luma_hostname),
     HostnameBinary = list_to_binary(LUMAHostname),
