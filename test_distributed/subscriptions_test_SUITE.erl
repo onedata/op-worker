@@ -21,14 +21,29 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([provider_registers_test/1, user_registers_test/1]).
+-export([provider_registers_test/1, user_registers_test/1, updates_push_accepted/1]).
 
-all() -> ?ALL([provider_registers_test, user_registers_test]).
+-define(CONTENT_TYPE_HEADER, [{<<"content-type">>, <<"application/json">>}]).
+
+all() ->
+    ?ALL([provider_registers_test, user_registers_test, updates_push_accepted]).
 
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+updates_push_accepted(Config) ->
+    WorkerNodes = [Node | _] = ?config(op_worker_nodes, Config),
+    application:start(ssl2),
+    hackney:start(),
+
+    Body = <<"44">>, % todo use sane input & check state
+    {ok, 204, _, _} = http_client:post(get_address(Node), ?CONTENT_TYPE_HEADER, Body, [insecure]),
+
+    hackney:stop(),
+    application:stop(ssl2),
+    ok.
 
 provider_registers_test(Config) ->
     WorkerNodes = ?config(op_worker_nodes, Config),
@@ -141,13 +156,13 @@ get_messages(Node, Number) ->
 mock_capture(Node, Args) ->
     rpc:call(Node, meck, capture, Args).
 
-as_message(Seq, Endpoint) -> [
-    {<<"last_seq">>, Seq},
-    {<<"endpoint">>, list_to_binary(Endpoint)}
-].
-
 set_client_ttl(Node, TTL) ->
     rpc:call(Node, application, set_env, [op_worker, client_subscription_ttl_seconds, TTL]).
+
+get_address(Node) ->
+    {ok, IP} = rpc:call(Node, application, get_env, [op_worker, external_ip]),
+    {ok, Port} = rpc:call(Node, application, get_env, [op_worker, rest_port]),
+    "https://" ++ atom_to_list(IP) ++ ":" ++ integer_to_list(Port) ++ "/updates".
 
 
 save_session(UserName, Auth, Status, Node) ->
