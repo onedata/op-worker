@@ -110,6 +110,7 @@ many_files_creation_test_base(Config) ->
     end,
 
     SpaceNameString = "Space " ++ AnswerDesc,
+    ct:print("Space name: ~p", [SpaceNameString]),
     SpaceName = list_to_binary(SpaceNameString),
     FullSpaceNameString = "/spaces/" ++ SpaceNameString,
     FullSpaceName = list_to_binary(FullSpaceNameString),
