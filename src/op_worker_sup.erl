@@ -56,9 +56,23 @@ start_link() ->
 -spec init(Args :: term()) ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([]) ->
-    {ok, {#{strategy => one_for_all, intensity => 5, period => 10}, [
+    {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, [
+        subscriptions_bridge_spec(),
         cluster_worker_specs:main_worker_sup_spec()
     ]}}.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
+-spec subscriptions_bridge_spec() -> supervisor:child_spec().
+subscriptions_bridge_spec() ->
+    #{
+        id => subscriptions_bridge,
+        start => {subscriptions_bridge, start_link, []},
+        restart => permanent,
+        shutdown => infinity,
+        type => worker,
+        modules => [subscriptions_bridge]
+    }.
 
