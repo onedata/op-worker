@@ -170,7 +170,7 @@ many_files_creation_test_base(Config) ->
 
     [
         #parameter{name = files_in_datastore, value = DocsInDB,
-            description = "Files in datastore after test"}
+            description = "Files in datastore after test"},
         #parameter{name = create_time, value = OkTimeCL / OkNumCL, unit = "us",
             description = "Average time of creating file"},
         #parameter{name = get_time, value = OkTime2 / OkNum2, unit = "us",
