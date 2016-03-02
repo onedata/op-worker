@@ -4,6 +4,18 @@
 CHANGELOG
 ---------
 
+### 1.0.1
+
+* VFS-1571 Mount compilation caches by default in make.py .
+* VFS-1571 Add rebar 2.6.1 built with rebar_beam_cache.
+* VFS-1447 sys.config per app
+* VFS-1508 direct output from ember live build to log file in dev environment
+ to toggle gui livereload
+* VFS-1508 change owner of GUI tmp dir periodically rather than run ember build as user
+* VFS-1508 run livereload as user
+* VFS-1508 change build process of GUI to use ember-cli, add livereload
+
+
 ### 1.0.0
 
 

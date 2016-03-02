@@ -8,7 +8,7 @@ Brings up a set of oneprovider worker nodes. They can create separate clusters.
 import os
 import subprocess
 import sys
-from . import common, docker, worker, globalregistry, gui_livereload
+from . import common, docker, worker, globalregistry, gui_livereload, ceph, s3
 
 DOCKER_BINDIR_PATH = '/root/build'
 
@@ -48,8 +48,16 @@ class ProviderWorkerConfigurator:
                             this_config[self.app_name()], bindir)
 
     def extra_volumes(self, config, bindir):
-        storage_volumes = [common.volume_for_storage(s) for s in config[
-            'os_config']['storages']] if 'os_config' in config else []
+        if 'os_config' in config and config['os_config']['storages']:
+            if isinstance(config['os_config']['storages'][0], basestring):
+                posix_storages = config['os_config']['storages']
+            else:
+                posix_storages = [s['name'] for s in config['os_config']['storages']
+                                  if s['type'] == 'posix']
+        else:
+            posix_storages = []
+
+        storage_volumes = [common.volume_for_storage(s) for s in posix_storages]
         # Check if gui_livereload is enabled in env and add required storages
         if 'gui_livereload' in config:
             if config['gui_livereload']:
@@ -74,23 +82,55 @@ class ProviderWorkerConfigurator:
 
 def create_storages(storages, op_nodes, op_config, bindir):
     # copy escript to docker host
-    script_name = 'create_storage.escript'
+    script_names = {'posix': 'create_posix_storage.escript',
+                    's3': 'create_s3_storage.escript',
+                    'ceph': 'create_ceph_storage.escript'}
     pwd = common.get_script_dir()
-    command = ['cp', os.path.join(pwd, script_name),
-               os.path.join(bindir, script_name)]
-    subprocess.check_call(command)
+    for _, script_name in script_names.iteritems():
+        command = ['cp', os.path.join(pwd, script_name),
+                   os.path.join(bindir, script_name)]
+        subprocess.check_call(command)
     # execute escript on one of the nodes
     # (storage is common fo the whole provider)
     first_node = op_nodes[0]
     container = first_node.split("@")[1]
     worker_name = container.split(".")[0]
     cookie = op_config[worker_name]['vm.args']['setcookie']
-    script_path = os.path.join(DOCKER_BINDIR_PATH, script_name)
-    for st_path in storages:
-        st_name = st_path
-        command = ['escript', script_path, cookie, first_node, st_name, st_path]
-        assert 0 is docker.exec_(container, command, tty=True,
+    script_patches = dict(map(lambda (k,v): (k, os.path.join(DOCKER_BINDIR_PATH, v)),
+                              script_names.iteritems()))
+    for storage in storages:
+        if isinstance(storage, basestring):
+            storage = {'type': 'posix', 'name': storage}
+        st_name = storage['name']
+        if storage['type'] == 'posix':
+            st_path = storage['name']
+            command = ['escript', script_patches['posix'], cookie, first_node, st_name, st_path]
+            assert 0 is docker.exec_(container, command, tty=True,
                                  stdout=sys.stdout, stderr=sys.stderr)
+        elif storage['type'] == 'ceph':
+            if 'image' in storage:
+                image = storage['image']
+            else:
+                image = 'onedata/ceph'
+            pool = tuple(storage['pool'].split(':'))
+            config = ceph.up(image, [pool])
+            print config
+            command = ['escript', script_patches['ceph'], cookie, first_node, st_name, "ceph",
+                       config['host_name'], pool[0], config['username'], config['key']]
+            assert 0 is docker.exec_(container, command, tty=True,
+                                 stdout=sys.stdout, stderr=sys.stderr)
+        elif storage['type'] == 's3':
+            if 'image' in storage:
+                image = storage['image']
+            else:
+                image = 'lphoward/fake-s3'
+            config = s3.up(image, [storage['bucket']])
+            command = ['escript', script_patches['s3'], cookie, first_node, st_name, config['host_name'],
+                       storage['bucket'], config['access_key'], config['secret_key'], "iam.amazonaws.com"]
+            assert 0 is docker.exec_(container, command, tty=True,
+                                 stdout=sys.stdout, stderr=sys.stderr)
+        else:
+            raise RuntimeError('Unknown storage type: {}'.format(storage['type']))
     # clean-up
     command = ['rm', os.path.join(bindir, script_name)]
     subprocess.check_call(command)
