@@ -169,7 +169,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         }
     ) end),
 
-    {ok, HandleId} = save_handle(SFMHandle1, SessId),
+    {ok, HandleId} = save_handle(CTX, SessId, SpaceUUID, UUID, FileId),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
@@ -249,9 +249,7 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
-    {ok, Storage} = fslogic_storage:select_storage(CTX),
-    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
-    {ok, HandleId} = save_handle(SFMHandle1, SessId),
+    {ok, HandleId} = save_handle(CTX, SessId, SpaceUUID, UUID, FileId),
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
@@ -263,8 +261,14 @@ get_file_location(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 %% @doc Saves file handle in user's session, returns id of saved handle
 %% @end
 %%--------------------------------------------------------------------
--spec save_handle(storage_file_manager:handle(), session:id()) -> {ok, binary()}.
-save_handle(SFMHandle, SessionId) ->
+-spec save_handle(fslogic_worker:ctx(), session:id(),
+    SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+    FileId :: binary()) ->
+    {ok, binary()}.
+save_handle(CTX, SessionId, SpaceUUID, FileUUID, FileId) ->
+    {ok, Storage} = fslogic_storage:select_storage(CTX),
+    SFMHandle = storage_file_manager:new_handle(
+        SessionId, SpaceUUID, FileUUID, Storage, FileId),
     {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
     HandleId = base64:encode(crypto:rand_bytes(20)),
     {ok, #document{value = #session{handles = Handles}}} = session:get(SessionId),
