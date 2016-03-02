@@ -109,17 +109,12 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
 
-    Spaces = case UserId of
-        ?ROOT_USER_ID ->
-            {ok, Docs} = space_info:list(),
-            Docs;
-        _ ->
-            {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
-            lists:map(fun(SpaceId) ->
-                {ok, Doc} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
-                Doc
-            end, SpaceIds)
-    end,
+    {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
+    Spaces = lists:map(fun(SpaceId) ->
+        {ok, Doc} =
+            space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+        Doc
+    end, SpaceIds),
 
     Len = size(SpaceName),
     MatchedSpacesIds = lists:filtermap(fun
@@ -138,7 +133,8 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
         [] ->
             throw(?ENOENT);
         [SpaceId] ->
-            {path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
+            {path, fslogic_path:join(
+                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
     end;
 get_canonical_file_entry(Ctx, Tokens) ->
     {ok, DefaultSpaceId} = fslogic_spaces:get_default_space_id(Ctx),

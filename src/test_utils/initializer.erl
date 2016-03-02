@@ -155,7 +155,7 @@ setup_session(_Worker, [], Config) ->
 setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     Self = self(),
 
-    {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
+    {SpaceIds, SpaceNames} = lists:unzip(Spaces),
     {GroupIds, _GroupNames} = lists:unzip(Groups),
 
     Name = fun(Text, Num) -> name(Text, Num) end,
@@ -164,6 +164,13 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     UserId = Name("user_id", UserNum),
     Iden = #identity{user_id = UserId},
     UserName = Name("username", UserNum),
+
+    lists:foreach(fun(SpaceName) ->
+        case get(SpaceName) of
+            undefined -> put(SpaceName, [SessId]);
+            SessIds -> put(SpaceName, [SessId | SessIds])
+        end
+    end, SpaceNames),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_fuse_session, [SessId, Iden, Self])),

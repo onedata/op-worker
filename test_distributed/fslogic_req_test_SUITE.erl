@@ -501,7 +501,7 @@ update_times_test(Config) ->
         end, [SessId1, SessId2, SessId3, SessId4]).
 
 
-%% Get uuid of given by path file. Possible as root to bypass permissions checks.
+%% Get uuid of given by path file. Possible as a space member to bypass permissions checks.
 get_uuid_privileged(Worker, SessId, Path) ->
     SessId1 = case Path of
                   <<"/">> ->
@@ -509,7 +509,8 @@ get_uuid_privileged(Worker, SessId, Path) ->
                   <<"/spaces">> ->
                       SessId;
                   _ ->
-                      ?ROOT_SESS_ID
+                      {ok, [_, _, SpaceName | _]} = fslogic_path:verify_file_path(Path),
+                      hd(get(SpaceName))
               end,
     get_uuid(Worker, SessId1, Path).
 
@@ -536,6 +537,6 @@ init_per_testcase(_, Config) ->
     initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces(Config),
     test_utils:mock_validate_and_unload(Workers, communicator).
