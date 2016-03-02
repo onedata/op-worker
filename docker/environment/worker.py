@@ -159,7 +159,7 @@ def _couchbase_up(cluster_name, db_nodes, dns_servers, uid):
 
 
 def _db_driver(config):
-    return config['db_driver'] if 'db_driver' in config else 'couchdb'
+    return config['db_driver'] if 'db_driver' in config else 'couchbase'
 
 
 def _db_driver_module(db_driver):
