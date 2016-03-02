@@ -111,7 +111,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = _UserID, name = Name}} = FileDoc} ->
+            ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
             #posix_user_ctx{gid = GID, uid = UID} = try
@@ -122,10 +122,16 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             catch
                 throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
             end,
+            FinalUID = case  session:get(SessId) of
+                {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
+                    UID;
+                _ ->
+                    fslogic_utils:gen_storage_uid(UserID)
+            end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
                 uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                ctime = CTime, uid = UID, size = Size, name = Name
+                ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};
         {error, {not_found, _}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
