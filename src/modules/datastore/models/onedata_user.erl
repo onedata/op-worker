@@ -146,7 +146,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
         },
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
-        file_meta:setup_onedata_user({user, {SrlzdMacaroon, SrlzdDMacaroons}}, Id),
+        file_meta:setup_onedata_user({user, {Macaroon, DMacaroons}}, Id),
         {ok, OnedataUserDoc}
     catch
         _:Reason ->
@@ -160,10 +160,10 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
 %%--------------------------------------------------------------------
 -spec get_or_fetch(datastore:key(), #auth{}) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Key, Token = #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}) ->
+get_or_fetch(Key, Token = #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
     case onedata_user:get(Key) of
         {ok, Doc = #document{key = Id}} ->
-            file_meta:setup_onedata_user({user, {SrlzdMacaroon, SrlzdDMacaroons}}, Id),
+            file_meta:setup_onedata_user({user, {Macaroon, DMacaroons}}, Id),
             {ok, Doc};
         {error, {not_found, _}} -> fetch(Token);
         Error -> Error
