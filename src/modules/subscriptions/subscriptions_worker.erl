@@ -97,7 +97,8 @@ get_endpoint() ->
     case Endpoint of
         undefined ->
             IP = inet_parse:ntoa(oneprovider:get_node_ip()),
-            Prepared = list_to_binary("https://" ++ IP ++ "/updates"),
+            Port = integer_to_list(rest_listener:port()),
+            Prepared = list_to_binary("https://" ++ IP ++ ":" ++ Port ++ "/updates"),
             worker_host:state_put(?MODULE, endpoint, Prepared),
             Prepared;
         _ -> Endpoint
