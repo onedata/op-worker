@@ -17,7 +17,8 @@
 
 %% Identity containing user_id
 -record(identity, {
-    user_id :: onedata_user:id()
+    user_id :: onedata_user:id(),
+    provider_id :: oneprovider:id()
 }).
 
 %% User session
@@ -84,7 +85,12 @@
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
-    size = 0 :: non_neg_integer() | undefined
+    version_vector = #{},
+    size = 0 :: non_neg_integer() | undefined,
+    recent_changes = {[], []} :: {
+        OldChanges :: [fslogic_file_location:change()],
+        NewChanges :: [fslogic_file_location:change()]
+    }
 }).
 
 %% Model for caching space details fetched from Global Registry
@@ -106,6 +112,11 @@
 %% Model that maps onedata user to Amazon S3 user
 -record(s3_user, {
     credentials :: #{storage:id() => s3_user:credentials()}
+}).
+
+%% Model that holds state entries for DBSync worker
+-record(dbsync_state, {
+    entry :: term()
 }).
 
 -endif.

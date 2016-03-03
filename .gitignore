@@ -3,6 +3,8 @@
 .eunit
 .dialyzer.plt
 .idea
+.rebar
+
 
 cluster_manager
 src/gui_static/common
@@ -15,8 +17,8 @@ src/gui_static/n2o
 *.beam
 *.pyc
 *.o
+*.d
 
-cluster_manager
 rel/op_worker
 rel/test_cluster
 rel/*.rpm
@@ -30,6 +32,7 @@ doc
 logs
 ebin
 priv
+.rebar
 
 c_lib
 c_src/helpers_nif/*.o

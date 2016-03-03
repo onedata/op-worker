@@ -5,16 +5,21 @@ DISTRIBUTION    ?= none
 export DISTRIBUTION
 
 PKG_REVISION    ?= $(shell git describe --tags --always)
-PKG_VERSION	?= $(shell git describe --tags --always | tr - .)
-PKG_ID	         = op-worker-$(PKG_VERSION)
-PKG_BUILD	 = 1
-BASE_DIR	 = $(shell pwd)
+PKG_VERSION     ?= $(shell git describe --tags --always | tr - .)
+PKG_ID           = op-worker-$(PKG_VERSION)
+PKG_BUILD        = 1
+BASE_DIR         = $(shell pwd)
 ERLANG_BIN       = $(shell dirname $(shell which erl))
-REBAR	        ?= $(BASE_DIR)/rebar
+REBAR           ?= $(BASE_DIR)/rebar
 PKG_VARS_CONFIG  = pkg.vars.config
 OVERLAY_VARS    ?=
 
-.PHONY: deps test package test_gui
+GIT_URL := $(shell git config --get remote.origin.url | sed -e 's/\(\/[^/]*\)$$//g')
+GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgrid.pl:7999/vfs'; else echo ${GIT_URL}; fi)
+ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
+export ONEDATA_GIT_URL
+
+.PHONY: deps package test test_gui
 
 all: test_rel
 
@@ -46,7 +51,10 @@ gui_prod:
 	./deps/gui/build_gui.sh prod
 
 gui_doc:
-	jsdoc -c src/http/gui/.jsdoc.conf app
+	jsdoc -c src/http/gui/.jsdoc.conf src/http/gui/app
+
+gui_clean:
+	cd src/http/gui && rm -rf node_modules bower_components dist tmp
 
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
@@ -76,7 +84,7 @@ generate: deps compile gui_prod
 	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
-clean: relclean pkgclean
+clean: relclean pkgclean gui_clean
 	./rebar clean
 
 distclean:
@@ -113,7 +121,7 @@ eunit:
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 test_gui:
-	./test_gui.sh
+	cd test_gui && ember test
 
 coverage:
 	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR)
@@ -165,7 +173,7 @@ package/$(PKG_ID).tar.gz: deps
 	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
 	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
 	done
-	find package/$(PKG_ID) -depth -name ".git" -exec rm -rf {} \;
+	find package/$(PKG_ID) -depth -name ".git" -not -path '*/cluster_worker/*' -exec rm -rf {} \;
 	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
 
 dist: package/$(PKG_ID).tar.gz

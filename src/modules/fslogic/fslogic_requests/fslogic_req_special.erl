@@ -41,7 +41,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
             false ->
                 ParentUUID
         end,
-    CTime = utils:time(),
+    CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
         type = ?DIRECTORY_TYPE,
@@ -53,7 +53,15 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     }},
     case file_meta:create(NormalizedParentUUID, File) of
         {ok, DirUUID} ->
-            {ok, _} = file_meta:update(NormalizedParentUUID, #{mtime => CTime}),
+            {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
+            #document{value = ParentMeta} = ParentDoc,
+            {ok, _} = file_meta:update(ParentDoc, #{mtime => CTime, ctime => CTime}),
+
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                ParentDoc#document{value = ParentMeta#file_meta{
+                    mtime = CTime, ctime = CTime
+                }}
+            ) end),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = DirUUID}
             };
@@ -78,6 +86,17 @@ read_dir(CTX, File, Offset, Size) ->
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
+    case fslogic_times:calculate_atime(FileDoc) of
+        actual ->
+            ok;
+        NewATime ->
+            #document{value = FileMeta} = FileDoc,
+            {ok, _} = file_meta:update(FileDoc, #{atime => NewATime}),
+            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
+                FileDoc#document{value = FileMeta#file_meta{atime = NewATime}}
+            ) end)
+    end,
+
     SpacesKey = fslogic_uuid:spaces_uuid(UserId),
     DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
     case Key of
@@ -90,11 +109,12 @@ read_dir(CTX, File, Offset, Size) ->
                     _ ->
                         file_meta:list_children(DefaultSpace, Offset - 1, Size)
                 end,
-                #fuse_response{status = #status{code = ?OK},
-                    fuse_response = #file_children{
-                        child_links = ChildLinks ++ DefaultSpaceChildLinks
-                    }
-                };
+
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = #file_children{
+                    child_links = ChildLinks ++ DefaultSpaceChildLinks
+                }
+            };
         SpacesKey ->
             {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
                 onedata_user:get(UserId),
@@ -104,7 +124,7 @@ read_dir(CTX, File, Offset, Size) ->
                     true ->
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
                         Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                            {ok, Space} = space_info:fetch(provider, SpaceId),
                             Space
                         end, SpacesIdsChunk),
 

@@ -7,9 +7,11 @@ Brings up dockers with full onedata environment.
 """
 
 import os
+import sys
 import copy
 import json
 import sys
+import time
 from . import appmock, client, common, globalregistry, cluster_manager, \
     worker, provider_worker, cluster_worker, docker, dns
 
@@ -29,7 +31,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
        bin_gr=default('bin_gr'), bin_cluster_manager=default('bin_cluster_manager'),
        bin_op_worker=default('bin_op_worker'), bin_cluster_worker=default('bin_cluster_worker'),
        bin_oc=default('bin_oc'), logdir=default('logdir')):
-    config = common.parse_json_file(config_path)
+    config = common.parse_json_config_file(config_path)
     uid = common.generate_uid()
 
     output = {
@@ -49,8 +51,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
 
     # Start appmock instances
     if 'appmock_domains' in config:
-        am_output = appmock.up(image, bin_am, dns_server,
-                               uid, config_path, logdir)
+        am_output = appmock.up(image, bin_am, dns_server, uid, config_path, logdir)
         common.merge(output, am_output)
         # Make sure appmock domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
@@ -59,8 +60,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
 
     # Start globalregistry instances
     if 'globalregistry_domains' in config:
-        gr_output = globalregistry.up(image, bin_gr, dns_server,
-                                      uid, config_path, logdir)
+        gr_output = globalregistry.up(image, bin_gr, dns_server, uid, config_path, logdir)
         common.merge(output, gr_output)
         # Make sure GR domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
@@ -93,8 +93,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
             for cfg_node in config['provider_domains'][provider_name][
                 'op_worker'].keys():
                 providers_map[provider_name]['nodes'].append(
-                    worker.worker_erl_node_name(cfg_node,
-                                                         provider_name, uid))
+                    worker.worker_erl_node_name(cfg_node, provider_name, uid))
                 providers_map[provider_name]['cookie'] = \
                     config['provider_domains'][provider_name]['op_worker'][
                         cfg_node]['vm.args']['setcookie']
@@ -140,6 +139,8 @@ echo $?'''
         print(command_output)
         # check of env configuration succeeded
         if command_res_code != '0':
+            # Let the command_output be flushed to console
+            time.sleep(2)
             sys.exit(1)
 
 

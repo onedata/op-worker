@@ -19,7 +19,7 @@
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -27,12 +27,12 @@
 
 -export([token_authentication/1]).
 
--define(MACAROON, <<"macaroon">>).
+-define(MACAROON, macaroon:create("a", "b", "c")).
+-define(MACAROON_TOKEN, element(2, macaroon:serialize(?MACAROON))).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
--performance({test_cases, []}).
-all() -> [token_authentication].
+all() -> ?ALL([token_authentication]).
 
 %%%===================================================================
 %%% Test functions
@@ -45,7 +45,7 @@ token_authentication(Config) ->
     SessionId = <<"SessionId">>,
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
+    {ok, Sock} = connect_via_token(Worker1, ?MACAROON_TOKEN, SessionId),
 
     % then
     ?assertMatch(
@@ -164,9 +164,10 @@ mock_gr_certificates(Config) ->
                     Body, [SSLOpts, insecure | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
+                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
                 http_client:request(Method, Url ++ URN, [
                     {<<"content-type">>, <<"application/json">>},
-                    {<<"macaroon">>, Macaroon} | Headers
+                    {<<"macaroon">>, SrlzdMacaroon} | Headers
                 ], Body, [SSLOpts, insecure | Options])
         end
     ).
