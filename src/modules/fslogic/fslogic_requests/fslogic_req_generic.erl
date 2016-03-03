@@ -156,16 +156,11 @@ delete(CTX, File) ->
 -check_permissions([{traverse_ancestors, 2}, {traverse_ancestors, {path, 3}}, {?delete, 2}]).
 rename(CTX, SourceEntry, TargetPath) ->
     ?debug("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
-    case file_meta:exists({path, TargetPath}) of
-        true ->
-            #fuse_response{status = #status{code = ?EEXIST}};
-        false ->
-            case file_meta:get(SourceEntry) of
-                {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
-                    rename_dir(CTX, FileDoc, TargetPath);
-                {ok, FileDoc} ->
-                    rename_file(CTX, FileDoc, TargetPath)
-            end
+    case file_meta:get(SourceEntry) of
+        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
+            rename_dir(CTX, FileDoc, TargetPath);
+        {ok, FileDoc} ->
+            rename_file(CTX, FileDoc, TargetPath)
     end.
 
 %%--------------------------------------------------------------------
@@ -523,7 +518,17 @@ rename_dir(CTX, SourceEntry, TargetPath) ->
         true ->
             #fuse_response{status = #status{code = ?EINVAL}};
         false ->
-            rename_impl(CTX, SourceEntry, TargetPath)
+            case file_meta:get({path, TargetPath}) of
+                {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = TargetDoc} ->
+                    case delete_impl(CTX, TargetDoc) of
+                        #fuse_response{status = #status{code = ?OK}} ->
+                            rename_impl(CTX, SourceEntry, TargetPath);
+                        NotOK ->
+                            NotOK
+                    end;
+                {ok, _TargetDoc} ->
+                    #fuse_response{status = #status{code = ?ENOTDIR}}
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -533,7 +538,17 @@ rename_dir(CTX, SourceEntry, TargetPath) ->
     #fuse_response{} | no_return().
 -check_permissions([{?delete_object, {parent, 2}}, {?add_object, {parent, {path, 3}}}]).
 rename_file(CTX, SourceEntry, TargetPath) ->
-    rename_impl(CTX, SourceEntry, TargetPath).
+    case file_meta:get({path, TargetPath}) of
+        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
+            #fuse_response{status = #status{code = ?EISDIR}};
+        {ok, TargetDoc} ->
+            case delete_impl(CTX, TargetDoc) of
+                #fuse_response{status = #status{code = ?OK}} ->
+                    rename_impl(CTX, SourceEntry, TargetPath);
+                NotOK ->
+                    NotOK
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Renames file_meta doc.
