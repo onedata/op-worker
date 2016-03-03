@@ -518,16 +518,21 @@ rename_dir(CTX, SourceEntry, TargetPath) ->
         true ->
             #fuse_response{status = #status{code = ?EINVAL}};
         false ->
-            case file_meta:get({path, TargetPath}) of
-                {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = TargetDoc} ->
-                    case delete_impl(CTX, TargetDoc) of
-                        #fuse_response{status = #status{code = ?OK}} ->
-                            rename_impl(CTX, SourceEntry, TargetPath);
-                        NotOK ->
-                            NotOK
-                    end;
-                {ok, _TargetDoc} ->
-                    #fuse_response{status = #status{code = ?ENOTDIR}}
+            case file_meta:exists({path, TargetPath}) of
+                false ->
+                    rename_impl(CTX, SourceEntry, TargetPath);
+                true ->
+                    case file_meta:get({path, TargetPath}) of
+                        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = TargetDoc} ->
+                            case delete_impl(CTX, TargetDoc) of
+                                #fuse_response{status = #status{code = ?OK}} ->
+                                    rename_impl(CTX, SourceEntry, TargetPath);
+                                NotOK ->
+                                    NotOK
+                            end;
+                        {ok, _TargetDoc} ->
+                            #fuse_response{status = #status{code = ?ENOTDIR}}
+                    end
             end
     end.
 
@@ -538,15 +543,20 @@ rename_dir(CTX, SourceEntry, TargetPath) ->
     #fuse_response{} | no_return().
 -check_permissions([{?delete_object, {parent, 2}}, {?add_object, {parent, {path, 3}}}]).
 rename_file(CTX, SourceEntry, TargetPath) ->
-    case file_meta:get({path, TargetPath}) of
-        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
-            #fuse_response{status = #status{code = ?EISDIR}};
-        {ok, TargetDoc} ->
-            case delete_impl(CTX, TargetDoc) of
-                #fuse_response{status = #status{code = ?OK}} ->
-                    rename_impl(CTX, SourceEntry, TargetPath);
-                NotOK ->
-                    NotOK
+    case file_meta:exists({path, TargetPath}) of
+        false ->
+            rename_impl(CTX, SourceEntry, TargetPath);
+        true ->
+            case file_meta:get({path, TargetPath}) of
+                {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
+                    #fuse_response{status = #status{code = ?EISDIR}};
+                {ok, TargetDoc} ->
+                    case delete_impl(CTX, TargetDoc) of
+                        #fuse_response{status = #status{code = ?OK}} ->
+                            rename_impl(CTX, SourceEntry, TargetPath);
+                        NotOK ->
+                            NotOK
+                    end
             end
     end.
 
