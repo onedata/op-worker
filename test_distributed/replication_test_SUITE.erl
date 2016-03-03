@@ -40,8 +40,8 @@
     remote_change_of_size_should_notify_clients/1,
     remote_change_of_blocks_should_notify_clients/1,
     remote_irrelevant_change_should_not_notify_clients/1,
-    conflicting_remote_changes_should_be_reconciled/1,
-    rtransfer_config_should_work/1
+    conflicting_remote_changes_should_be_reconciled/1
+%%    rtransfer_config_should_work/1
 ]).
 
 
@@ -61,8 +61,8 @@ all() ->
         remote_change_of_size_should_notify_clients,
         remote_change_of_blocks_should_notify_clients,
         remote_irrelevant_change_should_not_notify_clients,
-        conflicting_remote_changes_should_be_reconciled,
-        rtransfer_config_should_work
+        conflicting_remote_changes_should_be_reconciled
+%%        rtransfer_config_should_work
     ].
 
 
@@ -635,24 +635,25 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         blocks = [#file_block{offset = 4, size = 4}]}},
         rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
-rtransfer_config_should_work(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = <<"session_id1">>,
-    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
-
-    ?assertEqual(ok, rpc:call(W1, erlang, apply, [
-        fun() ->
-            Opts = rtransfer_config:rtransfer_opts(),
-            Open = proplists:get_value(open_fun, Opts),
-            Read = proplists:get_value(read_fun, Opts),
-            Write = proplists:get_value(write_fun, Opts),
-            {ok, WriteHandle} = erlang:apply(Open, [FileUuid, write]),
-            {ok, _, 4} = erlang:apply(Write, [WriteHandle, 0, <<"data">>]),
-            {ok, ReadHandle} = erlang:apply(Open, [FileUuid, read]),
-            {ok, _, <<"data">>} = erlang:apply(Read, [ReadHandle, 0, 10]),
-            ok
-        end, []
-    ])).
+%% TODO: VFS-1700
+%%rtransfer_config_should_work(Config) ->
+%%    [W1 | _] = ?config(op_worker_nodes, Config),
+%%    SessionId = <<"session_id1">>,
+%%    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+%%
+%%    ?assertEqual(ok, rpc:call(W1, erlang, apply, [
+%%        fun() ->
+%%            Opts = rtransfer_config:rtransfer_opts(),
+%%            Open = proplists:get_value(open_fun, Opts),
+%%            Read = proplists:get_value(read_fun, Opts),
+%%            Write = proplists:get_value(write_fun, Opts),
+%%            {ok, WriteHandle} = erlang:apply(Open, [FileUuid, write]),
+%%            {ok, _, 4} = erlang:apply(Write, [WriteHandle, 0, <<"data">>]),
+%%            {ok, ReadHandle} = erlang:apply(Open, [FileUuid, read]),
+%%            {ok, _, <<"data">>} = erlang:apply(Read, [ReadHandle, 0, 10]),
+%%            ok
+%%        end, []
+%%    ])).
 
 
 %%%===================================================================
