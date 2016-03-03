@@ -20,9 +20,16 @@
 %%% API
 %%%===================================================================
 
-create_ceph_user(_User_id, _Mon_host, _Cluster_name, _Pool_name, _Ceph_admin, _Ceph_admin_key) ->
-    erlang:nif_error(luma_nif_not_loaded).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user in Ceph
+%% @end
+%%--------------------------------------------------------------------
+-spec create_ceph_user(string(), string(), string(), string(), string(), string())
+        -> {ok, {string(), string()}} | {error, string()}.
+create_ceph_user(_UserId, _MonHost, _ClusterName, _PoolName, _CephAdmin, _CephAdminKey) ->
+    erlang:nif_error(luma_nif_not_loaded).
 
 %%%===================================================================
 %%% Internal functions

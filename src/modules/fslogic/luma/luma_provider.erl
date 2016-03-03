@@ -110,9 +110,9 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
 
     Credentials = case get_s3_user(UserId, StorageId) of
         undefined ->
-            {ok, #s3_user_credentials{access_key = Access_key, secret_key = SecretKey} = Credentials}
-                = create_s3_user(UserId, StorageId),
-            s3_user:add(UserId, StorageId, Access_key, SecretKey),
+            {ok, #s3_user_credentials{access_key = AccessKey, secret_key = SecretKey} = Credentials} =
+                create_s3_user(UserId, StorageId),
+            s3_user:add(UserId, StorageId, AccessKey, SecretKey),
             Credentials;
         Credentials ->
             Credentials
@@ -155,14 +155,14 @@ create_ceph_user(?ROOT_USER_ID, StorageId) ->
         user_key = maps:get(<<"user_key">>, Args)}};
 create_ceph_user(UserId, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
-    {ok, {User_name, User_key}} = luma_nif:create_ceph_user(binary_to_list(UserId),
+    {ok, {UserName, UserKey}} = luma_nif:create_ceph_user(binary_to_list(UserId),
         binary_to_list(maps:get(<<"mon_host">>, Args)),
         binary_to_list(maps:get(<<"cluster_name">>, Args, <<"Ceph">>)),
         binary_to_list(maps:get(<<"pool_name">>, Args)),
         binary_to_list(maps:get(<<"user_name">>, Args)),
         binary_to_list(maps:get(<<"user_key">>, Args))
     ),
-    {ok, #ceph_user_credentials{user_name = User_name, user_key = User_key}}.
+    {ok, #ceph_user_credentials{user_name = list_to_binary(UserName), user_key = list_to_binary(UserKey)}}.
 
 
 %%--------------------------------------------------------------------

@@ -115,7 +115,7 @@ new_storage(Name, Helpers) ->
 %%--------------------------------------------------------------------
 -spec luma_type() -> luma_proxy | luma_provider.
 luma_type() ->
-    case application:get_env(?APP_NAME, enable_luma) of
+    case application:get_env(?APP_NAME, enable_luma_proxy) of
         {ok, true} ->
             luma_proxy;
         {ok, false} ->
