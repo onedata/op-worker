@@ -40,7 +40,7 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    gen_path/1, gen_storage_path/1, rename/2, setup_onedata_user/1]).
+    gen_path/2, gen_storage_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
     is_spaces_dir/2]).
@@ -399,12 +399,13 @@ get_ancestors2(Key, Acc) ->
 %% Generate file_meta:path() for given file_meta:entry()
 %% @end
 %%--------------------------------------------------------------------
--spec gen_path(entry()) -> {ok, path()} | datastore:generic_error().
-gen_path({path, Path}) when is_binary(Path) ->
+-spec gen_path(entry(), SessId :: session:id()) ->
+    {ok, path()} | datastore:generic_error().
+gen_path({path, Path}, _SessId) when is_binary(Path) ->
     {ok, Path};
-gen_path(Entry) ->
+gen_path(Entry, SessId) ->
     ?run(begin
-             gen_path2(Entry, [])
+             gen_path2(Entry, SessId, [])
          end).
 
 %%--------------------------------------------------------------------
@@ -499,12 +500,12 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(UUID :: onedata_user:id()) -> ok.
-setup_onedata_user(UUID) ->
-    ?info("setup_onedata_user ~p", [UUID]),
+-spec setup_onedata_user(UserId :: onedata_user:id()) -> ok.
+setup_onedata_user(UserId) ->
+    ?info("setup_onedata_user ~p", [UserId]),
     try
         {ok, #document{value = #onedata_user{space_ids = Spaces}}} =
-            onedata_user:get(UUID),
+            onedata_user:get(UserId),
 
         CTime = erlang:system_time(seconds),
 
@@ -527,7 +528,6 @@ setup_onedata_user(UUID) ->
                 true ->
                     fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
                 false ->
-                    space_info:fetch(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
@@ -539,15 +539,15 @@ setup_onedata_user(UUID) ->
                       end, Spaces),
 
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
-            #document{key = fslogic_uuid:default_space_uuid(UUID),
+            #document{key = fslogic_uuid:default_space_uuid(UserId),
                 value = #file_meta{
-                    name = UUID, type = ?DIRECTORY_TYPE, mode = 8#1770,
+                    name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1770,
                     mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
                     is_scope = true
                 }
             }),
         {ok, _SpacesUUID} = create({uuid, RootUUID},
-            #document{key = fslogic_uuid:spaces_uuid(UUID),
+            #document{key = fslogic_uuid:spaces_uuid(UserId),
                 value = #file_meta{
                     name = ?SPACES_BASE_DIR_NAME, type = ?DIRECTORY_TYPE, mode = 8#1755,
                     mtime = CTime, atime = CTime, ctime = CTime, uid = ?ROOT_USER_ID,
@@ -756,18 +756,20 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
 %% and concatenates them into path().
 %% @end
 %%--------------------------------------------------------------------
--spec gen_path2(entry(), [name()]) -> {ok, path()} | datastore:generic_error() | no_return().
-gen_path2(Entry, Tokens) ->
+-spec gen_path2(entry(), session:id(), [name()]) ->
+    {ok, path()} | datastore:generic_error() | no_return().
+gen_path2(Entry, SessId, Tokens) ->
     SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
     {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = get(Entry),
     case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
         {ok, {?ROOT_DIR_UUID, _}} ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, {SpaceBaseDirUUID, _}} ->
-            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
-            gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+            {ok, #document{value = #space_info{name = SpaceName}}} = space_info:fetch(SpaceId, SessId),
+            gen_path2({uuid, SpaceBaseDirUUID}, SessId, [SpaceName | Tokens]);
         {ok, {ParentUUID, _}} ->
-            gen_path2({uuid, ParentUUID}, [Name | Tokens])
+            gen_path2({uuid, ParentUUID}, SessId, [Name | Tokens])
     end.
 
 %%--------------------------------------------------------------------

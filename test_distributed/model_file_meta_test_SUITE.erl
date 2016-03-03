@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -145,7 +146,7 @@ rename_test(Config) ->
 %%%===================================================================
 
 basic_operations_test_core(Config) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
 
     {{A1, U1}, CreateLevel0} = ?call_with_time(Worker1, create, [{path, <<"/">>}, #file_meta{name = <<"spaces">>, is_scope = true}]),
     {{A2, U2}, CreateLevel1} = ?call_with_time(Worker2, create, [{path, <<"/spaces">>}, #file_meta{name = <<"Space 1">>, is_scope = true}]),
@@ -190,10 +191,10 @@ basic_operations_test_core(Config) ->
     ?assertMatch({ok, #document{value = #file_meta{name = <<"1">>}}}, {AL20, UL20}),
     #document{key = Level20Key} = UL20,
 
-
-    {{A30, U30}, GenPathLevel1} = ?call_with_time(Worker1, gen_path, [{uuid, U21}]),
-    {{A31, U31}, GenPathLevel2} = ?call_with_time(Worker2, gen_path, [{uuid, U22}]),
-    {{A32, U32}, GenPathLevel3} = ?call_with_time(Worker2, gen_path, [{uuid, U23}]),
+    space_info_mock(Workers, <<"Space 1">>),
+    {{A30, U30}, GenPathLevel1} = ?call_with_time(Worker1, gen_path, [{uuid, U21}, ?ROOT_SESS_ID]),
+    {{A31, U31}, GenPathLevel2} = ?call_with_time(Worker2, gen_path, [{uuid, U22}, ?ROOT_SESS_ID]),
+    {{A32, U32}, GenPathLevel3} = ?call_with_time(Worker2, gen_path, [{uuid, U23}, ?ROOT_SESS_ID]),
     ?assertMatch({ok, <<"/spaces/Space 1/dir2/file1">>}, {A30, U30}),
     ?assertMatch({ok, <<"/spaces/Space 1/dir2/file2">>}, {A31, U31}),
     ?assertMatch({ok, <<"/spaces/Space 1/dir2/file3">>}, {A32, U32}),
@@ -208,8 +209,9 @@ basic_operations_test_core(Config) ->
     ?assertMatch({ok, {#document{key = Level20Key}, _}}, {A43, U43}),
 
 
-    {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, gen_path, [UL20]),
+    {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, gen_path, [UL20, ?ROOT_SESS_ID]),
     ?assertMatch({ok, Level20Path}, {AL20_2, UL20_2}),
+    test_utils:mock_validate_and_unload(Workers, space_info),
 
     {{A9, U9}, GetScopeLevel0} = ?call_with_time(Worker1, get_scope, [U14]),
     {{A10, U10}, GetScopeLevel1} = ?call_with_time(Worker1, get_scope, [U5]),
@@ -370,6 +372,12 @@ end_per_suite(Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+space_info_mock(Workers, SpaceName) ->
+    test_utils:mock_new(Workers, space_info),
+    test_utils:mock_expect(Workers, space_info, fetch, fun(_, _) ->
+        {ok, #document{value = #space_info{name = SpaceName}}}
+    end).
 
 exec_and_check_time(Mod, M, A) ->
     BeforeProcessing = os:timestamp(),

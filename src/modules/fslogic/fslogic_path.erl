@@ -108,28 +108,15 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
     {path, Path};
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-
+    #fslogic_ctx{session_id = SessId} = Ctx,
     {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
-    Spaces = lists:map(fun(SpaceId) ->
-        {ok, Doc} =
-            space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
-        Doc
+
+    MatchedSpaceIds = lists:filter(fun(SpaceId) ->
+        {ok, #document{value = #space_info{name = Name}}} = space_info:fetch(SpaceId, SessId),
+        Name =:= SpaceName
     end, SpaceIds),
 
-    Len = size(SpaceName),
-    MatchedSpacesIds = lists:filtermap(fun
-        (#document{value = #space_info{id = Id, name = Name}}) ->
-            CommonPrefixLen = binary:longest_common_prefix([
-                SpaceName,
-                <<Name/binary, ?SPACE_NAME_ID_SEPARATOR, Id/binary>>
-            ]),
-            case CommonPrefixLen of
-                Len -> {true, Id};
-                _ -> false
-            end
-    end, Spaces),
-
-    case MatchedSpacesIds of
+    case MatchedSpaceIds of
         [] ->
             throw(?ENOENT);
         [SpaceId] ->

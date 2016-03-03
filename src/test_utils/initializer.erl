@@ -47,8 +47,6 @@ create_test_users_and_spaces(Config) ->
     Space2 = {<<"space_id2">>, <<"space_name2">>},
     Space3 = {<<"space_id3">>, <<"space_name3">>},
     Space4 = {<<"space_id4">>, <<"space_name4">>},
-    Space5 = {<<"space_id5">>, <<"space_name">>},
-    Space6 = {<<"space_id6">>, <<"space_name">>},
 
     Group1 = {<<"group_id1">>, <<"group_name1">>},
     Group2 = {<<"group_id2">>, <<"group_name2">>},
@@ -59,13 +57,12 @@ create_test_users_and_spaces(Config) ->
     User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
     User3 = {3, [Space3, Space4], [Group3, Group4]},
     User4 = {4, [Space4], [Group4]},
-    User5 = {5, [Space5, Space6], []},
 
     file_meta_mock_setup(Workers),
-    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4, Space5, Space6]),
+    gr_spaces_mock_setup(Workers, [Space1, Space2, Space3, Space4]),
     gr_groups_mock_setup(Workers, [Group1, Group2, Group3, Group4]),
 
-    initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config).
+    initializer:setup_session(Worker, [User1, User2, User3, User4], Config).
 
 %%--------------------------------------------------------------------
 %% @doc Cleanup and unmocking related with users and spaces
@@ -173,7 +170,7 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     end, SpaceNames),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self])),
+        reuse_or_create_fuse_session, [SessId, Iden, #auth{}, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{
@@ -301,7 +298,7 @@ name(Text, Num) ->
 gr_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_new(Workers, gr_spaces),
     test_utils:mock_expect(Workers, gr_spaces, get_details,
-        fun(provider, SpaceId) ->
+        fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
             {ok, #space_details{id = SpaceId, name = SpaceName}}
         end

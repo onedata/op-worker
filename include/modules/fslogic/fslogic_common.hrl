@@ -25,8 +25,6 @@
 -define(SPACES_BASE_DIR_UUID, base64:encode(?SPACES_BASE_DIR_NAME)).
 -define(DIRECTORY_SEPARATOR, "/").
 -define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
-%% Separator between space name and ID used in case of space name clash
--define(SPACE_NAME_ID_SEPARATOR, "#").
 
 %% Context definition
 -record(fslogic_ctx, {
