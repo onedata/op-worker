@@ -14,12 +14,12 @@ export default {
     },
     mainMenu: {
       data: 'dane',
-      links: 'odnośniki',
-      recent: 'najnowsze',
+      links: 'linki',
+      recent: 'ostatnie',
       collection: 'kolekcja',
       trash: 'kosz',
-      spaces: 'przestrzenie',
-      groups: 'groupy',
+      spaces: 'miejsca',
+      groups: 'grupy',
       token: 'token'
     },
     spacesMenu: {
@@ -31,9 +31,9 @@ export default {
       providers: 'dostawcy'
     },
     permissionsTable: {
-      viewSpace: 'przeglądanie przestrzeni',
-      modifySpace: 'zmiana przestrzeni',
-      removeSpace: 'usuwanie przestrzeni',
+      viewSpace: 'przegląd miejsca',
+      modifySpace: 'zmiana miejsca',
+      removeSpace: 'usuwanie miejsca',
       inviteUser: 'zapraszanie użytkowników',
       removeUser: 'usuwanie użytkowników',
       inviteGroup: 'zapraszanie grup',
