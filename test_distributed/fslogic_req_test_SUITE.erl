@@ -23,7 +23,6 @@
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -85,7 +84,7 @@ fslogic_get_file_attr_test(Config) ->
         {SessId5, <<"space_id6">>, 8#1770, 0, <<"/spaces/space_name#space_id6">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
-        SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir">>}}
+        SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/t1_dir">>}}
     )).
 
 fslogic_mkdir_and_rmdir_test(Config) ->
@@ -117,17 +116,20 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     end,
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?req(Worker, SessId1,
-        #create_dir{parent_uuid = RootUUID1, name = <<"double">>, mode = 8#755}
+        #create_dir{parent_uuid = RootUUID1, name = <<"t2_double">>, mode = 8#755}
     )),
     ?assertMatch(#fuse_response{status = #status{code = ?EEXIST}}, ?req(Worker, SessId1,
-        #create_dir{parent_uuid = RootUUID1, name = <<"double">>, mode = 8#755}
+        #create_dir{parent_uuid = RootUUID1, name = <<"t2_double">>, mode = 8#755}
     )),
 
 
-    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
-    {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<>>, RootUUID2, []}, [<<"dir4">>, <<"dir5">>, <<"dir6">>]),
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []},
+        [<<"t2_dir1">>, <<"t2_dir2">>, <<"t2_dir3">>]),
+    {_, _, _, _, UUIDs2} = lists:foldl(MakeTree, {SessId2, <<"space_name2">>, <<>>, RootUUID2, []},
+        [<<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
 
-    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, <<"space_name2">>, <<"dir4">>, <<"dir5">>, <<"dir6">>]),
+    TestPath1 = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, <<"space_name2">>,
+        <<"t2_dir4">>, <<"t2_dir5">>, <<"t2_dir6">>]),
     FileAttr = ?req(Worker, SessId1, #get_file_attr{entry = {path, TestPath1}}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
     ?assertEqual(FileAttr, ?req(Worker, SessId2, #get_file_attr{entry = {path, TestPath1}})),
@@ -226,19 +228,19 @@ fslogic_read_dir_test(Config) ->
             ))
         end, Dirs)
     end, [
-        {SessId1, RootUUID1, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
-        {SessId2, RootUUID2, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId5, RootUUID5, [<<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]}
+        {SessId1, RootUUID1, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
+        {SessId2, RootUUID2, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId5, RootUUID5, [<<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]}
     ]),
 
     lists:foreach(ValidateReadDir, [
-        {SessId1, <<"/spaces/space_name1">>, [<<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
-        {SessId1, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId2, <<"/spaces/space_name2">>, [<<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId5, <<"/spaces/space_name#space_id5">>, [<<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]},
-        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir11">>, <<"dir12">>, <<"dir13">>, <<"dir14">>, <<"dir15">>]},
-        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir21">>, <<"dir22">>, <<"dir23">>, <<"dir24">>, <<"dir25">>]},
-        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"dir51">>, <<"dir52">>, <<"dir53">>, <<"dir54">>, <<"dir55">>]}
+        {SessId1, <<"/spaces/space_name1">>, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
+        {SessId1, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId2, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId5, <<"/spaces/space_name#space_id5">>, [<<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]},
+        {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
+        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
+        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]}
     ]).
 
 chmod_test(Config) ->
@@ -250,10 +252,10 @@ chmod_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = <<"/test">>,
+            Path = <<"/t4_test">>,
             ParentUUID = get_uuid_privileged(Worker, SessId, <<"/">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"test">>, mode = 8#000})),
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"t4_test">>, mode = 8#000})),
             UUID = get_uuid(Worker, SessId, Path),
 
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
@@ -311,7 +313,8 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}},
+                        ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
         end, [
@@ -323,7 +326,8 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     UUID = get_uuid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
+                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
+                        ?req(Worker, SessId, #create_dir{parent_uuid = UUID, mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
         end, [
@@ -429,22 +433,24 @@ simple_rename_test(Config) ->
 
             FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, NewPath}}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-            ?assertEqual(FileAttr, ?req(Worker, SessId, #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
+            ?assertEqual(FileAttr, ?req(Worker, SessId,
+                #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
             #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
             {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
         end,
 
-    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []}, [<<"dir1">>, <<"dir2">>, <<"dir3">>]),
+    {_, _, _, _, UUIDs1} = lists:foldl(MakeTree, {SessId1, <<"space_name1">>, <<>>, RootUUID1, []},
+        [<<"t6_dir1">>, <<"t6_dir2">>, <<"t6_dir3">>]),
     [_, ToMove | _] = lists:reverse(UUIDs1),
 
-    RenameResp1 = ?req(Worker, SessId1, #rename{uuid = ToMove, target_path = <<"/spaces/space_name2/dir4">>}),
+    RenameResp1 = ?req(Worker, SessId1, #rename{uuid = ToMove, target_path = <<"/spaces/space_name2/t6_dir4">>}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RenameResp1),
 
-    MovedFileAttr1 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/dir4">>}}),
-    MovedFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/dir4/dir3">>}}),
-    MovedFileAttr3 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir1/dir2">>}}),
-    MovedFileAttr4 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/dir1/dir2/dir3">>}}),
+    MovedFileAttr1 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/t6_dir4">>}}),
+    MovedFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name2/t6_dir4/t6_dir3">>}}),
+    MovedFileAttr3 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/t6_dir1/t6_dir2">>}}),
+    MovedFileAttr4 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/spaces/space_name1/t6_dir1/t6_dir2/t6_dir3">>}}),
 
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, MovedFileAttr2),
@@ -470,10 +476,10 @@ update_times_test(Config) ->
 
     lists:foreach(
         fun(SessId) ->
-            Path = <<"/test">>,
+            Path = <<"/t7_test">>,
             ParentUUID = get_uuid_privileged(Worker, SessId, <<"/">>),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
-                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"test">>, mode = 8#000})),
+                ?req(Worker, SessId, #create_dir{parent_uuid = ParentUUID, name = <<"t7_test">>, mode = 8#000})),
             UUID = get_uuid(Worker, SessId, Path),
 
             {_OldATime, OldMTime, OldCTime} = GetTimes({uuid, UUID}, SessId),
@@ -519,37 +525,17 @@ get_uuid(Worker, SessId, Path) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Workers),
+    initializer:communicator_mock(Workers),
     initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, communicator),
-
-    ?assertMatch(ok, rpc:call(Worker, caches_controller, wait_for_cache_dump, [], timer:seconds(60))),
-    ?assertMatch(ok, gen_server:call({?NODE_MANAGER_NAME, Worker}, clear_mem_synch, timer:seconds(60))).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).
+    test_utils:mock_validate_and_unload(Workers, communicator).

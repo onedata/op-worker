@@ -19,16 +19,13 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--type block_range() :: term(). % TODO should be a proper record
-
--export_type([block_range/0]).
-
 %% API
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2, get_parent/2, get_file_path/2]).
 %% Functions operating on files
--export([create/3, open/3, fsync/1, write/3, read/3, truncate/2, truncate/3,
-    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
+-export([create/3, open/3, fsync/1, write/3, write_without_events/3, read/3,
+    read_without_events/3, truncate/2, truncate/3, get_block_map/1,
+    get_block_map/2, unlink/1, unlink/2]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -152,7 +149,7 @@ create(SessId, Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
-    OpenType :: helper:open_mode()) ->
+    OpenType :: helpers:open_mode()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
@@ -197,58 +194,36 @@ fsync(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Writes data to a file. Returns number of written bytes.
-%% @end
+%% @equiv write(FileHandle, Offset, Buffer, true)
 %%--------------------------------------------------------------------
 -spec write(FileHandle :: logical_file_manager:handle(), Offset :: integer(), Buffer :: binary()) ->
     {ok, NewHandle :: logical_file_manager:handle(), integer()} | logical_file_manager:error_reply().
 write(FileHandle, Offset, Buffer) ->
-    Size = size(Buffer),
-    case write_internal(FileHandle, Offset, Buffer) of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, _, Size} = Ret1 ->
-            Ret1;
-        {ok, _, 0} = Ret2 ->
-            Ret2;
-        {ok, NewHandle, Written} ->
-            case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written)) of
-                {ok, NewHandle1, Written1} ->
-                    {ok, NewHandle1, Written + Written1};
-                {error, Reason1} ->
-                    {error, Reason1}
-            end
-    end.
-
+    write(FileHandle, Offset, Buffer, true).
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Reads requested part of a file.
-%% @end
+%% @equiv write(FileHandle, Offset, Buffer, false)
+%%--------------------------------------------------------------------
+-spec write_without_events(FileHandle :: logical_file_manager:handle(), Offset :: integer(), Buffer :: binary()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), integer()} | logical_file_manager:error_reply().
+write_without_events(FileHandle, Offset, Buffer) ->
+    write(FileHandle, Offset, Buffer, false).
+
+%%--------------------------------------------------------------------
+%% @equiv read(FileHandle, Offset, MaxSize, true)
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read(FileHandle, Offset, MaxSize) ->
-    case read_internal(FileHandle, Offset, MaxSize) of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, NewHandle, Bytes} = Ret1 ->
-            case size(Bytes) of
-                MaxSize ->
-                    Ret1;
-                0 ->
-                    Ret1;
-                Size ->
-                    case read(NewHandle, Offset + Size, MaxSize - Size) of
-                        {ok, NewHandle1, Bytes1} ->
-                            {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
-                        {error, Reason} ->
-                            {error, Reason}
-                    end
-            end
-    end.
+    read(FileHandle, Offset, MaxSize, true).
 
+%%--------------------------------------------------------------------
+%% @equiv read(FileHandle, Offset, MaxSize, false)
+%%--------------------------------------------------------------------
+-spec read_without_events(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
+read_without_events(FileHandle, Offset, MaxSize) ->
+    read(FileHandle, Offset, MaxSize, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -278,12 +253,12 @@ truncate(SessId, FileKey, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_block_map(FileHandle :: logical_file_manager:handle()) ->
-    {ok, [block_range()]} | logical_file_manager:error_reply().
+    {ok, fslogic_blocks:blocks()} | logical_file_manager:error_reply().
 get_block_map(#lfm_handle{file_uuid = UUID, fslogic_ctx = #fslogic_ctx{session_id = SessId}}) ->
     get_block_map(SessId, {uuid, UUID}).
 
 -spec get_block_map(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
-    {ok, [block_range()]} | logical_file_manager:error_reply().
+    {ok, fslogic_blocks:blocks()} | logical_file_manager:error_reply().
 get_block_map(SessId, FileKey) ->
     CTX = fslogic_context:new(SessId),
     {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
@@ -291,6 +266,9 @@ get_block_map(SessId, FileKey) ->
     #file_location{blocks = Blocks} = LocalLocation,
     {ok, Blocks}.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -370,49 +348,116 @@ get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_uuid =
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Writes data to a file. Returns number of written bytes.
+%% @end
+%%--------------------------------------------------------------------
+-spec write(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+    Buffer :: binary(), GenerateEvents :: boolean()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), integer()} | logical_file_manager:error_reply().
+write(FileHandle, Offset, Buffer, GenerateEvents) ->
+    Size = size(Buffer),
+    case write_internal(FileHandle, Offset, Buffer, GenerateEvents) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, _, Size} = Ret1 ->
+            Ret1;
+        {ok, _, 0} = Ret2 ->
+            Ret2;
+        {ok, NewHandle, Written} ->
+            case write(NewHandle, Offset + Written, binary:part(Buffer, Written, Size - Written), GenerateEvents) of
+                {ok, NewHandle1, Written1} ->
+                    {ok, NewHandle1, Written + Written1};
+                {error, Reason1} ->
+                    {error, Reason1}
+            end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Internal function for writing one portion of data in write/3
 %% @end
 %%--------------------------------------------------------------------
--spec write_internal(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(), Buffer :: binary()) ->
+-spec write_internal(FileHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
+    Buffer :: binary(), GenerateEvents :: boolean()) ->
     {ok, logical_file_manager:handle(), non_neg_integer()} | logical_file_manager:error_reply().
 write_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer) ->
-    {Key, NewSize} = get_sfm_handle_key(Handle, Offset, byte_size(Buffer)),
+    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer, GenerateEvents) ->
+    {Key, NewSize} = get_sfm_handle_key(UUID, Offset, byte_size(Buffer)),
     {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
-            ok = event:emit(#write_event{
-                file_uuid = UUID, blocks = [#file_block{
-                    file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
-                }]
-            }, SessId),
+            case GenerateEvents of
+                true ->
+                    ok = event:emit(#write_event{
+                        file_uuid = UUID, blocks = [#file_block{
+                            file_id = FileId, storage_id = StorageId, offset = Offset, size = Written
+                        }]
+                    }, SessId);
+                false ->
+                    ok
+            end,
             {ok, NewHandle, Written};
         {error, Reason2} ->
             {error, Reason2}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads requested part of a file.
+%% @end
+%%--------------------------------------------------------------------
+-spec read(FileHandle :: logical_file_manager:handle(), Offset :: integer(),
+    MaxSize :: integer(), GenerateEvents :: boolean()) ->
+    {ok, NewHandle :: logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
+read(FileHandle, Offset, MaxSize, GenerateEvents) ->
+    case read_internal(FileHandle, Offset, MaxSize, GenerateEvents) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, NewHandle, Bytes} = Ret1 ->
+            case size(Bytes) of
+                MaxSize ->
+                    Ret1;
+                0 ->
+                    Ret1;
+                Size ->
+                    case read(NewHandle, Offset + Size, MaxSize - Size, GenerateEvents) of
+                        {ok, NewHandle1, Bytes1} ->
+                            {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Internal function for reading one portion of data in read/3
 %% @end
 %%--------------------------------------------------------------------
--spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer()) ->
+-spec read_internal(FileHandle :: logical_file_manager:handle(), Offset :: integer(), MaxSize :: integer(), GenerateEvents :: boolean()) ->
     {ok, logical_file_manager:handle(), binary()} | logical_file_manager:error_reply().
 read_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode = OpenType,
-    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize) ->
-    {Key, NewSize} = get_sfm_handle_key(Handle, Offset, MaxSize),
+    fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize, GenerateEvents) ->
+    {Key, NewSize} = get_sfm_handle_key(UUID, Offset, MaxSize),
     {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
+    lfm_utils:call_fslogic(SessId, #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}},
+        fun(_) -> ok end),
     case storage_file_manager:read(SFMHandle, Offset, NewSize) of
         {ok, Data} ->
-            ok = event:emit(#read_event{
-                file_uuid = UUID, blocks = [#file_block{
-                    file_id = FileId, storage_id = StorageId, offset = Offset,
-                    size = size(Data)
-                }]
-            }, SessId),
+            case GenerateEvents of
+                true ->
+                    ok = event:emit(#read_event{
+                        file_uuid = UUID, blocks = [#file_block{
+                            file_id = FileId, storage_id = StorageId, offset = Offset,
+                            size = size(Data)
+                        }]
+                    }, SessId);
+                false ->
+                    ok
+            end,
             {ok, NewHandle, Data};
         {error, Reason2} ->
             {error, Reason2}

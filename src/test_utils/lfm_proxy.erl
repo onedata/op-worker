@@ -20,7 +20,9 @@
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2,
     read/4, write/4, mkdir/3, mkdir/4, ls/5, set_perms/4, get_xattr/4,
     set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
-    write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4, get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3, set_mimetype/4]).
+    write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
+    get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
+    set_mimetype/4, fsync/2]).
 
 %%%===================================================================
 %%% API
@@ -340,6 +342,17 @@ set_mimetype(Worker, SessId, FileKey, Mimetype) ->
                 logical_file_manager:set_mimetype(SessId, FileKey, Mimetype),
             Host ! {self(), Result}
         end).
+
+-spec fsync(node(), logical_file_manager:handle()) ->
+    ok | logical_file_manager:error_reply().
+fsync(Worker, TestHandle) ->
+    exec(Worker,
+        fun(Host) ->
+            [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
+            Result = logical_file_manager:fsync(Handle),
+            Host ! {self(), Result}
+        end).
+
 
 %%%===================================================================
 %%% Internal functions

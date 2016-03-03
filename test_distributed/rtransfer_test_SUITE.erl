@@ -596,9 +596,8 @@ cancel_fetching(Node, Ref) ->
     remote_apply(Node, rtransfer, cancel, [Ref]).
 
 prepare_rtransfer({Worker1, Ropts1}, {Worker2, Ropts2}, FileUUID, Offset, DataSize, NotifyFun, OnCompleteFun) ->
-
     ?assertMatch({ok, _}, start_rtransfer(Worker1, Ropts1)),
     ?assertMatch({ok, _}, start_rtransfer(Worker2, Ropts2)),
     Ref = prepare_fetch_request(Worker1, Worker2, FileUUID, Offset, DataSize),
-    fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
-    Ref.
+    NewRef = fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
+    NewRef.

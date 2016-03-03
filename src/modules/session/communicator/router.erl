@@ -20,6 +20,7 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
+-include("proto/oneprovider/dbsync_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -71,7 +72,6 @@ route_message(Msg = #server_message{message_id = #message_id{issuer = client,
     ok;
 route_message(Msg = #server_message{message_id = #message_id{issuer = client,
     recipient = Pid}}) ->
-    ?warning("Unknown recipient ~p for msg ~p ", [Pid, Msg]),
     ok;
 route_message(Msg = #client_message{message_id = #message_id{issuer = client}}) ->
     route_and_send_answer(Msg).
@@ -108,7 +108,10 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     message_body = #auth{} = Auth}) ->
     % This function performs an async call to session manager worker.
     {ok, SessId} = session:update(SessId, #{auth => Auth}),
-    ok.
+    ok;
+route_and_ignore_answer(#client_message{session_id = SessId,
+    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
+    ok = worker_proxy:cast(fslogic_worker, {fuse_request, SessId, FuseRequest}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,19 +127,17 @@ route_and_send_answer(#client_message{message_id = Id,
 route_and_send_answer(#client_message{message_id = Id,
     message_body = #get_protocol_version{}}) ->
     {ok, #server_message{message_id = Id, message_body = #protocol_version{}}};
-route_and_send_answer(#client_message{message_id = Id,
+route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #get_configuration{}}) ->
-    {ok, Docs} = subscription:list(),
-    Subs = lists:filtermap(
-        fun
-            (#document{value = #subscription{object = undefined}}) -> false;
-            (#document{value = #subscription{} = Sub}) -> {true, Sub}
-        end, Docs),
-    {ok, #server_message{message_id = Id, message_body = #configuration{
-        subscriptions = Subs
-    }}};
-route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
-    message_body = #fuse_request{} = FuseRequest}) ->
+    spawn(fun() ->
+        Configuration = fuse_config_manager:get_configuration(),
+        communicator:send(#server_message{
+            message_id = Id, message_body = Configuration
+        }, SessId)
+    end),
+    ok;
+route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
     ?info("Fuse request: ~p", [FuseRequest]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
@@ -156,6 +157,20 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId
         ?debug("ProxyIO response ~p", [ProxyIOResponse]),
         communicator:send(#server_message{message_id = Id,
             message_body = ProxyIOResponse}, SessId)
+          end),
+    end),
+    ok;
+route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+    message_body = #dbsync_request{} = DBSyncRequest}) ->
+    ?debug("DBSync request ~p", [DBSyncRequest]),
+    Handler = self(),
+    spawn(fun() ->
+        DBSyncResponse = worker_proxy:call(dbsync_worker,
+            {dbsync_request, SessId, DBSyncRequest}),
+
+        ?debug("DBSync response ~p", [DBSyncResponse]),
+        communicator:send(#server_message{message_id = Id,
+            message_body = DBSyncResponse}, Handler)
           end),
     ok.
 

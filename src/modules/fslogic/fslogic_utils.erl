@@ -18,7 +18,7 @@
 
 %% API
 -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
--export([get_local_file_location/1, get_local_storage_file_locations/1]).
+-export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
 
 
 %%%===================================================================
@@ -73,15 +73,22 @@ gen_storage_file_id(Entry) ->
 
 -spec get_local_file_location(fslogic_worker:file()) ->
     datastore:document() | no_return().
-get_local_file_location(Entry) ->
+get_local_file_location(Entry) -> %todo get rid of single file location and use get_local_file_locations/1
+    [LocalLocation] = get_local_file_locations(Entry),
+    LocalLocation.
+
+
+-spec get_local_file_locations(fslogic_worker:file()) ->
+    [datastore:document()] | no_return().
+get_local_file_locations(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),
     Locations = [file_location:get(LocId) || LocId <- LocIds],
-    [LocalLocation] = [Location ||
-        {ok, #document{value = #file_location{provider_id = ProviderId}} = Location}
+    [Location ||
+        {ok, Location = #document{value = #file_location{provider_id = ProviderId}}}
             <- Locations, LProviderId =:= ProviderId
-    ],
-    LocalLocation.
+    ].
+
 
 -spec get_local_storage_file_locations(datastore:document() | #file_location{} | fslogic_worker:file()) ->
     [{storage:id(), helpers:file()}] | no_return().

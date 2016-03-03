@@ -72,7 +72,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
     helpers:user_ctx().
 new_posix_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-    {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceUUID),
     FinalGID =
         case helpers_nif:groupname_to_gid(SpaceName) of
             {ok, GID} ->
@@ -124,8 +124,9 @@ select_helper(#storage{helpers = [Helper | _]}) ->
 %% Returns any available storage for given fslogic ctx.
 %% @end
 %%--------------------------------------------------------------------
--spec select_storage(fslogic_worker:ctx()) -> {ok, datastore:document()} | {error, Reason :: term()}.
-select_storage(#fslogic_ctx{space_id = SpaceId}) ->
+-spec select_storage(SpaceId :: binary()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+select_storage(SpaceId) ->
     case space_storage:get(SpaceId) of
         {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} ->
             case storage:get(StorageId) of

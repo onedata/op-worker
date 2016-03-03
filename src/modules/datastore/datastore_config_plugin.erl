@@ -25,17 +25,18 @@
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
 models() -> [
-  subscription,
-  session,
-  onedata_user,
-  onedata_group,
-  identity,
-  file_meta,
-  storage,
-  file_location,
-  xattr,
-  space_info,
-  space_storage,
-  ceph_user,
-  s3_user
+    subscription,
+    session,
+    onedata_user,
+    onedata_group,
+    identity,
+    file_meta,
+    storage,
+    file_location,
+    xattr,
+    space_info,
+    space_storage,
+    ceph_user,
+    s3_user,
+    dbsync_state
 ].
