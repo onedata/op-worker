@@ -87,7 +87,7 @@ fslogic_new_file_test(Config) ->
     ?assertNotMatch(undefined, FileId11),
     ?assertNotMatch(undefined, FileId21),
 
-    TestStorageId = ?config(storage_id, Config),
+    TestStorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
     ?assertMatch(TestStorageId, StorageId11),
     ?assertMatch(TestStorageId, StorageId21),
 

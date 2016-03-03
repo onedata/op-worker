@@ -31,7 +31,7 @@ all() -> ?ALL([
             custom_code_when_handler_throws_code,
             custom_error_when_handler_throws_error]).
 
--define(MACAROON, <<"macaroon">>).
+-define(MACAROON, element(2, macaroon:serialize(macaroon:create("a", "b", "c")))).
 
 %%%===================================================================
 %%% Test functions
@@ -223,7 +223,8 @@ mock_gr_certificates(Config) ->
                     Body, [SSLOpts | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {<<"macaroon">>, Macaroon},
+                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
+                AuthorizationHeader = {<<"macaroon">>, SrlzdMacaroon},
                 do_request(Method, Url ++ URN,
                     [{<<"content-type">>,<< "application/json">>},
                         AuthorizationHeader | Headers],

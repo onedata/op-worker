@@ -215,11 +215,11 @@ truncate(Auth, FileKey, Size) ->
 %% @doc Returns block map for a file.
 %%--------------------------------------------------------------------
 
--spec get_block_map(FileHandle :: file_handle()) -> {ok, [block_range()]} | error_reply().
+-spec get_block_map(FileHandle :: file_handle()) -> {ok, fslogic_blocks:blocks()} | error_reply().
 get_block_map(Handle) ->
     logical_file_manager:get_block_map(Handle).
 -spec get_block_map(Auth :: onedata_auth_api:auth(), FileKey :: file_id_or_path()) ->
-    {ok, [block_range()]} | error_reply().
+    {ok, fslogic_blocks:blocks()} | error_reply().
 get_block_map(Auth, FileKey) ->
     logical_file_manager:get_block_map(Auth, FileKey).
 

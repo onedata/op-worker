@@ -125,8 +125,9 @@ select_helper(#storage{helpers = [Helper | _]}) ->
 %% Returns any available storage for given fslogic ctx.
 %% @end
 %%--------------------------------------------------------------------
--spec select_storage(fslogic_worker:ctx()) -> {ok, datastore:document()} | {error, Reason :: term()}.
-select_storage(#fslogic_ctx{space_id = SpaceId}) ->
+-spec select_storage(SpaceId :: binary()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+select_storage(SpaceId) ->
     case space_storage:get(SpaceId) of
         {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} ->
             case storage:get(StorageId) of

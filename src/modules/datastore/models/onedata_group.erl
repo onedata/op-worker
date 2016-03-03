@@ -128,10 +128,10 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}, GroupId) ->
+fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}, GroupId) ->
     try
         {ok, #group_details{id = Id, name = Name}} =
-            gr_groups:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}, GroupId),
+            gr_groups:get_details({user, {Macaroon, DMacaroons}}, GroupId),
         %todo consider getting user_details for each group member and storing it as onedata_user
         OnedataGroupDoc = #document{key = Id, value = #onedata_group{name = Name}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),

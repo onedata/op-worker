@@ -66,7 +66,9 @@ translate_write_event_from_protobuf_test() ->
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_handshake_request_from_protobuf_test() ->
-    {Internal, Protobuf} = get_handshake_request(1, 1),
+    Macaroon = macaroon:create("a", "b", "c"),
+    {ok, Token} = macaroon:serialize(Macaroon),
+    {Internal, Protobuf} = get_handshake_request(Token, 1),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_message_stream_from_protobuf_test() ->
@@ -78,7 +80,9 @@ translate_end_of_message_stream_from_protobuf_test() ->
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_token_from_protobuf_test() ->
-    {Internal, Protobuf} = get_token(1),
+    M = macaroon:create("a", "b", "c"),
+    {ok, Token} = macaroon:serialize(M),
+    {Internal, Protobuf} = get_token(Token),
     ?assertEqual(Internal, translator:translate_from_protobuf(Protobuf)).
 
 translate_ping_from_protobuf_test() ->
@@ -316,7 +320,8 @@ get_write_event(FileUuid, Size, FileSize, Num, MaxS) ->
     }.
 
 get_token(Val) ->
-    {#auth{macaroon = Val}, #'Token'{value = Val}}.
+    {ok, M} = macaroon:deserialize(Val),
+    {#auth{macaroon = M}, #'Token'{value = Val}}.
 
 get_handshake_request(TokenVal, SessionId) ->
     {IntToken, PBToken} = get_token(TokenVal),

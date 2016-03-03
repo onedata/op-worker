@@ -59,8 +59,8 @@
 -type file_meta() :: model_record().
 -type posix_permissions() :: non_neg_integer().
 
--export_type([uuid/0, path/0, name/0, entry/0, type/0, offset/0, size/0, mode/0,
-    time/0, posix_permissions/0]).
+-export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
+    size/0, mode/0, time/0, posix_permissions/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks

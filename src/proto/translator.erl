@@ -104,7 +104,8 @@ translate_from_protobuf(#'MessageAcknowledgement'{} = Record) ->
         sequence_number = Record#'MessageAcknowledgement'.sequence_number
     };
 translate_from_protobuf(#'Token'{value = Val}) ->
-    #auth{macaroon = Val};
+    {ok, Macaroon} = macaroon:deserialize(Val),
+    #auth{macaroon = Macaroon};
 translate_from_protobuf(#'Ping'{data = Data}) ->
     #ping{data = Data};
 translate_from_protobuf(#'GetProtocolVersion'{}) ->
@@ -186,6 +187,8 @@ translate_from_protobuf(#'StatusReport'{space_id = SpaceId, seq_num = SeqNum}) -
     #status_report{space_id = SpaceId, seq = SeqNum};
 translate_from_protobuf(#'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
     #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes};
+translate_from_protobuf(#'SynchronizeBlock'{uuid = Uuid, block = #'FileBlock'{offset = O, size = S}}) ->
+    #synchronize_block{uuid = Uuid, block = #file_block{offset = O, size = S}};
 
 
 translate_from_protobuf(undefined) ->

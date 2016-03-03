@@ -85,7 +85,12 @@
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
-    size = 0 :: non_neg_integer() | undefined
+    version_vector = #{},
+    size = 0 :: non_neg_integer() | undefined,
+    recent_changes = {[], []} :: {
+        OldChanges :: [fslogic_file_location:change()],
+        NewChanges :: [fslogic_file_location:change()]
+    }
 }).
 
 %% Model for caching space details fetched from Global Registry

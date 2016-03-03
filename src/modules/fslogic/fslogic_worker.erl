@@ -21,6 +21,7 @@
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
 
 
 -export([init/1, handle/1, cleanup/0, handle_fuse_request/2]).
@@ -69,6 +70,13 @@ init(_Args) ->
             terminate_handler = event_utils:send_subscription_cancellation_handler()
         }
     },
+
+    case application:get_env(?APP_NAME, start_rtransfer_on_init) of
+        {ok, true} ->
+            rtransfer_config:start_rtransfer();
+        _ ->
+            ok
+    end,
 
     case event:subscribe(WriteSub) of
         {ok, WriteSubId} ->
@@ -272,6 +280,8 @@ handle_fuse_request(Ctx, #get_mimetype{uuid = UUID}) ->
     fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #set_mimetype{uuid = UUID, value = Value}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
+handle_fuse_request(Ctx, #synchronize_block{uuid = UUID, block = Block}) ->
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, UUID}, Block);
 handle_fuse_request(Ctx, #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}) ->
     fuse_config_manager:create_storage_test_file(Ctx, SID, FileUUID);
 handle_fuse_request(_Ctx, #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
@@ -285,7 +295,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
         blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
     }}) ->
-        case fslogic_blocks:update(FileUUID, Blocks, FileSize) of
+        case replica_updater:update(FileUUID, Blocks, FileSize, true) of
             {ok, size_changed} ->
                 MTime = erlang:system_time(seconds),
                 {ok, _} = file_meta:update({uuid, FileUUID}, #{
