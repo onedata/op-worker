@@ -15,7 +15,7 @@ const Router = Ember.Router.extend({
 });
 
 Router.map(function() {
-  this.route('lang', {path: '/:langId'}, function() {
+  this.route('lang', {path: '/:localeId'}, function() {
     this.route('recent', {resetNamespace: true});
 
     // spaces/ - all spaces configuration reached from primary sidebar

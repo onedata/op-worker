@@ -24,20 +24,25 @@ export default Ember.Route.extend({
   locales: function() {
     return this.get('i18n.locales');
   }.property('i18n.locales'),
+
   localeId: null,
 
   model(params) {
-    this.set('localeId', params.langId);
+    this.set('localeId', params.localeId);
   },
 
   afterModel() {
     let localeId = this.get('localeId');
-    if (this.get('locales').contains(localeId)) {
+    if (!localeId) {
+      let userLang = langDetect() || ENV.i18n.defaultLocale;
+      this.set('i18n.locale', userLang);
+    } else if (this.get('locales').contains(localeId)) {
       this.set('i18n.locale', localeId);
     } else {
-      let userLang = langDetect() || ENV.i18n.defaultLocale;
+      let userLocale = langDetect() || ENV.i18n.defaultLocale;
       // this is not a langId but rather a route without lang prefix
-      this.transitionTo(localeId, userLang);
+      let targetRoute = localeId;
+      this.transitionTo(targetRoute, userLocale);
     }
   }
 });
