@@ -128,7 +128,7 @@ def _docker_up(image, bindir, config, dns_servers, db_node_mappings, logdir,
         workdir=DOCKER_BINDIR_PATH,
         volumes=volumes,
         dns_list=dns_servers,
-        command=['bash', '-c', '''touch {0} && tail -f {0}'''.format(LOGFILE)])
+        command=['bash'])
 
     # create system users and groups (if specified)
     if 'os_config' in config:

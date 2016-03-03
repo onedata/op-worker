@@ -139,7 +139,7 @@ echo $?'''
         # check of env configuration succeeded
         if command_res_code != '0':
             # Let the command_output be flushed to console
-            time.sleep(2)
+            time.sleep(5)
             sys.exit(1)
 
 
