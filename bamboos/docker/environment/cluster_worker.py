@@ -12,8 +12,10 @@ from . import common, docker, worker, globalregistry
 
 DOCKER_BINDIR_PATH = '/root/build'
 
-def up(image, bindir, dns_server, uid, config_path, logdir=None):
-    return worker.up(image, bindir, dns_server, uid, config_path, ClusterWorkerConfigurator(), logdir)
+
+def up(image, bindir, dns_server, uid, config_path, logdir=None, storages_dockers=None):
+    return worker.up(image, bindir, dns_server, uid, config_path, ClusterWorkerConfigurator(),
+                     logdir, storages_dockers)
 
 
 class ClusterWorkerConfigurator:
@@ -21,7 +23,7 @@ class ClusterWorkerConfigurator:
         return cfg
 
     def configure_started_instance(self, bindir, instance, config,
-                                   container_ids, output):
+                                   container_ids, output, storages_dockers):
         pass
 
     def extra_volumes(self, config, bindir):

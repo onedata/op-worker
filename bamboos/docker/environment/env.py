@@ -13,7 +13,7 @@ import json
 import sys
 import time
 from . import appmock, client, common, globalregistry, cluster_manager, \
-    worker, provider_worker, cluster_worker, docker, dns
+    worker, provider_worker, cluster_worker, docker, dns, s3, ceph
 
 
 def default(key):
@@ -67,9 +67,30 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
         # so that dockers that start after can immediately see the domains.
         dns.maybe_restart_with_configuration('auto', uid, output)
 
+    # Start storages
+    storages_dockers = {'ceph': {}, 's3': {}}
+    for _, cfg in config['os_configs'].iteritems():
+        for storage in cfg['storages']:
+            if isinstance(storage, basestring):
+                break
+            if storage['type'] == 'ceph' and storage['name'] not in storages_dockers['ceph']:
+                ceph_image = storage['image'] if 'image' in storage else 'onedata/ceph'
+                pool = tuple(storage['pool'].split(':'))
+                result = ceph.up(ceph_image, [pool])
+                output['docker_ids'].extend(result['docker_ids'])
+                del result['docker_ids']
+                storages_dockers['ceph'][storage['name']] = result
+            elif storage['type'] == 's3' and storage['name'] not in storages_dockers['s3']:
+                s3_image = storage['image'] if 'image' in storage else 'lphoward/fake-s3'
+                result = s3.up(s3_image, [storage['bucket']])
+                output['docker_ids'].extend(result['docker_ids'])
+                del result['docker_ids']
+                storages_dockers['s3'][storage['name']] = result
+    output['storages'] = storages_dockers
+
     # Start provider cluster instances
-    setup_worker(provider_worker, bin_op_worker, 'provider_domains',
-                 bin_cluster_manager, config, config_path, dns_server, image, logdir, output, uid)
+    setup_worker(provider_worker, bin_op_worker, 'provider_domains', bin_cluster_manager,
+                 config, config_path, dns_server, image, logdir, output, uid, storages_dockers)
 
     # Start stock cluster worker instances
     setup_worker(cluster_worker, bin_cluster_worker, 'cluster_domains',
@@ -143,11 +164,11 @@ echo $?'''
             time.sleep(2)
             sys.exit(1)
 
-
     return output
 
 
-def setup_worker(worker, bin_worker, domains_name, bin_cm, config, config_path, dns_server, image, logdir, output, uid):
+def setup_worker(worker, bin_worker, domains_name, bin_cm, config, config_path, dns_server,
+                 image, logdir, output, uid, storages_dockers=None):
     if domains_name in config:
         # Start cluster_manager instances
         cluster_manager_output = cluster_manager.up(image, bin_cm, dns_server, uid, config_path, logdir,
@@ -155,7 +176,8 @@ def setup_worker(worker, bin_worker, domains_name, bin_cm, config, config_path, 
         common.merge(output, cluster_manager_output)
 
         # Start op_worker instances
-        cluster_worker_output = worker.up(image, bin_worker, dns_server, uid, config_path, logdir)
+        cluster_worker_output = worker.up(image, bin_worker, dns_server, uid, config_path,
+                                          logdir, storages_dockers)
         common.merge(output, cluster_worker_output)
         # Make sure OP domains are added to the dns server.
         # Setting first arg to 'auto' will force the restart and this is needed
