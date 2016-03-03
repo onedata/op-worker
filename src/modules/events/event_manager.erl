@@ -152,7 +152,8 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms}
                         {_, true} ->
                             HandleLocally();
                         {[H | _], false} ->
-                            provider_communicator:send(#events{events = [Evt]}, session_manager:get_provider_session_id(outgoing, H));
+                            provider_communicator:send(#events{events = [Evt]}, session_manager:get_provider_session_id(outgoing, H)),
+                            {noreply, State};
                         {[], _} ->
                             throw(unsupported_space)
                     end

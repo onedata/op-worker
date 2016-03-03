@@ -80,8 +80,8 @@ translate_from_protobuf(#'PermissionChangedSubscription'{} = Record) ->
     };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
-translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
-    #file_block{offset = Off, size = S};
+translate_from_protobuf(#'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
+    #file_block{offset = Off, size = S, file_id = FID, storage_id = SID};
 translate_from_protobuf(#'HandshakeRequest'{token = Token, session_id = SessionId}) ->
     #handshake_request{auth = translate_from_protobuf(Token), session_id = SessionId};
 translate_from_protobuf(#'GetConfiguration'{}) ->
@@ -477,8 +477,8 @@ translate_to_protobuf(#'get_new_file_location'{name = Name, parent_uuid = Parent
     {get_new_file_location, #'GetNewFileLocation'{name = Name, parent_uuid = ParentUUID, mode = Mode, flags = open_flags_translate_to_protobuf(Flags)}};
 translate_to_protobuf(#get_file_location{uuid = UUID, flags = Flags}) ->
     {get_file_location, #'GetFileLocation'{uuid = UUID, flags = open_flags_translate_to_protobuf(Flags)}};
-translate_to_protobuf(#get_helper_params{storage_id = SID, force_cluster_proxy = ForceCP}) ->
-    {get_helper_params, #'GetHelperParams'{storage_id = SID, force_cluster_proxy = ForceCP}};
+translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
+    {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
 translate_to_protobuf(#truncate{uuid = UUID, size = Size}) ->
     {truncate, #'Truncate'{uuid = UUID, size = Size}};
 translate_to_protobuf(#close{uuid = UUID}) ->

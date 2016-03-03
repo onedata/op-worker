@@ -136,7 +136,7 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
         }, SessId)
     end),
     ok;
-route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{fuse_request = FuseRequest}}) ->
     ?info("Fuse request: ~p", [FuseRequest]),
     spawn(fun() ->
@@ -145,7 +145,7 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, SessId)
-          end),
+    end),
     ok;
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
@@ -157,7 +157,6 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId
         ?debug("ProxyIO response ~p", [ProxyIOResponse]),
         communicator:send(#server_message{message_id = Id,
             message_body = ProxyIOResponse}, SessId)
-          end),
     end),
     ok;
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
@@ -171,7 +170,7 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
         ?debug("DBSync response ~p", [DBSyncResponse]),
         communicator:send(#server_message{message_id = Id,
             message_body = DBSyncResponse}, Handler)
-          end),
+    end),
     ok.
 
 effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->

@@ -306,9 +306,6 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_location{uuid = 
     fslogic_req_regular:get_file_location(NewCtx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #truncate{uuid = UUID, size = Size}}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
-handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
-    fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
-handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID, name = XattrName}}) ->
@@ -337,12 +334,12 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_mimetype{uuid = UUID}
     fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_mimetype{uuid = UUID, value = Value}}) ->
     fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
-handle_fuse_request(Ctx, #synchronize_block{uuid = UUID, block = Block}) ->
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID, block = Block}}) ->
     fslogic_req_regular:synchronize_block(Ctx, {uuid, UUID}, Block);
-handle_fuse_request(Ctx, #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}) ->
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}}) ->
     fuse_config_manager:create_storage_test_file(Ctx, SID, FileUUID);
-handle_fuse_request(_Ctx, #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
-    file_id = FileId, file_content = FileContent}) ->
+handle_fuse_request(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
+    file_id = FileId, file_content = FileContent}}) ->
     fuse_config_manager:verify_storage_test_file(SID, SpaceUUID, FileId, FileContent);
 handle_fuse_request(_Ctx, Req) ->
     ?log_bad_request(Req),
@@ -350,8 +347,7 @@ handle_fuse_request(_Ctx, Req) ->
 
 handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
-        blocks = Blocks, file_uuid = FileUUID, file_size = FileSize
-    }}) ->
+        blocks = Blocks, file_uuid = FileUUID, file_size = FileSize}}) ->
         case replica_updater:update(FileUUID, Blocks, FileSize, true) of
             {ok, size_changed} ->
                 MTime = erlang:system_time(seconds),
@@ -371,7 +367,7 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
             {error, Reason} ->
                 ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason])
         end
-                        end, Evts),
+    end, Evts),
 
     case Ctx of
         #{notify := Pid} -> Pid ! {handler_executed, Results};
@@ -393,7 +389,7 @@ handle_read_events(Evts, _Ctx) ->
                     FileDoc#document{value = FileMeta#file_meta{atime = NewATime}}
                 ) end)
         end
-              end, Evts).
+    end, Evts).
 
 handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
     file_uuid = FileUuid, storage_id = SID, file_id = FID,
@@ -437,7 +433,7 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_lo
     {file, {uuid, UUID}};
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #truncate{uuid = UUID}}) ->
     {file, {uuid, UUID}};
-request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_cluster_proxy = ForceCL}}) ->
+request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID}}) ->
     {file, {uuid, UUID}};
