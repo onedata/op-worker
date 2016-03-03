@@ -15,6 +15,14 @@
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+-record(subscriptions_state, {
+    last_seq :: pos_integer()
+}).
+
+-record(subscriptions_history, {
+    revisions :: [term()]
+}).
+
 %% Identity containing user_id
 -record(identity, {
     user_id :: onedata_user:id(),

@@ -81,7 +81,6 @@ resource_exists(Req, State) ->
 %%--------------------------------------------------------------------
 -spec delete_resource(req(), #{}) -> {term(), req(), #{}}.
 delete_resource(Req, State) ->
-    ?error("QQ ~p ~p", [Req, State]),
     {true, Req, State}.
 
 %%%===================================================================
@@ -96,8 +95,8 @@ delete_resource(Req, State) ->
 -spec handle_json_data(req(), #{}) -> {term(), req(), #{}}.
 handle_json_data(Req, State) ->
     {ok, Body, Req2} = cowboy_req:body(Req),
-    Json = json_utils:decode(Body),
-    ?error("BODY ~p", [Json]),%% todo handle
+    Updates = subscription_translator:unpack(Body),
+    worker_proxy:call(subscriptions_worker, {update, Updates}),
     {true, Req2, State}.
 
 %%%===================================================================

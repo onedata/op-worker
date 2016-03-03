@@ -161,6 +161,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 schedule_job() ->
-    Interval = application:get_env(?APP_NAME, subscription_renew_interval_seconds, 60),
+    Interval = application:get_env(?APP_NAME, subscription_renew_interval_seconds, 10),
     ?info("Started scheduled job; interval ~p s", [Interval]),
     timer:apply_interval(timer:seconds(Interval), ?MODULE, renew, []).

@@ -19,14 +19,13 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_runner.hrl").
 
+-define(STATE_KEY, <<"current_state">>).
 
 -export([init/1, handle/1, cleanup/0]).
 
 init([]) ->
-    {ok, #{
-        last_seq => 1, %% todo last_seq
-        clients_expiry => #{}
-    }}.
+    ensure_state_initialised(),
+    {ok, #{}}.
 
 handle(healthcheck) ->
     case is_pid(global:whereis_name(subscriptions_bridge)) of
@@ -35,8 +34,10 @@ handle(healthcheck) ->
     end;
 
 handle(renew) ->
-    renew(),
-    renew_users();
+    renew();
+
+handle({update, Updates}) ->
+    utils:pforeach(fun(Update) -> handle_update(Update) end, Updates);
 
 handle(Req) ->
     ?log_bad_request(Req).
@@ -44,53 +45,22 @@ handle(Req) ->
 cleanup() ->
     ok.
 
-renew_users() ->
-    Now = erlang:system_time(seconds),
-    ExpiryMap = worker_host:state_get(?MODULE, clients_expiry),
-    {ok, Sessions} = session:get_active(),
-    lists:foreach(fun(#document{value = #session{
-        identity = #identity{user_id = UserID}, auth = Auth}}) ->
-        case maps:get(UserID, ExpiryMap, 0) of
-            Expiry when Expiry < Now -> do_renew_user(Auth);
-            _ -> ok
-        end
-    end, Sessions).
-
-
-do_renew_user(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
-    TTL = application:get_env(?APP_NAME, client_subscription_ttl_seconds, timer:minutes(5)),
-    ?run(fun() ->
-        URN = "/subscription",
-        Data = json_utils:encode([
-            {<<"ttl_seconds">>, TTL},
-            {<<"provider">>, oneprovider:get_provider_id()}
-        ]),
-
-        Client = {user, {Macaroon, DMacaroons}},
-        {ok, 204, _ResponseHeaders, _ResponseBody} =
-            oz_endpoint:auth_request(Client, URN, post, Data),
-        ok
-    end).
-
-update_expiry(UserID, ExpiresAtSeconds) ->
-    worker_host:state_update(?MODULE, clients_expiry, fun(Map) ->
-        maps:put(UserID, ExpiresAtSeconds, Map)
-    end).
-
 renew() ->
+    URN = "/subscription",
+    Data = json_utils:encode([
+        {<<"last_seq">>, get_seq()},
+        {<<"endpoint">>, get_endpoint()}
+    ]),
     ?run(fun() ->
-        URN = "/subscription",
-        Data = json_utils:encode([
-            {<<"last_seq">>, get_seq()},
-            {<<"endpoint">>, get_endpoint()}
-        ]),
         {ok, 204, _ResponseHeaders, _ResponseBody} =
             oz_endpoint:auth_request(provider, URN, post, Data),
         ok
     end).
 
 get_seq() ->
-    worker_host:state_get(?MODULE, last_seq).
+    {ok, #document{value = #subscriptions_state{last_seq = Seq}}} =
+        subscriptions_state:get(?STATE_KEY),
+    Seq.
 
 get_endpoint() ->
     Endpoint = worker_host:state_get(?MODULE, endpoint),
@@ -103,3 +73,37 @@ get_endpoint() ->
             Prepared;
         _ -> Endpoint
     end.
+
+ensure_state_initialised() ->
+    subscriptions_state:create_or_update(#document{
+        key = ?STATE_KEY,
+        value = #subscriptions_state{
+            last_seq = 1
+        }
+    }, fun(State) -> {ok, State} end).
+
+update_last_seq(Seq) ->
+    subscriptions_state:update(?STATE_KEY, fun
+        (#subscriptions_state{last_seq = Curr} = State) when Curr < Seq ->
+            {ok, State#subscriptions_state{last_seq = Seq}};
+        (S) -> {ok, S}
+    end).
+
+handle_update({Doc, Type, Revs, Seq}) ->
+    ?info("UPDATE ~p", [{Doc, Type, Revs, Seq}]), %% todo remove
+    update_last_seq(Seq),
+    ID = Doc#document.key,
+    subscriptions_history:create_or_update(#document{
+        key = {Type, ID},
+        value = #subscriptions_history{revisions = Revs}
+    }, fun(#subscriptions_history{revisions = Curr}) ->
+        CurrRev = hd(Revs),
+        case lists:member(CurrRev, Curr) of
+            true -> {error, obsolete_version};
+            false ->
+                NotIncludedYet = Revs -- Curr,
+                FinalRevs = NotIncludedYet ++ Curr,
+                {ok, _} = Type:save(Doc),
+                {ok, #subscriptions_history{revisions = FinalRevs}}
+        end
+    end).
