@@ -18,7 +18,8 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/3]).
+-export([get_file_location/3, get_new_file_location/5, truncate/3,
+    get_helper_params/3, release/2]).
 -export([get_parent/2, synchronize_block/3]).
 
 %%%===================================================================
@@ -176,6 +177,19 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
             space_id = SpaceUUID, handle_id = HandleId})}.
+
+
+%%--------------------------------------------------------------------
+%% @doc Gets parent of file
+%% @end
+%%--------------------------------------------------------------------
+-spec release(#fslogic_ctx{}, HandleId :: binary()) ->
+    no_return() | #fuse_response{}.
+release(#fslogic_ctx{session_id = SessId}, HandleId) ->
+    {ok, #document{value = #session{handles = Handles}}} = session:get(SessId),
+    UpdatedHandles = maps:remove(HandleId, Handles),
+    {ok, SessId} = session:update(SessId, #{handles => UpdatedHandles}),
+    #fuse_response{status = #status{code = ?OK}}.
 
 
 %%--------------------------------------------------------------------
