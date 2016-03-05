@@ -17,9 +17,22 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([unpack/1]).
+-export([json_to_update/1]).
 
-unpack(Raw) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Translates json update batch from OZ to tuples with update data.
+%% @end
+%%--------------------------------------------------------------------
+
+-spec json_to_update(RawJson :: binary) -> [{
+    Update :: datastore:document(),
+    Model :: atom(),
+    Revisions :: [binary()],
+    SequenceNumber :: pos_integer()
+}].
+
+json_to_update(Raw) ->
     Json = json_utils:decode(Raw),
     lists:map(fun(Update) ->
         Seq = proplists:get_value(<<"seq">>, Update),
@@ -32,17 +45,20 @@ unpack(Raw) ->
         Update3 = proplists:delete(<<"revs">>, Update2),
 
         [Data] = Update3,
-        Type = element(1, Data),
+        Model = element(1, Data),
         Props = element(2, Data),
 
-        Model = type_to_model(Type),
+        Model = type_to_model(Model),
         Value = props_to_value(Model, Props),
         Rev = hd(Revs),
         Doc = #document{key = ID, value = Value, rev = Rev},
 
-        ?info("UNPACK Res ~p", [{Doc, Type, Revs, Seq}]),
-        {Doc, Type, Revs, Seq}
+        {Doc, Model, Revs, Seq}
     end, Json).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 props_to_value(onedata_user, Props) ->
     #onedata_user{

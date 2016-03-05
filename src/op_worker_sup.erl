@@ -57,7 +57,7 @@ start_link() ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([]) ->
     {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, [
-        subscriptions_bridge_spec(),
+%%        subscription_wss_spec(),
         cluster_worker_specs:main_worker_sup_spec()
     ]}}.
 
@@ -65,14 +65,14 @@ init([]) ->
 %%% Internal functions
 %%%===================================================================
 
--spec subscriptions_bridge_spec() -> supervisor:child_spec().
-subscriptions_bridge_spec() ->
+-spec subscription_wss_spec() -> supervisor:child_spec().
+subscription_wss_spec() ->
     #{
-        id => subscriptions_bridge,
-        start => {subscriptions_bridge, start_link, []},
+        id => subscription_wss,
+        start => {subscription_wss, start_link, []},
         restart => permanent,
-        shutdown => infinity,
+        shutdown => 5000,
         type => worker,
-        modules => [subscriptions_bridge]
+        modules => [subscription_wss]
     }.
 

@@ -15,12 +15,12 @@
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+% State of subscription tracking.
 -record(subscriptions_state, {
-    last_seq :: pos_integer()
-}).
-
--record(subscriptions_history, {
-    revisions :: [term()]
+    largest :: pos_integer(),
+    missing :: [pos_integer()],
+    users :: [term()],
+    users_updated_at :: pos_integer()
 }).
 
 %% Identity containing user_id
@@ -50,12 +50,14 @@
 -record(onedata_user, {
     name :: binary(),
     space_ids :: [binary()],
-    group_ids :: [binary()]
+    group_ids :: [binary()],
+    revision_history = [] :: [binary()]
 }).
 
 %% Local, cached version of OZ group
 -record(onedata_group, {
-    name :: binary()
+    name :: binary(),
+    revision_history = [] :: [binary()]
 }).
 
 -record(file_meta, {
@@ -101,10 +103,11 @@
     }
 }).
 
-%% Model for caching space details fetched from Global Registry
+%% Model for caching space details fetched from OZ
 -record(space_info, {
     id :: binary(),
-    name :: binary()
+    name :: binary(),
+    revision_history = [] :: [binary()]
 }).
 
 %% Model that maps space to storage

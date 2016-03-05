@@ -27,7 +27,7 @@
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
     get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1,
-    get_active/0]).
+    all_with_user/0]).
 
 -type id() :: binary().
 -type auth() :: #auth{}.
@@ -185,14 +185,16 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Returns session supervisor and node on which supervisor is running.
 %% @end
 %%--------------------------------------------------------------------
--spec get_active() ->
+-spec all_with_user() ->
     {ok, [datastore:document()]} | {error, Reason :: term()}.
 
-get_active() ->
+all_with_user() ->
     Filter = fun
         ('$end_of_table', Acc) ->
             {abort, Acc};
-        (#document{value = #session{status = active}} = Doc, Acc) ->
+        (#document{
+            value = #session{identity = #identity{user_id = UserID}}
+        } = Doc, Acc) when is_binary(UserID) ->
             {next, [Doc | Acc]};
         (_X, Acc) ->
             {next, Acc}

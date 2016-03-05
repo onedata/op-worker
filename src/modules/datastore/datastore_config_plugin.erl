@@ -25,7 +25,6 @@
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
 models() -> [
-    subscriptions_history,
     subscriptions_state,
     subscription,
     session,
