@@ -20,7 +20,7 @@
 -define(STATE_KEY, <<"current_state">>).
 
 -export([account_updates/1, get_missing/0, get_users/0, put_user/1,
-    reevaluate_users/0, ensure_initialised/0]).
+    reevaluate_users/0, ensure_initialised/0, get_refreshing_node/0]).
 
 -type(seq() :: pos_integer()).
 
@@ -46,8 +46,8 @@ account_updates(SequenceNumbers) ->
 %%--------------------------------------------------------------------
 -spec get_missing() -> {Missing :: ordsets:ordset(seq()), Largest :: seq()}.
 get_missing() ->
-    {ok, #subscriptions_state{missing = Missing, largest = Largest}} =
-        subscriptions_state:get(?STATE_KEY),
+    {ok, #document{value = #subscriptions_state{missing = Missing,
+        largest = Largest}}} = subscriptions_state:get(?STATE_KEY),
     {Missing, Largest}.
 
 %%--------------------------------------------------------------------
@@ -57,7 +57,8 @@ get_missing() ->
 %%--------------------------------------------------------------------
 -spec get_users() -> [UserID :: binary()].
 get_users() ->
-    {ok, #subscriptions_state{users = UserIDs}} = subscriptions_state:get(?STATE_KEY),
+    {ok, #document{value = #subscriptions_state{users = UserIDs}}}
+        = subscriptions_state:get(?STATE_KEY),
     lists:usort(UserIDs).
 
 %%--------------------------------------------------------------------
@@ -102,9 +103,24 @@ ensure_initialised() ->
                 value = #subscriptions_state{
                     largest = 0,
                     missing = [],
-                    users = Users
+                    users = Users,
+                    refreshing_node = node()
                 }
             }, fun(State) -> {ok, State} end)
+    end.
+
+get_refreshing_node() ->
+    {ok, #document{value = #subscriptions_state{refreshing_node = Node}}} =
+        subscriptions_state:get(?STATE_KEY),
+    {ok, Nodes} = request_dispatcher:get_worker_nodes(?MODULE),
+    case lists:member(Node, Nodes) of
+        true -> {ok, Node};
+        false ->
+            [NewNode | _] = lists:append(Nodes, [node()]),
+            subscriptions_state:update(?STATE_KEY, fun(State) ->
+                State#subscriptions_state{refreshing_node = NewNode}
+            end),
+            {ok, NewNode}
     end.
 
 

@@ -23,6 +23,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 init([]) ->
+    schedule_subscription_renew(),
     schedule_connection_start(),
     {ok, #{}}.
 
@@ -44,12 +45,16 @@ handle(start_provider_connection) ->
         end
     catch
         E:R ->
-            ?error("Subscriptions connection not started: ~p:~p", [E, R]),
+            ?error_stacktrace("Connection not started: ~p:~p", [E, R]),
             schedule_connection_start()
     end;
 
-handle(renew) ->
-    ok;
+handle(refresh_subscription) ->
+    Self = node(),
+    case subscription_monitor:get_refreshing_node() of
+        {ok, Self} -> refresh_subscription();
+        {ok, Node} -> ?info("Pid ~p does not match dedicated ~p", [Self, Node])
+    end;
 
 handle({update, Updates}) ->
     utils:pforeach(fun(Update) -> handle_update(Update) end, Updates);
@@ -71,8 +76,21 @@ cleanup() ->
 
 handle_update({Doc, Type, Revs, Seq}) ->
     ?info("UPDATE ~p", [{Doc, Type, Revs, Seq}]),
+    refresh_subscription(),
     ok.
 
+refresh_subscription() ->
+    {Missing, ResumeAt} = subscription_monitor:get_missing(),
+    Message = json_utils:encode([
+        {users, subscription_monitor:get_users()},
+        {resume_at, ResumeAt},
+        {missing, Missing}
+    ]),
+    ?info("REFRESH ~p ~p", [Message, whereis(subscription_wss)]),
+    whereis(subscription_wss) ! {push, Message}.
+
+schedule_subscription_renew() ->
+    timer:send_interval(timer:seconds(2), whereis(?MODULE), {timer, refresh_subscription}).
 
 schedule_connection_start() ->
     timer:send_after(timer:seconds(5), whereis(?MODULE), {timer, start_provider_connection}).

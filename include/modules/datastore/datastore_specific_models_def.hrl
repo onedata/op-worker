@@ -17,10 +17,10 @@
 
 % State of subscription tracking.
 -record(subscriptions_state, {
+    refreshing_node :: node(),
     largest :: pos_integer(),
     missing :: [pos_integer()],
-    users :: [term()],
-    users_updated_at :: pos_integer()
+    users :: [term()]
 }).
 
 %% Identity containing user_id

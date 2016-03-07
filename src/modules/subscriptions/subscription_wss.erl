@@ -39,16 +39,6 @@ start_link() ->
     {ok, Pid} = websocket_client:start_link(Address, ?MODULE, [], Options),
     Pid ! register,
     {ok, Pid}.
-%%    try
-%%        ?warning("Registering ~p as ~p ~p", [Pid, ?MODULE, erlang:process_info(Pid)]),
-%%        true = register(?MODULE, Pid),
-%%        ok
-%%    catch
-%%        E:R ->
-%%            ?warning("Unable to register connection ~p:~p", [E, R]),
-%%            exit(Pid, unable_to_register),
-%%            {error, unable_to_register}
-%%    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,6 +85,9 @@ websocket_info(register, _ConnState, _State) ->
             ?error_stacktrace("Unable to register ~p:~p", [E, R]),
             {close, <<"closed">>, _State}
     end;
+websocket_info({push, Binary}, _ConnState, _State) ->
+    ?error("INFO ~p", [{push, Binary}]),
+    {reply, {binary, Binary}, _State};
 
 websocket_info(_Msg, _ConnState, _State) ->
     ?error("INFO ~p", [_Msg]),
