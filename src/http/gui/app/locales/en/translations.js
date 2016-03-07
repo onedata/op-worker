@@ -10,7 +10,8 @@
 export default {
   components: {
     topBar: {
-      logout: 'Log out'
+      logout: 'Log out',
+      manageProviders: 'Manage providers'
     },
     mainMenu: {
       data: 'data',

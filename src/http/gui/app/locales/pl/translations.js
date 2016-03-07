@@ -10,7 +10,8 @@
 export default {
   components: {
     topBar: {
-      logout: 'Wyloguj'
+      logout: 'Wyloguj',
+      manageProviders: 'Zarządzaj dostawcami'
     },
     mainMenu: {
       data: 'dane',
@@ -39,7 +40,7 @@ export default {
       inviteGroup: 'zapraszanie grup',
       removeGroup: 'usuwanie grup',
       inviteProvider: 'zapraszanie dostawców',
-      removeProvider: 'usuwanie dostawców',
+      removeProvider: 'usuwanie dostawców'
     }
   },
   spaces: {
@@ -49,7 +50,7 @@ export default {
       },
       groups: {
         tableTitle: 'grupy'
-      },
+      }
     }
   }
 };
