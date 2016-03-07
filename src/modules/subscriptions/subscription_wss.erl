@@ -47,6 +47,7 @@ start_link() ->
     {ok, State :: term()} | {ok, State :: term(), Keepalive :: integer()}.
 init([], _ConnState) ->
     ?error("INIT ~p", [_ConnState]),
+    register(?MODULE, self()),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
