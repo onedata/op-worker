@@ -1,11 +1,14 @@
 CXX ?= g++
 
+ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts-~s/include/\", [code:root_dir(), erlang:system_info(version)]).")
+
 LDFLAGS += $(shell pkg-config --libs botan-1.10) \
 -Wl,-rpath -Wl,$$ORIGIN/helpers/lib -L ../priv/helpers/lib -lhelpers \
 -lboost_filesystem -lrados -ls3 -lglog -shared
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall $(shell pkg-config --cflags botan-1.10) \
--isystem ../priv/helpers/include -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE
+-isystem ../priv/helpers/include -isystem $(ERTS_INCLUDE_DIR) \
+-D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE
 
 all: \
 		../priv/csr_creator_drv.so \
