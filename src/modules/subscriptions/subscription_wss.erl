@@ -36,7 +36,19 @@ start_link() ->
     CertFile = oz_plugin:get_cert_path(),
     Options = [{keyfile, KeyFile}, {certfile, CertFile}, {cacertfile, CACertFile}],
 
-    websocket_client:start_link(Address, ?MODULE, [], Options).
+    {ok, Pid} = websocket_client:start_link(Address, ?MODULE, [], Options),
+    Pid ! register,
+    {ok, Pid}.
+%%    try
+%%        ?warning("Registering ~p as ~p ~p", [Pid, ?MODULE, erlang:process_info(Pid)]),
+%%        true = register(?MODULE, Pid),
+%%        ok
+%%    catch
+%%        E:R ->
+%%            ?warning("Unable to register connection ~p:~p", [E, R]),
+%%            exit(Pid, unable_to_register),
+%%            {error, unable_to_register}
+%%    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,7 +59,6 @@ start_link() ->
     {ok, State :: term()} | {ok, State :: term(), Keepalive :: integer()}.
 init([], _ConnState) ->
     ?error("INIT ~p", [_ConnState]),
-    register(?MODULE, self()),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -74,6 +85,17 @@ websocket_handle(_Msg, _ConnState, _State) ->
     {ok, State :: term()} |
     {reply, websocket_req:frame(), State :: term()} |
     {close, Reply :: binary(), State :: term()}.
+websocket_info(register, _ConnState, _State) ->
+    ?error("INFO ~p", [register]),
+    try
+        true = register(?MODULE, self()),
+        {ok, _State}
+    catch
+        E:R ->
+            ?error_stacktrace("Unable to register ~p:~p", [E, R]),
+            {close, <<"closed">>, _State}
+    end;
+
 websocket_info(_Msg, _ConnState, _State) ->
     ?error("INFO ~p", [_Msg]),
     {ok, _State}.
