@@ -126,6 +126,8 @@ remove_session(SessId) ->
             supervisor:terminate_child({?SESSION_MANAGER_WORKER_SUP, Node}, Sup),
             session:delete(SessId),
             close_connections(Cons);
+        {error, {not_found, _}} ->
+            ok;
         {error, Reason} ->
             {error, Reason}
     end.

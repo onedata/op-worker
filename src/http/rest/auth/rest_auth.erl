@@ -37,7 +37,7 @@ is_authorized(Req, State) ->
         {{ok, Auth}, NewReq} ->
             {true, NewReq, State#{auth => Auth}};
         {{error, {not_found, _}}, NewReq} ->
-            GrUrl = gr_plugin:get_gr_url(),
+            GrUrl = oz_plugin:get_oz_url(),
             ProviderId = oneprovider:get_provider_id(),
             {_, NewReq2} = cowboy_req:host(NewReq),
             {<<"http://", Url/binary>>, NewReq3} = cowboy_req:url(NewReq2),
@@ -82,11 +82,17 @@ authenticate(Req) ->
 %%--------------------------------------------------------------------
 -spec authenticate_using_token(req(), Token :: binary()) -> {{ok, session:id()} | {error, term()}, req()}.
 authenticate_using_token(Req, Token) ->
-    Auth = #auth{macaroon = Token},
-    case identity:get_or_fetch(Auth) of
-        {ok, #document{value = Iden}} ->
-            {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
-            {{ok, SessId}, Req};
+    case macaroon:deserialize(Token) of
+        {ok, Macaroon} ->
+            Auth = #auth{macaroon = Macaroon},
+            case identity:get_or_fetch(Auth) of
+                {ok, #document{value = Iden}} ->
+                    {ok, SessId} = session_manager:reuse_or_create_rest_session(Iden, Auth),
+                    {{ok, SessId}, Req};
+                Error ->
+                    {Error, Req}
+            end;
+
         Error ->
             {Error, Req}
     end.
@@ -112,4 +118,3 @@ authenticate_using_cert(Req) ->
         Error ->
             {Error, Req}
     end.
-

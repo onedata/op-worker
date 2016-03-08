@@ -19,7 +19,7 @@
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -27,12 +27,12 @@
 
 -export([token_authentication/1]).
 
--define(MACAROON, <<"macaroon">>).
+-define(MACAROON, macaroon:create("a", "b", "c")).
+-define(MACAROON_TOKEN, element(2, macaroon:serialize(?MACAROON))).
 -define(USER_ID, <<"test_id">>).
 -define(USER_NAME, <<"test_name">>).
 
--performance({test_cases, []}).
-all() -> [token_authentication].
+all() -> ?ALL([token_authentication]).
 
 %%%===================================================================
 %%% Test functions
@@ -41,11 +41,11 @@ all() -> [token_authentication].
 token_authentication(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    mock_gr_certificates(Config),
+    mock_oz_certificates(Config),
     SessionId = <<"SessionId">>,
 
     % when
-    {ok, Sock} = connect_via_token(Worker1, ?MACAROON, SessionId),
+    {ok, Sock} = connect_via_token(Worker1, ?MACAROON_TOKEN, SessionId),
 
     % then
     ?assertMatch(
@@ -60,7 +60,7 @@ token_authentication(Config) ->
         {ok, #document{value = #identity{user_id = ?USER_ID}}},
         rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
     ),
-    test_utils:mock_validate_and_unload(Workers, gr_endpoint),
+    test_utils:mock_validate_and_unload(Workers, oz_endpoint),
     ok = ssl2:close(Sock).
 
 %%%===================================================================
@@ -127,9 +127,9 @@ receive_server_message(IgnoredMsgList) ->
         {error, timeout}
     end.
 
-mock_gr_certificates(Config) ->
+mock_oz_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
+    Url = rpc:call(Worker1, oz_plugin, get_oz_url, []),
 
     % save key and cert files on the workers
     % read the files
@@ -144,11 +144,11 @@ mock_gr_certificates(Config) ->
             ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
             ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
         end, Workers),
-    % Use the cert paths on workers to mock gr_endpoint
+    % Use the cert paths on workers to mock oz_endpoint
     SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
-    test_utils:mock_new(Workers, gr_endpoint),
-    test_utils:mock_expect(Workers, gr_endpoint, auth_request,
+    test_utils:mock_new(Workers, oz_endpoint),
+    test_utils:mock_expect(Workers, oz_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, Url ++ URN,
@@ -164,9 +164,10 @@ mock_gr_certificates(Config) ->
                     Body, [SSLOpts, insecure | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
+                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
                 http_client:request(Method, Url ++ URN, [
                     {<<"content-type">>, <<"application/json">>},
-                    {<<"macaroon">>, Macaroon} | Headers
+                    {<<"macaroon">>, SrlzdMacaroon} | Headers
                 ], Body, [SSLOpts, insecure | Options])
         end
     ).

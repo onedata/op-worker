@@ -20,7 +20,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -30,14 +29,14 @@
 -export([empty_xattr_test/1, crud_xattr_test/1, list_xattr_test/1, remove_file_test/1,
     modify_cdmi_attrs/1]).
 
--performance({test_cases, []}).
-all() -> [
-    empty_xattr_test,
-    crud_xattr_test,
-    list_xattr_test,
-    remove_file_test,
-    modify_cdmi_attrs
-].
+all() ->
+    ?ALL([
+        empty_xattr_test,
+        crud_xattr_test,
+        list_xattr_test,
+        remove_file_test,
+        modify_cdmi_attrs
+    ]).
 
 %%%====================================================================
 %%% Test function
@@ -46,8 +45,8 @@ all() -> [
 empty_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
+    Path = <<"/t1_file">>,
+    Name1 = <<"t1_name1">>,
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
     ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_xattr(Worker, SessId, {uuid, Uuid}, Name1)),
@@ -56,10 +55,10 @@ empty_xattr_test(Config) ->
 crud_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
-    Value1 = <<"value1">>,
-    Value2 = <<"value2">>,
+    Path = <<"/t2_file">>,
+    Name1 = <<"t2_name1">>,
+    Value1 = <<"t2_value1">>,
+    Value2 = <<"t2_value2">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     UpdatedXattr1 = #xattr{name = Name1, value = Value2},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
@@ -78,12 +77,12 @@ crud_xattr_test(Config) ->
 list_xattr_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
-    Value1 = <<"value1">>,
+    Path = <<"/t3_file">>,
+    Name1 = <<"t3_name1">>,
+    Value1 = <<"t3_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
-    Name2 = <<"name2">>,
-    Value2 = <<"value2">>,
+    Name2 = <<"t3_name2">>,
+    Value2 = <<"t3_value2">>,
     Xattr2 = #xattr{name = Name2, value = Value2},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
@@ -96,9 +95,9 @@ list_xattr_test(Config) ->
 remove_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
-    Name1 = <<"name1">>,
-    Value1 = <<"value1">>,
+    Path = <<"/t4_file">>,
+    Name1 = <<"t4_name1">>,
+    Value1 = <<"t4_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
@@ -113,9 +112,9 @@ remove_file_test(Config) ->
 modify_cdmi_attrs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    Path = <<"/file">>,
+    Path = <<"/t5_file">>,
     Name1 = <<"cdmi_attr">>,
-    Value1 = <<"value1">>,
+    Value1 = <<"t5_value1">>,
     Xattr1 = #xattr{name = Name1, value = Value1},
     {ok, Uuid} = lfm_proxy:create(Worker, SessId, Path, 8#600),
 
@@ -127,7 +126,7 @@ modify_cdmi_attrs(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
@@ -136,7 +135,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    communicator_mock_setup(Workers),
+    initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -145,20 +144,3 @@ end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks communicator module, so that it ignores all messages.
-%% @end
-%%--------------------------------------------------------------------
--spec communicator_mock_setup(Workers :: node() | [node()]) -> ok.
-communicator_mock_setup(Workers) ->
-    test_utils:mock_new(Workers, communicator),
-    test_utils:mock_expect(Workers, communicator, send,
-        fun(_, _) -> ok end
-    ).

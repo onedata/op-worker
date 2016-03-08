@@ -27,11 +27,6 @@
 callback(<<"userName">>, _) ->
     {ok, op_gui_utils:get_user_id()};
 
-callback(<<"sync">>, _) ->
-    sync:ensure_started("../../build"),
-    sync:track_gui(),
-    Res = case sync:sync() of
-              true -> <<"ok">>;
-              false -> <<"error">>
-          end,
-    {ok, Res}.
+callback(<<"manageProvidersURL">>, _) ->
+    URL = str_utils:format_bin("~s/#/onezone", [oneprovider:get_oz_url()]),
+    {ok, URL}.

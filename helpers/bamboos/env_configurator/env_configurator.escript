@@ -148,16 +148,16 @@ main([InputJson]) ->
                 throw(error)
         end,
         io:format("Global configuration applied sucessfully!~n"),
-        ok
+        halt(0)
     catch
         T:M ->
             io:format("Error in ~s - ~p:~p~n", [escript:script_name(), T, M]),
-            ok
+            halt(1)
     end;
 
 main(_) ->
     io:format("Usage: ~s <input_json>~n", [escript:script_name()]),
-    ok.
+    halt(0).
 
 
 %%%===================================================================
@@ -221,18 +221,11 @@ bin_to_atom(Bin) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec register_in_global_registry(Workers :: [node()], Cookie :: atom(),
-    Provider :: binary()) -> ok | no_return.
+    Provider :: binary()) -> ok.
 register_in_global_registry(Workers, Cookie, Provider) ->
-    case call_node(hd(Workers), Cookie, oneprovider,
-        register_in_gr_dev, [Workers,
-            ?DEFAULT_KEY_FILE_PASSWD, Provider]) of
-        {ok, Provider} ->
-            ok;
-        Other ->
-            io:format("oneprovider:register_in_gr_dev "
-            "returned: ~p~n", [Other]),
-            throw(error)
-    end.
+    {ok, Provider} = call_node(hd(Workers), Cookie, oneprovider,
+        register_in_gr_dev, [Workers, ?DEFAULT_KEY_FILE_PASSWD, Provider]),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -15,7 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -28,9 +28,8 @@
 
 -export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1, data_counter/1]).
 
--performance({test_cases, []}).
 all() ->
-    [
+    ?ALL([
         less_than_block_fetch_test,
         exact_block_size_fetch_test,
         more_than_block_fetch_test,
@@ -45,7 +44,7 @@ all() ->
         %% error_write_fun_test,
         offset_greater_than_file_size_test,
         request_bigger_than_file_test
-    ].
+    ]).
 
 -define(FILE_HANDLE, <<"file_handle">>).
 -define(FILE_HANDLE2, <<"file_handle2">>).
@@ -55,6 +54,7 @@ all() ->
 -define(RTRANSFER_PORT, 6665).
 -define(TEST_OFFSET, 0).
 -define(TIMEOUT, timer:seconds(120)).
+-define(SLEEP_TIMEOUT, timer:seconds(120)).
 
 -define(DEFAULT_RTRANSFER_OPTS,
     [
@@ -210,7 +210,7 @@ cancel_fetch_test(Config) ->
     ),
     cancel_fetching(Worker1, Ref),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     %% then
     ?assertReceivedMatch({on_complete, {error, canceled}}, ?TIMEOUT).
 
@@ -234,7 +234,7 @@ many_requests_test(Config) ->
     Refs = generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
@@ -263,7 +263,7 @@ many_requests_to_one_file(Config) ->
     Refs = generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
@@ -597,9 +597,8 @@ cancel_fetching(Node, Ref) ->
     remote_apply(Node, rtransfer, cancel, [Ref]).
 
 prepare_rtransfer({Worker1, Ropts1}, {Worker2, Ropts2}, FileUUID, Offset, DataSize, NotifyFun, OnCompleteFun) ->
-
     ?assertMatch({ok, _}, start_rtransfer(Worker1, Ropts1)),
     ?assertMatch({ok, _}, start_rtransfer(Worker2, Ropts2)),
     Ref = prepare_fetch_request(Worker1, Worker2, FileUUID, Offset, DataSize),
-    fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
-    Ref.
+    NewRef = fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
+    NewRef.

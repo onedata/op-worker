@@ -19,7 +19,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("proto/oneclient/client_messages.hrl").
 -include_lib("proto/oneclient/server_messages.hrl").
 
@@ -44,22 +43,22 @@
     sequencer_manager_should_start_sequencer_in_stream_on_first_message/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    sequencer_manager_should_update_session_on_init,
-    sequencer_manager_should_update_session_on_terminate,
-    sequencer_manager_should_register_sequencer_in_stream,
-    sequencer_manager_should_unregister_sequencer_in_stream,
-    sequencer_manager_should_register_sequencer_out_stream,
-    sequencer_manager_should_unregister_sequencer_out_stream,
-    sequencer_manager_should_create_sequencer_stream_on_open_stream,
-    sequencer_manager_should_send_end_of_message_stream_on_close_stream,
-    sequencer_manager_should_forward_message_stream_reset,
-    sequencer_manager_should_forward_message_stream_reset_to_all_streams,
-    sequencer_manager_should_forward_message_request,
-    sequencer_manager_should_forward_message_acknowledgement,
-    sequencer_manager_should_start_sequencer_in_stream_on_first_message
-].
+all() ->
+    ?ALL([
+        sequencer_manager_should_update_session_on_init,
+        sequencer_manager_should_update_session_on_terminate,
+        sequencer_manager_should_register_sequencer_in_stream,
+        sequencer_manager_should_unregister_sequencer_in_stream,
+        sequencer_manager_should_register_sequencer_out_stream,
+        sequencer_manager_should_unregister_sequencer_out_stream,
+        sequencer_manager_should_create_sequencer_stream_on_open_stream,
+        sequencer_manager_should_send_end_of_message_stream_on_close_stream,
+        sequencer_manager_should_forward_message_stream_reset,
+        sequencer_manager_should_forward_message_stream_reset_to_all_streams,
+        sequencer_manager_should_forward_message_request,
+        sequencer_manager_should_forward_message_acknowledgement,
+        sequencer_manager_should_start_sequencer_in_stream_on_first_message
+    ]).
 
 -define(TIMEOUT, timer:seconds(15)).
 
@@ -161,7 +160,7 @@ sequencer_manager_should_start_sequencer_in_stream_on_first_message(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

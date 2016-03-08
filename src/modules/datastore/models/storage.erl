@@ -80,7 +80,7 @@ create(#document{value = #storage{name = Name}} = Document) ->
                         {ok, Key}
                 end
         end
-    end).
+                                                              end).
 
 %%--------------------------------------------------------------------
 %% @doc

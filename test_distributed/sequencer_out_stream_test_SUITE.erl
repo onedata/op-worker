@@ -17,7 +17,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 -include_lib("proto/oneclient/server_messages.hrl").
 -include_lib("proto/oneclient/stream_messages.hrl").
 
@@ -40,20 +39,20 @@
     sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_end_of_stream/1
 ]).
 
--performance({test_cases, []}).
-all() -> [
-    sequencer_out_stream_should_register_with_sequencer_manager_on_init,
-    sequencer_out_stream_should_unregister_from_sequencer_manager_on_terminate,
-    sequencer_out_stream_should_forward_messages,
-    sequencer_out_stream_should_increment_sequence_number,
-    sequencer_out_stream_should_resend_all_messages_on_message_stream_reset,
-    sequencer_out_stream_should_remove_messages_on_message_acknowledgement,
-    sequencer_out_stream_should_recompute_sequence_numbers_on_message_stream_reset,
-    sequencer_out_stream_should_resend_messages_on_message_request,
-    sequencer_out_stream_should_ignore_message_request_for_acknowledged_messages,
-    sequencer_out_stream_should_ignore_message_request_for_unsent_messages,
-    sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_end_of_stream
-].
+all() ->
+    ?ALL([
+        sequencer_out_stream_should_register_with_sequencer_manager_on_init,
+        sequencer_out_stream_should_unregister_from_sequencer_manager_on_terminate,
+        sequencer_out_stream_should_forward_messages,
+        sequencer_out_stream_should_increment_sequence_number,
+        sequencer_out_stream_should_resend_all_messages_on_message_stream_reset,
+        sequencer_out_stream_should_remove_messages_on_message_acknowledgement,
+        sequencer_out_stream_should_recompute_sequence_numbers_on_message_stream_reset,
+        sequencer_out_stream_should_resend_messages_on_message_request,
+        sequencer_out_stream_should_ignore_message_request_for_acknowledged_messages,
+        sequencer_out_stream_should_ignore_message_request_for_unsent_messages,
+        sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_end_of_stream
+    ]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -150,7 +149,7 @@ sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_en
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

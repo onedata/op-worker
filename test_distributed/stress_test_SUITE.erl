@@ -14,52 +14,54 @@
 
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([stress_test/1, file_meta_basic_operations_test/1]).
+-export([stress_test/1, file_meta_basic_operations_test/1, file_meta_basic_operations_test_base/1, stress_test_base/1]).
 
--performance([
-    {stress, [
-        file_meta_basic_operations_test
-        % TODO add simmilar test without mocks within cluster
-%%         sequencer_manager_multiple_streams_messages_ordering_test, connection_multi_ping_pong_test,
-%%         event_stream_different_file_id_aggregation_test,
-%%         event_manager_multiple_subscription_test, event_manager_multiple_clients_test
-    ]}, {stress_no_clearing, [
-        file_meta_basic_operations_test
-        % TODO add no clearing option to other tests
-%%         file_meta_basic_operations_test
-    ]}
+-define(STRESS_CASES, [
+    file_meta_basic_operations_test
+    %% TODO add simmilar test without mocks within cluster
+    %% sequencer_manager_multiple_streams_messages_ordering_test, connection_multi_ping_pong_test,
+    %% event_stream_different_file_id_aggregation_test,
+    %% event_manager_multiple_subscription_test, event_manager_multiple_clients_test
 ]).
+-define(STRESS_NO_CLEARING_CASES, [
+    file_meta_basic_operations_test
+    %% TODO add no clearing option to other tests
+]).
+
 all() ->
-    [].
+    ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
--performance([
-    {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-    {success_rate, 99},
-    {config, [{name, stress}, {description, "Basic config for stress test"}]}
-]).
 stress_test(Config) ->
-    performance:stress_test(Config).
+    ?STRESS(Config,[
+            {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
+            {success_rate, 99.9},
+            {config, [{name, stress}, {description, "Basic config for stress test"}]}
+        ]
+    ).
+stress_test_base(Config) ->
+  performance:stress_test(Config).
 
 %%%===================================================================
 
--performance([
-    {description, "Performs operations on file meta model"}
-]).
 file_meta_basic_operations_test(Config) ->
-    model_file_meta_test_SUITE:basic_operations_test_core(Config).
+    ?PERFORMANCE(Config, [
+        {description, "Performs operations on file meta model"}
+      ]
+    ).
+file_meta_basic_operations_test_base(Config) ->
+  model_file_meta_test_SUITE:basic_operations_test_core(Config).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

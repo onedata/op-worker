@@ -22,7 +22,7 @@
     },
     "provider_domains": {
         "p1": {
-            "db_driver": "couchbase",
+            "db_driver": "couchdb",
             "os_config": "cfg1",
             "cluster_manager": {
                 "cm": {
@@ -49,8 +49,8 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "global_registry_domain": "gr",
-                        "verify_gr_cert": false
+                        "zone_domain": "oz",
+                        "verify_oz_cert": false
                     }
                 },
                 "worker2": {
@@ -64,20 +64,20 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "global_registry_domain": "gr",
-                        "verify_gr_cert": false
+                        "zone_domain": "oz",
+                        "verify_oz_cert": false
                     }
                 }
             }
         }
     },
     "appmock_domains": {
-        "gr": {
+        "oz": {
             "appmock": {
                 "node1": {
-                    "mocked_app": "globalregistry",
+                    "mocked_app": "oz_worker",
                     "sys.config": {
-                        "app_description_file": "./gr_mock_description.erl.cfg"
+                        "app_description_file": "./oz_mock_description.erl.cfg"
                     }
                 }
             }

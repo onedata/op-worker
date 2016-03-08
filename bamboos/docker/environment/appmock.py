@@ -12,14 +12,14 @@ import os
 import random
 import string
 
-from . import common, docker, dns, cluster_manager, worker, globalregistry
+from . import common, docker, dns, cluster_manager, worker
 
 APPMOCK_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 
 
 def domain(appmock_instance, uid):
     """Formats domain for an appmock instance.
-    It is intended to fake OP or GR domain.
+    It is intended to fake OP or OZ domain.
     """
     return common.format_hostname(appmock_instance, uid)
 
@@ -49,12 +49,12 @@ def _tweak_config(config, appmock_node, appmock_instance, uid):
     # default appmock_erl_node_name will be used.
     node_name = {
         'cluster_manager': cluster_manager.cm_erl_node_name(appmock_node,
-                                                 appmock_instance, uid),
+                                                            appmock_instance,
+                                                            uid),
         'op_worker': worker.worker_erl_node_name(appmock_node,
                                                  appmock_instance,
                                                  uid),
-        'globalregistry': globalregistry.gr_erl_node_name(appmock_node,
-                                                          appmock_instance, uid)
+        'oz_worker': worker.worker_erl_node_name(appmock_node, appmock_instance, uid)
     }.get(mocked_app, appmock_erl_node_name(appmock_node, uid))
 
     if 'vm.args' not in cfg['nodes']['node']:
@@ -74,7 +74,7 @@ def _node_up(image, bindir, config, config_path, dns_servers, logdir):
     node_name = config['nodes']['node']['vm.args']['name']
     (name, sep, hostname) = node_name.partition('@')
 
-    sys_config = config['nodes']['node']['sys.config']
+    sys_config = config['nodes']['node']['sys.config']['appmock']
     # can be an absolute path or relative to gen_dev_args.json
     app_desc_file_path = sys_config['app_description_file']
     app_desc_file_name = os.path.basename(app_desc_file_path)
@@ -128,7 +128,7 @@ def _ready(node):
 
 
 def up(image, bindir, dns_server, uid, config_path, logdir=None):
-    config = common.parse_json_file(config_path)
+    config = common.parse_json_config_file(config_path)
     input_dir = config['dirs_config']['appmock']['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
@@ -154,7 +154,7 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
             appmocks.append(appmock_id)
             if 'mocked_app' in cfg['nodes']['node']:
                 mocked_app = cfg['nodes']['node']['mocked_app']
-                if mocked_app == 'op_worker' or mocked_app == 'globalregistry':
+                if mocked_app == 'op_worker' or mocked_app == 'oz_worker':
                     include_domain = True
                     appmock_ips.append(common.get_docker_ip(appmock_id))
             common.merge(output, node_out)

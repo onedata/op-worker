@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -26,11 +26,12 @@
     custom_code_when_handler_throws_code/1, custom_error_when_handler_throws_error/1]).
 
 %todo reenable rest_cert_auth after appmock repair
--performance({test_cases, []}).
-all() -> [token_auth, internal_error_when_handler_crashes,
-    custom_code_when_handler_throws_code, custom_error_when_handler_throws_error].
+all() -> ?ALL([
+            token_auth, internal_error_when_handler_crashes,
+            custom_code_when_handler_throws_code,
+            custom_error_when_handler_throws_error]).
 
--define(MACAROON, <<"macaroon">>).
+-define(MACAROON, element(2, macaroon:serialize(macaroon:create("a", "b", "c")))).
 
 %%%===================================================================
 %%% Test functions
@@ -113,7 +114,7 @@ custom_error_when_handler_throws_error(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
     initializer:clear_models(Worker, [subscription]),
     NewConfig.
@@ -133,7 +134,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
-    mock_gr_certificates(Config),
+    mock_oz_certificates(Config),
     Config.
 
 end_per_testcase(Case, Config) when
@@ -145,7 +146,7 @@ end_per_testcase(Case, Config) when
     hackney:stop(),
     application:stop(ssl2);
 end_per_testcase(_, Config) ->
-    unmock_gr_certificates(Config),
+    unmock_oz_certificates(Config),
     hackney:stop(),
     application:stop(ssl2).
 
@@ -176,9 +177,9 @@ rest_endpoint(Node) ->
         end,
     string:join(["https://", utils:get_host(Node), ":", Port, "/rest/latest/"], "").
 
-mock_gr_certificates(Config) ->
+mock_oz_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
+    Url = rpc:call(Worker1, oz_plugin, get_oz_url, []),
 
     % save key and cert files on the workers
     % read the files
@@ -193,20 +194,20 @@ mock_gr_certificates(Config) ->
             ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
             ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
         end, Workers),
-    % Use the cert paths on workers to mock gr_endpoint
+    % Use the cert paths on workers to mock oz_endpoint
     SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
-    test_utils:mock_new(Workers, [oneprovider, gr_endpoint]),
+    test_utils:mock_new(Workers, [oneprovider, oz_endpoint]),
 
     {ok, CACert} = file:read_file(?TEST_FILE(Config, "grpCA.pem")),
     [{_, CACertEncoded, _} | _] = rpc:call(Worker1, public_key, pem_decode, [CACert]),
 
     test_utils:mock_expect(Workers, oneprovider, get_provider_id,
         fun() -> <<"050fec8f157d6e4b31fd6d2924923c7a">> end),
-    test_utils:mock_expect(Workers, oneprovider, get_globalregistry_cert,
+    test_utils:mock_expect(Workers, oneprovider, get_oz_cert,
         fun() -> public_key:pkix_decode_cert(CACertEncoded, otp) end),
 
-    test_utils:mock_expect(Workers, gr_endpoint, auth_request,
+    test_utils:mock_expect(Workers, oz_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
                 do_request(Method, Url ++ URN,
@@ -222,7 +223,8 @@ mock_gr_certificates(Config) ->
                     Body, [SSLOpts | Options]);
             % @todo for now, in rest we only use the root macaroon
             ({_, {Macaroon, []}}, URN, Method, Headers, Body, Options) ->
-                AuthorizationHeader = {<<"macaroon">>, Macaroon},
+                {ok, SrlzdMacaroon} = macaroon:serialize(Macaroon),
+                AuthorizationHeader = {<<"macaroon">>, SrlzdMacaroon},
                 do_request(Method, Url ++ URN,
                     [{<<"content-type">>,<< "application/json">>},
                         AuthorizationHeader | Headers],
@@ -230,9 +232,9 @@ mock_gr_certificates(Config) ->
         end
     ).
 
-unmock_gr_certificates(Config) ->
+unmock_oz_certificates(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [gr_endpoint, oneprovider]).
+    test_utils:mock_validate_and_unload(Workers, [oz_endpoint, oneprovider]).
 
 -spec test_crash(term(), term()) -> no_return().
 test_crash(_, _) ->
