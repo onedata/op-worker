@@ -45,7 +45,7 @@ def _tweak_config(config, name, uid):
     return cfg
 
 
-def _node_up(image, bindir, config, gr_ip, dns_servers, packages,
+def _node_up(image, bindir, config, oz_ip, dns_servers, packages,
              storages):
     node_name = config['nodes']['node']['vm.args']['name']
 
@@ -73,7 +73,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
         image=image,
         name=hostname,
         hostname=hostname,
-        add_host={'onedata.org': gr_ip},
+        add_host={'onedata.org': oz_ip},
         detach=True,
         interactive=True,
         tty=True,
@@ -96,7 +96,7 @@ escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
     )
 
 
-def up(image, bindir, dns_server, uid, config_path, gr_ip):
+def up(image, bindir, dns_server, uid, config_path, oz_ip):
     config = common.parse_json_config_file(config_path)
     input_dir = config['dirs_config']['onepanel']['input_dir']
     packages = config['onepanel']['packages']
@@ -115,7 +115,7 @@ def up(image, bindir, dns_server, uid, config_path, gr_ip):
                for node in gen_dev_cfg['nodes']]
 
     for cfg in configs:
-        node_out = _node_up(image, bindir, cfg, gr_ip, dns_servers, packages,
+        node_out = _node_up(image, bindir, cfg, oz_ip, dns_servers, packages,
                             storages)
         common.merge(output, node_out)
 

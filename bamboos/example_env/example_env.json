@@ -8,8 +8,8 @@
             "input_dir": "rel/op_worker",
             "target_dir": "rel/test_cluster"
         },
-        "globalregistry": {
-            "input_dir": "rel/globalregistry",
+        "oz_worker": {
+            "input_dir": "rel/oz_worker",
             "target_dir": "rel/test_cluster"
         },
         "appmock": {
@@ -99,14 +99,14 @@
                                 "dbnode1",
                                 "dbnode2"
                             ],
-                            "global_registry_domain": "gr",
-                            "verify_gr_cert": false
+                            "zone_domain": "oz",
+                            "verify_oz_cert": false
                         }
                     }
                 }
             }
         },
-        "p2.gr": {
+        "p2.oz": {
             "db_driver": "riak",
             "os_config": "cfg2",
             "gui_livereload": false,
@@ -138,8 +138,8 @@
                             "db_nodes": [
                                 "riaknode1"
                             ],
-                            "global_registry_domain": "gr",
-                            "verify_gr_cert": false
+                            "zone_domain": "oz",
+                            "verify_oz_cert": false
                         }
                     }
                 },
@@ -155,8 +155,8 @@
                             "db_nodes": [
                                 "riaknode1"
                             ],
-                            "global_registry_domain": "gr",
-                            "verify_gr_cert": false
+                            "zone_domain": "oz",
+                            "verify_oz_cert": false
                         }
                     }
                 }
@@ -202,17 +202,36 @@
             }
         }
     },
-    "globalregistry_domains": {
-        "gr": {
-            "globalregistry": {
+    "zone_domains": {
+        "oz": {
+            "db_driver": "couchbase",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "cookie3"
+                    },
+                    "sys.config": {
+                        "cluster_manager": {
+                            "cm_nodes": [
+                                "cm"
+                            ],
+                            "worker_num": 1
+                        }
+                    }
+                }
+            },
+            "oz_worker": {
                 "node1": {
                     "vm.args": {
                         "setcookie": "cookie3"
                     },
                     "sys.config": {
-                        "globalregistry": {
+                        "oz_worker": {
+                            "cm_nodes": [
+                                "cm"
+                            ],
                             "db_nodes": [
-                                "db"
+                                "127.0.0.1:49161"
                             ],
                             "http_domain": {
                                 "string": "127.0.0.1"
@@ -279,7 +298,7 @@
                 ],
                 "providers": [
                     {
-                        "provider": "p2.gr",
+                        "provider": "p2.oz",
                         "supported_size": 1000000000
                     }
                 ]
@@ -310,7 +329,7 @@
                 "client1": {
                     "name": "client1",
                     "op_domain": "p1",
-                    "gr_domain": "gr",
+                    "zone_domain": "oz",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
                     "mounting_path": "/home/user1/onedata_cl1",
@@ -319,7 +338,7 @@
                 "client2": {
                     "name": "client2",
                     "op_domain": "p1",
-                    "gr_domain": "gr",
+                    "zone_domain": "oz",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
                     "mounting_path": "/home/user1/onedata_cl2",
@@ -333,7 +352,7 @@
                 "client1": {
                     "name": "client1",
                     "op_domain": "p1",
-                    "gr_domain": "gr",
+                    "zone_domain": "oz",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
                     "mounting_path": "/home/user1/onedata",
@@ -342,7 +361,7 @@
                 "client2": {
                     "name": "client2",
                     "op_domain": "p1",
-                    "gr_domain": "gr",
+                    "zone_domain": "oz",
                     "user_cert": "./cert.pem",
                     "user_key": "./cert.pem",
                     "mounting_path": "/home/user2/onedata",
@@ -369,10 +388,12 @@
                     "setcookie": "cookie7"
                 },
                 "sys.config": {
-                    "multicast_address": {
-                        "string": "239.255.0.1"
-                    },
-                    "verify_gr_cert": false
+                    "onepanel": {
+                        "multicast_address": {
+                            "string": "239.255.0.1"
+                        },
+                        "verify_oz_cert": false
+                    }
                 },
                 "packages": [
                     "cluster_manager",
@@ -388,10 +409,12 @@
                     "setcookie": "cookie7"
                 },
                 "sys.config": {
-                    "multicast_address": {
-                        "string": "239.255.0.1"
-                    },
-                    "verify_gr_cert": false
+                    "onepanel": {
+                        "multicast_address": {
+                            "string": "239.255.0.1"
+                        },
+                        "verify_oz_cert": false
+                    }
                 },
                 "packages": [
                     "cluster_manager",

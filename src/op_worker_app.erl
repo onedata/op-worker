@@ -36,8 +36,8 @@ start(_StartType, _StartArgs) ->
     test_node_starter:maybe_start_cover(),
 
     % Make sure CA bundle is present in the system.
-    % It is not required if verify_gr_cert env is false.
-    case application:get_env(?APP_NAME, verify_gr_cert) of
+    % It is not required if verify_oz_cert env is false.
+    case application:get_env(?APP_NAME, verify_oz_cert) of
         {ok, true} ->
             case file:read_file(web_client_utils:ca_bundle_location()) of
                 {ok, _} ->
@@ -53,9 +53,9 @@ start(_StartType, _StartArgs) ->
                     "~n~n", [web_client_utils:ca_bundle_location()]),
                     throw(no_ca_bundle)
             end,
-            application:set_env(ctool, verify_gr_cert, true);
+            application:set_env(ctool, verify_oz_cert, true);
         {ok, false} ->
-            application:set_env(ctool, verify_gr_cert, false)
+            application:set_env(ctool, verify_oz_cert, false)
     end,
     op_worker_sup:start_link().
 

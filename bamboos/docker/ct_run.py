@@ -14,15 +14,16 @@ Run the script with -h flag to learn about script's running options.
 """
 
 from __future__ import print_function
+
 import argparse
 import glob
+import json
 import os
 import platform
-import sys
-import time
 import re
 import shutil
-import json
+import sys
+import time
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
@@ -188,10 +189,10 @@ elif args.cover:
                             ('cluster_manager', data['cluster_domains'][cluster]['cluster_manager'].values())
                         )
 
-            if 'globalregistry_domains' in data:
-                for globalregistry in data['globalregistry_domains']:
+            if 'zone_domains' in data:
+                for zone in data['zone_domains']:
                     configs_to_change.extend(
-                        ('globalregistry', data['globalregistry_domains'][globalregistry]['globalregistry'].values())
+                        ('oz_worker', data['zone_domains'][zone]['oz_worker'].values())
                     )
 
             for (app_name, config) in configs_to_change:
