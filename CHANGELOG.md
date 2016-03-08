@@ -4,6 +4,13 @@
 CHANGELOG
 ---------
 
+### 3.0.0-alpha2
+
+* VFS-1665 Pull in ctool with new Macaroons.
+* VFS-1405 Update cluster_worker
+* VFS-1522 Find blocks to transfer in all file locations.
+
+
 ### 3.0.0-alpha
 
 * Dependencies management update
