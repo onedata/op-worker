@@ -49,5 +49,8 @@
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
 
+%% Allowed parameter keys
+-define(HANDLE_ID_KEY, <<"handle_id">>).
+-define(FILE_UUID_KEY, <<"file_uuid">>).
 
 -endif.

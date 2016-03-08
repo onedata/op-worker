@@ -11,6 +11,7 @@
 -module(fslogic_proxyio).
 -author("Konrad Zemek").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
@@ -102,9 +103,9 @@ read(SessionId, Parameters, StorageId, FileId, Offset, Size) ->
 get_handle(SessionId, Parameters, StorageId, FileId, OpenMode)->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}, handles = Handles}}} =
         session:get(SessionId),
-    case maps:get(<<"handle_id">>, Parameters, undefined) of
+    case maps:get(?HANDLE_ID_KEY, Parameters, undefined) of
         undefined ->
-            FileUuid = maps:get(<<"file_uuid">>, Parameters),
+            FileUuid = maps:get(?FILE_UUID_KEY, Parameters),
             {ok, #document{key = SpaceUUID}} =
                 fslogic_spaces:get_space({uuid, FileUuid}, UserId),
             {ok, Storage} = storage:get(StorageId),
