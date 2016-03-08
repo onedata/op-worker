@@ -30,14 +30,16 @@ Router.map(function() {
     });
 
     // data/ - list of Spaces - user can select the Space
-    this.route('data', function() {
+    this.route('data', {resetNamespace: true}, function() {
       // data/:space_id - show contents of a root dir of selected Space
-      this.route('space', {path: ':space_id'}, function() {
-        // data/:space_id/:file_id - select a file in a browser
-        this.route('file', {path: ':file_id'});
-      });
-      this.route('space', function() {
-        this.route('file');
+      this.route('data-space', {path: '/:data_space_id'}, function() {
+        // data/:space_id/:dir_id - a directory, which content is displayed
+        //   currently in browser (and is expanded in data-file-tree)
+        this.route('dir', {path: '/:dir_id'}, function() {
+          // data/:space_id/:dir_id/:file_id - file selected in a browser
+          this.route('file', {path: '/:file_id'});
+        });
+
       });
     });
 

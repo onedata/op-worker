@@ -1,7 +1,9 @@
 /**
  * This is a prototype model representing a file in file browser.
- * @module models/file
+ * New implementation with data-space support.
+ * @module models/_file
  * @author Łukasz Opioła
+ * @author Jakub Liput
  * @copyright (C) 2016 ACK CYFRONET AGH
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
  */
@@ -16,10 +18,10 @@ export default DS.Model.extend({
   */
   type: DS.attr('string'),
   content: DS.belongsTo('fileContent', {async: true}),
-  parentId: DS.attr('string'),
   parent: DS.belongsTo('file', {inverse: 'children', async: true}),
   children: DS.hasMany('file', {inverse: 'parent', async: true}),
 
+  // TODO: this information will be probably stored in component
   expanded: false,
   selected: false,
 
