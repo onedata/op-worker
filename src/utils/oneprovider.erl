@@ -19,9 +19,9 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(GRPKEY_ENV, grpkey_path).
--define(GRPCSR_ENV, grpcsr_path).
--define(GRPCERT_ENV, grpcert_path).
+-define(OZPKEY_ENV, grpkey_path).
+-define(OZPCSR_ENV, grpcsr_path).
+-define(OZPCERT_ENV, grpcert_path).
 
 
 %% ID of provider that is not currently registered in Global Registry
@@ -36,10 +36,10 @@
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
 -export([get_provider_domain/0]).
--export([get_gr_domain/0, get_gr_url/0]).
--export([get_gr_login_page/0, get_gr_logout_page/0]).
--export([get_provider_id/0, get_globalregistry_cert/0]).
--export([register_in_gr/3, register_in_gr_dev/3, save_file/2]).
+-export([get_oz_domain/0, get_oz_url/0]).
+-export([get_oz_login_page/0, get_oz_logout_page/0]).
+-export([get_provider_id/0, get_oz_cert/0]).
+-export([register_in_gr/3, register_in_oz_dev/3, save_file/2]).
 
 %%%===================================================================
 %%% API
@@ -59,7 +59,7 @@ get_node_hostname() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns the IP of the node, retrieved from node_manager, which has
-%% acquired it by contacting GR.
+%% acquired it by contacting OZ.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_node_ip() -> {byte(), byte(), byte(), byte()}.
@@ -80,66 +80,66 @@ get_provider_domain() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the domain of GR, which is specified in env.
+%% Returns the domain of OZ, which is specified in env.
 %% @end
 %%--------------------------------------------------------------------
--spec get_gr_domain() -> string().
-get_gr_domain() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, global_registry_domain),
+-spec get_oz_domain() -> string().
+get_oz_domain() ->
+    {ok, Hostname} = application:get_env(?APP_NAME, zone_domain),
     str_utils:to_list(Hostname).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the URL to GR.
+%% Returns the URL to OZ.
 %% @end
 %%--------------------------------------------------------------------
--spec get_gr_url() -> string().
-get_gr_url() ->
-    "https://" ++ get_gr_domain().
+-spec get_oz_url() -> string().
+get_oz_url() ->
+    "https://" ++ get_oz_domain().
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the URL to GR login page.
+%% Returns the URL to OZ login page.
 %% @end
 %%--------------------------------------------------------------------
--spec get_gr_login_page() -> string().
-get_gr_login_page() ->
-    {ok, Page} = application:get_env(?APP_NAME, global_registry_login_page),
+-spec get_oz_login_page() -> string().
+get_oz_login_page() ->
+    {ok, Page} = application:get_env(?APP_NAME, oz_login_page),
     % Page is in format '/page_name.html'
-    str_utils:format("https://~s~s", [get_gr_domain(), Page]).
+    str_utils:format("https://~s~s", [get_oz_domain(), Page]).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the URL to GR logout page.
+%% Returns the URL to OZ logout page.
 %% @end
 %%--------------------------------------------------------------------
--spec get_gr_logout_page() -> string().
-get_gr_logout_page() ->
-    {ok, Page} = application:get_env(?APP_NAME, global_registry_logout_page),
+-spec get_oz_logout_page() -> string().
+get_oz_logout_page() ->
+    {ok, Page} = application:get_env(?APP_NAME, oz_logout_page),
     % Page is in format '/page_name.html'
-    str_utils:format("https://~s~s", [get_gr_domain(), Page]).
+    str_utils:format("https://~s~s", [get_oz_domain(), Page]).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Registers in GR using config from app.src (cert locations).
+%% Registers in OZ using config from app.src (cert locations).
 %% @end
 %%--------------------------------------------------------------------
 -spec register_in_gr(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
     {ok, ProviderID :: binary()} | {error, term()}.
 register_in_gr(NodeList, KeyFilePassword, ProviderName) ->
     try
-        GRPKeyPath = gr_plugin:get_key_path(),
-        GRPCertPath = gr_plugin:get_cert_path(),
-        GRPCSRPath = gr_plugin:get_csr_path(),
+        OZPKeyPath = oz_plugin:get_key_path(),
+        OZPCertPath = oz_plugin:get_cert_path(),
+        OZPCSRPath = oz_plugin:get_csr_path(),
         % Create a CSR
-        0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
-        {ok, CSR} = file:read_file(GRPCSRPath),
-        {ok, Key} = file:read_file(GRPKeyPath),
-        % Send signing request to GR
+        0 = csr_creator:create_csr(KeyFilePassword, OZPKeyPath, OZPCSRPath),
+        {ok, CSR} = file:read_file(OZPCSRPath),
+        {ok, Key} = file:read_file(OZPKeyPath),
+        % Send signing request to OZ
         IPAddresses = get_all_nodes_ips(NodeList),
         RedirectionPoint = <<"https://", (hd(IPAddresses))/binary>>,
         Parameters = [
@@ -148,36 +148,36 @@ register_in_gr(NodeList, KeyFilePassword, ProviderName) ->
             {<<"redirectionPoint">>, RedirectionPoint},
             {<<"clientName">>, ProviderName}
         ],
-        {ok, ProviderId, Cert} = gr_providers:register(provider, Parameters),
-        ok = file:write_file(GRPCertPath, Cert),
+        {ok, ProviderId, Cert} = oz_providers:register(provider, Parameters),
+        ok = file:write_file(OZPCertPath, Cert),
         OtherWorkers = NodeList -- [node()],
-        save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
-        save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
+        save_file_on_hosts(OtherWorkers, OZPKeyPath, Key),
+        save_file_on_hosts(OtherWorkers, OZPCertPath, Cert),
         {ok, ProviderId}
     catch
         T:M ->
-            ?error_stacktrace("Cannot register in GlobalRegistry - ~p:~p", [T, M]),
+            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M]),
             {error, M}
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Registers in GR using config from app.src (cert locations).
+%% Registers in OZ using config from app.src (cert locations).
 %% @end
 %%--------------------------------------------------------------------
--spec register_in_gr_dev(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
+-spec register_in_oz_dev(NodeList :: [node()], KeyFilePassword :: string(), ClientName :: binary()) ->
     {ok, ProviderID :: binary()} | {error, term()}.
-register_in_gr_dev(NodeList, KeyFilePassword, ProviderName) ->
+register_in_oz_dev(NodeList, KeyFilePassword, ProviderName) ->
     try
-        GRPKeyPath = gr_plugin:get_key_path(),
-        GRPCertPath = gr_plugin:get_cert_path(),
-        GRPCSRPath = gr_plugin:get_csr_path(),
+        OZPKeyPath = oz_plugin:get_key_path(),
+        OZPCertPath = oz_plugin:get_cert_path(),
+        OZPCSRPath = oz_plugin:get_csr_path(),
         % Create a CSR
-        0 = csr_creator:create_csr(KeyFilePassword, GRPKeyPath, GRPCSRPath),
-        {ok, CSR} = file:read_file(GRPCSRPath),
-        {ok, Key} = file:read_file(GRPKeyPath),
-        % Send signing request to GR
+        0 = csr_creator:create_csr(KeyFilePassword, OZPKeyPath, OZPCSRPath),
+        {ok, CSR} = file:read_file(OZPCSRPath),
+        {ok, Key} = file:read_file(OZPKeyPath),
+        % Send signing request to OZ
         IPAddresses = get_all_nodes_ips(NodeList),
         ProviderDomain = str_utils:to_binary(oneprovider:get_provider_domain()),
         RedirectionPoint = <<"https://", ProviderDomain/binary>>,
@@ -188,15 +188,15 @@ register_in_gr_dev(NodeList, KeyFilePassword, ProviderName) ->
             {<<"clientName">>, ProviderName},
             {<<"uuid">>, ProviderName}
         ],
-        {ok, ProviderId, Cert} = gr_providers:register_with_uuid(provider, Parameters),
-        ok = file:write_file(GRPCertPath, Cert),
+        {ok, ProviderId, Cert} = oz_providers:register_with_uuid(provider, Parameters),
+        ok = file:write_file(OZPCertPath, Cert),
         OtherWorkers = NodeList -- [node()],
-        save_file_on_hosts(OtherWorkers, GRPKeyPath, Key),
-        save_file_on_hosts(OtherWorkers, GRPCertPath, Cert),
+        save_file_on_hosts(OtherWorkers, OZPKeyPath, Key),
+        save_file_on_hosts(OtherWorkers, OZPCertPath, Cert),
         {ok, ProviderId}
     catch
         T:M ->
-            ?error_stacktrace("Cannot register in GlobalRegistry - ~p:~p", [T, M]),
+            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M]),
             {error, M}
     end.
 
@@ -214,7 +214,7 @@ get_provider_id() ->
         {ok, ProviderId} ->
             ProviderId;
         _ ->
-            try file:read_file(gr_plugin:get_cert_path()) of
+            try file:read_file(oz_plugin:get_cert_path()) of
                 {ok, Bin} ->
                     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
                     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
@@ -233,20 +233,20 @@ get_provider_id() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns GR public certificate
+%% Returns OZ public certificate
 %% @end
 %%--------------------------------------------------------------------
--spec get_globalregistry_cert() -> #'OTPCertificate'{} | no_return().
-get_globalregistry_cert() ->
+-spec get_oz_cert() -> #'OTPCertificate'{} | no_return().
+get_oz_cert() ->
     % Cache the cert so that we don't decode the cert every time
-    case application:get_env(?APP_NAME, globalregistry_certificate) of
+    case application:get_env(?APP_NAME, oz_certificate) of
         {ok, GrCert} ->
             GrCert;
         _ ->
-            {ok, PemCert} = file:read_file(gr_plugin:get_cacert_path()),
+            {ok, PemCert} = file:read_file(oz_plugin:get_cacert_path()),
             [{'Certificate', DerCert, _}] = public_key:pem_decode(PemCert),
             GrCert = #'OTPCertificate'{} = public_key:pkix_decode_cert(DerCert, otp),
-            application:set_env(?APP_NAME, globalregistry_certificate, GrCert),
+            application:set_env(?APP_NAME, oz_certificate, GrCert),
             GrCert
     end.
 
@@ -257,7 +257,7 @@ get_globalregistry_cert() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns ProviderId based on provider's certificate (issued by globalregistry).
+%% Returns ProviderId based on provider's certificate (issued by OZ).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id(Cert :: #'OTPCertificate'{}) -> ProviderId :: binary() | no_return().
@@ -327,7 +327,7 @@ save_file(Path, Content) ->
 get_all_nodes_ips(NodeList) ->
     utils:pmap(
         fun(Node) ->
-            {ok, IPAddr} = rpc:call(Node, gr_providers, check_ip_address, [provider]),
+            {ok, IPAddr} = rpc:call(Node, oz_providers, check_ip_address, [provider]),
             IPAddr
         end, NodeList).
 

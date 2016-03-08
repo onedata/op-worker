@@ -127,7 +127,7 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch user from globalregistry and save it in cache.
+%% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(identity:credentials()) ->
@@ -153,7 +153,7 @@ fetch(Auth = #auth{}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get user's identity from cache, or fetch user from globalregistry
+%% Get user's identity from cache, or fetch user from OZ
 %% and store its identity
 %% @end
 %%--------------------------------------------------------------------
