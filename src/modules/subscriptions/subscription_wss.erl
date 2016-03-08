@@ -48,7 +48,6 @@ start_link() ->
 -spec init([term()], websocket_req:req()) ->
     {ok, State :: term()} | {ok, State :: term(), Keepalive :: integer()}.
 init([], _ConnState) ->
-    ?error("INIT ~p", [_ConnState]),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -61,8 +60,12 @@ init([], _ConnState) ->
     {ok, State :: term()} |
     {reply, websocket_req:frame(), State :: term()} |
     {close, Reply :: binary(), State :: term()}.
+websocket_handle({binary, RawUpdates}, _ConnState, _State) ->
+    Updates = subscription_translator:json_to_updates(RawUpdates),
+    worker_proxy:call(subscriptions_worker, {process_updates, Updates}),
+    {ok, _State};
 websocket_handle(_Msg, _ConnState, _State) ->
-    ?error("RECIEVED ~p", [_Msg]),
+    ?log_bad_request(_Msg),
     {ok, _State}.
 
 %%--------------------------------------------------------------------
@@ -76,7 +79,6 @@ websocket_handle(_Msg, _ConnState, _State) ->
     {reply, websocket_req:frame(), State :: term()} |
     {close, Reply :: binary(), State :: term()}.
 websocket_info(register, _ConnState, _State) ->
-    ?error("INFO ~p", [register]),
     try
         true = register(?MODULE, self()),
         {ok, _State}
@@ -86,11 +88,10 @@ websocket_info(register, _ConnState, _State) ->
             {close, <<"closed">>, _State}
     end;
 websocket_info({push, Binary}, _ConnState, _State) ->
-    ?error("INFO ~p", [{push, Binary}]),
     {reply, {binary, Binary}, _State};
 
 websocket_info(_Msg, _ConnState, _State) ->
-    ?error("INFO ~p", [_Msg]),
+    ?log_bad_request(_Msg),
     {ok, _State}.
 
 
@@ -104,5 +105,4 @@ websocket_info(_Msg, _ConnState, _State) ->
     Reason :: normal | error | remote.
 
 websocket_terminate(_Reason, _ConnState, _State) ->
-    ?error("TERMINATED ~p", [_Reason]),
     ok.

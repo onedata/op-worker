@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([json_to_update/1]).
+-export([json_to_updates/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -25,14 +25,14 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec json_to_update(RawJson :: binary) -> [{
+-spec json_to_updates(RawJson :: binary) -> [{
     Update :: datastore:document(),
     Model :: atom(),
     Revisions :: [binary()],
     SequenceNumber :: pos_integer()
 }].
 
-json_to_update(Raw) ->
+json_to_updates(Raw) ->
     Json = json_utils:decode(Raw),
     lists:map(fun(Update) ->
         Seq = proplists:get_value(<<"seq">>, Update),
@@ -45,10 +45,10 @@ json_to_update(Raw) ->
         Update3 = proplists:delete(<<"revs">>, Update2),
 
         [Data] = Update3,
-        Model = element(1, Data),
+        ModelRaw = element(1, Data),
         Props = element(2, Data),
 
-        Model = type_to_model(Model),
+        Model = type_to_model(ModelRaw),
         Value = props_to_value(Model, Props),
         Rev = hd(Revs),
         Doc = #document{key = ID, value = Value, rev = Rev},

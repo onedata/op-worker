@@ -56,7 +56,7 @@ handle(refresh_subscription) ->
         {ok, Node} -> ?info("Pid ~p does not match dedicated ~p", [Self, Node])
     end;
 
-handle({update, Updates}) ->
+handle({process_updates, Updates}) ->
     utils:pforeach(fun(Update) -> handle_update(Update) end, Updates);
 
 %% Handle stream crashes
@@ -74,10 +74,9 @@ handle(Req) ->
 cleanup() ->
     ok.
 
-handle_update({Doc, Type, Revs, Seq}) ->
-    ?info("UPDATE ~p", [{Doc, Type, Revs, Seq}]),
-    refresh_subscription(),
-    ok.
+handle_update({Doc, Model, Revs, Seq}) ->
+    ?info("UPDATE ~p", [{Doc, Model, Revs, Seq}]),
+    subscription_conflicts:update_model(Model, Doc).
 
 refresh_subscription() ->
     {Missing, ResumeAt} = subscription_monitor:get_missing(),
@@ -86,11 +85,10 @@ refresh_subscription() ->
         {resume_at, ResumeAt},
         {missing, Missing}
     ]),
-    ?info("REFRESH ~p ~p", [Message, whereis(subscription_wss)]),
     whereis(subscription_wss) ! {push, Message}.
 
 schedule_subscription_renew() ->
     timer:send_interval(timer:seconds(2), whereis(?MODULE), {timer, refresh_subscription}).
 
 schedule_connection_start() ->
-    timer:send_after(timer:seconds(5), whereis(?MODULE), {timer, start_provider_connection}).
+    timer:send_after(timer:seconds(2), whereis(?MODULE), {timer, start_provider_connection}).
