@@ -188,7 +188,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
 
 %%--------------------------------------------------------------------
-%% @doc Gets parent of file
+%% @doc Removes file handle saved in session.
 %% @end
 %%--------------------------------------------------------------------
 -spec release(#fslogic_ctx{}, HandleId :: binary()) ->
