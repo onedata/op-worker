@@ -83,7 +83,8 @@ def required_volumes(gui_config_file,
     elif mode == 'mount_output' or mode == 'mount_output_poll':
         return [
             (
-                os.path.join(project_target_dir, release_gui_dir),
+                os.path.join(project_src_dir, project_target_dir,
+                             release_gui_dir),
                 os.path.join(get_output_mount_path()),
                 'ro'
             )
