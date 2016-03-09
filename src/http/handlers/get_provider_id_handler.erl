@@ -27,7 +27,9 @@
 %% Cowboy handler callback.
 %% @end
 %%--------------------------------------------------------------------
--spec init(any(), term(), any()) -> {ok, term(), atom()}.
+-spec init({TransportName :: atom(), ProtocolName :: http},
+    Req :: cowboy_req:req(), Opts :: any()) ->
+    {ok, cowboy_req:req(), []}.
 init(_Type, Req, _Opts) ->
     {ok, Req, []}.
 
