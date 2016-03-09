@@ -2,10 +2,10 @@
 
 {{!-- Secondary sidebar --}}
 <nav class="secondary-sidebar">
-  {{data-spaces-select spaces=model goToDataSpace='goToDataSpace'}}
-  {{data-file-tree}}
+  {{data-spaces-select spaces=model goToDataSpace="goToDataSpace"}}
+  {{outlet "data-space"}}
 </nav>
 
-<div id='content-scroll'>
-  {{outlet}}
+<div id="content-scroll">
+  {{outlet "dir"}}
 </div>

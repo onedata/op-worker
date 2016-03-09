@@ -32,7 +32,7 @@ export default Ember.Route.extend({
 
   actions: {
     goToDataSpace(spaceId) {
-      this.transitionTo('data.data-space', {data_space_id: spaceId});
+      this.transitionTo('data.data-space', spaceId);
     }
   }
 });

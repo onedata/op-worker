@@ -75,8 +75,8 @@ route(<<"/index.html">>) -> ?INDEX.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_backend(Identifier :: binary()) -> HandlerModule :: module().
-data_backend(<<"file">>) -> file_data_backend;
-data_backend(<<"fileContent">>) -> file_data_backend.
+data_backend(<<"file">>) -> file_backend;
+data_backend(<<"dataSpace">>) -> data_space_backend.
 
 
 %%--------------------------------------------------------------------

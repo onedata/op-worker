@@ -17,7 +17,6 @@ export default DS.Model.extend({
     To check if it is a dir please use "isDir" property.
   */
   type: DS.attr('string'),
-  content: DS.belongsTo('fileContent', {async: true}),
   parent: DS.belongsTo('file', {inverse: 'children', async: true}),
   children: DS.hasMany('file', {inverse: 'parent', async: true}),
 

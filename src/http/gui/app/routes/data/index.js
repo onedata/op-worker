@@ -11,16 +11,14 @@
 import Ember from 'ember';
 
 export default Ember.Route.extend({
-  beforeModel() {
+  afterModel() {
     // TODO: s.get('isDefault')
     let defaultSpace = this.modelFor('data').find((s) => s.isDefault);
 
     // TODO: get(id)
     if (defaultSpace) {
       console.debug(`Redirecting to default space: ${defaultSpace.id}`);
-      this.transitionTo('data.data-space', {
-        dir_id: defaultSpace.id
-      });
+      this.transitionTo('data.data-space', defaultSpace.id);
     } else {
       console.error(`There is no default space!`);
     }

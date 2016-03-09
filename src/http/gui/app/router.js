@@ -34,7 +34,7 @@ Router.map(function() {
       // data/:space_id - show contents of a root dir of selected Space
       this.route('data-space', {path: '/:data_space_id'}, function() {
         // data/:space_id/:dir_id - a directory, which content is displayed
-        //   currently in browser (and is expanded in data-file-tree)
+        //   currently in browser (and is expanded in data-files-tree)
         this.route('dir', {path: '/:dir_id'}, function() {
           // data/:space_id/:dir_id/:file_id - file selected in a browser
           this.route('file', {path: '/:file_id'});
