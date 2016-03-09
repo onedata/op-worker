@@ -89,7 +89,7 @@
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
-    handle_id :: binary(),
+    handle_id :: binary() | undefined,
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
