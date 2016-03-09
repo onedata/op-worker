@@ -39,7 +39,7 @@ init(_Type, Req, _Opts) ->
 %% Handles a request producing an XML response
 %% @end
 %%--------------------------------------------------------------------
--spec handle(term(), term()) -> {ok, term(), term()}.
+-spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
     ProviderId = oneprovider:get_provider_id(),
     {ok, Req1} = cowboy_req:reply(
