@@ -25,7 +25,7 @@ export default Ember.Route.extend({
   },
 
   actions: {
-    showDirInBrowser(fileId) {
+    openDirInBrowser(fileId) {
       this.transitionTo('data.data-space.dir', fileId);
     }
   }

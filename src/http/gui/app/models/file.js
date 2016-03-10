@@ -21,7 +21,7 @@ export default DS.Model.extend({
   children: DS.hasMany('file', {inverse: 'parent', async: true}),
 
   // TODO: this information will be probably stored in component
-  isExpanded: true,
+  isExpanded: false,
   isSelected: false,
 
   isDir: function () {
