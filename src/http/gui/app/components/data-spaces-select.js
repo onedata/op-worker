@@ -14,5 +14,10 @@ export default Ember.Component.extend({
 
   selectedSpaceDidChange: function() {
     this.sendAction('goToDataSpace', this.get('selectedSpaceId'));
-  }.observes('selectedSpaceId')
+  }.observes('selectedSpaceId'),
+
+  // something: function() {
+  //   let a = this.get('spaces').toArray()[0].get('rootDir').get('children').toArray();
+  //   return a.length > 0 && a[0].get('name');
+  // }.property('spaces.@each.rootDir.@each.children.@each.name')
 });

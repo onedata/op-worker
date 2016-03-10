@@ -31,7 +31,7 @@ Router.map(function() {
 
     // data/ - list of Spaces - user can select the Space
     this.route('data', {resetNamespace: true}, function() {
-      // data/:space_id - show contents of a root dir of selected Space
+      // data/:space_id - show dir tree of a root dir of selected Space
       this.route('data-space', {path: '/:data_space_id'}, function() {
         // data/:space_id/:dir_id - a directory, which content is displayed
         //   currently in browser (and is expanded in data-files-tree)

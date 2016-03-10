@@ -41,6 +41,7 @@ find(<<"dataSpace">>, [<<"space1">>]) ->
     Res = [
         {<<"id">>, <<"space1">>},
         {<<"name">>, <<"Space 1">>},
+        {<<"isDefault">>, false},
         {<<"rootDir">>, <<"space1rootDir">>}
     ],
     ?log_debug({find, Res}),
@@ -50,6 +51,7 @@ find(<<"dataSpace">>, [<<"space2">>]) ->
     Res = [
         {<<"id">>, <<"space2">>},
         {<<"name">>, <<"Space 2">>},
+        {<<"isDefault">>, true},
         {<<"rootDir">>, <<"space2rootDir">>}
     ],
     ?log_debug({find, Res}),

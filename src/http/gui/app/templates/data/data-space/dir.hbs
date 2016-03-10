@@ -1,9 +1,7 @@
-Directory loaded: [[ {{model.name}} ]]
+Directory id: [[ {{model.id}} ]]
+
+Directory name: [[ {{model.name}} ]]
 {{!-- TODO: this will be an outlet for file details sidebar --}}
 {{!-- {{outlet}} --}}
 
-<ul>
-  {{#each model.children as |file|}}
-    <li>{{file.name}}</li>
-  {{/each}}
-</ul>
+{{data-files-list dir=model}}

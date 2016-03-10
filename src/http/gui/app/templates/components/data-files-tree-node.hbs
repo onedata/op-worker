@@ -1,0 +1,14 @@
+<ul>
+  {{#each rootDir.children as |file|}}
+    {{#if file.isDir}}
+      <li>
+        <p {{action 'toggleDir' file}}>
+          {{file.name}}
+        </p>
+        {{#if file.isExpanded}}
+          {{data-files-tree-node rootDir=file}}
+        {{/if}}
+      </li>
+    {{/if}}
+  {{/each}}
+</ul>

@@ -1,18 +1,17 @@
 import Ember from 'ember';
 
+// TODO jsdoc
 export default Ember.Route.extend({
   /** Transit to root dir of current DataSpace */
   afterModel() {
     let dataSpace = this.modelFor('data.data-space');
-    // TODO: get rootDir
-    let rootDir = dataSpace.rootDir;
+    let rootDir = dataSpace.get('rootDir');
 
     if (rootDir) {
-      // TODO: rootDir.get('id') rootDir, error log
-      console.debug(`Redirecting to root dir ${rootDir.id} of space ${dataSpace.id}`);
-      this.transitionTo('data.data-space.dir', rootDir.id);
+      console.debug(`Redirecting to root dir "${rootDir.get('id')}" of space "${dataSpace.get('id')}"`);
+      this.transitionTo('data.data-space.dir', rootDir.get('id'));
     } else {
-      console.error(`Data space ${dataSpace.id} has no rootDir!`);
+      console.error(`Data space "${dataSpace.get('id')}" has no rootDir!`);
     }
   },
 });
