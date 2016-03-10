@@ -2,11 +2,15 @@
   {{#each rootDir.children as |file|}}
     {{#if file.isDir}}
       <li>
-        <p {{action 'toggleDir' file}}>
-          {{file.name}}
+        <p>
+          <span {{action 'toggleDir' file}}>(+)</span>
+          <span>&nbsp;&nbsp;</span>
+          <span {{action 'browseDir' file}}>
+            {{file.name}}
+          </span>
         </p>
         {{#if file.isExpanded}}
-          {{data-files-tree-node rootDir=file}}
+          {{data-files-tree-node rootDir=file openDirInBrowser='openDirInBrowser'}}
         {{/if}}
       </li>
     {{/if}}

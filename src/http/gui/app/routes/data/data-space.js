@@ -13,11 +13,10 @@ export default Ember.Route.extend({
     return this.store.findRecord('data-space', params.data_space_id);
   },
 
-  activate() {
+  afterModel(dataSpace) {
     Ember.run.scheduleOnce('afterRender', this, function() {
-      console.debug('selected data-space: ' + this.model.get('id'));
+      console.debug('selected data-space: ' + dataSpace.get('id'));
       // TODO: this should use data-spaces-select service or something...
-
     });
   },
 
@@ -26,7 +25,7 @@ export default Ember.Route.extend({
   },
 
   actions: {
-    showDirInBrowser(fileId) {
+    openDirInBrowser(fileId) {
       this.transitionTo('data.data-space.dir', fileId);
     }
   }

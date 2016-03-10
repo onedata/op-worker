@@ -10,8 +10,14 @@
 import Ember from 'ember';
 
 export default Ember.Route.extend({
+  fileSystemTree: Ember.inject.service('file-system-tree'),
+
   model() {
     return this.store.findAll('data-space');
+  },
+
+  afterModel(dataSpaces) {
+    this.get('fileSystemTree').updateDataSpaces(dataSpaces);
   },
 
   actions: {

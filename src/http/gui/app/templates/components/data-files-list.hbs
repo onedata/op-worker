@@ -1,9 +1,9 @@
 Data files list for
 
 <ul>
-  {{#each dir.children as |file|}}
+  {{#each filesInfo as |fileInfo|}}
     <li>
-      name: {{file.name}}, type: {{file.type}}
+      {{fileInfo}}
     </li>
   {{/each}}
 </ul>

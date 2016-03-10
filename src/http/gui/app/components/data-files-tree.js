@@ -4,6 +4,8 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   dataFilesTreeService: Ember.inject.service('dataFilesTree'),
 
+  classNames: ['data-files-tree'],
+
   /**
     Reference to File - root of the filesystem showed in tree.
     Note, that only chilren of this File will be showed in tree (root will be hidden).
@@ -56,4 +58,10 @@ export default Ember.Component.extend({
   setRootDir(rootDir) {
     this.set('rootDir', rootDir);
   },
+
+  actions: {
+    openDirInBrowser(fileId) {
+      this.sendAction('openDirInBrowser', fileId);
+    }
+  }
 });
