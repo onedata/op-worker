@@ -308,7 +308,7 @@ export default DS.RESTAdapter.extend({
   /** WebSocket onerror callback */
   error: function (event) {
     // TODO @todo better error handling
-    window.alert('WebSocket error, see console for details.');
+    // window.alert('WebSocket error, see console for details.');
     console.error(`WebSocket error, event data: ` + event.data);
   },
 

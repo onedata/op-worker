@@ -25,4 +25,8 @@
 -export([callback/2]).
 
 callback(<<"userName">>, _) ->
-    {ok, op_gui_utils:get_user_id()}.
+    {ok, op_gui_utils:get_user_id()};
+
+callback(<<"manageProvidersURL">>, _) ->
+    URL = str_utils:format_bin("~s/#/onezone", [oneprovider:get_oz_url()]),
+    {ok, URL}.

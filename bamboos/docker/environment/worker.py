@@ -128,7 +128,7 @@ def _docker_up(image, bindir, config, dns_servers, db_node_mappings, logdir,
         workdir=DOCKER_BINDIR_PATH,
         volumes=volumes,
         dns_list=dns_servers,
-        command=['bash', '-c', '''touch {0} && tail -f {0}'''.format(LOGFILE)])
+        command=['bash'])
 
     # create system users and groups (if specified)
     if 'os_config' in config:
@@ -271,8 +271,8 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None):
                 sys_config['cluster_worker'] = dict()
 
             # todo: external_ip in cluster_worker should be obtained via plugin
-            sys_config['cluster_worker']['external_ip'] = ip
-            sys_config[configurator.app_name()]['external_ip'] = ip
+            sys_config['cluster_worker']['external_ip'] = {'string': ip}
+            sys_config[configurator.app_name()]['external_ip'] = {'string': ip}
 
         domain = cluster_domain(instance, uid)
         for id in worker_configs:
