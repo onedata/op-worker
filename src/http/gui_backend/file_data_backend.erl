@@ -12,7 +12,7 @@
 %%% THIS IS A PROTOTYPE AND AN EXAMPLE OF IMPLEMENTATION.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_backend).
+-module(file_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 

@@ -37,7 +37,7 @@
 -export([get_node_hostname/0, get_node_ip/0]).
 -export([get_provider_id/0, get_provider_domain/0]).
 -export([get_oz_domain/0, get_oz_url/0, get_oz_cert/0]).
--export([get_oz_login_page/0, get_oz_logout_page/0]).
+-export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([register_in_gr/3, register_in_oz_dev/3, save_file/2]).
 
 %%%===================================================================
@@ -118,6 +118,18 @@ get_oz_login_page() ->
 -spec get_oz_logout_page() -> string().
 get_oz_logout_page() ->
     {ok, Page} = application:get_env(?APP_NAME, oz_logout_page),
+    % Page is in format '/page_name.html'
+    str_utils:format("https://~s~s", [get_oz_domain(), Page]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the URL to OZ logout page.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_oz_providers_page() -> string().
+get_oz_providers_page() ->
+    {ok, Page} = application:get_env(?APP_NAME, oz_providers_page),
     % Page is in format '/page_name.html'
     str_utils:format("https://~s~s", [get_oz_domain(), Page]).
 

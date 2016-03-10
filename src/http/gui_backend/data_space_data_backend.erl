@@ -12,7 +12,7 @@
 %%% THIS IS A PROTOTYPE AND AN EXAMPLE OF IMPLEMENTATION.
 %%% @end
 %%%-------------------------------------------------------------------
--module(data_space_backend).
+-module(data_space_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
 
@@ -37,7 +37,7 @@ init() ->
     ok.
 
 %% Called when ember asks for a particular dataSpace
-find(<<"dataSpace">>, [<<"space1">>]) ->
+find(<<"data-space">>, [<<"space1">>]) ->
     Res = [
         {<<"id">>, <<"space1">>},
         {<<"name">>, <<"Space 1">>},
@@ -47,7 +47,7 @@ find(<<"dataSpace">>, [<<"space1">>]) ->
     ?log_debug({find, Res}),
     {ok, Res};
 
-find(<<"dataSpace">>, [<<"space2">>]) ->
+find(<<"data-space">>, [<<"space2">>]) ->
     Res = [
         {<<"id">>, <<"space2">>},
         {<<"name">>, <<"Space 2">>},
@@ -59,23 +59,23 @@ find(<<"dataSpace">>, [<<"space2">>]) ->
 
 %% Called when ember asks for all files - not implemented, because we don't
 %% want to return all files...
-find_all(<<"dataSpace">>) ->
-    {ok, DS1} = find(<<"dataSpace">>, [<<"space1">>]),
-    {ok, DS2} = find(<<"dataSpace">>, [<<"space2">>]),
+find_all(<<"data-space">>) ->
+    {ok, DS1} = find(<<"data-space">>, [<<"space1">>]),
+    {ok, DS2} = find(<<"data-space">>, [<<"space2">>]),
     {ok, [DS1, DS2]}.
 
 
 %% Called when ember asks for file mathcing given query
-find_query(<<"dataSpace">>, _Data) ->
+find_query(<<"data-space">>, _Data) ->
     {error, not_iplemented}.
 
 %% Called when ember asks to create a record
-create_record(<<"dataSpace">>, _Data) ->
+create_record(<<"data-space">>, _Data) ->
     {error, not_iplemented}.
 
-update_record(<<"dataSpace">>, _Id, _Data) ->
+update_record(<<"data-space">>, _Id, _Data) ->
     {error, not_iplemented}.
 
 %% Called when ember asks to delete a record
-delete_record(<<"dataSpace">>, _Id) ->
+delete_record(<<"data-space">>, _Id) ->
     {error, not_iplemented}.
