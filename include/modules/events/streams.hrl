@@ -118,4 +118,15 @@
     end
 }).
 
+%% Default remove_event stream specialization
+-define(REMOVE_FILE_EVENT_STREAM, #event_stream_definition{
+    admission_rule = fun
+        (#event{object = #remove_file_event{}}) -> true;
+        (_) -> false
+    end,
+    aggregation_rule = fun(#event{} = E1, #event{} = E2) ->
+        E2#event{counter = E1#event.counter + E2#event.counter}
+    end
+}).
+
 -endif.

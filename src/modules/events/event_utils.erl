@@ -82,6 +82,25 @@ inject_event_stream_definition(#subscription{object = #permission_changed_subscr
                             (Events, #{session_id := SessId}) ->
                                 communicator:send(#server_message{message_body = #events{events = Events}}, SessId)
                         end
+    }};
+
+inject_event_stream_definition(#subscription{object = #remove_file_subscription{
+    file_uuid = FileUuid}} = Sub) ->
+    Sub#subscription{event_stream = ?REMOVE_FILE_EVENT_STREAM#event_stream_definition{
+        admission_rule = fun
+            (#event{object = #remove_file_event{file_uuid = Uuid}})
+                when Uuid =:= FileUuid -> true;
+            (_) -> false
+        end,
+        emission_rule = fun(_) -> true end,
+        init_handler = fun
+            (_, SessId, _) ->
+                #{session_id => SessId}
+        end,
+        event_handler = fun
+            (Events, #{session_id := SessId}) ->
+                communicator:send(#server_message{message_body = #events{events = Events}}, SessId)
+        end
     }}.
 
 %%--------------------------------------------------------------------
