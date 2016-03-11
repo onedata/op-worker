@@ -2,8 +2,8 @@ Data files list for
 
 <ul>
   {{#each filesInfo as |fileInfo|}}
-    <li>
-      {{fileInfo}}
+    <li {{action "openFile" fileInfo.file}}>
+      {{fileInfo.label}}
     </li>
   {{/each}}
 </ul>
