@@ -28,6 +28,11 @@ export default DS.Model.extend({
     return this.get('type') === 'dir';
   }.property('type'),
 
+  hasSubDirs: function() {
+    return this.get('children').filter((child) => child.get('isDir'))
+      .length > 0;
+  }.property('children.@each.isDir'),
+
   isVisible: function () {
     var visible = this.get('parent.isExpanded');
     console.log('deselect(' + this.get('name') + '): ' +

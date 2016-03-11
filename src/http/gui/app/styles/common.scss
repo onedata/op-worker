@@ -275,6 +275,10 @@ html, body {
           &:hover {
             .secondary-sidebar-item.first-level {
               background-color: $onedata-light-azure;
+
+              .secondary-sidebar-item.first-level {
+                background-color: transparent;
+              }
             }
           }
 
@@ -290,6 +294,11 @@ html, body {
             }
           }
         }
+      }
+
+      // special styles for sidebar lists which are trees
+      ul.tree {
+
       }
     }
 
