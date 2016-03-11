@@ -204,14 +204,17 @@ html, body {
       ul {
         padding: 0;
 
+        // list item is a container for "action" item and its application childs
         li {
           list-style-type: none;
 
+          $secondary-sidebar-item-padding: $secondary-sidebar-width * 0.077;
+
+          // "active" item of list item
           .secondary-sidebar-item {
             border-top: #ebebeb 1px solid;
-            /* TODO: padding is probably bad idea */
-            padding-left: $secondary-sidebar-width / 13;
-            padding-right: $secondary-sidebar-width / 13;
+            padding-left: $secondary-sidebar-item-padding;
+            padding-right: $secondary-sidebar-item-padding;
             padding-top: 18px;
             padding-bottom: 16px;
             list-style-type: none;
@@ -233,15 +236,25 @@ html, body {
           }
 
           ul.submenu {
+            &.level-1 .secondary-sidebar-item {
+              padding-left: $secondary-sidebar-item-padding * 3.64;
+            }
+
+            &.level-2 .secondary-sidebar-item {
+              padding-left: $secondary-sidebar-item-padding * 3.64 * 2;
+            }
+
+            &.level-3 .secondary-sidebar-item {
+              padding-left: $secondary-sidebar-item-padding * 3.64 * 3;
+            }
+
+            // when is a child of non-active parent, it is invisible
             display: none;
             background-color: $onedata-light-gray;
-            li {
-              .secondary-sidebar-item {
-                padding-left: $secondary-sidebar-width * 0.28;
 
-                .item-label {
+            .secondary-sidebar-item {
+              .item-label {
                   text-transform: capitalize;
-                }
               }
 
               &:hover,
@@ -267,6 +280,7 @@ html, body {
 
           // active first-level entry
           &.active {
+            // submenu uncollapses when parent menu is clicked
             ul.submenu {
               display: block;
             }

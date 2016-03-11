@@ -9,6 +9,7 @@
 */
 export default {
   components: {
+    // layout
     topBar: {
       logout: 'Wyloguj',
       manageProviders: 'Zarządzaj dostawcami'
@@ -23,6 +24,7 @@ export default {
       groups: 'grupy',
       token: 'token'
     },
+    // spaces
     spacesMenu: {
       title: 'miejsca',
     },
@@ -41,6 +43,10 @@ export default {
       removeGroup: 'usuwanie grup',
       inviteProvider: 'zapraszanie dostawców',
       removeProvider: 'usuwanie dostawców'
+    },
+    // data
+    dataFilesTree: {
+      rootDirectory: 'Katalog główny'
     }
   },
   spaces: {
@@ -52,5 +58,5 @@ export default {
         tableTitle: 'grupy'
       }
     }
-  }
+  },
 };

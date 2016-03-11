@@ -4,15 +4,15 @@ import Ember from 'ember';
 export default Ember.Service.extend({
   store: Ember.inject.service('store'),
 
-  rootSpaces: {},
+  dataSpaces: null,
 
-  updateDataSpaces(dataSpaces) {
+  rootSpaces: function() {
     let rootSpaces = {};
-    dataSpaces.forEach((s) => {
+    this.get('dataSpaces').forEach((s) => {
       rootSpaces[s.get('rootDir.id')] = s.get('id');
     });
-    this.set('rootSpaces', rootSpaces);
-  },
+    return rootSpaces;
+  }.property('dataSpaces.@each.rootDir.id'),
 
   getSpaceIdForFile(file) {
     if (file) {

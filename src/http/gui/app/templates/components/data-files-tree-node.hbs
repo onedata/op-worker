@@ -1,7 +1,7 @@
 <ul>
   {{#each rootDir.children as |file|}}
     {{#if file.isDir}}
-      <li>
+      <li class="first-level">
         <p>
           <span {{action 'toggleDir' file}}>(+)</span>
           <span>&nbsp;&nbsp;</span>

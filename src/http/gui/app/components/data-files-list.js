@@ -11,7 +11,7 @@ export default Ember.Component.extend({
     return this.get('dir.children').map((file) => {
       let fileSystemTree = this.get('fileSystemTree');
       // TODO: get space id will be removed - only for space resolve demonstration
-      return `"${file.get('name')}" (${file.get('type')}) <- space "${fileSystemTree.getSpaceIdForFile(file)}"`;
+      return `id: "${file.get('id')}" "${file.get('name')}" (${file.get('type')}) <- space "${fileSystemTree.getSpaceIdForFile(file)}"`;
     });
-  }.property('dir.children')
+  }.property('dir.children.@each.name', 'dir.children.@each.type')
 });

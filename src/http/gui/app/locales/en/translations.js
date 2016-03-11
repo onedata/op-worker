@@ -41,6 +41,10 @@ export default {
       removeGroup: 'remove group',
       inviteProvider: 'invite provider',
       removeProvider: 'remove provider',
+    },
+    // data
+    dataFilesTree: {
+      rootDirectory: 'Root directory'
     }
   },
   spaces: {
@@ -52,5 +56,8 @@ export default {
         tableTitle: 'groups'
       },
     }
+  },
+  data: {
+    rootDirectory: 'Root directory'
   }
 };
