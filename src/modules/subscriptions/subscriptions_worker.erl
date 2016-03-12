@@ -28,9 +28,9 @@ init([]) ->
     {ok, #{}}.
 
 handle(healthcheck) ->
-    case whereis(subscription_wss) of
-        undefined -> ?warning("Subscriptions connection not running"), ok;
-        _ -> ok
+    case subscription_wss:healthcheck() of
+        ok -> ok;
+        {error, Reason} -> ?warning("Connection error:~p", [Reason]), ok
     end;
 
 handle(start_provider_connection) ->
@@ -53,7 +53,7 @@ handle(refresh_subscription) ->
     Self = node(),
     case subscription_monitor:get_refreshing_node() of
         {ok, Self} -> refresh_subscription();
-        {ok, Node} -> ?info("Pid ~p does not match dedicated ~p", [Self, Node])
+        {ok, Node} -> ?debug("Pid ~p does not match dedicated ~p", [Self, Node])
     end;
 
 handle({process_updates, Updates}) ->
@@ -61,8 +61,8 @@ handle({process_updates, Updates}) ->
 
 %% Handle stream crashes
 handle({'EXIT', _Pid, _Reason} = Req) ->
-    case whereis(subscription_wss) of
-        undefined ->
+    case subscription_wss:healthcheck() of
+        {error, _} ->
             ?error("Subscriptions connection crashed: ~p", [_Reason]),
             schedule_connection_start();
         _ -> ?log_bad_request(Req)
@@ -85,7 +85,7 @@ refresh_subscription() ->
         {resume_at, ResumeAt},
         {missing, Missing}
     ]),
-    whereis(subscription_wss) ! {push, Message}.
+    subscription_wss:push(Message).
 
 schedule_subscription_renew() ->
     timer:send_interval(timer:seconds(2), whereis(?MODULE), {timer, refresh_subscription}).

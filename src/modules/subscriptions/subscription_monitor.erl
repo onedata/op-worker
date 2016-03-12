@@ -101,7 +101,7 @@ ensure_initialised() ->
             subscriptions_state:create_or_update(#document{
                 key = ?STATE_KEY,
                 value = #subscriptions_state{
-                    largest = 0,
+                    largest = 1,
                     missing = [],
                     users = Users,
                     refreshing_node = node()

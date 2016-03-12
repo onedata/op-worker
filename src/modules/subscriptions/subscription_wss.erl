@@ -18,7 +18,16 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([init/2, websocket_handle/3, websocket_info/3, websocket_terminate/3]).
--export([start_link/0]).
+-export([start_link/0, healthcheck/0, push/1]).
+
+healthcheck() ->
+    case whereis(subscription_wss) of
+        undefined -> {error, subscription_wss_not_running};
+        _ -> ok
+    end.
+
+push(Message) ->
+    whereis(subscription_wss) ! {push, Message}.
 
 %%--------------------------------------------------------------------
 %% @doc
