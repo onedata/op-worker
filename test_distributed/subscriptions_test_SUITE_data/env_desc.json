@@ -29,44 +29,12 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 3
+                        "worker_num": 1
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "subscription_renew_interval_seconds": 3,
-                        "zone_domain": "oz",
-                        "verify_oz_cert": false
-                    }
-                },
-                "worker2": {
-                    "vm.args": {
-                        "setcookie": "test_cookie"
-                    },
-                    "sys.config": {
-                        "cm_nodes": [
-                            "cm"
-                        ],
-                        "db_nodes": [
-                            "127.0.0.1:49161"
-                        ],
-                        "subscription_renew_interval_seconds": 3,
-                        "zone_domain": "oz",
-                        "verify_oz_cert": false
-                    }
-                },
-                "worker3": {
                     "vm.args": {
                         "setcookie": "test_cookie"
                     },

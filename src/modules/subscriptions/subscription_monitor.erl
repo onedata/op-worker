@@ -35,6 +35,7 @@ account_updates(SequenceNumbers) ->
         #subscriptions_state{missing = Missing, largest = Largest} = State,
         NewMissing = ordsets:subtract(Missing, SequenceNumbers),
         NewLargest = max(Largest, lists:last(SequenceNumbers)),
+        ?error("QQ ~p ~p ~p ~p", [SequenceNumbers, State, NewMissing, NewLargest]),
         {ok, State#subscriptions_state{missing = NewMissing, largest = NewLargest}}
     end).
 
@@ -101,7 +102,7 @@ ensure_initialised() ->
             subscriptions_state:create_or_update(#document{
                 key = ?STATE_KEY,
                 value = #subscriptions_state{
-                    largest = 1,
+                    largest = 0,
                     missing = [],
                     users = Users,
                     refreshing_node = node()

@@ -18,7 +18,7 @@
 % State of subscription tracking.
 -record(subscriptions_state, {
     refreshing_node :: node(),
-    largest :: pos_integer(),
+    largest :: non_neg_integer(),
     missing :: [pos_integer()],
     users :: [term()]
 }).

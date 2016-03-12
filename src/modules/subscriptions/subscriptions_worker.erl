@@ -57,7 +57,10 @@ handle(refresh_subscription) ->
     end;
 
 handle({process_updates, Updates}) ->
-    utils:pforeach(fun(Update) -> handle_update(Update) end, Updates);
+    utils:pforeach(fun(Update) -> handle_update(Update) end, Updates),
+    Seqs = lists:map(fun({_, _, _, Seq}) -> Seq end, Updates),
+    subscription_monitor:account_updates(ordsets:from_list(Seqs)),
+    ok;
 
 %% Handle stream crashes
 handle({'EXIT', _Pid, _Reason} = Req) ->
