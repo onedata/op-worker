@@ -53,8 +53,42 @@ accounts_incoming_updates(Config) ->
     push_update(Node, [
         update(1, [<<"r1">>], S1, space(S1, S1))
     ]),
-
     expect_message([], 1, []),
+
+    push_update(Node, [
+        update(2, [<<"r1">>], S1, space(S1, S1)),
+        update(3, [<<"r1">>], S1, space(S1, S1)),
+        update(4, [<<"r1">>], S1, space(S1, S1))
+    ]),
+    expect_message([], 4, []),
+
+    push_update(Node, [
+        update(5, [<<"r1">>], S1, space(S1, S1)),
+        update(7, [<<"r1">>], S1, space(S1, S1)),
+        update(9, [<<"r1">>], S1, space(S1, S1))
+    ]),
+    expect_message([], 9, [6, 8]),
+
+    push_update(Node, [
+        update(10, [<<"r1">>], S1, space(S1, S1)),
+        update(11, [<<"r1">>], S1, space(S1, S1)),
+        update(12, [<<"r1">>], S1, space(S1, S1))
+    ]),
+    expect_message([], 12, [6, 8]),
+
+    push_update(Node, [
+        update(1, [<<"r1">>], S1, space(S1, S1)),
+        update(2, [<<"r1">>], S1, space(S1, S1)),
+        update(3, [<<"r1">>], S1, space(S1, S1))
+    ]),
+    expect_message([], 12, [6, 8]),
+
+    push_update(Node, [
+        update(6, [<<"r1">>], S1, space(S1, S1)),
+        update(8, [<<"r1">>], S1, space(S1, S1)),
+        update(15, [<<"r1">>], S1, space(S1, S1))
+    ]),
+    expect_message([], 15, [13, 14]),
     ok.
 
 %%%===================================================================

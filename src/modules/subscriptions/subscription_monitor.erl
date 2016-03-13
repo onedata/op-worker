@@ -33,8 +33,9 @@
 account_updates(SequenceNumbers) ->
     subscriptions_state:update(?STATE_KEY, fun(State) ->
         #subscriptions_state{missing = Missing, largest = Largest} = State,
-        NewMissing = ordsets:subtract(Missing, SequenceNumbers),
         NewLargest = max(Largest, lists:last(SequenceNumbers)),
+        AddedMissing = lists:seq(Largest, NewLargest) -- [Largest],
+        NewMissing = ordsets:subtract(Missing ++ AddedMissing, SequenceNumbers),
         ?error("QQ ~p ~p ~p ~p", [SequenceNumbers, State, NewMissing, NewLargest]),
         {ok, State#subscriptions_state{missing = NewMissing, largest = NewLargest}}
     end).
