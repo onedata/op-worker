@@ -18,9 +18,9 @@
 % State of subscription tracking.
 -record(subscriptions_state, {
     refreshing_node :: node(),
-    largest :: non_neg_integer(),
-    missing :: [pos_integer()],
-    users :: sets:set(binary())
+    largest :: subscriptions:seq(),
+    missing :: [subscriptions:seq()],
+    users :: sets:set(onedata_user:id())
 }).
 
 %% Identity containing user_id
@@ -51,13 +51,13 @@
     name :: binary(),
     space_ids :: [binary()],
     group_ids :: [binary()],
-    revision_history = [] :: [binary()]
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 %% Local, cached version of OZ group
 -record(onedata_group, {
     name :: binary(),
-    revision_history = [] :: [binary()]
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 -record(file_meta, {
@@ -107,7 +107,7 @@
 -record(space_info, {
     id :: binary(),
     name :: binary(),
-    revision_history = [] :: [binary()]
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 %% Model that maps space to storage

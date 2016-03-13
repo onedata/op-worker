@@ -57,7 +57,6 @@ start_link() ->
     {ok, {SupFlags :: supervisor:sup_flags(), [ChildSpec :: supervisor:child_spec()]}}.
 init([]) ->
     {ok, {#{strategy => one_for_one, intensity => 1000, period => 3600}, [
-%%        subscription_wss_spec(),
         cluster_worker_specs:main_worker_sup_spec()
     ]}}.
 
@@ -65,14 +64,4 @@ init([]) ->
 %%% Internal functions
 %%%===================================================================
 
--spec subscription_wss_spec() -> supervisor:child_spec().
-subscription_wss_spec() ->
-    #{
-        id => subscription_wss,
-        start => {subscription_wss, start_link, []},
-        restart => permanent,
-        shutdown => 5000,
-        type => worker,
-        modules => [subscription_wss]
-    }.
 

@@ -259,7 +259,7 @@ init_per_testcase(_, Config) ->
 
 reset_state(Nodes) ->
     rpc:call(hd(Nodes), subscriptions_state, delete, [?SUBSCRIPTIONS_STATE_KEY]),
-    rpc:call(hd(Nodes), subscription_monitor, ensure_initialised, []).
+    rpc:call(hd(Nodes), subscriptions, ensure_initialised, []).
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
@@ -310,7 +310,7 @@ expect_message(Users, ResumeAt, Missing) ->
 
 expect_message(Match, 1) ->
     receive Rcv -> ?assertMatch(Match, Rcv)
-    after 0 -> ?assertMatch(Match, timeout) end;
+    after 0 -> ?assertMatch(Match, <<"timeout">>) end;
 
 expect_message(Match, Retries) ->
     receive
@@ -319,7 +319,7 @@ expect_message(Match, Retries) ->
             ct:print("Miss ~p ~p", [_Any, Match]),
             expect_message(Match, Retries - 1)
     after
-        ?MESSAGES_WAIT_TIMEOUT -> ?assertMatch(Match, timeout)
+        ?MESSAGES_WAIT_TIMEOUT -> ?assertMatch(Match, <<"timeout">>)
     end.
 
 

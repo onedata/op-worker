@@ -6,6 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
+%%% This worker manages subscriptions of the provider.
+%%% Subscriptions ensure, that provider receives updates from the OZ.
+%%% Updates concern the provider itself
+%%% or the users that work with the provider.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(subscriptions_worker).
@@ -22,11 +26,36 @@
 
 -export([init/1, handle/1, cleanup/0]).
 
+%%%===================================================================
+%%% worker_plugin_behaviour callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link worker_plugin_behaviour} callback init/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec init(Args :: term()) ->
+    {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init([]) ->
     schedule_subscription_renew(),
     schedule_connection_start(),
     {ok, #{}}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link worker_plugin_behaviour} callback handle/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle(Request) -> Result when
+    Request :: healthcheck | start_provider_connection |refresh_subscription |
+    {process_updates, Updates} | {'EXIT', pid(), ExitReason :: term()},
+    Updates :: [{datastore:document(), subscriptions:model(),
+        UpdateRevs :: [subscriptions:rev()], subscriptions:seq()}],
+    Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
+    {error, Reason},
+    Response :: term(),
+    Reason :: term().
 handle(healthcheck) ->
     case subscription_wss:healthcheck() of
         ok -> ok;
@@ -35,7 +64,7 @@ handle(healthcheck) ->
 
 handle(start_provider_connection) ->
     try
-        subscription_monitor:ensure_initialised(),
+        subscriptions:ensure_initialised(),
         case subscription_wss:start_link() of
             {ok, Pid} ->
                 ?info("Subscriptions connection started ~p", [Pid]);
@@ -51,7 +80,7 @@ handle(start_provider_connection) ->
 
 handle(refresh_subscription) ->
     Self = node(),
-    case subscription_monitor:get_refreshing_node() of
+    case subscriptions:get_refreshing_node() of
         {ok, Self} -> refresh_subscription();
         {ok, Node} -> ?debug("Pid ~p does not match dedicated ~p", [Self, Node])
     end;
@@ -59,7 +88,7 @@ handle(refresh_subscription) ->
 handle({process_updates, Updates}) ->
     utils:pforeach(fun(Update) -> handle_update(Update) end, Updates),
     Seqs = lists:map(fun({_, _, _, Seq}) -> Seq end, Updates),
-    subscription_monitor:account_updates(ordsets:from_list(Seqs)),
+    subscriptions:account_updates(ordsets:from_list(Seqs)),
     ok;
 
 %% Handle stream crashes
@@ -74,23 +103,58 @@ handle({'EXIT', _Pid, _Reason} = Req) ->
 handle(Req) ->
     ?log_bad_request(Req).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link worker_plugin_behaviour} callback cleanup/0
+%% @end
+%%--------------------------------------------------------------------
+-spec cleanup() -> Result when
+    Result :: ok.
 cleanup() ->
     ok.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Process update.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_update({Doc :: datastore:document(), Model :: subscriptions:model(),
+    Revs :: [subscriptions:rev()], Seq :: subscriptions:seq()}) -> no_return().
 handle_update({Doc, Model, Revs, _Seq}) ->
     subscription_conflicts:update_model(Model, Doc, Revs).
 
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Send subscription renew message.
+%% @end
+%%--------------------------------------------------------------------
 refresh_subscription() ->
-    {Missing, ResumeAt} = subscription_monitor:get_missing(),
+    {Missing, ResumeAt} = subscriptions:get_missing(),
     Message = json_utils:encode([
-        {users, subscription_monitor:get_users()},
+        {users, subscriptions:get_users()},
         {resume_at, ResumeAt},
         {missing, Missing}
     ]),
     subscription_wss:push(Message).
 
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Schedule renewing the subscription at fixed interval.
+%% @end
+%%--------------------------------------------------------------------
 schedule_subscription_renew() ->
-    timer:send_interval(timer:seconds(2), whereis(?MODULE), {timer, refresh_subscription}).
+    timer:send_interval(timer:seconds(2), whereis(?MODULE),
+        {timer, refresh_subscription}).
 
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Schedule (re)start of the provider - OZ link
+%% @end
+%%--------------------------------------------------------------------
 schedule_connection_start() ->
-    timer:send_after(timer:seconds(2), whereis(?MODULE), {timer, start_provider_connection}).
+    timer:send_after(timer:seconds(2), whereis(?MODULE),
+        {timer, start_provider_connection}).

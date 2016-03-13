@@ -27,9 +27,9 @@
 
 -spec json_to_updates(RawJson :: binary) -> [{
     Update :: datastore:document(),
-    Model :: atom(),
-    Revisions :: [binary()],
-    SequenceNumber :: pos_integer()
+    Model :: subscriptions:model(),
+    Revisions :: [subscriptions:rev()],
+    SequenceNumber :: subscriptions:seq()
 }].
 
 json_to_updates(Raw) ->
@@ -60,6 +60,14 @@ json_to_updates(Raw) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Constructs value of the document from the proplist with values.
+%% @end
+%%--------------------------------------------------------------------
+-spec props_to_value(Model :: subscriptions:model(), [{binary(), term()}]) ->
+    Value :: term().
+
 props_to_value(onedata_user, Props) ->
     #onedata_user{
         name = proplists:get_value(<<"name">>, Props),
@@ -74,10 +82,15 @@ props_to_value(space_info, Props) ->
     #space_info{
         id = proplists:get_value(<<"id">>, Props),
         name = proplists:get_value(<<"name">>, Props)
-    };
-props_to_value(Model, Props) ->
-    ?error("Unexpected doc data; model: ~p, props: ~p", [Model, Props]).
+    }.
 
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Translates model name from the json to actual model module.
+%% @end
+%%--------------------------------------------------------------------
+-spec type_to_model(ModelRaw :: binary()) -> subscriptions:model().
 
 type_to_model(<<"space">>) ->
     space_info;

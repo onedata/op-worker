@@ -236,5 +236,5 @@ subscribe_user(Iden) ->
     UID = Iden#identity.user_id,
     case UID of
         undefined -> ok;
-        _ -> subscription_monitor:put_user(UID)
+        _ -> subscriptions:put_user(UID)
     end.

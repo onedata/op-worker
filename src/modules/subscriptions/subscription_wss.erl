@@ -20,12 +20,24 @@
 -export([init/2, websocket_handle/3, websocket_info/3, websocket_terminate/3]).
 -export([start_link/0, healthcheck/0, push/1]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if websocket is running & registered.
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck() -> ok | {error, Reason :: term()}.
 healthcheck() ->
     case whereis(subscription_wss) of
         undefined -> {error, subscription_wss_not_running};
         _ -> ok
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Pushes message to the OZ.
+%% @end
+%%--------------------------------------------------------------------
+-spec push(Message :: binary()) -> no_return().
 push(Message) ->
     whereis(subscription_wss) ! {push, Message}.
 

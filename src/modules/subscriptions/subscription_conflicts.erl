@@ -30,7 +30,8 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec update_model(Model :: atom(), Update :: datastore:document(),
+-spec update_model(Model :: subscriptions:model(),
+    Update :: datastore:document(),
     UpdateRevs :: [term()]) -> no_return().
 
 update_model(Model, UpdateDoc, UpdateRevs) ->
@@ -81,7 +82,14 @@ should_update(HistoryRevs, UpdateRevs) ->
     end,
     {Result, lists:sublist(Revs, ?HISTORY_MAX_LENGTH)}.
 
--spec get_revisions(Model :: atom(), Record) -> Record2 when
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Extracts revisions history from document being synced with the OZ.
+%% Such documents maintain revision history explicitly.
+%% @end
+%%--------------------------------------------------------------------
+
+-spec get_revisions(Model :: atom(), Record) -> Record2 | {error, term()} when
     Record :: #space_info{} | #onedata_user{} | #onedata_group{},
     Record2 :: #space_info{} | #onedata_user{} | #onedata_group{}.
 get_revisions(space_info, Record) ->
@@ -91,9 +99,17 @@ get_revisions(onedata_user, Record) ->
 get_revisions(onedata_group, Record) ->
     Record#onedata_group.revision_history;
 get_revisions(_Model, _Record) ->
-    erlang:error(not_implemented).
+    {error, get_revisions_not_implemented}.
 
--spec set_revisions(Model :: atom(), Record, Revs :: [term()]) -> Record2 when
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Sets revisions history to document being synced with the OZ.
+%% Such documents maintain revision history explicitly.
+%% @end
+%%--------------------------------------------------------------------
+
+-spec set_revisions(Model :: atom(), Record, Revs :: [term()]) ->
+    Record2 | {error, term()} when
     Record :: #space_info{} | #onedata_user{} | #onedata_group{},
     Record2 :: #space_info{} | #onedata_user{} | #onedata_group{}.
 set_revisions(space_info, Record, Revisions) ->
@@ -103,4 +119,4 @@ set_revisions(onedata_user, Record, Revisions) ->
 set_revisions(onedata_group, Record, Revisions) ->
     Record#onedata_group{revision_history = Revisions};
 set_revisions(_Model, _Record, _Revisions) ->
-    erlang:error(not_implemented).
+    {error, get_revisions_not_implemented}.
