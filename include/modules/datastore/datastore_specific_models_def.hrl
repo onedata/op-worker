@@ -20,7 +20,7 @@
     refreshing_node :: node(),
     largest :: non_neg_integer(),
     missing :: [pos_integer()],
-    users :: [term()]
+    users :: sets:set(binary())
 }).
 
 %% Identity containing user_id

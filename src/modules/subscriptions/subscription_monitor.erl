@@ -60,7 +60,7 @@ get_missing() ->
 get_users() ->
     {ok, #document{value = #subscriptions_state{users = UserIDs}}}
         = subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
-    lists:usort(UserIDs).
+    lists:usort(sets:to_list(UserIDs)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -71,7 +71,7 @@ get_users() ->
 -spec put_user(UserID :: binary()) -> no_return().
 put_user(UserID) ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
-        Users = [UserID | State#subscriptions_state.users],
+        Users = sets:add_element(UserID, State#subscriptions_state.users),
         {ok, State#subscriptions_state{users = Users}}
     end).
 
@@ -84,7 +84,8 @@ put_user(UserID) ->
 -spec reevaluate_users() -> no_return().
 reevaluate_users() ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
-        {ok, State#subscriptions_state{users = get_users_with_session()}}
+        Users = get_users_with_session(),
+        {ok, State#subscriptions_state{users = sets:from_list(Users)}}
     end).
 
 %%--------------------------------------------------------------------
@@ -104,7 +105,7 @@ ensure_initialised() ->
                 value = #subscriptions_state{
                     largest = 0,
                     missing = [],
-                    users = Users,
+                    users = sets:from_list(Users),
                     refreshing_node = node()
                 }
             }, fun(State) -> {ok, State} end)

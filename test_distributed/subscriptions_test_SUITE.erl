@@ -23,7 +23,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([registers_for_updates/1, accounts_incoming_updates/1,
     saves_the_actual_data/1, updates_with_the_actual_data/1,
-    resolves_conflicts/1]).
+    resolves_conflicts/1, registers_for_updates_with_users/1]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
@@ -40,7 +40,8 @@ all() -> ?ALL([
     accounts_incoming_updates,
     saves_the_actual_data,
     updates_with_the_actual_data,
-    resolves_conflicts
+    resolves_conflicts,
+    registers_for_updates_with_users
 ]).
 
 
@@ -50,6 +51,21 @@ all() -> ?ALL([
 
 registers_for_updates(_) ->
     expect_message([], 0, []),
+    ok.
+
+registers_for_updates_with_users(Config) ->
+    %% given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    U1 = ?ID(u1),
+    U2 = ?ID(u2),
+    expect_message([], 0, []),
+
+    %% when
+    create_session(Node, U1),
+    create_session(Node, U2),
+
+    %% then
+%%    expect_message([U1, U1], 0, []),
     ok.
 
 accounts_incoming_updates(Config) ->
@@ -276,9 +292,10 @@ update(Seq, Revs, ID, Core) ->
 fetch(Node, Model, ID) ->
     rpc:call(Node, Model, get, [ID]).
 
-
-call_worker(Node, Req) ->
-    rpc:call(Node, worker_proxy, call, [subscriptions_worker, Req]).
+create_session(Node, UserID) ->
+    ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_rest_session, [
+        #identity{user_id = UserID}, #auth{}
+    ])).
 
 expectation(Users, ResumeAt, Missing) ->
     json_utils:encode([
