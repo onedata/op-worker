@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--define(STATE_KEY, <<"current_state">>).
+-define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 
 -export([account_updates/1, get_missing/0, get_users/0, put_user/1,
     reevaluate_users/0, ensure_initialised/0, get_refreshing_node/0]).
@@ -31,12 +31,11 @@
 %%--------------------------------------------------------------------
 -spec account_updates(SequenceNumbers :: ordsets:ordset(seq())) -> no_return().
 account_updates(SequenceNumbers) ->
-    subscriptions_state:update(?STATE_KEY, fun(State) ->
+    subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         #subscriptions_state{missing = Missing, largest = Largest} = State,
         NewLargest = max(Largest, lists:last(SequenceNumbers)),
         AddedMissing = lists:seq(Largest, NewLargest) -- [Largest],
         NewMissing = ordsets:subtract(Missing ++ AddedMissing, SequenceNumbers),
-        ?error("QQ ~p ~p ~p ~p", [SequenceNumbers, State, NewMissing, NewLargest]),
         {ok, State#subscriptions_state{missing = NewMissing, largest = NewLargest}}
     end).
 
@@ -49,7 +48,7 @@ account_updates(SequenceNumbers) ->
 -spec get_missing() -> {Missing :: ordsets:ordset(seq()), Largest :: seq()}.
 get_missing() ->
     {ok, #document{value = #subscriptions_state{missing = Missing,
-        largest = Largest}}} = subscriptions_state:get(?STATE_KEY),
+        largest = Largest}}} = subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
     {Missing, Largest}.
 
 %%--------------------------------------------------------------------
@@ -60,7 +59,7 @@ get_missing() ->
 -spec get_users() -> [UserID :: binary()].
 get_users() ->
     {ok, #document{value = #subscriptions_state{users = UserIDs}}}
-        = subscriptions_state:get(?STATE_KEY),
+        = subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
     lists:usort(UserIDs).
 
 %%--------------------------------------------------------------------
@@ -71,7 +70,7 @@ get_users() ->
 %%--------------------------------------------------------------------
 -spec put_user(UserID :: binary()) -> no_return().
 put_user(UserID) ->
-    subscriptions_state:update(?STATE_KEY, fun(State) ->
+    subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         Users = [UserID | State#subscriptions_state.users],
         {ok, State#subscriptions_state{users = Users}}
     end).
@@ -84,7 +83,7 @@ put_user(UserID) ->
 %%--------------------------------------------------------------------
 -spec reevaluate_users() -> no_return().
 reevaluate_users() ->
-    subscriptions_state:update(?STATE_KEY, fun(State) ->
+    subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         {ok, State#subscriptions_state{users = get_users_with_session()}}
     end).
 
@@ -95,13 +94,13 @@ reevaluate_users() ->
 %%--------------------------------------------------------------------
 -spec ensure_initialised() -> no_return().
 ensure_initialised() ->
-    case subscriptions_state:exists(?STATE_KEY) of
+    case subscriptions_state:exists(?SUBSCRIPTIONS_STATE_KEY) of
         true -> ok;
         false ->
             % as retrieving users is costly, first we've checked for existence
             Users = get_users_with_session(),
             subscriptions_state:create_or_update(#document{
-                key = ?STATE_KEY,
+                key = ?SUBSCRIPTIONS_STATE_KEY,
                 value = #subscriptions_state{
                     largest = 0,
                     missing = [],
@@ -113,13 +112,13 @@ ensure_initialised() ->
 
 get_refreshing_node() ->
     {ok, #document{value = #subscriptions_state{refreshing_node = Node}}} =
-        subscriptions_state:get(?STATE_KEY),
+        subscriptions_state:get(?SUBSCRIPTIONS_STATE_KEY),
     {ok, Nodes} = request_dispatcher:get_worker_nodes(?MODULE),
     case lists:member(Node, Nodes) of
         true -> {ok, Node};
         false ->
             [NewNode | _] = lists:append(Nodes, [node()]),
-            subscriptions_state:update(?STATE_KEY, fun(State) ->
+            subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
                 State#subscriptions_state{refreshing_node = NewNode}
             end),
             {ok, NewNode}

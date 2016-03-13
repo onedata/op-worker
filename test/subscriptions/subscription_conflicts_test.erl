@@ -29,21 +29,26 @@ creates_docs_with_proper_value_test_() ->
         fun teardown/1,
         [fun() ->
             % given
+            Space = #space_info{
+                id = <<"space1">>, name = <<"space1name">>,
+                revision_history = undefined
+            },
             UpdateDoc = #document{
                 key = <<"some key">>,
                 rev = <<"r4">>,
-                value = #space_info{
-                    name =  <<"space1">>, name = <<"space1name">>,
-                    revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
-                }
+                value = Space
             },
 
             % when
-            subscription_conflicts:update_model(space_info, UpdateDoc),
+            subscription_conflicts:update_model(space_info, UpdateDoc,
+                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
 
             %then
             {CreateDoc, _} = last_create_or_update(space_info),
-            ?assertMatch(UpdateDoc, CreateDoc)
+            Expectation = UpdateDoc#document{value = Space#space_info{
+                revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
+            }},
+            ?assertMatch(Expectation, CreateDoc)
         end]}.
 
 creates_docs_with_proper_rev_number_test_() ->
@@ -54,13 +59,12 @@ creates_docs_with_proper_rev_number_test_() ->
             % given
             UpdateDoc = #document{
                 rev = <<"rev_not_connected_with_update">>,
-                value = #space_info{
-                    revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
-                }
+                value = #space_info{}
             },
 
             % when
-            subscription_conflicts:update_model(space_info, UpdateDoc),
+            subscription_conflicts:update_model(space_info, UpdateDoc,
+                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
 
             %then
             {CreateDoc, _} = last_create_or_update(space_info),
@@ -75,15 +79,13 @@ accepts_unseen_revs_test_() ->
             % given
             UpdateDoc = #document{
                 rev = <<"rev_not_connected_with_update">>,
-                value = #space_info{
-                    name =  <<"space1-up">>,
-                    revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
-                }
+                value = #space_info{name = <<"space1-up">>}
             },
-            subscription_conflicts:update_model(space_info, UpdateDoc),
+            subscription_conflicts:update_model(space_info, UpdateDoc,
+                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
             {_, UpdateFun} = last_create_or_update(space_info),
             CurrentRecord = #space_info{
-                name =  <<"space1">>,
+                name = <<"space1">>,
                 revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]
             },
 
@@ -92,7 +94,7 @@ accepts_unseen_revs_test_() ->
 
             %then
             ?assertMatch({ok, #space_info{
-                name =  <<"space1-up">>,
+                name = <<"space1-up">>,
                 revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
             }}, Result)
         end]}.
@@ -105,15 +107,13 @@ includes_all_unseen_revs_on_accept_test_() ->
             % given
             UpdateDoc = #document{
                 rev = <<"rev_not_connected_with_update">>,
-                value = #space_info{
-                    name =  <<"space1-up">>,
-                    revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
-                }
+                value = #space_info{name = <<"space1-up">>}
             },
-            subscription_conflicts:update_model(space_info, UpdateDoc),
+            subscription_conflicts:update_model(space_info, UpdateDoc,
+                [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]),
             {_, UpdateFun} = last_create_or_update(space_info),
             CurrentRecord = #space_info{
-                name =  <<"space1">>,
+                name = <<"space1">>,
                 revision_history = [<<"r3">>]
             },
 
@@ -122,7 +122,7 @@ includes_all_unseen_revs_on_accept_test_() ->
 
             %then
             ?assertMatch({ok, #space_info{
-                name =  <<"space1-up">>,
+                name = <<"space1-up">>,
                 revision_history = [<<"r4">>, <<"r2">>, <<"r1">>, <<"r3">>]
             }}, Result)
         end]}.
@@ -135,15 +135,13 @@ ignores_seen_revs_test_() ->
             % given
             UpdateDoc = #document{
                 rev = <<"rev_not_connected_with_update">>,
-                value = #space_info{
-                    name =  <<"space1-up">>,
-                    revision_history = [<<"r2">>, <<"r1">>]
-                }
+                value = #space_info{name = <<"space1-up">>}
             },
-            subscription_conflicts:update_model(space_info, UpdateDoc),
+            subscription_conflicts:update_model(space_info, UpdateDoc,
+                [<<"r2">>, <<"r1">>]),
             {_, UpdateFun} = last_create_or_update(space_info),
             CurrentRecord = #space_info{
-                name =  <<"space1">>,
+                name = <<"space1">>,
                 revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]
             },
 
@@ -152,7 +150,7 @@ ignores_seen_revs_test_() ->
 
             %then
             ?assertMatch({ok, #space_info{
-                name =  <<"space1">>,
+                name = <<"space1">>,
                 revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]
             }}, Result)
         end]}.
@@ -165,15 +163,13 @@ includes_all_unseen_revs_on_ignore_test_() ->
             % given
             UpdateDoc = #document{
                 rev = <<"rev_not_connected_with_update">>,
-                value = #space_info{
-                    name =  <<"space1-up">>,
-                    revision_history = [<<"r6">>, <<"r5">>, <<"r1">>]
-                }
+                value = #space_info{name = <<"space1-up">>}
             },
-            subscription_conflicts:update_model(space_info, UpdateDoc),
+            subscription_conflicts:update_model(space_info, UpdateDoc,
+                [<<"r6">>, <<"r5">>, <<"r1">>]),
             {_, UpdateFun} = last_create_or_update(space_info),
             CurrentRecord = #space_info{
-                name =  <<"space1">>,
+                name = <<"space1">>,
                 revision_history = [<<"r6">>, <<"r4">>, <<"r3">>]
             },
 
@@ -182,7 +178,7 @@ includes_all_unseen_revs_on_ignore_test_() ->
 
             %then
             ?assertMatch({ok, #space_info{
-                name =  <<"space1">>,
+                name = <<"space1">>,
                 revision_history = [<<"r6">>, <<"r4">>, <<"r3">>, <<"r5">>, <<"r1">>]
             }}, Result)
         end]}.

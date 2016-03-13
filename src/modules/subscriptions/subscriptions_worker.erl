@@ -77,9 +77,8 @@ handle(Req) ->
 cleanup() ->
     ok.
 
-handle_update({Doc, Model, Revs, Seq}) ->
-    ?info("UPDATE ~p", [{Doc, Model, Revs, Seq}]),
-    subscription_conflicts:update_model(Model, Doc).
+handle_update({Doc, Model, Revs, _Seq}) ->
+    subscription_conflicts:update_model(Model, Doc, Revs).
 
 refresh_subscription() ->
     {Missing, ResumeAt} = subscription_monitor:get_missing(),

@@ -19,7 +19,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update_model/2]).
+-export([update_model/3]).
+
+-define(HISTORY_MAX_LENGTH, 44).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -28,12 +30,15 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec update_model(Model :: atom(), Update :: datastore:document())
-        -> no_return().
-update_model(Model, UpdateInput) ->
-    UpdateRevs = get_revisions(Model, UpdateInput#document.value),
-    Update = UpdateInput#document{rev = hd(UpdateRevs)},
-    Key = Update#document.key,
+-spec update_model(Model :: atom(), Update :: datastore:document(),
+    UpdateRevs :: [term()]) -> no_return().
+
+update_model(Model, UpdateDoc, UpdateRevs) ->
+    Key = UpdateDoc#document.key,
+    Update = UpdateDoc#document{
+        rev = hd(UpdateRevs),
+        value = set_revisions(Model, UpdateDoc#document.value, UpdateRevs)
+    },
 
     {ok, Key} = Model:create_or_update(Update, fun(Record) ->
         RevisionHistory = get_revisions(Model, Record),
@@ -58,6 +63,7 @@ update_model(Model, UpdateInput) ->
 %% Checks if an update should be applied by verification if revisions
 %% connected with that update comply with current revisions history.
 %% Returns new revision history including previously unseen revisions.
+%% History is trimmed to prevent unchecked growth.
 %% @end
 %%--------------------------------------------------------------------
 
@@ -67,12 +73,14 @@ update_model(Model, UpdateInput) ->
 should_update(HistoryRevs, UpdateRevs) ->
     UpdateCurrent = hd(UpdateRevs),
     NewRevs = UpdateRevs -- HistoryRevs,
-    case lists:member(UpdateCurrent, HistoryRevs) of
+    {Result, Revs} = case lists:member(UpdateCurrent, HistoryRevs) of
         true ->
             {false, HistoryRevs ++ NewRevs};
         false ->
             {true, NewRevs ++ HistoryRevs}
-    end.
+    end,
+    {Result, lists:sublist(Revs, ?HISTORY_MAX_LENGTH)}.
+
 -spec get_revisions(Model :: atom(), Record) -> Record2 when
     Record :: #space_info{} | #onedata_user{} | #onedata_group{},
     Record2 :: #space_info{} | #onedata_user{} | #onedata_group{}.
@@ -85,6 +93,9 @@ get_revisions(onedata_group, Record) ->
 get_revisions(_Model, _Record) ->
     erlang:error(not_implemented).
 
+-spec set_revisions(Model :: atom(), Record, Revs :: [term()]) -> Record2 when
+    Record :: #space_info{} | #onedata_user{} | #onedata_group{},
+    Record2 :: #space_info{} | #onedata_user{} | #onedata_group{}.
 set_revisions(space_info, Record, Revisions) ->
     Record#space_info{revision_history = Revisions};
 set_revisions(onedata_user, Record, Revisions) ->

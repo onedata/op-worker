@@ -21,8 +21,11 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([registers_for_updates/1, accounts_incoming_updates/1]).
+-export([registers_for_updates/1, accounts_incoming_updates/1,
+    saves_the_actual_data/1, updates_with_the_actual_data/1,
+    resolves_conflicts/1]).
 
+-define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
 -define(MESSAGES_RECEIVE_ATTEMPTS, 30).
 
@@ -34,7 +37,10 @@
 
 all() -> ?ALL([
     registers_for_updates,
-    accounts_incoming_updates
+    accounts_incoming_updates,
+    saves_the_actual_data,
+    updates_with_the_actual_data,
+    resolves_conflicts
 ]).
 
 
@@ -91,6 +97,121 @@ accounts_incoming_updates(Config) ->
     expect_message([], 15, [13, 14]),
     ok.
 
+
+saves_the_actual_data(Config) ->
+    %% given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {S1, U1, G1} = {?ID(s1), ?ID(u1), ?ID(g1)},
+
+    %% when
+    push_update(Node, [
+        update(1, [<<"r1">>, <<"r2">>], S1, space(<<"space xp">>, S1)),
+        update(2, [<<"r1">>, <<"r2">>], G1, group(<<"group lol">>)),
+        update(3, [<<"r1">>, <<"r2">>], U1,
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+        )
+    ]),
+    expect_message([], 3, []),
+
+    %% then
+    ?assertMatch({ok, #document{key = S1, value = #space_info{
+        id = S1,
+        name = <<"space xp">>,
+        revision_history = [<<"r1">>, <<"r2">>]}}
+    }, fetch(Node, space_info, S1)),
+    ?assertMatch({ok, #document{key = G1, value = #onedata_group{
+        name = <<"group lol">>,
+        revision_history = [<<"r1">>, <<"r2">>]}}
+    }, fetch(Node, onedata_group, G1)),
+    ?assertMatch({ok, #document{key = U1, value = #onedata_user{
+        name = <<"onedata ftw">>,
+        group_ids = [<<"A">>, <<"B">>], space_ids = [<<"C">>, <<"D">>],
+        revision_history = [<<"r1">>, <<"r2">>]}}
+    }, fetch(Node, onedata_user, U1)),
+    ok.
+
+updates_with_the_actual_data(Config) ->
+    %% given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {S1, U1, G1} = {?ID(s1), ?ID(u1), ?ID(g1)},
+    push_update(Node, [
+        update(1, [<<"r1">>, <<"r2">>], S1, space(<<"space">>, S1)),
+        update(2, [<<"r1">>, <<"r2">>], G1, group(<<"group">>)),
+        update(3, [<<"r1">>, <<"r2">>], U1,
+            user(<<"onedata">>, [], [])
+        )
+    ]),
+    expect_message([], 3, []),
+
+    %% when
+    push_update(Node, [
+        update(4, [<<"r3">>, <<"r1">>, <<"r2">>], S1, space(<<"space xp">>, S1)),
+        update(5, [<<"r3">>, <<"r1">>, <<"r2">>], G1, group(<<"group lol">>)),
+        update(6, [<<"r3">>, <<"r1">>, <<"r2">>], U1,
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+        )
+    ]),
+    expect_message([], 6, []),
+
+    %% then
+    ?assertMatch({ok, #document{key = S1, value = #space_info{
+        id = S1,
+        name = <<"space xp">>,
+        revision_history = [<<"r3">>, <<"r1">>, <<"r2">>]}}
+    }, fetch(Node, space_info, S1)),
+    ?assertMatch({ok, #document{key = G1, value = #onedata_group{
+        name = <<"group lol">>,
+        revision_history = [<<"r3">>, <<"r1">>, <<"r2">>]}}
+    }, fetch(Node, onedata_group, G1)),
+    ?assertMatch({ok, #document{key = U1, value = #onedata_user{
+        name = <<"onedata ftw">>,
+        group_ids = [<<"A">>, <<"B">>], space_ids = [<<"C">>, <<"D">>],
+        revision_history = [<<"r3">>, <<"r1">>, <<"r2">>]}}
+    }, fetch(Node, onedata_user, U1)),
+    ok.
+
+%% details of conflict resolutions are covered by eunit tests
+resolves_conflicts(Config) ->
+    %% given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {S1, U1, G1} = {?ID(s1), ?ID(u1), ?ID(g1)},
+    push_update(Node, [
+        update(1, [<<"r3">>, <<"r1">>, <<"r2">>], S1, space(<<"space xp">>, S1)),
+        update(2, [<<"r3">>, <<"r1">>, <<"r2">>], G1, group(<<"group lol">>)),
+        update(3, [<<"r3">>, <<"r1">>, <<"r2">>], U1,
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+        )
+    ]),
+    expect_message([], 3, []),
+
+    %% when
+    push_update(Node, [
+        update(4, [<<"r1">>, <<"r2">>], S1, space(<<"space">>, S1)),
+        update(5, [<<"r3">>], G1, group(<<"group">>)),
+        update(6, [<<"r3">>, <<"r1">>, <<"r2">>], U1,
+            user(<<"onedata">>, [], [])
+        )
+    ]),
+    expect_message([], 6, []),
+
+    %% then
+    ?assertMatch({ok, #document{key = S1, value = #space_info{
+        id = S1,
+        name = <<"space xp">>,
+        revision_history = [<<"r3">>, <<"r1">>, <<"r2">>]}}
+    }, fetch(Node, space_info, S1)),
+    ?assertMatch({ok, #document{key = G1, value = #onedata_group{
+        name = <<"group lol">>,
+        revision_history = [<<"r3">>, <<"r1">>, <<"r2">>]}}
+    }, fetch(Node, onedata_group, G1)),
+    ?assertMatch({ok, #document{key = U1, value = #onedata_user{
+        name = <<"onedata ftw">>,
+        group_ids = [<<"A">>, <<"B">>], space_ids = [<<"C">>, <<"D">>],
+        revision_history = [<<"r3">>, <<"r1">>, <<"r2">>]}}
+    }, fetch(Node, onedata_user, U1)),
+    ok.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -115,8 +236,14 @@ init_per_testcase(_, Config) ->
         {ok, Self}
     end),
 
+    reset_state(Nodes),
     flush(),
+
     Config.
+
+reset_state(Nodes) ->
+    rpc:call(hd(Nodes), subscriptions_state, delete, [?SUBSCRIPTIONS_STATE_KEY]),
+    rpc:call(hd(Nodes), subscription_monitor, ensure_initialised, []).
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
@@ -136,8 +263,19 @@ push_update(Node, Updates) ->
 space(Name, ID) ->
     {space, [{id, ID}, {name, Name}]}.
 
+group(Name) ->
+    {onedata_group, [{name, Name}]}.
+
+user(Name, GIDs, SIDs) ->
+    {onedata_user, [{name, Name}, {group_ids, GIDs}, {space_ids, SIDs}]}.
+
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].
+
+
+fetch(Node, Model, ID) ->
+    rpc:call(Node, Model, get, [ID]).
+
 
 call_worker(Node, Req) ->
     rpc:call(Node, worker_proxy, call, [subscriptions_worker, Req]).
