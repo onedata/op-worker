@@ -9,9 +9,15 @@
   }
 
   // TODO: this is a common style, separate color from it please
-  .single-selectable {
+  .secondary-sidebar-item.single-selectable {
+    border-left: 4px solid;
+    border-left-color: transparent;
+
+    &:hover {
+      background-color: $onedata-light-azure;
+    }
+
     &.active {
-      border-left: 4px solid;
       background-color: $onedata-light-azure;
 
       &.onedata-red {
@@ -22,23 +28,26 @@
 
   .level-1 {
     .secondary-sidebar-item {
-      // TODO use variable from common
-      padding-left: 27px !important;
+      padding-left: $secondary-sidebar-item-padding !important;
     }
   }
 
   .level-2 {
     .secondary-sidebar-item {
-      // TODO use variable from common
-      padding-left: 57px !important;
+      padding-left: ($secondary-sidebar-item-padding + 22px) !important;
     }
   }
 
-  .level-3 {
-    .secondary-sidebar-item {
-      // TODO use variable from common
-      padding-left: 77px !important;
-    }
+  .level-3 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 44px) !important;
+  }
+
+  .level-4 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 66px) !important;
+  }
+
+  .level-5 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 88px) !important;
   }
 
 }
