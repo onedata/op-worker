@@ -39,116 +39,38 @@ init() ->
 
 
 %% Called when ember asks for a file (or a dir, which is treated as a file)
-find(<<"file">>, [<<"space1rootDir">>]) ->
+find(<<"file">>, [FileId]) ->
+    SessionId = g_session:get_session_id(),
+    SpacesDirUUID = get_spaces_dir_uuid(),
+    ParentUUID = case get_parent(FileId) of
+        SpacesDirUUID ->
+            null;
+        Other ->
+            Other
+    end,
+    {ok, #file_attr{name = Name, type = TypeAttr}} =
+        logical_file_manager:stat(SessionId, {uuid, FileId}),
+    Type = case TypeAttr of
+        ?DIRECTORY_TYPE -> <<"dir">>;
+        _ -> <<"file">>
+    end,
+    Children = case Type of
+        <<"file">> ->
+            [];
+        <<"dir">> ->
+            {ok, Chldrn} = logical_file_manager:ls(
+                SessionId, {uuid, FileId}, 0, 1000),
+            Chldrn
+    end,
+    ChildrenIds = [ChId || {ChId, _} <- Children],
     Res = [
-        {<<"id">>, <<"space1rootDir">>},
-        {<<"name">>, <<"Space 1">>},
-        {<<"type">>, <<"dir">>},
-        {<<"parent">>, null},
-        {<<"children">>, [
-          <<"s1d1">>,
-          <<"s1f1">>,
-          <<"s1f2">>
-        ]}
+        {<<"id">>, FileId},
+        {<<"name">>, Name},
+        {<<"type">>, Type},
+        {<<"parent">>, ParentUUID},
+        {<<"children">>, ChildrenIds}
     ],
-    {ok, Res};
-
-find(<<"file">>, [<<"space2rootDir">>]) ->
-    Res = [
-        {<<"id">>, <<"space2rootDir">>},
-        {<<"name">>, <<"Space 2">>},
-        {<<"type">>, <<"dir">>},
-        {<<"parent">>, null},
-        {<<"children">>, [
-          <<"s2d1">>,
-          <<"s2d2">>,
-          <<"s1f1">>
-        ]}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s1d1">>]) ->
-    Res = [
-        {<<"id">>, <<"s1d1">>},
-        {<<"name">>, <<"Katalog">>},
-        {<<"type">>, <<"dir">>},
-        {<<"parent">>, <<"space1rootDir">>},
-        {<<"children">>, [
-          <<"s1d1d1">>
-        ]}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s1d1d1">>]) ->
-    Res = [
-        {<<"id">>, <<"s1d1d1">>},
-        {<<"name">>, <<"Podrzedny">>},
-        {<<"type">>, <<"dir">>},
-        {<<"parent">>, <<"s1d1">>},
-        {<<"children">>, [
-          <<"s1d1d1f1">>
-        ]}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s1d1d1f1">>]) ->
-    Res = [
-        {<<"id">>, <<"s1d1d1f1">>},
-        {<<"name">>, <<"Gleboki Plik">>},
-        {<<"type">>, <<"file">>},
-        {<<"parent">>, <<"s1d1d1">>},
-        {<<"children">>, []}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s1f1">>]) ->
-    Res = [
-        {<<"id">>, <<"s1f1">>},
-        {<<"name">>, <<"Plik">>},
-        {<<"type">>, <<"file">>},
-        {<<"parent">>, <<"space1rootDir">>},
-        {<<"children">>, []}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s1f2">>]) ->
-    Res = [
-        {<<"id">>, <<"s1f2">>},
-        {<<"name">>, <<"File">>},
-        {<<"type">>, <<"file">>},
-        {<<"parent">>, <<"space1rootDir">>},
-        {<<"children">>, []}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s2d1">>]) ->
-    Res = [
-        {<<"id">>, <<"s2d1">>},
-        {<<"name">>, <<"Pusty I">>},
-        {<<"type">>, <<"dir">>},
-        {<<"parent">>, <<"space2rootDir">>},
-        {<<"children">>, []}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s2d2">>]) ->
-    Res = [
-        {<<"id">>, <<"s2d2">>},
-        {<<"name">>, <<"Pusty II">>},
-        {<<"type">>, <<"dir">>},
-        {<<"parent">>, <<"space2rootDir">>},
-        {<<"children">>, []}
-    ],
-    {ok, Res};
-
-find(<<"file">>, [<<"s2f1">>]) ->
-    Res = [
-        {<<"id">>, <<"s2d2">>},
-        {<<"name">>, <<"Drugi Plik">>},
-        {<<"type">>, <<"file">>},
-        {<<"parent">>, <<"space2rootDir">>},
-        {<<"children">>, []}
-    ],
+    ?log_debug({find, Res}),
     {ok, Res}.
 
 %% Called when ember asks for all files - not implemented, because we don't
@@ -172,3 +94,28 @@ update_record(<<"file">>, _Id, _Data) ->
 %% Called when ember asks to delete a record
 delete_record(<<"file">>, _Id) ->
     {error, not_iplemented}.
+
+
+
+% ------------------------------------------------------------
+% Internal
+% ------------------------------------------------------------
+
+get_parent(UUID) ->
+    ?dump({get_parent, UUID}),
+    SessionId = g_session:get_session_id(),
+    {ok, ParentUUID} = logical_file_manager:get_parent(
+        SessionId, {uuid, UUID}),
+    case logical_file_manager:get_file_path(SessionId, ParentUUID) of
+        {ok, <<"/spaces">>} ->
+            get_spaces_dir_uuid();
+        _ ->
+            ParentUUID
+    end.
+
+
+get_spaces_dir_uuid() ->
+    SessionId = g_session:get_session_id(),
+    {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
+        SessionId, {path, <<"/spaces">>}),
+    SpacesDirUUID.

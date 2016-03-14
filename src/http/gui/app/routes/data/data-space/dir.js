@@ -19,7 +19,7 @@ export default Ember.Route.extend({
 
     let loadedDirSpaceId = this.get('fileSystemTree').getSpaceIdForFile(file);
     if (loadedDirSpaceId !== this.modelFor('data.data-space').get('id')) {
-      console.error('Space of lodaded dir (file) is not a space loaded in data-space route');
+      console.error('Space of loaded dir (file) is not a space loaded in data-space route');
       transition.abort();
     }
 
@@ -33,7 +33,7 @@ export default Ember.Route.extend({
   },
 
   /**
-    This is a directory browers. It can show only one directory contents at a time.
+    This is a directory browser. It can show only one directory contents at a time.
     Render it in "data" template, because it's a master view of a data browser.
   */
   renderTemplate() {
