@@ -41,7 +41,6 @@ init() ->
     {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
     #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
     {ok, DefaultSpace} = oz_users:get_default_space({user, {Mac, DMacs}}),
-    ?dump(<<"/spaces/", DefaultSpace/binary>>),
     {ok, #file_attr{uuid = DefaultSpaceId}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces/", DefaultSpace/binary>>}),
     g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceId),
@@ -49,6 +48,7 @@ init() ->
 
 %% Called when ember asks for a particular dataSpace
 find(<<"data-space">>, [SpaceId]) ->
+    ?log_debug({find, SpaceId}),
     SessionId = g_session:get_session_id(),
     {ok, #file_attr{name = SpaceName}} = logical_file_manager:stat(
         SessionId, {uuid, SpaceId}),
