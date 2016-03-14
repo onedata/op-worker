@@ -24,11 +24,11 @@ export default Ember.Route.extend({
     }
 
     Ember.run.scheduleOnce('afterRender', this, function() {
-      // TODO: maybe make a service...
-      // TODO: html item id in separate function
-      let elementId = `#tree-dir-${file.id}`;
-      $('.dir-item.active').removeClass('active');
-      $(elementId).addClass('active');
+      this.get('fileSystemTree').expandDir(file).then(() => {
+        let elementId = `#tree-dir-${file.id}`;
+        $('.dir-item.active').removeClass('active');
+        $(elementId).addClass('active');
+      });
     });
   },
 

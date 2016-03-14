@@ -14,7 +14,8 @@ export default Ember.Component.extend({
       // TODO: get space id will be removed - only for space resolve demonstration
       return {
         file: file,
-        label: `id: "${file.get('id')}" "${file.get('name')}" (${file.get('type')}) <- space "${fileSystemTree.getSpaceIdForFile(file)}"`
+        label: `id: "${file.get('id')}" "${file.get('name')}" (${file.get('type')}) <- space "${fileSystemTree.getSpaceIdForFile(file)}", `,
+        path: fileSystemTree.dirsPath(file).map((i) => `${i.get('name')}`).join('/')
       };
     });
   }.property('dir.children.@each.name', 'dir.children.@each.type'),
