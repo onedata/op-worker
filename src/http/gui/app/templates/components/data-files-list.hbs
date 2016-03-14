@@ -3,7 +3,16 @@ Data files list for
 <ul>
   {{#each filesInfo as |fileInfo|}}
     <li {{action "openFile" fileInfo.file}}>
-      <strong>{{fileInfo.label}}</strong> ({{fileInfo.path}})
+      <span>
+        {{#if fileInfo.file.isDir}}
+          {{icon 'folder'}}
+        {{else}}
+          {{icon 'file'}}
+        {{/if}}
+      </span>
+      <strong class="file-entry" id="file-{{fileInfo.file.id}}" {{action 'selectFile' fileInfo.file}}>
+        {{fileInfo.file.name}}
+      </strong>
     </li>
   {{/each}}
 </ul>

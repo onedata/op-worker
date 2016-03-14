@@ -9,6 +9,14 @@ export default Ember.Component.extend({
   // TODO: doc
   dir: null,
 
+  selectedFile: null,
+
+  selectedFileChanged: function() {
+    let selectedFile = this.get('selectedFile');
+    this.$().find('.file-entry.selected-file').removeClass('selected-file');
+    this.$().find('#file-' + selectedFile.get('id')).addClass('selected-file');
+  }.observes('selectedFile'),
+
   filesInfo: function() {
     return this.get('dir.children').map((file) => {
       let fileSystemTree = this.get('fileSystemTree');
@@ -30,7 +38,6 @@ export default Ember.Component.extend({
       }
     },
 
-
     createFile(type) {
       let fileName = this.get('createFileName');
       let record = this.get('store').createRecord('file', {
@@ -41,6 +48,10 @@ export default Ember.Component.extend({
       record.save().then(() => {}, (failMessage) => {
         this.get('errorNotifier').handle(failMessage);
       });
+    },
+
+    selectFile(file) {
+      this.set('selectedFile', file);
     }
   },
 

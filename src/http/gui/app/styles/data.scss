@@ -51,3 +51,15 @@
   }
 
 }
+
+// TODO
+
+.file-entry {
+  &:hover {
+    background-color: $onedata-azure;
+  }
+
+  &.selected-file {
+    background-color: $onedata-red;
+  }
+}
