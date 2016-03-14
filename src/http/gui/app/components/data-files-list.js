@@ -4,6 +4,7 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   store: Ember.inject.service('store'),
   fileSystemTree: Ember.inject.service('file-system-tree'),
+  errorNotifier: Ember.inject.service('error-notifier'),
 
   // TODO: doc
   dir: null,
@@ -37,7 +38,9 @@ export default Ember.Component.extend({
         parent: this.get('dir'),
         type: type
       });
-      record.save();
+      record.save().then(() => {}, (failMessage) => {
+        this.get('errorNotifier').handle(failMessage);
+      });
     }
   },
 
