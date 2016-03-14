@@ -101,9 +101,8 @@ space_record(SpaceId, SpaceDirId, SpaceName) ->
 
 
 space_dir_to_space_id(SpaceDirId) ->
-    <<"space#", SpaceDirId/binary>>.
+    SpaceDirId.
 
 
 space_id_to_space_dir(SpaceId) ->
-    <<"space#", SpaceDirId/binary>> = SpaceId,
-    SpaceDirId.
+    SpaceId.

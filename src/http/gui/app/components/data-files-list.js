@@ -2,6 +2,7 @@ import Ember from 'ember';
 
 // TODO: jsdoc
 export default Ember.Component.extend({
+  store: Ember.inject.service('store'),
   fileSystemTree: Ember.inject.service('file-system-tree'),
 
   // TODO: doc
@@ -25,6 +26,18 @@ export default Ember.Component.extend({
       } else {
         console.error(`Clicked file is no a dir, so nothing will happen: ${dirFile.get('id')}`);
       }
+    },
+
+
+    createFile(type) {
+      let fileName = this.get('createFileName');
+      let record = this.get('store').createRecord('file', {
+        name: fileName,
+        parent: this.get('dir'),
+        type: type
+      });
+      record.save();
     }
-  }
+  },
+
 });
