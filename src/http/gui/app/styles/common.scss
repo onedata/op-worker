@@ -4,6 +4,7 @@ $top-bar-height: 72px !default;
 $global-min-width: 1000px !default;
 // $secondary-sidebar-width: 352px;
 $secondary-sidebar-width: 352px !default;
+$secondary-sidebar-item-padding: $secondary-sidebar-width * 0.077 !default;
 
 $content-padding: 12px !default;
 
@@ -208,8 +209,6 @@ html, body {
         li {
           list-style-type: none;
 
-          $secondary-sidebar-item-padding: $secondary-sidebar-width * 0.077;
-
           // "active" item of list item
           .secondary-sidebar-item {
             display: table;
@@ -243,16 +242,8 @@ html, body {
           }
 
           ul.submenu {
-            &.level-1 .secondary-sidebar-item {
+            .secondary-sidebar-item {
               padding-left: $secondary-sidebar-item-padding * 3.64;
-            }
-
-            &.level-2 .secondary-sidebar-item {
-              padding-left: $secondary-sidebar-item-padding * 3.64 * 2;
-            }
-
-            &.level-3 .secondary-sidebar-item {
-              padding-left: $secondary-sidebar-item-padding * 3.64 * 3;
             }
 
             // when is a child of non-active parent, it is invisible
@@ -271,8 +262,13 @@ html, body {
             }
           }
 
+          &.first-level {
+            border-left: 4px solid;
+            border-left-color: transparent;
+          }
+
           &.active.first-level {
-            border-left: 4px solid $onedata-azure;
+            border-left-color: $onedata-azure;
 
             .secondary-sidebar-item.first-level {
               background-color: $onedata-light-azure;
