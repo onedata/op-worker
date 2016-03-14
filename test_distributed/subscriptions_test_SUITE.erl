@@ -23,7 +23,8 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 -export([registers_for_updates/1, accounts_incoming_updates/1,
     saves_the_actual_data/1, updates_with_the_actual_data/1,
-    resolves_conflicts/1, registers_for_updates_with_users/1]).
+    resolves_conflicts/1, registers_for_updates_with_users/1,
+    applies_deletion/1]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
@@ -40,6 +41,7 @@ all() -> ?ALL([
     accounts_incoming_updates,
     saves_the_actual_data,
     updates_with_the_actual_data,
+    applies_deletion,
     resolves_conflicts,
     registers_for_updates_with_users
 ]).
@@ -190,6 +192,34 @@ updates_with_the_actual_data(Config) ->
         group_ids = [<<"A">>, <<"B">>], space_ids = [<<"C">>, <<"D">>],
         revision_history = [<<"r3">>, <<"r1">>, <<"r2">>]}}
     }, fetch(Node, onedata_user, U1)),
+    ok.
+
+applies_deletion(Config) ->
+    %% given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {S1, U1, G1} = {?ID(s1), ?ID(u1), ?ID(g1)},
+    push_update(Node, [
+        update(1, [<<"r1">>, <<"r2">>], S1, space(<<"space">>, S1)),
+        update(2, [<<"r1">>, <<"r2">>], G1, group(<<"group">>)),
+        update(3, [<<"r1">>, <<"r2">>], U1, user(<<"onedata">>, [], []))
+    ]),
+    expect_message([], 3, []),
+
+    %% when
+    push_update(Node, [
+        update(4, undefined, S1, {<<"space">>, <<"delete">>}),
+        update(5, undefined, G1, {<<"group">>, <<"delete">>}),
+        update(6, undefined, U1, {<<"user">>, <<"delete">>})
+    ]),
+    expect_message([], 6, []),
+
+    %% then
+    ?assertMatch({error, {not_found, space_info}},
+        fetch(Node, space_info, S1)),
+    ?assertMatch({error, {not_found, onedata_group}},
+        fetch(Node, onedata_group, G1)),
+    ?assertMatch({error, {not_found, onedata_user}},
+        fetch(Node, onedata_user, U1)),
     ok.
 
 %% details of conflict resolutions are covered by eunit tests

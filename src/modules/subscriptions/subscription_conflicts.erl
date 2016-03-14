@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update_model/3]).
+-export([update_model/3, delete_model/2]).
 
 -define(HISTORY_MAX_LENGTH, 44).
 
@@ -53,6 +53,17 @@ update_model(Model, UpdateDoc, UpdateRevs) ->
         {ok, UpdatedRecord}
     end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% As model isn't deleted then recreated in OZ (there is no such case)
+%% the model is deleted without revision checks.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_model(Model :: subscriptions:model(), ID :: datastore:ext_key())
+        -> no_return().
+
+delete_model(Model, ID) ->
+    Model:delete(ID).
 
 %%%===================================================================
 %%% Internal functions

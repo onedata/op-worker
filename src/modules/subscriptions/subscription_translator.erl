@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/subscriptions/subscriptions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -24,17 +25,7 @@
 %% Translates json update batch from OZ to tuples with update data.
 %% @end
 %%--------------------------------------------------------------------
-
--spec json_to_updates(RawJson :: binary) ->
-    [{
-        Update :: datastore:document(),
-        Model :: subscriptions:model(),
-        Revisions :: [subscriptions:rev()],
-        SequenceNumber :: subscriptions:seq()
-    } | {
-        ignore,
-        IgnoredSequenceNumber :: subscriptions:seq()
-    }].
+-spec json_to_updates(RawJson :: binary) -> [#sub_update{}].
 
 json_to_updates(Raw) ->
     Json = json_utils:decode(Raw),
@@ -51,13 +42,17 @@ json_to_updates(Raw) ->
         Data = hd(Update3),
         case Data of
             {<<"ignore">>, true} ->
-                {ignore, Seq};
+                #sub_update{ignore = true, seq = Seq};
+            {ModelRaw, <<"delete">>} ->
+                #sub_update{delete = true, seq = Seq, id = ID,
+                    model = type_to_model(ModelRaw)};
             {ModelRaw, Props} ->
                 Model = type_to_model(ModelRaw),
                 Value = props_to_value(Model, Props),
-                Rev = hd(Revs),
-                Doc = #document{key = ID, value = Value, rev = Rev},
-                {Doc, Model, Revs, Seq}
+                #sub_update{
+                    seq = Seq, id = ID, revs = Revs, model = Model,
+                    doc = #document{key = ID, value = Value, rev = hd(Revs)}
+                }
         end
     end, Json).
 

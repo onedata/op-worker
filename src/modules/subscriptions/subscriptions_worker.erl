@@ -19,6 +19,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include("modules/subscriptions/subscriptions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/oz/oz_runner.hrl").
@@ -50,9 +51,7 @@ init([]) ->
 -spec handle(Request) -> Result when
     Request :: healthcheck | start_provider_connection |refresh_subscription |
     {process_updates, Updates} | {'EXIT', pid(), ExitReason :: term()},
-    Updates :: [{datastore:document(), subscriptions:model(),
-        UpdateRevs :: [subscriptions:rev()], subscriptions:seq()} |
-    {ignore, subscriptions:seq()}],
+    Updates :: [#sub_update{}],
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -87,15 +86,8 @@ handle(refresh_subscription) ->
     end;
 
 handle({process_updates, Updates}) ->
-    utils:pforeach(fun
-        ({ignore, _}) -> ok;
-        (Update) -> handle_update(Update)
-    end, Updates),
-
-    Seqs = lists:map(fun
-        ({ignore, Seq}) -> Seq;
-        ({_, _, _, Seq}) -> Seq
-    end, Updates),
+    utils:pforeach(fun(Update) -> handle_update(Update) end, Updates),
+    Seqs = lists:map(fun(#sub_update{seq = Seq}) -> Seq end, Updates),
     subscriptions:account_updates(ordsets:from_list(Seqs)),
     ok;
 
@@ -130,9 +122,11 @@ cleanup() ->
 %% Process update.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_update({Doc :: datastore:document(), Model :: subscriptions:model(),
-    Revs :: [subscriptions:rev()], Seq :: subscriptions:seq()}) -> no_return().
-handle_update({Doc, Model, Revs, _Seq}) ->
+-spec handle_update(#sub_update{}) -> no_return().
+handle_update(#sub_update{ignore = true}) -> ok;
+handle_update(#sub_update{delete = true, id = ID, model = Model}) ->
+    subscription_conflicts:delete_model(Model, ID);
+handle_update(#sub_update{model = Model, doc = Doc, revs = Revs}) ->
     subscription_conflicts:update_model(Model, Doc, Revs).
 
 %%--------------------------------------------------------------------

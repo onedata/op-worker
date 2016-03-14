@@ -15,4 +15,15 @@
 -define(SUBSCRIPTIONS_WORKER_NAME, subscriptions_worker).
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 
+-record(sub_update, {
+    delete = false :: boolean(),
+    ignore = false :: boolean(),
+
+    seq :: subscriptions:seq(),
+    doc :: datastore:document(),
+    id :: datastore:ext_key(),
+    model :: subscriptions:model(),
+    revs :: [subscriptions:rev()]
+}).
+
 -endif.
