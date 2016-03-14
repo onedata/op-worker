@@ -1,6 +1,15 @@
 import Ember from 'ember';
 
 export default Ember.Component.extend({
+  nextLevel: function() {
+    return this.get('level') + 1;
+  }.property('level'),
+
+  levelClass: function() {
+    let level = this.get('level');
+    return level ? `level-${level}` : '';
+  }.property('level'),
+
   actions: {
     toggleDir(dirFile) {
       dirFile.set('isExpanded', !dirFile.get('isExpanded'));
