@@ -51,7 +51,8 @@ init([]) ->
     Request :: healthcheck | start_provider_connection |refresh_subscription |
     {process_updates, Updates} | {'EXIT', pid(), ExitReason :: term()},
     Updates :: [{datastore:document(), subscriptions:model(),
-        UpdateRevs :: [subscriptions:rev()], subscriptions:seq()}],
+        UpdateRevs :: [subscriptions:rev()], subscriptions:seq()} |
+    {ignore, subscriptions:seq()}],
     Result :: nagios_handler:healthcheck_response() | ok | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -74,7 +75,7 @@ handle(start_provider_connection) ->
         end
     catch
         E:R ->
-            ?error_stacktrace("Connection not started: ~p:~p", [E, R]),
+            ?error("Connection not started: ~p:~p", [E, R]),
             schedule_connection_start()
     end;
 
@@ -86,8 +87,15 @@ handle(refresh_subscription) ->
     end;
 
 handle({process_updates, Updates}) ->
-    utils:pforeach(fun(Update) -> handle_update(Update) end, Updates),
-    Seqs = lists:map(fun({_, _, _, Seq}) -> Seq end, Updates),
+    utils:pforeach(fun
+        ({ignore, _}) -> ok;
+        (Update) -> handle_update(Update)
+    end, Updates),
+
+    Seqs = lists:map(fun
+        ({ignore, Seq}) -> Seq;
+        ({_, _, _, Seq}) -> Seq
+    end, Updates),
     subscriptions:account_updates(ordsets:from_list(Seqs)),
     ok;
 
@@ -134,8 +142,13 @@ handle_update({Doc, Model, Revs, _Seq}) ->
 %%--------------------------------------------------------------------
 refresh_subscription() ->
     {Missing, ResumeAt} = subscriptions:get_missing(),
+    Users = subscriptions:get_users(),
+    ?info("Subscription progress - last_seq: ~p, missing: ~p, users: ~p ", [
+        ResumeAt, Missing, Users
+    ]),
+
     Message = json_utils:encode([
-        {users, subscriptions:get_users()},
+        {users, Users},
         {resume_at, ResumeAt},
         {missing, Missing}
     ]),

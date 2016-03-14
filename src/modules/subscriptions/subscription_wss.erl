@@ -39,7 +39,10 @@ healthcheck() ->
 %%--------------------------------------------------------------------
 -spec push(Message :: binary()) -> no_return().
 push(Message) ->
-    whereis(subscription_wss) ! {push, Message}.
+    case whereis(subscription_wss) of
+        undefined -> ?warning("No connection - dropping ~p", [Message]);
+        _ -> whereis(subscription_wss) ! {push, Message}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

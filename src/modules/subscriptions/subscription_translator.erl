@@ -25,12 +25,16 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec json_to_updates(RawJson :: binary) -> [{
-    Update :: datastore:document(),
-    Model :: subscriptions:model(),
-    Revisions :: [subscriptions:rev()],
-    SequenceNumber :: subscriptions:seq()
-}].
+-spec json_to_updates(RawJson :: binary) ->
+    [{
+        Update :: datastore:document(),
+        Model :: subscriptions:model(),
+        Revisions :: [subscriptions:rev()],
+        SequenceNumber :: subscriptions:seq()
+    } | {
+        ignore,
+        IgnoredSequenceNumber :: subscriptions:seq()
+    }].
 
 json_to_updates(Raw) ->
     Json = json_utils:decode(Raw),
@@ -44,16 +48,17 @@ json_to_updates(Raw) ->
         Revs = proplists:get_value(<<"revs">>, Update2),
         Update3 = proplists:delete(<<"revs">>, Update2),
 
-        [Data] = Update3,
-        ModelRaw = element(1, Data),
-        Props = element(2, Data),
-
-        Model = type_to_model(ModelRaw),
-        Value = props_to_value(Model, Props),
-        Rev = hd(Revs),
-        Doc = #document{key = ID, value = Value, rev = Rev},
-
-        {Doc, Model, Revs, Seq}
+        Data = hd(Update3),
+        case Data of
+            {<<"ignore">>, true} ->
+                {ignore, Seq};
+            {ModelRaw, Props} ->
+                Model = type_to_model(ModelRaw),
+                Value = props_to_value(Model, Props),
+                Rev = hd(Revs),
+                Doc = #document{key = ID, value = Value, rev = Rev},
+                {Doc, Model, Revs, Seq}
+        end
     end, Json).
 
 %%%===================================================================
@@ -82,7 +87,9 @@ props_to_value(space_info, Props) ->
     #space_info{
         id = proplists:get_value(<<"id">>, Props),
         name = proplists:get_value(<<"name">>, Props)
-    }.
+    };
+props_to_value(Model, Props) ->
+    ?log_bad_request({Model, Props}).
 
 
 %%--------------------------------------------------------------------
@@ -94,9 +101,9 @@ props_to_value(space_info, Props) ->
 
 type_to_model(<<"space">>) ->
     space_info;
-type_to_model(<<"onedata_group">>) ->
+type_to_model(<<"group">>) ->
     onedata_group;
-type_to_model(<<"onedata_user">>) ->
+type_to_model(<<"user">>) ->
     onedata_user;
 type_to_model(_Type) ->
     ?error("Unexpected update type ~p", [_Type]).

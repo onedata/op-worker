@@ -110,7 +110,13 @@ accounts_incoming_updates(Config) ->
         update(8, [<<"r1">>], S1, space(S1, S1)),
         update(15, [<<"r1">>], S1, space(S1, S1))
     ]),
-    expect_message([], 15, [13, 14]),
+
+    push_update(Node, [
+        update(13, undefined, undefined, {<<"ignore">>, true}),
+        update(14, undefined, undefined, {<<"ignore">>, true}),
+        update(16, undefined, undefined, {<<"ignore">>, true})
+    ]),
+    expect_message([], 16, []),
     ok.
 
 
@@ -280,10 +286,10 @@ space(Name, ID) ->
     {space, [{id, ID}, {name, Name}]}.
 
 group(Name) ->
-    {onedata_group, [{name, Name}]}.
+    {group, [{name, Name}]}.
 
 user(Name, GIDs, SIDs) ->
-    {onedata_user, [{name, Name}, {group_ids, GIDs}, {space_ids, SIDs}]}.
+    {user, [{name, Name}, {group_ids, GIDs}, {space_ids, SIDs}]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].
