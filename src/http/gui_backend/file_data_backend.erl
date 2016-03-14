@@ -84,8 +84,35 @@ find_query(<<"file">>, _Data) ->
     {error, not_iplemented}.
 
 %% Called when ember asks to create a record
-create_record(<<"file">>, _Data) ->
-    {error, not_iplemented}.
+create_record(<<"file">>, Data) ->
+    ?log_debug({create_record, <<"file">>, Data}),
+    SessionId = g_session:get_session_id(),
+    Name = proplists:get_value(<<"name">>, Data),
+    Type = proplists:get_value(<<"type">>, Data),
+    ParentUUID = proplists:get_value(<<"parent">>, Data, null),
+    {ok, ParentPath} = logical_file_manager:get_file_path(
+        SessionId, ParentUUID),
+    Path = filename:join([ParentPath, Name]),
+    ?log_debug(Path),
+    FileId = case Type of
+        <<"file">> ->
+            {ok, FId} = logical_file_manager:create(
+                SessionId, Path, 8#777),
+            FId;
+        <<"dir">> ->
+            {ok, DirId} = logical_file_manager:mkdir(
+                SessionId, Path, 8#777),
+            DirId
+    end,
+    Res = [
+        {<<"id">>, FileId},
+        {<<"name">>, Name},
+        {<<"type">>, Type},
+        {<<"parent">>, ParentUUID},
+        {<<"children">>, []}
+    ],
+    ?log_debug({create_record, Res}),
+    {ok, Res}.
 
 %% Called when ember asks to update a record
 update_record(<<"file">>, _Id, _Data) ->

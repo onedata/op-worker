@@ -82,7 +82,7 @@ page_init() ->
                     CreateInDefSpace(file, <<"nadrzedny/podrzedny III/prezentacja-n-p3.ppt">>),
                     CreateInDefSpace(file, <<"nadrzedny/podrzedny III/artykul-n-p3.pdf">>),
                     ok;
-                Other ->
+                _ ->
                     ok
             end
     end,

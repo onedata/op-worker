@@ -48,12 +48,10 @@ init() ->
 
 %% Called when ember asks for a particular dataSpace
 find(<<"data-space">>, [SpaceId]) ->
-    ?log_debug({find, SpaceId}),
     SessionId = g_session:get_session_id(),
     {ok, #file_attr{name = SpaceName}} = logical_file_manager:stat(
         SessionId, {uuid, SpaceId}),
-    SpaceDirId = space_id_to_space_dir(SpaceId),
-    Res = space_record(SpaceId, SpaceDirId, SpaceName),
+    Res = space_record(SpaceId, SpaceName),
     ?log_debug({find, Res}),
     {ok, Res}.
 
@@ -65,9 +63,8 @@ find_all(<<"data-space">>) ->
         {path, <<"/spaces">>}, 0, 1000),
     ?log_debug(SpaceDirs),
     Res = lists:map(
-        fun({SpaceDirId, SpaceName}) ->
-            SpaceId = space_dir_to_space_id(SpaceDirId),
-            space_record(SpaceId, SpaceDirId, SpaceName)
+        fun({SpaceId, SpaceName}) ->
+            space_record(SpaceId, SpaceName)
         end, SpaceDirs),
     ?log_debug(Res),
     {ok, Res}.
@@ -89,20 +86,11 @@ delete_record(<<"data-space">>, _Id) ->
     {error, not_iplemented}.
 
 
-space_record(SpaceId, SpaceDirId, SpaceName) ->
+space_record(SpaceId, SpaceName) ->
     DefaultSpaceId = g_session:get_value(?DEFAULT_SPACE_KEY),
     [
         {<<"id">>, SpaceId},
         {<<"name">>, SpaceName},
-        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceId},
-        {<<"rootDir">>, SpaceDirId}
+        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
+        {<<"rootDir">>, SpaceId}
     ].
-
-
-
-space_dir_to_space_id(SpaceDirId) ->
-    SpaceDirId.
-
-
-space_id_to_space_dir(SpaceId) ->
-    SpaceId.
