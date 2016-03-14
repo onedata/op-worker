@@ -212,6 +212,8 @@ html, body {
 
           // "active" item of list item
           .secondary-sidebar-item {
+            display: table;
+            width: 100%;
             border-top: #ebebeb 1px solid;
             padding-left: $secondary-sidebar-item-padding;
             padding-right: $secondary-sidebar-item-padding;
@@ -221,15 +223,20 @@ html, body {
             font-size: $secondary-sidebar-font-size;
             height: 60px;
 
+            // TODO: elements that use .item-icon or .item-label should use this class
+            .item-element {
+              display: table-cell;
+            }
+
             .item-icon {
-              display: block;
-              float: left;
+              display: table-cell;
               width: 2.2em;
               font-size: $secondary-sidebar-icon-font-size;
               text-align: center;
             }
 
             .item-label {
+              display: table-cell;
               font-size: $secondary-sidebar-font-size;
               padding-left: 0.5em;
             }
@@ -314,3 +321,6 @@ html, body {
   }
 
 }
+
+// TODO: temporary
+@import 'data';
