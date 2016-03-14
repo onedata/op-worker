@@ -1,7 +1,6 @@
 .secondary-sidebar {
-  // root directory item - all area is clickable
+  // root directory item
   .root-item {
-    cursor: pointer; cursor: hand;
   }
 
   // normal directory - only folder icon and label is clickable
@@ -9,10 +8,37 @@
     cursor: pointer; cursor: hand;
   }
 
+  // TODO: this is a common style, separate color from it please
   .single-selectable {
     &.active {
-      border-left: 4px solid $onedata-red;
+      border-left: 4px solid;
       background-color: $onedata-light-azure;
+
+      &.onedata-red {
+        border-left-color: $onedata-red;
+      }
     }
   }
+
+  .level-1 {
+    .secondary-sidebar-item {
+      // TODO use variable from common
+      padding-left: 27px !important;
+    }
+  }
+
+  .level-2 {
+    .secondary-sidebar-item {
+      // TODO use variable from common
+      padding-left: 57px !important;
+    }
+  }
+
+  .level-3 {
+    .secondary-sidebar-item {
+      // TODO use variable from common
+      padding-left: 77px !important;
+    }
+  }
+
 }

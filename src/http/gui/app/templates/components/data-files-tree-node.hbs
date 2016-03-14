@@ -1,8 +1,8 @@
 <ul>
   {{#each rootDir.children as |file|}}
     {{#if file.isDir}}
-      <li class="first-level">
-        <div id="tree-dir-{{file.id}}" class="secondary-sidebar-item dir-item single-selectable">
+      <li class="first-level {{levelClass}}">
+        <div id="tree-dir-{{file.id}}" class="secondary-sidebar-item dir-item single-selectable onedata-red">
           {{#if file.hasSubDirs}}
             <span class="item-element item-icon" {{action 'toggleDir' file}}>
               {{!-- TODO: real-design icons, styles and colors --}}
@@ -27,7 +27,8 @@
           </span>
         </div>
         {{#if file.isExpanded}}
-          {{data-files-tree-node rootDir=file openDirInBrowser='openDirInBrowser'}}
+          {{data-files-tree-node rootDir=file openDirInBrowser='openDirInBrowser'
+            level=nextLevel}}
         {{/if}}
       </li>
     {{/if}}

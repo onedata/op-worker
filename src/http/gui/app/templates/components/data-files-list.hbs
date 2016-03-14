@@ -7,3 +7,9 @@ Data files list for
     </li>
   {{/each}}
 </ul>
+
+<div class="create-file">
+  {{input value=createFileName}}
+  <a {{action 'createFile' 'file'}}>CREATE FILE</a>
+  <a {{action 'createFile' 'dir'}}>CREATE DIRECTORY</a>
+</div>
