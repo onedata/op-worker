@@ -11,6 +11,7 @@ export default Ember.Route.extend({
   },
 
   afterModel(file, transition) {
+    console.log('dir afterModel');
     if (!file.get('isDir')) {
       console.error('Loaded file is not a directory - it cannot be viewed in browser');
       transition.abort();

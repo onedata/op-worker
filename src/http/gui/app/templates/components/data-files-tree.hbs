@@ -1,4 +1,4 @@
-{{!-- <div id="tree" class="">
-</div> --}}
-
+<div class="" {{action 'openDirInBrowser' rootDir}}>
+  {{t 'components.dataFilesTree.rootDirectory'}}
+</div>
 {{data-files-tree-node rootDir=rootDir openDirInBrowser='openDirInBrowser'}}

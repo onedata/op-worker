@@ -2,7 +2,9 @@
 
 {{!-- Secondary sidebar --}}
 <nav class="secondary-sidebar">
-  {{data-spaces-select spaces=model goToDataSpace="goToDataSpace"}}
+  <div class="secondary-sidebar-header">
+    {{data-spaces-select spaces=model goToDataSpace="goToDataSpace"}}
+  </div>
   {{outlet "data-space"}}
 </nav>
 

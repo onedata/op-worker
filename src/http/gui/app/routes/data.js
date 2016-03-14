@@ -17,7 +17,7 @@ export default Ember.Route.extend({
   },
 
   afterModel(dataSpaces) {
-    this.get('fileSystemTree').updateDataSpaces(dataSpaces);
+    this.set('fileSystemTree.dataSpaces', dataSpaces);
   },
 
   actions: {
