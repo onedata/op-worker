@@ -2,14 +2,43 @@ Data files list for
 
 <ul>
   {{#each filesInfo as |fileInfo|}}
-    <li {{action "openFile" fileInfo.file}}>
-      <strong>{{fileInfo.label}}</strong> ({{fileInfo.path}})
+  {{!-- TODO: open file when selected and enter pressed --}}
+    <li {{action "openFile" fileInfo.file on="doubleClick"}}
+      {{action 'selectFile' fileInfo.file on="click"}}>
+      <span>
+        {{#if fileInfo.file.isDir}}
+          {{icon 'folder'}}
+        {{else}}
+          {{icon 'file'}}
+        {{/if}}
+      </span>
+      <strong class="file-entry {{if fileInfo.file.isSelected 'selected-file'}}" id="file-{{fileInfo.file.id}}">
+        {{fileInfo.file.name}}
+      </strong>
+      <i>Parent: {{fileInfo.file.parent.id}}</i>
     </li>
   {{/each}}
 </ul>
+
+<hr/>
 
 <div class="create-file">
   {{input value=createFileName}}
   <a {{action 'createFile' 'file'}} style="margin-right: 15px;">CREATE-FILE</a>
   <a {{action 'createFile' 'dir'}}>CREATE-DIRECTORY</a>
+</div>
+
+<hr/>
+
+{{#if singleSelectedFile}}
+  <div class="rename-file">
+    {{input value=renameFileName}}
+    <a {{action 'renameSelectedFile'}}>RENAME-SELECTED-FILE</a>
+  </div>
+{{/if}}
+
+<hr/>
+
+<div class="remove-files">
+  <a {{action 'removeSelectedFiles'}}>REMOVE-SELECTED-FILES</a>
 </div>

@@ -28,6 +28,48 @@ export default DS.Model.extend({
     return this.get('type') === 'dir';
   }.property('type'),
 
+  // TODO: doc, destroy, not destroyRecord!
+  destroyRecursive() {
+    // TODO: onsuccess onfailure...
+    let children = this.get('children');
+    let file = this;
+    let deleteChildren = function() {
+      if (children) {
+        children.forEach((child) => {
+          child.deleteRecursive();
+        });
+      } else {
+        console.debug('After destroy of ' + file.get('id') + ' there is no children');
+      }
+    };
+
+    this.destroyRecord().then(deleteChildren, deleteChildren);
+  },
+
+  deleteRecursive() {
+    console.debug('Will delete recursive: ' + this.get('id'));
+    let children = this.get('children');
+    console.debug('Children to delete: ' + children.map((c) => c.get('i')));
+    if (children && children.get('length') > 0) {
+      children.forEach((child) => {
+        child.deleteRecursive();
+      });
+    }
+    console.debug('Deleting file: ' + this.get('id'));
+    // remove self from parent children list - issues here TODO!
+    // TODO: perfomance issues on big trees?
+    let parent = this.get('parent');
+    let parentChildren = parent.get('children');
+    if (parent && parentChildren) {
+      parent.set('children',
+        parentChildren.filter((child) => child.get('id') !== this.get('id'))
+      );
+      this.set('parent', null);
+    }
+    this.deleteRecord();
+    console.debug('File: ' + this.get('id') + ' isDeleted: ' + this.get('isDeleted'));
+  },
+
   hasSubDirs: function() {
     return this.get('children').filter((child) => child.get('isDir'))
       .length > 0;

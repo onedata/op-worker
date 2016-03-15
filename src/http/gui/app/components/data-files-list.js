@@ -9,6 +9,23 @@ export default Ember.Component.extend({
   // TODO: doc
   dir: null,
 
+  selectedFiles: function() {
+    return this.get('dir.children').filter((file) => file.get('isSelected'));
+  }.property('dir.children.@each.isSelected'),
+
+  // TODO: only for single-selected file
+  singleSelectedFile: function() {
+    let selected = this.get('selectedFiles');
+    return selected.length === 1 ? selected[0] : null;
+  }.property('selectedFiles'),
+
+
+  // selectedFileChanged: function() {
+  //   let selectedFile = this.get('selectedFile');
+  //   this.$().find('.file-entry.selected-file').removeClass('selected-file');
+  //   this.$().find('#file-' + selectedFile.get('id')).addClass('selected-file');
+  // }.observes('selectedFile'),
+
   filesInfo: function() {
     return this.get('dir.children').map((file) => {
       let fileSystemTree = this.get('fileSystemTree');
@@ -30,7 +47,6 @@ export default Ember.Component.extend({
       }
     },
 
-
     createFile(type) {
       let fileName = this.get('createFileName');
       let record = this.get('store').createRecord('file', {
@@ -41,6 +57,28 @@ export default Ember.Component.extend({
       record.save().then(() => {}, (failMessage) => {
         this.get('errorNotifier').handle(failMessage);
         record.destroy();
+      });
+    },
+
+    // TODO: multiple select only with ctrl
+    selectFile(file) {
+      file.set('isSelected', !file.get('isSelected'));
+    },
+
+    renameSelectedFile() {
+      let file = this.get('singleSelectedFile');
+      if (file) {
+        file.set('name', this.get('renameFileName') || '');
+        file.save();
+      } else {
+        console.error('No file selected to rename or multiple selected');
+      }
+    },
+
+    // TODO: error handling
+    removeSelectedFiles() {
+      this.get('selectedFiles').forEach((file) => {
+        file.destroyRecursive();
       });
     }
   }
