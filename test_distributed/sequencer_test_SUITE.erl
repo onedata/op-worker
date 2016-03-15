@@ -123,7 +123,7 @@ route_message_should_forward_messages_to_different_streams(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    NewConfig = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     [Worker | _] = ?config(op_worker_nodes, NewConfig),
     initializer:clear_models(Worker, [subscription]),
     NewConfig.

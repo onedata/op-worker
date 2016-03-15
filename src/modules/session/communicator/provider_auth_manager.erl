@@ -70,7 +70,7 @@ handshake(Cert, Conn) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Returns ProviderId based on provider's certificate (issued by globalregistry).
+%% @doc Returns ProviderId based on provider's certificate (issued by OZ).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider_id(Cert :: #'OTPCertificate'{}) -> ProviderId :: oneprovider:id() | no_return().

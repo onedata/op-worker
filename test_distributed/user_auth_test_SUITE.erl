@@ -41,7 +41,7 @@ all() -> ?ALL([token_authentication]).
 token_authentication(Config) ->
     % given
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    mock_gr_certificates(Config),
+    mock_oz_certificates(Config),
     SessionId = <<"SessionId">>,
 
     % when
@@ -60,7 +60,7 @@ token_authentication(Config) ->
         {ok, #document{value = #identity{user_id = ?USER_ID}}},
         rpc:call(Worker1, identity, get, [#auth{macaroon = ?MACAROON}])
     ),
-    test_utils:mock_validate_and_unload(Workers, gr_endpoint),
+    test_utils:mock_validate_and_unload(Workers, oz_endpoint),
     ok = ssl2:close(Sock).
 
 %%%===================================================================
@@ -127,9 +127,9 @@ receive_server_message(IgnoredMsgList) ->
         {error, timeout}
     end.
 
-mock_gr_certificates(Config) ->
+mock_oz_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
-    Url = rpc:call(Worker1, gr_plugin, get_gr_url, []),
+    Url = rpc:call(Worker1, oz_plugin, get_oz_url, []),
 
     % save key and cert files on the workers
     % read the files
@@ -144,11 +144,11 @@ mock_gr_certificates(Config) ->
             ok = rpc:call(Node, file, write_file, [KeyPath, KeyBin]),
             ok = rpc:call(Node, file, write_file, [CertPath, CertBin])
         end, Workers),
-    % Use the cert paths on workers to mock gr_endpoint
+    % Use the cert paths on workers to mock oz_endpoint
     SSLOpts = {ssl_options, [{keyfile, KeyPath}, {certfile, CertPath}]},
 
-    test_utils:mock_new(Workers, gr_endpoint),
-    test_utils:mock_expect(Workers, gr_endpoint, auth_request,
+    test_utils:mock_new(Workers, oz_endpoint),
+    test_utils:mock_expect(Workers, oz_endpoint, auth_request,
         fun
             (provider, URN, Method, Headers, Body, Options) ->
                 http_client:request(Method, Url ++ URN,

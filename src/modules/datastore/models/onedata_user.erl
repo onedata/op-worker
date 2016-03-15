@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Globalregistry user data cache
+%%% OZ user data cache
 %%% @end
 %%%-------------------------------------------------------------------
 -module(onedata_user).
@@ -17,7 +17,7 @@
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -127,17 +127,17 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch user from globalregistry and save it in cache.
+%% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
     try
         {ok, #user_details{id = Id, name = Name}} =
-            gr_users:get_details({user, {Macaroon, DMacaroons}}),
+            oz_users:get_details({user, {Macaroon, DMacaroons}}),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            gr_users:get_spaces({user, {Macaroon, DMacaroons}}),
-        {ok, GroupIds} = gr_users:get_groups({user, {Macaroon, DMacaroons}}),
+            oz_users:get_spaces({user, {Macaroon, DMacaroons}}),
+        {ok, GroupIds} = oz_users:get_groups({user, {Macaroon, DMacaroons}}),
         [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
         OnedataUser = #onedata_user{
             name = Name,
@@ -155,7 +155,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get user from cache or fetch from globalregistry and save in cache.
+%% Get user from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_fetch(datastore:key(), #auth{}) ->
