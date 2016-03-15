@@ -15,9 +15,12 @@ Data files list for
       <strong class="file-entry {{if fileInfo.file.isSelected 'selected-file'}}" id="file-{{fileInfo.file.id}}">
         {{fileInfo.file.name}}
       </strong>
+      <i>Parent: {{fileInfo.file.parent.id}}</i>
     </li>
   {{/each}}
 </ul>
+
+<hr/>
 
 <div class="create-file">
   {{input value=createFileName}}
@@ -33,3 +36,9 @@ Data files list for
     <a {{action 'renameSelectedFile'}}>RENAME-SELECTED-FILE</a>
   </div>
 {{/if}}
+
+<hr/>
+
+<div class="remove-files">
+  <a {{action 'removeSelectedFiles'}}>REMOVE-SELECTED-FILES</a>
+</div>

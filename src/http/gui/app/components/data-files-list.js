@@ -9,12 +9,16 @@ export default Ember.Component.extend({
   // TODO: doc
   dir: null,
 
+  selectedFiles: function() {
+    return this.get('dir.children').filter((file) => file.get('isSelected'));
+  }.property('dir.children.@each.isSelected'),
+
   // TODO: only for single-selected file
   singleSelectedFile: function() {
-    let children = this.get('dir.children');
-    let selected = children.filter((file) => file.get('isSelected'));
+    let selected = this.get('selectedFiles');
     return selected.length === 1 ? selected[0] : null;
-  }.property('dir.children.@each.isSelected'),
+  }.property('selectedFiles'),
+
 
   // selectedFileChanged: function() {
   //   let selectedFile = this.get('selectedFile');
@@ -68,6 +72,13 @@ export default Ember.Component.extend({
       } else {
         console.error('No file selected to rename or multiple selected');
       }
+    },
+
+    // TODO: error handling
+    removeSelectedFiles() {
+      this.get('selectedFiles').forEach((file) => {
+        file.destroyRecursive();
+      });
     }
   },
 
