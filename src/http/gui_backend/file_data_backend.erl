@@ -124,8 +124,8 @@ update_record(<<"file">>, _Id, _Data) ->
     {error, not_iplemented}.
 
 %% Called when ember asks to delete a record
-delete_record(<<"file">>, _Id) ->
-    {error, not_iplemented}.
+delete_record(<<"file">>, Id) ->
+    ok = rm_rf(Id).
 
 
 % ------------------------------------------------------------
@@ -150,3 +150,14 @@ get_spaces_dir_uuid() ->
     {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces">>}),
     SpacesDirUUID.
+
+
+rm_rf(Id) ->
+    SessionId = g_session:get_session_id(),
+    {ok, Children} = logical_file_manager:ls(SessionId,
+        {uuid, Id}, 0, 1000),
+    lists:foreach(
+        fun({ChId, _}) ->
+            ok = rm_rf(ChId)
+        end, Children),
+    ok = logical_file_manager:unlink(SessionId, {uuid, Id}).
