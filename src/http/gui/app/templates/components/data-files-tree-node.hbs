@@ -4,17 +4,17 @@
       <li class="{{levelClass}}">
         <div id="tree-dir-{{file.id}}" class="secondary-sidebar-item dir-item single-selectable onedata-red">
           {{#if file.hasSubDirs}}
-            <span class="item-element item-icon" {{action 'toggleDir' file}}>
+            <span class="item-element item-icon tree-expand-icon" {{action 'toggleDir' file}}>
               {{!-- TODO: real-design icons, styles and colors --}}
               {{#if file.isExpanded}}
-                {{icon "links" "color-directory"}}
+                {{icon "arrow-down"}}
               {{else}}
-                {{icon "recent" "color-file"}}
+                {{icon "arrow-right"}}
               {{/if}}
             </span>
           {{else}}
             <span class="item-element item-icon">
-              {{icon "trash" "color-directory"}}
+              {{!-- blank space --}}
             </span>
           {{/if}}
           <span class="item-element item-click-area"  {{action 'browseDir' file}}>

@@ -1,4 +1,5 @@
-/// Oneicons - the onedata icons font
+/* Oneicons - the onedata icons font */
+/* TODO: use SCSS and reuse SCSS generated in icomoon */
 
 @font-face {
     font-family: 'oneicons';
@@ -26,160 +27,162 @@
     -moz-osx-font-smoothing: grayscale;
 }
 
-.oneicon-create:before {
+.oneicon-add:before {
     content: "\e900";
 }
-.oneicon-createcollection:before {
+.oneicon-arrow-down:before {
     content: "\e901";
 }
-.oneicon-cut:before {
+.oneicon-arrow-right:before {
     content: "\e902";
 }
-.oneicon-data:before {
+.oneicon-arrow-up:before {
     content: "\e903";
 }
-.oneicon-discard:before {
+.oneicon-checkbox-check:before {
     content: "\e904";
 }
-.oneicon-file:before {
+.oneicon-checkbox-x:before {
     content: "\e905";
 }
-.oneicon-folder:before {
+.oneicon-close:before {
     content: "\e906";
 }
-.oneicon-getsupport:before {
+.oneicon-collectioncreate:before {
     content: "\e907";
 }
-.oneicon-group .path1:before {
+.oneicon-copy:before {
     content: "\e908";
-    color: rgb(0, 0, 0);
 }
-.oneicon-group .path2:before {
+.oneicon-cut:before {
     content: "\e909";
-    margin-left: -1.142578125em;
-    color: rgb(0, 0, 0);
 }
-.oneicon-group .path3:before {
+.oneicon-file:before {
     content: "\e90a";
-    margin-left: -1.142578125em;
-    color: rgb(0, 0, 0);
 }
-.oneicon-group .path4:before {
+.oneicon-folder-new:before {
     content: "\e90b";
-    margin-left: -1.142578125em;
-    color: rgb(255, 255, 255);
 }
-.oneicon-group .path5:before {
+.oneicon-folder:before {
     content: "\e90c";
-    margin-left: -1.142578125em;
-    color: rgb(255, 255, 255);
 }
-.oneicon-group .path6:before {
+.oneicon-group-invite:before {
     content: "\e90d";
-    margin-left: -1.142578125em;
-    color: rgb(255, 255, 255);
 }
-.oneicon-group .path7:before {
+.oneicon-group:before {
     content: "\e90e";
-    margin-left: -1.142578125em;
-    color: rgb(255, 255, 255);
-}
-.oneicon-group2:before {
-    content: "\e90f";
-}
-.oneicon-groups:before {
-    content: "\e910";
 }
 .oneicon-inbox:before {
-    content: "\e911";
-}
-.oneicon-invitegroup:before {
-    content: "\e912";
-}
-.oneicon-inviteuser:before {
-    content: "\e913";
+    content: "\e90f";
 }
 .oneicon-join:before {
+    content: "\e910";
+}
+.oneicon-lock:before {
+    content: "\e911";
+}
+.oneicon-menu-collection:before {
+    content: "\e912";
+}
+.oneicon-menu-data:before {
+    content: "\e913";
+}
+.oneicon-menu-groups:before {
     content: "\e914";
 }
-.oneicon-leavespace:before {
+.oneicon-menu-links:before {
     content: "\e915";
 }
-.oneicon-links:before {
+.oneicon-menu-recent:before {
     content: "\e916";
 }
-.oneicon-movedown:before {
+.oneicon-menu-token:before {
     content: "\e917";
 }
-.oneicon-moveup:before {
+.oneicon-menu-trash:before {
     content: "\e918";
 }
-.oneicon-newfolder:before {
+.oneicon-move_down:before {
     content: "\e919";
 }
-.oneicon-provider:before {
+.oneicon-move_up:before {
     content: "\e91a";
 }
-.oneicon-recent:before {
+.oneicon-provider-add:before {
     content: "\e91b";
 }
-.oneicon-remove:before {
+.oneicon-provider-default:before {
     content: "\e91c";
 }
-.oneicon-rename:before {
+.oneicon-provider:before {
     content: "\e91d";
 }
-.oneicon-search:before {
+.oneicon-remove:before {
     content: "\e91e";
 }
-.oneicon-share:before {
+.oneicon-rename:before {
     content: "\e91f";
 }
-.oneicon-space:before {
+.oneicon-search:before {
     content: "\e920";
 }
-.oneicon-spacedefault:before {
+.oneicon-share:before {
     content: "\e921";
 }
-.oneicon-spaces:before {
+.oneicon-social-dropbox:before {
     content: "\e922";
 }
-.oneicon-trash:before {
+.oneicon-social-facebook:before {
     content: "\e923";
 }
-.oneicon-upload:before {
+.oneicon-social-github:before {
     content: "\e924";
 }
-.oneicon-user:before {
+.oneicon-social-google:before {
     content: "\e925";
 }
-.oneicon-userplus:before {
+.oneicon-social-plgrid:before {
     content: "\e926";
 }
-.oneicon-userprofile:before {
+.oneicon-space-add:before {
     content: "\e927";
 }
-.oneicon-view1:before {
+.oneicon-space-default:before {
     content: "\e928";
 }
-.oneicon-view2:before {
+.oneicon-space-empty:before {
     content: "\e929";
 }
-.oneicon-copy:before {
+.oneicon-space-reload:before {
     content: "\e92a";
 }
-.oneicon-arrowdown:before {
+.oneicon-space:before {
     content: "\e92b";
 }
-.oneicon-arrowright:before {
+.oneicon-star-empty:before {
     content: "\e92c";
 }
-.oneicon-block:before {
+.oneicon-star:before {
     content: "\e92d";
 }
-.oneicon-check:before {
+.oneicon-support:before {
     content: "\e92e";
 }
-.oneicon-collection:before {
+.oneicon-upload:before {
     content: "\e92f";
+}
+.oneicon-user-add:before {
+    content: "\e930";
+}
+.oneicon-user-profile:before {
+    content: "\e931";
+}
+.oneicon-user:before {
+    content: "\e932";
+}
+.oneicon-view-grid:before {
+    content: "\e933";
+}
+.oneicon-view-list:before {
+    content: "\e934";
 }

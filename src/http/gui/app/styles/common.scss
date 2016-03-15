@@ -17,7 +17,7 @@ $sidebar-item-hover-color: $onedata-red;
 
 /// Font and icon sizes
 $secondary-sidebar-font-size: 13pt !default;
-$secondary-sidebar-icon-font-size: 16pt !default;
+$secondary-sidebar-icon-font-size: 38px !default;
 
 $top-bar-icon-font-size: 16pt !default;
 
@@ -79,6 +79,11 @@ html, body {
         .profile-dropdown {
           margin-left: 10px;
           margin-right: 10px;
+
+          .oneicon {
+            font-size: 40px;
+            vertical-align: middle;
+          }
         }
       }
     }
@@ -126,9 +131,12 @@ html, body {
 
       li {
         overflow: hidden;
-        font-size: 18pt;
         vertical-align: middle;
         border-bottom: solid #565960 1px;
+
+        .oneicon {
+          font-size: 40px;
+        }
 
         a {
           display: table;
@@ -148,9 +156,11 @@ html, body {
             max-height: $sidebar-item-height;
             text-align: center;
             color: #fff;
+            cursor: pointer; cursor: hand;
 
             figcaption {
-              padding-top: 4px;
+              // pull up
+              margin-top: -3px;
               font-size: 8pt;
               font-weight: lighter;
               letter-spacing: 0.05em;
@@ -208,6 +218,7 @@ html, body {
         // list item is a container for "action" item and its application childs
         li {
           list-style-type: none;
+          line-height: 18px;
 
           // "active" item of list item
           .secondary-sidebar-item {
@@ -216,8 +227,6 @@ html, body {
             border-top: #ebebeb 1px solid;
             padding-left: $secondary-sidebar-item-padding;
             padding-right: $secondary-sidebar-item-padding;
-            padding-top: 18px;
-            padding-bottom: 16px;
             list-style-type: none;
             font-size: $secondary-sidebar-font-size;
             height: 60px;
@@ -225,17 +234,22 @@ html, body {
             // TODO: elements that use .item-icon or .item-label should use this class
             .item-element {
               display: table-cell;
+              vertical-align: middle;
             }
 
             .item-icon {
               display: table-cell;
-              width: 2.2em;
+              // pull up - some hack
+              padding-bottom: 10px;
+              width: 1.5em;
+              vertical-align: middle;
               font-size: $secondary-sidebar-icon-font-size;
               text-align: center;
             }
 
             .item-label {
               display: table-cell;
+              vertical-align: middle;
               font-size: $secondary-sidebar-font-size;
               padding-left: 0.5em;
             }
