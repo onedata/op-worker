@@ -32,9 +32,9 @@
 %%--------------------------------------------------------------------
 -spec change_replicated(SpaceId :: binary(), dbsync_worker:change()) ->
     any().
-change_replicated(SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE, mode = Mode}}}) ->
+change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc = #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?debug("change_replicated: changed file_meta ~p", [FileUUID]),
-    fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileUUID, ?ROOT_SESS_ID, Mode), %todo create with appropriate owner
+    fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
     fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
     ?debug("change_replicated: changed file_meta ~p", [FileUUID]),

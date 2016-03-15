@@ -16,7 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([add_change/2, get_changes/2, create_storage_file_if_not_exists/4,
+-export([add_change/2, get_changes/2, create_storage_file_if_not_exists/2,
     create_storage_file/4, get_merged_changes/2]).
 
 -define(MAX_CHANGES, 20).
@@ -87,11 +87,18 @@ get_merged_changes(Doc, N) ->
 %% Create storage file and file_location if there is no file_location defined
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(binary(), file_meta:uuid(), session:id(), file_meta:posix_permissions()) -> ok.
-create_storage_file_if_not_exists(SpaceId, FileUuid, SessId, Mode) ->
-    case fslogic_utils:get_local_file_locations({uuid, FileUuid}) of
+-spec create_storage_file_if_not_exists(space_info:id(), file_meta:file_meta()) -> ok.
+create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
+    value = #file_meta{mode = Mode, uid = UserId}}) ->
+    case fslogic_utils:get_local_file_locations(FileDoc) of
         [] ->
-            create_storage_file(SpaceId, FileUuid, SessId, Mode),
+            create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
+            case onedata_user:exists(UserId) of
+                true ->
+                    files_to_chown:chown_file(FileUuid, UserId, SpaceId);
+                false ->
+                    files_to_chown:add(UserId, FileUuid)
+            end,
             ok;
         _ ->
             ok

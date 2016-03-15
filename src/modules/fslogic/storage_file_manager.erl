@@ -149,8 +149,24 @@ chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
 %%--------------------------------------------------------------------
 -spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) ->
     ok | logical_file_manager:error_reply().
-chown(_FileHandle, _User, _Group) ->
-    ok.
+chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID}, UserId, SpaceId) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceUuid),
+
+    Uid = fslogic_utils:gen_storage_uid(UserId),
+    Gid =
+        case helpers_nif:groupname_to_gid(SpaceName) of
+            {ok, GID} ->
+                GID;
+            {error, _} ->
+                fslogic_utils:gen_storage_uid(SpaceUuid)
+        end,
+
+    helpers:chown(HelperHandle, FileId, Uid, Gid);
+chown(_,_,_) ->
+    throw(?EPERM).
 
 
 %%--------------------------------------------------------------------

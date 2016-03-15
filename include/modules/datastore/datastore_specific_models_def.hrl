@@ -119,4 +119,10 @@
     entry :: term()
 }).
 
+%% Model that holds files created by root, whose owner needs to be changed when
+%% the user will be present in current provider
+-record(files_to_chown, {
+    file_uuids = [] :: [file_meta:uuid()]
+}).
+
 -endif.
