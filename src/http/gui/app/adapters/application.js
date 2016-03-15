@@ -395,8 +395,8 @@ export default DS.RESTAdapter.extend({
 
         promise.success(transformed_data);
       } else if (json.result === RESULT_ERROR) {
-        console.log('FETCH_RESP error: ' + json.data);
-        promise.error(new Error('wypieprzylo sie ' + JSON.stringify(json.data)));
+        console.log('FETCH_RESP error: ' +  JSON.stringify(json.data));
+        promise.error(json.data);
       } else {
         console.log('Unknown operation result: ' + json.result);
       }

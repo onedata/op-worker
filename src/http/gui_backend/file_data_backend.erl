@@ -90,7 +90,7 @@ create_record(<<"file">>, Data) ->
     Name = proplists:get_value(<<"name">>, Data),
     case binary:match(Name, <<"nie">>) of
         {_, _} ->
-            {error, bleblelbebll};
+            gui_error:report_warning(<<"Names with 'nie' forbidden!">>);
         nomatch ->
             Type = proplists:get_value(<<"type">>, Data),
             ParentUUID = proplists:get_value(<<"parent">>, Data, null),
