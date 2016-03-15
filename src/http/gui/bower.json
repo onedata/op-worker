@@ -14,7 +14,7 @@
     "qunit": "~1.20.0",
     "bootstrap": "~3.3.5",
     "ember-localstorage-adapter": "^0.5.5",
-    "bootstrap-treeview": "^1.2.0"
+    "resumable.js": "resumablejs#~1.0.2"
   },
   "resolutions": {
     "ember-data": "1.13.15",
