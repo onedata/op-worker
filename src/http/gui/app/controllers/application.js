@@ -12,19 +12,6 @@ import Ember from 'ember';
 export default Ember.Controller.extend({
   serverService: Ember.inject.service('server'),
 
-  /** @todo this should be moved to main-menu component */
-  mains: [
-    {name: 'data', icon: 'data'},
-    {name: 'links', icon: 'links'},
-    {name: 'recent', icon: 'recent'},
-    {name: 'collection', icon: 'collection'},
-    {name: 'trash', icon: 'trash'},
-    {name: 'spaces', icon: 'spaces'},
-    // TODO: bad names of icons
-    {name: 'groups', icon: 'group2'},
-    {name: 'token', icon: 'group'},
-  ],
-
   activate() {
     this.initializeValue('userName');
   },

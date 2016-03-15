@@ -76,7 +76,7 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
 
     # Start oneclient instances
     if 'oneclient' in config:
-        oc_output = client.up(image, bin_oc, dns_server, uid, config_path)
+        oc_output = client.up(image, bin_oc, dns_server, uid, config_path, logdir)
         common.merge(output, oc_output)
 
     # Setup global environment - providers, users, groups, spaces etc.
@@ -139,7 +139,7 @@ echo $?'''
         # check of env configuration succeeded
         if command_res_code != '0':
             # Let the command_output be flushed to console
-            time.sleep(2)
+            time.sleep(5)
             sys.exit(1)
 
 
