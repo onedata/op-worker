@@ -31,7 +31,7 @@
 %% Updates state with already received sequence numbers.
 %% @end
 %%--------------------------------------------------------------------
--spec account_updates(SequenceNumbers :: ordsets:ordset(seq())) -> no_return().
+-spec account_updates(SequenceNumbers :: ordsets:ordset(seq())) -> any().
 account_updates(SequenceNumbers) ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         #subscriptions_state{missing = Missing, largest = Largest} = State,
@@ -70,7 +70,7 @@ get_users() ->
 %% Should be invoked when first session for user is added.
 %% @end
 %%--------------------------------------------------------------------
--spec put_user(UserID :: onedata_user:id()) -> no_return().
+-spec put_user(UserID :: onedata_user:id()) -> any().
 put_user(UserID) ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         Users = sets:add_element(UserID, State#subscriptions_state.users),
@@ -83,7 +83,7 @@ put_user(UserID) ->
 %% the datatstore. Performance may be poor as it examines sessions of users.
 %% @end
 %%--------------------------------------------------------------------
--spec reevaluate_users() -> no_return().
+-spec reevaluate_users() -> any().
 reevaluate_users() ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         Users = get_users_with_session(),
@@ -95,7 +95,7 @@ reevaluate_users() ->
 %% Ensures that state is initialised.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_initialised() -> no_return().
+-spec ensure_initialised() -> any().
 ensure_initialised() ->
     case subscriptions_state:exists(?SUBSCRIPTIONS_STATE_KEY) of
         true -> ok;

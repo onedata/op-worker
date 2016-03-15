@@ -37,7 +37,7 @@ healthcheck() ->
 %% Pushes message to the OZ.
 %% @end
 %%--------------------------------------------------------------------
--spec push(Message :: binary()) -> no_return().
+-spec push(Message :: binary()) -> any().
 push(Message) ->
     case whereis(subscription_wss) of
         undefined -> ?warning("No connection - dropping ~p", [Message]);

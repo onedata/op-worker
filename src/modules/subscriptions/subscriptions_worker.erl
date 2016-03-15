@@ -76,14 +76,16 @@ handle(start_provider_connection) ->
         E:R ->
             ?error("Connection not started: ~p:~p", [E, R]),
             schedule_connection_start()
-    end;
+    end,
+    ok;
 
 handle(refresh_subscription) ->
     Self = node(),
     case subscriptions:get_refreshing_node() of
         {ok, Self} -> refresh_subscription();
         {ok, Node} -> ?debug("Pid ~p does not match dedicated ~p", [Self, Node])
-    end;
+    end,
+    ok;
 
 handle({process_updates, Updates}) ->
     utils:pforeach(fun(Update) -> handle_update(Update) end, Updates),
@@ -98,7 +100,8 @@ handle({'EXIT', _Pid, _Reason} = Req) ->
             ?error("Subscriptions connection crashed: ~p", [_Reason]),
             schedule_connection_start();
         _ -> ?log_bad_request(Req)
-    end;
+    end,
+    ok;
 
 handle(Req) ->
     ?log_bad_request(Req).
@@ -122,7 +125,7 @@ cleanup() ->
 %% Process update.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_update(#sub_update{}) -> no_return().
+-spec handle_update(#sub_update{}) -> any().
 handle_update(#sub_update{ignore = true}) -> ok;
 handle_update(#sub_update{delete = true, id = ID, model = Model}) ->
     subscription_conflicts:delete_model(Model, ID);

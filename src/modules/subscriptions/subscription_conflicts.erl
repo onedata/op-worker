@@ -32,7 +32,7 @@
 
 -spec update_model(Model :: subscriptions:model(),
     Update :: datastore:document(),
-    UpdateRevs :: [term()]) -> no_return().
+    UpdateRevs :: [term()]) -> any().
 
 update_model(Model, UpdateDoc, UpdateRevs) ->
     Key = UpdateDoc#document.key,
@@ -60,7 +60,7 @@ update_model(Model, UpdateDoc, UpdateRevs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_model(Model :: subscriptions:model(), ID :: datastore:ext_key())
-        -> no_return().
+        -> any().
 
 delete_model(Model, ID) ->
     Model:delete(ID).

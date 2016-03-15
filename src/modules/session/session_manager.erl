@@ -231,7 +231,7 @@ session_id_to_provider_id(SessId) ->
 %% Includes user in subscription (if identity belongs to an user).
 %% @end
 %%--------------------------------------------------------------------
--spec subscribe_user(Iden :: session:identity()) -> no_return().
+-spec subscribe_user(Iden :: session:identity()) -> any().
 subscribe_user(Iden) ->
     UID = Iden#identity.user_id,
     case UID of

@@ -82,9 +82,7 @@ props_to_value(space_info, Props) ->
     #space_info{
         id = proplists:get_value(<<"id">>, Props),
         name = proplists:get_value(<<"name">>, Props)
-    };
-props_to_value(Model, Props) ->
-    ?log_bad_request({Model, Props}).
+    }.
 
 
 %%--------------------------------------------------------------------
