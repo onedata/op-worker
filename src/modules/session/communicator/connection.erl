@@ -47,7 +47,7 @@
     response_map = #{}
 }).
 
--define(TIMEOUT, timer:minutes(1)).
+-define(TIMEOUT, timer:minutes(10)).
 -define(PACKET_VALUE, 4).
 
 %%%===================================================================
@@ -383,28 +383,36 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, socket = Sock,
     transport = Transp}, Msg1) ->
     IsProvider = provider_auth_manager:is_provider(Cert),
-
     {State, Msg} = update_message_id(State0, Msg1),
 
     EffectiveSessionId =
         case {IsProvider, Msg} of
             {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth}} when ProxySessionId =/= undefined ->
-                {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, SessId, Auth, fuse),
+                ProviderId = provider_auth_manager:get_provider_id(Cert),
+                {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
                 ProxySessionId;
             _ ->
                 SessId
         end,
     ?info("Handle message ~p ~p ~p ~p", [IsProvider, Msg, EffectiveSessionId, SessId]),
-    case router:preroute_message(Msg, EffectiveSessionId) of
-        ok ->
+
+    case Msg of
+        #server_message{session_id = TargetSessionId} when TargetSessionId =/= SessId ->
+            ?info("REROUTE CONN ~p ~p ~p", [TargetSessionId, SessId, Msg]),
+            connection:send(Msg, TargetSessionId),
             {noreply, State, ?TIMEOUT};
-        {ok, ServerMsg} ->
-            ?info("Reply ~p", [ServerMsg]),
-            send_server_message(Sock, Transp, ServerMsg),
-            {noreply, State, ?TIMEOUT};
-        {error, Reason} ->
-            ?warning("Message ~p handling error: ~p", [Msg, Reason]),
-            {stop, {error, Reason}, State}
+        _ ->
+            case router:preroute_message(Msg, EffectiveSessionId) of
+                ok ->
+                    {noreply, State, ?TIMEOUT};
+                {ok, ServerMsg} ->
+                    ?info("Reply ~p", [ServerMsg]),
+                    send_server_message(Sock, Transp, ServerMsg),
+                    {noreply, State, ?TIMEOUT};
+                {error, Reason} ->
+                    ?warning("Message ~p handling error: ~p", [Msg, Reason]),
+                    {stop, {error, Reason}, State}
+            end
     end.
 
 

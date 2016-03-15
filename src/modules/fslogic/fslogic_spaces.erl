@@ -18,7 +18,7 @@
 -include_lib("ctool/include/global_registry/gr_spaces.hrl").
 
 %% API
--export([get_default_space/1, get_default_space_id/1, get_space/2]).
+-export([get_default_space/1, get_default_space_id/1, get_space/2, get_space/1]).
 
 %%%===================================================================
 %%% API
@@ -51,6 +51,34 @@ get_default_space_id(UserId) ->
     {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
         onedata_user:get(UserId),
     {ok, DefaultSpaceId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns space document for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_space(FileEntry :: fslogic_worker:file()) ->
+    {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
+get_space(FileEntry) ->
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+
+    SpaceId = case FileUUID of
+        <<"">> ->
+            throw({not_a_space, FileEntry});
+        _ ->
+            ?info("Decoding UUID ~p ~p", [FileUUID, FileEntry]),
+            BinFileUUID = base64:decode(FileUUID),
+            case binary_to_term(BinFileUUID) of
+                {space, SpaceId0} ->
+                    SpaceId0;
+                {{space_id, SpaceId0}, _FileUUID} ->
+                    SpaceId0
+            end
+    end,
+
+    file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
+
 
 %%--------------------------------------------------------------------
 %% @doc

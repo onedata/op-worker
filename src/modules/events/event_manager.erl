@@ -136,7 +136,7 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms}
     {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc},
         identity = #identity{user_id = UserId}}}} = session:get(SessId),
 
-    case {event_to_file_entry(Evt), UserId} of
+    case {request_to_file_entry_or_provider(Evt), UserId} of
         {_, undefined} ->
             HandleLocally();
         {{file, Entry}, _} ->
@@ -164,9 +164,40 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms}
 
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms} = State) ->
-    ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
-    {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-    {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}};
+    HandleLocally = fun() ->
+        ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
+        {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
+        {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}}
+    end,
+
+    {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc},
+        identity = #identity{user_id = UserId}}}} = session:get(SessId),
+
+    case {request_to_file_entry_or_provider(Sub), UserId} of
+        {_, undefined} ->
+            HandleLocally();
+        {{file, Entry}, _} ->
+            SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+            case file_meta:to_uuid(Entry) of
+                {ok, SpacesDir} ->
+                    HandleLocally();
+                _ ->
+                    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
+                    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+                    {ok, ProviderIds} = gr_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                    case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                        {_, true} ->
+                            HandleLocally();
+                        {[H | _], false} ->
+                            provider_communicator:send(Sub, session_manager:get_provider_session_id(outgoing, H)),
+                            HandleLocally();
+                        {[], _} ->
+                            throw(unsupported_space)
+                    end
+            end;
+        _ ->
+            HandleLocally()
+    end;
 
 handle_cast(#subscription_cancellation{id = SubId}, #state{
     event_streams = EvtStms, session_id = SessId} = State) ->
@@ -248,9 +279,21 @@ start_event_streams(EvtStmSup, SessId) ->
         maps:put(SubId, EvtStm, Stms)
     end, #{}, Docs).
 
-event_to_file_entry(#event{object = #write_event{}, key = FileUUID}) ->
+request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUUID}}) ->
     {file, {uuid, FileUUID}};
-event_to_file_entry(#event{object = #read_event{}, key = FileUUID}) ->
+request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
     {file, {uuid, FileUUID}};
-event_to_file_entry(#event{}) ->
+request_to_file_entry_or_provider(#event{object = #update_event{object = #file_attr{uuid = FileUUID}}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #update_event{object = #file_location{uuid = FileUUID}}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #file_location_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #permission_changed_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(_) ->
     not_file_context.

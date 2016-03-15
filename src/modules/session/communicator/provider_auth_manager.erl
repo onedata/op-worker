@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_provider/1, handshake/2]).
+-export([is_provider/1, handshake/2, get_provider_id/1]).
 
 %%%===================================================================
 %%% API

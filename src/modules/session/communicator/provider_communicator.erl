@@ -21,7 +21,7 @@
 
 %% API
 -export([send/2, send/3, send_async/2, communicate/2, communicate_async/2,
-    communicate_async/3]).
+    communicate_async/3, ensure_connected/1]).
 
 -define(SEND_RETRY_DELAY, timer:seconds(5)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(30)).

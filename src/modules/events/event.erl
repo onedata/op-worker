@@ -14,6 +14,7 @@
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -29,10 +30,10 @@
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
 -type manager_ref() :: pid() | session:id() | [pid() | session:id()] |
-                       % reference all event managers except one provided
-                       {exclude, pid() | session:id()} |
-                       % reference all event managers except those provided in list
-                       {exclude, [pid() | session:id()]}.
+% reference all event managers except one provided
+{exclude, pid() | session:id()} |
+% reference all event managers except those provided in list
+{exclude, [pid() | session:id()]}.
 
 %%%===================================================================
 %%% API
@@ -120,6 +121,41 @@ subscribe(#subscription{id = SubId} = Sub) ->
 subscribe(#subscription{id = undefined} = Sub, Ref) ->
     subscribe(Sub#subscription{id = subscription:generate_id()}, Ref);
 
+subscribe(#subscription{} = Sub = Request, SessionId) when is_binary(SessionId) ->
+    Providers =
+        case request_to_file_entry_or_provider(Sub) of
+            {provider, ProviderId} ->
+                [ProviderId];
+            {file, Entry} ->
+                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry),
+                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+                {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc}}}} = session:get(SessionId),
+                {ok, ProviderIds} = gr_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                    {_, true} ->
+                        [oneprovider:get_provider_id()];
+                    {[_ | _], false} ->
+                        ProviderIds;
+                    {[], _} ->
+                        throw(unsupported_space)
+                end
+        end,
+
+    Self = oneprovider:get_provider_id(),
+    case lists:member(Self, Providers) of
+        true ->
+            subscribe(Sub, [SessionId]);
+        false ->
+            [RerouteToProviderId | _] = Providers,
+            {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
+            {ok, #server_message{message_body = MsgBody}} =
+                provider_communicator:communicate(#client_message{
+                    message_body = Request,
+                    proxy_session_id = SessionId,
+                    proxy_session_auth = Auth
+                }, session_manager:get_provider_session_id(outgoing, RerouteToProviderId)),
+            MsgBody
+    end;
 subscribe(#subscription{id = SubId} = Sub, Ref) ->
     send_to_event_managers(Sub, get_event_managers(as_list(Ref))),
     {ok, SubId}.
@@ -273,3 +309,23 @@ as_list(Object) when is_list(Object) ->
     Object;
 as_list(Object) ->
     [Object].
+
+
+request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #update_event{object = #file_attr{uuid = FileUUID}}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #update_event{object = #file_location{uuid = FileUUID}}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #file_location_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #permission_changed_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{}) ->
+    {provider, oneprovider:get_provider_id()}.

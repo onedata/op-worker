@@ -274,6 +274,9 @@ get_random_connection(SessId) ->
     {ok, Comm :: pid()} | {error, Reason :: term()}.
 get_connections(SessId) ->
     case session:get(SessId) of
+        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
+            provider_communicator:ensure_connected( session_manager:get_provider_session_id(outgoing, ProxyVia)),
+            get_connections(ProxyVia);
         {ok, #document{value = #session{connections = Cons}}} ->
             {ok, Cons};
         {error, Reason} ->

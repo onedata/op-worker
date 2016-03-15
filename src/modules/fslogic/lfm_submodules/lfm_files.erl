@@ -17,6 +17,7 @@
 -include("modules/fslogic/lfm_internal.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -161,6 +162,43 @@ open(SessId, FileKey, OpenType) ->
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
+                    Sub1 = #subscription{
+                        object = #file_attr_subscription{
+                            file_uuid = FileUUID,
+                            time_threshold = 500,
+                            counter_threshold = 5
+                        },
+                        event_stream = #event_stream_definition{
+                            metadata = 0,
+                            emission_rule = fun(_) -> true end,
+                            init_handler = event_utils:send_subscription_handler(),
+                            event_handler = fun(Evts, Ctx) ->
+                                ?info("Attrs changed ~p", [Evts])
+                            end,
+                            terminate_handler = event_utils:send_subscription_cancellation_handler()
+                        }
+                    },
+
+                    Sub2 = #subscription{
+                        object = #file_location_subscription{
+                            file_uuid = FileUUID,
+                            time_threshold = 500,
+                            counter_threshold = 5
+                        },
+                        event_stream = #event_stream_definition{
+                            metadata = 0,
+                            emission_rule = fun(_) -> true end,
+                            init_handler = event_utils:send_subscription_handler(),
+                            event_handler = fun(Evts, Ctx) ->
+                                ?info("Location changed ~p", [Evts])
+                            end,
+                            terminate_handler = event_utils:send_subscription_cancellation_handler()
+                        }
+                    },
+
+                    event:subscribe(Sub1),
+                    event:subscribe(Sub2),
+
                     {ok, #lfm_handle{file_location = Location, provider_id = ProviderId,
                         sfm_handles = maps:from_list([{default, {{StorageId, FileId}, NewSFMHandle}}]),
                         fslogic_ctx = CTX, file_uuid = _UUID, open_mode = OpenType}};

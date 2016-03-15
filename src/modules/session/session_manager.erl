@@ -171,7 +171,7 @@ reuse_or_create_rest_session(Iden, Auth) ->
 %% Creates or reuses proxy session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: session:id(), Auth :: session:auth(), SessionType :: atom()) ->
+-spec reuse_or_create_proxy_session(SessId :: session:id(), ProxyVia :: oneprovider:id(), Auth :: session:auth(), SessionType :: atom()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
     {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
@@ -254,7 +254,7 @@ get_provider_session_id(Type, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec session_id_to_provider_id(session:id()) -> oneprovider:id().
 session_id_to_provider_id(SessId) ->
-    {_, provider, ProviderId} = binary_to_term(base64:decode(SessId)),
+    {_, _, ProviderId} = binary_to_term(base64:decode(SessId)),
     ProviderId.
 
 %%%===================================================================

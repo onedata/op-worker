@@ -62,13 +62,15 @@ deserialize_server_message(Message, _SessionId) ->
     #'ServerMessage'{
         message_id = MsgId,
         message_stream = MsgStm,
-        message_body = {_, MsgBody}
+        message_body = {_, MsgBody},
+        session_id = SessionId
     } = messages:decode_msg(Message, 'ServerMessage'),
     {ok, DecodedId} = message_id:decode(MsgId),
     {ok, #server_message{
         message_id = DecodedId,
         message_stream = translator:translate_from_protobuf(MsgStm),
-        message_body = translator:translate_from_protobuf(MsgBody)
+        message_body = translator:translate_from_protobuf(MsgBody),
+        session_id = SessionId
     }}.
 
 %%--------------------------------------------------------------------
@@ -78,12 +80,13 @@ deserialize_server_message(Message, _SessionId) ->
 %%--------------------------------------------------------------------
 -spec serialize_server_message(#server_message{}) -> {ok, binary()} | no_return().
 serialize_server_message(#server_message{message_id = MsgId, message_stream = MsgStm,
-    message_body = MsgBody}) ->
+    message_body = MsgBody, session_id = SessionId}) ->
     {ok, EncodedId} = message_id:encode(MsgId),
     ServerMessage = #'ServerMessage'{
         message_id = EncodedId,
         message_stream = translator:translate_to_protobuf(MsgStm),
-        message_body = translator:translate_to_protobuf(MsgBody)
+        message_body = translator:translate_to_protobuf(MsgBody),
+        session_id = SessionId
     },
     {ok, messages:encode_msg(ServerMessage, [verify])}.
 

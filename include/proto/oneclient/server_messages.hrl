@@ -19,6 +19,7 @@
 -record(server_message, {
     message_id :: message_id:id(),
     message_stream :: #message_stream{},
+    session_id :: session:id(),
     message_body :: tuple()
 }).
 
