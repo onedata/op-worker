@@ -56,6 +56,7 @@ export default Ember.Component.extend({
       });
       record.save().then(() => {}, (failMessage) => {
         this.get('errorNotifier').handle(failMessage);
+        record.destroy();
       });
     },
 
@@ -80,6 +81,6 @@ export default Ember.Component.extend({
         file.destroyRecursive();
       });
     }
-  },
+  }
 
 });
