@@ -2,7 +2,9 @@ Data files list for
 
 <ul>
   {{#each filesInfo as |fileInfo|}}
-    <li {{action "openFile" fileInfo.file}}>
+  {{!-- TODO: open file when selected and enter pressed --}}
+    <li {{action "openFile" fileInfo.file on="doubleClick"}}
+      {{action 'selectFile' fileInfo.file on="click"}}>
       <span>
         {{#if fileInfo.file.isDir}}
           {{icon 'folder'}}
@@ -10,7 +12,7 @@ Data files list for
           {{icon 'file'}}
         {{/if}}
       </span>
-      <strong class="file-entry" id="file-{{fileInfo.file.id}}" {{action 'selectFile' fileInfo.file}}>
+      <strong class="file-entry {{if fileInfo.file.isSelected 'selected-file'}}" id="file-{{fileInfo.file.id}}">
         {{fileInfo.file.name}}
       </strong>
     </li>
@@ -22,3 +24,12 @@ Data files list for
   <a {{action 'createFile' 'file'}} style="margin-right: 15px;">CREATE-FILE</a>
   <a {{action 'createFile' 'dir'}}>CREATE-DIRECTORY</a>
 </div>
+
+<hr/>
+
+{{#if singleSelectedFile}}
+  <div class="rename-file">
+    {{input value=renameFileName}}
+    <a {{action 'renameSelectedFile'}}>RENAME-SELECTED-FILE</a>
+  </div>
+{{/if}}
