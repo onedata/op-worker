@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
 -export([get/2, fetch/1, fetch/2]).
@@ -148,7 +148,7 @@ get(SpaceId, SessId) ->
 -spec fetch(SpaceId :: binary()) -> {ok, datastore:document()} | datastore:get_error().
 fetch(SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {ok, #space_details{id = Id, name = Name}} = gr_spaces:get_details(provider, SpaceId),
+    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(provider, SpaceId),
     Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
     {ok, _} = space_info:save(Doc),
     {ok, Doc}.
@@ -162,14 +162,14 @@ fetch(SpaceId) ->
 -spec fetch(SpaceId :: binary(), SessId :: session:id()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(SpaceId, ?ROOT_SESS_ID) ->
-    {ok, SpaceDetails} = gr_spaces:get_details(provider, SpaceId),
+    {ok, SpaceDetails} = oz_spaces:get_details(provider, SpaceId),
     fetch(SpaceId, ?ROOT_SESS_ID, ?ROOT_USER_ID, SpaceDetails);
 fetch(SpaceId, SessId) ->
     {ok, #document{value = #session{
         auth = #auth{macaroon = Macaroon, disch_macaroons = DischMacaroons},
         identity = #identity{user_id = UserId}
     }}} = session:get(SessId),
-    {ok, SpaceDetails} = gr_spaces:get_details(
+    {ok, SpaceDetails} = oz_spaces:get_details(
         {user, {Macaroon, DischMacaroons}}, SpaceId),
     fetch(SpaceId, SessId, UserId, SpaceDetails).
 

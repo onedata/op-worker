@@ -5,7 +5,6 @@
 .idea
 .rebar
 
-
 cluster_manager
 src/gui_static/common
 src/gui_static/flatui
@@ -40,3 +39,7 @@ c_src/rt_container/*.o
 c_src/oneproxy/build/*
 
 docs/_build/
+
+# OS X
+.DS_Store
+._*

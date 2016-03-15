@@ -68,14 +68,14 @@ uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
 %%--------------------------------------------------------------------
 -spec spaceid_to_space_dir_uuid(SpaceId :: binary()) -> binary().
 spaceid_to_space_dir_uuid(SpaceId) ->
-    base64:encode(term_to_binary({space, SpaceId})).
+    http_utils:base64url_encode(term_to_binary({space, SpaceId})).
 
 %%--------------------------------------------------------------------
 %% @doc Convert file_meta uuid of space directory to SpaceId
 %%--------------------------------------------------------------------
 -spec space_dir_uuid_to_spaceid(SpaceUuid :: binary()) -> binary().
 space_dir_uuid_to_spaceid(SpaceUuid) ->
-    case binary_to_term(base64:decode(SpaceUuid)) of
+    case binary_to_term(http_utils:base64url_decode(SpaceUuid)) of
         {space, SpaceId} ->
             SpaceId;
         _ ->
@@ -88,7 +88,7 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
 %%--------------------------------------------------------------------
 -spec spaces_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
 spaces_uuid(UserId) ->
-    base64:encode(term_to_binary({UserId, ?SPACES_BASE_DIR_NAME})).
+    http_utils:base64url_encode(term_to_binary({UserId, ?SPACES_BASE_DIR_NAME})).
 
 %%--------------------------------------------------------------------
 %% @doc Returns UUID of user's default space directory.
@@ -96,7 +96,7 @@ spaces_uuid(UserId) ->
 %%--------------------------------------------------------------------
 -spec default_space_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
 default_space_uuid(UserId) ->
-    base64:encode(UserId).
+    http_utils:base64url_encode(UserId).
 
 %%%===================================================================
 %%% Internal functions

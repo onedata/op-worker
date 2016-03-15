@@ -14,7 +14,7 @@
 
 -include("modules/fslogic/lfm_internal.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/global_registry/gr_providers.hrl").
+-include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -define(RTRANSFER_PORT, 6665).
@@ -49,7 +49,7 @@ rtransfer_opts() ->
     [
         {get_nodes_fun,
             fun(ProviderId) ->
-                {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
+                {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
                 lists:map(
                     fun(URL) ->
                         {ok, Ip} = inet:ip(binary_to_list(URL)),

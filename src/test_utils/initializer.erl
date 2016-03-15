@@ -13,8 +13,8 @@
 -author("Tomasz Lichon").
 
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
--include_lib("ctool/include/global_registry/gr_groups.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
+-include_lib("ctool/include/oz/oz_groups.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -55,7 +55,7 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, gr_spaces, gr_groups, space_storage]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
 
 clear_cache(W) ->
     A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
@@ -288,8 +288,8 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     User4 = {4, [Space4], [Group4]},
 
     file_meta_mock_setup(SameDomainWorkers),
-    gr_spaces_mock_setup(SameDomainWorkers, [Space1, Space2, Space3, Space4]),
-    gr_groups_mock_setup(SameDomainWorkers, [Group1, Group2, Group3, Group4]),
+    oz_spaces_mock_setup(SameDomainWorkers, [Space1, Space2, Space3, Space4]),
+    oz_groups_mock_setup(SameDomainWorkers, [Group1, Group2, Group3, Group4]),
 
     proplists:compact(
         initializer:setup_session(Worker, [User1, User2, User3, User4], Config)
@@ -336,15 +336,15 @@ name(Text, Num) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Mocks gr_spaces module, so that it returns default space details for default
+%% Mocks oz_spaces module, so that it returns default space details for default
 %% space ID.
 %% @end
 %%--------------------------------------------------------------------
--spec gr_spaces_mock_setup(Workers :: node() | [node()],
+-spec oz_spaces_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}]) -> ok.
-gr_spaces_mock_setup(Workers, Spaces) ->
-    test_utils:mock_new(Workers, gr_spaces),
-    test_utils:mock_expect(Workers, gr_spaces, get_details,
+oz_spaces_mock_setup(Workers, Spaces) ->
+    test_utils:mock_new(Workers, oz_spaces),
+    test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
             {ok, #space_details{id = SpaceId, name = SpaceName}}
@@ -354,15 +354,15 @@ gr_spaces_mock_setup(Workers, Spaces) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Mocks gr_groups module, so that it returns default group details for default
+%% Mocks oz_groups module, so that it returns default group details for default
 %% group ID.
 %% @end
 %%--------------------------------------------------------------------
--spec gr_groups_mock_setup(Workers :: node() | [node()],
+-spec oz_groups_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}]) -> ok.
-gr_groups_mock_setup(Workers, Groups) ->
-    test_utils:mock_new(Workers, gr_groups),
-    test_utils:mock_expect(Workers, gr_groups, get_details,
+oz_groups_mock_setup(Workers, Groups) ->
+    test_utils:mock_new(Workers, oz_groups),
+    test_utils:mock_expect(Workers, oz_groups, get_details,
         fun({user, _}, GroupId) ->
             GroupName = proplists:get_value(GroupId, Groups),
             {ok, #group_details{id = GroupId, name = GroupName}}

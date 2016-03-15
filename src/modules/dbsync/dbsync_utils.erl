@@ -13,8 +13,8 @@
 
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/global_registry/gr_providers.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/oz/oz_providers.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 
 
 %% API
@@ -36,7 +36,7 @@
     [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
     try
-        {ok, ProviderIds} = gr_spaces:get_providers(provider, SpaceId),
+        {ok, ProviderIds} = oz_spaces:get_providers(provider, SpaceId),
         ProviderIds
     catch
         _:{_, {error, 'No such file or directory'}} ->
@@ -61,10 +61,10 @@ get_spaces_for_provider() ->
 -spec get_spaces_for_provider(oneprovider:id()) ->
     [SpaceId :: binary()].
 get_spaces_for_provider(ProviderId) ->
-    {ok, SpaceIds} = gr_providers:get_spaces(provider),
+    {ok, SpaceIds} = oz_providers:get_spaces(provider),
     lists:foldl(
         fun(SpaceId, Acc) ->
-            {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
+            {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
             case lists:member(ProviderId, Providers) of
                 true -> [SpaceId | Acc];
                 false -> Acc
@@ -78,7 +78,7 @@ get_spaces_for_provider(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_url(ProviderId :: oneprovider:id()) -> URL :: binary() | no_return().
 get_provider_url(ProviderId) ->
-    {ok, #provider_details{urls = URLs}} = gr_providers:get_details(provider, ProviderId),
+    {ok, #provider_details{urls = URLs}} = oz_providers:get_details(provider, ProviderId),
     _URL = lists:nth(crypto:rand_uniform(1, length(URLs) + 1), URLs).
 
 

@@ -93,7 +93,7 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 -spec handle_json_data(req(), #{}) -> {term(), req(), #{}}.
 handle_json_data(Req, State = #{auth := Auth}) ->
-    case Auth =:= session:get_rest_session_id(?GLOBALREGISTRY_IDENTITY) of
+    case Auth =:= session:get_rest_session_id(?OZ_IDENTITY) of
         true ->
             case cowboy_req:path_info(Req) of
                 {[<<"auth">>], _}  ->

@@ -39,6 +39,6 @@
 %%% Global identities
 %%%===================================================================
 
--define(GLOBALREGISTRY_IDENTITY, #identity{user_id = <<"GLOBALREGISTRY">>}).
+-define(OZ_IDENTITY, #identity{user_id = <<"ONE-ZONE">>}).
 
 -endif.
