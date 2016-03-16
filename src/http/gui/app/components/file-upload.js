@@ -9,7 +9,8 @@ export default Ember.Component.extend({
       chunkSize: 1*1024*1024,
       simultaneousUploads: 4,
       testChunks: false,
-      throttleProgressCallbacks: 1
+      throttleProgressCallbacks: 1,
+      query: {parentId: this.get('currentDir.id')}
     });
   }.property('uploadAddress'),
 
