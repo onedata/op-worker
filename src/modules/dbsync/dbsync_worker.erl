@@ -633,7 +633,11 @@ ensure_global_stream_active() ->
     case is_valid_stream(state_get(changes_stream)) of
         true -> ok;
         false ->
-            Since = state_get(global_resume_seq),
+            Since0 = state_get(global_resume_seq),
+            Since = case Since0 of
+                undefined -> 0;
+                _ -> Since0
+            end,
             timer:send_after(0, whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
             ok
     end.
