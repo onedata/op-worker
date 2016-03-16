@@ -66,7 +66,7 @@ start_link() ->
     CertFile = oz_plugin:get_cert_path(),
     Options = [{keyfile, KeyFile}, {certfile, CertFile}, {cacertfile, CACertFile}],
 
-    case websocket_client:star9t_link(Address, ?MODULE, [], Options) of
+    case websocket_client:start_link(Address, ?MODULE, [], Options) of
         {ok, Pid} ->
             Pid ! register,
             {ok, Pid};
