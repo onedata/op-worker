@@ -35,10 +35,9 @@
 
 %% API
 -export([get_node_hostname/0, get_node_ip/0]).
--export([get_provider_domain/0]).
--export([get_oz_domain/0, get_oz_url/0]).
+-export([get_provider_id/0, get_provider_domain/0]).
+-export([get_oz_domain/0, get_oz_url/0, get_oz_cert/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0]).
--export([get_provider_id/0, get_oz_cert/0]).
 -export([register_in_gr/3, register_in_oz_dev/3, save_file/2]).
 
 %%%===================================================================
