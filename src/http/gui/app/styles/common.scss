@@ -77,8 +77,11 @@ html, body {
       }
 
       .toolbar-icon {
-        // important because we want all icons to be the same color
-        color: $color-toolbar-icon !important;
+        color: $color-toolbar-icon;
+
+        &.disabled {
+          color: $color-toolbar-icon-disabled;
+        }
       }
 
       .navbar-brand {

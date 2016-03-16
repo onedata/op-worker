@@ -41,6 +41,10 @@ export default Ember.Route.extend({
     Render it in "data" template, because it's a master view of a data browser.
   */
   renderTemplate() {
+    this.render('data.dataSpace.dir.dirToolbar', {
+      into: 'application',
+      outlet: 'toolbar'
+    });
     this.render({
       into: 'data',
       outlet: 'dir'

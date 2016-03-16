@@ -5,59 +5,23 @@ export default Ember.Component.extend({
   store: Ember.inject.service('store'),
   fileSystemTree: Ember.inject.service('file-system-tree'),
   errorNotifier: Ember.inject.service('error-notifier'),
+  fileBrowser: Ember.inject.service('file-browser'),
 
   // TODO: doc
   dir: null,
-
-  selectedFiles: function() {
-    return this.get('dir.children').filter((file) => file.get('isSelected'));
-  }.property('dir.children.@each.isSelected'),
-
-  // TODO: only for single-selected file
-  singleSelectedFile: function() {
-    let selected = this.get('selectedFiles');
-    return selected.length === 1 ? selected[0] : null;
-  }.property('selectedFiles'),
-
-
-  // selectedFileChanged: function() {
-  //   let selectedFile = this.get('selectedFile');
-  //   this.$().find('.file-entry.selected-file').removeClass('selected-file');
-  //   this.$().find('#file-' + selectedFile.get('id')).addClass('selected-file');
-  // }.observes('selectedFile'),
-
-  filesInfo: function() {
-    return this.get('dir.children').map((file) => {
-      let fileSystemTree = this.get('fileSystemTree');
-      // TODO: get space id will be removed - only for space resolve demonstration
-      return {
-        file: file,
-        label: `id: "${file.get('id')}" "${file.get('name')}" (${file.get('type')}) <- space "${fileSystemTree.getSpaceIdForFile(file)}", `,
-        path: fileSystemTree.dirsPath(file).map((i) => `${i.get('name')}`).join('/')
-      };
-    });
-  }.property('dir.children.@each.name', 'dir.children.@each.type'),
-
+  
   actions: {
-    openFile(dirFile) {
-      if (dirFile.get('isDir')) {
-        this.sendAction('openDirInBrowser', dirFile.get('id'));
+    openFile(file) {
+      if (file.get('isDir')) {
+        this.sendAction('openDirInBrowser', file.get('id'));
       } else {
-        console.error(`Clicked file is no a dir, so nothing will happen: ${dirFile.get('id')}`);
+        window.open(`/download/${file.get('id')}`, '_blank');
       }
     },
 
+    // TODO: show modal
     createFile(type) {
-      let fileName = this.get('createFileName');
-      let record = this.get('store').createRecord('file', {
-        name: fileName,
-        parent: this.get('dir'),
-        type: type
-      });
-      record.save().then(() => {}, (failMessage) => {
-        this.get('errorNotifier').handle(failMessage);
-        record.destroy();
-      });
+      this.get('dir').createFile(type, this.get('createFileName'));
     },
 
     // TODO: multiple select only with ctrl
@@ -65,8 +29,9 @@ export default Ember.Component.extend({
       file.set('isSelected', !file.get('isSelected'));
     },
 
+    // TODO: renameFileName will be probably in modal
     renameSelectedFile() {
-      let file = this.get('singleSelectedFile');
+      let file = this.get('dir.singleSelectedFile');
       if (file) {
         file.set('name', this.get('renameFileName') || '');
         file.save();
@@ -77,9 +42,7 @@ export default Ember.Component.extend({
 
     // TODO: error handling
     removeSelectedFiles() {
-      this.get('selectedFiles').forEach((file) => {
-        file.destroyRecursive();
-      });
+      this.get('dir').removeSelectedFiles();
     }
   }
 
