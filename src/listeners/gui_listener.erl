@@ -74,6 +74,7 @@ start() ->
         {'_', [
             {?provider_id_path, get_provider_id_handler, []},
             {"/nagios/[...]", nagios_handler, []},
+            {"/upload", upload_handler, []},
             {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
             {"/[...]", gui_static_handler, {dir, DocRoot}}
         ]}
@@ -81,6 +82,8 @@ start() ->
 
     % Call gui init, which will call init on all modules that might need state.
     gui:init(),
+    % Start an ETS table for GUI uploads
+    upload_handler:start_ets(),
     % Start the listener for web gui and nagios handler
     Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
         ranch_ssl2, [
