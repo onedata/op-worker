@@ -25,7 +25,7 @@
 %% Translates json update batch from OZ to tuples with update data.
 %% @end
 %%--------------------------------------------------------------------
--spec json_to_updates(RawJson :: binary) -> [#sub_update{}].
+-spec json_to_updates(RawJson :: binary()) -> [#sub_update{}].
 
 json_to_updates(Raw) ->
     Json = json_utils:decode(Raw),
@@ -52,7 +52,10 @@ json_to_updates(Raw) ->
                 #sub_update{
                     seq = Seq, id = ID, revs = Revs, model = Model,
                     doc = #document{key = ID, value = Value, rev = hd(Revs)}
-                }
+                };
+            _ ->
+                ?warning("Ignoring update data: ~p, seq: ~p", [Data, Seq]),
+                #sub_update{ignore = true, seq = Seq}
         end
     end, Json).
 
