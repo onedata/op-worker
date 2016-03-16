@@ -69,8 +69,8 @@ rtransfer_opts() ->
                 lfm_files:write_without_events(Handle, Offset, Buffer)
             end},
         {close_fun,
-            fun(_Handle) ->
-                ok
+            fun(Handle) ->
+                lfm_files:fsync(Handle)
             end},
         {ranch_opts,
             [
