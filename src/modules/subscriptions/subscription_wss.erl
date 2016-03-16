@@ -6,6 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
+%%% Maintains connection to the OZ over WSS.
+%%% Only one connection per node is to be active.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(subscription_wss).
@@ -37,11 +39,14 @@ healthcheck() ->
 %% Pushes message to the OZ.
 %% @end
 %%--------------------------------------------------------------------
--spec push(Message :: binary()) -> any().
+-spec push(Message :: binary()) -> ok.
 push(Message) ->
     case whereis(subscription_wss) of
-        undefined -> ?warning("No connection - dropping ~p", [Message]);
-        _ -> whereis(subscription_wss) ! {push, Message}
+        undefined ->
+            ?warning("No connection - dropping ~p", [Message]);
+        WSS ->
+            WSS ! {push, Message},
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -52,15 +57,16 @@ push(Message) ->
 -spec start_link() ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
-    Port = integer_to_list(application:get_env(?APP_NAME, oz_wss_port, 9443)),
-    Address = "wss://" ++ oneprovider:get_oz_domain() ++ ":" ++ Port ++ "/subscriptions",
+    {ok, Port} = application:get_env(?APP_NAME, oz_wss_port),
+    Address = "wss://" ++ oneprovider:get_oz_domain() ++
+        ":" ++ integer_to_list(Port) ++ "/subscriptions",
 
     CACertFile = oz_plugin:get_cacert_path(),
     KeyFile = oz_plugin:get_key_path(),
     CertFile = oz_plugin:get_cert_path(),
     Options = [{keyfile, KeyFile}, {certfile, CertFile}, {cacertfile, CACertFile}],
 
-    case websocket_client:start_link(Address, ?MODULE, [], Options) of
+    case websocket_client:star9t_link(Address, ?MODULE, [], Options) of
         {ok, Pid} ->
             Pid ! register,
             {ok, Pid};

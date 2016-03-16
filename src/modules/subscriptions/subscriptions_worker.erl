@@ -59,7 +59,8 @@ init([]) ->
 handle(healthcheck) ->
     case subscription_wss:healthcheck() of
         ok -> ok;
-        {error, Reason} -> ?warning("Connection error:~p", [Reason]), ok
+        %% Active connection to the OZ isn't required to assume worker is ok
+        {error, Reason} -> ?warning("Connection error:~p", [Reason])
     end;
 
 handle(start_provider_connection) ->
@@ -93,8 +94,8 @@ handle({process_updates, Updates}) ->
     subscriptions:account_updates(ordsets:from_list(Seqs)),
     ok;
 
-%% Handle stream crashes
 handle({'EXIT', _Pid, _Reason} = Req) ->
+    %% Handle stream crashes
     case subscription_wss:healthcheck() of
         {error, _} ->
             ?error("Subscriptions connection crashed: ~p", [_Reason]),
@@ -125,7 +126,7 @@ cleanup() ->
 %% Process update.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_update(#sub_update{}) -> any().
+-spec handle_update(#sub_update{}) -> ok.
 handle_update(#sub_update{ignore = true}) -> ok;
 handle_update(#sub_update{delete = true, id = ID, model = Model}) ->
     subscription_conflicts:delete_model(Model, ID);
@@ -137,6 +138,7 @@ handle_update(#sub_update{model = Model, doc = Doc, revs = Revs}) ->
 %% Send subscription renew message.
 %% @end
 %%--------------------------------------------------------------------
+-spec refresh_subscription() -> ok.
 refresh_subscription() ->
     {Missing, ResumeAt} = subscriptions:get_missing(),
     Users = subscriptions:get_users(),
@@ -156,15 +158,19 @@ refresh_subscription() ->
 %% Schedule renewing the subscription at fixed interval.
 %% @end
 %%--------------------------------------------------------------------
+-spec schedule_subscription_renew() -> ok.
 schedule_subscription_renew() ->
-    timer:send_interval(timer:seconds(2), whereis(?MODULE),
-        {timer, refresh_subscription}).
+    {ok, _} = timer:send_interval(timer:seconds(2), whereis(?MODULE),
+        {timer, refresh_subscription}),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc @private
 %% Schedule (re)start of the provider - OZ link
 %% @end
 %%--------------------------------------------------------------------
+-spec schedule_connection_start() -> ok.
 schedule_connection_start() ->
-    timer:send_after(timer:seconds(2), whereis(?MODULE),
-        {timer, start_provider_connection}).
+    {ok, _} = timer:send_after(timer:seconds(2), whereis(?MODULE),
+        {timer, start_provider_connection}),
+    ok.

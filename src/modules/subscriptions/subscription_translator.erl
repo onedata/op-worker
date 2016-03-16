@@ -1,15 +1,16 @@
 %%%--------------------------------------------------------------------
-%%% @author Michal Żmuda
+%%% @author Michal Zmuda
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
+%%% Encodes raw json updates and outputs proper update records.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(subscription_translator).
--author("Michal Żmuda").
+-author("Michal Zmuda").
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
@@ -69,8 +70,7 @@ json_to_updates(Raw) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec props_to_value(Model :: subscriptions:model(), [{binary(), term()}]) ->
-    Value :: term().
-
+    Value :: subscriptions:record().
 props_to_value(onedata_user, Props) ->
     #onedata_user{
         name = proplists:get_value(<<"name">>, Props),
@@ -94,7 +94,6 @@ props_to_value(space_info, Props) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec type_to_model(ModelRaw :: binary()) -> subscriptions:model().
-
 type_to_model(<<"space">>) ->
     space_info;
 type_to_model(<<"group">>) ->

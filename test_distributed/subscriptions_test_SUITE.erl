@@ -6,6 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
+%%% Covers handling updates from subscription.
+%%% Usually injects updates from OZ and later verifies datastore state.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(subscriptions_test_SUITE).

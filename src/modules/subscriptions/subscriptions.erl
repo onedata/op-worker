@@ -24,22 +24,27 @@
 -type(seq() :: non_neg_integer()).
 -type(rev() :: term()).
 -type(model() :: onedata_group | onedata_user | space_info).
--export_type([seq/0, rev/0, model/0]).
+-type(record() :: #space_info{} | #onedata_user{} | #onedata_group{}).
+-export_type([seq/0, rev/0, model/0, record/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates state with already received sequence numbers.
 %% @end
 %%--------------------------------------------------------------------
--spec account_updates(SequenceNumbers :: ordsets:ordset(seq())) -> any().
+-spec account_updates(SequenceNumbers :: ordsets:ordset(seq())) -> ok.
 account_updates(SequenceNumbers) ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         #subscriptions_state{missing = Missing, largest = Largest} = State,
         NewLargest = max(Largest, lists:last(SequenceNumbers)),
-        AddedMissing = lists:seq(Largest, NewLargest) -- [Largest],
+        AddedMissing = case NewLargest =:= Largest of
+            true -> [];
+            false -> lists:seq(Largest+1, NewLargest)
+        end,
         NewMissing = ordsets:subtract(Missing ++ AddedMissing, SequenceNumbers),
         {ok, State#subscriptions_state{missing = NewMissing, largest = NewLargest}}
-    end).
+    end),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,12 +75,13 @@ get_users() ->
 %% Should be invoked when first session for user is added.
 %% @end
 %%--------------------------------------------------------------------
--spec put_user(UserID :: onedata_user:id()) -> any().
+-spec put_user(UserID :: onedata_user:id()) -> ok.
 put_user(UserID) ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         Users = sets:add_element(UserID, State#subscriptions_state.users),
         {ok, State#subscriptions_state{users = Users}}
-    end).
+    end),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,19 +89,20 @@ put_user(UserID) ->
 %% the datatstore. Performance may be poor as it examines sessions of users.
 %% @end
 %%--------------------------------------------------------------------
--spec reevaluate_users() -> any().
+-spec reevaluate_users() -> ok.
 reevaluate_users() ->
     subscriptions_state:update(?SUBSCRIPTIONS_STATE_KEY, fun(State) ->
         Users = get_users_with_session(),
         {ok, State#subscriptions_state{users = sets:from_list(Users)}}
-    end).
+    end),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Ensures that state is initialised.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_initialised() -> any().
+-spec ensure_initialised() -> ok.
 ensure_initialised() ->
     case subscriptions_state:exists(?SUBSCRIPTIONS_STATE_KEY) of
         true -> ok;
@@ -110,7 +117,8 @@ ensure_initialised() ->
                     users = sets:from_list(Users),
                     refreshing_node = node()
                 }
-            }, fun(State) -> {ok, State} end)
+            }, fun(State) -> {ok, State} end),
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -147,8 +155,8 @@ get_refreshing_node() ->
 -spec get_users_with_session() -> [onedata_user:id()].
 get_users_with_session() ->
     {ok, Docs} = session:all_with_user(),
-    UserIDs = lists:filtermap(fun
+    lists:filtermap(fun
         (#document{value = #session{identity = #identity{user_id = UserID}}}) ->
-            {true, UserID}
-    end, Docs),
-    UserIDs.
+            {true, UserID};
+        (_) -> false
+    end, Docs).
