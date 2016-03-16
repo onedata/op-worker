@@ -205,7 +205,11 @@ handle({'EXIT', Stream, Reason}) ->
         _ ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
     end;
-handle({async_init_stream, Since, Until, Queue}) ->
+handle({async_init_stream, Since0, Until, Queue}) ->
+    Since = case Since0 of
+        undefined -> 0;
+        _ -> Since0
+    end,
     state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
@@ -633,11 +637,7 @@ ensure_global_stream_active() ->
     case is_valid_stream(state_get(changes_stream)) of
         true -> ok;
         false ->
-            Since0 = state_get(global_resume_seq),
-            Since = case Since0 of
-                undefined -> 0;
-                _ -> Since0
-            end,
+            Since = state_get(global_resume_seq),
             timer:send_after(0, whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
             ok
     end.
