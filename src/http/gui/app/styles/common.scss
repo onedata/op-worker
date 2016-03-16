@@ -19,12 +19,16 @@ $sidebar-item-hover-color: $onedata-red;
 $secondary-sidebar-font-size: 13pt !default;
 $secondary-sidebar-icon-font-size: 38px !default;
 
-$top-bar-icon-font-size: 16pt !default;
+$top-bar-icon-font-size: 32px !default;
 
 $table-font-size: 13pt !default;
 $table-checkbox-size: 16pt !default;
 
 $transition-time: 0.25s !default;
+
+/// Bootstrap variables
+// TODO: set to values from app.scss
+// @grid-float-breakpoint
 
 /// Set Open Sans font globally
 @font-face {
@@ -61,21 +65,57 @@ html, body {
     //transition: left 0.25s;
 
     .navbar {
-      min-height: $top-bar-height;
+      height: $top-bar-height;
       margin-bottom: 0;
       border: none;
       border-radius: 0;
       background: none;
 
+      .top-bar-item {
+        // important because we want all items height to fit bar height
+        min-height: $top-bar-height !important;
+      }
+
+      .toolbar-icon {
+        // important because we want all icons to be the same color
+        color: $color-toolbar-icon !important;
+      }
+
       .navbar-brand {
-        padding-left: 42px;
+        width: 156px;
+        margin-left: 32px;
+        margin-right: 62px;
+        // TODO: svg
+        background-image: url("/assets/images/logo.png");
+        background-position: center center;
+        background-repeat: no-repeat;
       }
 
       .top-bar-icon {
-        font-size: $top-bar-icon-font-size;
+        // important because we to force top bar icons to be equally sized
+        font-size: $top-bar-icon-font-size !important;
+      }
+
+      // TODO: left only for first, disable right for last
+      .toolbar-group {
+        border-right: solid 1px $color-toolbar-separator;
+
+        &.navbar-right {
+          &:first-of-type {
+            border-right: none;
+          }
+        }
+
       }
 
       .navbar-nav {
+        // TODO: probably > li can be used... consider it
+        // TODO: .top-bar-item
+        > li > a {
+          // important because we want all items height to fit bar height
+          min-height: $top-bar-height !important;
+        }
+
         .profile-dropdown {
           margin-left: 10px;
           margin-right: 10px;
@@ -116,14 +156,12 @@ html, body {
       .small-logo {
         height: $top-bar-height;
         width: $sidebar-width;
-        padding-top: 15px;
         text-align: center;
 
-        img {
-          padding: 0;
-          width: 41px;
-          height: 27px;
-        }
+        // TODO: use SVG
+        background-image: url("/assets/images/logo-short.png");
+        background-repeat: no-repeat;
+        background-position: center center;
       }
 
       // TODO
@@ -277,6 +315,7 @@ html, body {
           }
 
           &.first-level {
+            // TODO: this causes a left "margin" of horizontal lines...
             border-left: 4px solid;
             border-left-color: transparent;
           }
