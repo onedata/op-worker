@@ -289,15 +289,23 @@ get_bin_param(Key, Params) ->
     end.
 
 
-create_unique_file(SessionId, ProposedPath) ->
-    create_unique_file(SessionId, ProposedPath, 1).
+create_unique_file(SessionId, OriginalPath) ->
+    create_unique_file(SessionId, OriginalPath, 0).
 
 
 create_unique_file(_, _, ?MAX_UNIQUE_FILENAME_COUNTER) ->
     throw(filename_occupied);
 
 
-create_unique_file(SessionId, ProposedPath, Counter) ->
+create_unique_file(SessionId, OriginalPath, Counter) ->
+    ProposedPath = case Counter of
+        0 ->
+            OriginalPath;
+        _ ->
+            RootNm = filename:rootname(OriginalPath),
+            Ext = filename:extension(OriginalPath),
+            str_utils:format_bin("~s(~B)~s", [RootNm, Counter, Ext])
+    end,
     % @todo use exists when it is implemented
     case logical_file_manager:stat(SessionId, {path, ProposedPath}) of
         {error, _} ->
@@ -305,10 +313,7 @@ create_unique_file(SessionId, ProposedPath, Counter) ->
             {ok, FileId} = logical_file_manager:create(SessionId, ProposedPath),
             FileId;
         {ok, _} ->
-            RootNm = filename:rootname(ProposedPath),
-            Ext = filename:extension(ProposedPath),
-            NewName = str_utils:format_bin("~s(~B)~s", [RootNm, Counter, Ext]),
-            create_unique_file(SessionId, NewName, Counter + 1)
+            create_unique_file(SessionId, OriginalPath, Counter + 1)
     end.
 
 
