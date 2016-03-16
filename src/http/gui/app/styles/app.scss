@@ -82,3 +82,7 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
     @import 'components/one-table-common';
     @import 'components/one-table-mobile';
 }
+
+/// Bootstrap
+
+@import "bootstrap";
