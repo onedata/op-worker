@@ -82,8 +82,6 @@ start() ->
 
     % Call gui init, which will call init on all modules that might need state.
     gui:init(),
-    % Start an ETS table for GUI uploads
-    upload_handler:start_ets(),
     % Start the listener for web gui and nagios handler
     Result = ranch:start_listener(?HTTPS_LISTENER, GuiNbAcceptors,
         ranch_ssl2, [
