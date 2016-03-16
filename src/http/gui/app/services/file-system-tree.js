@@ -14,6 +14,7 @@ export default Ember.Service.extend(Ember.Evented, {
     return rootSpaces;
   }.property('dataSpaces.@each.rootDir.id'),
 
+  // TODO: move spaceId to File model
   getSpaceIdForFile(file) {
     if (file) {
       let parent = file.get('parent');
@@ -28,26 +29,8 @@ export default Ember.Service.extend(Ember.Evented, {
   },
 
   // TODO: cache of tree
-  /**
-   * Returns array with file parents, including the file.
-   * The array is ordered from root dir to given file (from parents to children).
-   *
-   * @param file - a leaf file of path to find
-   * @returns {Array} array of Files
-   */
   dirsPath(file) {
-    if (file) {
-      let path = [file];
-      let parent = file.get('parent');
-      while (parent && parent.get('id')) {
-        path.unshift(parent);
-        parent = parent.get('parent');
-      }
-      console.debug(`Computed path for file ${file.get('id')}: ${JSON.stringify(path)}`);
-      return path;
-    } else {
-      return [];
-    }
+    return file ? file.dirsPath() : [];
   },
 
   expandDir(file) {

@@ -2,7 +2,9 @@
 
 <div id="app">
   <header>
-    {{top-bar}}
+    {{#top-bar}}
+      {{outlet 'toolbar'}}
+    {{/top-bar}}
   </header>
 
   <nav class="primary-sidebar">

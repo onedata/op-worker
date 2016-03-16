@@ -1,21 +1,19 @@
-Data files list for
-
 <ul>
-  {{#each filesInfo as |fileInfo|}}
+  {{#each dir.children as |file|}}
   {{!-- TODO: open file when selected and enter pressed --}}
-    <li {{action "openFile" fileInfo.file on="doubleClick"}}
-      {{action 'selectFile' fileInfo.file on="click"}}>
+    <li {{action "openFile" file on="doubleClick"}}
+      {{action "selectFile" file on="click"}}>
       <span>
-        {{#if fileInfo.file.isDir}}
-          {{icon 'folder'}}
+        {{#if file.isDir}}
+          {{icon "folder"}}
         {{else}}
-          {{icon 'file'}}
+          {{icon "file"}}
         {{/if}}
       </span>
-      <strong class="file-entry {{if fileInfo.file.isSelected 'selected-file'}}" id="file-{{fileInfo.file.id}}">
-        {{fileInfo.file.name}}
+      <strong class="file-entry {{if file.isSelected 'selected-file'}}" id="file-{{file.id}}">
+        {{file.name}}
       </strong>
-      <i>Parent: {{fileInfo.file.parent.id}}</i>
+      <i>Path: {{file.path}}</i>
     </li>
   {{/each}}
 </ul>

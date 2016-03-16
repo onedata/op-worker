@@ -9,8 +9,11 @@
  */
 
 import DS from 'ember-data';
+import Ember from 'ember';
 
 export default DS.Model.extend({
+  errorNotifier: Ember.inject.service('errorNotifier'),
+
   name: DS.attr('string'),
   /**
     Specifies is this object a regular file ("file") or directory ("dir")
@@ -20,13 +23,22 @@ export default DS.Model.extend({
   parent: DS.belongsTo('file', {inverse: 'children', async: true}),
   children: DS.hasMany('file', {inverse: 'parent', async: true}),
 
-  // TODO: this information will be probably stored in component
   isExpanded: false,
   isSelected: false,
 
   isDir: function () {
     return this.get('type') === 'dir';
   }.property('type'),
+
+  resetBrowserState() {
+    this.set('isExpanded', false);
+    this.set('isSelected', false);
+  },
+
+  resetBrowserStateRecursive() {
+    this.get('children').forEach((child) => child.resetBrowserStateRecursive());
+    this.resetBrowserState();
+  },
 
   // TODO: doc, destroy, not destroyRecord!
   destroyRecursive() {
@@ -70,11 +82,6 @@ export default DS.Model.extend({
     console.debug('File: ' + this.get('id') + ' isDeleted: ' + this.get('isDeleted'));
   },
 
-  hasSubDirs: function() {
-    return this.get('children').filter((child) => child.get('isDir'))
-      .length > 0;
-  }.property('children.@each.isDir'),
-
   isVisible: function () {
     var visible = this.get('parent.isExpanded');
     console.log('deselect(' + this.get('name') + '): ' +
@@ -83,5 +90,83 @@ export default DS.Model.extend({
       this.set('isSelected', false);
     }
     return visible;
-  }.property('parent.isExpanded')
+  }.property('parent.isExpanded'),
+
+  /// Utils
+
+  /**
+   * Returns array with file parents, including the file.
+   * The array is ordered from root dir to given file (from parents to children).
+   *
+   * @param file - a leaf file of path to find
+   * @returns {Array} array of Files
+   */
+  dirsPath() {
+    let path = [this];
+    let parent = this.get('parent');
+    while (parent && parent.get('id')) {
+      path.unshift(parent);
+      parent = parent.get('parent');
+    }
+    console.debug(`Computed path for file ${this.get('id')}: ${JSON.stringify(path)}`);
+    return path;
+  },
+
+  // TODO: may not update properly
+  path: function() {
+    return this.dirsPath().map(f => f.get('name')).join('/');
+  }.property('parent'),
+
+  // TODO: move directory utils to mixin
+  /// Directory utils
+
+  onlyDirectory() {
+    if (!this.get('isDir')) {
+      throw 'This file is not a directory!';
+    }
+  },
+
+  hasSubDirs: function() {
+    this.onlyDirectory();
+    return this.get('children').filter((child) => child.get('isDir'))
+      .length > 0;
+  }.property('children.@each.isDir'),
+
+  selectedFiles: function() {
+    this.onlyDirectory();
+    return this.get('children').filter((file) => file.get('isSelected'));
+  }.property('children.@each.isSelected'),
+
+  singleSelectedFile: function() {
+    this.onlyDirectory();
+    let selected = this.get('selectedFiles');
+    return selected.length === 1 ? selected[0] : null;
+  }.property('selectedFiles'),
+
+  isSomeFileSelected: function() {
+    this.onlyDirectory();
+    return this.get('selectedFiles.length') > 0;
+  }.property('selectedFiles'),
+
+  removeSelectedFiles() {
+    this.onlyDirectory();
+    this.get('selectedFiles').forEach((file) => {
+      file.destroyRecursive();
+    });
+  },
+
+  /** Creates file in this directory (only if this.isDir()) */
+  createFile(type, fileName) {
+    this.onlyDirectory();
+    let record = this.get('store').createRecord('file', {
+      name: fileName,
+      parent: this,
+      type: type
+    });
+    record.save().then(() => {}, (failMessage) => {
+      this.get('errorNotifier').handle(failMessage);
+      record.destroy();
+    });
+  },
+
 });

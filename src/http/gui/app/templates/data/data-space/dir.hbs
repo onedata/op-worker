@@ -1,7 +1,9 @@
-Directory id: [[ {{model.id}} ]]
+<div class="dir-path">
+  Path: {{model.path}}
+</div>
 
-Directory name: [[ {{model.name}} ]]
-{{!-- TODO: this will be an outlet for file details sidebar --}}
-{{!-- {{outlet}} --}}
+<hr>
 
-{{data-files-list dir=model openDirInBrowser='openDirInBrowser'}}
+<div class="files-list">
+  {{data-files-list dir=model openDirInBrowser='openDirInBrowser'}}
+</div>

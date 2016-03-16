@@ -1,8 +1,5 @@
 <ul>
-  <div class="small-logo">
-    <img src="assets/images/logoshort.png" alt="Onedata" />
-  </div>
-  {{!-- TODO: mains is a bad name... --}}
+  <div class="small-logo"></div>
   {{#each menuItems as |menuItem|}}
     <li>
       <a id="main-{{mainPage.name}}" {{action 'activateItem' menuItem.name}}>

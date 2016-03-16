@@ -1,0 +1,16 @@
+{{!-- TODO: toolbar icon component --}}
+<li>
+  {{!-- TODO: to remove, only for testing --}}
+  <div class="top-bar-item" style="padding-top: 20px;">
+    Some input:
+    {{input value=someInput}}
+  </div>
+</li>
+{{#each items as |item|}}
+  <li>
+    <a class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
+      {{action item.action}}>
+      {{icon item.icon 'top-bar-icon'}}
+    </a>
+  </li>
+{{/each}}
