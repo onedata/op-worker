@@ -186,6 +186,10 @@ includes_all_unseen_revs_on_ignore_test_() ->
 %%%-------------------------------------------------------------------
 
 setup() ->
+    meck:new(application, [unstick]),
+    meck:expect(application, get_env, fun
+        (_, subscriptions_history_lenght_limit) -> {ok, 100}
+    end),
     lists:foreach(fun(Model) ->
         meck:new(Model, [unstick]),
         meck:expect(Model, create_or_update, fun(_Doc, _Fun) ->
@@ -195,7 +199,6 @@ setup() ->
 
 teardown(_) ->
     lists:foreach(fun(Model) ->
-
         ?assert(meck:validate(Model))
     end, ?MOCKED_MODELS),
     meck:unload().
