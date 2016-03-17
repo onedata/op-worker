@@ -96,7 +96,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files_to_chown_bucket, [{onedata_user, create}, {onedata_user, save}], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(files_to_chown_bucket, [{onedata_user, create}, {onedata_user, save}], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
