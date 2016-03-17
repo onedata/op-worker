@@ -57,7 +57,8 @@ export default {
     dataFilesList: {
       files: 'pliki',
       size: 'rozmiar',
-      modification: 'modyfikacja'
+      modification: 'modyfikacja',
+      permissions: 'uprawnienia'
     },
     dataFilesListToolbar: {
       renameFileModal: {
@@ -75,6 +76,10 @@ export default {
       removeFilesModal: {
         title: 'Usuwanie plików',
         text: 'Czy chcesz usunąć wybrane elementy?'
+      },
+      editPermissionsModal: {
+        title: 'Zmiana uprawnień',
+        text: 'Wprowadź nowy kod uprawnień:'
       },
     }
   },

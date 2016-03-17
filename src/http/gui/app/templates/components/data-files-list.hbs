@@ -7,6 +7,9 @@
       {{t 'components.dataFilesList.size'}}
     </th>
     <th>
+      {{t 'components.dataFilesList.permissions'}}
+    </th>
+    <th>
       {{t 'components.dataFilesList.modification'}}
     </th>
   </thead>
@@ -29,6 +32,9 @@
         </td>
         <td>
           {{file.sizeHumanReadable}}
+        </td>
+        <td>
+          {{file.permissions}}
         </td>
         <td>
           {{file.modificationDate}}

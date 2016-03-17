@@ -55,7 +55,8 @@ export default {
     dataFilesList: {
       files: 'files',
       size: 'size',
-      modification: 'modification'
+      modification: 'modification',
+      permissions: 'permissions'
     },
     dataFilesListToolbar: {
       renameFileModal: {
@@ -73,6 +74,10 @@ export default {
       removeFilesModal: {
         title: 'Remove files',
         text: 'Do you want to remove selected files?'
+      },
+      editPermissionsModal: {
+        title: 'Edit permissions',
+        text: 'Enter new file permissions code:'
       },
     },
   },

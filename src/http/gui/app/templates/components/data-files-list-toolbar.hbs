@@ -99,6 +99,27 @@
   {{/bs-modal-footer}}
 {{/bs-modal}}
 
+{{!-- EDIT PERMISSIONS --}}
+
+{{#bs-modal open=isEditingPermissions body=false footer=false
+    title=(t "components.dataFilesListToolbar.editPermissionsModal.title")
+    id="edit-permissions"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitEditPermissions" "dir") model=this}}
+      {{bs-form-element controlType="text" property="newPermissions" autofocus=true
+        label=(t 'components.dataFilesListToolbar.editPermissionsModal.text')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.cancel"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
 {{!-- NOT IMPLEMENTED --}}
 
 {{#bs-modal open=isNotImplementedModal body=false footer=false

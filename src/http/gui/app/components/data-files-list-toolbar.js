@@ -39,7 +39,7 @@ export default Ember.Component.extend({
       },
       {
         icon: 'lock',
-        action: 'notImplemented',
+        action: 'editPermissions',
         disabled: !this.get('dir.isSomeFileSelected'),
       },
       {
@@ -86,12 +86,17 @@ export default Ember.Component.extend({
       //   debugger;
       // });
 
-      this.$().find('input').focus();
+      this.$().find('input').focus().select();
     },
 
     // TODO: error handling
     removeSelectedFiles() {
       this.set('isRemovingFiles', true);
+    },
+
+    editPermissions() {
+      this.set('newPermissions', '');
+      this.set('isEditingPermissions', true);
     },
 
     notImplemented() {
@@ -133,6 +138,14 @@ export default Ember.Component.extend({
         this.get('dir').removeSelectedFiles();
       } finally {
         this.set('isRemovingFiles', false);
+      }
+    },
+
+    submitEditPermissions() {
+      try {
+        this.get('dir').setSelectedFilesPermissions(this.get('newPermissions'));
+      } finally {
+        this.set('isEditingPermissions', false);
       }
     },
   }

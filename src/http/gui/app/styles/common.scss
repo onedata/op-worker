@@ -75,6 +75,10 @@ html, body {
       .toolbar-icon {
         color: $color-toolbar-icon;
 
+        &:hover {
+          color: $color-toolbar-icon !important;
+        }
+
         &.disabled {
           color: $color-toolbar-icon-disabled;
         }

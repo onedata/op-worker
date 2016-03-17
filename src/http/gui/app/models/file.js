@@ -23,17 +23,17 @@ export default DS.Model.extend({
   parent: DS.belongsTo('file', {inverse: 'children', async: true}),
   children: DS.hasMany('file', {inverse: 'parent', async: true}),
 
+  modificationTime: DS.attr('number'),
+  size: DS.attr('number'),
+  permissions: DS.attr('number'),
+
   isExpanded: false,
   isSelected: false,
 
-  // TODO: dummy fields
-  sizeBytes: 100,
-  modificationDate: '2015-05-20 17:23',
-
   // TODO: implement B, MB, GB, TODO: move to helper
   sizeHumanReadable: function() {
-    return `${this.get('sizeBytes')} B`;
-  }.property('sizeBytes'),
+    return `${this.get('size')} B`;
+  }.property('size'),
 
   isDir: function () {
     return this.get('type') === 'dir';
@@ -161,6 +161,14 @@ export default DS.Model.extend({
     this.onlyDirectory();
     this.get('selectedFiles').forEach((file) => {
       file.destroyRecursive();
+    });
+  },
+
+  setSelectedFilesPermissions(permissions) {
+    this.get('selectedFiles').forEach((file) => {
+      file.set('permissions', permissions);
+      // TODO: handle errors
+      file.save();
     });
   },
 
