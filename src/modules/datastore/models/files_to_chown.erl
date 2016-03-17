@@ -178,9 +178,13 @@ chown_file(FileUuid, UserId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec chown_pending_files(onedata_user:id()) -> ok.
 chown_pending_files(UserId) ->
-    {ok, #document{value = #files_to_chown{file_uuids = FileUuids}}} = files_to_chown:get(UserId),
-    lists:foreach(fun chown_pending_file/1, FileUuids),
-    delete(UserId).
+    case files_to_chown:get(UserId) of
+        {ok, #document{value = #files_to_chown{file_uuids = FileUuids}}} ->
+            lists:foreach(fun chown_pending_file/1, FileUuids),
+            delete(UserId);
+        {error,{not_found,files_to_chown}} ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
