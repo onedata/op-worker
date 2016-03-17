@@ -18,6 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -49,7 +50,7 @@
 
 -performance({test_cases, []}).
 all() ->
-    [
+    ?ALL([
         dbsync_trigger_should_create_local_file_location,
         local_file_location_should_have_correct_uid_for_local_user,
         local_file_location_should_be_chowned_when_missing_user_appears,
@@ -67,7 +68,7 @@ all() ->
         remote_irrelevant_change_should_not_notify_clients,
         conflicting_remote_changes_should_be_reconciled,
         rtransfer_config_should_work
-    ].
+    ]).
 
 
 %%%===================================================================
