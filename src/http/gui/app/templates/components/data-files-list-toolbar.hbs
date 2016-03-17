@@ -1,11 +1,5 @@
+{{!-- TODO: icons hide when too small size of screen --}}
 {{!-- TODO: toolbar icon component --}}
-<li>
-  {{!-- TODO: to remove, only for testing --}}
-  <div class="top-bar-item" style="padding-top: 20px;">
-    Some input:
-    {{input value=someInput}}
-  </div>
-</li>
 {{#each items as |item|}}
   <li>
     <a class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
@@ -27,7 +21,7 @@
     id="rename-file"}}
   {{#bs-modal-body}}
     {{#bs-form action=(action "submitRenameSelectedFile") model=this}}
-      {{bs-form-element controlType="text" property="renameFileName"
+      {{bs-form-element controlType="text" property="renameFileName" autofocus=true
         label=(t 'components.dataFilesListToolbar.renameFileModal.enterName'
           currentName=dir.singleSelectedFile.name)}}
     {{/bs-form}}
@@ -40,5 +34,42 @@
       {{t "common.modal.cancel"}}
     {{/bs-button}}
   {{/bs-modal-footer}}
+{{/bs-modal}}
 
+{{#bs-modal open=isCreatingDir body=false footer=false
+    title=(t "components.dataFilesListToolbar.createDirModal.title")
+    id="create-dir"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitCreateFile" "dir") model=this}}
+      {{bs-form-element controlType="text" property="createFileName" autofocus=true
+        label=(t 'components.dataFilesListToolbar.createDirModal.enterName')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.cancel"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{#bs-modal open=isCreatingFile body=false footer=false
+    title=(t "components.dataFilesListToolbar.createFileModal.title")
+    id="create-file"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitCreateFile" "file") model=this}}
+      {{bs-form-element controlType="text" property="createFileName" autofocus=true
+        label=(t 'components.dataFilesListToolbar.createFileModal.enterName')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.cancel"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
 {{/bs-modal}}

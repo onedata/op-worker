@@ -4,8 +4,6 @@ export default Ember.Component.extend({
   tagName: 'ul',
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
 
-  someInput: null,
-
   /**
    * Holds items of toolbar. Each item is a Object with properties:
    * - icon {String}
@@ -65,20 +63,21 @@ export default Ember.Component.extend({
   actions: {
     /// Actions on toolbar items click
 
-    // TODO: show modal with input text
-    createDir() {
-      this.get('dir').createFile('dir', this.get('someInput'));
-    },
-
-    createFile() {
-      this.get('dir').createFile('file', this.get('someInput'));
-    },
-
     renameSelectedFile() {
       if (this.get('dir.singleSelectedFile')) {
         this.set('renameFileName', '');
         this.set('isRenamingFile', true);
       }
+    },
+
+    createDir() {
+      this.set('createFileName', '');
+      this.set('isCreatingDir', true);
+    },
+
+    createFile() {
+      this.set('createFileName', '');
+      this.set('isCreatingFile', true);
     },
 
     renameModalOpened() {
@@ -117,6 +116,15 @@ export default Ember.Component.extend({
         }
       } finally {
         this.set('isRenamingFile', false);
+      }
+    },
+
+    submitCreateFile(type) {
+      try {
+        this.get('dir').createFile(type, this.get('createFileName'));
+      } finally {
+        this.set('isCreatingFile', false);
+        this.set('isCreatingDir', false);
       }
     },
   }

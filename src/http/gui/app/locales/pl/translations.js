@@ -58,7 +58,15 @@ export default {
       renameFileModal: {
         title: 'Zmień nazwę pliku lub katalogu',
         enterName: 'Zmień nazwę elementu "{{currentName}}" na:'
-      }
+      },
+      createDirModal: {
+        title: 'Nowy katalog',
+        enterName: 'Wprowadź nazwę nowego katalogu:'
+      },
+      createFileModal: {
+        title: 'Nowy plik',
+        enterName: 'Wprowadź nazwę nowego pliku:'
+      },
     }
   },
   spaces: {
