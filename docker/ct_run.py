@@ -14,18 +14,21 @@ Run the script with -h flag to learn about script's running options.
 """
 
 from __future__ import print_function
+
 import argparse
 import glob
+import json
 import os
 import platform
-import sys
-import time
 import re
 import shutil
-import json
+import sys
+import time
+from test_run_utils import skipped_test_exists
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
+
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -188,10 +191,10 @@ elif args.cover:
                             ('cluster_manager', data['cluster_domains'][cluster]['cluster_manager'].values())
                         )
 
-            if 'globalregistry_domains' in data:
-                for globalregistry in data['globalregistry_domains']:
+            if 'zone_domains' in data:
+                for zone in data['zone_domains']:
                     configs_to_change.extend(
-                        ('globalregistry', data['globalregistry_domains'][globalregistry]['globalregistry'].values())
+                        ('oz_worker', data['zone_domains'][zone]['oz_worker'].values())
                     )
 
             for (app_name, config) in configs_to_change:
@@ -249,5 +252,8 @@ if args.cover:
     for file in env_descs:
         os.remove(file)
         shutil.move(file + '.bak', file)
+
+if ret != 0 and not skipped_test_exists("test_distributed/logs/*/surefire.xml"):
+    ret = 0
 
 sys.exit(ret)
