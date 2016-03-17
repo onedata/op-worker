@@ -17,4 +17,9 @@
   <section id="main-content">
     {{outlet}}
   </section>
+
+  {{#ember-notify closeAfter=5000 classPrefix="onedata-notify" as |message close|}}
+    <a {{action close}} class='close-button'>{{icon 'checkbox-x'}}</a>
+    <span class='message'>{{message.text}}</span>
+  {{/ember-notify}}
 </div>
