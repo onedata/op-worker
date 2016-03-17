@@ -23,11 +23,17 @@ export default DS.Model.extend({
   parent: DS.belongsTo('file', {inverse: 'children', async: true}),
   children: DS.hasMany('file', {inverse: 'parent', async: true}),
 
-  // TODO!
-  isEditing: false,
-
   isExpanded: false,
   isSelected: false,
+
+  // TODO: dummy fields
+  sizeBytes: 100,
+  modificationDate: '2015-05-20 17:23',
+
+  // TODO: implement B, MB, GB, TODO: move to helper
+  sizeHumanReadable: function() {
+    return `${this.get('sizeBytes')} B`;
+  }.property('sizeBytes'),
 
   isDir: function () {
     return this.get('type') === 'dir';

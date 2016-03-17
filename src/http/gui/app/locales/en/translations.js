@@ -52,23 +52,28 @@ export default {
     dataFilesTree: {
       rootDirectory: 'Root directory'
     },
+    dataFilesList: {
+      files: 'files',
+      size: 'size',
+      modification: 'modification'
+    },
     dataFilesListToolbar: {
       renameFileModal: {
         title: 'Rename file or directory',
         enterName: 'Rename the item "{{currentName}}" to:'
-      }
-    },
-    createDirModal: {
-      title: 'New directory',
-      enterName: 'Enter new directory name:'
-    },
-    createFileModal: {
-      title: 'New file',
-      enterName: 'Enter new file name:'
-    },
-    removeFilesModal: {
-      title: 'Remove files',
-      text: 'Do you want to remove selected files?'
+      },
+      createDirModal: {
+        title: 'New directory',
+        enterName: 'Enter new directory name:'
+      },
+      createFileModal: {
+        title: 'New file',
+        enterName: 'Enter new file name:'
+      },
+      removeFilesModal: {
+        title: 'Remove files',
+        text: 'Do you want to remove selected files?'
+      },
     },
   },
   spaces: {

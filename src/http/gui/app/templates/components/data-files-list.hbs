@@ -1,47 +1,43 @@
-<ul>
-  {{#each dir.children as |file|}}
-  {{!-- TODO: open file when selected and enter pressed --}}
-    <li {{action "openFile" file on="doubleClick"}}
-      {{action "selectFile" file on="click"}}>
-      <span>
-        {{#if file.isDir}}
-          {{icon "folder"}}
-        {{else}}
-          {{icon "file"}}
-        {{/if}}
-      </span>
-      <strong class="file-entry {{if file.isSelected 'selected-file'}}" id="file-{{file.id}}">
-        {{file.name}}
-      </strong>
-      <i>Path: {{file.path}}</i>
-    </li>
-  {{/each}}
-</ul>
+<table class="table table-strips files-table">
+  <thead>
+    <th>
+      {{t 'components.dataFilesList.files'}}
+    </th>
+    <th>
+      {{t 'components.dataFilesList.size'}}
+    </th>
+    <th>
+      {{t 'components.dataFilesList.modification'}}
+    </th>
+  </thead>
+  <tbody>
+    {{#each dir.children as |file|}}
+    {{!-- TODO: open file when selected and enter pressed --}}
+      <tr {{action "openFile" file on="doubleClick"}}
+        {{action "selectFile" file on="click"}} class="{{if file.isSelected 'active'}}">
+        <td id="file-{{file.id}}">
+          <div class="file-icon">
+            {{#if file.isDir}}
+              {{icon "folder" "color-folder"}}
+            {{else}}
+              {{icon "file" "color-file"}}
+            {{/if}}
+          </div>
+          <div class="file-label">
+            {{file.name}}
+          </div>
+        </td>
+        <td>
+          {{file.sizeHumanReadable}}
+        </td>
+        <td>
+          {{file.modificationDate}}
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
+</table>
 
-<hr/>
-
-<div class="create-file">
-  {{input value=createFileName}}
-  <a class="btn btn-primary" {{action 'createFile' 'file'}} style="margin-right: 15px;">CREATE-FILE</a>
-  <a class="btn btn-primary" {{action 'createFile' 'dir'}}>CREATE-DIRECTORY</a>
-</div>
-
-<hr/>
-
-{{#if singleSelectedFile}}
-  <div class="rename-file">
-    {{input value=renameFileName}}
-    <a class="btn btn-primary" {{action 'renameSelectedFile'}}>RENAME-SELECTED-FILE</a>
-  </div>
-{{/if}}
-
-<hr/>
-
-<div class="remove-files">
-  <a class="btn btn-danger" {{action 'removeSelectedFiles'}}>REMOVE-SELECTED-FILES</a>
-</div>
-
-<hr/>
 
 <div class="file-upload">
   {{file-upload currentDir=dir}}

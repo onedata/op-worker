@@ -54,6 +54,11 @@ export default {
     dataFilesTree: {
       rootDirectory: 'Katalog główny'
     },
+    dataFilesList: {
+      files: 'pliki',
+      size: 'rozmiar',
+      modification: 'modyfikacja'
+    },
     dataFilesListToolbar: {
       renameFileModal: {
         title: 'Zmiana nazwy pliku lub katalogu',
