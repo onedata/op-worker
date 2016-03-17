@@ -427,9 +427,9 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     datastore:key().
 get_sync_context(#document{key = Key, value = #file_meta{}}) ->
     Key;
-get_sync_context(#document{value = #links{key = DocKey, model = file_meta}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
-get_sync_context(#document{value = #links{key = DocKey, model = file_location}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_location}}) ->
     #model_config{store_level = StoreLevel} = file_location:model_init(),
     {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
     get_sync_context(Doc);
