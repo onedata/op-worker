@@ -9,8 +9,9 @@ module.exports = function(defaults) {
         'app/styles/media-variables', 'app/styles/components']
     },
     'ember-bootstrap': {
-      importBootstrapTheme: true,
-      importBootstrapFont: false
+      'importBootstrapFont': false,
+      'importBootstrapCSS': false,
+      'importBootstrapTheme': false,
     }
   });
 

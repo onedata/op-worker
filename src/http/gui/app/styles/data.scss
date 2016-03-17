@@ -58,15 +58,59 @@
 
 // TODO
 
-.file-entry {
-  &:hover {
-    background-color: $onedata-azure;
+.table.files-table {
+  thead {
+    th {
+      text-transform: uppercase;
+    }
   }
 
-  &.selected-file {
-    background-color: $onedata-red;
+  tbody{
+    tr {
+      line-height: 32px;
+
+      &:hover {
+        background-color: $onedata-light-gray;
+      }
+
+      &.active {
+        background-color: $onedata-light-azure;
+      }
+
+      td {
+        // disable Bootstrap colors - use tr color
+        background-color: transparent !important;
+
+        // make text in rows aligned vertically middle
+        line-height: inherit;
+
+        .file-icon {
+          float: left;
+          font-size: 32px !important;
+          width: 40px;
+          padding-left: 2px;
+          text-align: left;
+        }
+        .file-label {
+          float: left;
+          margin-left: 20px;
+        }
+      }
+    }
   }
+
+
 }
+
+// .file-entry {
+//   &:hover {
+//     background-color: $onedata-azure;
+//   }
+//
+//   &.selected-file {
+//     background-color: $onedata-red;
+//   }
+// }
 
 // TODO resumablejs
 

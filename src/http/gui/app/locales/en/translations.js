@@ -8,6 +8,12 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
 */
 export default {
+  common: {
+    modal: {
+      ok: 'OK',
+      cancel: 'Cancel'
+    }
+  },
   components: {
     topBar: {
       logout: 'Log out',
@@ -45,7 +51,35 @@ export default {
     // data
     dataFilesTree: {
       rootDirectory: 'Root directory'
-    }
+    },
+    dataFilesList: {
+      files: 'files',
+      size: 'size',
+      modification: 'modification',
+      permissions: 'permissions'
+    },
+    dataFilesListToolbar: {
+      renameFileModal: {
+        title: 'Rename file or directory',
+        enterName: 'Rename the item "{{currentName}}" to:'
+      },
+      createDirModal: {
+        title: 'New directory',
+        enterName: 'Enter new directory name:'
+      },
+      createFileModal: {
+        title: 'New file',
+        enterName: 'Enter new file name:'
+      },
+      removeFilesModal: {
+        title: 'Remove files',
+        text: 'Do you want to remove selected files?'
+      },
+      editPermissionsModal: {
+        title: 'Edit permissions',
+        text: 'Enter new file permissions code:'
+      },
+    },
   },
   spaces: {
     show: {

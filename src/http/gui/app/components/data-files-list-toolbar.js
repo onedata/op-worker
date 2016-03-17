@@ -4,8 +4,6 @@ export default Ember.Component.extend({
   tagName: 'ul',
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
 
-  someInput: null,
-
   /**
    * Holds items of toolbar. Each item is a Object with properties:
    * - icon {String}
@@ -41,7 +39,7 @@ export default Ember.Component.extend({
       },
       {
         icon: 'lock',
-        action: 'notImplemented',
+        action: 'editPermissions',
         disabled: !this.get('dir.isSomeFileSelected'),
       },
       {
@@ -63,37 +61,92 @@ export default Ember.Component.extend({
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
 
   actions: {
-    // TODO: show modal with input text
+    /// Actions on toolbar items click
+
+    renameSelectedFile() {
+      if (this.get('dir.singleSelectedFile')) {
+        this.set('renameFileName', '');
+        this.set('isRenamingFile', true);
+      }
+    },
+
     createDir() {
-      this.get('dir').createFile('dir', this.get('someInput'));
+      this.set('createFileName', '');
+      this.set('isCreatingDir', true);
     },
 
     createFile() {
-      this.get('dir').createFile('file', this.get('someInput'));
+      this.set('createFileName', '');
+      this.set('isCreatingFile', true);
     },
 
-    // TODO: renameFileName will be probably in modal
-    renameSelectedFile() {
-      let file = this.get('dir.singleSelectedFile');
-      if (file) {
-        if (this.get('someInput')) {
-          file.set('name', this.get('someInput') || '');
-          file.save();
-        } else {
-          console.error('Please enter non-blank file name');
-        }
-      } else {
-        console.error('No file selected to rename or multiple selected');
-      }
+    renameModalOpened() {
+      // TODO: should use autofocus of modal bs-form-element, but it does not work
+      // $('*').focus(function(event) {
+      //   debugger;
+      // });
+
+      this.$().find('input').focus().select();
     },
 
     // TODO: error handling
     removeSelectedFiles() {
-      this.get('dir').removeSelectedFiles();
+      this.set('isRemovingFiles', true);
+    },
+
+    editPermissions() {
+      this.set('newPermissions', '');
+      this.set('isEditingPermissions', true);
     },
 
     notImplemented() {
-      window.alert('not implemented yet!');
-    }
+      this.set('isNotImplementedModal', true);
+    },
+
+    /// Actions for modals
+    // TODO: move modals to separate components? (they have some state)
+
+    submitRenameSelectedFile() {
+      try {
+        let file = this.get('dir.singleSelectedFile');
+        if (file) {
+          if (this.get('renameFileName')) {
+            file.set('name', this.get('renameFileName') || '');
+            file.save();
+          } else {
+            console.error('Please enter non-blank file name');
+          }
+        } else {
+          console.error('No file selected to rename or multiple selected');
+        }
+      } finally {
+        this.set('isRenamingFile', false);
+      }
+    },
+
+    submitCreateFile(type) {
+      try {
+        this.get('dir').createFile(type, this.get('createFileName'));
+      } finally {
+        this.set('isCreatingFile', false);
+        this.set('isCreatingDir', false);
+      }
+    },
+
+    submitRemoveFiles() {
+      try {
+        this.get('dir').removeSelectedFiles();
+      } finally {
+        this.set('isRemovingFiles', false);
+      }
+    },
+
+    submitEditPermissions() {
+      try {
+        this.get('dir').setSelectedFilesPermissions(this.get('newPermissions'));
+      } finally {
+        this.set('isEditingPermissions', false);
+      }
+    },
   }
 });
