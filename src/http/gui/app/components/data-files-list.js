@@ -6,6 +6,7 @@ export default Ember.Component.extend({
   fileSystemTree: Ember.inject.service('file-system-tree'),
   errorNotifier: Ember.inject.service('error-notifier'),
   fileBrowser: Ember.inject.service('file-browser'),
+  notify: Ember.inject.service('notify'),
 
   // TODO: doc
   dir: null,

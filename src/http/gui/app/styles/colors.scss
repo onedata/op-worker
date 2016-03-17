@@ -5,6 +5,7 @@ $onedata-graphite: #2F333A;
 $onedata-snow: #F6F7F8;
 $onedata-light-gray: #FAFAFA;
 $onedata-light-azure: #F2F7FA;
+$onedata-fresh-green: #97C31B;
 // TODO: same as graphite?
 $onedata-topbar-graphite: #363A42;
 
@@ -18,6 +19,15 @@ $color-toolbar-icon-hover: $onedata-red;
 $color-toolbar-separator: #DADADA;
 $color-button-primary: #55E191;
 $color-button-default: #8E8E8E;
+
+// TODO: notify colors for all types
+$color-notify-background: #2B3037;
+$color-notify-info: $onedata-fresh-green;
+$color-notify-success: $onedata-fresh-green;
+$color-notify-warning: $onedata-red;
+$color-notify-alert: $onedata-red;
+$color-notify-error: $onedata-red;
+
 
 /// Color classes
 // TODO: all classes should start with "color-"
