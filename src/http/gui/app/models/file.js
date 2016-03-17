@@ -35,6 +35,11 @@ export default DS.Model.extend({
     return `${this.get('size')} B`;
   }.property('size'),
 
+  mTimeHumanReadable: function() {
+    // TODO nicely format date
+    return this.get('modificationTime');
+  }.property('modificationTime'),
+
   isDir: function () {
     return this.get('type') === 'dir';
   }.property('type'),

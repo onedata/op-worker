@@ -13,7 +13,9 @@
     "loader.js": "ember-cli/loader.js#3.4.0",
     "qunit": "~1.20.0",
     "ember-localstorage-adapter": "^0.5.5",
-    "resumable.js": "resumablejs#~1.0.2"
+    "resumable.js": "resumablejs#~1.0.2",
+    "bootstrap":  "~3.3.6",
+    "bootstrap-sass": "~3.3.6"
   },
   "resolutions": {
     "ember-data": "1.13.15",

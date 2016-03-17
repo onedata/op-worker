@@ -48,11 +48,17 @@ find(<<"file">>, [FileId]) ->
         Other ->
             Other
     end,
-    {ok, #file_attr{name = Name, type = TypeAttr}} =
+    {ok, #file_attr{
+        name = Name,
+        type = TypeAttr,
+        size = SizeAttr,
+        mtime = ModificationTime,
+        mode = Permissions}} =
         logical_file_manager:stat(SessionId, {uuid, FileId}),
-    Type = case TypeAttr of
-        ?DIRECTORY_TYPE -> <<"dir">>;
-        _ -> <<"file">>
+    ?dump(ModificationTime),
+    {Type, Size} = case TypeAttr of
+        ?DIRECTORY_TYPE -> {<<"dir">>, null};
+        _ -> {<<"file">>, SizeAttr}
     end,
     Children = case Type of
         <<"file">> ->
@@ -67,6 +73,9 @@ find(<<"file">>, [FileId]) ->
         {<<"id">>, FileId},
         {<<"name">>, Name},
         {<<"type">>, Type},
+        {<<"permissions">>, Permissions},
+        {<<"modificationTime">>, ModificationTime},
+        {<<"size">>, Size},
         {<<"parent">>, ParentUUID},
         {<<"children">>, ChildrenIds}
     ],
@@ -120,7 +129,8 @@ create_record(<<"file">>, Data) ->
     end.
 
 %% Called when ember asks to update a record
-update_record(<<"file">>, _Id, _Data) ->
+update_record(<<"file">>, Id, Data) ->
+    ?dump({Id, Data}),
     {error, not_iplemented}.
 
 %% Called when ember asks to delete a record
