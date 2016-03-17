@@ -42,7 +42,7 @@ CHANGELOG
 * VFS-1010 Don't shed root privileges on non-Linux platforms.
 * VFS-1010 Run scripts in make.py as a running user.
 * VFS-1010 Cleanup scripts associated with running distributed tests.
-* VFS-1000 Add a first version of globalregistry_up.
+* VFS-1000 Add a first version of zone_up.
 * VFS-1000 Add a makefile, fetch required images automatically.
 * VFS-1000 Configure the cluster through gen_dev_args.json
 * VFS-1000 Implement a make.py script and improve cluster_up.
