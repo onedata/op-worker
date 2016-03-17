@@ -27,7 +27,7 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, 200).
+-define(FLUSH_QUEUE_INTERVAL, 1000).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
 
 -type queue_id() :: binary().
@@ -168,6 +168,10 @@ handle({flush_queue, QueueKey}) ->
                 fun(SpaceId, #batch{until = Until} = B) ->
                         catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
                     update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    case QueueKey of
+                        global -> state_put(global_resume_seq, Until);
+                        _ -> ok
+                    end,
                     #batch{since = Until, until = Until}
                 end,
                 BatchMap),
@@ -205,11 +209,9 @@ handle({'EXIT', Stream, Reason}) ->
         _ ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
     end;
-handle({async_init_stream, Since0, Until, Queue}) ->
-    Since = case Since0 of
-        undefined -> 0;
-        _ -> Since0
-    end,
+handle({async_init_stream, undefined, Until, Queue}) ->
+    handle({async_init_stream, 0, Until, Queue});
+handle({async_init_stream, Since, Until, Queue}) ->
     state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
