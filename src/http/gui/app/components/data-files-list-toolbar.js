@@ -1,6 +1,8 @@
 import Ember from 'ember';
 
 export default Ember.Component.extend({
+  notify: Ember.inject.service('notify'),
+
   tagName: 'ul',
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
 
@@ -136,6 +138,7 @@ export default Ember.Component.extend({
     submitRemoveFiles() {
       try {
         this.get('dir').removeSelectedFiles();
+        this.get('notify').success('Files removed');
       } finally {
         this.set('isRemovingFiles', false);
       }
