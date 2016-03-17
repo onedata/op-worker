@@ -3,12 +3,12 @@
     <img src="assets/images/logoshort.png" alt="Onedata" />
   </div>
   {{!-- TODO: mains is a bad name... --}}
-  {{#each mains as |mainPage|}}
+  {{#each menuItems as |menuItem|}}
     <li>
-      <a id="main-{{mainPage.name}}" {{action 'activateItem' mainPage.name}}>
+      <a id="main-{{mainPage.name}}" {{action 'activateItem' menuItem.name}}>
         <figure>
-          {{icon mainPage.icon}}
-          <figcaption>{{mainPage.name}}</figcaption>
+          {{icon menuItem.icon}}
+          <figcaption>{{t menuItem.titleI18n}}</figcaption>
         </figure>
       </a>
     </li>

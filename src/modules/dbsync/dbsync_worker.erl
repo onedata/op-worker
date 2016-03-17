@@ -27,7 +27,7 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, 200).
+-define(FLUSH_QUEUE_INTERVAL, 1000).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
 
 -type queue_id() :: binary().
@@ -110,6 +110,7 @@ handle(ping) ->
     pong;
 
 handle(healthcheck) ->
+    ensure_global_stream_active(),
     case state_get(changes_stream) of
         Stream when is_pid(Stream) ->
             ok;
@@ -160,12 +161,17 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
 %% Push changes from queue to providers
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
+    ensure_global_stream_active(),
     state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
                         catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
                     update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    case QueueKey of
+                        global -> state_put(global_resume_seq, Until);
+                        _ -> ok
+                    end,
                     #batch{since = Until, until = Until}
                 end,
                 BatchMap),
@@ -203,10 +209,13 @@ handle({'EXIT', Stream, Reason}) ->
         _ ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
     end;
+handle({async_init_stream, undefined, Until, Queue}) ->
+    handle({async_init_stream, 0, Until, Queue});
 handle({async_init_stream, Since, Until, Queue}) ->
-    state_update(changes_stream, fun(_) ->
+    state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
+                catch exit(OldStream, shutdown),
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
@@ -536,8 +545,8 @@ bcast_status() ->
     lists:foreach(
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
-%%            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
-            {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
+            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
+            {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
 
@@ -607,3 +616,30 @@ consume_batches(ProviderId, SpaceId) ->
         do_apply_batch_changes(ProviderId, SpaceId, Batch, false)
     end, Batches).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether given term is valid stream reference.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_valid_stream(term()) -> boolean().
+is_valid_stream(Stream) when is_pid(Stream) ->
+    erlang:process_info(Stream) =/= undefined;
+is_valid_stream(_) ->
+    false.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Restarts global stream if necessary.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_global_stream_active() -> ok.
+ensure_global_stream_active() ->
+    case is_valid_stream(state_get(changes_stream)) of
+        true -> ok;
+        false ->
+            Since = state_get(global_resume_seq),
+            timer:send_after(0, whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+            ok
+    end.

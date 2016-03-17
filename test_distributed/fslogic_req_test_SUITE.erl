@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 

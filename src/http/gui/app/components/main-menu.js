@@ -18,6 +18,18 @@ export default Ember.Component.extend({
   mainMenuService: Ember.inject.service('main-menu'),
   currentItem: null,
 
+  menuItems: [
+    {name: 'data', titleI18n: 'components.mainMenu.data', icon: 'data'},
+    {name: 'links', titleI18n: 'components.mainMenu.links', icon: 'links'},
+    {name: 'recent', titleI18n: 'components.mainMenu.recent', icon: 'recent'},
+    {name: 'collection', titleI18n: 'components.mainMenu.collection', icon: 'collection'},
+    {name: 'trash', titleI18n: 'components.mainMenu.trash', icon: 'trash'},
+    {name: 'spaces', titleI18n: 'components.mainMenu.spaces', icon: 'spaces'},
+    // TODO: bad names of icons
+    {name: 'groups', titleI18n: 'components.mainMenu.groups', icon: 'group2'},
+    {name: 'token', titleI18n: 'components.mainMenu.token', icon: 'group'},
+  ],
+
   /*** Bind with main-menu service, TODO: mixin or something? ***/
   SERVICE_API: ['selectItem', 'deselectItem', 'clearSelection'],
 

@@ -13,6 +13,7 @@
 -author("Michal Zmuda").
 -author("Lukasz Opiola").
 
+-include("http/http_common.hrl").
 -include("global_definitions.hrl").
 -include_lib("gui/include/gui.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -71,6 +72,7 @@ start() ->
         ]},
         % Proper requests are routed to handler modules
         {'_', [
+            {?provider_id_path, get_provider_id_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
             {"/[...]", gui_static_handler, {dir, DocRoot}}
