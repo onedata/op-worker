@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/sfm_handle.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -153,18 +154,14 @@ chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID},
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceUuid),
 
-    Uid = fslogic_utils:gen_storage_uid(UserId),
-    Gid =
-        case helpers_nif:groupname_to_gid(SpaceName) of
-            {ok, GID} ->
-                GID;
-            {error, _} ->
-                fslogic_utils:gen_storage_uid(SpaceUuid)
-        end,
-
-    helpers:chown(HelperHandle, FileId, Uid, Gid);
+    Ctx = fslogic_storage:new_user_ctx(HelperInit, #identity{user_id = UserId}, SpaceUuid),
+    case Ctx of
+        #posix_user_ctx{uid = Uid, gid = Gid} ->
+            helpers:chown(HelperHandle, FileId, Uid, Gid);
+        _ ->
+            ok
+    end;
 chown(_,_,_) ->
     throw(?EPERM).
 
