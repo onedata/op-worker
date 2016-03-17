@@ -59,6 +59,12 @@
 // TODO
 
 .table.files-table {
+  // TODO: style
+  &.file-drag {
+    background-color: $onedata-light-azure;
+    border: 4px dashed $onedata-graphite;
+  }
+
   thead {
     th {
       text-transform: uppercase;

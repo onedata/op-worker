@@ -1,25 +1,15 @@
 import Ember from 'ember';
-/* globals Resumable */
 
+// TODO: this component will become a bottom progress panel
 export default Ember.Component.extend({
-  uploadAddress: '/upload',
-  resumable: function() {
-    return new Resumable({
-      target: this.get('uploadAddress'),
-      chunkSize: 1*1024*1024,
-      simultaneousUploads: 4,
-      testChunks: false,
-      throttleProgressCallbacks: 1,
-      query: {parentId: this.get('currentDir.id')}
-    });
-  }.property('uploadAddress'),
+  fileUpload: Ember.inject.service('file-upload'),
 
   // TODO: does not react to upladAddress changes
   // TODO: use element selectors within this widget
   didInsertElement() {
-    var r = this.get('resumable');
+    var r = this.get('fileUpload.resumable');
     // Resumable.js isn't supported, fall back on a different method
-    if(!r.support) {
+    if (!r.support) {
       // TODO: other message
       window.alert('resumable js is not supported!');
       $('.resumable-error').show();
