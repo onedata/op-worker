@@ -38,14 +38,14 @@
     memory = [] :: [{Key :: term(), Value :: term()}]
 }).
 
-%% Local, cached version of globalregistry user
+%% Local, cached version of OZ user
 -record(onedata_user, {
     name :: binary(),
     space_ids :: [binary()],
     group_ids :: [binary()]
 }).
 
-%% Local, cached version of globalregistry group
+%% Local, cached version of OZ group
 -record(onedata_group, {
     name :: binary()
 }).

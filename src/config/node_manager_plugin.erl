@@ -207,8 +207,8 @@ on_code_change(_OldVsn, State, _Extra) ->
 -spec check_node_ip_address() -> IPV4Addr :: {A :: byte(), B :: byte(), C :: byte(), D :: byte()}.
 check_node_ip_address() ->
     try
-        application:set_env(ctool, verify_gr_cert, false), % @todo VFS-1572
-        {ok, IPBin} = gr_providers:check_ip_address(provider),
+        application:set_env(ctool, verify_oz_cert, false), % @todo VFS-1572
+        {ok, IPBin} = oz_providers:check_ip_address(provider),
         {ok, IP} = inet_parse:ipv4_address(binary_to_list(IPBin)),
         IP
     catch T:M ->

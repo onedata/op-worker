@@ -537,7 +537,7 @@ bcast_status() ->
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
 %%            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
-            {ok, Providers} = gr_spaces:get_providers(provider, SpaceId),
+            {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
 

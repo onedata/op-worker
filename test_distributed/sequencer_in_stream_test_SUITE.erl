@@ -152,7 +152,7 @@ sequencer_in_stream_should_unregister_from_sequencer_manager_when_end_of_stream(
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

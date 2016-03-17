@@ -100,7 +100,7 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init(session:id(), Hostname :: binary(), Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
     no_return().
 init(SessionId, Hostname, Port, Transport, Timeout) ->
-    TLSSettings = [{certfile, gr_plugin:get_cert_path()}, {keyfile, gr_plugin:get_key_path()}],
+    TLSSettings = [{certfile, oz_plugin:get_cert_path()}, {keyfile, oz_plugin:get_key_path()}],
     ?info("Connecting to ~p ~p", [Hostname, Port]),
     {ok, Socket} = Transport:connect(Hostname, Port, TLSSettings, Timeout),
     ok = Transport:setopts(Socket, [binary, {active, once}, {packet, ?PACKET_VALUE}]),
