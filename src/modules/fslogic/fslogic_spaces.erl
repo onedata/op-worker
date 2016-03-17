@@ -68,7 +68,7 @@ get_space(FileEntry) ->
             throw({not_a_space, FileEntry});
         _ ->
             ?info("Decoding UUID ~p ~p", [FileUUID, FileEntry]),
-            BinFileUUID = base64:decode(FileUUID),
+            BinFileUUID = http_utils:base64url_decode(FileUUID),
             case binary_to_term(BinFileUUID) of
                 {space, SpaceId0} ->
                     SpaceId0;
@@ -88,6 +88,7 @@ get_space(FileEntry) ->
 -spec get_space(FileEntry :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
 get_space(FileEntry, UserId) ->
+    ?info("get_space ~p ~p", [FileEntry, UserId]),
     DefaultSpaceUUID = fslogic_uuid:default_space_uuid(UserId),
     SpacesDir = fslogic_uuid:spaces_uuid(UserId),
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
@@ -102,7 +103,7 @@ get_space(FileEntry, UserId) ->
             DefaultSpaceId;
         _ ->
             ?info("Decoding UUID ~p ~p", [FileUUID, FileEntry]),
-            BinFileUUID = base64:decode(FileUUID),
+            BinFileUUID = http_utils:base64url_decode(FileUUID),
             case binary_to_term(BinFileUUID) of
                 {space, SpaceId0} ->
                     SpaceId0;
@@ -111,12 +112,16 @@ get_space(FileEntry, UserId) ->
             end
     end,
 
-    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
-    case (is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds)) orelse UserId == ?ROOT_USER_ID of
-        true ->
-            {ok, SpaceDoc} = file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
-            {ok, SpaceDoc};
-        false -> throw({not_a_space, FileEntry})
+    case UserId of
+        ?ROOT_USER_ID ->
+            file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId));
+        _ ->
+            {ok, SpaceIds} = onedata_user:get_spaces(UserId),
+            case (is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds)) orelse UserId == ?ROOT_USER_ID of
+                true ->
+                    file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId));
+                false -> throw({not_a_space, FileEntry})
+            end
     end.
 
 %%%===================================================================

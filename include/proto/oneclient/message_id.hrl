@@ -13,10 +13,6 @@
 -ifndef(MESSAGE_ID_HRL).
 -define(MESSAGE_ID_HRL, 1).
 
--record(message_id, {
-    issuer :: client | server,
-    id :: binary(),
-    recipient :: pid() | undefined
-}).
+-include("modules/datastore/datastore_specific_models_def.hrl").
 
 -endif.

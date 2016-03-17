@@ -15,6 +15,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([open_stream/1, close_stream/2, send_message/3, route_message/2]).
@@ -90,6 +91,7 @@ send_to_sequencer_manager(Msg, Ref) when is_pid(Ref) ->
     gen_server:cast(Ref, Msg);
 
 send_to_sequencer_manager(Msg, Ref) ->
+
     case session:get_sequencer_manager(Ref) of
         {ok, ManPid} -> send_to_sequencer_manager(Msg, ManPid);
         {error, Reason} -> {error, Reason}

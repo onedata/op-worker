@@ -18,6 +18,7 @@
 -behaviour(gen_server).
 
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -133,8 +134,9 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms}
         end, EvtStms)}}
     end,
 
-    {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc},
-        identity = #identity{user_id = UserId}}}} = session:get(SessId),
+
+
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessId),
 
     case {request_to_file_entry_or_provider(Evt), UserId} of
         {_, undefined} ->
@@ -147,12 +149,18 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms}
                 _ ->
                     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
                     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                    {ok, ProviderIds} = gr_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                    RestClient = fslogic_utils:session_to_rest_client(SessId),
+                    {ok, #document{value = #session{auth = #auth{} = Auth}}} = session:get(SessId),
+                    {ok, ProviderIds} = oz_spaces:get_providers(RestClient, SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             HandleLocally();
                         {[H | _], false} ->
-                            provider_communicator:send(#events{events = [Evt]}, session_manager:get_provider_session_id(outgoing, H)),
+                            provider_communicator:send(#client_message{
+                                message_body = #events{events = [Evt]},
+                                proxy_session_id = SessId,
+                                proxy_session_auth = Auth
+                            }, session_manager:get_provider_session_id(outgoing, H)),
                             {noreply, State};
                         {[], _} ->
                             throw(unsupported_space)
@@ -165,13 +173,12 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms}
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms} = State) ->
     HandleLocally = fun() ->
-        ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
+        ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
         {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}}
     end,
 
-    {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc},
-        identity = #identity{user_id = UserId}}}} = session:get(SessId),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessId),
 
     case {request_to_file_entry_or_provider(Sub), UserId} of
         {_, undefined} ->
@@ -184,12 +191,18 @@ handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup
                 _ ->
                     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
                     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                    {ok, ProviderIds} = gr_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                    {ok, #document{value = #session{auth = #auth{} = Auth}}} = session:get(SessId),
+                    RestClient = fslogic_utils:session_to_rest_client(SessId),
+                    {ok, ProviderIds} = oz_spaces:get_providers(RestClient, SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             HandleLocally();
                         {[H | _], false} ->
-                            provider_communicator:send(Sub, session_manager:get_provider_session_id(outgoing, H)),
+                            provider_communicator:send(#client_message{
+                                message_body = Sub,
+                                proxy_session_id = SessId,
+                                proxy_session_auth = Auth
+                            }, session_manager:get_provider_session_id(outgoing, H)),
                             HandleLocally();
                         {[], _} ->
                             throw(unsupported_space)

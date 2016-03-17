@@ -21,7 +21,7 @@
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 

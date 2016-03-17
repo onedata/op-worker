@@ -20,7 +20,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/common/credentials.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
@@ -169,6 +169,19 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
         SpacesDir = fslogic_uuid:spaces_uuid(fslogic_context:get_user_id(Context)),
         {NextCTX, Providers} =
             case request_to_file_entry_or_provider(Context, Request) of
+                {space, SpaceId} ->
+                    ?info("BY SPACE ~p", [SpaceId]),
+                    #fslogic_ctx{session_id = SessionId} = Context,
+                    {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc}}}} = session:get(SessionId),
+                    {ok, ProviderIds} = oz_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                    case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                        {_, true} ->
+                            {Context, [oneprovider:get_provider_id()]};
+                        {[_ | _], false} ->
+                            {Context, ProviderIds};
+                        {[], _} ->
+                            throw(unsupported_space)
+                    end;
                 {file, Entry} ->
                     case file_meta:to_uuid(Entry) of
                         {ok, SpacesDir} ->
@@ -176,8 +189,9 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                         _ ->
                             #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
                                 fslogic_context:set_space_id(Context, Entry),
-                            {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc}}}} = session:get(SessionId),
-                            {ok, ProviderIds} = gr_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+
+                            RestClient = fslogic_utils:session_to_rest_client(SessionId),
+                            {ok, ProviderIds} = oz_spaces:get_providers(RestClient, SpaceId),
                             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                                 {_, true} ->
                                     {NewCtx, [oneprovider:get_provider_id()]};
@@ -410,7 +424,19 @@ handle_proxyio_request(_CTX, Req) ->
 
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {path, Path}}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    {file, fslogic_path:get_canonical_file_entry(Ctx, Tokens)};
+    ?info("PATH request ~p ~p ~p", [Path, Tokens, fslogic_path:get_canonical_file_entry(Ctx, Tokens)]),
+    case fslogic_path:get_canonical_file_entry(Ctx, Tokens) of
+        {path, P} = FileEntry ->
+            {ok, Tokens1} = fslogic_path:verify_file_path(P),
+            case Tokens1 of
+                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | _] ->
+                    {space, SpaceId};
+                _ ->
+                    {file, FileEntry}
+            end;
+        OtherFileEntry ->
+            {file, OtherFileEntry}
+    end;
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     {file, Entry};
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #delete_file{uuid = UUID}}) ->

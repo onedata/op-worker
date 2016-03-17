@@ -217,7 +217,7 @@ reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
 create_gui_session(Auth) ->
     SessId = datastore_utils:gen_uuid(),
     {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
-    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui},
+    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui, connections = [spawn(fun Loop() -> receive M -> ?info("MOCK GUI CONN ~p", [M]) end, Loop() end)]},
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
@@ -244,7 +244,7 @@ remove_session(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_session_id(Type :: incoming | outgoing, oneprovider:id()) -> session:id().
 get_provider_session_id(Type, ProviderId) ->
-    base64:encode(term_to_binary({Type, provider, ProviderId})).
+    http_utils:base64url_encode(term_to_binary({Type, provider, ProviderId})).
 
 
 %%--------------------------------------------------------------------
@@ -254,7 +254,7 @@ get_provider_session_id(Type, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec session_id_to_provider_id(session:id()) -> oneprovider:id().
 session_id_to_provider_id(SessId) ->
-    {_, _, ProviderId} = binary_to_term(base64:decode(SessId)),
+    {_, _, ProviderId} = binary_to_term(http_utils:base64url_decode(SessId)),
     ProviderId.
 
 %%%===================================================================

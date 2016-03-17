@@ -127,17 +127,23 @@ subscribe(#subscription{} = Sub = Request, SessionId) when is_binary(SessionId) 
             {provider, ProviderId} ->
                 [ProviderId];
             {file, Entry} ->
-                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry),
-                SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc}}}} = session:get(SessionId),
-                {ok, ProviderIds} = gr_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
-                case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
-                    {_, true} ->
-                        [oneprovider:get_provider_id()];
-                    {[_ | _], false} ->
-                        ProviderIds;
-                    {[], _} ->
-                        throw(unsupported_space)
+                try
+                    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry),
+                    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+                    {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc}}}} = session:get(SessionId),
+                    {ok, ProviderIds} = oz_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                    case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                        {_, true} ->
+                            [oneprovider:get_provider_id()];
+                        {[_ | _], false} ->
+                            ProviderIds;
+                        {[], _} ->
+                            throw(unsupported_space)
+                    end
+                catch
+                    _:E ->
+                        ?error_stacktrace("subscribe crash ~p", [E]),
+                        [oneprovider:get_provider_id()]
                 end
         end,
 

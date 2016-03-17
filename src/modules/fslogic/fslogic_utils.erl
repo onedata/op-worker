@@ -12,6 +12,7 @@
 
 
 -include("global_definitions.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -19,11 +20,23 @@
 %% API
 -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
-
+-export([session_to_rest_client/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+session_to_rest_client(?ROOT_SESS_ID) ->
+    provider;
+session_to_rest_client(SessId) ->
+    {ok, #document{value = #session{auth = Auth, type = Type}}} = session:get(SessId),
+    case Type of
+        provider_outgoing -> provider;
+        provider -> provider;
+        _ ->
+            #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc} = Auth,
+            {try_user, {Macaroon, MacaroonDsc}}
+    end.
 
 
 %%--------------------------------------------------------------------

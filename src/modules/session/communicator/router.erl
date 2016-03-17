@@ -48,7 +48,7 @@ preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
 preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    sequencer:route_message(Msg, SessId).
+    router:route_message(Msg).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,7 +110,7 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     {ok, SessId} = session:update(SessId, #{auth => Auth}),
     ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
+    message_body = #fuse_request{} = FuseRequest}) ->
     ok = worker_proxy:cast(fslogic_worker, {fuse_request, SessId, FuseRequest}).
 
 %%--------------------------------------------------------------------
@@ -137,8 +137,8 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     end),
     ok;
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
-    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
-    ?info("Fuse request: ~p", [FuseRequest]),
+    message_body = #fuse_request{} = FuseRequest}) ->
+    ?info("Fuse request: ~p ~p", [FuseRequest, SessId]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
         ?info("Fuse response: ~p", [FuseResponse]),

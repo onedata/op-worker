@@ -103,9 +103,10 @@ translate_from_protobuf(#'MessageAcknowledgement'{} = Record) ->
         stream_id = Record#'MessageAcknowledgement'.stream_id,
         sequence_number = Record#'MessageAcknowledgement'.sequence_number
     };
-translate_from_protobuf(#'Token'{value = Val}) ->
+translate_from_protobuf(#'Token'{value = Val, secondary_values = SecValues}) ->
     {ok, Macaroon} = macaroon:deserialize(Val),
-    #auth{macaroon = Macaroon};
+    DischargeMacaroons = [R || {ok, R} <- [macaroon:deserialize(SecValue) || SecValue <- SecValues]],
+    #auth{macaroon = Macaroon, disch_macaroons = DischargeMacaroons};
 translate_from_protobuf(#'Ping'{data = Data}) ->
     #ping{data = Data};
 translate_from_protobuf(#'GetProtocolVersion'{}) ->
@@ -252,9 +253,6 @@ translate_from_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
 
 
-
-translate_from_protobuf(#'Token'{value = Val}) ->
-    #auth{macaroon = Val};
 translate_from_protobuf(#'GetParent'{uuid = UUID}) ->
     #'get_parent'{uuid = UUID};
 translate_from_protobuf(#'Dir'{uuid = UUID}) ->
@@ -339,6 +337,22 @@ translate_to_protobuf(#write_subscription{} = Sub) ->
         counter_threshold = Sub#write_subscription.counter_threshold,
         time_threshold = Sub#write_subscription.time_threshold,
         size_threshold = Sub#write_subscription.size_threshold
+    }};
+translate_to_protobuf(#file_attr_subscription{} = Record) ->
+    {file_attr_subscription, #'FileAttrSubscription'{
+        file_uuid = Record#'file_attr_subscription'.file_uuid,
+        counter_threshold = Record#'file_attr_subscription'.counter_threshold,
+        time_threshold = Record#'file_attr_subscription'.time_threshold
+    }};
+translate_to_protobuf(#'file_location_subscription'{} = Record) ->
+    {file_location_subscription, #'FileLocationSubscription'{
+        file_uuid = Record#'file_location_subscription'.file_uuid,
+        counter_threshold = Record#'file_location_subscription'.counter_threshold,
+        time_threshold = Record#'file_location_subscription'.time_threshold
+    }};
+translate_to_protobuf(#'permission_changed_subscription'{} = Record) ->
+    {permission_changed_subscription, #'PermissionChangedSubscription'{
+        file_uuid = Record#'permission_changed_subscription'.file_uuid
     }};
 translate_to_protobuf(#subscription_cancellation{id = Id}) ->
     {subscription_cancellation, #'SubscriptionCancellation'{id = Id}};
@@ -429,8 +443,6 @@ translate_to_protobuf(#'proxyio_response'{status = Status, proxyio_response = Pr
         status = translate_to_protobuf(Status),
         proxyio_response = translate_to_protobuf(ProxyIOResponse)
     }};
-translate_to_protobuf(#'RemoteData'{data = Data}) ->
-    {remote_data, #'remote_data'{data = Data}};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 translate_to_protobuf(#remote_data{data = Data}) ->
@@ -449,9 +461,10 @@ translate_to_protobuf(#xattr{name = Name, value = Value}) ->
     {xattr, #'Xattr'{name = Name, value = Value}};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
-translate_to_protobuf(#auth{macaroon = Macaroon}) ->
+translate_to_protobuf(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
     {ok, Token} = macaroon:serialize(Macaroon),
-    #'Token'{value = Token};
+    SecValues = [R || {ok, R} <- [macaroon:serialize(DMacaroon) || DMacaroon <- DMacaroons]],
+    #'Token'{value = Token, secondary_values = SecValues};
 
 
 

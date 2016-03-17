@@ -133,18 +133,18 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
              FileDoc =
                  case FileDoc0 of
                      #document{key = undefined} = Doc ->
-                         BinParentUUID = base64:decode(ParentUUID),
+                         BinParentUUID = http_utils:base64url_decode(ParentUUID),
                          NewUUID =
                              try binary_to_term(BinParentUUID) of
                                  {space, SpaceId} ->
-                                     base64:encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
+                                     http_utils:base64url_encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
                                  {{space_id, SpaceId}, _FileUUID} ->
-                                     base64:encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
+                                     http_utils:base64url_encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
                                  _ ->
-                                     base64:encode(term_to_binary(crypto:rand_bytes(10)))
+                                     http_utils:base64url_encode(term_to_binary(crypto:rand_bytes(10)))
                              catch
                                 _:_ ->
-                                    base64:encode(term_to_binary(crypto:rand_bytes(10)))
+                                    http_utils:base64url_encode(term_to_binary(crypto:rand_bytes(10)))
                              end,
                          Doc#document{key = NewUUID};
                      _ ->

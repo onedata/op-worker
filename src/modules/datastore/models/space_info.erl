@@ -13,6 +13,7 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
@@ -138,6 +139,7 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    ?info("space_info:fetch ~p ~p", [Client, SpaceId]),
     {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
     case space_info:get(Key) of
         {ok, #document{value = SpaceInfo} = Doc} ->

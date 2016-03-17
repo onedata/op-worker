@@ -17,8 +17,10 @@
 
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("modules/datastore/datastore_specific_models_def.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -44,7 +46,7 @@
     transport :: module(),
     session_id :: session:id(),
     connection_type :: incoming | outgoing,
-    response_map = #{}
+    peer_type = fuse_client :: fuse_client | provider
 }).
 
 -define(TIMEOUT, timer:minutes(10)).
@@ -81,6 +83,11 @@ init(Ref, Socket, Transport, _Opts) ->
     {Ok, Closed, Error} = Transport:messages(),
     Certificate = get_cert(Socket),
 
+    PeerType = case provider_auth_manager:is_provider(Certificate) of
+        true -> provider;
+        false -> fuse_client
+    end,
+
     gen_server:enter_loop(?MODULE, [], #state{
         socket = Socket,
         transport = Transport,
@@ -88,7 +95,8 @@ init(Ref, Socket, Transport, _Opts) ->
         closed = Closed,
         error = Error,
         certificate = Certificate,
-        connection_type = incoming
+        connection_type = incoming,
+        peer_type = PeerType
     }, ?TIMEOUT).
 
 
@@ -119,7 +127,8 @@ init(SessionId, Hostname, Port, Transport, Timeout) ->
         closed = Closed,
         error = Error,
         certificate = Certificate,
-        connection_type = outgoing
+        connection_type = outgoing,
+        peer_type = provider
     }, ?TIMEOUT).
 
 %%--------------------------------------------------------------------
@@ -193,11 +202,11 @@ handle_call({send, ServerMsg}, _From, State = #state{socket = Socket, connection
     transport = Transport}) ->
     send_server_message(Socket, Transport, ServerMsg),
     {reply, ok, State};
-handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId}}},
+handle_call({send, ClientMsg = #client_message{message_id = #message_id{recipient = Pid, id = MessageId} = MID}},
     _From, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) when is_pid(Pid) ->
+    {ok, _} = message_id:save(#document{key = MessageId, value = MID}),
     send_client_message(Socket, Transport, ClientMsg),
-    NewState = State#state{response_map = maps:put(MessageId, Pid, State#state.response_map)},
-    {reply, ok, NewState};
+    {reply, ok, State};
 handle_call({send, ClientMsg = #client_message{}},
     _From, State = #state{socket = Socket, connection_type = outgoing, transport = Transport}) ->
     send_client_message(Socket, Transport, ClientMsg),
@@ -397,7 +406,7 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
     ?info("Handle message ~p ~p ~p ~p", [IsProvider, Msg, EffectiveSessionId, SessId]),
 
     case Msg of
-        #server_message{session_id = TargetSessionId} when TargetSessionId =/= SessId ->
+        #server_message{proxy_session_id = TargetSessionId} when TargetSessionId =/= SessId ->
             ?info("REROUTE CONN ~p ~p ~p", [TargetSessionId, SessId, Msg]),
             connection:send(Msg, TargetSessionId),
             {noreply, State, ?TIMEOUT};
@@ -424,11 +433,19 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
 %%--------------------------------------------------------------------
 -spec update_message_id(#state{}, #server_message{} | #client_message{}) ->
     {NewState :: #state{}, NewMsg :: #server_message{}}.
-update_message_id(State = #state{connection_type = outgoing, response_map = RMap},
+update_message_id(State = #state{connection_type = outgoing},
     Msg = #server_message{message_id = #message_id{id = ID} = MID}) ->
-    NewMsg = Msg#server_message{message_id = MID#message_id{recipient = maps:get(ID, RMap, undefined)}},
-    NewState = State#state{response_map = maps:remove(ID, RMap)},
-    {NewState, NewMsg};
+
+    NewMID = case message_id:get(ID) of
+        {ok, #document{value = NewMID0}} ->
+            message_id:delete(ID),
+            NewMID0;
+        _ ->
+            MID
+    end,
+
+    NewMsg = Msg#server_message{message_id = NewMID},
+    {State, NewMsg};
 update_message_id(State, Msg) ->
     {State, Msg}.
 
@@ -467,6 +484,7 @@ send_server_message(Socket, Transport, ServerMsg) ->
     ServerMessage :: #client_message{}) -> ok.
 send_client_message(Socket, Transport, ClientMsg) ->
     {ok, Data} = serializator:serialize_client_message(ClientMsg),
+    ?info("Sending ~p", [ClientMsg]),
     ok = Transport:send(Socket, Data).
 
 
