@@ -8,6 +8,12 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
 */
 export default {
+  common: {
+    modal: {
+      ok: 'OK',
+      cancel: 'Anuluj'
+    }
+  },
   components: {
     // layout
     topBar: {
@@ -47,6 +53,12 @@ export default {
     // data
     dataFilesTree: {
       rootDirectory: 'Katalog główny'
+    },
+    dataFilesListToolbar: {
+      renameFileModal: {
+        title: 'Zmień nazwę pliku lub katalogu',
+        enterName: 'Zmień nazwę elementu "{{currentName}}" na:'
+      }
     }
   },
   spaces: {

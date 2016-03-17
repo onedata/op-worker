@@ -1,10 +1,5 @@
 /* The main style file to include other sylesheets: various media or css libraries */
 
-// Init Bootstrap
-// TODO: use bootstrap-custom: https://www.npmjs.com/package/ember-cli-bootstrap-sass
-
-// $icon-font-path: "bower_components/bootstrap-sass/assets/fonts/bootstrap/" !default;
-
 $min-width-mobile: 300px;
 $max-width-mobile: 760px;
 
@@ -23,6 +18,15 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
 
 // TODO: some refactor:
 // http://thesassway.com/intermediate/responsive-web-design-in-sass-using-media-queries-in-sass-32
+
+/// Bootstrap
+
+// Bootstrap variables
+// TODO: set to values from app.scss
+// @grid-float-breakpoint
+$modal-inner-padding: 30px;
+
+@import "bootstrap";
 
 @import 'colors';
 @import 'oneicons';
@@ -83,6 +87,5 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
     @import 'components/one-table-mobile';
 }
 
-/// Bootstrap
-
-@import "bootstrap";
+@import 'components/modal';
+@import 'components/button';

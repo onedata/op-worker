@@ -49,5 +49,5 @@ export default Ember.Route.extend({
       into: 'data',
       outlet: 'dir'
     });
-  }
+  },
 });

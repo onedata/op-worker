@@ -23,6 +23,9 @@ export default DS.Model.extend({
   parent: DS.belongsTo('file', {inverse: 'children', async: true}),
   children: DS.hasMany('file', {inverse: 'parent', async: true}),
 
+  // TODO!
+  isEditing: false,
+
   isExpanded: false,
   isSelected: false,
 
