@@ -91,11 +91,11 @@ export default Ember.Component.extend({
 
     // TODO: error handling
     removeSelectedFiles() {
-      this.get('dir').removeSelectedFiles();
+      this.set('isRemovingFiles', true);
     },
 
     notImplemented() {
-      window.alert('not implemented yet!');
+      this.set('isNotImplementedModal', true);
     },
 
     /// Actions for modals
@@ -125,6 +125,14 @@ export default Ember.Component.extend({
       } finally {
         this.set('isCreatingFile', false);
         this.set('isCreatingDir', false);
+      }
+    },
+
+    submitRemoveFiles() {
+      try {
+        this.get('dir').removeSelectedFiles();
+      } finally {
+        this.set('isRemovingFiles', false);
       }
     },
   }

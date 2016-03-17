@@ -66,6 +66,10 @@ export default {
       title: 'New file',
       enterName: 'Enter new file name:'
     },
+    removeFilesModal: {
+      title: 'Remove files',
+      text: 'Do you want to remove selected files?'
+    },
   },
   spaces: {
     show: {

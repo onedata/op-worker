@@ -56,7 +56,7 @@ export default {
     },
     dataFilesListToolbar: {
       renameFileModal: {
-        title: 'Zmień nazwę pliku lub katalogu',
+        title: 'Zmiana nazwy pliku lub katalogu',
         enterName: 'Zmień nazwę elementu "{{currentName}}" na:'
       },
       createDirModal: {
@@ -66,6 +66,10 @@ export default {
       createFileModal: {
         title: 'Nowy plik',
         enterName: 'Wprowadź nazwę nowego pliku:'
+      },
+      removeFilesModal: {
+        title: 'Usuwanie plików',
+        text: 'Czy chcesz usunąć wybrane elementy?'
       },
     }
   },
