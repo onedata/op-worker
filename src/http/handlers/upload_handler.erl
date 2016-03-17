@@ -123,7 +123,6 @@ terminate(_Reason, _Req, _State) ->
 %% Internal functions
 %% ====================================================================
 
-%% handle_http_upload/1
 %%--------------------------------------------------------------------
 %% @doc
 %% Asserts the validity of multipart POST request and proceeds with
@@ -131,7 +130,7 @@ terminate(_Reason, _Req, _State) ->
 %% file body.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_http_upload(cowboy_req:req()) -> {ok, cowboy_req:req()}.
+-spec handle_http_upload(Req :: cowboy_req:req()) -> cowboy_req:req().
 handle_http_upload(Req) ->
     % Try to retrieve user's session
     InitSession =

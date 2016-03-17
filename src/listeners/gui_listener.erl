@@ -75,6 +75,7 @@ start() ->
             {?provider_id_path, get_provider_id_handler, []},
             {"/nagios/[...]", nagios_handler, []},
             {"/upload", upload_handler, []},
+            {"/download/:id", download_handler, []},
             {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
             {"/[...]", gui_static_handler, {dir, DocRoot}}
         ]}
