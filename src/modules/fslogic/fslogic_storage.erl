@@ -36,8 +36,8 @@
 -spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
 new_user_ctx(StorageType, SessionId, SpaceUUID) ->
-    Luma_type = luma_type(),
-    Luma_type:new_user_ctx(StorageType, SessionId, SpaceUUID).
+    LumaType = luma_type(),
+    LumaType:new_user_ctx(StorageType, SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -47,8 +47,8 @@ new_user_ctx(StorageType, SessionId, SpaceUUID) ->
 -spec get_posix_user_ctx(StorageType :: helpers:name(), SessionId :: session:id(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
 get_posix_user_ctx(StorageType, SessionId, SpaceUUID) ->
-    Luma_type = luma_type(),
-    Luma_type:get_posix_user_ctx(StorageType, SessionId, SpaceUUID).
+    LumaType = luma_type(),
+    LumaType:get_posix_user_ctx(StorageType, SessionId, SpaceUUID).
 
 %%--------------------------------------------------------------------
 %% @doc

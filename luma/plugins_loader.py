@@ -3,6 +3,10 @@ import os
 
 
 class PluginsLoader:
+    """Loads generators (all python files) from 'generators' directory. Each generator will
+    be available under key created from its filename.
+    """
+
     def __init__(self):
         self.plugins = {}
 

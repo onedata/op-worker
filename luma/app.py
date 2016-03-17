@@ -40,10 +40,8 @@ args = parser.parse_args()
 
 app = Flask(__name__)
 app.config.from_pyfile(args.config)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///%s' % app.config['DATABASE']
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{0}'.format(app.config['DATABASE'])
 db = SQLAlchemy(app)
 
 plugins = PluginsLoader()
 plugins.load_plugins()
-
-

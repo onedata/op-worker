@@ -178,6 +178,7 @@ s3_user_proxy_test(Config) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
 init_per_suite(Config) ->
     EnvUpResult = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
     [Worker | _] = ?config(op_worker_nodes, EnvUpResult),
@@ -188,7 +189,6 @@ init_per_suite(Config) ->
     create_space(Worker, ?CEPH_STORAGE_NAME, ?CEPH_SPACE_NAME),
     create_space(Worker, ?S3_STORAGE_NAME, ?S3_SPACE_NAME),
     EnvUpResult.
-
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).

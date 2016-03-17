@@ -27,7 +27,7 @@ all: \
 	$(CXX) $? -o $@ $(LDFLAGS)
 
 ../priv/luma_nif.so: \
-		luma_nif.o
+		luma/luma_nif.o
 	$(CXX) $? -o $@ $(LDFLAGS)
 
 ../priv/rt_priority_queue_drv.so: \

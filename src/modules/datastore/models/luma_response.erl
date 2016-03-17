@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Cache that stores LUMA server responses
+%%% Cache that stores LUMA server responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_response).

@@ -5,17 +5,25 @@ from model import UserCredentialsMapping, GeneratorsMapping, StorageIdToTypeMapp
 
 
 def error_message(code, message):
+    """Creates response with provided code and error JSON response in format:
+    {
+        "status": "error",
+        "message": "message"
+    }
+    """
     response = json.jsonify(status='error', message=message)
     response.status_code = code
     return response
 
 
 def missing_param(param_name):
-    return error_message(422, 'Missing parameter: {}'.format(param_name))
+    """Creates error response with default message for missing parameter"""
+    return error_message(422, 'Missing parameter: {0}'.format(param_name))
 
 
 @app.route("/get_user_credentials", methods=['GET'])
 def get_user_credentials():
+    """Handles user credentials mapping request. More detailed description in README."""
     global_id = request.values.get('global_id')
     if not global_id:
         return missing_param('global_id')
@@ -62,7 +70,7 @@ def get_user_credentials():
         except Exception as e:
             return error_message(500, str(e))
 
-        credentials_mapping = UserCredentialsMapping(global_id, storage_id, json.dumps(credentials))
+        credentials_mapping = UserCredentialsMapping(global_id, storage_id or storage_type, json.dumps(credentials))
         db.session.add(credentials_mapping)
         db.session.commit()
     else:

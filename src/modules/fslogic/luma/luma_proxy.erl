@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
--include_lib("ctool/include/global_registry/gr_users.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
 
 
 %% API

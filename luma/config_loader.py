@@ -4,6 +4,7 @@ from model import StorageIdToTypeMapping, GeneratorsMapping, UserCredentialsMapp
 
 
 def load_storage_id_to_type_mapping(storage_id_to_type_file):
+    """Loads storage id to type mapping from file into database"""
     with app.app_context():
         with open(storage_id_to_type_file) as data_file:
             data = json.load(data_file)
@@ -16,6 +17,7 @@ def load_storage_id_to_type_mapping(storage_id_to_type_file):
 
 
 def load_generators_mapping(generators_file):
+    """Loads generators mapping from file into database"""
     with app.app_context():
         with open(generators_file) as data_file:
             data = json.load(data_file)
@@ -36,6 +38,7 @@ def load_generators_mapping(generators_file):
 
 
 def load_user_credentials_mapping(user_credentials_file):
+    """Loads user credentials mapping from file into database"""
     with app.app_context():
         with open(user_credentials_file) as data_file:
             data = json.load(data_file)
