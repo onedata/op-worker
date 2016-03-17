@@ -147,7 +147,7 @@ put_cdmi(Req, State = #{auth := Auth, path := Path, options := Opts}) ->
                 ok = onedata_file_api:cp({path, CopyURI}, Path),
                 {ok, copied};
             {undefined, undefined, MoveURI} ->
-                ok = onedata_file_api:mv({path, MoveURI}, Path),
+                ok = onedata_file_api:mv(Auth, {path, MoveURI}, Path),
                 {ok, moved}
         end,
 

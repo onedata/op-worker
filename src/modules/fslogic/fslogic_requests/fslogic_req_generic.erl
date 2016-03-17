@@ -24,7 +24,7 @@
 -define(CDMI_COMPLETION_STATUS_XATTR_NAME, <<"cdmi_completion_status">>).
 
 %% API
--export([chmod/3, get_file_attr/2, delete/2, rename/3, update_times/5,
+-export([chmod/3, get_file_attr/2, delete/2, update_times/5,
     get_xattr/3, set_xattr/3, remove_xattr/3, list_xattr/2,
     get_acl/2, set_acl/3, remove_acl/2, get_transfer_encoding/2,
     set_transfer_encoding/3, get_cdmi_completion_status/2,
@@ -143,29 +143,6 @@ delete(CTX, File) ->
             delete_dir(CTX, FileDoc);
         {ok, FileDoc} ->
             delete_file(CTX, FileDoc)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc Renames file/dir.
-%% For best performance use following arg types: path -> uuid -> document
-%% @end
-%%--------------------------------------------------------------------
--spec rename(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
-                         #fuse_response{} | no_return().
--check_permissions([{traverse_ancestors, 2}, {traverse_ancestors, {path, 3}}, {?delete, 2}]).
-rename(CTX, SourceEntry, TargetPath) ->
-    ?debug("Renaming file ~p to ~p...", [SourceEntry, TargetPath]),
-    case file_meta:exists({path, TargetPath}) of
-        true ->
-            #fuse_response{status = #status{code = ?EEXIST}};
-        false ->
-            case file_meta:get(SourceEntry) of
-                {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
-                    rename_dir(CTX, FileDoc, TargetPath);
-                {ok, FileDoc} ->
-                    rename_file(CTX, FileDoc, TargetPath)
-            end
     end.
 
 %%--------------------------------------------------------------------
@@ -513,58 +490,6 @@ delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @doc Checks necessary permissions and renames directory
-%%--------------------------------------------------------------------
--spec rename_dir(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) ->
-    #fuse_response{} | no_return().
--check_permissions([{?delete_subcontainer, {parent, 2}}, {?add_subcontainer, {parent, {path, 3}}}]).
-rename_dir(CTX, SourceEntry, TargetPath) ->
-    case moving_into_itself(SourceEntry, TargetPath) of
-        true ->
-            #fuse_response{status = #status{code = ?EINVAL}};
-        false ->
-            rename_impl(CTX, SourceEntry, TargetPath)
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc Checks necessary permissions and renames file
-%%--------------------------------------------------------------------
--spec rename_file(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) ->
-    #fuse_response{} | no_return().
--check_permissions([{?delete_object, {parent, 2}}, {?add_object, {parent, {path, 3}}}]).
-rename_file(CTX, SourceEntry, TargetPath) ->
-    rename_impl(CTX, SourceEntry, TargetPath).
-
-%%--------------------------------------------------------------------
-%% @doc Renames file_meta doc.
-%%--------------------------------------------------------------------
--spec rename_impl(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) ->
-    #fuse_response{} | no_return().
-rename_impl(_CTX, SourceEntry, TargetPath) ->
-    ok = file_meta:rename(SourceEntry, {path, TargetPath}),
-    {ok, FileDoc} = file_meta:get({path, TargetPath}),
-    {ok, ParentDoc} = file_meta:get_parent({path, TargetPath}),
-    CurrTime = erlang:system_time(seconds),
-
-    #document{value = ParentMeta} = ParentDoc,
-    {ok, _} = file_meta:update(ParentDoc, #{mtime => CurrTime, ctime => CurrTime}),
-
-    #document{value = FileMeta} = FileDoc,
-    {ok, _} = file_meta:update(FileDoc, #{ctime => CurrTime}),
-
-    spawn(
-        fun() ->
-            fslogic_event:emit_file_sizeless_attrs_update(
-                ParentDoc#document{value = ParentMeta#file_meta{
-                    mtime = CurrTime, ctime = CurrTime
-                }}),
-            fslogic_event:emit_file_sizeless_attrs_update(
-                FileDoc#document{value = FileMeta#file_meta{ctime = CurrTime}})
-        end),
-
-    #fuse_response{status = #status{code = ?OK}}.
-
-%%--------------------------------------------------------------------
 %% @doc
 %% Change mode of storage files related with given file_meta.
 %% @end
@@ -596,15 +521,3 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
 %% Internal functions
 %%--------------------------------------------------------------------
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if renamed entry is one of target path parents.
-%% @end
-%%--------------------------------------------------------------------
--spec moving_into_itself(SourceEntry :: fslogic_worker:file(), TargetPath :: file_meta:path()) ->
-    boolean().
-moving_into_itself(SourceEntry, TargetPath) ->
-    {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
-    {_, ParentPath} = fslogic_path:basename_and_parent(TargetPath),
-    {ok, {_, ParentUUIDs}} = file_meta:resolve_path(ParentPath),
-    lists:any(fun(ParentUUID) -> ParentUUID =:= SourceUUID end, ParentUUIDs).

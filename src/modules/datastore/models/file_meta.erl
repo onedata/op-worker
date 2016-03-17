@@ -42,8 +42,8 @@
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
     gen_path/1, gen_storage_path/1, rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
--export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
-    is_spaces_dir/2]).
+-export([snapshot_name/2, get_current_snapshot/1, to_uuid/1, is_root_dir/1,
+    is_spaces_base_dir/1, is_spaces_dir/2]).
 -export([fix_parent_links/2, fix_parent_links/1]).
 
 -type uuid() :: datastore:key().
@@ -639,8 +639,16 @@ is_spaces_base_dir(#document{key = Key}) ->
 rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
              {ok, FileUUID} = update(Subject, #{name => NewName}),
-             ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, {FileUUID, ?MODEL_NAME}}),
-             ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName),
+             {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
+             ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {snapshot_name(NewName, V), {FileUUID, ?MODEL_NAME}}),
+             ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
+             case get_current_snapshot(Subject) =:= SubjectDoc of
+                 true ->
+                     ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, Subject}),
+                     ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName);
+                 false ->
+                     ok
+             end,
              ok
          end);
 rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, {path, NewPath}) ->
@@ -651,11 +659,19 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, 
              {ok, NewParent} = get({path, NewParentPath}),
 
              {ok, NewScope} = get_scope(NewParent),
+             {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
 
-             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject}),
              {ok, FileUUID} = update(Subject, #{name => NewName}),
-             ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
+             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {snapshot_name(NewName, V), Subject}),
+             ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
              ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
+             case get_current_snapshot(Subject) =:= SubjectDoc of
+                 true ->
+                     ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject}),
+                     ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName);
+                 false ->
+                     ok
+             end,
 
              ok = update_scopes(Subject, NewScope),
 
@@ -825,6 +841,16 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 snapshot_name(FileName, Version) ->
     <<FileName/binary, ?SNAPSHOT_SEPARATOR, (integer_to_binary(Version))/binary>>.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns current version of given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_current_snapshot(Entry :: entry()) -> entry().
+get_current_snapshot(Entry) ->
+    %% TODO: find actual current version
+    {ok, CurrentSnapshot} = get(Entry),
+    CurrentSnapshot.
 
 %%--------------------------------------------------------------------
 %% @doc

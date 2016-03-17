@@ -18,7 +18,7 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, ls/4, get_children_count/2, rmdir/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, get_file_path/2]).
+-export([exists/1, mv/3, cp/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2, fsync/1]).
@@ -126,9 +126,10 @@ exists(FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Moves a file or directory to a new location.
 %%--------------------------------------------------------------------
--spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
-mv(FileKeyFrom, PathTo) ->
-    logical_file_manager:mv(FileKeyFrom, PathTo).
+-spec mv(Auth :: onedata_auth_api:auth(), FileKeyFrom :: file_key(), PathTo :: file_path()) ->
+    ok | error_reply().
+mv(Auth, FileKeyFrom, PathTo) ->
+    logical_file_manager:mv(Auth, FileKeyFrom, PathTo).
 
 %%--------------------------------------------------------------------
 %% @doc Copies a file or directory to given location.

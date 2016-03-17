@@ -18,7 +18,7 @@
 
 %% API
 -export([init/1, teardown/1, stat/3, truncate/4, create/4, unlink/3, open/4, close/2,
-    read/4, write/4, mkdir/3, mkdir/4, ls/5, set_perms/4, get_xattr/4,
+    read/4, write/4, mkdir/3, mkdir/4, mv/4, ls/5, set_perms/4, get_xattr/4,
     set_xattr/4, remove_xattr/4, list_xattr/3, get_acl/3, set_acl/4,
     write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
@@ -209,6 +209,16 @@ ls(Worker, SessId, FileKey, Offset, Limit) ->
         fun(Host) ->
             Result =
                 logical_file_manager:ls(SessId, FileKey, Offset, Limit),
+            Host ! {self(), Result}
+        end).
+
+-spec mv(node(), session:id(), file_meta:uuid_or_path(), file_meta:path()) ->
+    ok | logical_file_manager:error_reply().
+mv(Worker, SessId, FileKeyFrom, PathTo) ->
+    exec(Worker,
+        fun(Host) ->
+            Result =
+                logical_file_manager:mv(SessId, FileKeyFrom, PathTo),
             Host ! {self(), Result}
         end).
 

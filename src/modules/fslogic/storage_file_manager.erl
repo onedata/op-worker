@@ -120,10 +120,12 @@ mkdir(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileHandleFrom :: handle(), PathOnStorageTo :: file_meta:path()) ->
+-spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
     ok | logical_file_manager:error_reply().
-mv(_FileHandleFrom, _PathOnStorageTo) ->
-    ok.
+mv(#sfm_handle{storage = Storage, file = FileFrom}, FileTo) ->
+    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+    HelperHandle = helpers:new_handle(HelperInit),
+    helpers:rename(HelperHandle, FileFrom, FileTo).
 
 
 %%--------------------------------------------------------------------
