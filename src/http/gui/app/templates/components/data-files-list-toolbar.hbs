@@ -3,19 +3,11 @@
 {{#each items as |item|}}
   <li>
     {{!-- TODO refactor --}}
-    {{#if item.action}}
-      <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
-         disabled={{item.disabled}}
-        {{action item.action}}>
-        {{icon item.icon 'top-bar-icon'}}
-      </a>
-    {{else}}
-      <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
-         disabled={{item.disabled}}>
-
-        {{icon item.icon 'top-bar-icon'}}
-      </a>
-    {{/if}}
+    <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
+       disabled={{item.disabled}}
+      {{action (if item.action item.action (action (mut undefProp)))}}>
+      {{icon item.icon 'top-bar-icon'}}
+    </a>
   </li>
 {{/each}}
 

@@ -74,13 +74,18 @@ html, body {
 
       .toolbar-icon {
         color: $color-toolbar-icon;
+        // we do not want hover
+        background-color: transparent !important;
+        cursor: pointer; cursor: hand;
 
         &:hover {
-          color: $color-toolbar-icon !important;
+          color: $onedata-red !important;
         }
 
         &.disabled {
           color: $color-toolbar-icon-disabled;
+          pointer-events: none;
+          cursor: default;
         }
       }
 
