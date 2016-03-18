@@ -10,6 +10,7 @@
 
 import DS from 'ember-data';
 import Ember from 'ember';
+import octalPermissionsToString from '../utils/octal-permissions-to-string';
 /* globals moment */
 
 export default DS.Model.extend({
@@ -61,7 +62,7 @@ export default DS.Model.extend({
 
   permissionsHumanReadable: function() {
     let perms = this.get('permissions');
-    return (1000 + perms).toString().substring(1);
+    return perms ? octalPermissionsToString(perms) : '';
   }.property('permissions'),
 
   isDir: function () {
