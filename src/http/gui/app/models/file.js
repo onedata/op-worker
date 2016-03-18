@@ -67,7 +67,6 @@ export default DS.Model.extend({
     let file = this;
     let deleteChildren = function() {
       file.get('notify').success('File removed');
-      console.log('WAT');
       if (children) {
         children.forEach((child) => {
           child.deleteRecursive();
