@@ -24,11 +24,17 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([preroute_message/2, route_message/1]).
+-export([preroute_message/2, route_message/1, route_proxy_message/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+route_proxy_message(#client_message{message_body = #events{events = Evts}} = Msg, TargetSessionId) ->
+    ?info("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
+    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, TargetSessionId) end, Evts),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc

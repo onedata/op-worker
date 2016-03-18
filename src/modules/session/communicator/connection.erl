@@ -408,17 +408,14 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
                 ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
                 {Msg0#client_message{session_id = ProxySessionId}, ProxySessionId};
-            {true, #client_message{proxy_session_id = ProxySessionId}} when ProxySessionId =/= undefined ->
-                {Msg0#client_message{session_id = ProxySessionId}, ProxySessionId};
             _ ->
                 {Msg0, SessId}
         end,
     ?info("Handle message ~p ~p ~p ~p", [IsProvider, Msg, EffectiveSessionId, SessId]),
 
     case Msg of
-        #server_message{proxy_session_id = TargetSessionId} when TargetSessionId =/= SessId ->
-            ?info("REROUTE CONN ~p ~p ~p", [TargetSessionId, SessId, Msg]),
-            connection:send(Msg, TargetSessionId),
+        #client_message{proxy_session_id = TargetSessionId} = Msg when TargetSessionId =/= EffectiveSessionId, is_binary(TargetSessionId) ->
+            router:route_proxy_message(Msg, TargetSessionId),
             {noreply, State, ?TIMEOUT};
         _ ->
             case router:preroute_message(Msg, EffectiveSessionId) of

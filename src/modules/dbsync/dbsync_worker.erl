@@ -85,14 +85,22 @@ init_stream(Since, Until, Queue) ->
         _ -> ok
     end,
 
-    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
-    couchdb_datastore_driver:changes_start_link(
+    {ok, TRef} = timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
+    {ok, StreamPid} = couchdb_datastore_driver:changes_start_link(
         fun
             (_, stream_ended, _) ->
                 worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
             (Seq, Doc, Model) ->
                 worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
-        end, Since, Until).
+        end, Since, Until),
+
+    spawn(fun() ->
+        process_flag(trap_exit, true),
+        erlang:link(StreamPid),
+        receive {'EXIT', StreamPid, _} -> timer:cancel(TRef) end
+    end),
+
+    {ok, StreamPid}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,8 +108,7 @@ init_stream(Since, Until, Queue) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: ping | healthcheck |
-    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
+    Request :: ping | healthcheck | term(),
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
