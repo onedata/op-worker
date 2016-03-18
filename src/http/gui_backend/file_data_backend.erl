@@ -53,13 +53,13 @@ find(<<"file">>, [FileId]) ->
         type = TypeAttr,
         size = SizeAttr,
         mtime = ModificationTime,
-        mode = Permissions}} =
+        mode = PermissionsAttr}} =
         logical_file_manager:stat(SessionId, {uuid, FileId}),
-    ?dump(ModificationTime),
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE -> {<<"dir">>, null};
         _ -> {<<"file">>, SizeAttr}
     end,
+    Permissions = integer_to_binary(PermissionsAttr, 8),
     Children = case Type of
         <<"file">> ->
             [];
@@ -129,13 +129,53 @@ create_record(<<"file">>, Data) ->
     end.
 
 %% Called when ember asks to update a record
-update_record(<<"file">>, Id, Data) ->
-    ?dump({Id, Data}),
-    {error, not_iplemented}.
+update_record(<<"file">>, FileId, Data) ->
+    SessionId = g_session:get_session_id(),
+%%    Rename = fun(_NewName) ->
+%%        {ok, OldPath} = logical_file_manager:get_file_path(SessionId, FileId),
+%%        DirName = filename:dirname(OldPath),
+%%        {ok, OldPath} = logical_file_manager:mv(SessionId, FileId),
+%%        ?dump(OldPath),
+%%        ok
+%%    end,
+    Chmod = fun(NewPermsBin) ->
+        Perms = case is_integer(NewPermsBin) of
+            true ->
+                binary_to_integer(integer_to_binary(NewPermsBin), 8);
+            false ->
+                binary_to_integer(NewPermsBin, 8)
+        end,
+        case Perms >= 0 andalso Perms =< 8#777 of
+            true ->
+                ok = logical_file_manager:set_perms(
+                    SessionId, {uuid, FileId}, Perms);
+            false ->
+                gui_error:report_warning(<<"Cannot change permissions, "
+                "invalid octal value.">>)
+        end
+    end,
+%%    case proplists:get_value(<<"name">>, Data, undefined) of
+%%        undefined ->
+%%            ok;
+%%        NewName ->
+%%            Rename(NewName)
+%%    end,
+    case proplists:get_value(<<"permissions">>, Data, undefined) of
+        undefined ->
+            ok;
+        NewPerms ->
+            Chmod(NewPerms)
+    end,
+    ?dump({FileId, Data}),
+    ok.
 
 %% Called when ember asks to delete a record
 delete_record(<<"file">>, Id) ->
-    ok = rm_rf(Id).
+    try
+        rm_rf(Id)
+    catch error:{badmatch, {error, eacces}} ->
+        gui_error:report_warning(<<"Cannot remove file - access denied.">>)
+    end.
 
 
 % ------------------------------------------------------------

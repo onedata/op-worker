@@ -138,7 +138,6 @@ export default Ember.Component.extend({
     submitRemoveFiles() {
       try {
         this.get('dir').removeSelectedFiles();
-        this.get('notify').success('Files removed');
       } finally {
         this.set('isRemovingFiles', false);
       }
