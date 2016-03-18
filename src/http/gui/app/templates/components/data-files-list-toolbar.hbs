@@ -2,10 +2,17 @@
 {{!-- TODO: toolbar icon component --}}
 {{#each items as |item|}}
   <li>
-    <a class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
-      {{action item.action}}>
-      {{icon item.icon 'top-bar-icon'}}
-    </a>
+    {{!-- TODO refactor --}}
+    {{#if item.action}}
+      <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
+        {{action item.action}}>
+        {{icon item.icon 'top-bar-icon'}}
+      </a>
+    {{else}}
+      <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}">
+        {{icon item.icon 'top-bar-icon'}}
+      </a>
+    {{/if}}
   </li>
 {{/each}}
 

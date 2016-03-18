@@ -1,4 +1,7 @@
 <table class="table table-strips files-table">
+  <div class="drop-area">
+    {{icon 'upload'}}
+  </div>
   <thead>
     <th>
       {{t 'components.dataFilesList.files'}}
@@ -43,8 +46,3 @@
     {{/each}}
   </tbody>
 </table>
-
-
-<div class="file-upload">
-  {{file-upload currentDir=dir}}
-</div>

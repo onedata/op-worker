@@ -81,6 +81,10 @@ export default {
         title: 'Zmiana uprawnień',
         text: 'Wprowadź nowy kod uprawnień:'
       },
+    },
+    fileUpload: {
+      titleUpload: 'Wysyłanie {{count}} pliku',
+      cancelAll: 'Anuluj wszystkie',
     }
   },
   spaces: {

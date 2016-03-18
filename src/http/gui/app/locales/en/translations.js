@@ -80,6 +80,10 @@ export default {
         text: 'Enter new file permissions code:'
       },
     },
+    fileUpload: {
+      titleUpload: 'Uploading {{count}} file(s)',
+      cancelAll: 'Cancel all',
+    }
   },
   spaces: {
     show: {

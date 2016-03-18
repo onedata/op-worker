@@ -2,6 +2,7 @@ import Ember from 'ember';
 
 export default Ember.Component.extend({
   notify: Ember.inject.service('notify'),
+  fileUpload: Ember.inject.service('fileUpload'),
 
   tagName: 'ul',
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
@@ -16,51 +17,63 @@ export default Ember.Component.extend({
   items: function() {
     return [
       {
+        id: 'create-dir-tool',
         icon: 'folder-new',
         action: 'createDir',
       },
       // TODO: temporary, to decide
       {
+        id: 'create-file-tool',
         icon: 'file',
         action: 'createFile',
       },
       {
+        id: 'share-file-tool',
         icon: 'share',
         action: 'notImplemented',
         disabled: !this.get('dir.isSomeFileSelected'),
       },
-      // TODO: invoke uploader on action
+      // using fileUpload service binding
       {
+        id: 'upload-file-tool',
         icon: 'upload',
-        action: 'notImplemented',
       },
       {
+        id: 'rename-file-tool',
         icon: 'rename',
         action: 'renameSelectedFile',
         disabled: !this.get('dir.singleSelectedFile'),
       },
       {
+        id: 'lock-file-tool',
         icon: 'lock',
         action: 'editPermissions',
         disabled: !this.get('dir.isSomeFileSelected'),
       },
       {
+        id: 'copy-file-tool',
         icon: 'copy',
         action: 'notImplemented',
         disabled: !this.get('dir.isSomeFileSelected'),
       },
       {
+        id: 'cut-file-tool',
         icon: 'cut',
         action: 'notImplemented',
         disabled: !this.get('dir.isSomeFileSelected'),
       },
       {
+        id: 'remove-file-tool',
         icon: 'remove',
         action: 'removeSelectedFiles',
         disabled: !this.get('dir.isSomeFileSelected'),
       },
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
+
+  didInsertElement() {
+    this.get('fileUpload').assignBrowse(this.$().find('#upload-file-tool'));
+  },
 
   actions: {
     /// Actions on toolbar items click

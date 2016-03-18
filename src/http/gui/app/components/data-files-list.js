@@ -13,56 +13,7 @@ export default Ember.Component.extend({
   dir: null,
 
   bindFileUpload() {
-    var r = this.get('fileUpload.resumable');
-    // Resumable.js isn't supported, fall back on a different method
-    if (!r.support) {
-      // TODO: other message
-      window.alert('resumable js is not supported!');
-      $('.resumable-error').show();
-    } else {
-      let container = this.$().find('.table');
-
-      r.assignDrop(container[0]);
-
-      // Dragging
-      // TODO: styles
-      container.on('dragenter', function() {
-        $(this).addClass('file-drag');
-      });
-      container.on('dragend', function() {
-        $(this).removeClass('file-drag');
-      });
-      container.on('drop', function() {
-        $(this).removeClass('file-drag');
-      });
-
-      // Resumable events
-
-      r.on('fileAdded', (file) => {
-        this.get('notify').info('Starting file upload: ' + file.fileName);
-        r.upload();
-      });
-
-      // TODO: handle pause
-
-      r.on('complete', () => {
-        this.get('notify').info('File upload completed');
-      });
-
-      r.on('fileSuccess', (file/*, message*/) => {
-        this.get('notify').info(`File "${file.fileName}" uploaded successfully!`);
-      });
-
-      r.on('fileError', (file, message) => {
-        this.get('notify').error(`File "${file.fileName}" upload failed: ${message}`);
-      });
-
-      // TODO: handle file progress
-
-      r.on('uploadStart', () => {
-        this.get('notify').info('Starting file upload');
-      });
-    }
+    this.get('fileUpload').assignDrop(this.$().find('.table'));
   },
 
   didInsertElement() {
