@@ -10,6 +10,7 @@
 
 import DS from 'ember-data';
 import Ember from 'ember';
+/* globals moment */
 
 export default DS.Model.extend({
   errorNotifier: Ember.inject.service('errorNotifier'),
@@ -36,9 +37,9 @@ export default DS.Model.extend({
     return `${this.get('size')} B`;
   }.property('size'),
 
-  mTimeHumanReadable: function() {
-    // TODO nicely format date
-    return this.get('modificationTime');
+  modificationMoment: function() {
+    let timestamp = this.get('modificationTime');
+    return timestamp ? moment(timestamp * 1000).format('YYYY-MM-DD HH:MM') : '-';
   }.property('modificationTime'),
 
   permissionsHumanReadable: function() {

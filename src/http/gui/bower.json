@@ -15,7 +15,8 @@
     "ember-localstorage-adapter": "^0.5.5",
     "resumable.js": "resumablejs#~1.0.2",
     "bootstrap": "~3.3.6",
-    "bootstrap-sass": "~3.3.6"
+    "bootstrap-sass": "~3.3.6",
+    "moment": "^2.12.0"
   },
   "resolutions": {
     "ember-data": "1.13.15",
