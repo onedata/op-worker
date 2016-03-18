@@ -5,11 +5,14 @@
     {{!-- TODO refactor --}}
     {{#if item.action}}
       <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
+         disabled={{item.disabled}}
         {{action item.action}}>
         {{icon item.icon 'top-bar-icon'}}
       </a>
     {{else}}
-      <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}">
+      <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
+         disabled={{item.disabled}}>
+
         {{icon item.icon 'top-bar-icon'}}
       </a>
     {{/if}}

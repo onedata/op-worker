@@ -31,7 +31,8 @@ export default Ember.Component.extend({
         id: 'share-file-tool',
         icon: 'share',
         action: 'notImplemented',
-        disabled: !this.get('dir.isSomeFileSelected'),
+        //disabled: !this.get('dir.isSomeFileSelected'),
+        disabled: true
       },
       // using fileUpload service binding
       {
@@ -42,25 +43,29 @@ export default Ember.Component.extend({
         id: 'rename-file-tool',
         icon: 'rename',
         action: 'renameSelectedFile',
-        disabled: !this.get('dir.singleSelectedFile'),
+        //disabled: !this.get('dir.singleSelectedFile'),
+        disabled: true
       },
       {
         id: 'lock-file-tool',
         icon: 'lock',
         action: 'editPermissions',
-        disabled: !this.get('dir.isSomeFileSelected'),
+        //disabled: !this.get('dir.isSomeFileSelected'),
+        disabled: true
       },
       {
         id: 'copy-file-tool',
         icon: 'copy',
         action: 'notImplemented',
-        disabled: !this.get('dir.isSomeFileSelected'),
+        //disabled: !this.get('dir.isSomeFileSelected'),
+        disabled: true
       },
       {
         id: 'cut-file-tool',
         icon: 'cut',
         action: 'notImplemented',
-        disabled: !this.get('dir.isSomeFileSelected'),
+        //disabled: !this.get('dir.isSomeFileSelected'),
+        disabled: true
       },
       {
         id: 'remove-file-tool',
