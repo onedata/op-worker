@@ -50,8 +50,7 @@ export default Ember.Component.extend({
         id: 'lock-file-tool',
         icon: 'lock',
         action: 'editPermissions',
-        //disabled: !this.get('dir.isSomeFileSelected'),
-        disabled: true
+        disabled: !this.get('dir.isSomeFileSelected'),
       },
       {
         id: 'copy-file-tool',
