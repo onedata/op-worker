@@ -183,7 +183,10 @@ export default DS.Model.extend({
     this.get('selectedFiles').forEach((file) => {
       file.set('permissions', parseInt(permissions));
       // TODO: handle errors
-      file.save();
+      file.save().then(() => {}, (failMessage) => {
+        this.get('errorNotifier').handle(failMessage);
+        file.rollback();
+      });
     });
   },
 
