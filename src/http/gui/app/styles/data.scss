@@ -121,6 +121,10 @@
         // make text in rows aligned vertically middle
         line-height: inherit;
 
+        &.col-permissions {
+          font-family: monospace;
+        }
+
         .file-icon {
           float: left;
           width: 40px;
