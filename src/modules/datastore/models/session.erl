@@ -276,8 +276,9 @@ get_random_connection(SessId) ->
 get_connections(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia)  ->
-            provider_communicator:ensure_connected( session_manager:get_provider_session_id(outgoing, ProxyVia)),
-            get_connections(ProxyVia);
+            ProxyViaSession = session_manager:get_provider_session_id(outgoing, ProxyVia),
+            provider_communicator:ensure_connected( ProxyViaSession ),
+            get_connections(ProxyViaSession);
         {ok, #document{value = #session{connections = Cons}}} ->
             {ok, Cons};
         {error, Reason} ->

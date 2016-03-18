@@ -296,12 +296,10 @@ request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUU
     {file, {uuid, FileUUID}};
 request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
     {file, {uuid, FileUUID}};
-request_to_file_entry_or_provider(#event{object = #update_event{object = #file_attr{uuid = FileUUID}}}) ->
-    {file, {uuid, FileUUID}};
-request_to_file_entry_or_provider(#event{object = #update_event{object = #file_location{uuid = FileUUID}}}) ->
-    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #update_event{}}) ->
+    not_file_context;
 request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = FileUUID}}) ->
-    {file, {uuid, FileUUID}};
+    not_file_context;
 request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
     {file, {uuid, FileUUID}};
 request_to_file_entry_or_provider(#subscription{object = #file_location_subscription{file_uuid = FileUUID}}) ->

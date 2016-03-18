@@ -138,38 +138,40 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     ok;
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{} = FuseRequest}) ->
+    Connection = self(),
     ?info("Fuse request: ~p ~p", [FuseRequest, SessId]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
         ?info("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
-        }, SessId)
+        }, Connection)
     end),
     ok;
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
+    Connection = self(),
     spawn(fun() ->
         ProxyIOResponse = worker_proxy:call(fslogic_worker,
             {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
 
         ?debug("ProxyIO response ~p", [ProxyIOResponse]),
         communicator:send(#server_message{message_id = Id,
-            message_body = ProxyIOResponse}, SessId)
+            message_body = ProxyIOResponse}, Connection)
     end),
     ok;
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #dbsync_request{} = DBSyncRequest}) ->
     ?debug("DBSync request ~p", [DBSyncRequest]),
-    Handler = self(),
+    Connection = self(),
     spawn(fun() ->
         DBSyncResponse = worker_proxy:call(dbsync_worker,
             {dbsync_request, SessId, DBSyncRequest}),
 
         ?debug("DBSync response ~p", [DBSyncResponse]),
         communicator:send(#server_message{message_id = Id,
-            message_body = DBSyncResponse}, Handler)
+            message_body = DBSyncResponse}, Connection)
     end),
     ok.
 

@@ -563,7 +563,7 @@ bcast_status() ->
     ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
-%%    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
+    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);

@@ -140,13 +140,13 @@ before(_ModelName, _Method, _Level, _Context) ->
 fetch(Client, SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     ?info("space_info:fetch ~p ~p", [Client, SpaceId]),
-    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
     case space_info:get(Key) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
-            {ok, _} = space_info:save(NewDoc),
-            {ok, NewDoc};
+%%            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
+%%            {ok, _} = space_info:save(NewDoc),
+            {ok, Doc};
         {error, {not_found, _}} ->
+            {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
             Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
             {ok, _} = space_info:create(Doc),
             {ok, Doc};
