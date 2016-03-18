@@ -100,8 +100,7 @@ init_stream(Since, Until, Queue) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: ping | healthcheck |
-    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
+    Request :: ping | healthcheck | term(),
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
