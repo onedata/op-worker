@@ -13,6 +13,7 @@ import Ember from 'ember';
 
 export default DS.Model.extend({
   errorNotifier: Ember.inject.service('errorNotifier'),
+  notify: Ember.inject.service('notify'),
 
   name: DS.attr('string'),
   /**
@@ -35,6 +36,16 @@ export default DS.Model.extend({
     return `${this.get('size')} B`;
   }.property('size'),
 
+  mTimeHumanReadable: function() {
+    // TODO nicely format date
+    return this.get('modificationTime');
+  }.property('modificationTime'),
+
+  permissionsHumanReadable: function() {
+    let perms = this.get('permissions');
+    return (1000 + perms).toString().substring(1);
+  }.property('permissions'),
+
   isDir: function () {
     return this.get('type') === 'dir';
   }.property('type'),
@@ -55,6 +66,7 @@ export default DS.Model.extend({
     let children = this.get('children');
     let file = this;
     let deleteChildren = function() {
+      file.get('notify').success('File removed');
       if (children) {
         children.forEach((child) => {
           child.deleteRecursive();
@@ -64,7 +76,10 @@ export default DS.Model.extend({
       }
     };
 
-    this.destroyRecord().then(deleteChildren, deleteChildren);
+    this.destroyRecord().then(deleteChildren, (failMessage) => {
+      file.get('errorNotifier').handle(failMessage);
+      file.rollbackAttributes();
+    });
   },
 
   deleteRecursive() {
@@ -166,7 +181,7 @@ export default DS.Model.extend({
 
   setSelectedFilesPermissions(permissions) {
     this.get('selectedFiles').forEach((file) => {
-      file.set('permissions', permissions);
+      file.set('permissions', parseInt(permissions));
       // TODO: handle errors
       file.save();
     });

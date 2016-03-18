@@ -186,17 +186,24 @@ export default DS.RESTAdapter.extend({
     let data = {};
     let serializer = store.serializerFor(type.modelName);
     serializer.serializeIntoHash(data, type, record, {includeId: true});
+    console.log(data);
     return this.asyncRequest(OP_CREATE_RECORD, type.modelName, null, data);
   },
 
   /** Called when ember store wants to update a record */
   updateRecord(store, type, record) {
     this.logToConsole(OP_UPDATE_RECORD, [store, type, record]);
-    let data = {};
-    let serializer = store.serializerFor(type.modelName);
-    serializer.serializeIntoHash(data, type, record, {includeId: true});
     let id = Ember.get(record, 'id');
-    return this.asyncRequest(OP_UPDATE_RECORD, type.modelName, id, data);
+    let changedAttributes = record.changedAttributes();
+    let keys = Object.keys(changedAttributes);
+    console.log(changedAttributes);
+    let changesData = {};
+    keys.forEach((key) => {
+      // changedAttributes hold a map with key of record field names and
+      // values of two-element array [oldValue, newValue]
+      changesData[key] = changedAttributes[key][1];
+    });
+    return this.asyncRequest(OP_UPDATE_RECORD, type.modelName, id, changesData);
   },
 
   /** Called when ember store wants to delete a record */
@@ -307,9 +314,6 @@ export default DS.RESTAdapter.extend({
    */
   transformRequest(json, type, operation) {
     switch (operation) {
-      case OP_UPDATE_RECORD:
-        return json[type];
-
       case OP_CREATE_RECORD:
         return json[type];
 
@@ -395,7 +399,7 @@ export default DS.RESTAdapter.extend({
 
         promise.success(transformed_data);
       } else if (json.result === RESULT_ERROR) {
-        console.log('FETCH_RESP error: ' +  JSON.stringify(json.data));
+        console.log('FETCH_RESP error: ' + JSON.stringify(json.data));
         promise.error(json.data);
       } else {
         console.log('Unknown operation result: ' + json.result);
