@@ -18,11 +18,12 @@
     border-left-color: transparent;
 
     &:hover {
-      background-color: $onedata-light-azure;
+      background-color: $onedata-light-gray;
     }
 
     &.active {
-      background-color: $onedata-light-azure;
+      background-color: $onedata-light-gray;
+      color: $onedata-red;
 
       &.onedata-red {
         border-left-color: $onedata-red;
@@ -30,28 +31,32 @@
     }
   }
 
-  .level-1 {
-    .secondary-sidebar-item {
-      padding-left: $secondary-sidebar-item-padding !important;
-    }
+  .level-1 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 22px) !important;
   }
 
-  .level-2 {
-    .secondary-sidebar-item {
-      padding-left: ($secondary-sidebar-item-padding + 22px) !important;
-    }
-  }
-
-  .level-3 .secondary-sidebar-item {
+  .level-2 .secondary-sidebar-item {
     padding-left: ($secondary-sidebar-item-padding + 44px) !important;
   }
 
-  .level-4 .secondary-sidebar-item {
+  .level-3 .secondary-sidebar-item {
     padding-left: ($secondary-sidebar-item-padding + 66px) !important;
   }
 
-  .level-5 .secondary-sidebar-item {
+  .level-4 .secondary-sidebar-item {
     padding-left: ($secondary-sidebar-item-padding + 88px) !important;
+  }
+
+  .level-5 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 110px) !important;
+  }
+
+  .level-6 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 132px) !important;
+  }
+
+  .level-7 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 154px) !important;
   }
 
 }
