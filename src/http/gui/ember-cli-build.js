@@ -29,6 +29,7 @@ module.exports = function(defaults) {
   // along with the exports of each module as its value.
 
   app.import("bower_components/resumable.js/resumable.js");
+  app.import("bower_components/moment/min/moment-with-locales.min.js");
 
   return app.toTree();
 };
