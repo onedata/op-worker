@@ -34,7 +34,24 @@ export default DS.Model.extend({
 
   // TODO: implement B, MB, GB, TODO: move to helper
   sizeHumanReadable: function() {
-    return `${this.get('size')} B`;
+    let bytes = this.get('size');
+    if (!bytes) {
+      return '';
+    }
+
+    let number = bytes;
+    let unit = 'B';
+    if (bytes > 999999999) {
+      unit = 'GB';
+      number = bytes/1000000000;
+    } else if (bytes > 999999) {
+      unit = 'MB';
+      number = bytes/1000000;
+    } else if (bytes > 999) {
+      unit = 'KB';
+      number = bytes/1000;
+    }
+    return `${number.toFixed(2)} ${unit}`;
   }.property('size'),
 
   modificationMoment: function() {
