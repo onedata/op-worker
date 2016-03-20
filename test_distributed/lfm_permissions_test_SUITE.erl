@@ -64,7 +64,6 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("annotations/include/annotations.hrl").
 
 %%%-------------------------------------------------------------------
 %%% API
@@ -173,7 +172,7 @@ posix_read_file_user_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/file">>, 8#770)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/t1_file">>, 8#770)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {uuid, Uuid}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
 
@@ -190,7 +189,7 @@ posix_read_file_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#770)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/t2_file">>, 8#770)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {uuid, Uuid}, write)),
     ?assertEqual({ok, 1}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
 
@@ -206,7 +205,7 @@ posix_write_file_user_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name1/file">>, 8#770)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name1/t3_file">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {uuid, Uuid}, 8#570)),
@@ -226,7 +225,7 @@ posix_write_file_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, 1}, Config),
     SessId4 = ?config({session_id, 4}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name4/file">>, 8#770)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name4/t4_file">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId1, {uuid, Uuid}, 8#750)),
@@ -245,8 +244,8 @@ posix_read_dir_user_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#770)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#770)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/t5_dir">>, 8#770)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/t5_dir/file">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, DirUuid}, 8#370)),
@@ -260,8 +259,8 @@ posix_read_dir_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#770)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#770)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/t6_dir">>, 8#770)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/t6_dir/file">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, DirUuid}, 8#730)),
@@ -274,17 +273,17 @@ posix_write_dir_user_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
     SessId3 = ?config({session_id, 3}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#770)),
-    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/dir/file1">>, 8#770)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/t7_dir">>, 8#770)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/t7_dir/file1">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {uuid, DirUuid}, 8#570)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId3, <<"/dir/file2">>, 8#770)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId3, <<"/t7_dir/file2">>, 8#770)),
     % TODO: assert eacces on mv when implemented
     ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId3, {uuid, File1Uuid})),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {uuid, DirUuid}, 8#370)),
-    ?assertMatch({ok, _Uuid}, lfm_proxy:create(W, SessId3, <<"/dir/file2">>, 8#770)),
+    ?assertMatch({ok, _Uuid}, lfm_proxy:create(W, SessId3, <<"/t7_dir/file2">>, 8#770)),
     % TODO: assert ok on mv when implemented
     ?assertEqual(ok, lfm_proxy:unlink(W, SessId3, {uuid, File1Uuid})).
 
@@ -293,17 +292,17 @@ posix_write_dir_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId3 = ?config({session_id, 3}, Config),
     SessId1 = ?config({session_id, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#770)),
-    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/dir/file1">>, 8#770)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/t8_dir">>, 8#770)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/t8_dir/file1">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {uuid, DirUuid}, 8#750)),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/dir/file2">>, 8#770)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/t8_dir/file2">>, 8#770)),
     % TODO: assert eacces on mv when implemented
     ?assertEqual({error, ?EACCES}, lfm_proxy:unlink(W, SessId1, {uuid, File1Uuid})),
 
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId3, {uuid, DirUuid}, 8#730)),
-    ?assertMatch({ok, _Uuid}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/dir/file2">>, 8#770)),
+    ?assertMatch({ok, _Uuid}, lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/t8_dir/file2">>, 8#770)),
     % TODO: assert ok on mv when implemented
     ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {uuid, File1Uuid})).
 
@@ -311,9 +310,9 @@ posix_execute_dir_user_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1">>, 8#770)),
-    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1/dir2">>, 8#770)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir1/dir2/file">>, 8#770)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/t9_dir1">>, 8#770)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/t9_dir1/dir2">>, 8#770)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t9_dir1/dir2/file">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#670)),
@@ -331,9 +330,9 @@ posix_execute_dir_group_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId2 = ?config({session_id, 2}, Config),
     SessId3 = ?config({session_id, 3}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1">>, 8#770)),
-    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir1/dir2">>, 8#770)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir1/dir2/file">>, 8#770)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/t10_dir1">>, 8#770)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/t10_dir1/dir2">>, 8#770)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t10_dir1/dir2/file">>, 8#770)),
 
     % Verification
     ?assertEqual(ok, lfm_proxy:set_perms(W, SessId2, {uuid, Dir1Uuid}, 8#760)),
@@ -357,7 +356,7 @@ acl_read_object_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/t11_file">>, 8#777)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {uuid, Uuid}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
 
@@ -378,7 +377,7 @@ acl_read_object_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [{GroupId1, _} | _] = ?config({groups, 1}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/t12_file">>, 8#777)),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId2, {uuid, Uuid}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
 
@@ -399,8 +398,8 @@ acl_list_container_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/t13_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/t13_dir/file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?list_container_mask),
@@ -418,8 +417,8 @@ acl_list_container_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [{GroupId1, _} | _] = ?config({groups, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/dir/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/t14_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/t14_dir/file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId1, ?list_container_mask),
@@ -437,7 +436,7 @@ acl_write_object_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/file">>, 8#777)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/t15_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?write_object_mask),
@@ -460,7 +459,7 @@ acl_write_object_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [{GroupId1, _} | _] = ?config({groups, 1}, Config),
-    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/file">>, 8#777)),
+    {_, Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/t16_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId1, ?write_object_mask),
@@ -483,17 +482,17 @@ acl_add_object_user_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/t17_dir">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId2, ?add_object_mask),
     Ace2 = ?allow_user(UserId2, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, DirUuid}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir/file">>, 8#777)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t17_dir/file">>, 8#777)),
 
     Ace3 = ?allow_user(UserId2, ?add_object_mask bor ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, DirUuid}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _FileUuid}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir/file">>, 8#777)).
+    ?assertMatch({ok, _FileUuid}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t17_dir/file">>, 8#777)).
 
 acl_add_object_group_test(Config) ->
     % Setup
@@ -502,17 +501,17 @@ acl_add_object_group_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     [_, {GroupId2, _} | _] = ?config({groups, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/t18_dir">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId2, ?add_object_mask),
     Ace2 = ?allow_group(GroupId2, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, DirUuid}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir/file">>, 8#777)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t18_dir/file">>, 8#777)),
 
     Ace3 = ?allow_group(GroupId2, ?add_object_mask bor ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, DirUuid}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _FileUuid}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/dir/file">>, 8#777)).
+    ?assertMatch({ok, _FileUuid}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t18_dir/file">>, 8#777)).
 
 acl_add_subcontainer_user_test(Config) ->
     % Setup
@@ -521,17 +520,17 @@ acl_add_subcontainer_user_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/spaces/space_name4/dir1">>, 8#777)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/spaces/space_name4/t19_dir1">>, 8#777)),
 
     % Verification
     Ace1 = ?allow_user(UserId2, ?add_subcontainer_mask),
     Ace2 = ?deny_user(UserId2, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/t19_dir1/dir2">>, 8#777)),
 
     Ace3 = ?allow_user(UserId2, ?add_subcontainer_mask bor ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _Dir2Uuid}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777)).
+    ?assertMatch({ok, _Dir2Uuid}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/t19_dir1/dir2">>, 8#777)).
 
 acl_add_subcontainer_group_test(Config) ->
     % Setup
@@ -540,17 +539,17 @@ acl_add_subcontainer_group_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     [_, {GroupId2, _} | _] = ?config({groups, 1}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/spaces/space_name4/dir1">>, 8#777)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/spaces/space_name4/t20_dir1">>, 8#777)),
 
     % Verification
     Ace1 = ?allow_group(GroupId2, ?add_subcontainer_mask),
     Ace2 = ?deny_group(GroupId2, ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace1, Ace2])),
-    ?assertEqual({error, ?EACCES}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777)),
+    ?assertEqual({error, ?EACCES}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/t20_dir1/dir2">>, 8#777)),
 
     Ace3 = ?allow_group(GroupId2, ?add_subcontainer_mask bor ?traverse_container_mask),
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId3, {uuid, Dir1Uuid}, [?acl_all(UserId3), Ace3])),
-    ?assertMatch({ok, _Dir2Uuid}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/dir1/dir2">>, 8#777)).
+    ?assertMatch({ok, _Dir2Uuid}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name4/t20_dir1/dir2">>, 8#777)).
 
 acl_read_metadata_user_test(Config) ->
     % Setup
@@ -559,7 +558,7 @@ acl_read_metadata_user_test(Config) ->
     UserId4 = ?config({user_id, 4}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     UserId3 = ?config({user_id, 3}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/t21_file">>, 8#777)),
     Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
     ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {uuid, FileUuid}, Xattr)),
 
@@ -579,7 +578,7 @@ acl_read_metadata_group_test(Config) ->
     UserId4 = ?config({user_id, 4}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     [_, _, _, {GroupId4, _}] = ?config({groups, 1}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/t22_file">>, 8#777)),
     Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
     ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {uuid, FileUuid}, Xattr)),
 
@@ -599,7 +598,7 @@ acl_write_metadata_user_test(Config) ->
     UserId4 = ?config({user_id, 4}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     UserId3 = ?config({user_id, 3}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/spaces/space_name4/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/spaces/space_name4/t23_file">>, 8#777)),
     Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
     ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {uuid, FileUuid}, Xattr)),
 
@@ -622,7 +621,7 @@ acl_write_metadata_group_test(Config) ->
     UserId4 = ?config({user_id, 4}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     [_, _, {GroupId3, _} | _] = ?config({groups, 1}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/spaces/space_name4/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId4, <<"/spaces/space_name4/t24_file">>, 8#777)),
     Xattr = #xattr{name = <<"XATTR_NAME">>, value = <<42/integer>>},
     ?assertEqual(ok, lfm_proxy:set_xattr(W, SessId4, {uuid, FileUuid}, Xattr)),
 
@@ -645,10 +644,10 @@ acl_traverse_container_user_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     UserId3 = ?config({user_id, 3}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1">>, 8#777)),
-    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1/dir2">>, 8#777)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/t25_dir1">>, 8#777)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/t25_dir1/dir2">>, 8#777)),
     {ok, FileUuid} =
-        lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/dir1/dir2/file">>, 8#777),
+        lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/t25_dir1/dir2/file">>, 8#777),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {uuid, FileUuid}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
 
@@ -671,10 +670,10 @@ acl_traverse_container_group_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId3 = ?config({session_id, 3}, Config),
     [_, _, {GroupId3, _} | _] = ?config({groups, 1}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1">>, 8#777)),
-    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/dir1/dir2">>, 8#777)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/t26_dir1">>, 8#777)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name3/t26_dir1/dir2">>, 8#777)),
     {ok, FileUuid} =
-        lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/dir1/dir2/file">>, 8#777),
+        lfm_proxy:create(W, SessId1, <<"/spaces/space_name3/t26_dir1/dir2/file">>, 8#777),
     {_, H1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {uuid, FileUuid}, write)),
     {_, 1} = ?assertMatch({ok, _}, lfm_proxy:write(W, H1, 0, <<255:8>>)),
 
@@ -697,8 +696,8 @@ acl_delete_object_user_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     UserId2 = ?config({user_id, 2}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/dir/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/t27_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/t27_dir/file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId2, ?delete_object_mask),
@@ -717,8 +716,8 @@ acl_delete_object_group_test(Config) ->
     UserId3 = ?config({user_id, 3}, Config),
     SessId2 = ?config({session_id, 2}, Config),
     [_, _, _, {GroupId4, _}] = ?config({groups, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/dir/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId3, <<"/t28_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId3, <<"/t28_dir/file">>, 8#777)),
 
     % Verification
     Ace1 = ?allow_group(GroupId4, ?traverse_container_mask),
@@ -737,8 +736,8 @@ acl_delete_subcontainer_user_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId4 = ?config({session_id, 4}, Config),
     UserId4 = ?config({user_id, 4}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1">>, 8#777)),
-    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1/dir2">>, 8#777)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/t29_dir1">>, 8#777)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/t29_dir1/dir2">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId4, ?delete_subcontainer_mask),
@@ -757,8 +756,8 @@ acl_delete_subcontainer_group_test(Config) ->
     UserId1 = ?config({user_id, 1}, Config),
     SessId4 = ?config({session_id, 4}, Config),
     [_, _, _, {GroupId4, _}] = ?config({groups, 1}, Config),
-    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1">>, 8#777)),
-    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/dir1/dir2">>, 8#777)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/t30_dir1">>, 8#777)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, <<"/spaces/space_name4/t30_dir1/dir2">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId4, ?delete_subcontainer_mask),
@@ -777,7 +776,7 @@ acl_read_attributes_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/t31_file">>, 8#777)),
     ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId2, {uuid, FileUuid}, <<"base64">>)),
     ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId2, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId2, {uuid, FileUuid}, <<"text/html">>)),
@@ -802,7 +801,7 @@ acl_read_attributes_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [{GroupId1, _} | _] = ?config({groups, 1}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/t32_file">>, 8#777)),
     ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W, SessId2, {uuid, FileUuid}, <<"base64">>)),
     ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W, SessId2, {uuid, FileUuid}, <<"Completed">>)),
     ?assertEqual(ok, lfm_proxy:set_mimetype(W, SessId2, {uuid, FileUuid}, <<"text/html">>)),
@@ -827,7 +826,7 @@ acl_write_attributes_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/t33_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?write_attributes_mask),
@@ -854,7 +853,7 @@ acl_write_attributes_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [_, _, _, {GroupId4, _}] = ?config({groups, 1}, Config),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/file">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name4/t34_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId4, ?write_attributes_mask),
@@ -881,8 +880,8 @@ acl_delete_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/t35_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/t35_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?delete_mask),
@@ -904,8 +903,8 @@ acl_delete_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [{GroupId1, _} | _] = ?config({groups, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/t36_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/t36_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId1, ?delete_mask),
@@ -927,8 +926,8 @@ acl_read_acl_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/t37_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/t37_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?read_acl_mask),
@@ -950,8 +949,8 @@ acl_read_acl_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [_, _, {GroupId3, _} | _] = ?config({groups, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name2/t38_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name2/t38_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId3, ?read_acl_mask),
@@ -973,8 +972,8 @@ acl_write_acl_user_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     UserId1 = ?config({user_id, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/t39_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t39_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_user(UserId1, ?write_acl_mask),
@@ -996,8 +995,8 @@ acl_write_acl_group_test(Config) ->
     UserId2 = ?config({user_id, 2}, Config),
     SessId1 = ?config({session_id, 1}, Config),
     [_, _, {GroupId3, _} | _] = ?config({groups, 1}, Config),
-    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/dir">>, 8#777)),
-    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/file">>, 8#777)),
+    {_, DirUuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId2, <<"/spaces/space_name3/t40_dir">>, 8#777)),
+    {_, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, <<"/spaces/space_name3/t40_file">>, 8#777)),
 
     % Verification
     Ace1 = ?deny_group(GroupId3, ?write_acl_mask),
@@ -1017,7 +1016,7 @@ acl_write_acl_group_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->

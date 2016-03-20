@@ -52,6 +52,6 @@ base16_test() ->
     ?assertEqual(Obj, cdmi_id:from_base16(Encode)).
 
 uuid_to_objectid_test() ->
-    Uuid = base64:encode(<<"123456789123456">>),
+    Uuid = http_utils:base64url_encode(<<"123456789123456">>),
     {ok, ObjectId} = cdmi_id:uuid_to_objectid(Uuid),
     ?assertEqual({ok, Uuid}, cdmi_id:objectid_to_uuid(ObjectId)).

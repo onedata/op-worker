@@ -78,10 +78,12 @@ all() ->
         accept_header_test
     ]).
 
--define(MACAROON, "macaroon").
 -define(TIMEOUT, timer:seconds(5)).
 
--define(USER_1_TOKEN_HEADER, {<<"X-Auth-Token">>, <<"1">>}).
+user_1_token_header() ->
+    {ok, Srlzd} = macaroon:serialize(macaroon:create("a", "b", "c")),
+    {<<"X-Auth-Token">>, Srlzd}.
+
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-container">>}).
 -define(OBJECT_CONTENT_TYPE_HEADER, {<<"content-type">>, <<"application/cdmi-object">>}).
@@ -104,7 +106,7 @@ list_dir_test(Config) ->
     %%------ list basic dir --------
     {ok, Code1, Headers1, Response1} =
         do_request(Worker, TestDirName ++ "/", get,
-            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
 
     ?assertEqual(200, Code1),
     ?assertEqual(proplists:get_value(<<"content-type">>, Headers1),
@@ -124,7 +126,7 @@ list_dir_test(Config) ->
     %%------ list root dir ---------
     {ok, Code2, _Headers2, Response2} =
         do_request(Worker, [], get,
-            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>, CdmiResponse2)),
@@ -135,14 +137,14 @@ list_dir_test(Config) ->
     %%--- list nonexisting dir -----
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, "nonexisting_dir/",
-            get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            get, [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(404, Code3),
     %%------------------------------
 
     %%-- selective params list -----
     {ok, Code4, _Headers4, Response4} =
         do_request(Worker, TestDirName ++ "/?children;objectName",
-            get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            get, [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
     ?assertEqual(<<"dir/">>,
@@ -164,7 +166,7 @@ list_dir_test(Config) ->
 
     {ok, Code5, _Headers5, Response5} =
         do_request(Worker, ChildrangeDir ++ "?children;childrenrange",
-            get, [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            get, [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
     ChildrenResponse1 = proplists:get_value(<<"children">>, CdmiResponse5),
@@ -177,13 +179,13 @@ list_dir_test(Config) ->
 
     {ok, Code6, _, Response6} =
         do_request(Worker, ChildrangeDir ++ "?children:2-13;childrenrange", get,
-            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
     {ok, Code7, _, Response7} =
         do_request(Worker, ChildrangeDir ++ "?children:0-1;childrenrange", get,
-            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
     {ok, Code8, _, Response8} =
         do_request(Worker, ChildrangeDir ++ "?children:14-14;childrenrange", get,
-            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER], []),
+            [user_1_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(200, Code6),
     ?assertEqual(200, Code7),
     ?assertEqual(200, Code8),
@@ -228,7 +230,7 @@ get_file_test(Config) ->
     ?assertEqual(FileContent, get_file_content(Config, FileName)),
 
     %%-------- basic read ----------
-    RequestHeaders1 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code1, _Headers1, Response1} = do_request(Worker, FileName, get, RequestHeaders1, []),
     ?assertEqual(200, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
@@ -245,7 +247,7 @@ get_file_test(Config) ->
     %%------------------------------
 
     %%-- selective params read -----
-    RequestHeaders2 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders2 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code2, _Headers2, Response2} = do_request(Worker, FileName ++ "?parentURI;completionStatus", get, RequestHeaders2, []),
     ?assertEqual(200, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
@@ -256,7 +258,7 @@ get_file_test(Config) ->
     %%------------------------------
 
     %%--- selective value read -----
-    RequestHeaders3 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code3, _Headers3, Response3} = do_request(Worker, FileName ++ "?value:1-3;valuerange", get, RequestHeaders3, []),
     ?assertEqual(200, Code3),
     CdmiResponse3 = json_utils:decode(Response3),
@@ -267,7 +269,7 @@ get_file_test(Config) ->
 
     %%------- noncdmi read --------
     {ok, Code4, Headers4, Response4} =
-        do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER]),
+        do_request(Worker, FileName, get, [user_1_token_header()]),
     ?assertEqual(200, Code4),
 
     ?assertEqual(<<"application/octet-stream">>, proplists:get_value(<<"content-type">>, Headers4)),
@@ -275,7 +277,7 @@ get_file_test(Config) ->
     %%------------------------------
 
     %%------- objectid read --------
-    RequestHeaders5 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code5, _Headers5, Response5} = do_request(Worker, FileName ++ "?objectID", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
 
@@ -285,7 +287,7 @@ get_file_test(Config) ->
     %%------------------------------
 
     %%-------- read by id ----------
-    RequestHeaders6 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code6, _Headers6, Response6} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(ObjectID), get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
 
@@ -296,7 +298,7 @@ get_file_test(Config) ->
     %% selective value read non-cdmi
     RequestHeaders7 = [{<<"Range">>, <<"1-3,5-5,-3">>}],
     {ok, Code7, _Headers7, Response7} =
-        do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders7]),
+        do_request(Worker, FileName, get, [user_1_token_header() | RequestHeaders7]),
     ?assertEqual(206, Code7),
     ?assertEqual(<<"omec...">>, Response7), % 1-3,5-5,12-14  from FileContent = <<"Some content...">>
     %%------------------------------
@@ -304,7 +306,7 @@ get_file_test(Config) ->
     %% selective value read non-cdmi error
     RequestHeaders8 = [{<<"Range">>, <<"1-3,6-4,-3">>}],
     {ok, Code8, _Headers8, _Response8} =
-        do_request(Worker, FileName, get, [?USER_1_TOKEN_HEADER | RequestHeaders8]),
+        do_request(Worker, FileName, get, [user_1_token_header() | RequestHeaders8]),
     ?assertEqual(400, Code8).
     %%------------------------------
 
@@ -318,7 +320,7 @@ metadata_test(Config) ->
     %%-------- create file with user metadata --------
     ?assert(not object_exists(Config, FileName)),
 
-    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody1 = [
         {<<"value">>, FileContent}, {<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>},
         {<<"metadata">>, [{<<"my_metadata">>, <<"my_value">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}]}],
@@ -418,7 +420,7 @@ metadata_test(Config) ->
     ?assertEqual(1, length(Metadata10)),
 
     %%------ create directory with user metadata  ----------
-    RequestHeaders2 = [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders2 = [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody11 = [{<<"metadata">>, [{<<"my_metadata">>, <<"my_dir_value">>}]}],
     RawRequestBody11 = json_utils:encode(RequestBody11),
     {ok, 201, _Headers11, Response11} = do_request(Worker, DirName, put, RequestHeaders2, RawRequestBody11),
@@ -465,7 +467,7 @@ metadata_test(Config) ->
     write_to_file(Config, FileName2, <<"data">>, 0),
     RequestBody15 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace2, Ace3]}]}],
     RawRequestBody15 = json_utils:encode(RequestBody15),
-    RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
 
     {ok, Code15, _Headers15, Response15} = do_request(Worker, FileName2 ++ "?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15),
     ?assertMatch({204, _}, {Code15, Response15}),
@@ -478,7 +480,7 @@ metadata_test(Config) ->
     ?assertEqual(6, length(Metadata16)),
     ?assertEqual([Ace1, Ace2, Ace3], proplists:get_value(<<"cdmi_acl">>, Metadata16)),
 
-    {ok, Code17, _Headers17, Response17} = do_request(Worker, FileName2, get, [?USER_1_TOKEN_HEADER], []),
+    {ok, Code17, _Headers17, Response17} = do_request(Worker, FileName2, get, [user_1_token_header()], []),
     ?assertEqual(200, Code17),
     ?assertEqual(<<"data">>, Response17),
     %%------------------------------
@@ -491,12 +493,12 @@ metadata_test(Config) ->
         {<<"acemask">>, ?write}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace4]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
-    RequestHeaders18 = [?USER_1_TOKEN_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
+    RequestHeaders18 = [user_1_token_header(), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
 
     {ok, Code18, _Headers18, _Response18} = do_request(Worker, DirName ++ "?metadata:cdmi_acl", put, RequestHeaders18, RawRequestBody18),
     ?assertEqual(204, Code18),
 
-    {ok, Code19, _Headers19, _Response19} = do_request(Worker, filename:join(DirName, "some_file"), put, [?USER_1_TOKEN_HEADER], []),
+    {ok, Code19, _Headers19, _Response19} = do_request(Worker, filename:join(DirName, "some_file"), put, [user_1_token_header()], []),
     ?assertEqual(403, Code19).
     %%------------------------------
 
@@ -514,7 +516,7 @@ delete_file_test(Config) ->
     RequestHeaders1 = [?CDMI_VERSION_HEADER],
     {ok, Code1, _Headers1, _Response1} =
         do_request(
-            Worker, FileName, delete, [?USER_1_TOKEN_HEADER | RequestHeaders1]),
+            Worker, FileName, delete, [user_1_token_header() | RequestHeaders1]),
     ?assertEqual(204, Code1),
 
     ?assert(not object_exists(Config, FileName)),
@@ -526,7 +528,7 @@ delete_file_test(Config) ->
     RequestHeaders2 = [?CDMI_VERSION_HEADER],
     {ok, Code2, _Headers2, _Response2} =
         do_request(Worker, GroupFileName, delete,
-            [?USER_1_TOKEN_HEADER | RequestHeaders2]),
+            [user_1_token_header() | RequestHeaders2]),
     ?assertEqual(204, Code2),
 
     ?assert(not object_exists(Config, GroupFileName)).
@@ -544,7 +546,7 @@ delete_dir_test(Config) ->
     ?assert(object_exists(Config, DirName)),
 
     RequestHeaders1 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
@@ -562,7 +564,7 @@ delete_dir_test(Config) ->
     ?assert(object_exists(Config, DirName)),
 
     RequestHeaders2 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
@@ -577,7 +579,7 @@ delete_dir_test(Config) ->
     %%----- delete group dir -------
     ?assert(object_exists(Config, SpacesDirName)),
 
-    RequestHeaders3 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER],
+    RequestHeaders3 = [user_1_token_header(), ?CDMI_VERSION_HEADER],
     ?assert(object_exists(Config, SpacesDirName)),
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, SpacesDirName, delete, RequestHeaders3, []),
@@ -599,7 +601,7 @@ create_file_test(Config) ->
     %%-------- basic create --------
     ?assert(not object_exists(Config, ToCreate)),
 
-    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody1 = [{<<"value">>, FileContent}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
     {ok, Code1, _Headers1, Response1} = do_request(Worker, ToCreate, put, RequestHeaders1, RawRequestBody1),
@@ -620,7 +622,7 @@ create_file_test(Config) ->
     %%------ base64 create ---------
     ?assert(not object_exists(Config, ToCreate2)),
 
-    RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody2 = [{<<"valuetransferencoding">>, <<"base64">>}, {<<"value">>, base64:encode(FileContent)}],
     RawRequestBody2 = json_utils:encode(RequestBody2),
     {ok, Code2, _Headers2, Response2} =
@@ -641,7 +643,7 @@ create_file_test(Config) ->
     %%------- create empty ---------
     ?assert(not object_exists(Config, ToCreate4)),
 
-    RequestHeaders4 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders4 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code4, _Headers4, _Response4} = do_request(Worker, ToCreate4, put, RequestHeaders4, []),
     ?assertEqual(201, Code4),
 
@@ -655,7 +657,7 @@ create_file_test(Config) ->
     RequestHeaders5 = [{<<"content-type">>, <<"application/binary">>}],
     {ok, Code5, _Headers5, _Response5} =
         do_request(Worker, ToCreate5, put,
-            [?USER_1_TOKEN_HEADER | RequestHeaders5], FileContent),
+            [user_1_token_header() | RequestHeaders5], FileContent),
 
     ?assertEqual(201, Code5),
 
@@ -675,7 +677,7 @@ update_file_test(Config) ->
     ?assert(object_exists(Config, FullTestFileName)),
     ?assertEqual(TestFileContent, get_file_content(Config, FullTestFileName)),
 
-    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody1 = [{<<"value">>, NewValue}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
     {ok, Code1, _Headers1, _Response1} = do_request(Worker, FullTestFileName, put, RequestHeaders1, RawRequestBody1),
@@ -687,7 +689,7 @@ update_file_test(Config) ->
 
     %%---- value update, cdmi ------
     UpdateValue = <<"123">>,
-    RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders2 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody2 = [{<<"value">>, base64:encode(UpdateValue)}],
     RawRequestBody2 = json_utils:encode(RequestBody2),
     {ok, Code2, _Headers2, _Response2} = do_request(Worker, FullTestFileName ++ "?value:0-2", put, RequestHeaders2, RawRequestBody2),
@@ -700,7 +702,7 @@ update_file_test(Config) ->
     %%--- value replace, http ------
     RequestBody3 = TestFileContent,
     {ok, Code3, _Headers3, _Response3} =
-        do_request(Worker, FullTestFileName, put, [?USER_1_TOKEN_HEADER], RequestBody3),
+        do_request(Worker, FullTestFileName, put, [user_1_token_header()], RequestBody3),
     ?assertEqual(204, Code3),
 
     ?assert(object_exists(Config, FullTestFileName)),
@@ -713,7 +715,7 @@ update_file_test(Config) ->
     RequestHeaders4 = [{<<"content-range">>, <<"0-2">>}],
     {ok, Code4, _Headers4, _Response4} =
         do_request(Worker, FullTestFileName,
-            put, [?USER_1_TOKEN_HEADER | RequestHeaders4], UpdateValue),
+            put, [user_1_token_header() | RequestHeaders4], UpdateValue),
     ?assertEqual(204, Code4),
 
     ?assert(object_exists(Config, FullTestFileName)),
@@ -725,7 +727,7 @@ update_file_test(Config) ->
     UpdateValue = <<"123">>,
     RequestHeaders5 = [{<<"content-range">>, <<"0-2,3-4">>}],
     {ok, Code5, _Headers5, _Response5} =
-        do_request(Worker, FullTestFileName, put, [?USER_1_TOKEN_HEADER | RequestHeaders5],
+        do_request(Worker, FullTestFileName, put, [user_1_token_header() | RequestHeaders5],
             UpdateValue),
     ?assertEqual(400, Code5),
 
@@ -753,7 +755,7 @@ choose_adequate_handler(Config) ->
 use_supported_cdmi_version(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
-    RequestHeaders = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders = [?CDMI_VERSION_HEADER, user_1_token_header()],
 
     % when
     {ok, Code, _ResponseHeaders, _Response} =
@@ -787,7 +789,7 @@ create_dir_test(Config) ->
     ?assert(not object_exists(Config, DirName)),
 
     {ok, Code1, _Headers1, _Response1} =
-        do_request(Worker, DirName, put, [?USER_1_TOKEN_HEADER]),
+        do_request(Worker, DirName, put, [user_1_token_header()]),
     ?assertEqual(201, Code1),
 
     ?assert(object_exists(Config, DirName)),
@@ -796,7 +798,7 @@ create_dir_test(Config) ->
     %%------ basic create ----------
     ?assert(not object_exists(Config, DirName2)),
 
-    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    RequestHeaders2 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
     {ok, Code2, _Headers2, Response2} = do_request(Worker, DirName2, put, RequestHeaders2, []),
 
     ?assertEqual(201, Code2),
@@ -815,7 +817,7 @@ create_dir_test(Config) ->
     ?assert(object_exists(Config, DirName)),
 
     RequestHeaders3 = [
-        ?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER
+        user_1_token_header(), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code3, _Headers3, _Response3} =
         do_request(Worker, DirName, put, RequestHeaders3, []),
@@ -828,7 +830,7 @@ create_dir_test(Config) ->
     ?assert(not object_exists(Config, MissingParentName)),
 
     RequestHeaders4 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
@@ -844,7 +846,7 @@ objectid_test(Config) ->
         create_test_dir_and_file(Config),
 
     %%-------- / objectid ----------
-    RequestHeaders1 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code1, Headers1, Response1} = do_request(Worker, "", get, RequestHeaders1, []),
     ?assertEqual(200, Code1),
 
@@ -860,7 +862,7 @@ objectid_test(Config) ->
     %%------------------------------
 
     %%------ /dir objectid ---------
-    RequestHeaders2 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders2 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code2, _Headers2, Response2} = do_request(Worker, TestDirName ++ "/", get, RequestHeaders2, []),
     ?assertEqual(200, Code2),
 
@@ -875,7 +877,7 @@ objectid_test(Config) ->
     %%------------------------------
 
     %%--- /dir/file.txt objectid ---
-    RequestHeaders3 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code3, _Headers3, Response3} = do_request(Worker, filename:join(TestDirName, TestFileName), get, RequestHeaders3, []),
     ?assertEqual(200, Code3),
 
@@ -890,7 +892,7 @@ objectid_test(Config) ->
     %%------------------------------
 
     %%---- get / by objectid -------
-    RequestHeaders4 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders4 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code4, _Headers4, Response4} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(RootId) ++ "/", get, RequestHeaders4, []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
@@ -902,7 +904,7 @@ objectid_test(Config) ->
     %%------------------------------
 
     %%--- get /dir/ by objectid ----
-    RequestHeaders5 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code5, _Headers5, Response5} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
@@ -917,7 +919,7 @@ objectid_test(Config) ->
     %%------------------------------
 
     %% get /dir/file.txt by objectid
-    RequestHeaders6 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code6, _Headers6, Response6} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(DirId) ++ "/file.txt", get, RequestHeaders6, []),
     ?assertEqual(200, Code6),
     CdmiResponse6 = json_utils:decode(Response6),
@@ -1024,7 +1026,7 @@ moved_permanently_test(Config) ->
     RequestHeaders1 = [
         ?CONTAINER_CONTENT_TYPE_HEADER,
         ?CDMI_VERSION_HEADER,
-        ?USER_1_TOKEN_HEADER
+        user_1_token_header()
     ],
     Location1 = list_to_binary(CDMIEndpoint ++ DirName),
     {ok, Code1, Headers1, _Response1} =
@@ -1038,7 +1040,7 @@ moved_permanently_test(Config) ->
     RequestHeaders2 = [
         ?CONTAINER_CONTENT_TYPE_HEADER,
         ?CDMI_VERSION_HEADER,
-        ?USER_1_TOKEN_HEADER
+        user_1_token_header()
     ],
     Location2 = list_to_binary(CDMIEndpoint ++ DirName++"?example_qs=1"),
     {ok, Code2, Headers2, _Response2} =
@@ -1052,7 +1054,7 @@ moved_permanently_test(Config) ->
     RequestHeaders3 = [
         ?OBJECT_CONTENT_TYPE_HEADER,
         ?CDMI_VERSION_HEADER,
-        ?USER_1_TOKEN_HEADER
+        user_1_token_header()
     ],
     Location3 = list_to_binary(CDMIEndpoint ++ FileName),
     {ok, Code3, Headers3, _Response3} =
@@ -1070,7 +1072,7 @@ request_format_check_test(Config) ->
     FileContent = <<"File content!">>,
 
     %%-- obj missing content-type --
-    RequestHeaders1 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody1 = [{<<"value">>, FileContent}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
     {ok, Code1, _Headers1, _Response1} = do_request(Worker, FileToCreate, put, RequestHeaders1, RawRequestBody1),
@@ -1078,7 +1080,7 @@ request_format_check_test(Config) ->
     %%------------------------------
 
     %%-- dir missing content-type --
-    RequestHeaders3 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders3 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     RequestBody3 = [{<<"metadata">>, <<"">>}],
     RawRequestBody3 = json_utils:encode(RequestBody3),
     {ok, Code3, _Headers3, _Response3} = do_request(Worker, DirToCreate, put, RequestHeaders3, RawRequestBody3),
@@ -1093,7 +1095,7 @@ mimetype_and_encoding_test(Config) ->
         create_test_dir_and_file(Config),
 
     %% get mimetype and valuetransferencoding of non-cdmi file
-    RequestHeaders1 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders1 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code1, _Headers1, Response1} = do_request(Worker, filename:join(TestDirName, TestFileName) ++ "?mimetype;valuetransferencoding", get, RequestHeaders1, []),
     ?assertEqual(200, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
@@ -1102,7 +1104,7 @@ mimetype_and_encoding_test(Config) ->
     %%------------------------------
 
     %%-- update mime and encoding --
-    RequestHeaders2 = [?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders2 = [?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, user_1_token_header()],
     RawBody2 = json_utils:encode([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"application/binary">>}]),
     {ok, Code2, _Headers2, _Response2} = do_request(Worker, filename:join(TestDirName, TestFileName), put, RequestHeaders2, RawBody2),
     ?assertEqual(204, Code2),
@@ -1117,14 +1119,14 @@ mimetype_and_encoding_test(Config) ->
     %% create file with given mime and encoding
     FileName4 = "mime_file.txt",
     FileContent4 = <<"some content">>,
-    RequestHeaders4 = [?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders4 = [?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, user_1_token_header()],
     RawBody4 = json_utils:encode([{<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>}, {<<"value">>, FileContent4}]),
     {ok, Code4, _Headers4, Response4} = do_request(Worker, FileName4, put, RequestHeaders4, RawBody4),
     ?assertEqual(201, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
     ?assertEqual(<<"text/plain">>, proplists:get_value(<<"mimetype">>, CdmiResponse4)),
 
-    RequestHeaders5 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders5 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code5, _Headers5, Response5} = do_request(Worker, FileName4 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders5, []),
     ?assertEqual(200, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
@@ -1136,11 +1138,11 @@ mimetype_and_encoding_test(Config) ->
     %% create file with given mime and encoding using non-cdmi request
     FileName6 = "mime_file_noncdmi.txt",
     FileContent6 = <<"some content">>,
-    RequestHeaders6 = [{<<"Content-Type">>, <<"text/plain; charset=utf-8">>}, ?USER_1_TOKEN_HEADER],
+    RequestHeaders6 = [{<<"Content-Type">>, <<"text/plain; charset=utf-8">>}, user_1_token_header()],
     {ok, Code6, _Headers6, _Response6} = do_request(Worker, FileName6, put, RequestHeaders6, FileContent6),
     ?assertEqual(201, Code6),
 
-    RequestHeaders7 = [?CDMI_VERSION_HEADER, ?USER_1_TOKEN_HEADER],
+    RequestHeaders7 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code7, _Headers7, Response7} = do_request(Worker, FileName6 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders7, []),
     ?assertEqual(200, Code7),
     CdmiResponse7 = json_utils:decode(Response7),
@@ -1159,7 +1161,7 @@ out_of_range_test(Config) ->
 
     %%---- reading out of range ---- (shuld return empty binary)
     ?assertEqual(<<>>, get_file_content(Config, FileName)),
-    RequestHeaders1 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER],
+    RequestHeaders1 = [user_1_token_header(), ?CDMI_VERSION_HEADER],
 
     RequestBody1 = json_utils:encode([{<<"value">>, <<"data">>}]),
     {ok, Code1, _Headers1, Response1} = do_request(Worker, FileName ++ "?value:0-3", get, RequestHeaders1, RequestBody1),
@@ -1171,7 +1173,7 @@ out_of_range_test(Config) ->
     %%------ writing at end -------- (shuld extend file)
     ?assertEqual(<<>>, get_file_content(Config, FileName)),
 
-    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders2 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     RequestBody2 = json_utils:encode([{<<"value">>, base64:encode(<<"data">>)}]),
     {ok, Code2, _Headers2, _Response2} = do_request(Worker, FileName ++ "?value:0-3", put, RequestHeaders2, RequestBody2),
     ?assertEqual(204, Code2),
@@ -1210,7 +1212,7 @@ partial_upload_test(Config) ->
     ?assert(not object_exists(Config, FileName)),
 
     % upload first chunk of file
-    RequestHeaders1 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, {"X-CDMI-Partial", "true"}],
+    RequestHeaders1 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER, {"X-CDMI-Partial", "true"}],
     RequestBody1 = json_utils:encode([{<<"value">>, Chunk1}]),
     {ok, Code1, _Headers1, Response1} = do_request(Worker, FileName, put, RequestHeaders1, RequestBody1),
     ?assertEqual(201, Code1),
@@ -1223,13 +1225,13 @@ partial_upload_test(Config) ->
     ?assertEqual(204, Code2),
 
     % upload third chunk of file
-    RequestHeaders3 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders3 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     RequestBody3 = json_utils:encode([{<<"value">>, base64:encode(Chunk3)}]),
     {ok, Code3, _Headers3, _Response3} = do_request(Worker, FileName ++ "?value:5-9", put, RequestHeaders3, RequestBody3),
     ?assertEqual(204, Code3),
 
     % get created file and check its consistency
-    RequestHeaders4 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER],
+    RequestHeaders4 = [user_1_token_header(), ?CDMI_VERSION_HEADER],
     {ok, Code4, _Headers4, Response4} = do_request(Worker, FileName, get, RequestHeaders4, []),
     ?assertEqual(200, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
@@ -1242,7 +1244,7 @@ partial_upload_test(Config) ->
     ?assert(not object_exists(Config, FileName2)),
 
     % upload first chunk of file
-    RequestHeaders5 = [?USER_1_TOKEN_HEADER, {<<"X-CDMI-Partial">>, <<"true">>}],
+    RequestHeaders5 = [user_1_token_header(), {<<"X-CDMI-Partial">>, <<"true">>}],
     {ok, Code5, _Headers5, _Response5} = do_request(Worker, FileName2, put, RequestHeaders5, Chunk1),
     ?assertEqual(201, Code5),
 
@@ -1253,17 +1255,17 @@ partial_upload_test(Config) ->
     ?assertEqual(<<"Processing">>, proplists:get_value(<<"completionStatus">>, CdmiResponse5_1)),
 
     % upload second chunk of file
-    RequestHeaders6 = [?USER_1_TOKEN_HEADER, {<<"content-range">>, <<"4-4">>}, {<<"X-CDMI-Partial">>, <<"true">>}],
+    RequestHeaders6 = [user_1_token_header(), {<<"content-range">>, <<"4-4">>}, {<<"X-CDMI-Partial">>, <<"true">>}],
     {ok, Code6, _Headers6, _Response6} = do_request(Worker, FileName2, put, RequestHeaders6, Chunk2),
     ?assertEqual(204, Code6),
 
     % upload third chunk of file
-    RequestHeaders7 = [?USER_1_TOKEN_HEADER, {<<"content-range">>, <<"5-9">>}, {<<"X-CDMI-Partial">>, <<"false">>}],
+    RequestHeaders7 = [user_1_token_header(), {<<"content-range">>, <<"5-9">>}, {<<"X-CDMI-Partial">>, <<"false">>}],
     {ok, Code7, _Headers7, _Response7} = do_request(Worker, FileName2, put, RequestHeaders7, Chunk3),
     ?assertEqual(204, Code7),
 
     % get created file and check its consistency
-    RequestHeaders8 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER],
+    RequestHeaders8 = [user_1_token_header(), ?CDMI_VERSION_HEADER],
     {ok, Code8, _Headers8, Response8} = do_request(Worker, FileName2, get, RequestHeaders8, []),
     ?assertEqual(200, Code8),
     CdmiResponse8 = json_utils:decode(Response8),
@@ -1325,16 +1327,16 @@ acl_test(Config) ->
     write_to_file(Config, Filename1, <<"data">>, 0),
 
     % set acl to 'write' and test cdmi/non-cdmi get request (should return 403 forbidden)
-    RequestHeaders1 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders1 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclWrite),
     {ok, 403, _, _} = do_request(Worker, Filename1, get, RequestHeaders1, []),
-    {ok, 403, _, _} = do_request(Worker, Filename1, get, [?USER_1_TOKEN_HEADER], []),
+    {ok, 403, _, _} = do_request(Worker, Filename1, get, [user_1_token_header()], []),
     ?assertEqual({error, ?EACCES}, open_file(Config, Filename1, read)),
 
     % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
     {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclReadWrite),
     {ok, 200, _, _} = do_request(Worker, Filename1, get, RequestHeaders1, []),
-    {ok, 200, _, _} = do_request(Worker, Filename1, get, [?USER_1_TOKEN_HEADER], []),
+    {ok, 200, _, _} = do_request(Worker, Filename1, get, [user_1_token_header()], []),
     %%------------------------------
 
     %%------- write file test ------
@@ -1345,14 +1347,14 @@ acl_test(Config) ->
     ?assertEqual(<<"new_data">>, get_file_content(Config, Filename1)),
     write_to_file(Config, Filename1, <<"1">>, 8),
     ?assertEqual(<<"new_data1">>, get_file_content(Config, Filename1)),
-    {ok, 204, _, _} = do_request(Worker, Filename1, put, [?USER_1_TOKEN_HEADER], <<"new_data2">>),
+    {ok, 204, _, _} = do_request(Worker, Filename1, put, [user_1_token_header()], <<"new_data2">>),
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
 
     % set acl to 'read' and test cdmi/non-cdmi put request (should return 403 forbidden)
     {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclRead),
     RequestBody6 = json_utils:encode([{<<"value">>, <<"new_data3">>}]),
     {ok, 403, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, RequestBody6),
-    {ok, 403, _, _} = do_request(Worker, Filename1, put, [?USER_1_TOKEN_HEADER], <<"new_data4">>),
+    {ok, 403, _, _} = do_request(Worker, Filename1, put, [user_1_token_header()], <<"new_data4">>),
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
     ?assertEqual({error, ?EACCES}, open_file(Config, Filename1, write)),
     ?assertEqual(<<"new_data2">>, get_file_content(Config, Filename1)),
@@ -1363,7 +1365,7 @@ acl_test(Config) ->
     {ok, 204, _, _} = do_request(Worker, Filename1, put, RequestHeaders1, MetadataAclDelete),
 
     % delete file
-    {ok, 204, _, _} = do_request(Worker, Filename1, delete, [?USER_1_TOKEN_HEADER], []),
+    {ok, 204, _, _} = do_request(Worker, Filename1, delete, [user_1_token_header()], []),
     ?assert(not object_exists(Config, Filename1)),
     %%------------------------------
 
@@ -1376,12 +1378,12 @@ acl_test(Config) ->
     File4 = filename:join(Dirname1, "4"),
 
     % set acl to 'read&write' and test cdmi get request (should succeed)
-    RequestHeaders2 = [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    RequestHeaders2 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
     {ok, 204, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, MetadataAclReadWriteExecute),
     {ok, 200, _, _} = do_request(Worker, Dirname1, get, RequestHeaders2, []),
 
     % create files in directory (should succeed)
-    {ok, 201, _, _} = do_request(Worker, File1, put, [?USER_1_TOKEN_HEADER], []),
+    {ok, 201, _, _} = do_request(Worker, File1, put, [user_1_token_header()], []),
     ?assert(object_exists(Config, File1)),
     {ok, 201, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
     ?assert(object_exists(Config, File2)),
@@ -1389,9 +1391,9 @@ acl_test(Config) ->
     ?assert(object_exists(Config, File3)),
 
     % delete files (should succeed)
-    {ok, 204, _, _} = do_request(Worker, File1, delete, [?USER_1_TOKEN_HEADER], []),
+    {ok, 204, _, _} = do_request(Worker, File1, delete, [user_1_token_header()], []),
     ?assert(not object_exists(Config, File1)),
-    {ok, 204, _, _} = do_request(Worker, File2, delete, [?USER_1_TOKEN_HEADER], []),
+    {ok, 204, _, _} = do_request(Worker, File2, delete, [user_1_token_header()], []),
     ?assert(not object_exists(Config, File2)),
 
     % set acl to 'write' and test cdmi get request (should return 403 forbidden)
@@ -1404,7 +1406,7 @@ acl_test(Config) ->
     {ok, 403, _, _} = do_request(Worker, Dirname1, put, RequestHeaders2, json_utils:encode([{<<"metadata">>, [{<<"my_meta">>, <<"value">>}]}])),
 
     % create files (should return 403 forbidden)
-    {ok, 403, _, _} = do_request(Worker, File1, put, [?USER_1_TOKEN_HEADER], []),
+    {ok, 403, _, _} = do_request(Worker, File1, put, [user_1_token_header()], []),
     ?assert(not object_exists(Config, File1)),
     {ok, 403, _, _} = do_request(Worker, File2, put, RequestHeaders1, <<"{\"value\":\"val\"}">>),
     ?assert(not object_exists(Config, File2)),
@@ -1412,7 +1414,7 @@ acl_test(Config) ->
     ?assert(not object_exists(Config, File4)),
 
     % delete files (should return 403 forbidden)
-    {ok, 403, _, _} = do_request(Worker, File3, delete, [?USER_1_TOKEN_HEADER], []),
+    {ok, 403, _, _} = do_request(Worker, File3, delete, [user_1_token_header()], []),
     ?assert(object_exists(Config, File3)).
     %%------------------------------
 
@@ -1430,7 +1432,7 @@ errors_test(Config) ->
 
     %%----- wrong create path ------
     RequestHeaders2 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
@@ -1441,7 +1443,7 @@ errors_test(Config) ->
 
     %%---- wrong create path 2 -----
     RequestHeaders3 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
@@ -1452,7 +1454,7 @@ errors_test(Config) ->
 
     %%-------- wrong base64 --------
     RequestHeaders4 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
@@ -1466,7 +1468,7 @@ errors_test(Config) ->
     RawBody5 = [{<<"metadata">>, [{<<"a">>, <<"a">>}]}, {<<"metadata">>, [{<<"b">>, <<"b">>}]}],
     RequestBody5 = json_utils:encode(RawBody5),
     RequestHeaders5 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
@@ -1478,7 +1480,7 @@ errors_test(Config) ->
 
     %%-- reding non-existing file --
     RequestHeaders6 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
@@ -1489,7 +1491,7 @@ errors_test(Config) ->
 
     %%--- list nonexisting dir -----
     RequestHeaders7 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
@@ -1505,7 +1507,7 @@ errors_test(Config) ->
     ?assertEqual(object_exists(Config, File8), true),
     write_to_file(Config, File8, FileContent8, ?FILE_BEGINNING),
     ?assertEqual(get_file_content(Config, File8), FileContent8),
-    RequestHeaders8 = [?USER_1_TOKEN_HEADER],
+    RequestHeaders8 = [user_1_token_header()],
 
     mock_opening_file_without_perms(Config),
     {ok, Code8, _Headers8, _Response8} =
@@ -1522,7 +1524,7 @@ errors_test(Config) ->
     write_to_file(Config, File9, FileContent9, ?FILE_BEGINNING),
     ?assertEqual(get_file_content(Config, File9), FileContent9),
     RequestHeaders9 = [
-        ?USER_1_TOKEN_HEADER,
+        user_1_token_header(),
         ?CDMI_VERSION_HEADER,
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
@@ -1540,7 +1542,7 @@ accept_header_test(Config) ->
 
     {ok, Code1, _Headers1, _Response1} =
         do_request(Worker, [], get,
-            [?USER_1_TOKEN_HEADER, ?CDMI_VERSION_HEADER, AcceptHeader], []),
+            [user_1_token_header(), ?CDMI_VERSION_HEADER, AcceptHeader], []),
 
     ?assertEqual(200, Code1).
 
@@ -1549,7 +1551,7 @@ accept_header_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")),
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
@@ -1610,11 +1612,13 @@ cdmi_endpoint(Node) ->
 
 mock_user_auth(Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    {_, SerializedUser1Macaroon} = user_1_token_header(),
+    {ok, User1Macaroon} = macaroon:deserialize(SerializedUser1Macaroon),
     test_utils:mock_new(Workers, identity),
     test_utils:mock_expect(Workers, identity, get_or_fetch,
         fun
-            (#auth{macaroon = Token}) when size(Token) == 1 ->
-                UserId = ?config({user_id, binary_to_integer(Token)}, Config),
+            (#auth{macaroon = M}) when M =:= User1Macaroon ->
+                UserId = ?config({user_id, 1}, Config),
                 {ok, #document{value = #identity{user_id = UserId}}};
             (Auth) ->
                 meck:passthrough(Auth)

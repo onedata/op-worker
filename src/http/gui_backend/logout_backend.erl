@@ -24,4 +24,4 @@
 page_init() ->
     g_session:log_out(),
     {redirect_absolute,
-        str_utils:to_binary(oneprovider:get_gr_logout_page())}.
+        str_utils:to_binary(oneprovider:get_oz_logout_page())}.

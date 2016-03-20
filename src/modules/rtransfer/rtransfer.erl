@@ -123,13 +123,15 @@ prepare_request(ProviderId, FileUUID, Offset, Size) ->
 %% that `Notify' is called for subsequent blocks.
 %% `OnComplete' will be called whenever a full transfer is completed,
 %% either with error or success.
+%% Returns updated ref.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Ref :: ref(), Notify :: notify_fun(),
-    OnComplete :: on_complete_fun()) -> ok.
+    OnComplete :: on_complete_fun()) -> ref().
 fetch(Ref, Notify, OnComplete) ->
-    gen_server:cast({global, rtransfer},
-        Ref#request_transfer{notify = Notify, on_complete = OnComplete}).
+    NewRef = Ref#request_transfer{notify = Notify, on_complete = OnComplete},
+    gen_server:cast({global, rtransfer}, NewRef),
+    NewRef.
 
 %%--------------------------------------------------------------------
 %% @doc

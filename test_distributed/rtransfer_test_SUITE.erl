@@ -54,6 +54,7 @@ all() ->
 -define(RTRANSFER_PORT, 6665).
 -define(TEST_OFFSET, 0).
 -define(TIMEOUT, timer:seconds(120)).
+-define(SLEEP_TIMEOUT, timer:seconds(120)).
 
 -define(DEFAULT_RTRANSFER_OPTS,
     [
@@ -209,7 +210,7 @@ cancel_fetch_test(Config) ->
     ),
     cancel_fetching(Worker1, Ref),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     %% then
     ?assertReceivedMatch({on_complete, {error, canceled}}, ?TIMEOUT).
 
@@ -233,7 +234,7 @@ many_requests_test(Config) ->
     Refs = generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
@@ -262,7 +263,7 @@ many_requests_to_one_file(Config) ->
     Refs = generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
-    timer:sleep(?TIMEOUT),
+    timer:sleep(?SLEEP_TIMEOUT),
     stop_counter(CounterPid),
     %% then
     ?assertReceivedMatch(
@@ -596,9 +597,8 @@ cancel_fetching(Node, Ref) ->
     remote_apply(Node, rtransfer, cancel, [Ref]).
 
 prepare_rtransfer({Worker1, Ropts1}, {Worker2, Ropts2}, FileUUID, Offset, DataSize, NotifyFun, OnCompleteFun) ->
-
     ?assertMatch({ok, _}, start_rtransfer(Worker1, Ropts1)),
     ?assertMatch({ok, _}, start_rtransfer(Worker2, Ropts2)),
     Ref = prepare_fetch_request(Worker1, Worker2, FileUUID, Offset, DataSize),
-    fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
-    Ref.
+    NewRef = fetch_data(Worker1, Ref, NotifyFun, OnCompleteFun),
+    NewRef.

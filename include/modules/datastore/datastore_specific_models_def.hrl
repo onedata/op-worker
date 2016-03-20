@@ -38,14 +38,14 @@
     memory = [] :: [{Key :: term(), Value :: term()}]
 }).
 
-%% Local, cached version of globalregistry user
+%% Local, cached version of OZ user
 -record(onedata_user, {
     name :: binary(),
     space_ids :: [binary()],
     group_ids :: [binary()]
 }).
 
-%% Local, cached version of globalregistry group
+%% Local, cached version of OZ group
 -record(onedata_group, {
     name :: binary()
 }).
@@ -85,7 +85,12 @@
     storage_id :: storage:id(),
     file_id :: helpers:file(),
     blocks = [] :: [fslogic_blocks:block()],
-    size = 0 :: non_neg_integer() | undefined
+    version_vector = #{},
+    size = 0 :: non_neg_integer() | undefined,
+    recent_changes = {[], []} :: {
+        OldChanges :: [fslogic_file_location:change()],
+        NewChanges :: [fslogic_file_location:change()]
+    }
 }).
 
 %% Model for caching space details fetched from Global Registry
@@ -107,6 +112,11 @@
 %% Model that maps onedata user to Amazon S3 user
 -record(s3_user, {
     credentials :: #{storage:id() => s3_user:credentials()}
+}).
+
+%% Model that holds state entries for DBSync worker
+-record(dbsync_state, {
+    entry :: term()
 }).
 
 -endif.

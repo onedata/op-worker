@@ -18,7 +18,7 @@
     },
     "provider_domains": {
         "p1": {
-            "db_driver": "couchbase",
+            "db_driver": "couchdb",
             "os_config": "cfg1",
             "cluster_manager": {
                 "cm": {
@@ -45,7 +45,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "verify_gr_cert": false
+                        "verify_oz_cert": false
                     }
                 },
                 "worker2": {
@@ -59,7 +59,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "verify_gr_cert": false
+                        "verify_oz_cert": false
                     }
                 },
                 "worker3": {
@@ -73,7 +73,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "verify_gr_cert": false
+                        "verify_oz_cert": false
                     }
                 }
             }

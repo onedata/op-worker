@@ -16,10 +16,9 @@
 -include_lib("public_key/include/public_key.hrl").
 
 % Record containing macaroons for user authorization in GR.
-% All macaroons are in serialized form.
 -record(auth, {
-    macaroon :: binary(),
-    disch_macaroons = [] :: [binary()]
+    macaroon :: macaroon:macaroon(),
+    disch_macaroons = [] :: [macaroon:macaroon()]
 }).
 
 -record(certificate, {

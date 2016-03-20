@@ -14,7 +14,7 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/global_registry/gr_spaces.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
 -export([fetch/2]).
@@ -22,6 +22,10 @@
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
+
+-type id() :: binary().
+
+-export_type([id/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -130,11 +134,11 @@ before(_ModelName, _Method, _Level, _Context) ->
 %% Fetches space details from Global Registry and stores them in database.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Client :: gr_endpoint:client(), SpaceId :: binary()) ->
+-spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {ok, #space_details{id = Id, name = Name}} = gr_spaces:get_details(Client, SpaceId),
+    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
     case space_info:get(Key) of
         {ok, #document{value = SpaceInfo} = Doc} ->
             NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},

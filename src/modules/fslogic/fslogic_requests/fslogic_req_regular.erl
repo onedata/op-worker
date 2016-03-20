@@ -19,7 +19,7 @@
 
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/3]).
--export([get_parent/2]).
+-export([get_parent/2, synchronize_block/3]).
 
 %%%===================================================================
 %%% API functions
@@ -78,14 +78,14 @@ truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
 -spec get_helper_params(fslogic_worker:ctx(),
     StorageId :: storage:id(), ForceCL :: boolean()) ->
     FuseResponse :: #fuse_response{} | no_return().
-get_helper_params(_Ctx, StorageId, true = _ForceCL) ->
+get_helper_params(_Ctx, StorageId, true = _ForceProxy) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #helper_params{helper_name = <<"ProxyIO">>,
             helper_args = [
                 #helper_arg{key = <<"storage_id">>, value = StorageId}
             ]}};
 get_helper_params(#fslogic_ctx{session = #session{identity = #identity{user_id = UserId}}},
-    StorageId, false = _ForceCL) ->
+    StorageId, false = _ForceProxy) ->
     {ok, #document{value = #storage{}} = StorageDoc} = storage:get(StorageId),
     {HelperName, HelperArgsMap} = case fslogic_storage:select_helper(StorageDoc) of
         {ok, #helper_init{name = ?CEPH_HELPER_NAME, args = Args}} ->
@@ -132,7 +132,7 @@ get_file_location(CTX, File, rdwr) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flags()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?add_object, 2}, {?traverse_container, 2}]).
-get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags) ->
+get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, {uuid, ParentUUID}, Name, Mode, _Flags) ->
     NormalizedParentUUID =
         case fslogic_uuid:default_space_uuid(fslogic_context:get_user_id(CTX)) =:= ParentUUID of
             true ->
@@ -143,7 +143,6 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
         end,
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, NormalizedParentUUID}, fslogic_context:get_user_id(CTX)),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(CTX),
     CTime = erlang:system_time(seconds),
     File = #document{value = #file_meta{
         name = Name,
@@ -157,25 +156,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
 
     {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
-
-    Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
-        provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = UUID},
-    {ok, LocId} = file_location:create(#document{value = Location}),
-
-    file_meta:attach_location({uuid, UUID}, LocId, oneprovider:get_provider_id()),
-
-    LeafLess = fslogic_path:dirname(FileId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, undefined, Storage, LeafLess),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok -> ok;
-        {error, eexist} ->
-            ok
-    end,
-
-    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
-    storage_file_manager:unlink(SFMHandle1),
-    ok = storage_file_manager:create(SFMHandle1, Mode),
+    {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
 
     {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
     CurrTime = erlang:system_time(seconds),
@@ -189,10 +170,10 @@ get_new_file_location(#fslogic_ctx{session_id = SessId} = CTX, {uuid, ParentUUID
     ) end),
 
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_location{
+        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
-            space_id = SpaceUUID}}.
+            space_id = SpaceUUID})}.
 
 
 %%--------------------------------------------------------------------
@@ -206,6 +187,18 @@ get_parent(_CTX, File) ->
     {ok, #document{key = ParentUUID}} = file_meta:get_parent(File),
     #fuse_response{status = #status{code = ?OK}, fuse_response =
     #dir{uuid = ParentUUID}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Synchronizes given block with remote replicas.
+%% @end
+%%--------------------------------------------------------------------
+-spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
+    #fuse_response{}.
+synchronize_block(_Ctx, {uuid, Uuid}, Block)  ->
+    ok = replica_synchronizer:synchronize(Uuid, Block),
+    #fuse_response{status = #status{code = ?OK}}.
 
 
 %%%===================================================================
@@ -247,7 +240,7 @@ get_file_location_for_rdwr(CTX, File) -> get_file_location(CTX, File).
 get_file_location(CTX, File) ->
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
 
-    {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX),
+    {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
     #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
@@ -255,7 +248,7 @@ get_file_location(CTX, File) ->
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_location{
+        fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = UUID, provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_id = SpaceUUID}}.
+            space_id = SpaceUUID})}.
