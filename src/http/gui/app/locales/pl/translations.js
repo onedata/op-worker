@@ -62,6 +62,17 @@ export default {
       permissions: 'uprawnienia'
     },
     dataFilesListToolbar: {
+      tooltip: {
+        createDir: 'Utwórz katalog',
+        createFile: 'Utwórz plik',
+        shareFile: 'Udostępnij element',
+        uploadFile: 'Załaduj plik',
+        rename: 'Zmień nazwę elementu',
+        permissions: 'Zmień uprawnienia elementu',
+        copy: 'Kopiuj element',
+        cut: 'Wytnij element',
+        remove: 'Usuń element'
+      },
       renameFileModal: {
         title: 'Zmiana nazwy pliku lub katalogu',
         enterName: 'Zmień nazwę elementu "{{currentName}}" na:'
