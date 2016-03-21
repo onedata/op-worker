@@ -32,12 +32,7 @@ run_and_normalize_error(Fun, Module) ->
     catch
         error:__Reason ->
             __Reason0 = normalize_error(__Reason),
-            case __Reason0 of 
-                {not_found, file_meta} ->
-                    ?debug_stacktrace("~p error: ~p", [Module, __Reason0]);
-                _ ->
-                    ?error_stacktrace("~p error: ~p", [Module, __Reason0])
-            end,
+            ?error_stacktrace("~p error: ~p", [Module, __Reason0]),
             {error, __Reason0}
     end.
 
