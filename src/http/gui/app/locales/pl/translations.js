@@ -28,7 +28,8 @@ export default {
       trash: 'kosz',
       spaces: 'miejsca',
       groups: 'grupy',
-      token: 'token'
+      token: 'tokeny',
+      providers: 'dostawcy'
     },
     // spaces
     spacesMenu: {

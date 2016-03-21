@@ -16,8 +16,6 @@ const Router = Ember.Router.extend({
 
 Router.map(function() {
   this.route('lang', {path: '/:localeId'}, function() {
-    this.route('recent', {resetNamespace: true});
-
     // spaces/ - all spaces configuration reached from primary sidebar
     this.route('spaces', {resetNamespace: true}, function() {
       // spaces/:space_id - entry for configuration of the single space
@@ -43,9 +41,14 @@ Router.map(function() {
       });
     });
 
-    this.route('links', {resetNamespace: true});
-    this.route('collection', {resetNamespace: true});
-    this.route('trash', {resetNamespace: true});
+    this.route('groups', {resetNamespace: true});
+
+    // TODO: activate after routes implementation
+    // this.route('recent', {resetNamespace: true});
+    // this.route('links', {resetNamespace: true});
+    // this.route('collection', {resetNamespace: true});
+    // this.route('trash', {resetNamespace: true});
+
     this.route('wildcard', { path: "*path"});
     this.route('not-found');
   });

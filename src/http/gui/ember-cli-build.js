@@ -6,7 +6,8 @@ module.exports = function(defaults) {
   var app = new EmberApp(defaults, {
     sassOptions: {
       includePaths: ['app/styles', 'app/styles/media-styles',
-        'app/styles/media-variables', 'app/styles/components']
+        'app/styles/media-variables', 'app/styles/components',
+        'app/styles/oneicons']
     },
     'ember-bootstrap': {
       'importBootstrapFont': false,

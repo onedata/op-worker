@@ -27,7 +27,8 @@ export default {
       trash: 'trash',
       spaces: 'spaces',
       groups: 'groups',
-      token: 'token'
+      token: 'tokens',
+      providers: 'providers'
     },
     spacesMenu: {
       title: 'spaces',
