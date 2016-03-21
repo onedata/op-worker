@@ -6,13 +6,13 @@
     <th>
       {{t 'components.dataFilesList.files'}}
     </th>
-    <th>
+    <th class="hidden-xs">
       {{t 'components.dataFilesList.size'}}
     </th>
-    <th>
+    <th class="hidden-xs hidden-sm">
       {{t 'components.dataFilesList.permissions'}}
     </th>
-    <th>
+    <th class="hidden-xs">
       {{t 'components.dataFilesList.modification'}}
     </th>
   </thead>
@@ -33,13 +33,13 @@
             {{file.name}}
           </div>
         </td>
-        <td>
+        <td class="hidden-xs">
           {{file.sizeHumanReadable}}
         </td>
-        <td class="col-permissions">
+        <td class="col-permissions hidden-xs hidden-sm">
           {{file.permissionsHumanReadable}}
         </td>
-        <td>
+        <td class="hidden-xs">
           {{file.modificationMoment}}
         </td>
       </tr>
