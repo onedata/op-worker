@@ -29,7 +29,9 @@ $modal-inner-padding: 30px;
 @import "bootstrap";
 
 @import 'colors';
-@import 'oneicons';
+
+$icomoon-font-path: 'fonts/oneicons';
+@import 'oneicons/style.scss';
 // TODO: this is style from VFS-1508, will be changed
 // @import 'components/file-browser'
 

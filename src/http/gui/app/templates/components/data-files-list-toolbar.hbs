@@ -4,7 +4,8 @@
   <li>
     {{!-- TODO refactor --}}
     <a id="{{item.id}}" class="top-bar-item toolbar-icon {{if item.disabled 'disabled'}}"
-       disabled={{item.disabled}}
+       disabled={{item.disabled}} data-toggle="tooltip" data-placement="bottom"
+       title={{item.tooltip}}
       {{action (if item.action item.action (action (mut undefProp)))}}>
       {{icon item.icon 'top-bar-icon'}}
     </a>

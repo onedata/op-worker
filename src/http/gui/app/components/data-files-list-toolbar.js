@@ -15,56 +15,65 @@ export default Ember.Component.extend({
    * - disabled {Boolean}
    */
   items: function() {
+    let i18n = this.get('i18n');
     return [
       {
         id: 'create-dir-tool',
         icon: 'folder-new',
         action: 'createDir',
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.createDir')
       },
       // TODO: temporary, to decide
       {
         id: 'create-file-tool',
         icon: 'file',
         action: 'createFile',
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.createFile')
       },
       {
         id: 'share-file-tool',
         icon: 'share',
         action: 'notImplemented',
         //disabled: !this.get('dir.isSomeFileSelected'),
-        disabled: true
+        disabled: true,
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.shareFile')
       },
       // using fileUpload service binding
       {
         id: 'upload-file-tool',
         icon: 'upload',
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.uploadFile')
       },
       {
         id: 'rename-file-tool',
         icon: 'rename',
         action: 'renameSelectedFile',
         //disabled: !this.get('dir.singleSelectedFile'),
-        disabled: true
+        disabled: true,
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.renameFile')
       },
       {
         id: 'lock-file-tool',
         icon: 'lock',
         action: 'editPermissions',
         disabled: !this.get('dir.isSomeFileSelected'),
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.permissions')
       },
       {
         id: 'copy-file-tool',
         icon: 'copy',
         action: 'notImplemented',
         //disabled: !this.get('dir.isSomeFileSelected'),
-        disabled: true
+        disabled: true,
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.copy')
       },
       {
         id: 'cut-file-tool',
         icon: 'cut',
         action: 'notImplemented',
         //disabled: !this.get('dir.isSomeFileSelected'),
-        disabled: true
+        disabled: true,
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.cut')
       },
       {
         id: 'remove-file-tool',
@@ -77,6 +86,7 @@ export default Ember.Component.extend({
 
   didInsertElement() {
     this.get('fileUpload').assignBrowse(this.$().find('#upload-file-tool'));
+    this.$().find('[data-toggle="tooltip"]').tooltip();
   },
 
   actions: {

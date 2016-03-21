@@ -27,7 +27,8 @@ export default {
       trash: 'trash',
       spaces: 'spaces',
       groups: 'groups',
-      token: 'token'
+      token: 'tokens',
+      providers: 'providers'
     },
     spacesMenu: {
       title: 'spaces',
@@ -59,6 +60,17 @@ export default {
       permissions: 'permissions'
     },
     dataFilesListToolbar: {
+      tooltip: {
+        createDir: 'Create directory',
+        createFile: 'Create file',
+        shareFile: 'Share element',
+        uploadFile: 'Upload file',
+        rename: 'Rename element',
+        permissions: 'Change element permissions',
+        copy: 'Copy element',
+        cut: 'Cut element',
+        remove: 'Remove element'
+      },
       renameFileModal: {
         title: 'Rename file or directory',
         enterName: 'Rename the item "{{currentName}}" to:'
