@@ -152,26 +152,27 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
     {ok, proplists:proplist()} | {error, binary()}.
 get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
     {ok, LUMAHostname} = application:get_env(?APP_NAME, luma_hostname),
-    HostnameBinary = list_to_binary(LUMAHostname),
     {ok, LUMAPort} = application:get_env(?APP_NAME, luma_port),
-    PortBinary = list_to_binary(LUMAPort),
     {ok, Hostname} = inet:gethostname(),
     {ok, {hostent, FullHostname, _, inet, _, IPList}} = inet:gethostbyname(Hostname),
-    FullHostnameBinary = list_to_binary(FullHostname),
-    IPListString = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IPList),
-    IPBinary = json_utils:encode(IPListString),
+    IPListParsed = lists:map(fun(IP) -> list_to_binary(inet_parse:ntoa(IP)) end, IPList),
     UserDetailsJSON = case session:get_auth(SessionId) of
         {ok, undefined} ->
             <<"{}">>;
         {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
-            {ok, UserDetails} = gr_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
+            {ok, UserDetails} = oz_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
             UserDetailsProplist = lists:zip(record_info(fields, user_details), tl(tuple_to_list(UserDetails))),
-            list_to_binary(http_uri:encode(binary_to_list(json_utils:encode(UserDetailsProplist))))
+            json_utils:encode(UserDetailsProplist)
     end,
     case http_client:get(
-        <<HostnameBinary/binary, ":", PortBinary/binary, "/get_user_credentials?global_id=", UserId/binary,
-            "&storage_type=", StorageType/binary, "&storage_id=", StorageId/binary, "&source_ips=", IPBinary/binary,
-            "&source_hostname=", FullHostnameBinary/binary, "&user_details=", UserDetailsJSON/binary>>,
+        <<(list_to_binary(LUMAHostname))/binary, ":", (list_to_binary(LUMAPort))/binary,
+            "/get_user_credentials?"
+            "global_id=", UserId/binary,
+            "&storage_type=", StorageType/binary,
+            "&storage_id=", StorageId/binary,
+            "&source_ips=", (json_utils:encode(IPListParsed))/binary,
+            "&source_hostname=", (list_to_binary(FullHostname))/binary,
+            "&user_details=", (http_utils:url_encode(UserDetailsJSON))/binary>>,
         [],
         [],
         [insecure]
