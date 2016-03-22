@@ -17,6 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
 %% export for ct
@@ -32,15 +33,15 @@
     session_getters_test/1,
     session_supervisor_child_crash_test/1]).
 
--performance({test_cases, []}).
-all() -> [
-    session_manager_session_creation_and_reuse_test,
-    session_manager_session_components_running_test,
-    session_manager_supervision_tree_structure_test,
-    session_manager_session_removal_test,
-    session_getters_test,
-    session_supervisor_child_crash_test
-].
+all() ->
+    ?ALL([
+        session_manager_session_creation_and_reuse_test,
+        session_manager_session_components_running_test,
+        session_manager_supervision_tree_structure_test,
+        session_manager_session_removal_test,
+        session_getters_test,
+        session_supervisor_child_crash_test
+    ]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
