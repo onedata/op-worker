@@ -29,5 +29,7 @@
 %% {@link rpc_backend_behaviour} callback handle/2.
 %% @end
 %%--------------------------------------------------------------------
+-spec handle(FunctionId :: binary(), RequestData :: term()) ->
+    ok | {ok, ResponseData :: term()} | gui_error:error_result().
 handle(_, _) ->
-    {error, <<"Not implemented">>}.
+    gui_error:report_error(<<"Not implemented">>).

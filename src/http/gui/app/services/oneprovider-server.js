@@ -7,8 +7,6 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
  */
 
-// This file should be linked to app/services/server.js
-
 import Ember from 'ember';
 
 export default Ember.Service.extend({

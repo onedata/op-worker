@@ -9,14 +9,11 @@
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
 %%% the file model used in Ember application.
-%%% THIS IS A PROTOTYPE AND AN EXAMPLE OF IMPLEMENTATION.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_data_backend).
 -author("Lukasz Opiola").
 -author("Jakub Liput").
-
--compile([export_all]).
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -27,18 +24,28 @@
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
-%% Convenience macro to log a debug level log dumping given variable.
--define(log_debug(_Arg),
-    ?alert("~s", [str_utils:format("FILE_BACKEND: ~s: ~p", [??_Arg, _Arg])])
-).
 
+%%%===================================================================
+%%% API functions
+%%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback init/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec init() -> ok.
 init() ->
-    ?log_debug({websocket_init, g_session:get_session_id()}),
     ok.
 
 
-%% Called when ember asks for a file (or a dir, which is treated as a file)
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback find/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec find(ResourceType :: binary(), Ids :: [binary()]) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
 find(<<"file">>, [FileId]) ->
     SessionId = g_session:get_session_id(),
     SpacesDirUUID = get_spaces_dir_uuid(),
@@ -79,35 +86,51 @@ find(<<"file">>, [FileId]) ->
         {<<"parent">>, ParentUUID},
         {<<"children">>, ChildrenIds}
     ],
-    ?log_debug({find, Res}),
     {ok, Res}.
 
-%% Called when ember asks for all files - not implemented, because we don't
-%% want to return all files...
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback find_all/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec find_all(ResourceType :: binary()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
 find_all(<<"file">>) ->
-    {error, not_iplemented}.
+    gui_error:report_error(<<"Not iplemented">>).
 
 
-%% Called when ember asks for file mathcing given query
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback find_query/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
+    {ok, [proplists:proplist()]} | gui_error:error_result().
 find_query(<<"file">>, _Data) ->
-    {error, not_iplemented}.
+    gui_error:report_error(<<"Not iplemented">>).
 
-%% Called when ember asks to create a record
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback create_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
+    {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"file">>, Data) ->
     try
-        ?log_debug({create_record, <<"file">>, Data}),
         SessionId = g_session:get_session_id(),
         Name = proplists:get_value(<<"name">>, Data),
         case binary:match(Name, <<"nie">>) of
             {_, _} ->
-                    gui_error:report_warning(<<"Names with 'nie' forbidden!">>);
+                gui_error:report_warning(<<"Names with 'nie' forbidden!">>);
             nomatch ->
                 Type = proplists:get_value(<<"type">>, Data),
                 ParentUUID = proplists:get_value(<<"parent">>, Data, null),
                 {ok, ParentPath} = logical_file_manager:get_file_path(
                     SessionId, ParentUUID),
                 Path = filename:join([ParentPath, Name]),
-                ?log_debug(Path),
                 FileId = case Type of
                     <<"file">> ->
                         {ok, FId} = logical_file_manager:create(
@@ -139,14 +162,21 @@ create_record(<<"file">>, Data) ->
                     {<<"parent">>, ParentUUID},
                     {<<"children">>, []}
                 ],
-                ?log_debug({create_record, Res}),
                 {ok, Res}
         end
     catch _:_ ->
         gui_error:report_warning(<<"Failed to create new directory.">>)
     end.
 
-%% Called when ember asks to update a record
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback update_record/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_record(RsrcType :: binary(), Id :: binary(),
+    Data :: proplists:proplist()) ->
+    ok | gui_error:error_result().
 update_record(<<"file">>, FileId, Data) ->
     try
         SessionId = g_session:get_session_id(),
@@ -154,7 +184,6 @@ update_record(<<"file">>, FileId, Data) ->
 %%        {ok, OldPath} = logical_file_manager:get_file_path(SessionId, FileId),
 %%        DirName = filename:dirname(OldPath),
 %%        {ok, OldPath} = logical_file_manager:mv(SessionId, FileId),
-%%        ?dump(OldPath),
 %%        ok
 %%    end,
         Chmod = fun(NewPermsBin) ->
@@ -185,13 +214,19 @@ update_record(<<"file">>, FileId, Data) ->
             NewPerms ->
                 Chmod(NewPerms)
         end,
-        ?dump({FileId, Data}),
         ok
     catch _:_ ->
         gui_error:report_warning(<<"Cannot change permissions.">>)
     end.
 
-%% Called when ember asks to delete a record
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback delete_record/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_record(RsrcType :: binary(), Id :: binary()) ->
+    ok | gui_error:error_result().
 delete_record(<<"file">>, Id) ->
     try
         rm_rf(Id)
@@ -200,12 +235,19 @@ delete_record(<<"file">>, Id) ->
     end.
 
 
-% ------------------------------------------------------------
-% Internal
-% ------------------------------------------------------------
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the UUID of parent of given file. This is needed because
+%% spaces dir has two different UUIDs, should be removed when this is fixed.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent(UUID :: binary()) -> binary().
 get_parent(UUID) ->
-    ?dump({get_parent, UUID}),
     SessionId = g_session:get_session_id(),
     {ok, ParentUUID} = logical_file_manager:get_parent(
         SessionId, {uuid, UUID}),
@@ -217,6 +259,13 @@ get_parent(UUID) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the UUID of user's /spaces dir.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_spaces_dir_uuid() -> binary().
 get_spaces_dir_uuid() ->
     SessionId = g_session:get_session_id(),
     {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
@@ -224,6 +273,13 @@ get_spaces_dir_uuid() ->
     SpacesDirUUID.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Recursively deletes a directory and all its contents.
+%% @end
+%%--------------------------------------------------------------------
+-spec rm_rf(Id :: binary()) -> ok | no_return().
 rm_rf(Id) ->
     SessionId = g_session:get_session_id(),
     {ok, Children} = logical_file_manager:ls(SessionId,
