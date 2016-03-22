@@ -1,22 +1,30 @@
-{{!-- TODO: use bs-select (which does not show labels for strange reason...) --}}
-{{!-- TODO: or style select with bootstrap --}}
-{{!-- {{select-2
-   content=spaces
-   value=selectedSpaceId
-   optionValuePath="content.id"
-   optionLabelPath="content.name"
-   searchEnabled=false
-}} --}}
-
-<select onchange={{action (mut space) value="target.value"}}>
-  {{#each spaces as |spaceChoice|}}
-    <option value={{spaceChoice.id}} selected={{eq space spaceChoice}}>
-      <span class="tether-select-icon">
-        {{icon (if spaceChoice.isDefault 'space-default' 'space')}}
-      </span>
-      <span class="tether-select-label">
-        {{spaceChoice.name}}
-      </span>
-    </option>
-  {{/each}}
-</select>
+<div class="dropdown">
+  <a href="#" class="dropdown-toggle secondary-sidebar-item single-selectable" data-toggle="dropdown"
+    role="button" aria-haspopup="true" aria-expanded="false">
+    <div class="item-element dropdown-select-icon">
+      <div class="item-icon">
+        {{icon (if selectedSpace.isDefault 'space-default' 'space')}}
+      </div>
+      <div class="item-label">
+        {{selectedSpace.name}}
+      </div>
+      <div class="item-icon">
+        {{icon 'arrow-down'}}
+      </div>
+    </div>
+  </a>
+  <ul class="dropdown-menu dropdown-menu-down dropdown-menu-list">
+    {{#each spaces as |s|}}
+      <li>
+        <a href="#" {{action 'setSelectedSpace' s}}>
+          <span>
+            {{icon (if s.isDefault 'space-default' 'space')}}
+          </span>
+          <span>
+            {{s.name}}
+          </span>
+        </a>
+      </li>
+    {{/each}}
+  </ul>
+</div>

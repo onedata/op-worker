@@ -9,21 +9,48 @@ export default Ember.Component.extend({
   spaces: null,
 
   /** Space currently selected */
-  selectedSpaceId: null,
+  selectedSpace: null,
 
-  selectedSpace: function() {
-    return this.get('spaces').find((s) => s.id === this.get('selectedSpaceId'));
-  }.property('selectedSpaceId'),
+  // selectedSpace: function() {
+  //   return this.get('spaces').find((s) => s.id === this.get('selectedSpaceId'));
+  // }.property('selectedSpaceId'),
+
+  prevSelectedSpace: null,
+
+  spacesChanged: function() {
+    console.warn(`Spaces changed: ${this.get('spaces.length')}, prev: ${this.get('prevSelectedSpace')}`);
+    if (!this.get('prevSelectedSpace') && this.get('spaces.length') > 0) {
+      let defaultSpace = this.get('spaces').find((s) => s.get('isDefault'));
+      this.set('selectedSpace', defaultSpace);
+    }
+  }.observes('spaces', 'spaces.length', 'spaces.@each.isDefault'),
+
+  initSelectedSpace: function() {
+    console.warn('init spaces');
+    this.spacesChanged();
+  }.on('init'),
 
   selectedSpaceDidChange: function() {
-    this.sendAction('goToDataSpace', this.get('selectedSpaceId'));
-  }.observes('selectedSpaceId'),
+    if (this.get('selectedSpace')) {
+      this.sendAction('goToDataSpace', this.get('selectedSpace.id'));
+    }
+  }.observes('selectedSpace'),
 
   didInsertElement() {
-    let selectInstance = new Select({
-      el: document.querySelector('select'),
-      className: 'select-theme-onedata'
-    });
+    // let selectInstance = new Select({
+    //   el: document.querySelector('select'),
+    //   className: 'select-theme-onedata'
+    // });
+
+    console.warn('did insert spaces');
+    this.spacesChanged();
+  },
+
+  actions: {
+    setSelectedSpace(space) {
+      this.set('prevSelectedSpace', this.get('selectedSpace'));
+      this.set('selectedSpace', space);
+    }
   }
 
   // something: function() {

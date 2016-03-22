@@ -165,6 +165,7 @@
                 "displayed_name": "space2",
                 "storage": "/mnt/st1",
                 "users": [
+                    "user1",
                     "user2"
                 ],
                 "groups": [
