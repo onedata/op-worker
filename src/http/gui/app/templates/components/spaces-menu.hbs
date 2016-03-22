@@ -9,11 +9,8 @@
       <div {{action 'showSpaceOptions' space}} class="secondary-sidebar-item first-level">
         <span class="item-element item-click-area">
           <span class="item-icon">
-            {{#if space.isDefault}}
-              {{icon 'space-default' 'default-space-color'}}
-            {{else}}
-              {{icon 'space' 'space-color'}}
-            {{/if}}
+            {{icon (if space.isDefault 'space-home' 'space')
+              (if space.isDefault 'default-space-color' 'space-color')}}
           </span>
 
           <span class="item-label">

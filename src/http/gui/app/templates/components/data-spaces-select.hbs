@@ -3,7 +3,7 @@
     role="button" aria-haspopup="true" aria-expanded="false">
     <div class="item-element dropdown-select-icon">
       <div class="item-icon">
-        {{icon (if selectedSpace.isDefault 'space-default' 'space')}}
+        {{icon (if selectedSpace.isDefault 'space-home' 'space')}}
       </div>
       <div class="item-label">
         {{selectedSpace.name}}
@@ -18,7 +18,7 @@
       <li>
         <a href="#" {{action 'setSelectedSpace' s}}>
           <span>
-            {{icon (if s.isDefault 'space-default' 'space')}}
+            {{icon (if s.isDefault 'space-home' 'space')}}
           </span>
           <span>
             {{s.name}}
