@@ -623,7 +623,8 @@ consume_batches(ProviderId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec is_valid_stream(term()) -> boolean().
 is_valid_stream(Stream) when is_pid(Stream) ->
-    erlang:process_info(Stream) =/= undefined;
+    try erlang:process_info(Stream) =/= undefined
+    catch _:_ -> node(Stream) =/= node() end;
 is_valid_stream(_) ->
     false.
 
