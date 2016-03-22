@@ -196,7 +196,7 @@ get_download_buffer_size() ->
 %% based on given filepath or filename.
 %% @end
 %%--------------------------------------------------------------------
--spec attachment_headers(FileName :: file_meta:name()) -> cowboy_req:req().
+-spec attachment_headers(FileName :: file_meta:name()) -> proplists:proplist().
 attachment_headers(FileName) ->
     FileNameUrlEncoded = http_utils:url_encode(FileName),
     {Type, Subtype, _} = cow_mimetypes:all(FileName),

@@ -33,3 +33,4 @@
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
 handle(_, _) ->
     gui_error:report_error(<<"Not implemented">>).
+
