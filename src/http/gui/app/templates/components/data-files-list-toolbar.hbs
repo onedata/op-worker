@@ -12,6 +12,9 @@
   </li>
 {{/each}}
 
+{{!-- File upload browse element - hidden, used by upload button --}}
+{{!-- TODO: respect maxFiles like in Resumable.js bind --}}
+<input id="toolbar-file-browse" type="file" multiple="multiple" class="hidden" />
 
 {{!-- Modals for actions --}}
 {{!-- TODO: modals should be in separate component or something --}}

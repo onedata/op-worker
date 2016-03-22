@@ -25,11 +25,6 @@ export default Ember.Component.extend({
     }
   }.observes('spaces', 'spaces.length', 'spaces.@each.isDefault'),
 
-  initSelectedSpace: function() {
-    console.warn('init spaces');
-    this.spacesChanged();
-  }.on('init'),
-
   selectedSpaceDidChange: function() {
     if (this.get('selectedSpace')) {
       this.sendAction('goToDataSpace', this.get('selectedSpace.id'));
