@@ -57,7 +57,7 @@ init() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space">>, [SpaceId]) ->
     SessionId = g_session:get_session_id(),
     {ok, #file_attr{name = SpaceName}} = logical_file_manager:stat(
@@ -72,7 +72,7 @@ find(<<"data-space">>, [SpaceId]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
     SessionId = g_session:get_session_id(),
     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
@@ -90,7 +90,7 @@ find_all(<<"data-space">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"data-space">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 

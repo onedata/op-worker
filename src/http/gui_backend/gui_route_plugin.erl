@@ -104,7 +104,8 @@ public_rpc_backend() -> public_rpc_backend.
 %% {@link gui_route_plugin_behaviour} callback get_session_details/0
 %% @end
 %%--------------------------------------------------------------------
--spec session_details() -> {ok, proplists:proplist()} | {error, term()}.
+-spec session_details() ->
+    {ok, proplists:proplist()} | gui_error:error_result().
 session_details() ->
     Res = [
         {<<"userName">>, op_gui_utils:get_user_id()},

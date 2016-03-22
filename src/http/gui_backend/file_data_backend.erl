@@ -45,7 +45,7 @@ init() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, [FileId]) ->
     SessionId = g_session:get_session_id(),
     SpacesDirUUID = get_spaces_dir_uuid(),
@@ -95,7 +95,7 @@ find(<<"file">>, [FileId]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all(ResourceType :: binary()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"file">>) ->
     gui_error:report_error(<<"Not iplemented">>).
 
@@ -106,7 +106,7 @@ find_all(<<"file">>) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
-    {ok, [proplists:proplist()]} | gui_error:error_result().
+    {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>).
 

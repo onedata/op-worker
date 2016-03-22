@@ -170,7 +170,7 @@ reuse_or_create_rest_session(Iden, Auth) ->
 %% Creates GUI session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_gui_session(UserId :: onedata_user:id(), Auth :: session:auth()) ->
+-spec create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_uuid(),
