@@ -227,7 +227,6 @@
         "spaces": {
             "space1": {
                 "displayed_name": "space1",
-                "storage": "/mnt/st1",
                 "users": [
                     "user1"
                 ],
@@ -247,39 +246,36 @@
             },
             "space2": {
                 "displayed_name": "space2",
-                "storage": "/mnt/st1",
                 "users": [
                     "user1"
                 ],
                 "groups": [
                     "group2"
                 ],
-                "providers": [
-                    {
-                        "provider": "provider2",
+                "providers": {
+                    "provider2": {
+                        "storage": "/mnt/st2",
                         "supported_size": 1000000000
                     }
-                ]
+                }
             },
             "space3": {
                 "displayed_name": "space3",
-                "storage": "/mnt/st1",
                 "users": [
                     "user3"
                 ],
                 "groups": [
                     "group3"
                 ],
-                "providers": [
-                    {
-                        "provider": "provider1",
+                "providers": {
+                    "provider1": {
+                        "storage": "/mnt/st1",
                         "supported_size": 1000000000
                     }
-                ]
+                }
             },
             "space5": {
                 "displayed_name": "space5",
-                "storage": "/mnt/st1",
                 "users": [
                     "user1",
                     "user2",
@@ -288,16 +284,15 @@
                 "groups": [
                     "group5"
                 ],
-                "providers": [
-                    {
-                        "provider": "provider2",
+                "providers": {
+                    "provider2": {
+                        "storage": "/mnt/st2",
                         "supported_size": 1000000000
                     }
-                ]
+                }
             },
             "space7": {
                 "displayed_name": "space7",
-                "storage": "/mnt/st1",
                 "users": [
                     "user1",
                     "user2",
@@ -306,16 +301,16 @@
                 "groups": [
                     "group5"
                 ],
-                "providers": [
-                    {
-                        "provider": "provider1",
+                "providers": {
+                    "provider1": {
+                        "storage": "/mnt/st1",
                         "supported_size": 1000000000
                     },
-                    {
-                        "provider": "provider2",
+                    "provider2": {
+                        "storage": "/mnt/st2",
                         "supported_size": 1000000000
                     }
-                ]
+                }
             }
         }
     }
