@@ -1,7 +1,10 @@
 import Ember from 'ember';
+/* globals Select */
 
 // TODO: doc
 export default Ember.Component.extend({
+  classNames: ['data-spaces-select'],
+
   /** List of DataSpace records */
   spaces: null,
 
@@ -15,6 +18,13 @@ export default Ember.Component.extend({
   selectedSpaceDidChange: function() {
     this.sendAction('goToDataSpace', this.get('selectedSpaceId'));
   }.observes('selectedSpaceId'),
+
+  didInsertElement() {
+    let selectInstance = new Select({
+      el: document.querySelector('select'),
+      className: 'select-theme-onedata'
+    });
+  }
 
   // something: function() {
   //   let a = this.get('spaces').toArray()[0].get('rootDir').get('children').toArray();

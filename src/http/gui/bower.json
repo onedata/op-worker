@@ -16,7 +16,8 @@
     "resumable.js": "resumablejs#~1.0.2",
     "bootstrap": "~3.3.6",
     "bootstrap-sass": "~3.3.6",
-    "moment": "^2.12.0"
+    "moment": "^2.12.0",
+    "tether-select": "^1.1.1"
   },
   "resolutions": {
     "ember-data": "1.13.15",

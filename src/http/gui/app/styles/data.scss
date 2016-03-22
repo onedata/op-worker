@@ -1,3 +1,32 @@
+.data-spaces-select {
+  -moz-appearance: none;
+  -ms-appearance: none;
+  -o-appearance: none;
+  appearance: none;
+
+  width: 100%;
+  text-transform: uppercase;
+  color: #56616E;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+
+  .form-control {
+    font-size: inherit;
+    border: none;
+    border-radius: none;
+    -webkit-box-shadow: none;
+    box-shadow: none;
+    transition: none;
+    -webkit-transition: none;
+    -o-transtion: none;
+  }
+}
+
+.onedata-select:before {
+  content: "a";
+}
+
 .secondary-sidebar {
   // root directory item
   .root-item {

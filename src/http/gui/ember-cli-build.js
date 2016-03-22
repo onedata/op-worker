@@ -32,5 +32,10 @@ module.exports = function(defaults) {
   app.import("bower_components/resumable.js/resumable.js");
   app.import("bower_components/moment/min/moment-with-locales.min.js");
 
+  app.import("bower_components/tether/dist/js/tether.min.js");
+  app.import("bower_components/tether-select/dist/js/select.min.js");
+  // app.import("bower_components/tether-select/dist/css/select-theme-default.css");
+
+
   return app.toTree();
 };

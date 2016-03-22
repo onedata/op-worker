@@ -1,4 +1,22 @@
 {{!-- TODO: use bs-select (which does not show labels for strange reason...) --}}
 {{!-- TODO: or style select with bootstrap --}}
-{{view 'select' content=spaces optionValuePath="content.id"
-       optionLabelPath="content.name" value=selectedSpaceId}}
+{{!-- {{select-2
+   content=spaces
+   value=selectedSpaceId
+   optionValuePath="content.id"
+   optionLabelPath="content.name"
+   searchEnabled=false
+}} --}}
+
+<select onchange={{action (mut space) value="target.value"}}>
+  {{#each spaces as |spaceChoice|}}
+    <option value={{spaceChoice.id}} selected={{eq space spaceChoice}}>
+      <span class="tether-select-icon">
+        {{icon (if spaceChoice.isDefault 'space-default' 'space')}}
+      </span>
+      <span class="tether-select-label">
+        {{spaceChoice.name}}
+      </span>
+    </option>
+  {{/each}}
+</select>
