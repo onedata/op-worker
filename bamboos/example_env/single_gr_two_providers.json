@@ -98,7 +98,7 @@
                             "db_nodes": [
                                 "dbnode1"
                             ],
-                            "zone_domain": "oz",
+                            "oz_domain": "oz",
                             "verify_oz_cert": false
                         }
                     }
@@ -107,7 +107,7 @@
         },
         "provider2": {
             "db_driver": "couchdb",
-            "os_config": "cfg1",
+            "os_config": "cfg2",
             "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
@@ -137,7 +137,7 @@
                             "db_nodes": [
                                 "dbnode1"
                             ],
-                            "zone_domain": "oz",
+                            "oz_domain": "oz",
                             "verify_oz_cert": false
                         }
                     }
@@ -234,16 +234,16 @@
                 "groups": [
                     "group1"
                 ],
-                "providers": [
-                    {
-                        "provider": "provider1",
+                "providers": {
+                    "provider1": {
+                        "storage": "/mnt/st1",
                         "supported_size": 1000000000
                     },
-                    {
-                        "provider": "provider2",
+                    "provider2": {
+                        "storage": "/mnt/st2",
                         "supported_size": 1000000000
                     }
-                ]
+                }
             },
             "space2": {
                 "displayed_name": "space2",

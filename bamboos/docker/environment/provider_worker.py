@@ -21,9 +21,9 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None):
 class ProviderWorkerConfigurator:
     def tweak_config(self, cfg, uid, instance):
         sys_config = cfg['nodes']['node']['sys.config'][self.app_name()]
-        if 'zone_domain' in sys_config:
-            oz_hostname = worker.cluster_domain(sys_config['zone_domain'], uid)
-            sys_config['zone_domain'] = oz_hostname
+        if 'oz_domain' in sys_config:
+            oz_hostname = worker.cluster_domain(sys_config['oz_domain'], uid)
+            sys_config['oz_domain'] = oz_hostname
         # If livereload bases on gui output dir mount, change the location
         # from where static files are served to that dir.
         if 'gui_livereload' in cfg:
