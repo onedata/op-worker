@@ -97,7 +97,11 @@ handle_http_download(Req, FileId) ->
                 {ok, #file_attr{size = Size, name = FileName}} =
                     logical_file_manager:stat(SessionId, {uuid, FileId}),
                 StreamFun = cowboy_file_stream_fun(FileHandle, Size),
-                Req2 = set_attachment_headers(Req, FileName),
+                Headers = attachment_headers(FileName),
+                Req2 = lists:foldl(
+                    fun({Header, Value}, ReqAcc) ->
+                        cowboy_req:set_resp_header(Header, Value, ReqAcc)
+                    end, Req, Headers),
                 Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
                 {ok, NewReq} = cowboy_req:reply(200, Req3),
                 NewReq
@@ -186,19 +190,18 @@ get_download_buffer_size() ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Sets response headers on cowboy #req record, so that the data
-%% is interpreted as attachment (browsers will save it to disk).
+%% @doc Returns attachment headers that will cause web browser to
+%% interpret received data as attachment (and save it to disk).
 %% Proper filename is set, both in utf8 encoding and legacy for older browsers,
 %% based on given filepath or filename.
 %% @end
 %%--------------------------------------------------------------------
--spec set_attachment_headers(Req :: cowboy_req:req(),
-    FileName :: file_meta:name()) -> cowboy_req:req().
-set_attachment_headers(Req, FileName) ->
+-spec attachment_headers(FileName :: file_meta:name()) -> cowboy_req:req().
+attachment_headers(FileName) ->
     FileNameUrlEncoded = http_utils:url_encode(FileName),
     {Type, Subtype, _} = cow_mimetypes:all(FileName),
     MimeType = <<Type/binary, "/", Subtype/binary>>,
-    Headers = [
+    [
         {<<"content-type">>, MimeType},
         {<<"content-disposition">>, <<"attachment;",
             % Offer safely-encoded UTF-8 filename and
@@ -206,8 +209,4 @@ set_attachment_headers(Req, FileName) ->
             " filename=", FileNameUrlEncoded/binary,
             "; filename*=UTF-8''", FileNameUrlEncoded/binary>>
         }
-    ],
-    _NewReq = lists:foldl(
-        fun({Header, Value}, ReqAcc) ->
-            cowboy_req:set_resp_header(Header, Value, ReqAcc)
-        end, Req, Headers).
+    ].
