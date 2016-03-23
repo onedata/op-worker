@@ -97,14 +97,9 @@ handle_http_download(Req, FileId) ->
                 {ok, #file_attr{size = Size, name = FileName}} =
                     logical_file_manager:stat(SessionId, {uuid, FileId}),
                 StreamFun = cowboy_file_stream_fun(FileHandle, Size),
-%%                Req2 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req),
                 Headers = attachment_headers(FileName),
                 % Reply with attachment headers and a streaming function
-%%                {ok, NewReq} = cowboy_req:reply(200, Headers, Req2),
-%%                {ok, NewReq} =
-%%                    cowboy_req:reply(200, Headers, {1, fun(_,_) -> ok end}, Req),
-                g_ctx:reply(200, [], {Size, StreamFun})
-%%                NewReq
+                g_ctx:reply(200, Headers, {Size, StreamFun})
             catch
                 T:M ->
                     ?error_stacktrace("Error while processing file download "
