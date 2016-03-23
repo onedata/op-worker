@@ -126,11 +126,13 @@ ceph_user_proxy_test(Config) ->
     test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) -> {ok, 200, [],
         json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
             [{<<"user_name">>, UserName}, {<<"user_key">>, UserKey}]}])} end),
+
     CephCtx = ?assertMatch(#ceph_user_ctx{user_name = UserName, user_key = UserKey},
         rpc:call(Worker, luma_proxy, new_user_ctx,
             [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertEqual(CephCtx, rpc:call(Worker, luma_proxy, new_user_ctx,
         [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
+
     test_utils:mock_num_calls(Worker, http_client, get, 4, 1).
 
 s3_user_provider_test(Config) ->
@@ -138,11 +140,13 @@ s3_user_provider_test(Config) ->
     SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?S3_SPACE_NAME]),
     AccessKey = <<"AccessKey">>,
     SecretKey = <<"SecretKey">>,
+
     test_utils:mock_new(Worker, amazonaws_iam),
     test_utils:mock_expect(Worker, amazonaws_iam, create_user, fun(_, _, _, _, _) -> ok end),
     test_utils:mock_expect(Worker, amazonaws_iam, create_access_key, fun(_, _, _, _, _) ->
         {ok, {AccessKey, SecretKey}} end),
     test_utils:mock_expect(Worker, amazonaws_iam, allow_access_to_bucket, fun(_, _, _, _, _, _) -> ok end),
+
     test_utils:mock_new(Worker, file_meta),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
@@ -167,11 +171,13 @@ s3_user_proxy_test(Config) ->
     test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) -> {ok, 200, [],
         json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
             [{<<"access_key">>, AccessKey}, {<<"secret_key">>, SecretKey}]}])} end),
+
     S3Ctx = ?assertMatch(#s3_user_ctx{access_key = AccessKey, secret_key = SecretKey},
         rpc:call(Worker, luma_proxy, new_user_ctx,
             [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertEqual(S3Ctx, rpc:call(Worker, luma_proxy, new_user_ctx,
         [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
+
     test_utils:mock_num_calls(Worker, http_client, get, 4, 1).
 
 
@@ -185,9 +191,11 @@ init_per_suite(Config) ->
     Self = self(),
     Iden = #identity{user_id = ?USER_ID},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager, reuse_or_create_fuse_session, [?SESSION_ID, Iden, Self])),
+
     create_space(Worker, ?POSIX_STORAGE_NAME, ?POSIX_SPACE_NAME),
     create_space(Worker, ?CEPH_STORAGE_NAME, ?CEPH_SPACE_NAME),
     create_space(Worker, ?S3_STORAGE_NAME, ?S3_SPACE_NAME),
+    
     EnvUpResult.
 
 end_per_suite(Config) ->

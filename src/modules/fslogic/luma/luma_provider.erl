@@ -99,9 +99,11 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
             };
         undefined ->
             {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+
             GID = fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID),
             UID = fslogic_utils:gen_storage_uid(UserId),
             posix_user:add(UserId, StorageId, UID, GID),
+
             #posix_user_ctx{uid = UID, gid = GID}
     end.
 
@@ -144,6 +146,7 @@ create_ceph_user(?ROOT_USER_ID, StorageId) ->
         user_key = maps:get(<<"user_key">>, Args)}};
 create_ceph_user(UserId, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
+
     {ok, {UserName, UserKey}} = luma_nif:create_ceph_user(binary_to_list(UserId),
         binary_to_list(maps:get(<<"mon_host">>, Args)),
         binary_to_list(maps:get(<<"cluster_name">>, Args, <<"Ceph">>)),
@@ -151,6 +154,7 @@ create_ceph_user(UserId, StorageId) ->
         binary_to_list(maps:get(<<"user_name">>, Args)),
         binary_to_list(maps:get(<<"user_key">>, Args))
     ),
+
     {ok, #ceph_user_ctx{user_name = list_to_binary(UserName), user_key = list_to_binary(UserKey)}}.
 
 
@@ -166,13 +170,16 @@ create_s3_user(?ROOT_USER_ID, StorageId) ->
         secret_key = maps:get(<<"secret_key">>, Args)}};
 create_s3_user(UserId, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
+
     AdminAccessKey = maps:get(<<"access_key">>, Args),
     AdminSecretKey = maps:get(<<"secret_key">>, Args),
     BucketName = maps:get(<<"bucket_name">>, Args),
     IAMHost = maps:get(<<"iam_host">>, Args, <<"iam.amazonaws.com">>),
     Region = maps:get(<<"region">>, Args, <<"us-east-1">>),
+
     ok = amazonaws_iam:create_user(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId),
     {ok, {AccessKey, SecretKey}} =
         amazonaws_iam:create_access_key(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId),
     ok = amazonaws_iam:allow_access_to_bucket(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId, BucketName),
+
     {ok, #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey}}.

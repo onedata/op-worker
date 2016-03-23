@@ -82,10 +82,12 @@ allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region, UserName, B
                 {<<"Action">>,
                     [<<"s3:PutObject">>, <<"s3:GetObject">>, <<"s3:DeleteObject">>]},
                 {<<"Resource">>, [<<"arn:aws:s3:::", BucketName/binary, "/*">>]}]]}],
+
     PolicyDocumentString = binary_to_list(json_utils:encode(Policy)),
     PolicyDocumentEscaped = list_to_binary(http_uri:encode(PolicyDocumentString)),
     %% Necessary because Amazon expects '*' encoded as '%2A' which is not done by http_uri:encode
     PolicyDocument = re:replace(PolicyDocumentEscaped, <<"[*]">>, <<"%2A">>, [{return, binary}, global]),
+
     case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region, <<"PutUserPolicy">>,
         [{<<"UserName">>, UserName}, {<<"PolicyName">>, <<BucketName/binary, "-access">>},
             {<<"PolicyDocument">>, PolicyDocument}]) of
@@ -147,8 +149,10 @@ execute_iam_query(AccessKey, SecretKey, Host, Region, Action, Params) ->
     CanonicalRequestHash = hexbinary(crypto:hash(sha256, CanonicalRequest)),
     StringToSign = <<Algorithm/binary, "\n", AmzDate/binary, "\n", CredentialScope/binary, "\n",
         CanonicalRequestHash/binary>>,
+
     SigningKey = get_signature_key(SecretKey, Datestamp, Region, Service),
     Signature = hexbinary(crypto:hmac(sha256, SigningKey, StringToSign)),
+
     FinalQuerystring = <<CanonicalQuerystring/binary, "&X-Amz-Signature=", Signature/binary>>,
 
     RequestURL = <<"https://", Host/binary, CanonicalURI/binary, "?", FinalQuerystring/binary>>,
