@@ -46,7 +46,7 @@ init(_Type, Req, _Opts) ->
 %% Handles an upload request.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.
+-spec handle(Req :: cowboy_req:req(), term()) -> {ok, cowboy_req:req(), term()}.
 handle(Req, State) ->
     {FileId, _} = cowboy_req:binding(id, Req),
     NewReq = handle_http_download(Req, FileId),
@@ -58,7 +58,7 @@ handle(Req, State) ->
 %% Cowboy handler callback, no cleanup needed
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(term(), term(), term()) -> ok.
+-spec terminate(term(), Req :: cowboy_req:req(), term()) -> ok.
 terminate(_Reason, _Req, _State) ->
     ok.
 
