@@ -103,7 +103,7 @@ handle_http_download(Req, FileId) ->
                         cowboy_req:set_resp_header(Header, Value, ReqAcc)
                     end, Req, Headers),
                 Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-                {ok, NewReq} = cowboy_req:reply(200, Req3),
+                {ok, NewReq} = cowboy_req:reply(200, [], <<"">>, Req3),
                 NewReq
             catch
                 T:M ->
