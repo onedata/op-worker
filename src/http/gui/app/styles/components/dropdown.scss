@@ -64,11 +64,31 @@ $dropdown-triangle-width: 8px;
       }
 
       > a {
+        display: table;
         color: $top-font-color !important;
         padding: 10px;
+        width: 100%;
+
         &:hover {
           color: white !important;
           background-color: transparent !important;
+        }
+
+        // TODO: only left icon
+        .item-icon {
+          display: table-cell;
+          padding-right: 10px;
+          font-size: 1.5em;
+          line-height: 28px;
+          vertical-align: middle;
+          width: 28px;
+          text-align: center;
+        }
+
+        .item-label {
+          display: table-cell;
+          line-height: 28px;
+          vertical-align: middle;
         }
       }
 
@@ -81,6 +101,11 @@ $dropdown-triangle-width: 8px;
       padding: 0;
       margin: 0;
     }
+  }
+
+  // move start of dropdown to left for secondary sidebar select dropdown
+  &.dropdown-sidebar-select {
+    right: ($secondary-sidebar-item-padding - $dropdown-triangle-width/2);
   }
 
 }
