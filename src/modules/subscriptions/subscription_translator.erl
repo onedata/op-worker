@@ -116,6 +116,13 @@ type_to_model(_Type) ->
     ?error("Unexpected update type ~p", [_Type]).
 
 
+%%--------------------------------------------------------------------
+%% @doc @private
+%% For each ID converts binary privileges to atoms.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_ids_with_privileges([{ID :: binary(), Privileges :: [binary()]}]) ->
+    [{ID1 :: binary(), Privileges1 :: [atom()]}].
 process_ids_with_privileges(Raw) ->
     lists:map(fun({ID, Binaries}) ->
         {ID, lists:map(fun(Bin) ->
