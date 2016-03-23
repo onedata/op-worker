@@ -46,7 +46,7 @@ def _ready(container):
     ip = docker.inspect(container)['NetworkSettings']['IPAddress']
     url = 'http://{0}:8091/pools'.format(ip)
     try:
-        r = requests.head(url, timeout=8)
+        r = requests.head(url, timeout=REQUEST_TIMEOUT)
         return r.status_code == requests.codes.ok
     except requests.ConnectionError:
         return False
