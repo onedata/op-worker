@@ -103,7 +103,7 @@ handle_http_download(Req, FileId) ->
 %%                {ok, NewReq} = cowboy_req:reply(200, Headers, Req2),
 %%                {ok, NewReq} =
 %%                    cowboy_req:reply(200, Headers, {1, fun(_,_) -> ok end}, Req),
-                g_ctx:reply(200, Headers, {Size, StreamFun})
+                g_ctx:reply(200, [], {Size, StreamFun})
 %%                NewReq
             catch
                 T:M ->
