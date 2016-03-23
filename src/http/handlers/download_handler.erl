@@ -102,7 +102,8 @@ handle_http_download(Req, FileId) ->
                 % Reply with attachment headers and a streaming function
 %%                {ok, NewReq} = cowboy_req:reply(200, Headers, Req2),
                 {ok, NewReq} =
-                    cowboy_req:reply(200, Headers, {Size, StreamFun}, Req),
+%%                    cowboy_req:reply(200, Headers, {1, fun(_,_) -> ok end}, Req),
+                g_ctx:reply(200, Headers, {Size, StreamFun}),
                 NewReq
             catch
                 T:M ->
