@@ -63,7 +63,7 @@ clean_test_users_and_spaces(Config) ->
 %%--------------------------------------------------------------------
 %% @doc Cleanup and unmocking related with users and spaces
 %%--------------------------------------------------------------------
--spec clean_test_users_and_spaces(Config :: list()) -> term().
+-spec clean_test_users_and_spaces_no_validate(Config :: list()) -> term().
 clean_test_users_and_spaces_no_validate(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     DomainWorkers = get_different_domain_workers(Config),
