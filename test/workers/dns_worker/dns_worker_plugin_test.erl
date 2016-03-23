@@ -48,7 +48,7 @@ domain_parser_test_() ->
             ?assertEqual(ok, dns_worker_plugin:parse_domain("www.part.prov.onedata.org")),
             ?assertEqual(nx_domain, dns_worker_plugin:parse_domain("www.part1.part2.prov.onedata.org")),
             ?assertEqual(refused, dns_worker_plugin:parse_domain("agh.edu.pl")),
-            ?assertEqual(8, meck:num_calls(application, get_env, ['_', zone_domain])),
+            ?assertEqual(8, meck:num_calls(application, get_env, ['_', oz_domain])),
             ?assertEqual(8, meck:num_calls(application, get_env, ['_', provider_domain])),
             ?assert(meck:validate(application))
         end]}.
@@ -124,7 +124,7 @@ domain_parser_setup() ->
     meck:expect(application, get_env,
         fun(_, Param) ->
             case Param of
-                zone_domain -> {ok, "onedata.org"};
+                oz_domain -> {ok, "onedata.org"};
                 provider_domain -> {ok, "prov.onedata.org"}
             end
         end).
@@ -138,7 +138,7 @@ domain_proper_setup() ->
         fun(_, Param) ->
             case Param of
                 dns_worker_plugin -> {ok, dns_worker_plugin};
-                zone_domain -> {ok, "onedata.org"};
+                oz_domain -> {ok, "onedata.org"};
                 provider_domain -> {ok, "prov.onedata.org"};
                 current_loglevel -> {ok, info};
                 dns_a_response_ttl -> {ok, 60};
