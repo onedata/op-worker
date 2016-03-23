@@ -20,7 +20,7 @@
 -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
 -export([get_storage_type/1, get_storage_id/1, gen_storage_gid/2]).
-
+-export([get_s3_user/2, get_ceph_user/2, get_posix_user/2]).
 
 %%%===================================================================
 %%% API functions
@@ -134,3 +134,66 @@ get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DS
 get_local_storage_file_locations(Entry) ->
     #document{} = Doc = get_local_file_location(Entry),
     get_local_storage_file_locations(Doc).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets S3 credentials from datastore.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_s3_user(UserId :: binary(), StorageId :: storage:id()) ->
+    {ok, s3_user:credentials()} | undefined.
+get_s3_user(UserId, StorageId) ->
+    case s3_user:get(UserId) of
+        {ok, #document{value = #s3_user{credentials = CredentialsMap}}} ->
+            case maps:find(StorageId, CredentialsMap) of
+                {ok, Credentials} ->
+                    {ok, Credentials};
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets Ceph credentials from datastore.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ceph_user(UserId :: binary(), StorageId :: storage:id()) ->
+    {ok, ceph_user:credentials()} | undefined.
+get_ceph_user(UserId, StorageId) ->
+    case ceph_user:get(UserId) of
+        {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} ->
+            case maps:find(StorageId, CredentialsMap) of
+                {ok, Credentials} ->
+                    {ok, Credentials};
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets POSIX credentials from datastore.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posix_user(UserId :: binary(), StorageId :: storage:id()) ->
+    {ok, posix_user:credentials()} | undefined.
+get_posix_user(UserId, StorageId) ->
+    case posix_user:get(UserId) of
+        {ok, #document{value = #posix_user{credentials = CredentialsMap}}} ->
+            case maps:find(StorageId, CredentialsMap) of
+                {ok, Credentials} ->
+                    {ok, Credentials};
+                _ ->
+                    undefined
+            end;
+        _ ->
+            undefined
+    end.

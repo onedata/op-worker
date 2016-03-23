@@ -23,6 +23,11 @@
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
+-record(ceph_user_credentials, {
+    user_name :: name(),
+    user_key :: key()
+}).
+
 -type name() :: binary().
 -type key() :: binary().
 -type credentials() :: #ceph_user_credentials{}.

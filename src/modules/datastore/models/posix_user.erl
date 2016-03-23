@@ -6,22 +6,33 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Cache that stores LUMA server responses.
+%%% Cache that maps onedata user to POSIX user.
 %%% @end
 %%%-------------------------------------------------------------------
--module(luma_response).
--author("Michal Wrona").
+-module(posix_user).
+-author("Mcihal Wrona").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 
 %% API
--export([save/3, get/2]).
+-export([add/4, uid/1, gid/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
+
+-record(posix_user_credentials, {
+    uid :: uid(),
+    gid :: gid()
+}).
+
+-type uid() :: non_neg_integer().
+-type gid() :: non_neg_integer().
+-type credentials() :: #posix_user_credentials{}.
+
+-export_type([uid/0, gid/0, credentials/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -89,7 +100,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(luma_response_bucket, [], ?LOCAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(posix_user_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -118,25 +129,76 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds storage credentials for onedata user.
+%% Adds POSIX storage credentials for onedata user.
 %% @end
 %%--------------------------------------------------------------------
--spec save(UserId :: onedata_user:id(), StorageId :: storage:id() | helpers:name(), Credentials :: helpers:user_ctx()) ->
-    {ok, {UserId :: onedata_user:id(), StorageId :: storage:id()}} | {error, Reason :: term()}.
-save(UserId, StorageId, Credentials) ->
-    luma_response:save(#document{key = {UserId, StorageId}, value = #luma_response{credentials = Credentials}}).
+-spec add(UserId :: onedata_user:id(), StorageId :: storage:id(), Uid :: uid(), Gid :: gid())
+        -> {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+add(UserId, StorageId, Uid, Gid) ->
+    case posix_user:get(UserId) of
+        {ok, #document{value = POSIXUser} = Doc} ->
+            NewPOSIXUser = add_credentials(POSIXUser, StorageId, Uid, Gid),
+            posix_user:save(Doc#document{value = NewPOSIXUser});
+        {error, {not_found, _}} ->
+            POSIXUser = new(UserId, StorageId, Uid, Gid),
+            case create(POSIXUser) of
+                {ok, POSIXUserId} -> {ok, POSIXUserId};
+                {error, already_exists} ->
+                    add(UserId, StorageId, Uid, Gid);
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets storage credentials for onedata user.
+%% Returns POSIX user uid.
 %% @end
 %%--------------------------------------------------------------------
--spec get(UserId :: onedata_user:id(), StorageId :: storage:id() | helpers:name()) ->
-    {ok, Credentials :: helpers:user_ctx()} | datastore:get_error().
-get(UserId, StorageId) ->
-    case luma_response:get({UserId, StorageId}) of
-        {ok, #document{value = #luma_response{credentials = Credentials}}} ->
-            {ok, Credentials};
-        Error ->
-            Error
-    end.
+-spec uid(Credentials :: #posix_user_credentials{}) -> Uid :: uid().
+uid(#posix_user_credentials{uid = Uid}) ->
+    Uid.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns POSIX user gid.
+%% @end
+%%--------------------------------------------------------------------
+-spec gid(Credentials :: #posix_user_credentials{}) -> Gid :: gid().
+gid(#posix_user_credentials{gid = Gid}) ->
+    Gid.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns POSIX user datastore document.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(UserId :: onedata_user:id(), StorageId :: storage:id(),
+    Uid :: uid(), Gid :: gid()) -> Doc :: #document{}.
+new(UserId, StorageId, Uid, Gid) ->
+    #document{key = UserId, value = #posix_user{
+        credentials = maps:put(StorageId, #posix_user_credentials{
+            uid = Uid,
+            gid = Gid
+        }, #{})}
+    }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Adds credentials to existing POSIX user.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_credentials(POSIXUser :: #posix_user{}, StorageId :: storage:id(),
+    Uid :: uid(), Gid :: gid()) -> NewPOSIXUser :: #posix_user{}.
+add_credentials(#posix_user{credentials = Credentials} = POSIXUser, StorageId, Uid, Gid) ->
+    POSIXUser#posix_user{credentials = maps:put(StorageId, #posix_user_credentials{
+        uid = Uid,
+        gid = Gid
+    }, Credentials)}.

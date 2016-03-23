@@ -109,11 +109,6 @@
     credentials :: #{storage:id() => ceph_user:credentials()}
 }).
 
--record(ceph_user_credentials, {
-    user_name :: ceph_user:name(),
-    user_key :: ceph_user:key()
-}).
-
 %% Model that maps onedata user to Amazon S3 user
 -record(s3_user, {
     credentials :: #{storage:id() => s3_user:credentials()}
@@ -124,14 +119,9 @@
     entry :: term()
 }).
 
--record(s3_user_credentials, {
-    access_key :: s3_user:access_key(),
-    secret_key :: s3_user:secret_key()
-}).
-
-%% Model represents user credentials form luma
--record(luma_response, {
-    credentials :: helpers:user_ctx()
+%% Model that maps onedata user to POSIX user
+-record(posix_user, {
+    credentials :: #{storage:id() => posix_user:credentials()}
 }).
 
 -endif.

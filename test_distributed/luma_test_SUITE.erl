@@ -102,7 +102,7 @@ posix_user_proxy_test(Config) ->
     ?assertNotEqual(PosixCtx#posix_user_ctx.gid, PosixS3Ctx#posix_user_ctx.gid),
     ?assertNotEqual(PosixCephCtx#posix_user_ctx.gid, PosixS3Ctx#posix_user_ctx.gid),
 
-    test_utils:mock_num_calls(Worker, http_client, get, 4, 2).
+    test_utils:mock_num_calls(Worker, http_client, get, 4, 3).
 
 ceph_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -198,12 +198,9 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertMatch(ok, rpc:call(Worker, luma_response, delete, [{?USER_ID, ?DIRECTIO_HELPER_NAME}])),
     ?assertMatch(ok, rpc:call(Worker, ceph_user, delete, [?USER_ID])),
     ?assertMatch(ok, rpc:call(Worker, s3_user, delete, [?USER_ID])),
-    clear_luma_response(Worker, ?POSIX_STORAGE_NAME),
-    clear_luma_response(Worker, ?CEPH_STORAGE_NAME),
-    clear_luma_response(Worker, ?S3_STORAGE_NAME).
+    ?assertMatch(ok, rpc:call(Worker, posix_user, delete, [?USER_ID])).
 
 create_space(Worker, StorageName, SpaceName) ->
     {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker, storage, get_by_name, [StorageName])),
@@ -211,7 +208,3 @@ create_space(Worker, StorageName, SpaceName) ->
     {ok, SpaceName} = ?assertMatch({ok, _}, rpc:call(Worker, space_storage, add, [SpaceName, StorageId])),
     ?assertMatch({ok, _}, rpc:call(Worker, space_storage, get, [SpaceName])).
 
-clear_luma_response(Worker, StorageName) ->
-    {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker, storage, get_by_name, [StorageName])),
-    StorageId = rpc:call(Worker, storage, id, [Storage]),
-    ?assertMatch(ok, rpc:call(Worker, luma_response, delete, [{?USER_ID, StorageId}])).

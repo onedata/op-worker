@@ -39,5 +39,5 @@ models() -> [
     ceph_user,
     s3_user,
     dbsync_state,
-    luma_response
+    posix_user
 ].

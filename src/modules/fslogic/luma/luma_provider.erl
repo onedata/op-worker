@@ -65,20 +65,18 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
 
-    Credentials = case get_ceph_user(UserId, StorageId) of
+    case fslogic_utils:get_ceph_user(UserId, StorageId) of
+        {ok, Credentials} ->
+            #ceph_user_ctx{
+                user_name = ceph_user:name(Credentials),
+                user_key = ceph_user:key(Credentials)
+            };
         undefined ->
-            {ok, #ceph_user_credentials{user_name = UserName, user_key = UserKey} = Credentials} =
+            {ok, #ceph_user_ctx{user_name = UserName, user_key = UserKey} = Credentials} =
                 create_ceph_user(UserId, StorageId),
             ceph_user:add(UserId, StorageId, UserName, UserKey),
-            Credentials;
-        Credentials ->
             Credentials
-    end,
-
-    #ceph_user_ctx{
-        user_name = ceph_user:name(Credentials),
-        user_key = ceph_user:key(Credentials)
-    }.
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -90,10 +88,22 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
 -spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_posix_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-    {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
-    FinalGID = fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID),
-    FinalUID = fslogic_utils:gen_storage_uid(UserId),
-    #posix_user_ctx{uid = FinalUID, gid = FinalGID}.
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
+
+    case fslogic_utils:get_posix_user(UserId, StorageId) of
+        {ok, Credentials} ->
+            #posix_user_ctx{
+                uid = posix_user:uid(Credentials),
+                gid = posix_user:gid(Credentials)
+            };
+        undefined ->
+            {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+            GID = fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID),
+            UID = fslogic_utils:gen_storage_uid(UserId),
+            posix_user:add(UserId, StorageId, UID, GID),
+            #posix_user_ctx{uid = UID, gid = GID}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -108,38 +118,17 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
 
-    Credentials = case get_s3_user(UserId, StorageId) of
+     case fslogic_utils:get_s3_user(UserId, StorageId) of
+        {ok, Credentials} ->
+            #s3_user_ctx{
+                access_key = s3_user:access_key(Credentials),
+                secret_key = s3_user:secret_key(Credentials)
+            };
         undefined ->
-            {ok, #s3_user_credentials{access_key = AccessKey, secret_key = SecretKey} = Credentials} =
+            {ok, #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey} = Credentials} =
                 create_s3_user(UserId, StorageId),
             s3_user:add(UserId, StorageId, AccessKey, SecretKey),
-            Credentials;
-        Credentials ->
             Credentials
-    end,
-
-    #s3_user_ctx{
-        access_key = s3_user:access_key(Credentials),
-        secret_key = s3_user:secret_key(Credentials)
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets Ceph credentials from datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec get_ceph_user(UserId :: binary(), StorageId :: storage:id()) -> ceph_user:credentials() | undefined.
-get_ceph_user(UserId, StorageId) ->
-    case ceph_user:get(UserId) of
-        {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} ->
-            case maps:find(StorageId, CredentialsMap) of
-                {ok, Credentials} ->
-                    Credentials;
-                _ ->
-                    undefined
-            end;
-        _ ->
-            undefined
     end.
 
 
@@ -148,10 +137,10 @@ get_ceph_user(UserId, StorageId) ->
 %% Creates Ceph user credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec create_ceph_user(UserId :: binary(), StorageId :: storage:id()) -> {ok, ceph_user:credentials()}.
+-spec create_ceph_user(UserId :: binary(), StorageId :: storage:id()) -> {ok, #ceph_user_ctx{}}.
 create_ceph_user(?ROOT_USER_ID, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
-    {ok, #ceph_user_credentials{user_name = maps:get(<<"user_name">>, Args),
+    {ok, #ceph_user_ctx{user_name = maps:get(<<"user_name">>, Args),
         user_key = maps:get(<<"user_key">>, Args)}};
 create_ceph_user(UserId, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
@@ -162,27 +151,7 @@ create_ceph_user(UserId, StorageId) ->
         binary_to_list(maps:get(<<"user_name">>, Args)),
         binary_to_list(maps:get(<<"user_key">>, Args))
     ),
-    {ok, #ceph_user_credentials{user_name = list_to_binary(UserName), user_key = list_to_binary(UserKey)}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets S3 credentials from datastore.
-%% @end
-%%--------------------------------------------------------------------
--spec get_s3_user(UserId :: binary(), StorageId :: storage:id()) -> ceph_user:credentials() | undefined.
-get_s3_user(UserId, StorageId) ->
-    case s3_user:get(UserId) of
-        {ok, #document{value = #s3_user{credentials = CredentialsMap}}} ->
-            case maps:find(StorageId, CredentialsMap) of
-                {ok, Credentials} ->
-                    Credentials;
-                _ ->
-                    undefined
-            end;
-        _ ->
-            undefined
-    end.
+    {ok, #ceph_user_ctx{user_name = list_to_binary(UserName), user_key = list_to_binary(UserKey)}}.
 
 
 %%--------------------------------------------------------------------
@@ -190,10 +159,10 @@ get_s3_user(UserId, StorageId) ->
 %% Creates S3 user credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec create_s3_user(UserId :: binary(), StorageId :: storage:id()) -> {ok, s3_user:credentials()}.
+-spec create_s3_user(UserId :: binary(), StorageId :: storage:id()) -> {ok, #s3_user_ctx{}}.
 create_s3_user(?ROOT_USER_ID, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
-    {ok, #s3_user_credentials{access_key = maps:get(<<"access_key">>, Args),
+    {ok, #s3_user_ctx{access_key = maps:get(<<"access_key">>, Args),
         secret_key = maps:get(<<"secret_key">>, Args)}};
 create_s3_user(UserId, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} = storage:get(StorageId),
@@ -206,4 +175,4 @@ create_s3_user(UserId, StorageId) ->
     {ok, {AccessKey, SecretKey}} =
         amazonaws_iam:create_access_key(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId),
     ok = amazonaws_iam:allow_access_to_bucket(AdminAccessKey, AdminSecretKey, IAMHost, Region, UserId, BucketName),
-    {ok, #s3_user_credentials{access_key = AccessKey, secret_key = SecretKey}}.
+    {ok, #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey}}.
