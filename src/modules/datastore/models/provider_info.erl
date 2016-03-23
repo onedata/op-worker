@@ -14,10 +14,10 @@
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/oz/oz_spaces.hrl").
+-include_lib("ctool/include/oz/oz_providers.hrl").
 
 %% API
--export([create_or_update/2]).
+-export([create_or_update/2, get_or_fetch/1, fetch/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -139,3 +139,41 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
     datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get provider from cache or fetch from OZ and save in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(ID :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Key) ->
+    case provider_info:get(Key) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Key);
+        Error -> Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetch provider from OZ and save it in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(ID :: binary()) -> {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(ID) ->
+    try
+        case oz_providers:get_details(provider, ID) of
+            {ok, #provider_details{name = Name}} ->
+                Doc = #document{key = ID, value = #provider_info{
+                    client_name = Name
+                }},
+                {ok, ID} = provider_info:save(Doc),
+                {ok, Doc};
+            Error -> Error
+        end
+    catch
+        _:Reason ->
+            {error, Reason}
+    end.
