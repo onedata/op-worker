@@ -8,6 +8,10 @@
             "input_dir": "rel/op_worker",
             "target_dir": "rel/test_cluster"
         },
+        "cluster_worker": {
+            "input_dir": "rel/cluster_worker",
+            "target_dir": "rel/test_cluster"
+        },
         "oz_worker": {
             "input_dir": "rel/oz_worker",
             "target_dir": "rel/test_cluster"
@@ -107,7 +111,7 @@
             }
         },
         "p2.oz": {
-            "db_driver": "riak",
+            "db_driver": "couchdb",
             "os_config": "cfg2",
             "gui_livereload": "none",
             "cluster_manager": {
@@ -136,7 +140,7 @@
                                 "cm1"
                             ],
                             "db_nodes": [
-                                "riaknode1"
+                                "dbnode1"
                             ],
                             "zone_domain": "oz",
                             "verify_oz_cert": false
@@ -153,7 +157,7 @@
                                 "cm1"
                             ],
                             "db_nodes": [
-                                "riaknode1"
+                                "dbnode1"
                             ],
                             "zone_domain": "oz",
                             "verify_oz_cert": false
@@ -164,7 +168,7 @@
         }
     },
     "cluster_domains": {
-        "p1": {
+        "p3": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
             "cluster_manager": {
@@ -204,8 +208,8 @@
     },
     "zone_domains": {
         "oz": {
+            "db_driver": "couchdb",
             "gui_livereload": "none",
-            "db_driver": "couchbase",
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
@@ -307,7 +311,7 @@
         }
     },
     "appmock_domains": {
-        "p3": {
+        "p4": {
             "appmock": {
                 "appmock1": {
                     "mocked_app": "op_worker",
