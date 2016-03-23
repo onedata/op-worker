@@ -9,7 +9,7 @@
 -author("Jakub Kudzia").
 
 %%lfm_files.erl
--define(FSYNC_TIMEOUT, timer:seconds(30)).
+-define(FSYNC_TIMEOUT, timer:minutes(1)).
 
 %% replica_synchronizer
 -define(SYNC_TIMEOUT, timer:minutes(5)).
