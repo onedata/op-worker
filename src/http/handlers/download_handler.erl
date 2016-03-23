@@ -101,10 +101,10 @@ handle_http_download(Req, FileId) ->
                 Headers = attachment_headers(FileName),
                 % Reply with attachment headers and a streaming function
 %%                {ok, NewReq} = cowboy_req:reply(200, Headers, Req2),
-                {ok, NewReq} =
+%%                {ok, NewReq} =
 %%                    cowboy_req:reply(200, Headers, {1, fun(_,_) -> ok end}, Req),
-                g_ctx:reply(200, Headers, {Size, StreamFun}),
-                NewReq
+                g_ctx:reply(200, Headers, {Size, StreamFun})
+%%                NewReq
             catch
                 T:M ->
                     ?error_stacktrace("Error while processing file download "

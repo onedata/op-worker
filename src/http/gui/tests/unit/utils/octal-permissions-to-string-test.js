@@ -13,6 +13,9 @@ let perms = {
 };
 
 for (let octal in perms) {
+  // @todo remove this suppresion when the test is written in a better way
+  // https://jslinterrors.com/dont-make-functions-within-a-loop
+  /*jshint -W083 */
   test('perms ' + octal, function(assert) {
     assert.equal(octalPermissionsToString(octal), perms[octal]);
   });

@@ -1,5 +1,4 @@
 import Ember from 'ember';
-/* globals Select */
 
 // TODO: doc
 export default Ember.Component.extend({
