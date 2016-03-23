@@ -42,6 +42,7 @@ export default Ember.Component.extend({
       {
         id: 'upload-file-tool',
         icon: 'upload',
+        action: 'uploadBrowse',
         tooltip: i18n.t('components.dataFilesListToolbar.tooltip.uploadFile')
       },
       {
@@ -84,9 +85,16 @@ export default Ember.Component.extend({
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
 
+  resumableJsChange: function() {
+    let resumable = this.get('fileUpload.fileUploadComponent.resumable');
+    if (resumable) {
+      resumable.assignBrowse(this.$().find('#toolbar-file-browse'));
+    }
+  }.observes('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
+
   didInsertElement() {
-    this.get('fileUpload').assignBrowse(this.$().find('#upload-file-tool'));
     this.$().find('[data-toggle="tooltip"]').tooltip();
+    this.resumableJsChange();
   },
 
   actions: {
@@ -126,6 +134,10 @@ export default Ember.Component.extend({
     editPermissions() {
       this.set('newPermissions', '');
       this.set('isEditingPermissions', true);
+    },
+
+    uploadBrowse() {
+      this.$('#toolbar-file-browse').trigger('click');
     },
 
     notImplemented() {

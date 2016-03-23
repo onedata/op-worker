@@ -42,6 +42,7 @@
     "ember-i18n": "4.2.0",
     "ember-localstorage-adapter": "0.5.5",
     "ember-notify": "^5.0.2",
+    "ember-truth-helpers": "1.2.0",
     "livereload": "0.4.1",
     "phantomjs-prebuilt": "2.1.3"
   }

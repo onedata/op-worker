@@ -1,4 +1,30 @@
-{{!-- TODO: use bs-select (which does not show labels for strange reason...) --}}
-{{!-- TODO: or style select with bootstrap --}}
-{{view 'select' content=spaces optionValuePath="content.id"
-       optionLabelPath="content.name" value=selectedSpaceId}}
+<div class="dropdown">
+  <a href="#" class="dropdown-toggle secondary-sidebar-item single-selectable" data-toggle="dropdown"
+    role="button" aria-haspopup="true" aria-expanded="false">
+    <div class="item-element dropdown-select-icon">
+      <div class="item-icon">
+        {{icon (if selectedSpace.isDefault 'space-home' 'space')}}
+      </div>
+      <div class="item-label">
+        {{selectedSpace.name}}
+      </div>
+      <div class="item-icon">
+        {{icon 'arrow-down'}}
+      </div>
+    </div>
+  </a>
+  <ul class="dropdown-menu dropdown-menu-down dropdown-menu-list dropdown-sidebar-select">
+    {{#each spaces as |s|}}
+      <li>
+        <a href="#" {{action 'setSelectedSpace' s}}>
+          <div class="item-icon">
+            {{icon (if s.isDefault 'space-home' 'space')}}
+          </div>
+          <div class="item-label">
+            {{s.name}}
+          </div>
+        </a>
+      </li>
+    {{/each}}
+  </ul>
+</div>

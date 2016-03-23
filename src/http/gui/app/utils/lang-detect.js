@@ -12,16 +12,19 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
  */
 export default function langDetect() {
-  let lang = window.navigator.languages ? window.navigator.languages[0] : null;
-  lang = lang || window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage;
+  // let lang = window.navigator.languages ? window.navigator.languages[0] : null;
+  // lang = lang || window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage;
+  //
+  // if (lang.indexOf('-') !== -1) {
+  //   lang = lang.split('-')[0];
+  // }
+  //
+  // if (lang.indexOf('_') !== -1) {
+  //   lang = lang.split('_')[0];
+  // }
+  //
+  // return lang;
 
-  if (lang.indexOf('-') !== -1) {
-    lang = lang.split('-')[0];
-  }
-
-  if (lang.indexOf('_') !== -1) {
-    lang = lang.split('_')[0];
-  }
-
-  return lang;
+  // TODO: disabled for demo 3.0 to force English
+  return 'en';
 }

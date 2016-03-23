@@ -19,6 +19,16 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
 // TODO: some refactor:
 // http://thesassway.com/intermediate/responsive-web-design-in-sass-using-media-queries-in-sass-32
 
+// TODO: move to utils.scss
+
+@mixin vendor-prefix($name, $argument) {
+  -webkit-#{$name}: #{$argument};
+  -ms-#{$name}: #{$argument};
+  -moz-#{$name}: #{$argument};
+  -o-#{$name}: #{$argument};
+  #{$name}: #{$argument};
+}
+
 /// Bootstrap
 
 // Bootstrap variables
@@ -43,6 +53,7 @@ $icomoon-font-path: 'fonts/oneicons';
     @import 'media-styles/desktop-large';
     @import 'components/one-table-common';
     @import 'components/one-table-desktop';
+    @import 'components/dropdown';
 }
 
 @media screen
@@ -54,6 +65,7 @@ $icomoon-font-path: 'fonts/oneicons';
     @import 'media-styles/desktop-medium';
     @import 'components/one-table-common';
     @import 'components/one-table-desktop';
+    @import 'components/dropdown';
 }
 
 @media screen
@@ -65,6 +77,7 @@ $icomoon-font-path: 'fonts/oneicons';
     @import 'media-styles/desktop-small';
     @import 'components/one-table-common';
     @import 'components/one-table-desktop';
+    @import 'components/dropdown';
 }
 
 @media screen
@@ -76,6 +89,7 @@ $icomoon-font-path: 'fonts/oneicons';
     @import 'media-styles/tablet';
     @import 'components/one-table-common';
     @import 'components/one-table-mobile';
+    @import 'components/dropdown';
 }
 
 // minimal layout, min-width-mobile not used in query
@@ -87,6 +101,7 @@ $icomoon-font-path: 'fonts/oneicons';
     @import 'media-styles/mobile';
     @import 'components/one-table-common';
     @import 'components/one-table-mobile';
+    @import 'components/dropdown';
 }
 
 @import 'components/modal';
