@@ -55,7 +55,7 @@
                                 "cm1"
                             ],
                             "db_nodes": [
-                                "riaknode1"
+                                "dbnode1"
                             ],
                             "verify_oz_cert": false
                         }

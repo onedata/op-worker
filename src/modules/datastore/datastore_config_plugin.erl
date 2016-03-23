@@ -25,6 +25,7 @@
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
 models() -> [
+    subscriptions_state,
     subscription,
     session,
     onedata_user,

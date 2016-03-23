@@ -214,7 +214,7 @@ handle({async_init_stream, Since, Until, Queue}) ->
     state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
-                catch exit(OldStream, shutdown),
+                    catch exit(OldStream, shutdown),
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
@@ -291,7 +291,7 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
-    catch consume_batches(FromProvider, SpaceId),
+        catch consume_batches(FromProvider, SpaceId),
     do_apply_batch_changes(FromProvider, SpaceId, Batch, true).
 
 %%--------------------------------------------------------------------
