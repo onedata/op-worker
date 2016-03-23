@@ -19,7 +19,7 @@
 
 % Default buffer size used to send file to a client. It is used if env variable
 % gui_download_buffer cannot be found.
--define(DEFAULT_DOWNLOAD_BUFFER_SIZE, 1048576). % 1MB
+-define(DEFAULT_DOWNLOAD_BUFFER_SIZE, 4194304). % 1MB
 
 %% Cowboy API
 -export([init/3, handle/2, terminate/3]).
@@ -97,13 +97,12 @@ handle_http_download(Req, FileId) ->
                 {ok, #file_attr{size = Size, name = FileName}} =
                     logical_file_manager:stat(SessionId, {uuid, FileId}),
                 StreamFun = cowboy_file_stream_fun(FileHandle, Size),
+%%                Req2 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req),
                 Headers = attachment_headers(FileName),
-                Req2 = lists:foldl(
-                    fun({Header, Value}, ReqAcc) ->
-                        cowboy_req:set_resp_header(Header, Value, ReqAcc)
-                    end, Req, Headers),
-                Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-                {ok, NewReq} = cowboy_req:reply(200, [], <<"">>, Req3),
+                % Reply with attachment headers and a streaming function
+%%                {ok, NewReq} = cowboy_req:reply(200, Headers, Req2),
+                {ok, NewReq} =
+                    cowboy_req:reply(200, Headers, {Size, StreamFun}, Req),
                 NewReq
             catch
                 T:M ->
@@ -122,7 +121,7 @@ handle_http_download(Req, FileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cowboy_file_stream_fun(FileHandle :: #lfm_handle{}, Size :: integer()) ->
-    function().
+    fun((any(), module()) -> ok).
 cowboy_file_stream_fun(FileHandle, Size) ->
     fun(Socket, Transport) ->
         try
@@ -132,7 +131,8 @@ cowboy_file_stream_fun(FileHandle, Size) ->
             % Any exceptions that occur during file streaming must be caught
             % here for cowboy to close the connection cleanly.
             ?error_stacktrace("Error while streaming file '~p' - ~p:~p",
-                [FileHandle#lfm_handle.file_uuid, T, M])
+                [FileHandle#lfm_handle.file_uuid, T, M]),
+            ok
         end
     end.
 
@@ -179,14 +179,9 @@ stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
 %%--------------------------------------------------------------------
 -spec get_download_buffer_size() -> integer().
 get_download_buffer_size() ->
-    _Size = case application:get_env(?APP_NAME, gui_download_buffer) of
-        {ok, Value} ->
-            Value;
-        _ ->
-            ?error("Could not read 'gui_download_buffer' from config. "
-            "Using default value."),
-            ?DEFAULT_DOWNLOAD_BUFFER_SIZE
-    end.
+    {ok, Value} = application:get_env(
+        ?APP_NAME, gui_download_buffer, ?DEFAULT_DOWNLOAD_BUFFER_SIZE),
+    Value.
 
 
 %%--------------------------------------------------------------------
@@ -196,7 +191,8 @@ get_download_buffer_size() ->
 %% based on given filepath or filename.
 %% @end
 %%--------------------------------------------------------------------
--spec attachment_headers(FileName :: file_meta:name()) -> proplists:proplist().
+-spec attachment_headers(FileName :: file_meta:name()) ->
+    [{binary(), binary()}].
 attachment_headers(FileName) ->
     FileNameUrlEncoded = http_utils:url_encode(FileName),
     {Type, Subtype, _} = cow_mimetypes:all(FileName),

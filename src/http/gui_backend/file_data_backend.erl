@@ -180,6 +180,7 @@ create_record(<<"file">>, Data) ->
 update_record(<<"file">>, FileId, Data) ->
     try
         SessionId = g_session:get_session_id(),
+        % @todo uncomment when mv is supported
 %%    Rename = fun(_NewName) ->
 %%        {ok, OldPath} = logical_file_manager:get_file_path(SessionId, FileId),
 %%        DirName = filename:dirname(OldPath),
@@ -202,6 +203,7 @@ update_record(<<"file">>, FileId, Data) ->
                     "invalid octal value.">>)
             end
         end,
+        % @todo uncomment when mv is supported
 %%    case proplists:get_value(<<"name">>, Data, undefined) of
 %%        undefined ->
 %%            ok;
