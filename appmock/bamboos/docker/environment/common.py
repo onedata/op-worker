@@ -153,7 +153,7 @@ def fix_sys_config_walk(element, current_app_name, parents, file_path):
 
 
 def apps_with_sysconfig():
-    return ["cluster_manager", "appmock", "cluster_worker", "op_worker", "globalregistry", "onepanel", "oneclient"]
+    return ["cluster_manager", "appmock", "cluster_worker", "op_worker", "globalregistry", "onepanel", "oneclient", "oz_worker"]
 
 
 def get_docker_name(name_or_container):
@@ -191,7 +191,7 @@ def format_hostname(domain_parts, uid):
 def format_erl_node_name(app_name, hostname):
     """Formats full node name for an erlang VM hosted on docker based on app_name and hostname.
     NOTE: Hostnames are also used as docker names!
-    app_name - application name, e.g.: 'cluster_manager', 'globalregistry'
+    app_name - application name, e.g.: 'cluster_manager', 'oz_worker'
     hostname - hostname aquired by format_*_hostname
     """
     return '{0}@{1}'.format(app_name, hostname)
