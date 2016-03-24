@@ -63,11 +63,13 @@ reuse_or_create_fuse_session(SessId, Iden, Auth, Con) ->
     end,
     case session:update(SessId, Diff) of
         {ok, SessId} ->
+            subscribe_user(Iden),
             {ok, reused};
         {error, {not_found, _}} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, fuse]),
+                    subscribe_user(Iden),
                     {ok, created};
                 {error, already_exists} ->
                     reuse_or_create_fuse_session(SessId, Iden, Auth, Con);
@@ -101,11 +103,13 @@ reuse_or_create_provider_session(SessId, SessionType, Iden, Con) ->
            end,
     case session:update(SessId, Diff) of
         {ok, SessId} ->
+            subscribe_user(Iden),
             {ok, reused};
         {error, {not_found, _}} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, provider]),
+                    subscribe_user(Iden),
                     {ok, created};
                 {error, already_exists} ->
                     reuse_or_create_provider_session(SessId, SessionType, Iden, Con);
@@ -150,11 +154,13 @@ reuse_or_create_rest_session(Iden, Auth) ->
     end,
     case session:update(SessId, Diff) of
         {ok, SessId} ->
+            subscribe_user(Iden),
             {ok, SessId};
         {error, {not_found, _}} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, rest]),
+                    subscribe_user(Iden),
                     {ok, SessId};
                 {error, already_exists} ->
                     reuse_or_create_rest_session(Iden);
@@ -179,6 +185,7 @@ create_gui_session(Auth) ->
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
+            subscribe_user(Iden),
             {ok, SessId};
         {error, Reason} ->
             {error, Reason}
@@ -218,3 +225,16 @@ session_id_to_provider_id(SessId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Includes user in subscription (if identity belongs to an user).
+%% @end
+%%--------------------------------------------------------------------
+-spec subscribe_user(Iden :: session:identity()) -> ok.
+subscribe_user(Iden) ->
+    UID = Iden#identity.user_id,
+    case UID of
+        undefined -> ok;
+        _ -> subscriptions:put_user(UID)
+    end.

@@ -45,7 +45,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "zone_domain": "oz",
+                        "oz_domain": "oz",
                         "verify_oz_cert": false
                     }
                 },
@@ -60,7 +60,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "zone_domain": "oz",
+                        "oz_domain": "oz",
                         "verify_oz_cert": false
                     }
                 }
