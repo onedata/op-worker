@@ -64,24 +64,18 @@ gui_clean:
 ##
 ## Generates a dev release
 generate_dev: deps compile gui_dev
+	# Remove gui tmp dir
+	rm -rf src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
-	# Move gui tmp dir away from sources, so as to prevent
-	# rebar from entering it during spec generation and crashing
-	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
-	# Bring back the tmp dir to its normal location
-	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
 ## Generates a production release
 generate: deps compile gui_prod
+	# Remove gui tmp dir
+	rm -rf src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
-	# Move gui tmp dir away from sources, so as to prevent
-	# rebar from entering it during spec generation and crashing
-	mv src/http/gui/tmp /tmp/gui_tmp
 	./rebar generate $(OVERLAY_VARS)
-	# Bring back the tmp dir to its normal location
-	mv /tmp/gui_tmp src/http/gui/tmp
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
 clean: relclean pkgclean gui_clean

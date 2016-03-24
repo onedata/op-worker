@@ -1,10 +1,5 @@
 /* The main style file to include other sylesheets: various media or css libraries */
 
-// Init Bootstrap
-// TODO: use bootstrap-custom: https://www.npmjs.com/package/ember-cli-bootstrap-sass
-
-// $icon-font-path: "bower_components/bootstrap-sass/assets/fonts/bootstrap/" !default;
-
 $min-width-mobile: 300px;
 $max-width-mobile: 760px;
 
@@ -24,8 +19,29 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
 // TODO: some refactor:
 // http://thesassway.com/intermediate/responsive-web-design-in-sass-using-media-queries-in-sass-32
 
+// TODO: move to utils.scss
+
+@mixin vendor-prefix($name, $argument) {
+  -webkit-#{$name}: #{$argument};
+  -ms-#{$name}: #{$argument};
+  -moz-#{$name}: #{$argument};
+  -o-#{$name}: #{$argument};
+  #{$name}: #{$argument};
+}
+
+/// Bootstrap
+
+// Bootstrap variables
+// TODO: set to values from app.scss
+// @grid-float-breakpoint
+$modal-inner-padding: 30px;
+
+@import "bootstrap";
+
 @import 'colors';
-@import 'oneicons';
+
+$icomoon-font-path: 'fonts/oneicons';
+@import 'oneicons/style.scss';
 // TODO: this is style from VFS-1508, will be changed
 // @import 'components/file-browser'
 
@@ -37,6 +53,7 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
     @import 'media-styles/desktop-large';
     @import 'components/one-table-common';
     @import 'components/one-table-desktop';
+    @import 'components/dropdown';
 }
 
 @media screen
@@ -48,6 +65,7 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
     @import 'media-styles/desktop-medium';
     @import 'components/one-table-common';
     @import 'components/one-table-desktop';
+    @import 'components/dropdown';
 }
 
 @media screen
@@ -59,6 +77,7 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
     @import 'media-styles/desktop-small';
     @import 'components/one-table-common';
     @import 'components/one-table-desktop';
+    @import 'components/dropdown';
 }
 
 @media screen
@@ -70,6 +89,7 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
     @import 'media-styles/tablet';
     @import 'components/one-table-common';
     @import 'components/one-table-mobile';
+    @import 'components/dropdown';
 }
 
 // minimal layout, min-width-mobile not used in query
@@ -81,4 +101,10 @@ $min-width-desktop-large: $max-width-desktop-medium + 1;
     @import 'media-styles/mobile';
     @import 'components/one-table-common';
     @import 'components/one-table-mobile';
+    @import 'components/dropdown';
 }
+
+@import 'components/modal';
+@import 'components/button';
+@import 'components/notify';
+@import 'components/file-upload';
