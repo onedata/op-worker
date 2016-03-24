@@ -250,6 +250,7 @@ delete_record(<<"file">>, Id) ->
 %%--------------------------------------------------------------------
 -spec process_file_meta_change(Method :: model_behaviour:model_action(),
     Context :: term(), ReturnValue :: term()) -> ok.
+% @TODO FILTROWANIE - PACZ NA fslogic_context:set_space_id
 process_file_meta_change(create, [#document{key = Id} = _Doc], _ReturnValue) ->
     ?alert("Create: ~p", [Id]),
     ok;
