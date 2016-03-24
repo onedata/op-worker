@@ -9,11 +9,9 @@ class PluginsLoader:
 
     def __init__(self):
         self.plugins = {}
-
-    def load_plugins(self):
-        plugins = [f.split('.')[0] for f in os.listdir("generators") if
+        plugins_files = [f.split('.')[0] for f in os.listdir("generators") if
                    f.endswith('.py')]
-        for p in plugins:
+        for p in plugins_files:
             self.plugins[p] = imp.load_module(p, *imp.find_module(p, [
                 'generators']))
 

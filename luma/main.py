@@ -1,9 +1,47 @@
 from flask import json, request
-from app import app, db, plugins, args
+from app import db, create_app
 from config_loader import load_user_credentials_mapping, \
     load_generators_mapping, load_storage_id_to_type_mapping
 from model import UserCredentialsMapping, GeneratorsMapping, \
     StorageIdToTypeMapping
+from plugins_loader import PluginsLoader
+import argparse
+
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    description='Start LUMA server')
+
+parser.add_argument(
+    '-cm', '--credentials-mapping',
+    action='store',
+    default=None,
+    help='json file with array of credentials mappings',
+    dest='credentials_mapping_file')
+
+parser.add_argument(
+    '-gm', '--generators-mapping',
+    action='store',
+    default=None,
+    help='json file with array of storages to generators mappings',
+    dest='generators_mapping')
+
+parser.add_argument(
+    '-sm', '--storages-mapping',
+    action='store',
+    default=None,
+    help='json file with array of storage id to type mappings',
+    dest='storages_mapping')
+
+parser.add_argument(
+    '-c', '--config',
+    action='store',
+    default='config.cfg',
+    help='cfg file with app configuration',
+    dest='config')
+
+args = parser.parse_args()
+app = create_app(args.config)
+plugins = PluginsLoader()
 
 
 def error_message(code, message):
@@ -97,10 +135,10 @@ def get_user_credentials():
 
 if __name__ == "__main__":
     if args.credentials_mapping_file:
-        load_user_credentials_mapping(args.credentials_mapping_file)
+        load_user_credentials_mapping(app, args.credentials_mapping_file)
     if args.generators_mapping:
-        load_generators_mapping(args.generators_mapping)
+        load_generators_mapping(app, plugins, args.generators_mapping)
     if args.storages_mapping:
-        load_storage_id_to_type_mapping(args.storages_mapping)
+        load_storage_id_to_type_mapping(app, args.storages_mapping)
 
     app.run(host=app.config['HOST'])

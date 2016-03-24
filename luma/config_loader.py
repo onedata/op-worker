@@ -1,10 +1,10 @@
 from flask import json
-from app import app, db, plugins
+from app import db
 from model import StorageIdToTypeMapping, GeneratorsMapping, \
     UserCredentialsMapping
 
 
-def load_storage_id_to_type_mapping(storage_id_to_type_file):
+def load_storage_id_to_type_mapping(app, storage_id_to_type_file):
     """Loads storage id to type mapping from file into database"""
     with app.app_context():
         with open(storage_id_to_type_file) as data_file:
@@ -21,7 +21,7 @@ def load_storage_id_to_type_mapping(storage_id_to_type_file):
             db.session.commit()
 
 
-def load_generators_mapping(generators_file):
+def load_generators_mapping(app, plugins, generators_file):
     """Loads generators mapping from file into database"""
     with app.app_context():
         with open(generators_file) as data_file:
@@ -47,7 +47,7 @@ def load_generators_mapping(generators_file):
             db.session.commit()
 
 
-def load_user_credentials_mapping(user_credentials_file):
+def load_user_credentials_mapping(app, user_credentials_file):
     """Loads user credentials mapping from file into database"""
     with app.app_context():
         with open(user_credentials_file) as data_file:
