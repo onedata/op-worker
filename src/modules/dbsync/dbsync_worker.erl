@@ -335,15 +335,14 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
         ModelConfig = ModelName:model_init(),
         MainDocKey = case Value of
             #links{} ->
-                couchdb_datastore_driver:links_key_to_doc_key(Key);
+                Value#links.doc_key;
             _ -> Key
         end,
 
         datastore:run_synchronized(ModelName, MainDocKey, fun() ->
             caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key, all)
+            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all)
         end),
         spawn(
             fun() ->
