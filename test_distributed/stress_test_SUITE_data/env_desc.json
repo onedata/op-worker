@@ -29,7 +29,8 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 2
+                        "worker_num": 2,
+                        "verify_oz_cert": false
                     }
                 }
             },
