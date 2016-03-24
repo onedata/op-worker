@@ -100,8 +100,7 @@ init_stream(Since, Until, Queue) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: ping | healthcheck |
-    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
+    Request :: ping | healthcheck | term(),
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -624,7 +623,8 @@ consume_batches(ProviderId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec is_valid_stream(term()) -> boolean().
 is_valid_stream(Stream) when is_pid(Stream) ->
-    erlang:process_info(Stream) =/= undefined;
+    try erlang:process_info(Stream) =/= undefined
+    catch _:_ -> node(Stream) =/= node() end;
 is_valid_stream(_) ->
     false.
 
