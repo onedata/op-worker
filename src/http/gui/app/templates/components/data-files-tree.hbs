@@ -1,0 +1,19 @@
+<ul>
+  <li>
+    <div id="tree-dir-{{rootDir.id}}"
+      class="secondary-sidebar-item root-item dir-item single-selectable onedata-red">
+      <div class="item-element item-click-area" {{action 'openDirInBrowser' rootDir}}>
+        <span class="item-element item-icon">
+          {{icon "folder-open" "color-directory"}}
+        </span>
+        <span class="item-element item-label">
+          {{t 'components.dataFilesTree.rootDirectory'}}
+        </span>
+      </div>
+    </div>
+  </li>
+  <li>
+    {{data-files-tree-node rootDir=rootDir openDirInBrowser='openDirInBrowser'
+      level=1}}
+  </li>
+</ul>

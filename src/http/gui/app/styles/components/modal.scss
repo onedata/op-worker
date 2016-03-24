@@ -1,0 +1,58 @@
+.modal {
+  .modal-dialog {
+    .modal-content {
+      border: none;
+      border-top-left-radius: 4px;
+      border-top-right-radius: 4px;
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+
+      .modal-header {
+        padding-left: 30px;
+        padding-right: 30px;
+        border-top-left-radius: inherit;
+        border-top-right-radius: inherit;
+        // TODO: use h1?
+        font-size: 1.6em;
+        color: white;
+        background-color: #2B3037;
+
+        .close {
+          color: white;
+          text-shadow: none;
+        }
+      }
+
+      .modal-body {
+        // padding: 30px;
+
+        .form-group {
+          label {
+            margin-bottom: 20px;
+          }
+        }
+
+        // TODO: only input[type=text] ?
+        .form-control {
+          border-radius: 0;
+          border: solid 1px #545C74;
+
+          &:focus {
+            box-shadow: none;
+          }
+        }
+      }
+
+      .modal-footer {
+        text-align: center;
+        border-radius: inherit;
+        background-color: #F2F2F2;
+        border-top: none;
+
+        .btn + .btn {
+          margin-left: 25px;
+        }
+      }
+    }
+  }
+}

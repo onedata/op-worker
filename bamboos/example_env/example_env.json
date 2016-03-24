@@ -301,7 +301,7 @@
                 ],
                 "providers": {
                     "p2.oz": {
-                        "storage": "/mnt/s2",
+                        "storage": "/mnt/s1",
                         "supported_size": 1000000000
                     }
                 }
