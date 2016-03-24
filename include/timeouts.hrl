@@ -1,11 +1,13 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2016, <COMPANY>
+%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% This file contains timeout definitions
 %%% @end
-%%% Created : 17. Mar 2016 10:45 AM
-%%%-------------------------------------------------------------------
 -author("Jakub Kudzia").
 
 %%lfm_files.erl
