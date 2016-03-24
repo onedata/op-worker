@@ -4,7 +4,7 @@ Start LUMA
 ----
 To init LUMA server database run command:
 
-    init_db.py
+    ./init_db.py
 
 Optional arguments:
 
@@ -18,7 +18,7 @@ Optional arguments:
 ----
 To start LUMA server run command:
 
-    main.py
+    ./main.py
 
 Optional arguments:
 
