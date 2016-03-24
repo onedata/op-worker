@@ -16,7 +16,7 @@
 % oneprovider specific config
 -define(ONEPROVIDER_CM_APP_NAME, cluster_manager).
 -define(DIST_APP_FAILOVER_TIMEOUT, timer:seconds(5)).
--define(SYNC_NODES_TIMEOUT, timer:minutes(1)).
+-define(SYNC_NODES_TIMEOUT, timer:minutes(2)).
 
 %% API
 -export([configure_release/4]).
