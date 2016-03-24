@@ -89,9 +89,9 @@ update(#document{value = #file_meta{}, key = Key}, Diff) ->
     update(Key, Diff);
 update({path, Path}, Diff) ->
     ?run(begin
-             {ok, {#document{} = Document, _}} = resolve_path(Path),
-             update(Document, Diff)
-         end);
+        {ok, {#document{} = Document, _}} = resolve_path(Path),
+        update(Document, Diff)
+    end);
 update(Key, Diff) ->
     datastore:update(?STORE_LEVEL, ?MODULE, Key, Diff).
 
@@ -118,40 +118,40 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 -spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUUID}, File) ->
     ?run(begin
-             {ok, Parent} = get(ParentUUID),
-             create(Parent, File)
-         end);
+        {ok, Parent} = get(ParentUUID),
+        create(Parent, File)
+    end);
 create({path, Path}, File) ->
     ?run(begin
-             {ok, {Parent, _}} = resolve_path(Path),
-             create(Parent, File)
-         end);
+        {ok, {Parent, _}} = resolve_path(Path),
+        create(Parent, File)
+    end);
 create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
     ?run(begin
-             false = is_snapshot(FileName),
-             datastore:run_synchronized(?MODEL_NAME, ParentUUID,
-                 fun() ->
-                     case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
-                         {error, {not_found, _}} ->
-                             case create(FileDoc) of
-                                 {ok, UUID} ->
-                                     SavedDoc = FileDoc#document{key = UUID},
-                                     {ok, Scope} = get_scope(Parent),
-                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
-                                     ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
-                                     {ok, UUID};
-                                 {error, Reason} ->
-                                     {error, Reason}
-                             end;
-                         {ok, _} ->
-                             {error, already_exists}
-                     end
-                 end)
+        false = is_snapshot(FileName),
+        datastore:run_synchronized(?MODEL_NAME, ParentUUID,
+            fun() ->
+                case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
+                    {error, {not_found, _}} ->
+                        case create(FileDoc) of
+                            {ok, UUID} ->
+                                SavedDoc = FileDoc#document{key = UUID},
+                                {ok, Scope} = get_scope(Parent),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
+                                {ok, UUID};
+                            {error, Reason} ->
+                                {error, Reason}
+                        end;
+                    {ok, _} ->
+                        {error, already_exists}
+                end
+            end)
 
-         end).
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -194,9 +194,9 @@ get(#document{value = #file_meta{}} = Document) ->
     {ok, Document};
 get({path, Path}) ->
     ?run(begin
-             {ok, {Doc, _}} = resolve_path(Path),
-             {ok, Doc}
-         end);
+        {ok, {Doc, _}} = resolve_path(Path),
+        {ok, Doc}
+    end);
 get(?ROOT_DIR_UUID) ->
     {ok, #document{key = ?ROOT_DIR_UUID, value =
     #file_meta{name = ?ROOT_DIR_NAME, is_scope = true, mode = 8#111, uid = ?ROOT_USER_ID}}};
@@ -213,28 +213,28 @@ delete({uuid, Key}) ->
     delete(Key);
 delete(#document{value = #file_meta{name = FileName}, key = Key}) ->
     ?run(begin
-             case datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent) of
-                 {ok, {ParentKey, ?MODEL_NAME}} ->
-                     ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME, FileName);
-                 _ ->
-                     ok
-             end,
-             datastore:delete(?STORE_LEVEL, ?MODULE, Key)
-         end);
+        case datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent) of
+            {ok, {ParentKey, ?MODEL_NAME}} ->
+                ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME, FileName);
+            _ ->
+                ok
+        end,
+        datastore:delete(?STORE_LEVEL, ?MODULE, Key)
+    end);
 delete({path, Path}) ->
     ?run(begin
-             {ok, {#document{} = Document, _}} = resolve_path(Path),
-             delete(Document)
-         end);
+        {ok, {#document{} = Document, _}} = resolve_path(Path),
+        delete(Document)
+    end);
 delete(Key) ->
     ?run(begin
-             case get(Key) of
-                 {ok, #document{} = Document} ->
-                     delete(Document);
-                 {error, {not_found, _}} ->
-                     ok
-             end
-         end).
+        case get(Key) of
+            {ok, #document{} = Document} ->
+                delete(Document);
+            {error, {not_found, _}} ->
+                ok
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -267,8 +267,15 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(files, [
+        {onedata_user, create},
+        {onedata_user, save},
+        {onedata_user, update},
+        {file_meta, save},
+        {file_meta, create},
+        {file_meta, delete},
+        {file_meta, update}
+    ], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -285,6 +292,10 @@ model_init() ->
     setup_onedata_user(UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
     setup_onedata_user(UUID);
+%% @TODO temporary solution, move to events for changes in files
+'after'(file_meta, Method, ?GLOBAL_ONLY_LEVEL, Context, ReturnValue) ->
+    file_data_backend:process_file_meta_change(Method, Context, ReturnValue),
+    ok;
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -309,35 +320,35 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, [#child_link{}]} | {error, Reason :: term()}.
 list_children(Entry, Offset, Count) ->
     ?run(begin
-             {ok, #document{} = File} = get(Entry),
-             Res = datastore:foreach_link(?LINK_STORE_LEVEL, File,
-                 fun
-                     (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
-                         Acc;
-                     (LinkName, {_Key, ?MODEL_NAME}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
-                         case is_snapshot(LinkName) of
-                             true ->
-                                 {Skip, Count1, Acc};
-                             false ->
-                                 {Skip - 1, Count1, Acc}
-                         end;
-                     (LinkName, {Key, ?MODEL_NAME}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
-                         case is_snapshot(LinkName) of
-                             true ->
-                                 {0, Count1, Acc};
-                             false ->
-                                 {0, Count1 - 1, [#child_link{uuid = Key, name = LinkName} | Acc]}
-                         end;
-                     (_LinkName, _LinkTarget, AccIn) ->
-                         AccIn
-                 end, {Offset, Count, []}),
-             case Res of
-                 {ok, {_, _, UUIDs}} ->
-                     {ok, UUIDs};
-                 {error, Reason} ->
-                     {error, Reason}
-             end
-         end).
+        {ok, #document{} = File} = get(Entry),
+        Res = datastore:foreach_link(?LINK_STORE_LEVEL, File,
+            fun
+                (_LinkName, _LinkTarget, {_, 0, _} = Acc) ->
+                    Acc;
+                (LinkName, {_Key, ?MODEL_NAME}, {Skip, Count1, Acc}) when is_binary(LinkName), Skip > 0 ->
+                    case is_snapshot(LinkName) of
+                        true ->
+                            {Skip, Count1, Acc};
+                        false ->
+                            {Skip - 1, Count1, Acc}
+                    end;
+                (LinkName, {Key, ?MODEL_NAME}, {0, Count1, Acc}) when is_binary(LinkName), Count > 0 ->
+                    case is_snapshot(LinkName) of
+                        true ->
+                            {0, Count1, Acc};
+                        false ->
+                            {0, Count1 - 1, [#child_link{uuid = Key, name = LinkName} | Acc]}
+                    end;
+                (_LinkName, _LinkTarget, AccIn) ->
+                    AccIn
+            end, {Offset, Count, []}),
+        case Res of
+            {ok, {_, _, UUIDs}} ->
+                {ok, UUIDs};
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -348,15 +359,15 @@ list_children(Entry, Offset, Count) ->
 -spec get_locations(entry()) -> {ok, [datastore:key()]} | datastore:get_error().
 get_locations(Entry) ->
     ?run(begin
-             {ok, #document{} = File} = get(Entry),
-             datastore:foreach_link(?LINK_STORE_LEVEL, File,
-                 fun
-                     (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
-                         [Key | AccIn];
-                     (_LinkName, _LinkTarget, AccIn) ->
-                         AccIn
-                 end, [])
-         end).
+        {ok, #document{} = File} = get(Entry),
+        datastore:foreach_link(?LINK_STORE_LEVEL, File,
+            fun
+                (<<?LOCATION_PREFIX, _/binary>>, {Key, file_location}, AccIn) ->
+                    [Key | AccIn];
+                (_LinkName, _LinkTarget, AccIn) ->
+                    AccIn
+            end, [])
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -366,15 +377,15 @@ get_locations(Entry) ->
 -spec get_parent(Entry :: entry()) -> {ok, datastore:document()} | datastore:get_error().
 get_parent(Entry) ->
     ?run(begin
-             case get(Entry) of
-                 {ok, #document{key = ?ROOT_DIR_UUID}} = RootResp ->
-                     RootResp;
-                 {ok, #document{key = Key}} ->
-                     {ok, {ParentKey, ?MODEL_NAME}} =
-                         datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
-                     get({uuid, ParentKey})
-             end
-         end).
+        case get(Entry) of
+            {ok, #document{key = ?ROOT_DIR_UUID}} = RootResp ->
+                RootResp;
+            {ok, #document{key = Key}} ->
+                {ok, {ParentKey, ?MODEL_NAME}} =
+                    datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
+                get({uuid, ParentKey})
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -384,9 +395,9 @@ get_parent(Entry) ->
 -spec get_ancestors(Entry :: entry()) -> {ok, [uuid()]} | datastore:get_error().
 get_ancestors(Entry) ->
     ?run(begin
-             {ok, #document{key = Key}} = get(Entry),
-             {ok, get_ancestors2(Key, [])}
-         end).
+        {ok, #document{key = Key}} = get(Entry),
+        {ok, get_ancestors2(Key, [])}
+    end).
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(Key, Acc) ->
@@ -404,8 +415,8 @@ gen_path({path, Path}) when is_binary(Path) ->
     {ok, Path};
 gen_path(Entry) ->
     ?run(begin
-             gen_path2(Entry, [])
-         end).
+        gen_path2(Entry, [])
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -433,28 +444,28 @@ resolve_path(Path) ->
 -spec resolve_path(Parent :: entry(), path()) -> {ok, {datastore:document(), [uuid()]}} | datastore:generic_error().
 resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
     ?run(begin
-             {ok, #document{key = RootUUID} = Root} = get(ParentEntry),
-             case fslogic_path:split(Path) of
-                 [] ->
-                     {ok, {Root, [RootUUID]}};
-                 Tokens ->
-                     case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
-                         {ok, {Leaf, KeyPath}} ->
-                             [_ | [RealParentUUID | _]] = lists:reverse([RootUUID | KeyPath]),
-                             {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
-                             case ParentUUID of
-                                 RealParentUUID ->
-                                     {ok, {Leaf, [RootUUID | KeyPath]}};
-                                 _ ->
-                                     {error, ghost_file}
-                             end;
-                         {error, link_not_found} -> %% Map links errors to document errors
-                             {error, {not_found, ?MODEL_NAME}};
-                         {error, Reason} ->
-                             {error, Reason}
-                     end
-             end
-         end).
+        {ok, #document{key = RootUUID} = Root} = get(ParentEntry),
+        case fslogic_path:split(Path) of
+            [] ->
+                {ok, {Root, [RootUUID]}};
+            Tokens ->
+                case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
+                    {ok, {Leaf, KeyPath}} ->
+                        [_ | [RealParentUUID | _]] = lists:reverse([RootUUID | KeyPath]),
+                        {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
+                        case ParentUUID of
+                            RealParentUUID ->
+                                {ok, {Leaf, [RootUUID | KeyPath]}};
+                            _ ->
+                                {error, ghost_file}
+                        end;
+                    {error, link_not_found} -> %% Map links errors to document errors
+                        {error, {not_found, ?MODEL_NAME}};
+                    {error, Reason} ->
+                        {error, Reason}
+                end
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -465,16 +476,16 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
 -spec rename(entry(), {name, name()} | {path, path()}) -> ok | datastore:generic_error().
 rename({path, Path}, Op) ->
     ?run(begin
-             {ok, {Subj, KeyPath}} = resolve_path(Path),
-             [_ | [ParentUUID | _]] = lists:reverse(KeyPath),
-             rename3(Subj, ParentUUID, Op)
-         end);
+        {ok, {Subj, KeyPath}} = resolve_path(Path),
+        [_ | [ParentUUID | _]] = lists:reverse(KeyPath),
+        rename3(Subj, ParentUUID, Op)
+    end);
 rename(Entry, Op) ->
     ?run(begin
-             {ok, Subj} = get(Entry),
-             {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Subj, parent),
-             rename3(Subj, ParentUUID, Op)
-         end).
+        {ok, Subj} = get(Entry),
+        {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Subj, parent),
+        rename3(Subj, ParentUUID, Op)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -488,9 +499,9 @@ get_scope(#document{value = #file_meta{is_scope = false}} = Document) ->
     datastore:fetch_link_target(?LINK_STORE_LEVEL, Document, scope);
 get_scope(Entry) ->
     ?run(begin
-             {ok, Doc} = get(Entry),
-             get_scope(Doc)
-         end).
+        {ok, Doc} = get(Entry),
+        get_scope(Doc)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -536,7 +547,7 @@ setup_onedata_user(UUID) ->
                                 ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                             }})
             end
-                      end, Spaces),
+        end, Spaces),
 
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
             #document{key = fslogic_uuid:default_space_uuid(UUID),
@@ -594,9 +605,9 @@ to_uuid(#document{key = UUID}) ->
     {ok, UUID};
 to_uuid({path, Path}) ->
     ?run(begin
-             {ok, {Doc, _}} = resolve_path(Path),
-             to_uuid(Doc)
-         end).
+        {ok, {Doc, _}} = resolve_path(Path),
+        to_uuid(Doc)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -638,29 +649,29 @@ is_spaces_base_dir(#document{key = Key}) ->
     ok | datastore:generic_error().
 rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-             {ok, FileUUID} = update(Subject, #{name => NewName}),
-             ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, {FileUUID, ?MODEL_NAME}}),
-             ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName),
-             ok
-         end);
+        {ok, FileUUID} = update(Subject, #{name => NewName}),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, {FileUUID, ?MODEL_NAME}}),
+        ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName),
+        ok
+    end);
 rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, {path, NewPath}) ->
     ?run(begin
-             NewTokens = fslogic_path:split(NewPath),
-             [NewName | NewParentTokens] = lists:reverse(NewTokens),
-             NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
-             {ok, NewParent} = get({path, NewParentPath}),
+        NewTokens = fslogic_path:split(NewPath),
+        [NewName | NewParentTokens] = lists:reverse(NewTokens),
+        NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
+        {ok, NewParent} = get({path, NewParentPath}),
 
-             {ok, NewScope} = get_scope(NewParent),
+        {ok, NewScope} = get_scope(NewParent),
 
-             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject}),
-             {ok, FileUUID} = update(Subject, #{name => NewName}),
-             ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
-             ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject}),
+        {ok, FileUUID} = update(Subject, #{name => NewName}),
+        ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
 
-             ok = update_scopes(Subject, NewScope),
+        ok = update_scopes(Subject, NewScope),
 
-             ok
-         end).
+        ok
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -671,13 +682,13 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, 
 -spec update_scopes(Entry :: entry(), NewScope :: datastore:document()) -> ok | datastore:generic_error().
 update_scopes(Entry, #document{key = NewScopeUUID} = NewScope) ->
     ?run(begin
-             {ok, #document{key = OldScopeUUID}} = get_scope(Entry),
-             case OldScopeUUID of
-                 NewScopeUUID -> ok;
-                 _ ->
-                     set_scopes(Entry, NewScope)
-             end
-         end).
+        {ok, #document{key = OldScopeUUID}} = get_scope(Entry),
+        case OldScopeUUID of
+            NewScopeUUID -> ok;
+            _ ->
+                set_scopes(Entry, NewScope)
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -687,44 +698,44 @@ update_scopes(Entry, #document{key = NewScopeUUID} = NewScope) ->
 -spec set_scopes(entry(), datastore:document()) -> ok | datastore:generic_error().
 set_scopes(Entry, #document{key = NewScopeUUID}) ->
     ?run(begin
-             SetterFun =
-                 fun(CurrentEntry, ScopeUUID) ->
-                     {ok, CurrentUUID} = to_uuid(CurrentEntry),
-                     ok = datastore:add_links(?LINK_STORE_LEVEL, CurrentUUID, ?MODEL_NAME, {scope, {ScopeUUID, ?MODEL_NAME}})
-                 end,
+        SetterFun =
+            fun(CurrentEntry, ScopeUUID) ->
+                {ok, CurrentUUID} = to_uuid(CurrentEntry),
+                ok = datastore:add_links(?LINK_STORE_LEVEL, CurrentUUID, ?MODEL_NAME, {scope, {ScopeUUID, ?MODEL_NAME}})
+            end,
 
-             Master = self(),
-             ReceiverFun =
-                 fun Receiver() ->
-                     receive
-                         {Entry0, ScopeUUID0} ->
-                             SetterFun(Entry0, ScopeUUID0),
-                             Receiver();
-                         exit ->
-                             ok,
-                             Master ! scope_setting_done
-                     end
-                 end,
-             Setters = [spawn_link(ReceiverFun) || _ <- lists:seq(1, ?SET_SCOPER_WORKERS)],
+        Master = self(),
+        ReceiverFun =
+            fun Receiver() ->
+                receive
+                    {Entry0, ScopeUUID0} ->
+                        SetterFun(Entry0, ScopeUUID0),
+                        Receiver();
+                    exit ->
+                        ok,
+                        Master ! scope_setting_done
+                end
+            end,
+        Setters = [spawn_link(ReceiverFun) || _ <- lists:seq(1, ?SET_SCOPER_WORKERS)],
 
-             Res =
-                 try set_scopes6(Entry, NewScopeUUID, Setters, [], 0, ?SET_SCOPE_BATCH_SIZE) of
-                     Result -> Result
-                 catch
-                     _:Reason ->
-                         {error, Reason}
-                 end,
+        Res =
+            try set_scopes6(Entry, NewScopeUUID, Setters, [], 0, ?SET_SCOPE_BATCH_SIZE) of
+                Result -> Result
+            catch
+                _:Reason ->
+                    {error, Reason}
+            end,
 
-             lists:foreach(fun(Setter) ->
-                 Setter ! exit,
-                 receive
-                     scope_setting_done -> ok
-                 after 200 ->
-                     ?error("set_scopes error for entry: ~p", [Entry])
-                 end
-                           end, Setters),
-             Res
-         end).
+        lists:foreach(fun(Setter) ->
+            Setter ! exit,
+            receive
+                scope_setting_done -> ok
+            after 200 ->
+                ?error("set_scopes error for entry: ~p", [Entry])
+            end
+        end, Setters),
+        Res
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc

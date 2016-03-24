@@ -23,6 +23,7 @@
 -export([init/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([process_file_meta_change/3]).
 
 
 %%%===================================================================
@@ -239,6 +240,25 @@ delete_record(<<"file">>, Id) ->
     catch error:{badmatch, {error, eacces}} ->
         gui_error:report_warning(<<"Cannot remove file - access denied.">>)
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @todo temporal solution - events should be used instead
+%% Processes file_meta model changes and informs Ember client about changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_file_meta_change(Method :: model_behaviour:model_action(),
+    Context :: term(), ReturnValue :: term()) -> ok.
+process_file_meta_change(create, [#document{key = Id} = _Doc], _ReturnValue) ->
+    ?alert("Create: ~p", [Id]),
+    ok;
+process_file_meta_change(update, [Id, _Changes], _ReturnValue) ->
+    ?alert("Update: ~p", [Id]),
+    ok;
+process_file_meta_change(delete, [Id, _DeleteFun], _ReturnValue) ->
+    ?alert("Delete: ~p", [Id]),
+    ok.
 
 
 %%%===================================================================
