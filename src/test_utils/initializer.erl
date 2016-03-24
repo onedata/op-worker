@@ -27,7 +27,7 @@
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
-    communicator_mock/1]).
+    communicator_mock/1, clean_test_users_and_spaces_no_validate/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
@@ -56,6 +56,24 @@ clean_test_users_and_spaces(Config) ->
         clear_cache(W)
     end, DomainWorkers),
     test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
+
+
+%%TODO this function can be deleted after resolving VFS-1811 and replacing call
+%%to this function in cdmi_test_SUITE with call to clean_test_users_and_spaces.
+%%--------------------------------------------------------------------
+%% @doc Cleanup and unmocking related with users and spaces
+%%--------------------------------------------------------------------
+-spec clean_test_users_and_spaces_no_validate(Config :: list()) -> term().
+clean_test_users_and_spaces_no_validate(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    DomainWorkers = get_different_domain_workers(Config),
+
+    lists:foreach(fun(W) ->
+        initializer:teardown_sesion(W, Config),
+        clear_cache(W)
+    end, DomainWorkers),
+    test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
+
 
 clear_cache(W) ->
     A1 = rpc:call(W, caches_controller, wait_for_cache_dump, []),
