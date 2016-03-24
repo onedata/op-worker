@@ -71,9 +71,13 @@ find(<<"file">>, [FileId]) ->
         <<"file">> ->
             [];
         <<"dir">> ->
-            {ok, Chldrn} = logical_file_manager:ls(
-                SessionId, {uuid, FileId}, 0, 1000),
-            Chldrn
+            case logical_file_manager:ls(
+                SessionId, {uuid, FileId}, 0, 1000) of
+                {ok, Chldrn} ->
+                    Chldrn;
+                _ ->
+                    []
+            end
     end,
     ChildrenIds = [ChId || {ChId, _} <- Children],
     Res = [
