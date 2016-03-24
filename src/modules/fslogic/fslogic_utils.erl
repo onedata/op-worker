@@ -41,10 +41,11 @@ get_storage_type(StorageId) ->
 %% @doc Returns StorageId for given SpaceUUID
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(SpaceUUID :: binary()) -> storage:id().
+-spec get_storage_id(SpaceUUID :: file_meta:uuid()) -> storage:id().
 get_storage_id(SpaceUUID) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
+        space_storage:get(SpaceId),
     StorageId.
 
 
@@ -52,7 +53,8 @@ get_storage_id(SpaceUUID) ->
 %% @doc Generates storage GID based on SpaceName or SpaceUUID
 %% @end
 %%--------------------------------------------------------------------
--spec gen_storage_gid(SpaceName :: file_meta:name(), SpaceUUID :: file_meta:uuid()) -> non_neg_integer().
+-spec gen_storage_gid(SpaceName :: file_meta:name(),
+    SpaceUUID :: file_meta:uuid()) -> non_neg_integer().
 gen_storage_gid(SpaceName, SpaceUUID) ->
     case helpers_nif:groupname_to_gid(SpaceName) of
         {ok, GID} ->
@@ -71,8 +73,10 @@ gen_storage_uid(?ROOT_USER_ID) ->
     0;
 gen_storage_uid(ID) ->
     <<UID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
-    {ok, LowestUID} = application:get_env(?APP_NAME, lowest_generated_storage_uid),
-    {ok, HighestUID} = application:get_env(?APP_NAME, highest_generated_storage_uid),
+    {ok, LowestUID} = application:get_env(?APP_NAME,
+        lowest_generated_storage_uid),
+    {ok, HighestUID} = application:get_env(?APP_NAME,
+        highest_generated_storage_uid),
     LowestUID + UID0 rem HighestUID.
 
 

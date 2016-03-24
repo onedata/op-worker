@@ -31,8 +31,8 @@
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
-    helpers:user_ctx().
+-spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
     new_ceph_user_ctx(SessionId, SpaceUUID);
 new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
@@ -50,7 +50,8 @@ new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
 get_posix_user_ctx(?DIRECTIO_HELPER_NAME, SessionId, SpaceUUID) ->
     new_posix_user_ctx(SessionId, SpaceUUID);
 get_posix_user_ctx(_, SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
     StorageId = fslogic_utils:get_storage_id(SpaceUUID),
 
     case fslogic_utils:get_posix_user(UserId, StorageId) of
@@ -60,8 +61,8 @@ get_posix_user_ctx(_, SessionId, SpaceUUID) ->
                 gid = posix_user:gid(Credentials)
             };
         _ ->
-            {ok, Response} = get_credentials_from_luma(UserId, ?DIRECTIO_HELPER_NAME,
-                ?DIRECTIO_HELPER_NAME, SessionId),
+            {ok, Response} = get_credentials_from_luma(UserId,
+                ?DIRECTIO_HELPER_NAME, ?DIRECTIO_HELPER_NAME, SessionId),
 
             UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
@@ -80,9 +81,11 @@ get_posix_user_ctx(_, SessionId, SpaceUUID) ->
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+-spec new_ceph_user_ctx(SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
     StorageId = fslogic_utils:get_storage_id(SpaceUUID),
 
     case fslogic_utils:get_ceph_user(UserId, StorageId) of
@@ -93,7 +96,8 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
             };
         undefined ->
             StorageType = fslogic_utils:get_storage_type(StorageId),
-            {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
+                StorageId, SessionId),
 
             UserName = proplists:get_value(<<"user_name">>, Response),
             UserKey = proplists:get_value(<<"user_key">>, Response),
@@ -108,9 +112,11 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+-spec new_posix_user_ctx(SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_posix_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
     StorageId = fslogic_utils:get_storage_id(SpaceUUID),
 
     case fslogic_utils:get_posix_user(UserId, StorageId) of
@@ -122,7 +128,8 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
         _ ->
             StorageType = fslogic_utils:get_storage_type(StorageId),
 
-            {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
+                StorageId, SessionId),
 
             UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
@@ -137,9 +144,11 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_s3_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+-spec new_s3_user_ctx(SessionId :: session:id(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
 new_s3_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
+        session:get(SessionId),
     StorageId = fslogic_utils:get_storage_id(SpaceUUID),
     case fslogic_utils:get_s3_user(UserId, StorageId) of
         {ok, Credentials} ->
@@ -149,7 +158,8 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
             };
         _ ->
             StorageType = fslogic_utils:get_storage_type(StorageId),
-            {ok, Response} = get_credentials_from_luma(UserId, StorageType, StorageId, SessionId),
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
+                StorageId, SessionId),
 
             AccessKey = proplists:get_value(<<"access_key">>, Response),
             SecretKey = proplists:get_value(<<"secret_key">>, Response),
@@ -181,13 +191,16 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
         {ok, undefined} ->
             <<"{}">>;
         {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
-            {ok, UserDetails} = oz_users:get_details({user, {SrlzdMacaroon, SrlzdDMacaroons}}),
-            UserDetailsProplist = lists:zip(record_info(fields, user_details), tl(tuple_to_list(UserDetails))),
+            {ok, UserDetails} = oz_users:get_details({user, {SrlzdMacaroon,
+                SrlzdDMacaroons}}),
+            UserDetailsProplist = lists:zip(record_info(fields, user_details),
+                tl(tuple_to_list(UserDetails))),
             json_utils:encode(UserDetailsProplist)
     end,
 
     case http_client:get(
-        <<(list_to_binary(LUMAHostname))/binary, ":", (list_to_binary(LUMAPort))/binary,
+        <<(list_to_binary(LUMAHostname))/binary, ":",
+            (list_to_binary(LUMAPort))/binary,
             "/get_user_credentials?"
             "global_id=", UserId/binary,
             "&storage_type=", StorageType/binary,
@@ -217,11 +230,13 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
 %% @doc Parses LUMA response to posix user ctx
 %% @end
 %%--------------------------------------------------------------------
--spec parse_posix_ctx_from_luma(proplists:proplist(), SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
+-spec parse_posix_ctx_from_luma(proplists:proplist(),
+    SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
 parse_posix_ctx_from_luma(Response, SpaceUUID) ->
     GID = case proplists:get_value(<<"gid">>, Response) of
         undefined ->
-            {ok, #document{value = #file_meta{name = SpaceName}}} = file_meta:get({uuid, SpaceUUID}),
+            {ok, #document{value = #file_meta{name = SpaceName}}} =
+                file_meta:get({uuid, SpaceUUID}),
             fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID);
         Val ->
             Val

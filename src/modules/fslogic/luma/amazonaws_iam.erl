@@ -24,10 +24,12 @@
 %% @doc Creates new Amazon IAM user
 %% @end
 %%--------------------------------------------------------------------
--spec create_user(AdminAccessKey :: binary(), AdminSecretKey :: binary(), Host :: binary(), Region :: binary(),
-    UserName :: binary()) -> ok | {error, Reason :: term()}.
+-spec create_user(AdminAccessKey :: binary(), AdminSecretKey :: binary(),
+    Host :: binary(), Region :: binary(), UserName :: binary()) ->
+    ok | {error, Reason :: term()}.
 create_user(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
-    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region, <<"CreateUser">>,
+    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region,
+        <<"CreateUser">>,
         [{<<"UserName">>, UserName}]) of
         {ok, 200, _, _} ->
             ok;
@@ -47,18 +49,21 @@ create_user(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
 %% @doc Creates access key for given Amazon IAM user
 %% @end
 %%--------------------------------------------------------------------
--spec create_access_key(AdminAccessKey :: binary(), AdminSecretKey :: binary(), Host :: binary(),
-    Region :: binary(), UserName :: binary()) ->
+-spec create_access_key(AdminAccessKey :: binary(), AdminSecretKey :: binary(),
+    Host :: binary(), Region :: binary(), UserName :: binary()) ->
     {ok, {AccessKey :: binary(), SecretKey :: binary()}} | {error, Reason :: term()}.
 create_access_key(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
-    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region, <<"CreateAccessKey">>,
+    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region,
+        <<"CreateAccessKey">>,
         [{<<"UserName">>, UserName}]) of
         {ok, 200, _, Body} ->
             {XML, _} = xmerl_scan:string(binary_to_list(Body)),
             AccessKey = xml_val(
-                xmerl_xpath:string("/CreateAccessKeyResponse/CreateAccessKeyResult/AccessKey/AccessKeyId", XML)),
+                xmerl_xpath:string(
+                    "/CreateAccessKeyResponse/CreateAccessKeyResult/AccessKey/AccessKeyId", XML)),
             SecretKey = xml_val(
-                xmerl_xpath:string("/CreateAccessKeyResponse/CreateAccessKeyResult/AccessKey/SecretAccessKey", XML)),
+                xmerl_xpath:string(
+                    "/CreateAccessKeyResponse/CreateAccessKeyResult/AccessKey/SecretAccessKey", XML)),
             {ok, {AccessKey, SecretKey}};
         {ok, _, _, Body} ->
             {error, parse_error_response(Body)}
@@ -69,10 +74,12 @@ create_access_key(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
 %% @doc Allows user access to bucket
 %% @end
 %%--------------------------------------------------------------------
--spec allow_access_to_bucket(AdminAccessKey :: binary(), AdminSecretKey :: binary(), Host :: binary(),
-    Region :: binary(), UserName :: binary(), BucketName :: binary()) ->
+-spec allow_access_to_bucket(AdminAccessKey :: binary(),
+    AdminSecretKey :: binary(), Host :: binary(), Region :: binary(),
+    UserName :: binary(), BucketName :: binary()) ->
     ok | {error, Reason :: term()}.
-allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region, UserName, BucketName) ->
+allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region,
+    UserName, BucketName) ->
     Policy = [{<<"Version">>, <<"2012-10-17">>},
         {<<"Statement">>, [
             [{<<"Effect">>, <<"Allow">>},
@@ -85,11 +92,14 @@ allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region, UserName, B
 
     PolicyDocumentString = binary_to_list(json_utils:encode(Policy)),
     PolicyDocumentEscaped = list_to_binary(http_uri:encode(PolicyDocumentString)),
-    %% Necessary because Amazon expects '*' encoded as '%2A' which is not done by http_uri:encode
-    PolicyDocument = re:replace(PolicyDocumentEscaped, <<"[*]">>, <<"%2A">>, [{return, binary}, global]),
+    %% Necessary because Amazon expects '*' encoded as '%2A'
+    %% which is not done by http_uri:encode
+    PolicyDocument = re:replace(PolicyDocumentEscaped, <<"[*]">>, <<"%2A">>,
+        [{return, binary}, global]),
 
-    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region, <<"PutUserPolicy">>,
-        [{<<"UserName">>, UserName}, {<<"PolicyName">>, <<BucketName/binary, "-access">>},
+    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region,
+        <<"PutUserPolicy">>, [{<<"UserName">>, UserName}, {<<"PolicyName">>,
+            <<BucketName/binary, "-access">>},
             {<<"PolicyDocument">>, PolicyDocument}]) of
         {ok, 200, _, _} ->
             ok;
@@ -110,14 +120,17 @@ allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region, UserName, B
 %% http://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html
 %% @end
 %%--------------------------------------------------------------------
--spec execute_iam_query(AccessKey :: binary(), SecretKey :: binary(), Host :: binary(), Region :: binary(),
-    Action :: binary(), Params :: [{binary(), binary()}]) ->
-    {ok, integer(), list(), binary()} | {error, Reason :: term()}.
+-spec execute_iam_query(AccessKey :: binary(), SecretKey :: binary(),
+    Host :: binary(), Region :: binary(), Action :: binary(),
+    Params :: [{binary(), binary()}]) ->
+    {ok, integer(), list(), binary()} |{error, Reason :: term()}.
 execute_iam_query(AccessKey, SecretKey, Host, Region, Action, Params) ->
     {Date, Time} = erlang:universaltime(),
-    DatestampString = lists:flatten(io_lib:format("~4.10.0b~2.10.0b~2.10.0b", tuple_to_list(Date))),
+    DatestampString = lists:flatten(io_lib:format("~4.10.0b~2.10.0b~2.10.0b",
+        tuple_to_list(Date))),
     Datestamp = list_to_binary(DatestampString),
-    AmzDateString = lists:flatten(io_lib:format("~4.10.0b~2.10.0b~2.10.0bT~2.10.0b~2.10.0b~2.10.0bZ",
+    AmzDateString = lists:flatten(io_lib:format(
+        "~4.10.0b~2.10.0b~2.10.0bT~2.10.0b~2.10.0b~2.10.0bZ",
         tuple_to_list(Date) ++ tuple_to_list(Time))),
     AmzDate = list_to_binary(AmzDateString),
 
@@ -127,8 +140,10 @@ execute_iam_query(AccessKey, SecretKey, Host, Region, Action, Params) ->
     CanonicalHeaders = <<"host:", Host/binary, "\n">>,
     SignedHeaders = <<"host">>,
     Algorithm = <<"AWS4-HMAC-SHA256">>,
-    CredentialScope = <<Datestamp/binary, "/", Region/binary, "/", Service/binary, "/aws4_request">>,
-    AmzCredentialsString = binary_to_list(<<AccessKey/binary, "/", CredentialScope/binary>>),
+    CredentialScope = <<Datestamp/binary, "/", Region/binary, "/",
+        Service/binary, "/aws4_request">>,
+    AmzCredentialsString = binary_to_list(<<AccessKey/binary, "/",
+        CredentialScope/binary>>),
     AmzCredentials = list_to_binary(http_uri:encode(AmzCredentialsString)),
 
     SortedParams = lists:sort(Params ++ [
@@ -140,23 +155,30 @@ execute_iam_query(AccessKey, SecretKey, Host, Region, Action, Params) ->
         {<<"X-Amz-SignedHeaders">>, SignedHeaders}
     ]),
 
-    CanonicalQuerystring = lists:foldl(fun({Key, Val}, Acc) -> <<Acc/binary, "&", Key/binary, "=", Val/binary>> end,
+    CanonicalQuerystring = lists:foldl(fun({Key, Val}, Acc) ->
+        <<Acc/binary, "&", Key/binary, "=", Val/binary>> end,
         <<"Action=", Action/binary>>, SortedParams),
 
     PayloadHash = hexbinary(crypto:hash(sha256, "")),
-    CanonicalRequest = <<Method/binary, "\n", CanonicalURI/binary, "\n", CanonicalQuerystring/binary, "\n",
-        CanonicalHeaders/binary, "\n", SignedHeaders/binary, "\n", PayloadHash/binary>>,
+    CanonicalRequest = <<Method/binary, "\n", CanonicalURI/binary,
+        "\n", CanonicalQuerystring/binary, "\n",
+        CanonicalHeaders/binary, "\n", SignedHeaders/binary, "\n",
+        PayloadHash/binary>>,
     CanonicalRequestHash = hexbinary(crypto:hash(sha256, CanonicalRequest)),
-    StringToSign = <<Algorithm/binary, "\n", AmzDate/binary, "\n", CredentialScope/binary, "\n",
+    StringToSign = <<Algorithm/binary, "\n", AmzDate/binary, "\n",
+        CredentialScope/binary, "\n",
         CanonicalRequestHash/binary>>,
 
     SigningKey = get_signature_key(SecretKey, Datestamp, Region, Service),
     Signature = hexbinary(crypto:hmac(sha256, SigningKey, StringToSign)),
 
-    FinalQuerystring = <<CanonicalQuerystring/binary, "&X-Amz-Signature=", Signature/binary>>,
+    FinalQuerystring = <<CanonicalQuerystring/binary, "&X-Amz-Signature=",
+        Signature/binary>>,
 
-    RequestURL = <<"https://", Host/binary, CanonicalURI/binary, "?", FinalQuerystring/binary>>,
-    {ok, Status, Headers, Ref} = hackney:request(get, RequestURL, [], <<"">>, [insecure]),
+    RequestURL = <<"https://", Host/binary, CanonicalURI/binary, "?",
+        FinalQuerystring/binary>>,
+    {ok, Status, Headers, Ref} = hackney:request(get, RequestURL, [],
+        <<"">>, [insecure]),
     {ok, Body} = hackney:body(Ref),
     {ok, Status, Headers, Body}.
 
@@ -174,8 +196,8 @@ hexbinary(<<X:256/big-unsigned-integer>>) ->
 %% @doc Generates key to sign IAM Amazon request
 %% @end
 %%--------------------------------------------------------------------
--spec get_signature_key(SecretKey :: binary(), Datestamp :: binary(), Region :: binary(), Service :: binary())
-        -> binary().
+-spec get_signature_key(SecretKey :: binary(), Datestamp :: binary(),
+    Region :: binary(), Service :: binary()) -> binary().
 get_signature_key(SecretKey, Datestamp, Region, Service) ->
     KDate = crypto:hmac(sha256, <<"AWS4", SecretKey/binary>>, Datestamp),
     KRegion = crypto:hmac(sha256, KDate, Region),
@@ -187,7 +209,8 @@ get_signature_key(SecretKey, Datestamp, Region, Service) ->
 %% @doc Parses error response from Amazon IAM
 %% @end
 %%--------------------------------------------------------------------
--spec parse_error_response(Body :: binary()) -> {Code :: binary(), Message :: binary()}.
+-spec parse_error_response(Body :: binary()) ->
+    {Code :: binary(), Message :: binary()}.
 parse_error_response(Body) ->
     {XML, _} = xmerl_scan:string(binary_to_list(Body)),
     Code = xml_val(xmerl_xpath:string("/ErrorResponse/Error/Code", XML)),

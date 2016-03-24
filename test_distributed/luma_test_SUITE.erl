@@ -21,11 +21,13 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 
--export([posix_user_provider_test/1, posix_user_proxy_test/1, ceph_user_provider_test/1,
-    ceph_user_proxy_test/1, s3_user_provider_test/1, s3_user_proxy_test/1]).
+-export([posix_user_provider_test/1, posix_user_proxy_test/1,
+    ceph_user_provider_test/1, ceph_user_proxy_test/1,
+    s3_user_provider_test/1, s3_user_proxy_test/1]).
 
-all() -> ?ALL([posix_user_provider_test, posix_user_proxy_test, ceph_user_provider_test,
-    ceph_user_proxy_test, s3_user_provider_test, s3_user_proxy_test]).
+all() ->
+    ?ALL([posix_user_provider_test, posix_user_proxy_test, ceph_user_provider_test,
+        ceph_user_proxy_test, s3_user_provider_test, s3_user_proxy_test]).
 
 -define(SESSION_ID, <<"SessId">>).
 -define(POSIX_SPACE_NAME, <<"s1">>).
@@ -42,15 +44,18 @@ all() -> ?ALL([posix_user_provider_test, posix_user_proxy_test, ceph_user_provid
 
 posix_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?POSIX_SPACE_NAME]),
+    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?POSIX_SPACE_NAME]),
 
     test_utils:mock_new(Worker, file_meta),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?POSIX_SPACE_NAME}}} end),
 
-    %% each new_user_ctx invocation should return same posix ctx for posix storage type
-    PosixCtx = ?assertMatch(#posix_user_ctx{}, rpc:call(Worker, luma_provider, new_user_ctx,
-        [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
+    %% each new_user_ctx invocation should return same posix ctx
+    %% for posix storage type
+    PosixCtx = ?assertMatch(#posix_user_ctx{}, rpc:call(Worker, luma_provider,
+        new_user_ctx, [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID,
+            SpaceUUID])),
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_provider, new_user_ctx,
         [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
@@ -58,7 +63,8 @@ posix_user_provider_test(Config) ->
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_provider, get_posix_user_ctx,
         [?DIRECTIO_HELPER_NAME, ?SESSION_ID, SpaceUUID])),
 
-    %% get_posix_user_ctx should return posix context for storages different than posix
+    %% get_posix_user_ctx should return posix context for storages
+    %% different than posix
     ?assertMatch(PosixCtx, rpc:call(Worker, luma_provider, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, SpaceUUID])),
     ?assertMatch(PosixCtx, rpc:call(Worker, luma_provider, get_posix_user_ctx,
@@ -67,15 +73,20 @@ posix_user_provider_test(Config) ->
 
 posix_user_proxy_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    PosixSpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?POSIX_SPACE_NAME]),
-    CephSpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?CEPH_SPACE_NAME]),
-    S3SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?S3_SPACE_NAME]),
+    PosixSpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?POSIX_SPACE_NAME]),
+    CephSpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?CEPH_SPACE_NAME]),
+    S3SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?S3_SPACE_NAME]),
     UID = 1,
 
     %% mock LUMA server response for posix ctx
     test_utils:mock_new(Worker, http_client),
-    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) -> {ok, 200, [],
-        json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>, [{<<"uid">>, UID}]}])} end),
+    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
+        {ok, 200, [],
+            json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
+                [{<<"uid">>, UID}]}])} end),
     test_utils:mock_new(Worker, file_meta),
     %% return different space name for each space uuid
     test_utils:mock_expect(Worker, file_meta, get,
@@ -87,8 +98,10 @@ posix_user_proxy_test(Config) ->
                 {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}}
         end),
 
-    %% each invocation of new_user_ctx posix should return same posix ctx for posix storage type
-    PosixCtx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker, luma_proxy, new_user_ctx,
+    %% each invocation of new_user_ctx posix should return same posix ctx
+    %% for posix storage type
+    PosixCtx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker,
+        luma_proxy, new_user_ctx,
         [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, PosixSpaceUUID])),
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_proxy, new_user_ctx,
         [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, PosixSpaceUUID])),
@@ -102,7 +115,8 @@ posix_user_proxy_test(Config) ->
     %% for non posix storages get_posix_user_ctx should return posix ctx
 
     %% get_posix_user_ctx should return same ctx on every invocation
-    PosixCephCtx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
+    PosixCephCtx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker,
+        luma_proxy, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, CephSpaceUUID])),
     ?assertEqual(PosixCephCtx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, CephSpaceUUID])),
@@ -110,7 +124,8 @@ posix_user_proxy_test(Config) ->
     test_utils:mock_num_calls(Worker, http_client, get, 4, 2),
 
     %% get_posix_user_ctx should return same ctx on every invocation
-    PosixS3Ctx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
+    PosixS3Ctx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker,
+        luma_proxy, get_posix_user_ctx,
         [?S3_HELPER_NAME, ?SESSION_ID, S3SpaceUUID])),
     ?assertEqual(PosixS3Ctx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?S3_HELPER_NAME, ?SESSION_ID, S3SpaceUUID])),
@@ -118,7 +133,8 @@ posix_user_proxy_test(Config) ->
     %% user ctx from LUMA server should be requested only once
     test_utils:mock_num_calls(Worker, http_client, get, 4, 3),
 
-    %% posix ctx for each storage type should differ on gid due to its generation from space name
+    %% posix ctx for each storage type should differ on gid due to
+    %% its generation from space name
     ?assertNotEqual(PosixCtx#posix_user_ctx.gid, PosixCephCtx#posix_user_ctx.gid),
     ?assertNotEqual(PosixCtx#posix_user_ctx.gid, PosixS3Ctx#posix_user_ctx.gid),
     ?assertNotEqual(PosixCephCtx#posix_user_ctx.gid, PosixS3Ctx#posix_user_ctx.gid).
@@ -126,28 +142,32 @@ posix_user_proxy_test(Config) ->
 
 ceph_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?CEPH_SPACE_NAME]),
+    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?CEPH_SPACE_NAME]),
     test_utils:mock_new(Worker, file_meta),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?CEPH_SPACE_NAME}}} end),
 
     %% each new_user_ctx invocation should return same ceph ctx for ceph storage type
-    CephCtx = ?assertMatch(#ceph_user_ctx{}, rpc:call(Worker, luma_provider, new_user_ctx,
-        [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
+    CephCtx = ?assertMatch(#ceph_user_ctx{}, rpc:call(Worker, luma_provider,
+        new_user_ctx, [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID,
+            SpaceUUID])),
     ?assertEqual(CephCtx, rpc:call(Worker, luma_provider, new_user_ctx,
         [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])).
 
 ceph_user_proxy_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?CEPH_SPACE_NAME]),
+    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?CEPH_SPACE_NAME]),
     UserName = <<"username">>,
     UserKey = <<"key">>,
 
     %% mock LUMA server response for ceph ctx
     test_utils:mock_new(Worker, http_client),
-    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) -> {ok, 200, [],
-        json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
-            [{<<"user_name">>, UserName}, {<<"user_key">>, UserKey}]}])} end),
+    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
+        {ok, 200, [],
+            json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
+                [{<<"user_name">>, UserName}, {<<"user_key">>, UserKey}]}])} end),
 
     %% each new_user_ctx invocation should return same ceph ctx for ceph storage type
     CephCtx = ?assertMatch(#ceph_user_ctx{user_name = UserName, user_key = UserKey},
@@ -161,23 +181,27 @@ ceph_user_proxy_test(Config) ->
 
 s3_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?S3_SPACE_NAME]),
+    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?S3_SPACE_NAME]),
     AccessKey = <<"AccessKey">>,
     SecretKey = <<"SecretKey">>,
 
     %% mock invocation of amazonaws_iam API calls
     test_utils:mock_new(Worker, amazonaws_iam),
-    test_utils:mock_expect(Worker, amazonaws_iam, create_user, fun(_, _, _, _, _) -> ok end),
-    test_utils:mock_expect(Worker, amazonaws_iam, create_access_key, fun(_, _, _, _, _) ->
-        {ok, {AccessKey, SecretKey}} end),
-    test_utils:mock_expect(Worker, amazonaws_iam, allow_access_to_bucket, fun(_, _, _, _, _, _) -> ok end),
+    test_utils:mock_expect(Worker, amazonaws_iam, create_user,
+        fun(_, _, _, _, _) -> ok end),
+    test_utils:mock_expect(Worker, amazonaws_iam, create_access_key,
+        fun(_, _, _, _, _) -> {ok, {AccessKey, SecretKey}} end),
+    test_utils:mock_expect(Worker, amazonaws_iam, allow_access_to_bucket,
+        fun(_, _, _, _, _, _) -> ok end),
 
     test_utils:mock_new(Worker, file_meta),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
 
     %% each new_user_ctx invocation should return same s3 ctx for s3 storage type
-    S3Ctx = ?assertMatch(#s3_user_ctx{access_key = AccessKey, secret_key = SecretKey},
+    S3Ctx = ?assertMatch(#s3_user_ctx{access_key = AccessKey,
+        secret_key = SecretKey},
         rpc:call(Worker, luma_provider, new_user_ctx,
             [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertMatch(S3Ctx, rpc:call(Worker, luma_provider, new_user_ctx,
@@ -190,17 +214,21 @@ s3_user_provider_test(Config) ->
 
 s3_user_proxy_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?S3_SPACE_NAME]),
+    SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid,
+        [?S3_SPACE_NAME]),
     AccessKey = <<"AccessKey">>,
     SecretKey = <<"SecretKey">>,
 
     test_utils:mock_new(Worker, http_client),
-    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) -> {ok, 200, [],
-        json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
-            [{<<"access_key">>, AccessKey}, {<<"secret_key">>, SecretKey}]}])} end),
+    test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) ->
+        {ok, 200, [],
+            json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
+                [{<<"access_key">>, AccessKey},
+                    {<<"secret_key">>, SecretKey}]}])} end),
 
     %% each new_user_ctx invocation should return same s3 ctx for s3 storage type
-    S3Ctx = ?assertMatch(#s3_user_ctx{access_key = AccessKey, secret_key = SecretKey},
+    S3Ctx = ?assertMatch(#s3_user_ctx{access_key = AccessKey,
+        secret_key = SecretKey},
         rpc:call(Worker, luma_proxy, new_user_ctx,
             [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertEqual(S3Ctx, rpc:call(Worker, luma_proxy, new_user_ctx,
@@ -219,12 +247,13 @@ init_per_suite(Config) ->
     [Worker | _] = ?config(op_worker_nodes, EnvUpResult),
     Self = self(),
     Iden = #identity{user_id = ?USER_ID},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager, reuse_or_create_fuse_session, [?SESSION_ID, Iden, Self])),
+    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
+        reuse_or_create_fuse_session, [?SESSION_ID, Iden, Self])),
 
     create_space(Worker, ?POSIX_STORAGE_NAME, ?POSIX_SPACE_NAME),
     create_space(Worker, ?CEPH_STORAGE_NAME, ?CEPH_SPACE_NAME),
     create_space(Worker, ?S3_STORAGE_NAME, ?S3_SPACE_NAME),
-    
+
     EnvUpResult.
 
 end_per_suite(Config) ->
@@ -240,8 +269,10 @@ end_per_testcase(_, Config) ->
     ?assertMatch(ok, rpc:call(Worker, posix_user, delete, [?USER_ID])).
 
 create_space(Worker, StorageName, SpaceName) ->
-    {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker, storage, get_by_name, [StorageName])),
+    {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
+        storage, get_by_name, [StorageName])),
     StorageId = rpc:call(Worker, storage, id, [Storage]),
-    {ok, SpaceName} = ?assertMatch({ok, _}, rpc:call(Worker, space_storage, add, [SpaceName, StorageId])),
+    {ok, SpaceName} = ?assertMatch({ok, _}, rpc:call(Worker,
+        space_storage, add, [SpaceName, StorageId])),
     ?assertMatch({ok, _}, rpc:call(Worker, space_storage, get, [SpaceName])).
 
