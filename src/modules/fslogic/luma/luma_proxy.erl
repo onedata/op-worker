@@ -190,9 +190,9 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
     UserDetailsJSON = case session:get_auth(SessionId) of
         {ok, undefined} ->
             <<"{}">>;
-        {ok, #auth{macaroon = SrlzdMacaroon, disch_macaroons = SrlzdDMacaroons}} ->
-            {ok, UserDetails} = oz_users:get_details({user, {SrlzdMacaroon,
-                SrlzdDMacaroons}}),
+        {ok, #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}} ->
+            {ok, UserDetails} = oz_users:get_details({user,
+                {Macaroon, DMacaroons}}),
             UserDetailsProplist = lists:zip(record_info(fields, user_details),
                 tl(tuple_to_list(UserDetails))),
             json_utils:encode(UserDetailsProplist)

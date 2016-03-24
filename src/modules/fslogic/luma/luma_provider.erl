@@ -160,16 +160,15 @@ create_ceph_user(UserId, StorageId) ->
     {ok, #document{value = #storage{helpers = [#helper_init{args = Args} | _]}}} =
         storage:get(StorageId),
 
-    {ok, {UserName, UserKey}} = luma_nif:create_ceph_user(binary_to_list(UserId),
-        binary_to_list(maps:get(<<"mon_host">>, Args)),
-        binary_to_list(maps:get(<<"cluster_name">>, Args, <<"Ceph">>)),
-        binary_to_list(maps:get(<<"pool_name">>, Args)),
-        binary_to_list(maps:get(<<"user_name">>, Args)),
-        binary_to_list(maps:get(<<"user_key">>, Args))
+    {ok, {UserName, UserKey}} = luma_nif:create_ceph_user(UserId,
+        maps:get(<<"mon_host">>, Args),
+        maps:get(<<"cluster_name">>, Args, <<"Ceph">>),
+        maps:get(<<"pool_name">>, Args),
+        maps:get(<<"user_name">>, Args),
+        maps:get(<<"user_key">>, Args)
     ),
 
-    {ok, #ceph_user_ctx{user_name = list_to_binary(UserName),
-        user_key = list_to_binary(UserKey)}}.
+    {ok, #ceph_user_ctx{user_name = UserName, user_key = UserKey}}.
 
 
 %%--------------------------------------------------------------------

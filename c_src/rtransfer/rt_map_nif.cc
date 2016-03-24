@@ -6,7 +6,7 @@
  * cited in 'LICENSE.txt'.
  */
 
-#include "nifpp.h"
+#include "../nifpp.h"
 #include "rt_map.h"
 #include "rt_local_term.h"
 #include "rt_exception.h"

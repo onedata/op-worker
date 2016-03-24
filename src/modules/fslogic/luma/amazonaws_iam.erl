@@ -159,37 +159,31 @@ execute_iam_query(AccessKey, SecretKey, Host, Region, Action, Params) ->
         <<Acc/binary, "&", Key/binary, "=", Val/binary>> end,
         <<"Action=", Action/binary>>, SortedParams),
 
-    PayloadHash = hexbinary(crypto:hash(sha256, "")),
+    PayloadHash = list_to_binary(hex_utils:to_hex(crypto:hash(sha256, ""))),
     CanonicalRequest = <<Method/binary, "\n", CanonicalURI/binary,
         "\n", CanonicalQuerystring/binary, "\n",
         CanonicalHeaders/binary, "\n", SignedHeaders/binary, "\n",
         PayloadHash/binary>>,
-    CanonicalRequestHash = hexbinary(crypto:hash(sha256, CanonicalRequest)),
+    CanonicalRequestHash = list_to_binary(hex_utils:to_hex(crypto:hash(sha256,
+        CanonicalRequest))),
     StringToSign = <<Algorithm/binary, "\n", AmzDate/binary, "\n",
         CredentialScope/binary, "\n",
         CanonicalRequestHash/binary>>,
 
     SigningKey = get_signature_key(SecretKey, Datestamp, Region, Service),
-    Signature = hexbinary(crypto:hmac(sha256, SigningKey, StringToSign)),
+    Signature = list_to_binary(hex_utils:to_hex(crypto:hmac(sha256, SigningKey,
+        StringToSign))),
 
     FinalQuerystring = <<CanonicalQuerystring/binary, "&X-Amz-Signature=",
         Signature/binary>>,
 
     RequestURL = <<"https://", Host/binary, CanonicalURI/binary, "?",
         FinalQuerystring/binary>>,
+    %% TODO VFS-1674 Change hackney use for Amazon IAM to http_client
     {ok, Status, Headers, Ref} = hackney:request(get, RequestURL, [],
         <<"">>, [insecure]),
     {ok, Body} = hackney:body(Ref),
     {ok, Status, Headers, Body}.
-
-
-%%--------------------------------------------------------------------
-%% @doc Converts binary to base16 representation
-%% @end
-%%--------------------------------------------------------------------
--spec hexbinary(binary()) -> binary().
-hexbinary(<<X:256/big-unsigned-integer>>) ->
-    list_to_binary(lists:flatten(io_lib:format("~64.16.0b", [X]))).
 
 
 %%--------------------------------------------------------------------

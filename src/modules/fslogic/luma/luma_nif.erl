@@ -26,8 +26,8 @@
 %% Creates new user in Ceph
 %% @end
 %%--------------------------------------------------------------------
--spec create_ceph_user(string(), string(), string(), string(), string(), string())
-        -> {ok, {string(), string()}} | {error, string()}.
+-spec create_ceph_user(binary(), binary(), binary(), binary(), binary(), binary())
+        -> {ok, {binary(), binary()}} | {error, binary()}.
 create_ceph_user(_UserId, _MonHost, _ClusterName, _PoolName, _CephAdmin, _CephAdminKey) ->
     erlang:nif_error(luma_nif_not_loaded).
 
