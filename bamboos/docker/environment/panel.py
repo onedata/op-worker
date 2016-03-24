@@ -27,8 +27,8 @@ def panel_erl_node_name(node_name, uid):
     return common.format_erl_node_name('onepanel', hostname)
 
 
-def panel_provider_domain(uid):
-    """Formats provider domain for a docker hosting onepanel."""
+def panel_application_domain(uid):
+    """Formats application domain for a docker hosting onepanel."""
     return common.format_hostname([], uid)
 
 
@@ -40,7 +40,7 @@ def _tweak_config(config, name, uid):
     vm_args['name'] = panel_erl_node_name(name, uid)
 
     sys_config = cfg['nodes']['node']['sys.config']['onepanel']
-    sys_config['provider_domain'] = {"string": panel_provider_domain(uid)}
+    sys_config['application_domain'] = {"string": panel_application_domain(uid)}
 
     return cfg
 
