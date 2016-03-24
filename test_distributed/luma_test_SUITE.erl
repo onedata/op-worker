@@ -48,12 +48,17 @@ posix_user_provider_test(Config) ->
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?POSIX_SPACE_NAME}}} end),
 
+    %% each new_user_ctx invocation should return same posix ctx for posix storage type
     PosixCtx = ?assertMatch(#posix_user_ctx{}, rpc:call(Worker, luma_provider, new_user_ctx,
         [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_provider, new_user_ctx,
         [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
+
+    %% get_posix_user_ctx should return same ctx as new_user_ctx
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_provider, get_posix_user_ctx,
         [?DIRECTIO_HELPER_NAME, ?SESSION_ID, SpaceUUID])),
+
+    %% get_posix_user_ctx should return posix context for storages different than posix
     ?assertMatch(PosixCtx, rpc:call(Worker, luma_provider, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, SpaceUUID])),
     ?assertMatch(PosixCtx, rpc:call(Worker, luma_provider, get_posix_user_ctx,
@@ -67,10 +72,12 @@ posix_user_proxy_test(Config) ->
     S3SpaceUUID = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [?S3_SPACE_NAME]),
     UID = 1,
 
+    %% mock LUMA server response for posix ctx
     test_utils:mock_new(Worker, http_client),
     test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) -> {ok, 200, [],
         json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>, [{<<"uid">>, UID}]}])} end),
     test_utils:mock_new(Worker, file_meta),
+    %% return different space name for each space uuid
     test_utils:mock_expect(Worker, file_meta, get,
         fun({uuid, SpaceUUID}) when SpaceUUID == PosixSpaceUUID ->
             {ok, #document{value = #file_meta{name = ?POSIX_SPACE_NAME}}};
@@ -80,29 +87,42 @@ posix_user_proxy_test(Config) ->
                 {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}}
         end),
 
+    %% each invocation of new_user_ctx posix should return same posix ctx for posix storage type
     PosixCtx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker, luma_proxy, new_user_ctx,
         [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, PosixSpaceUUID])),
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_proxy, new_user_ctx,
         [#helper_init{name = ?DIRECTIO_HELPER_NAME}, ?SESSION_ID, PosixSpaceUUID])),
+
+    %% get_posix_user_ctx should return same ctx as new_user_ctx
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?DIRECTIO_HELPER_NAME, ?SESSION_ID, PosixSpaceUUID])),
+    %% user ctx from LUMA server should be requested only once
     test_utils:mock_num_calls(Worker, http_client, get, 4, 1),
 
+    %% for non posix storages get_posix_user_ctx should return posix ctx
+
+    %% get_posix_user_ctx should return same ctx on every invocation
     PosixCephCtx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, CephSpaceUUID])),
     ?assertEqual(PosixCephCtx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, CephSpaceUUID])),
+    %% user ctx from LUMA server should be requested only once
+    test_utils:mock_num_calls(Worker, http_client, get, 4, 2),
 
+    %% get_posix_user_ctx should return same ctx on every invocation
     PosixS3Ctx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?S3_HELPER_NAME, ?SESSION_ID, S3SpaceUUID])),
     ?assertEqual(PosixS3Ctx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?S3_HELPER_NAME, ?SESSION_ID, S3SpaceUUID])),
 
+    %% user ctx from LUMA server should be requested only once
+    test_utils:mock_num_calls(Worker, http_client, get, 4, 3),
+
+    %% posix ctx for each storage type should differ on gid due to its generation from space name
     ?assertNotEqual(PosixCtx#posix_user_ctx.gid, PosixCephCtx#posix_user_ctx.gid),
     ?assertNotEqual(PosixCtx#posix_user_ctx.gid, PosixS3Ctx#posix_user_ctx.gid),
-    ?assertNotEqual(PosixCephCtx#posix_user_ctx.gid, PosixS3Ctx#posix_user_ctx.gid),
+    ?assertNotEqual(PosixCephCtx#posix_user_ctx.gid, PosixS3Ctx#posix_user_ctx.gid).
 
-    test_utils:mock_num_calls(Worker, http_client, get, 4, 3).
 
 ceph_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -111,6 +131,7 @@ ceph_user_provider_test(Config) ->
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?CEPH_SPACE_NAME}}} end),
 
+    %% each new_user_ctx invocation should return same ceph ctx for ceph storage type
     CephCtx = ?assertMatch(#ceph_user_ctx{}, rpc:call(Worker, luma_provider, new_user_ctx,
         [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertEqual(CephCtx, rpc:call(Worker, luma_provider, new_user_ctx,
@@ -122,17 +143,20 @@ ceph_user_proxy_test(Config) ->
     UserName = <<"username">>,
     UserKey = <<"key">>,
 
+    %% mock LUMA server response for ceph ctx
     test_utils:mock_new(Worker, http_client),
     test_utils:mock_expect(Worker, http_client, get, fun(_, _, _, _) -> {ok, 200, [],
         json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
             [{<<"user_name">>, UserName}, {<<"user_key">>, UserKey}]}])} end),
 
+    %% each new_user_ctx invocation should return same ceph ctx for ceph storage type
     CephCtx = ?assertMatch(#ceph_user_ctx{user_name = UserName, user_key = UserKey},
         rpc:call(Worker, luma_proxy, new_user_ctx,
             [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertEqual(CephCtx, rpc:call(Worker, luma_proxy, new_user_ctx,
         [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
+    %% LUMA server should be requested for ctx only once
     test_utils:mock_num_calls(Worker, http_client, get, 4, 1).
 
 s3_user_provider_test(Config) ->
@@ -141,6 +165,7 @@ s3_user_provider_test(Config) ->
     AccessKey = <<"AccessKey">>,
     SecretKey = <<"SecretKey">>,
 
+    %% mock invocation of amazonaws_iam API calls
     test_utils:mock_new(Worker, amazonaws_iam),
     test_utils:mock_expect(Worker, amazonaws_iam, create_user, fun(_, _, _, _, _) -> ok end),
     test_utils:mock_expect(Worker, amazonaws_iam, create_access_key, fun(_, _, _, _, _) ->
@@ -151,12 +176,14 @@ s3_user_provider_test(Config) ->
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
         {ok, #document{value = #file_meta{name = ?S3_SPACE_NAME}}} end),
 
+    %% each new_user_ctx invocation should return same s3 ctx for s3 storage type
     S3Ctx = ?assertMatch(#s3_user_ctx{access_key = AccessKey, secret_key = SecretKey},
         rpc:call(Worker, luma_provider, new_user_ctx,
             [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertMatch(S3Ctx, rpc:call(Worker, luma_provider, new_user_ctx,
         [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
+    %% amazonaws_iam API should be requested only once for new user
     test_utils:mock_num_calls(Worker, amazonaws_iam, create_user, 5, 1),
     test_utils:mock_num_calls(Worker, amazonaws_iam, create_access_key, 5, 1),
     test_utils:mock_num_calls(Worker, amazonaws_iam, allow_access_to_bucket, 6, 1).
@@ -172,12 +199,14 @@ s3_user_proxy_test(Config) ->
         json_utils:encode([{<<"status">>, <<"success">>}, {<<"data">>,
             [{<<"access_key">>, AccessKey}, {<<"secret_key">>, SecretKey}]}])} end),
 
+    %% each new_user_ctx invocation should return same s3 ctx for s3 storage type
     S3Ctx = ?assertMatch(#s3_user_ctx{access_key = AccessKey, secret_key = SecretKey},
         rpc:call(Worker, luma_proxy, new_user_ctx,
             [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
     ?assertEqual(S3Ctx, rpc:call(Worker, luma_proxy, new_user_ctx,
         [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
+    %% LUMA server should be requested for ctx only once
     test_utils:mock_num_calls(Worker, http_client, get, 4, 1).
 
 
