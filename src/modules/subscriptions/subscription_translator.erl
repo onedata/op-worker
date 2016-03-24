@@ -79,12 +79,22 @@ props_to_value(onedata_user, Props) ->
     };
 props_to_value(onedata_group, Props) ->
     #onedata_group{
-        name = proplists:get_value(<<"name">>, Props)
+        name = proplists:get_value(<<"name">>, Props),
+        spaces = proplists:get_value(<<"spaces">>, Props),
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props))
     };
 props_to_value(space_info, Props) ->
     #space_info{
         id = proplists:get_value(<<"id">>, Props),
-        name = proplists:get_value(<<"name">>, Props)
+        name = proplists:get_value(<<"name">>, Props),
+        providers = proplists:get_value(<<"providers">>, Props),
+        size = proplists:get_value(<<"size">>, Props),
+        groups = process_ids_with_privileges(proplists:get_value(<<"groups">>, Props)),
+        users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props))
+    };
+props_to_value(provider_info, Props) ->
+    #provider_info{
+        client_name = proplists:get_value(<<"client_name">>, Props)
     }.
 
 
@@ -94,6 +104,8 @@ props_to_value(space_info, Props) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec type_to_model(ModelRaw :: binary()) -> subscriptions:model().
+type_to_model(<<"provider">>) ->
+    provider_info;
 type_to_model(<<"space">>) ->
     space_info;
 type_to_model(<<"group">>) ->
@@ -102,3 +114,18 @@ type_to_model(<<"user">>) ->
     onedata_user;
 type_to_model(_Type) ->
     ?error("Unexpected update type ~p", [_Type]).
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% For each ID converts binary privileges to atoms.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_ids_with_privileges([{ID :: binary(), Privileges :: [binary()]}]) ->
+    [{ID1 :: binary(), Privileges1 :: [atom()]}].
+process_ids_with_privileges(Raw) ->
+    lists:map(fun({ID, Binaries}) ->
+        {ID, lists:map(fun(Bin) ->
+            binary_to_atom(Bin, latin1)
+        end, Binaries)}
+    end, Raw).

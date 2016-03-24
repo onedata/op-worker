@@ -108,6 +108,8 @@ get_revisions(onedata_user, Record) ->
     Record#onedata_user.revision_history;
 get_revisions(onedata_group, Record) ->
     Record#onedata_group.revision_history;
+get_revisions(provider_info, Record) ->
+    Record#provider_info.revision_history;
 get_revisions(_Model, _Record) ->
     {error, get_revisions_not_implemented}.
 
@@ -125,5 +127,7 @@ set_revisions(onedata_user, Record, Revisions) ->
     Record#onedata_user{revision_history = Revisions};
 set_revisions(onedata_group, Record, Revisions) ->
     Record#onedata_group{revision_history = Revisions};
+set_revisions(provider_info, Record, Revisions) ->
+    Record#provider_info{revision_history = Revisions};
 set_revisions(_Model, _Record, _Revisions) ->
     {error, get_revisions_not_implemented}.
