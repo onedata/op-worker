@@ -17,11 +17,12 @@
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 %% API
 -export([synchronize/2]).
 
--define(SYNC_TIMEOUT, timer:seconds(10)).
+
 
 %%%===================================================================
 %%% API

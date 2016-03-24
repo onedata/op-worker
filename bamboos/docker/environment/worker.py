@@ -10,8 +10,8 @@ import copy
 import json
 import os
 from . import common, docker, riak, couchbase, dns, cluster_manager
+from timeouts import *
 
-CLUSTER_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 # mounting point for op-worker-node docker
 DOCKER_BINDIR_PATH = '/root/build'
 LOGFILE = '/tmp/run.log'
