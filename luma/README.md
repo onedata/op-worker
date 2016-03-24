@@ -1,3 +1,36 @@
+Start LUMA 
+=====
+**Init LUMA database**
+----
+To init LUMA server database run command:
+
+    init_db.py
+
+Optional arguments:
+
+| Param  | Description |
+| :--  | :-- |
+| -h, --help  | help message and exit |
+| -c CONFIG, --config CONFIG | cfg file with app configuration (default: config.cfg) |
+
+
+**Start LUMA server**
+----
+To start LUMA server run command:
+
+    main.py
+
+Optional arguments:
+
+| Param  | Description |
+| :--  | :-- |
+| -h, --help  | help message and exit |
+| -cm CREDENTIALS_MAPPING_FILE, --credentials-mapping CREDENTIALS_MAPPING_FILE | json file with array of credentials mappings (default:None) |
+| -gm GENERATORS_MAPPING, --generators-mapping GENERATORS_MAPPING | json file with array of storages to generators mappings (default: None) |
+| -sm STORAGES_MAPPING, --storages-mapping STORAGES_MAPPING | json file with array of storage id to type mappings (default: None) |
+| -c CONFIG, --config CONFIG | cfg file with app configuration (default: config.cfg) |
+
+
 API
 =====
 

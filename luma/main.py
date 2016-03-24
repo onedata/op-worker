@@ -1,11 +1,15 @@
-from flask import json, request
-from app import db, create_app
-from config_loader import load_user_credentials_mapping, \
-    load_generators_mapping, load_storage_id_to_type_mapping
-from model import UserCredentialsMapping, GeneratorsMapping, \
-    StorageIdToTypeMapping
-from plugins_loader import PluginsLoader
+#!/usr/bin/env python2
 import argparse
+import os
+
+from flask import json, request
+from luma.app import db, create_app
+from luma.config_loader import load_user_credentials_mapping, \
+    load_generators_mapping, load_storage_id_to_type_mapping
+from luma.model import UserCredentialsMapping, GeneratorsMapping, \
+    StorageIdToTypeMapping
+
+from luma.plugins_loader import PluginsLoader
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -40,7 +44,7 @@ parser.add_argument(
     dest='config')
 
 args = parser.parse_args()
-app = create_app(args.config)
+app = create_app(os.path.join(os.getcwd(), args.config))
 plugins = PluginsLoader()
 
 
@@ -133,12 +137,11 @@ def get_user_credentials():
     return json.jsonify(status='success', data=credentials)
 
 
-if __name__ == "__main__":
-    if args.credentials_mapping_file:
-        load_user_credentials_mapping(app, args.credentials_mapping_file)
-    if args.generators_mapping:
-        load_generators_mapping(app, plugins, args.generators_mapping)
-    if args.storages_mapping:
-        load_storage_id_to_type_mapping(app, args.storages_mapping)
+if args.credentials_mapping_file:
+    load_user_credentials_mapping(app, args.credentials_mapping_file)
+if args.generators_mapping:
+    load_generators_mapping(app, plugins, args.generators_mapping)
+if args.storages_mapping:
+    load_storage_id_to_type_mapping(app, args.storages_mapping)
 
-    app.run(host=app.config['HOST'])
+app.run(host=app.config['HOST'])

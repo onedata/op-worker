@@ -1,7 +1,9 @@
-from app import db, create_app
-import model
+#!/usr/bin/env python2
 import argparse
+import os
 
+import luma.model
+from luma.app import db, create_app
 
 parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -15,6 +17,4 @@ parser.add_argument(
         dest='config')
 
 args = parser.parse_args()
-
-if __name__ == "__main__":
-    db.create_all(app=create_app(args.config))
+db.create_all(app=create_app(os.path.join(os.getcwd(), args.config)))
