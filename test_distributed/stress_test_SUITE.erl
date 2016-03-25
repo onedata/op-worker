@@ -76,7 +76,10 @@ many_files_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
             [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
-            [{name, files_per_thead}, {value, 10}, {description, "Number of files used by single threads."}]
+            [{name, files_per_thead}, {value, 10}, {description, "Number of files used by single threads."}],
+            [{name, clear_ratio}, {value, 1.25}, {description,
+                "Ratio used to calculate number of clearing threads " ++
+                    "(threads_num/clear_ratio thrads are used to clear documents)."}]
         ]},
         {description, "Performs multiple datastore operations using many threads. Level - database."}
     ]).
@@ -145,7 +148,7 @@ many_files_creation_test_base(Config) ->
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum, OkNum2),
 
-    ClearRatio = 2,
+    ClearRatio = ?config(clear_ratio, Config),
     NewTN = round(ThreadsNum / ClearRatio),
     NewCT = 1,
     DelOpsNum = FilesPerThead * NewTN,
