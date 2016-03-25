@@ -24,6 +24,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 %% API
 -export([start_link/2]).
@@ -51,7 +52,6 @@
     sequencer_out_streams = #{} :: streams()
 }).
 
--define(SEND_RETRY_DELAY, timer:seconds(5)).
 
 %%%===================================================================
 %%% API

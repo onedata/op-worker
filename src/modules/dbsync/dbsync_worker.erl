@@ -216,11 +216,9 @@ handle({'EXIT', Stream, Reason}) ->
         _ ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
     end;
-handle({async_init_stream, Since0, Until, Queue}) ->
-    Since = case Since0 of
-        undefined -> 0;
-        _ -> Since0
-    end,
+handle({async_init_stream, undefined, Until, Queue}) ->
+    handle({async_init_stream, 0, Until, Queue});
+handle({async_init_stream, Since, Until, Queue}) ->
     state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
@@ -633,7 +631,8 @@ consume_batches(ProviderId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec is_valid_stream(term()) -> boolean().
 is_valid_stream(Stream) when is_pid(Stream) ->
-    erlang:process_info(Stream) =/= undefined;
+    try erlang:process_info(Stream) =/= undefined
+    catch _:_ -> node(Stream) =/= node() end;
 is_valid_stream(_) ->
     false.
 

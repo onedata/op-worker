@@ -84,7 +84,7 @@ get_provider_domain() ->
 %%--------------------------------------------------------------------
 -spec get_oz_domain() -> string().
 get_oz_domain() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, zone_domain),
+    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
     str_utils:to_list(Hostname).
 
 
