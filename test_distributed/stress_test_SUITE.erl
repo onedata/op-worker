@@ -40,11 +40,11 @@
 all() ->
     ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
 
--define(REQUEST_TIMEOUT, timer:seconds(30)).
--define(TIMEOUT, timer:seconds(60)).
+-define(REQUEST_TIMEOUT, timer:minutes(5)).
+-define(TIMEOUT, timer:minutes(5)).
 -define(call_store(Fun, Args), erlang:apply(file_meta, Fun, Args)).
 -define(call(N, M, A), ?call(N, file_meta, M, A)).
--define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
+-define(call(N, Mod, M, A), rpc:call(N, Mod, M, A, ?TIMEOUT)).
 
 %%%===================================================================
 %%% Test functions
