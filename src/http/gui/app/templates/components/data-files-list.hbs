@@ -1,0 +1,48 @@
+<table class="table table-strips files-table">
+  <div class="drop-area">
+    {{icon 'upload'}}
+  </div>
+  <thead>
+    <th>
+      {{t 'components.dataFilesList.files'}}
+    </th>
+    <th class="hidden-xs">
+      {{t 'components.dataFilesList.size'}}
+    </th>
+    <th class="hidden-xs hidden-sm">
+      {{t 'components.dataFilesList.permissions'}}
+    </th>
+    <th class="hidden-xs">
+      {{t 'components.dataFilesList.modification'}}
+    </th>
+  </thead>
+  <tbody>
+    {{#each dir.children as |file|}}
+    {{!-- TODO: open file when selected and enter pressed --}}
+      <tr {{action "openFile" file on="doubleClick"}}
+        {{action "selectFile" file on="click"}} class="{{if file.isSelected 'active'}}">
+        <td id="file-{{file.id}}">
+          <div class="file-icon">
+            {{#if file.isDir}}
+              {{icon "folder" "color-directory"}}
+            {{else}}
+              {{icon "file" "color-file"}}
+            {{/if}}
+          </div>
+          <div class="file-label">
+            {{file.name}}
+          </div>
+        </td>
+        <td class="hidden-xs">
+          {{file.sizeHumanReadable}}
+        </td>
+        <td class="col-permissions hidden-xs hidden-sm">
+          {{file.permissionsHumanReadable}}
+        </td>
+        <td class="hidden-xs">
+          {{file.modificationMoment}}
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
+</table>

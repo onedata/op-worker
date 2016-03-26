@@ -21,7 +21,7 @@ export default Ember.Component.extend({
 
   items: [
     {type: 'user', labelI18n: 'components.spacesSubmenu.users', icon: 'user'},
-    {type: 'group', labelI18n: 'components.spacesSubmenu.groups', icon: 'groups'},
+    {type: 'group', labelI18n: 'components.spacesSubmenu.groups', icon: 'group'},
     {type: 'provider', labelI18n: 'components.spacesSubmenu.providers', icon: 'provider'},
   ],
 
