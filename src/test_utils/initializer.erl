@@ -393,7 +393,7 @@ file_meta_mock_setup(Workers) ->
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after',
         fun(onedata_user, create, _, _, {ok, UUID}) ->
-            file_meta:setup_onedata_user(UUID),
+            file_meta:setup_onedata_user(provider, UUID),
             Self ! onedata_user_setup
         end
     ).
