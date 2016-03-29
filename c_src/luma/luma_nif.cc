@@ -64,7 +64,7 @@ static ERL_NIF_TERM create_ceph_user_nif(
     boost::split(strs, out, boost::is_any_of("\n "));
 
     return nifpp::make(env, std::make_tuple(nifpp::str_atom{"ok"},
-                                std::make_tuple(ceph_user_name.c_str(),
+                                std::make_tuple(ceph_user_name,
                                                 strs[strs.size() - 2])));
 }
 
