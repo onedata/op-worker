@@ -18,7 +18,7 @@
 -env ERL_CRASH_DUMP {{crash_dump}}
 
 ## Upgrade ets limit (tmp ets are used for transactions)
--env ERL_MAX_ETS_TABLES 100000
+-env ERL_MAX_ETS_TABLES 1000000
 
 ## Configure schedulers
 ## +S 2:2

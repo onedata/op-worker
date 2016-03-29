@@ -84,6 +84,9 @@ many_files_creation_test(Config) ->
         {description, "Performs multiple datastore operations using many threads. Level - database."}
     ]).
 many_files_creation_test_base(Config) ->
+    % Sleep because test does to many operations for Cauchbase when running for a long time
+    timer:sleep(timer:seconds(10)),
+
     LastFails = ?config(last_fails, Config),
     RepNum = ?config(rep_num, Config),
     case LastFails of
