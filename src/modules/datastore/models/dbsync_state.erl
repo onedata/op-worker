@@ -100,7 +100,6 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-%%    try o = k catch _:_ -> ?error_stacktrace("model_init") end,
     ?MODEL_CONFIG(dbsync_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------

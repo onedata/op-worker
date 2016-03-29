@@ -118,10 +118,8 @@ get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_
             {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
             Client = fslogic_utils:session_to_rest_client(SessId),
 
-            ?info("get_canonical_file_entry Client ~p", [Client]),
-
             lists:map(fun(SpaceId) ->
-                {ok, Doc} = space_info:fetch(Client, SpaceId),
+                {ok, Doc} = space_info:get_or_fetch(Client, SpaceId),
                 Doc
             end, SpaceIds)
     end,

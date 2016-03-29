@@ -18,7 +18,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([fetch/2]).
+-export([fetch/2, get_or_fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -139,17 +139,36 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    ?info("space_info:fetch ~p ~p", [Client, SpaceId]),
+    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
     case space_info:get(Key) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-%%            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
-%%            {ok, _} = space_info:save(NewDoc),
+            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
+            {ok, _} = space_info:save(NewDoc),
             {ok, Doc};
         {error, {not_found, _}} ->
             {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
             Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
             {ok, _} = space_info:create(Doc),
             {ok, Doc};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get space details from cache or fetch from OZ and save in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Client, SpaceId) ->
+    Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    case space_info:get(Key) of
+        {ok, #document{} = Doc} ->
+            {ok, Doc};
+        {error, {not_found, _}} ->
+            fetch(Client, SpaceId);
         {error, Reason} ->
             {error, Reason}
     end.

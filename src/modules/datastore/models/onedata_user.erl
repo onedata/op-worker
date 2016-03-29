@@ -162,8 +162,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Key, Token = #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}) ->
     case onedata_user:get(Key) of
-        {ok, Doc = #document{key = Id}} ->
-            file_meta:setup_onedata_user({user, {Macaroon, DMacaroons}}, Id),
+        {ok, Doc} ->
             {ok, Doc};
         {error, {not_found, _}} -> fetch(Token);
         Error -> Error
