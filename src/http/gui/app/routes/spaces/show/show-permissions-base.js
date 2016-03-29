@@ -36,6 +36,9 @@ let onSaveFailure = function(permission) {
 export default Ember.Route.extend({
   spacesMenuService: Ember.inject.service('spaces-menu'),
 
+  /** Abstract: <string> should be set in subclasses, eg. user, group */
+  permissionsType: null,
+
   model() {
     var space = this.modelFor('spaces.show');
     return space.get(this.get('collectionName'));
@@ -46,6 +49,7 @@ export default Ember.Route.extend({
   }.property('permissionsType'),
 
   activate() {
+    window.alert('lol');
     let permissionsType = this.get('permissionsType');
     console.debug(`show ${permissionsType} activate`);
     Ember.run.scheduleOnce('afterRender', this, function() {

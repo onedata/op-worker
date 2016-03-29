@@ -15,13 +15,15 @@ export default Ember.Route.extend({
     return this.store.find('space', params.space_id);
   },
 
-  afterModel(model) {
-    console.debug(`space show afterModel: ${model} id ${model.get('id')}`);
-    let space = model;
+  afterModel(selectedSpace) {
+    console.debug(`space show afterModel: ${selectedSpace} id ${selectedSpace.get('id')}`);
     Ember.run.scheduleOnce('afterRender', this, function() {
-      console.debug(`will trigger select space: ${space} id ${space.get('id')}`);
-      this.get('spacesMenuService').trigger('selectSpace', space);
+      console.debug(`will trigger select space: ${selectedSpace} id ${selectedSpace.get('id')}`);
+      this.get('spacesMenuService').trigger('selectSpace', selectedSpace);
       $('nav.secondary-sidebar').addClass('visible');
     });
+
+    // by default, open users settings
+    this.transitionTo('spaces.show.users');
   }
 });

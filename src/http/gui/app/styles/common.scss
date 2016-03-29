@@ -321,7 +321,7 @@ html, body {
 
               &:hover,
               &.active {
-                color: $onedata-azure;
+                color: $onedata-red;
               }
             }
           }
@@ -333,16 +333,16 @@ html, body {
           }
 
           &.active.first-level {
-            border-left-color: $onedata-azure;
+            border-left-color: $onedata-red;
 
             .secondary-sidebar-item.first-level {
-              background-color: $onedata-light-azure;
+              background-color: $onedata-light-gray;
             }
           }
 
           &:hover {
             .secondary-sidebar-item.first-level {
-              background-color: $onedata-light-azure;
+              background-color: $onedata-light-gray;
 
               .secondary-sidebar-item.first-level {
                 background-color: transparent;
@@ -355,6 +355,12 @@ html, body {
             // submenu uncollapses when parent menu is clicked
             ul.submenu {
               display: block;
+
+              .active {
+                .secondary-sidebar-item {
+                  color: $onedata-red;
+                }
+              }
             }
 
             .secondary-sidebar-item {

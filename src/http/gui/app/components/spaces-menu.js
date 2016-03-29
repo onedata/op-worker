@@ -36,11 +36,11 @@ export default Ember.Component.extend({
   }.on('willDestroyElement'),
 
   clearSpaceSelection() {
-    $('.secondary-sidebar li').removeClass('active');
+    $('.secondary-sidebar .first-level').removeClass('active');
   },
 
   clearSpaceSubmenuSelection() {
-    $('.secondary-sidebar li .submenu li').removeClass('active');
+    $('.secondary-sidebar .submenu li').removeClass('active');
   },
 
   selectSpace(space) {
@@ -56,6 +56,8 @@ export default Ember.Component.extend({
     console.debug(`select submenu for ${optionName} with space ${space}`);
     if (space) {
       space.set('currentMenuOption', optionName);
+    } else {
+      console.error(`selectSubmenu without activeSpace`);
     }
   },
 
@@ -65,7 +67,7 @@ export default Ember.Component.extend({
     let optionName = space.get('currentMenuOption');
     let jqItem = `#${space.get('sidebarEntryId')} .submenu .${optionName}-permissions`;
     $(jqItem).addClass('active');
-  }.observes('activeSpace.currentMenuOption'),
+  }.observes('activeSpace', 'activeSpace.currentMenuOption'),
 
   // TODO: sender, key, value, rev... arguments
   activeSpaceDidChange: function() {
