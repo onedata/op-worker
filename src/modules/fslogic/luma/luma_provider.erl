@@ -93,26 +93,13 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
 new_posix_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
         session:get(SessionId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
-        space_storage:get(SpaceId),
+    {ok, #document{value = #file_meta{name = SpaceName}}} =
+        file_meta:get({uuid, SpaceUUID}),
 
-    case fslogic_utils:get_posix_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #posix_user_ctx{
-                uid = posix_user:uid(Credentials),
-                gid = posix_user:gid(Credentials)
-            };
-        undefined ->
-            {ok, #document{value = #file_meta{name = SpaceName}}} =
-                file_meta:get({uuid, SpaceUUID}),
+    UID = fslogic_utils:gen_storage_uid(UserId),
+    GID = fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID),
 
-            GID = fslogic_utils:gen_storage_gid(SpaceName, SpaceUUID),
-            UID = fslogic_utils:gen_storage_uid(UserId),
-            posix_user:add(UserId, StorageId, UID, GID),
-
-            #posix_user_ctx{uid = UID, gid = GID}
-    end.
+    #posix_user_ctx{uid = UID, gid = GID}.
 
 
 %%--------------------------------------------------------------------
