@@ -110,7 +110,7 @@ posix_user_proxy_test(Config) ->
     ?assertEqual(PosixCtx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?DIRECTIO_HELPER_NAME, ?SESSION_ID, PosixSpaceUUID])),
     %% user ctx from LUMA server should be requested only once
-    test_utils:mock_num_calls(Worker, http_client, get, 4, 1),
+    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 1),
 
     %% for non posix storages get_posix_user_ctx should return posix ctx
 
@@ -121,7 +121,7 @@ posix_user_proxy_test(Config) ->
     ?assertEqual(PosixCephCtx, rpc:call(Worker, luma_proxy, get_posix_user_ctx,
         [?CEPH_HELPER_NAME, ?SESSION_ID, CephSpaceUUID])),
     %% user ctx from LUMA server should be requested only once
-    test_utils:mock_num_calls(Worker, http_client, get, 4, 2),
+    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 2),
 
     %% get_posix_user_ctx should return same ctx on every invocation
     PosixS3Ctx = ?assertMatch(#posix_user_ctx{uid = UID}, rpc:call(Worker,
@@ -131,7 +131,7 @@ posix_user_proxy_test(Config) ->
         [?S3_HELPER_NAME, ?SESSION_ID, S3SpaceUUID])),
 
     %% user ctx from LUMA server should be requested only once
-    test_utils:mock_num_calls(Worker, http_client, get, 4, 3),
+    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 3),
 
     %% posix ctx for each storage type should differ on gid due to
     %% its generation from space name
@@ -177,7 +177,7 @@ ceph_user_proxy_test(Config) ->
         [#helper_init{name = ?CEPH_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
     %% LUMA server should be requested for ctx only once
-    test_utils:mock_num_calls(Worker, http_client, get, 4, 1).
+    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 1).
 
 s3_user_provider_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -208,9 +208,9 @@ s3_user_provider_test(Config) ->
         [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
     %% amazonaws_iam API should be requested only once for new user
-    test_utils:mock_num_calls(Worker, amazonaws_iam, create_user, 5, 1),
-    test_utils:mock_num_calls(Worker, amazonaws_iam, create_access_key, 5, 1),
-    test_utils:mock_num_calls(Worker, amazonaws_iam, allow_access_to_bucket, 6, 1).
+    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, create_user, 5, 1),
+    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, create_access_key, 5, 1),
+    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, allow_access_to_bucket, 6, 1).
 
 s3_user_proxy_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -235,7 +235,7 @@ s3_user_proxy_test(Config) ->
         [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
     %% LUMA server should be requested for ctx only once
-    test_utils:mock_num_calls(Worker, http_client, get, 4, 1).
+    test_utils:mock_assert_num_calls(Worker, http_client, get, 4, 1).
 
 
 %%%===================================================================

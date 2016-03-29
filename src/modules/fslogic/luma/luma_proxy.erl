@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include("deps/ctool/include/utils/utils.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 
 
@@ -193,9 +194,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionId) ->
         {ok, #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}} ->
             {ok, UserDetails} = oz_users:get_details({user,
                 {Macaroon, DMacaroons}}),
-            UserDetailsProplist = lists:zip(record_info(fields, user_details),
-                tl(tuple_to_list(UserDetails))),
-            json_utils:encode(UserDetailsProplist)
+            UserDetailsList = ?record_to_list(user_details, UserDetails),
+            json_utils:encode(UserDetailsList)
     end,
 
     case http_client:get(
