@@ -91,9 +91,9 @@ global_stream_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID3)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
@@ -113,7 +113,7 @@ global_stream_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -171,7 +171,7 @@ global_stream_document_remove_test(MultiConfig) ->
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, couchdb_datastore_driver:links_doc_key(UUID1)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(UUID1)]),
 
             Map0 = #{},
             _Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0)
@@ -189,7 +189,7 @@ global_stream_document_remove_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, couchdb_datastore_driver:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(UUID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -299,9 +299,9 @@ global_stream_with_proto_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID3)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
@@ -321,7 +321,7 @@ global_stream_with_proto_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [couchdb_datastore_driver:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
