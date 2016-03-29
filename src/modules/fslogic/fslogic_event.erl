@@ -17,7 +17,7 @@
 
 %% API
 -export([emit_file_attr_update/2, emit_file_sizeless_attrs_update/1,
-    emit_file_location_update/2, emit_permission_changed/1, emit_remove_file/1]).
+    emit_file_location_update/2, emit_permission_changed/1, emit_file_removal/1]).
 
 %%%===================================================================
 %%% API
@@ -95,10 +95,10 @@ emit_permission_changed(FileUuid) ->
 %% Send event informing subscribed client that permissions of file has changed.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_remove_file(FileUuid :: file_meta:uuid()) ->
+-spec emit_file_removal(FileUuid :: file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
-emit_remove_file(FileUuid) ->
-    event:emit(#event{object = #remove_file_event{file_uuid = FileUuid}}).
+emit_file_removal(FileUuid) ->
+    event:emit(#event{object = #file_removal_event{file_uuid = FileUuid}}).
 
 %%%===================================================================
 %%% Internal functions

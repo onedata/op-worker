@@ -147,7 +147,7 @@ delete(CTX, File) ->
     case FuseResponse of
         #fuse_response{status = #status{code = ?OK}} ->
             {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, File),
-            fslogic_event:emit_remove_file(UUID);
+            fslogic_event:emit_file_removal(UUID);
         _ ->
             ok
     end,

@@ -65,7 +65,7 @@
 
 %% definition of an event triggered when file is removed
 %% file_uuid - UUID of a file
--record(remove_file_event, {
+-record(file_removal_event, {
     file_uuid :: file_meta:uuid()
 }).
 

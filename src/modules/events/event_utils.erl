@@ -84,11 +84,11 @@ inject_event_stream_definition(#subscription{object = #permission_changed_subscr
                         end
     }};
 
-inject_event_stream_definition(#subscription{object = #remove_file_subscription{
+inject_event_stream_definition(#subscription{object = #file_removal_subscription{
     file_uuid = FileUuid}} = Sub) ->
-    Sub#subscription{event_stream = ?REMOVE_FILE_EVENT_STREAM#event_stream_definition{
+    Sub#subscription{event_stream = ?FILE_REMOVAL_EVENT_STREAM#event_stream_definition{
         admission_rule = fun
-            (#event{object = #remove_file_event{file_uuid = Uuid}})
+            (#event{object = #file_removal_event{file_uuid = Uuid}})
                 when Uuid =:= FileUuid -> true;
             (_) -> false
         end,

@@ -24,7 +24,8 @@
 -export_type([key/0, object/0, update_object/0, counter/0, subscription/0, manager_ref/0]).
 
 -type key() :: term().
--type object() :: #read_event{} | #update_event{} | #write_event{} | #permission_changed_event{} | #remove_file_event{}.
+-type object() :: #read_event{} | #update_event{} | #write_event{} | #permission_changed_event{}
+| #file_removal_event{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
@@ -180,7 +181,7 @@ set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = E
 set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid};
 
-set_key(#event{object = #remove_file_event{file_uuid = Uuid}} = Evt) ->
+set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid}.
 
 %%--------------------------------------------------------------------

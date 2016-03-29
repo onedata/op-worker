@@ -80,9 +80,9 @@
     file_uuid :: file_meta:uuid()
 }).
 
-%% definition of a subscription for removing file
+%% definition of a subscription for file removal
 %% file_uuid         - UUID of a file for which notifications should be sent
--record(remove_file_subscription, {
+-record(file_removal_subscription, {
     file_uuid :: file_meta:uuid()
 }).
 
