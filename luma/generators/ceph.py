@@ -32,7 +32,7 @@ def create_user_credentials(global_id, storage_type, storage_id, source_ips,
 
     status, response, reason = cluster.mon_command(json.dumps(
         {"prefix": "auth get-or-create", "entity": user_name,
-         "caps": ["mon", "allow rw", "osd",
+         "caps": ["mon", "allow r", "osd",
                   "allow rw pool={}".format(POOL_NAME)]}), "")
     if status != 0:
         raise RuntimeError(reason)

@@ -47,7 +47,7 @@ static ERL_NIF_TERM create_ceph_user_nif(
     std::ostringstream cmd_stream;
     cmd_stream << "{\"prefix\":\"auth "
                   "get-or-create\",\"caps\":[\"mon\",\"allow "
-                  "r\",\"osd\",\"allow rw pool_name="
+                  "r\",\"osd\",\"allow rw pool="
                << pool_name << "\"],\"entity\":\"" << ceph_user_name << "\"}";
     std::string cmd = cmd_stream.str();
 
