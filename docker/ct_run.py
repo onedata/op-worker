@@ -24,10 +24,23 @@ import re
 import shutil
 import sys
 import time
-from test_run_utils import skipped_test_exists
+import glob
+import xml.etree.ElementTree as ElementTree
 
 sys.path.insert(0, 'bamboos/docker')
 from environment import docker
+
+
+def skipped_test_exists(junit_report_path):
+    reports = glob.glob(junit_report_path)
+    # if there are many reports, check only the last one
+    reports.sort()
+    tree = ElementTree.parse(reports[-1])
+    testsuites = tree.getroot()
+    for testsuite in testsuites:
+        if testsuite.attrib['skipped'] != '0':
+            return True
+    return False
 
 
 parser = argparse.ArgumentParser(
