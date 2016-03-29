@@ -21,9 +21,9 @@ def up(image, bindir, dns_server, uid, config_path, logdir=None, storages_docker
 class ProviderWorkerConfigurator:
     def tweak_config(self, cfg, uid, instance):
         sys_config = cfg['nodes']['node']['sys.config'][self.app_name()]
-        if 'zone_domain' in sys_config:
-            oz_hostname = worker.cluster_domain(sys_config['zone_domain'], uid)
-            sys_config['zone_domain'] = oz_hostname
+        if 'oz_domain' in sys_config:
+            oz_hostname = worker.cluster_domain(sys_config['oz_domain'], uid)
+            sys_config['oz_domain'] = oz_hostname
         # If livereload bases on gui output dir mount, change the location
         # from where static files are served to that dir.
         if 'gui_livereload' in cfg:
@@ -94,7 +94,7 @@ Starting GUI livereload
         return "op_worker_nodes"
 
 
-def create_storages(storages, op_nodes, op_config, bindir, storages_dockers=None):
+def create_storages(storages, op_nodes, op_config, bindir, storages_dockers):
     # copy escript to docker host
     script_names = {'posix': 'create_posix_storage.escript',
                     's3': 'create_s3_storage.escript',
@@ -110,28 +110,28 @@ def create_storages(storages, op_nodes, op_config, bindir, storages_dockers=None
     container = first_node.split("@")[1]
     worker_name = container.split(".")[0]
     cookie = op_config[worker_name]['vm.args']['setcookie']
-    script_patches = dict(map(lambda (k, v): (k, os.path.join(DOCKER_BINDIR_PATH, v)),
+    script_paths = dict(map(lambda (k, v): (k, os.path.join(DOCKER_BINDIR_PATH, v)),
                               script_names.iteritems()))
     for storage in storages:
         if isinstance(storage, basestring):
             storage = {'type': 'posix', 'name': storage}
         if storage['type'] == 'posix':
             st_path = storage['name']
-            command = ['escript', script_patches['posix'], cookie,
+            command = ['escript', script_paths['posix'], cookie,
                        first_node, storage['name'], st_path]
             assert 0 is docker.exec_(container, command, tty=True,
                                      stdout=sys.stdout, stderr=sys.stderr)
         elif storage['type'] == 'ceph':
             config = storages_dockers['ceph'][storage['name']]
             pool = storage['pool'].split(':')[0]
-            command = ['escript', script_patches['ceph'], cookie,
+            command = ['escript', script_paths['ceph'], cookie,
                        first_node, storage['name'], "ceph",
                        config['host_name'], pool, config['username'], config['key']]
             assert 0 is docker.exec_(container, command, tty=True,
                                      stdout=sys.stdout, stderr=sys.stderr)
         elif storage['type'] == 's3':
             config = storages_dockers['s3'][storage['name']]
-            command = ['escript', script_patches['s3'], cookie,
+            command = ['escript', script_paths['s3'], cookie,
                        first_node, storage['name'], config['host_name'],
                        storage['bucket'], config['access_key'], config['secret_key'],
                        "iam.amazonaws.com"]

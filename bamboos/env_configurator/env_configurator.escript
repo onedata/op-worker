@@ -64,13 +64,13 @@
 %%%             'groups': [
 %%%                 'g1'
 %%%             ],
-%%%             'providers': [
-%%%                 {
-%%%                     'provider': 'p1',
+%%%             'providers': {
+%%%                 'p1': {
+%%%                     'storage': '/mnt/st1',
 %%%                     'supported_size': 1000000000
 %%%                 },
-%%%                 {
-%%%                     'provider': 'p2',
+%%%                 'p2': {
+%%%                     'storage': '/mnt/st2',
 %%%                     'supported_size': 1000000000
 %%%                 }
 %%%             ]
@@ -82,12 +82,12 @@
 %%%             'groups': [
 %%%                 'g2'
 %%%             ],
-%%%             'providers': [
-%%%                 {
-%%%                     'provider': 'p1',
+%%%             'providers': {
+%%%                 'p1': {
+%%%                     'storage': '/mnt/st1',
 %%%                     'supported_size': 1000000000
 %%%                 }
-%%%             ]
+%%%             }
 %%%         }
 %%%     }
 %%% }
@@ -136,7 +136,7 @@ main([InputJson]) ->
                 ProviderWorkers = [bin_to_atom(P) || P <- ProviderWorkersBin],
                 Cookie = bin_to_atom(proplists:get_value(<<"cookie">>, Props)),
                 register_in_onezone(ProviderWorkers, Cookie, Provider),
-                create_space_storage_mapping(hd(ProviderWorkers), Cookie, Spaces)
+                create_space_storage_mapping(hd(ProviderWorkers), Cookie, Spaces, Provider)
             end, Providers),
         case call_node(OZNode, OZCookie, dev_utils, set_up_test_entities,
             [Users, Groups, Spaces]) of
@@ -151,7 +151,7 @@ main([InputJson]) ->
         halt(0)
     catch
         T:M ->
-            io:format("Error in ~s - ~p:~p~n", [escript:script_name(), T, M]),
+            io:format("Error in ~s - ~p:~p~n~p~n", [escript:script_name(), T, M, erlang:get_stacktrace()]),
             halt(1)
     end;
 
@@ -193,7 +193,23 @@ call_node(Node, Cookie, Module, Function, Args) ->
 %%--------------------------------------------------------------------
 -spec helpers_init() -> ok.
 helpers_init() ->
-    true = code:add_path(filename:join(get_escript_dir(), "ebin")).
+    SrcDir = filename:join(get_escript_dir(), "src"),
+    {ok, Modules} = file:list_dir(SrcDir),
+    lists:foreach(fun(Module) ->
+        compile_and_load_module(filename:join(SrcDir, Module))
+    end, Modules).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Compiles and loads module into erlang VM.
+%% @end
+%%--------------------------------------------------------------------
+-spec compile_and_load_module(File :: string()) -> ok.
+compile_and_load_module(File) ->
+    {ok, ModuleName, Binary} = compile:file(File, [report, binary]),
+    {module, _} = code:load_binary(ModuleName, File, Binary),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -215,6 +231,7 @@ get_escript_dir() ->
 bin_to_atom(Bin) ->
     list_to_atom(binary_to_list(Bin)).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Registers provider in OZ.
@@ -227,17 +244,24 @@ register_in_onezone(Workers, Cookie, Provider) ->
         register_in_oz_dev, [Workers, ?DEFAULT_KEY_FILE_PASSWD, Provider]),
     ok.
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates space storage mapping is provider database.
+%% Creates space storage mapping in provider database.
 %% @end
 %%--------------------------------------------------------------------
 -spec create_space_storage_mapping(Worker :: node(), Cookie :: atom(),
-    Spaces :: proplists:proplist()) -> ok.
-create_space_storage_mapping(Worker, Cookie, Spaces) ->
+    Spaces :: proplists:proplist(), ProviderDomain :: binary()) -> ok.
+create_space_storage_mapping(Worker, Cookie, Spaces, ProviderDomain) ->
     lists:foreach(fun({SpaceId, Props}) ->
-        Name = proplists:get_value(<<"storage">>, Props),
-        {ok, Storage} = call_node(Worker, Cookie, storage, get_by_name, [Name]),
-        StorageId = call_node(Worker, Cookie, storage, id, [Storage]),
-        {ok, _} = call_node(Worker, Cookie, space_storage, add, [SpaceId, StorageId])
+        SpaceProviders = proplists:get_value(<<"providers">>, Props),
+        case proplists:get_value(ProviderDomain, SpaceProviders) of
+            undefined ->
+                ok;
+            ProviderSupportInfo ->
+                StorageName = proplists:get_value(<<"storage">>, ProviderSupportInfo),
+                {ok, Storage} = call_node(Worker, Cookie, storage, get_by_name, [StorageName]),
+                StorageId = call_node(Worker, Cookie, storage, id, [Storage]),
+                {ok, _} = call_node(Worker, Cookie, space_storage, add, [SpaceId, StorageId])
+        end
     end, Spaces).

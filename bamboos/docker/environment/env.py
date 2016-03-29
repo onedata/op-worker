@@ -17,6 +17,8 @@ from . import appmock, client, common, zone_worker, cluster_manager, \
 
 def default(key):
     return {'image': 'onedata/worker',
+            'ceph_image': 'onedata/ceph',
+            's3_image': 'lphoward/fake-s3',
             'bin_am': '{0}/appmock'.format(os.getcwd()),
             'bin_oz': '{0}/oz_worker'.format(os.getcwd()),
             'bin_op_worker': '{0}/op_worker'.format(os.getcwd()),
@@ -26,7 +28,8 @@ def default(key):
             'logdir': None}[key]
 
 
-def up(config_path, image=default('image'), bin_am=default('bin_am'),
+def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
+       s3_image=default('s3_image'), bin_am=default('bin_am'),
        bin_oz=default('bin_oz'),
        bin_cluster_manager=default('bin_cluster_manager'),
        bin_op_worker=default('bin_op_worker'),
@@ -65,29 +68,9 @@ def up(config_path, image=default('image'), bin_am=default('bin_am'),
                  logdir, output, uid)
 
     # Start storages
-    storages_dockers = {'ceph': {}, 's3': {}}
-    for key, cfg in config['os_configs'].iteritems():
-        for storage in cfg['storages']:
-            if isinstance(storage, basestring):
-                sys.stderr.write('''WARNING:
-    Detected deprecated syntax at os_configs.{0}.storages
-    Change entry "{1}" to: {{ "type": "posix", "name": "{1}" }}
-    In file {2}'''.format(key, storage, config_path))
-                break
-            if storage['type'] == 'ceph' and storage['name'] not in storages_dockers['ceph']:
-                ceph_image = storage['image'] if 'image' in storage else 'onedata/ceph'
-                pool = tuple(storage['pool'].split(':'))
-                result = ceph.up(ceph_image, [pool])
-                output['docker_ids'].extend(result['docker_ids'])
-                del result['docker_ids']
-                storages_dockers['ceph'][storage['name']] = result
-            elif storage['type'] == 's3' and storage['name'] not in storages_dockers['s3']:
-                s3_image = storage['image'] if 'image' in storage else 'lphoward/fake-s3'
-                result = s3.up(s3_image, [storage['bucket']])
-                output['docker_ids'].extend(result['docker_ids'])
-                del result['docker_ids']
-                storages_dockers['s3'][storage['name']] = result
+    storages_dockers, storages_dockers_ids = _start_storages(config, config_path, ceph_image, s3_image)
     output['storages'] = storages_dockers
+    output['docker_ids'].extend(storages_dockers_ids)
 
     # Start provider cluster instances
     setup_worker(provider_worker, bin_op_worker, 'provider_domains',
@@ -187,3 +170,28 @@ def setup_worker(worker, bin_worker, domains_name, bin_cm, config, config_path,
         # Setting first arg to 'auto' will force the restart and this is needed
         # so that dockers that start after can immediately see the domains.
         dns.maybe_restart_with_configuration('auto', uid, output)
+
+
+def _start_storages(config, config_path, ceph_image, s3_image):
+    storages_dockers = {'ceph': {}, 's3': {}}
+    docker_ids = []
+    for key, cfg in config['os_configs'].iteritems():
+        for storage in cfg['storages']:
+            if isinstance(storage, basestring):
+                sys.stderr.write('''WARNING:
+    Detected deprecated syntax at os_configs.{0}.storages
+    Change entry "{1}" to: {{ "type": "posix", "name": "{1}" }}
+    In file {2}'''.format(key, storage, config_path))
+                break
+            if storage['type'] == 'ceph' and storage['name'] not in storages_dockers['ceph']:
+                pool = tuple(storage['pool'].split(':'))
+                result = ceph.up(ceph_image, [pool])
+                docker_ids.extend(result['docker_ids'])
+                del result['docker_ids']
+                storages_dockers['ceph'][storage['name']] = result
+            elif storage['type'] == 's3' and storage['name'] not in storages_dockers['s3']:
+                result = s3.up(s3_image, [storage['bucket']])
+                docker_ids.extend(result['docker_ids'])
+                del result['docker_ids']
+                storages_dockers['s3'][storage['name']] = result
+    return storages_dockers, docker_ids

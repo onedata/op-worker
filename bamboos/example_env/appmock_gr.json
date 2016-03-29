@@ -71,7 +71,7 @@
                             "db_nodes": [
                                 "dbnode1"
                             ],
-                            "zone_domain": "oz",
+                            "oz_domain": "oz",
                             "verify_oz_cert": false
                         }
                     }
