@@ -28,13 +28,35 @@
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
-    domain_to_provider_id/1]).
+    domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc Makes workers 'think' that all files belong to given SpaceId.
+%%--------------------------------------------------------------------
+-spec assume_all_files_in_space(Config :: list(), SpaceId :: binary()) -> ok.
+assume_all_files_in_space(Config, SpaceId) ->
+    SpaceDoc = #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), value = #file_meta{}},
+    Workers = ?config(op_worker_nodes, Config),
+    catch test_utils:mock_new(Workers, fslogic_spaces),
+    test_utils:mock_expect(Workers, fslogic_spaces, get_space,
+        fun(_, _) ->
+            {ok, SpaceDoc}
+        end).
+
+
+%%-------------------------------------------------------------------
+%% @doc Reverses assume_all_files_in_space/2
+%%--------------------------------------------------------------------
+-spec clear_assume_all_files_in_space(Config :: list()) -> ok.
+clear_assume_all_files_in_space(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [fslogic_spaces]).
 
 
 %%-------------------------------------------------------------------

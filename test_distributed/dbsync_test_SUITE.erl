@@ -366,12 +366,14 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
+
     ConfigP1 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP1]}),
     ConfigP2 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP2]}),
     ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
     ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
 
-    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
 
     test_utils:mock_expect([WorkerP1], oneprovider, get_provider_id,
         fun() ->

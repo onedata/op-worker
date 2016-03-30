@@ -134,8 +134,6 @@ handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms}
         end, EvtStms)}}
     end,
 
-
-
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessId),
 
     case {request_to_file_entry_or_provider(Evt), UserId} of

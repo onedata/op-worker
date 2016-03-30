@@ -439,7 +439,7 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
 %% @end
 %%--------------------------------------------------------------------
 -spec update_message_id(#state{}, #server_message{} | #client_message{}) ->
-    {NewState :: #state{}, NewMsg :: #server_message{}}.
+    {NewState :: #state{}, NewMsg :: #server_message{} | #client_message{}}.
 update_message_id(State = #state{connection_type = outgoing},
     Msg = #server_message{message_id = #message_id{id = ID} = MID}) ->
 

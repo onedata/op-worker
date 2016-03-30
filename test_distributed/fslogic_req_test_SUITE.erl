@@ -52,7 +52,7 @@ all() ->
 
 -define(TIMEOUT, timer:seconds(5)).
 
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}])).
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
 
 %%%===================================================================
 %%% Test functions

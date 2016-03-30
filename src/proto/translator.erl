@@ -569,7 +569,7 @@ translate_to_protobuf(undefined) ->
 %%%===================================================================
 
 
--spec open_flags_translate_to_protobuf('READ_WRITE' | 'READ' | 'WRITE') -> fslogic_worker:open_flags().
+-spec open_flags_translate_to_protobuf(fslogic_worker:open_flags()) -> 'READ_WRITE' | 'READ' | 'WRITE'.
 open_flags_translate_to_protobuf(undefined) ->
     'READ_WRITE';
 open_flags_translate_to_protobuf(rdwr) ->
