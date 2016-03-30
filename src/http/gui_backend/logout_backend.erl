@@ -8,7 +8,6 @@
 %%% @doc
 %%% This module implements page_backend_behaviour and is called
 %%% when logout page is visited - it contains logout logic (redirects to GR).
-%%% THIS IS A PROTOTYPE AND AN EXAMPLE OF IMPLEMENTATION.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(logout_backend).
@@ -20,8 +19,16 @@
 %% API
 -export([page_init/0]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link page_backend_behaviour} callback page_init/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec page_init() -> gui_html_handler:page_init_result().
 page_init() ->
     g_session:log_out(),
-    {redirect_absolute,
-        str_utils:to_binary(oneprovider:get_oz_logout_page())}.
+    {redirect_absolute, str_utils:to_binary(oneprovider:get_oz_logout_page())}.

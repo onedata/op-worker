@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc provider's protocol listener starting & stopping
+%%% @doc This module is responsible for providers' protocol listener starting
+%%% and stopping.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(provider_listener).
@@ -23,12 +24,12 @@
 -export([port/0, start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
-%%% listener_starter_behaviour callbacks
+%%% listener_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback port/0.
+%% {@link listener_behaviour} callback port/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec port() -> integer().
@@ -39,7 +40,7 @@ port() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback start/1.
+%% {@link listener_behaviour} callback start/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
@@ -64,7 +65,9 @@ start() ->
             {certfile, CertFile},
             {cacerts, CACerts},
             {verify_type, verify_peer},
-            {fail_if_no_peer_cert, true}
+            {fail_if_no_peer_cert, true},
+            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
+            {versions, ['tlsv1.2', 'tlsv1.1']}
         ],
         connection, []
     ),
@@ -76,7 +79,7 @@ start() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback stop/1.
+%% {@link listener_behaviour} callback stop/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
@@ -93,16 +96,31 @@ stop() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the status of a listener.
+%% {@link listener_behaviour} callback healthcheck/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    {ok, ProtoPort} = application:get_env(?APP_NAME, provider_protocol_handler_port),
-    case gen_tcp:connect("127.0.0.1", ProtoPort, [{packet, 4}, {active, false}]) of
+    {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
+        nagios_healthcheck_timeout),
+    case gen_tcp:connect("127.0.0.1", port(), [{packet, 4}, {active, false}], Timeout) of
         {ok, Sock} ->
             gen_tcp:close(Sock),
             ok;
-        _ ->
-            {error, server_not_responding}
+        {error, Reason} ->
+            {error, Reason}
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list of weak ciphers.
+%% @end
+-spec weak_ciphers() -> list().
+%%--------------------------------------------------------------------
+weak_ciphers() ->
+    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

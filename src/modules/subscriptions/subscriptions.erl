@@ -23,8 +23,8 @@
 
 -type(seq() :: non_neg_integer()).
 -type(rev() :: term()).
--type(model() :: onedata_group | onedata_user | space_info).
--type(record() :: #space_info{} | #onedata_user{} | #onedata_group{}).
+-type(model() :: onedata_group | onedata_user | space_info | provider_info).
+-type(record() :: #space_info{} | #onedata_user{} | #onedata_group{} | #provider_info{}).
 -export_type([seq/0, rev/0, model/0, record/0]).
 
 %%--------------------------------------------------------------------
@@ -39,7 +39,7 @@ account_updates(SequenceNumbers) ->
         NewLargest = max(Largest, lists:last(SequenceNumbers)),
         AddedMissing = case NewLargest =:= Largest of
             true -> [];
-            false -> lists:seq(Largest+1, NewLargest)
+            false -> lists:seq(Largest + 1, NewLargest)
         end,
         NewMissing = ordsets:subtract(Missing ++ AddedMissing, SequenceNumbers),
         {ok, State#subscriptions_state{missing = NewMissing, largest = NewLargest}}

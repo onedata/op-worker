@@ -1,0 +1,171 @@
+.data-spaces-select {
+  -moz-appearance: none;
+  -ms-appearance: none;
+  -o-appearance: none;
+  appearance: none;
+
+  width: 100%;
+  text-transform: uppercase;
+  color: #56616E;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+
+  .form-control {
+    font-size: inherit;
+    border: none;
+    border-radius: none;
+    -webkit-box-shadow: none;
+    box-shadow: none;
+    transition: none;
+    -webkit-transition: none;
+    -o-transtion: none;
+  }
+}
+
+.onedata-select:before {
+  content: "a";
+}
+
+.secondary-sidebar {
+  // root directory item
+  .root-item {
+  }
+
+  .tree-expand-icon {
+    font-size: $secondary-sidebar-icon-font-size * 0.75;
+  }
+
+  // normal directory - only folder icon and label is clickable
+  .item-click-area {
+    cursor: pointer; cursor: hand;
+  }
+
+  // TODO: this is a common style, separate color from it please
+  .secondary-sidebar-item.single-selectable {
+    border-left: 4px solid;
+    border-left-color: transparent;
+
+    &:hover {
+      background-color: $onedata-light-gray;
+    }
+
+    &.active {
+      background-color: $onedata-light-gray;
+      color: $onedata-red;
+
+      &.onedata-red {
+        border-left-color: $onedata-red;
+      }
+    }
+  }
+
+  .level-1 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 22px) !important;
+  }
+
+  .level-2 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 44px) !important;
+  }
+
+  .level-3 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 66px) !important;
+  }
+
+  .level-4 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 88px) !important;
+  }
+
+  .level-5 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 110px) !important;
+  }
+
+  .level-6 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 132px) !important;
+  }
+
+  .level-7 .secondary-sidebar-item {
+    padding-left: ($secondary-sidebar-item-padding + 154px) !important;
+  }
+
+}
+
+// TODO
+
+.table.files-table {
+  // TODO: style
+  position: relative;
+
+  &.file-drag {
+    .drop-area {
+      display: block;
+    }
+  }
+
+  .drop-area {
+    display: none;
+    z-index: 100;
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    background-color: rgba($onedata-light-gray, 0.75);
+    border: 4px dashed $onedata-graphite;
+    border-radius: 10px;
+
+    .oneicon {
+      display: block;
+      font-size: 200px;
+      height: 100%;
+      text-align: center;
+    }
+  }
+
+  thead {
+    th {
+      padding: 8px;
+      padding-bottom: 15px;
+      text-transform: uppercase;
+      font-weight: normal;
+    }
+  }
+
+  tbody{
+    tr {
+      line-height: 32px;
+
+      &:hover {
+        background-color: $onedata-light-gray;
+      }
+
+      &.active {
+        background-color: $onedata-light-azure;
+      }
+
+      td {
+        // disable Bootstrap colors - use tr color
+        background-color: transparent !important;
+
+        // make text in rows aligned vertically middle
+        line-height: inherit;
+
+        &.col-permissions {
+          font-family: monospace;
+        }
+
+        .file-icon {
+          float: left;
+          width: 40px;
+          margin-left: -6px;
+          font-size: 32px !important;
+          text-align: left;
+        }
+        .file-label {
+          float: left;
+          margin-left: 20px;
+        }
+      }
+    }
+  }
+}
