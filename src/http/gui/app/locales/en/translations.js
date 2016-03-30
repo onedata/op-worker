@@ -11,7 +11,10 @@ export default {
   common: {
     modal: {
       ok: 'OK',
-      cancel: 'Cancel'
+      cancel: 'Cancel',
+      yes: 'Yes',
+      no: 'No',
+      fetchingToken: 'Fetching token...'
     }
   },
   components: {
@@ -35,6 +38,9 @@ export default {
       create: 'Create',
       join: 'Join',
       drop: {
+        setHome: 'Set as home',
+        moveUp: 'Move up',
+        moveDown: 'Move down',
         leave: 'Leave space',
         rename: 'Rename',
         remove: 'Remove',
@@ -48,7 +54,23 @@ export default {
       },
       joinModal: {
         title: 'Join a space',
-        label: 'Copy generated token and send it to the space administrator'
+        label: 'Enter a token of a space to join:'
+      },
+      renameModal: {
+        title: 'Rename a space',
+        label: 'Enter new space name:'
+      },
+      leaveModal: {
+        title: 'Leave a space',
+        label: 'Are you sure you want to leave space "{{spaceName}}"?'
+      },
+      removeModal: {
+        title: 'Remove a space',
+        label: 'Are you sure you want to remove a space "{{spaceName}}"?'
+      },
+      notify: {
+        spaceRemoved: 'Space "{{spaceName}}" has been removed',
+        spaceRemoveFailed: 'Failed to remove space "{{spaceName}}"'
       }
     },
     spacesSubmenu: {

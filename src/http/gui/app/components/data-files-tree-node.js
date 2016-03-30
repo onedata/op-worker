@@ -10,6 +10,10 @@ export default Ember.Component.extend({
     return level ? `level-${level}` : '';
   }.property('level'),
 
+  subdirsSorting: ['name:asc'],
+  subdirs: Ember.computed.filterBy('rootDir.children', 'isDir', true),
+  subdirsSorted: Ember.computed.sort('subdirs', 'subdirsSorting'),
+
   actions: {
     toggleDir(dirFile) {
       dirFile.set('isExpanded', !dirFile.get('isExpanded'));

@@ -15,23 +15,33 @@
 */
 
 import Ember from 'ember';
+import bindFloater from '../utils/bind-floater';
 
 export default Ember.Component.extend({
   activeSpace: null,
   spacesMenuService: Ember.inject.service('spaces-menu'),
   store: Ember.inject.service('store'),
   notify: Ember.inject.service('notify'),
+  oneproviderServer: Ember.inject.service('oneproviderServer'),
 
   spaces: [],
 
   /*** Bind with main-menu service, TODO: mixin or something? ***/
   SERVICE_API: ['selectSpace', 'clearSpaceSelection', 'selectSubmenu'],
 
+  /*** Variables for actions and modals ***/
+
   isCreatingSpace: false,
   newSpaceName: null,
 
   isJoiningSpace: false,
   joinSpaceToken: null,
+
+  spaceToRename: null,
+  renameSpaceName: null,
+
+  spaceToRemove: null,
+
 
   /** Listen on mainMenuService's events */
   listen: function() {
@@ -48,28 +58,39 @@ export default Ember.Component.extend({
     let i18n = this.get('i18n');
     return [
       {
+        icon: 'home',
+        label: i18n.t('components.spacesMenu.drop.setHome'),
+        action: 'setAsHome'
+      },
+      {
         icon: 'leave-space',
         label: i18n.t('components.spacesMenu.drop.leave'),
+        action: 'leaveSpace'
       },
       {
         icon: 'rename',
         label: i18n.t('components.spacesMenu.drop.rename'),
+        action: 'renameSpace'
       },
       {
         icon: 'remove',
         label: i18n.t('components.spacesMenu.drop.remove'),
+        action: 'removeSpace'
       },
       {
         icon: 'group-invite',
         label: i18n.t('components.spacesMenu.drop.inviteGroup'),
+        action: 'inviteGroup'
       },
       {
         icon: 'user-add',
         label: i18n.t('components.spacesMenu.drop.inviteUser'),
+        action: 'inviteUser'
       },
       {
         icon: 'support',
         label: i18n.t('components.spacesMenu.drop.getSupport'),
+        action: 'getSupport'
       }
     ];
   }.property(),
@@ -121,6 +142,25 @@ export default Ember.Component.extend({
     }
   }.observes('activeSpace'),
 
+  // TODO: this method searches for newly inserted space-dropdown-menus,
+  // maybe dropdown should be separate component to bind itself on insert
+  bindSpaceDrops: function() {
+    Ember.run.scheduleOnce('afterRender', this, function() {
+      let floaters = this.$().find('.space-dropdown-menu').not('.floater');
+      let sidebar = $('.secondary-sidebar');
+      floaters.each(function(index, el) {
+        el = $(el);
+        let updater = bindFloater(el);
+        sidebar.on('scroll', updater);
+        el.on('mouseover', updater);
+      });
+    });
+  }.observes('spaces.length'),
+
+  didInsertElement() {
+    this.bindSpaceDrops();
+  },
+
   actions: {
     /** Delegate to goToSpace action, should show submenu to configure Space */
     showSpaceOptions(space) {
@@ -159,14 +199,112 @@ export default Ember.Component.extend({
     },
 
     startJoinSpace() {
-      this.set('isJoiningSpace', true);
       this.set('joinSpaceToken', null);
-      // TODO: get token from rpc call
-      this.set('joinSpaceToken', 'fkfd0fudf89dnafydayfgsdafyudasgnf');
+      this.set('isJoiningSpace', true);
+    },
+
+    submitJoinSpace() {
+      let token = this.get('joinSpaceToken');
+      // TODO: loading gif?
+      this.get('oneproviderServer').joinSpace(token).then(
+        () => {
+          this.set('tokenToDisplay', token);
+        }
+      );
     },
 
     joinSpaceModalOpened() {
       // currently all actions in startJoinSpace
     },
+
+    setAsHome(space) {
+      this.get('spaces').forEach((s) => {
+        s.set('isDefault', false);
+        s.save();
+      });
+      space.set('isDefault', true);
+      // TODO: notify success
+      space.save();
+    },
+
+    leaveSpace(space) {
+      this.set('spaceToLeave', space);
+    },
+
+    submitLeaveSpace() {
+      try {
+        let space = this.get('spaceToLeave');
+        let spaceName = space.get('name');
+        this.get('oneproviderServer').leaveSpace(space).then(
+          () => {
+            this.get('notify').info(`Space "${spaceName}" left successfully`);
+          },
+          () => {
+            // TODO: better message
+            this.get('notify').error(`Cannot leave space "${spaceName}" due to error`);
+          }
+        );
+      } finally {
+        this.set('spaceToLeave', null);
+      }
+    },
+
+    renameSpace(space) {
+      this.set('renameSpaceName', space.get('name'));
+      this.set('spaceToRename', space);
+    },
+
+    submitRenameSpace() {
+      try {
+        let space = this.get('spaceToRename');
+        space.set('name', this.get('renameSpaceName'));
+        // TODO: save notification
+        space.save();
+      } finally {
+        this.set('spaceToRename', null);
+      }
+    },
+
+    removeSpace(space) {
+      this.set('spaceToRemove', space);
+    },
+
+    submitRemoveSpace() {
+      try {
+        let space = this.get('spaceToRemove');
+        let spaceName = space.get('name');
+        space.destroyRecord().then(
+          () => {
+            this.get('notify').info(this.get('i18n').t('components.spacesMenu.notify.spaceRemoved', {spaceName: spaceName}));
+          },
+          () => {
+            this.get('notify').error(this.get('i18n').t('components.spacesMenu.notify.spaceRemoveFailed', {spaceName: spaceName}));
+          }
+        );
+      } finally {
+        this.set('spaceToRemove', null);
+      }
+    },
+
+    inviteGroup(space) {
+      // TODO: show modal with loading
+      this.set('tokenToDisplay', null);
+      this.get('oneproviderServer').inviteGroup(space).then(
+        (token) => {
+          this.set('tokenToDisplay', token);
+        },
+        (error) => {
+          console.error('Invite group token fetch failed: ' + JSON.stringify(error));
+        }
+      );
+    },
+
+    inviteUser(space) {
+      this.get('oneproviderServer').inviteUser(space);
+    },
+
+    getSupport(space) {
+      this.get('oneproviderServer').getSupport(space);
+    }
   }
 });
