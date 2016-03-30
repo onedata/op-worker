@@ -19,10 +19,19 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   activeSpace: null,
   spacesMenuService: Ember.inject.service('spaces-menu'),
+  store: Ember.inject.service('store'),
+  notify: Ember.inject.service('notify'),
+
   spaces: [],
 
   /*** Bind with main-menu service, TODO: mixin or something? ***/
   SERVICE_API: ['selectSpace', 'clearSpaceSelection', 'selectSubmenu'],
+
+  isCreatingSpace: false,
+  newSpaceName: null,
+
+  isJoiningSpace: false,
+  joinSpaceToken: null,
 
   /** Listen on mainMenuService's events */
   listen: function() {
@@ -125,6 +134,39 @@ export default Ember.Component.extend({
 
     showGroupsConfig(space) {
       this.sendAction('showGroupsConfig', space);
+    },
+
+    startCreateSpace() {
+      this.set('isCreatingSpace', true);
+    },
+
+    createSpaceModalOpened() {
+      this.set('newSpaceName', null);
+    },
+
+    submitCreateSpace() {
+      try {
+        let s = this.get('store').createRecord('space', {
+          name: this.get('newSpaceName')
+        });
+        s.save();
+      } catch (error) {
+        this.get('notify').error(`Creating space with name "${this.get('newSpaceName')}" failed`);
+        console.error(`Space create failed: ${error}`);
+      } finally {
+        this.set('isCreatingSpace', false);
+      }
+    },
+
+    startJoinSpace() {
+      this.set('isJoiningSpace', true);
+      this.set('joinSpaceToken', null);
+      // TODO: get token from rpc call
+      this.set('joinSpaceToken', 'fkfd0fudf89dnafydayfgsdafyudasgnf');
+    },
+
+    joinSpaceModalOpened() {
+      // currently all actions in startJoinSpace
     },
   }
 });

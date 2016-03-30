@@ -135,8 +135,6 @@ html, body {
         }
       }
     }
-
-
   }
 
   nav.primary-sidebar {
@@ -196,19 +194,12 @@ html, body {
             background-color: $sidebar-item-hover-color;
           }
 
+          // TODO: generic figure styles moved up
           figure {
-            display: table-cell;
-            vertical-align: middle;
             max-height: $sidebar-item-height;
-            text-align: center;
             color: #fff;
-            cursor: pointer; cursor: hand;
 
             figcaption {
-              // pull up
-              margin-top: -3px;
-              font-size: 8pt;
-              font-weight: lighter;
               letter-spacing: 0.05em;
               text-transform: capitalize;
             }
@@ -245,17 +236,46 @@ html, body {
 
       border-right: #E6E6E6 2px solid;
 
+      // TODO: responsive variables?
       .secondary-sidebar-header {
-        text-transform: uppercase;
-        border-top: none;
-        // TODO: should be like div.current-sidebar-entry...
-        height: 60px;
-        padding-top: 18px;
-        padding-left: 33px; // SPACES is moved right slightly
-        padding-bottom: 16px;
-        padding-right: 27px;
         color: #4D5664; // TODO: graphite2?
-        font-size: 11pt;
+
+        > * {
+          display: table-cell;
+        }
+
+        .title {
+          width: 100%;
+          text-transform: uppercase;
+          border-top: none;
+          // TODO: should be like div.current-sidebar-entry...
+          height: 60px;
+          padding-top: 18px;
+          padding-left: 33px; // SPACES is moved right slightly
+          padding-bottom: 16px;
+          padding-right: 27px;
+          font-size: 11pt;
+        }
+
+        figure {
+          figcaption {
+            // pull up
+            margin-top: -10px;
+          }
+        }
+
+        .icon {
+          &:first-of-type {
+            padding-left: 15px;
+          }
+
+          font-size: 28px;
+          padding-right: 15px;
+
+          &:hover {
+            color: $onedata-red;
+          }
+        }
       }
 
 
@@ -387,13 +407,27 @@ html, body {
     }
   }
 
+  figure {
+    display: table-cell;
+    vertical-align: middle;
+    text-align: center;
+    cursor: pointer; cursor: hand;
+
+    figcaption {
+      // pull up
+      margin-top: -3px;
+      font-size: 8pt;
+      font-weight: lighter;
+    }
+  }
+
 }
 
 .hover-parent {
   &:not(:hover) {
     .transparent-not-hovered {
       color: transparent !important;
-    }  
+    }
   }
 }
 
