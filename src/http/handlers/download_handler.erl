@@ -175,9 +175,8 @@ stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
 %%--------------------------------------------------------------------
 -spec get_download_buffer_size() -> integer().
 get_download_buffer_size() ->
-    {ok, Value} = application:get_env(
-        ?APP_NAME, gui_download_buffer, ?DEFAULT_DOWNLOAD_BUFFER_SIZE),
-    Value.
+    application:get_env(
+        ?APP_NAME, gui_download_buffer, ?DEFAULT_DOWNLOAD_BUFFER_SIZE).
 
 
 %%--------------------------------------------------------------------

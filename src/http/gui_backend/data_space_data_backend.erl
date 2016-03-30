@@ -24,7 +24,7 @@
 -define(DEFAULT_SPACE_KEY, default_space).
 
 %% API
--export([init/0]).
+-export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
@@ -45,9 +45,22 @@ init() ->
     {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
     #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
     {ok, DefaultSpace} = oz_users:get_default_space({user, {Mac, DMacs}}),
+    ?dump(<<"/spaces/", DefaultSpace/binary>>),
     {ok, #file_attr{uuid = DefaultSpaceId}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces/", DefaultSpace/binary>>}),
     g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceId),
+    op_gui_utils:register_backend(?MODULE, self()),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback terminate/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate() -> ok.
+terminate() ->
+    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
