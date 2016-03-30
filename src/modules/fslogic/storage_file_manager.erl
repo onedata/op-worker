@@ -64,7 +64,6 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
         _ ->
             {false, undefined}
     end,
-    ?info("New handle: ~p ~p", [FileUUID, IsLocal]),
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,

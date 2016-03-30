@@ -133,14 +133,14 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?info("FSLogic request: ~p", [FuseRequest]),
+    ?info("fuse_request: ~p", [FuseRequest]),
     Response = run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request),
-    ?info("FSLogic response: ~p", [Response]),
+    ?info("fuse_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?info("FSLogic request: ~p", [ProxyIORequest]),
+    ?info("proxyio_request: ~p", [ProxyIORequest]),
     Response = run_and_catch_exceptions(fun handle_proxyio_request/2, fslogic_context:new(SessId), ProxyIORequest, proxyio_request),
-    ?info("FSLogic response: ~p", [Response]),
+    ?info("proxyio_response: ~p", [Response]),
     Response;
 handle(_Request) ->
     ?log_bad_request(_Request),
@@ -387,8 +387,6 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
                 ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason])
         end
     end, Evts),
-
-    ?info("handler_executed ~p", [Ctx]),
 
     case Ctx of
         #{notify := Pid} -> Pid ! {handler_executed, Results};

@@ -89,7 +89,6 @@ flush(SubId, Notify) ->
 %%--------------------------------------------------------------------
 -spec flush(SubId :: subscription:id(), Notify :: pid(), Ref :: event:manager_ref()) -> ok.
 flush(SubId, Notify, Ref) ->
-    ?info("ZOMG ~p", [get_event_managers(as_list(Ref))]),
     send_to_event_managers({flush_stream, SubId, Notify}, get_event_managers(as_list(Ref))).
 
 %%--------------------------------------------------------------------
