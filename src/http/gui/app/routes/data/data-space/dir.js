@@ -21,11 +21,12 @@ export default Ember.Route.extend({
       transition.abort();
     }
 
-    let loadedDirSpaceId = this.get('fileSystemTree').getSpaceIdForFile(file);
-    if (loadedDirSpaceId !== this.modelFor('data.data-space').get('id')) {
-      console.error('Space of loaded dir (file) is not a space loaded in data-space route');
-      transition.abort();
-    }
+    // @todo this sometimes runs too early and getSpaceIdForFile does not work
+    //let loadedDirSpaceId = this.get('fileSystemTree').getSpaceIdForFile(file);
+    //if (loadedDirSpaceId !== this.modelFor('data.data-space').get('id')) {
+    //  console.error('Space of loaded dir (file) is not a space loaded in data-space route');
+    //  transition.abort();
+    //}
 
     Ember.run.scheduleOnce('afterRender', this, function() {
       this.get('fileSystemTree').expandDir(file).then(() => {
