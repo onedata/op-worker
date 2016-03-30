@@ -63,6 +63,7 @@ init(_Args) ->
     Since = 0,
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -81,26 +82,18 @@ init_stream(Since, Until, Queue) ->
                 fun(SpaceId) ->
                     {SpaceId, #batch{since = Since, until = Since}}
                 end, dbsync_utils:get_spaces_for_provider())),
+            timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
             state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
         _ -> ok
     end,
 
-    {ok, TRef} = timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
-    {ok, StreamPid} = couchdb_datastore_driver:changes_start_link(
+    couchdb_datastore_driver:changes_start_link(
         fun
             (_, stream_ended, _) ->
                 worker_proxy:call(dbsync_worker, {Queue, {cleanup, Until}});
             (Seq, Doc, Model) ->
                 worker_proxy:call(dbsync_worker, {Queue, #change{seq = Seq, doc = Doc, model = Model}})
-        end, Since, Until),
-
-    spawn(fun() ->
-        process_flag(trap_exit, true),
-        erlang:link(StreamPid),
-        receive {'EXIT', StreamPid, _} -> timer:cancel(TRef) end
-    end),
-
-    {ok, StreamPid}.
+        end, Since, Until).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -173,8 +166,8 @@ handle({flush_queue, QueueKey}) ->
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
-                        catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
-                    update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    spawn(fun() -> dbsync_proto:send_batch(QueueKey, SpaceId, B) end),
+                    set_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
                     case QueueKey of
                         global -> state_put(global_resume_seq, Until);
                         _ -> ok
@@ -347,7 +340,7 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
             _ -> Key
         end,
 
-        datastore:run_synchronized(ModelName, MainDocKey, fun() ->
+        datastore:run_synchronized(ModelName, {dbsync, MainDocKey}, fun() ->
             caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
             caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
@@ -514,6 +507,26 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
         end,
 
     state_update(Key, OP).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets sequence number for given Provider and Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_current_seq(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
+    ok.
+set_current_seq(ProviderId, SpaceId, SeqNum) ->
+    Key = {current_seq, ProviderId, SpaceId},
+    OldValue = state_get(Key),
+    OP =
+        fun(undefined) ->
+            SeqNum;
+            (CurrentSeq) ->
+                max(SeqNum, CurrentSeq)
+        end,
+
+    state_put(Key, OP(OldValue)).
 
 
 %%--------------------------------------------------------------------

@@ -359,7 +359,7 @@ name(Text, Num) ->
 oz_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
-        fun(provider, SpaceId) ->
+        fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
             {ok, #space_details{id = SpaceId, name = SpaceName}}
         end

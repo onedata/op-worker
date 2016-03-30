@@ -487,6 +487,8 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_mimetyp
     {file, {uuid, UUID}};
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #set_mimetype{uuid = UUID, value = Value}}) ->
     {file, {uuid, UUID}};
+request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID}}) ->
+    {file, {uuid, UUID}};
 request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{file_uuid = UUID}) ->
     {file, {uuid, UUID}};
 request_to_file_entry_or_provider(_Ctx, Req) ->
