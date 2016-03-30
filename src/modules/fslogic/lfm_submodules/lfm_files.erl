@@ -340,7 +340,7 @@ get_sfm_handle_key_internal(_UUID, _Offset, Size, []) ->
 %%--------------------------------------------------------------------
 -spec get_sfm_handle_n_update_handle(Handle :: logical_file_manager:handle(), Key :: term(), SFMHandles :: sfm_handles_map(),
     OpenType :: helpers:open_mode()) ->
-    {{StorageId :: storage:id(), FileId :: file_meta:uuid()},
+    {{StorageId :: storage:id() | undefined, FileId :: file_meta:uuid()},
         SFMHandle :: storage_file_manager:handle(),
         NewHandle :: logical_file_manager:handle()} |  no_return().
 get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_uuid = FileUUID,

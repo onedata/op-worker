@@ -176,7 +176,6 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
         {NextCTX, Providers} =
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
-                    ?info("BY SPACE ~p", [SpaceId]),
                     #fslogic_ctx{session_id = SessionId} = Context,
                     {ok, ProviderIds} = oz_spaces:get_providers(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
@@ -222,8 +221,6 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                                 {ok, apply(Function, [NextCTX, Request1])};
                             {ok, {reroute, RerouteToProvider, Request1}} ->
                                 {ok, fslogic_remote:reroute(NextCTX, RerouteToProvider, Request1)};
-                            {ok, {response, Response}} -> %% Do not handle this request and return custom response
-                                {ok, Response};
                             {error, PreRouteError} ->
                                 ?error("Cannot initialize reouting for request ~p due to error in prerouting handler: ~p", [Request, PreRouteError]),
                                 throw({unable_to_reroute_message, {prerouting_error, PreRouteError}})

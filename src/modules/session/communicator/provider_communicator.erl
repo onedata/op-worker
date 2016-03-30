@@ -145,7 +145,6 @@ communicate_async(Msg, Ref, Recipient) ->
 ensure_connected(Conn) when is_pid(Conn) ->
     ok;
 ensure_connected(SessId) ->
-    try o = k catch _:_ -> ?debug_stacktrace("ensure_connected ~p", [SessId]) end,
     ProviderId = session_manager:session_id_to_provider_id(SessId),
     case session:get_random_connection(SessId) of
         {error, _} ->

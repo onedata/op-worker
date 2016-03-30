@@ -69,9 +69,9 @@ prerouting(_CTX, RequestBody, [RerouteTo | _Providers]) ->
 %%      'undefined' return value means, that response is invalid and the whole rerouting process shall fail.
 %% @end
 %%--------------------------------------------------------------------
--spec postrouting(SpaceInfo :: #space_info{}, {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
+-spec postrouting(#fslogic_ctx{}, {ok | error, ResponseOrReason :: term()}, Request :: term()) -> Result :: undefined | term().
 postrouting(_CTX, {ok, Response}, _Request) ->
     Response;
-postrouting(_SpaceInfo, UnkResult, Request) ->
+postrouting(_CTX, UnkResult, Request) ->
     ?error("Unknown result ~p for request ~p", [UnkResult, Request]),
     undefined.
