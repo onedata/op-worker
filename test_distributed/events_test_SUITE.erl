@@ -44,13 +44,13 @@ all() ->
     ?ALL([
         subscribe_should_create_subscription,
         unsubscribe_should_remove_subscription,
-         subscribe_should_notify_event_manager,
-         subscribe_should_notify_all_event_managers,
-         emit_read_event_should_execute_handler,
-         emit_write_event_should_execute_handler,
+        subscribe_should_notify_event_manager,
+        subscribe_should_notify_all_event_managers,
+        emit_read_event_should_execute_handler,
+        emit_write_event_should_execute_handler,
         emit_file_attr_update_event_should_execute_handler,
         emit_file_location_update_event_should_execute_handler,
-         flush_should_notify_awaiting_process
+        flush_should_notify_awaiting_process
     ]).
 
 -define(TIMEOUT, timer:seconds(15)).
@@ -179,7 +179,8 @@ init_per_testcase(Case, Config) when
         SessId
     end, lists:seq(0, 4)),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
-    [{session_ids, SessIds}, {subscription_id, SubId} | Config];
+    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    initializer:create_test_users_and_spaces([{session_ids, SessIds}, {subscription_id, SubId} | Config]);
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
