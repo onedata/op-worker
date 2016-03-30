@@ -27,13 +27,23 @@
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
-    communicator_mock/1, clean_test_users_and_spaces_no_validate/1]).
+    communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
+    domain_to_provider_id/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%-------------------------------------------------------------------
+%% @doc Returns provider id based on worker's domain
+%%--------------------------------------------------------------------
+-spec domain_to_provider_id(Domain :: atom()) -> binary().
+domain_to_provider_id(Domain) ->
+    atom_to_binary(Domain, unicode).
+
 
 %%--------------------------------------------------------------------
 %% @doc Setup and mocking related with users and spaces, done on each provider
@@ -55,7 +65,7 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -72,7 +82,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
+    test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 clear_cache(W) ->
@@ -293,7 +303,7 @@ create_test_users_and_spaces(AllWorkers, Config) ->
         StorageId = ?config({storage_id, Domain}, Config),
 
         CWorkers = get_same_domain_workers(Config, Domain),
-        ProviderId = atom_to_binary(Domain, utf8),
+        ProviderId = domain_to_provider_id(Domain),
         test_utils:mock_expect(CWorkers, oneprovider, get_provider_id,
             fun() ->
                 ProviderId
@@ -378,7 +388,7 @@ oz_spaces_mock_setup(Workers, Spaces) ->
     test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_providers,
         fun(_, _SpaceId) ->
-            {ok, [atom_to_binary(Domain, utf8) || Domain <- Domains]}
+            {ok, [domain_to_provider_id(Domain) || Domain <- Domains]}
         end
     ),
     test_utils:mock_expect(Workers, oz_spaces, get_details,

@@ -406,8 +406,8 @@ end_per_testcase(_, MultiConfig) ->
     Workers = ?config(op_worker_nodes, ?config(all, MultiConfig)),
     lfm_proxy:teardown(?config(p1, MultiConfig)),
     lfm_proxy:teardown(?config(p2, MultiConfig)),
-    initializer:clean_test_users_and_spaces(?config(p1, MultiConfig)),
-    initializer:clean_test_users_and_spaces(?config(p2, MultiConfig)),
+    initializer:clean_test_users_and_spaces_no_validate(?config(p1, MultiConfig)),
+    initializer:clean_test_users_and_spaces_no_validate(?config(p2, MultiConfig)),
 
     catch task_manager:kill_all(),
 

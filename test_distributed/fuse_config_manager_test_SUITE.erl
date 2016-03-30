@@ -133,5 +133,5 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config).
 
