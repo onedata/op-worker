@@ -347,7 +347,12 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
         end),
         spawn(
             fun() ->
-                dbsync_events:change_replicated(SpaceId, Change),
+                try
+                    dbsync_events:change_replicated(SpaceId, Change)
+                catch
+                    _:Error ->
+                        ?error_stacktrace("dbsync_events:change_replicated(~p, ~p)~n~nerror: ~p", [SpaceId, Change, Error])
+                end,
                 ok
             end),
         apply_changes(SpaceId, T)
@@ -544,7 +549,7 @@ bcast_status() ->
     lists:foreach(
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
-            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
+%%            ?debug("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
             {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
@@ -560,7 +565,7 @@ bcast_status() ->
     ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
-%%    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
+%%    ?debug("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);

@@ -40,7 +40,7 @@ on_file_location_change(_SpaceId, ChangedLocationDoc =
                 true ->
                     {ok, Locations} = file_meta:get_locations({uuid, Uuid}),
                     lists:foreach(fun(Id) ->
-                        update_location_replica(Id, ChangedLocationDoc) end,
+                        ok = update_location_replica(Id, ChangedLocationDoc) end,
                         [LocationId || LocationId <- Locations, LocationId =/= Key]);
                 false ->
                     ok
@@ -92,6 +92,7 @@ update_local_location_replica(LocalDoc = #document{value = #file_location{versio
 -spec update_outdated_local_location_replica(file_location:doc(), file_location:doc()) -> ok.
 update_outdated_local_location_replica(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1}},
     ExternalDoc = #document{value = #file_location{version_vector = VV2, size = NewSize}}) ->
+    ?info("Updating outdated replica of file ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = fslogic_file_location:get_changes(ExternalDoc, Diff),
@@ -106,8 +107,8 @@ update_outdated_local_location_replica(LocalDoc = #document{value = #file_locati
 %%--------------------------------------------------------------------
 -spec reconcile_replicas(file_location:doc(), file_location:doc()) -> ok.
 reconcile_replicas(LocalDoc = #document{value = #file_location{uuid = Uuid, version_vector = VV1, blocks = LocalBlocks, size = LocalSize}},
-    ExternalDoc = #document{value = #file_location{version_vector = VV2, blocks = ExternalBlocks, size = ExternalSize}}) ->
-    ?info("Conflicting changes detected on ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
+    ExternalDoc = #document{value = #file_location{version_vector = VV2, size = ExternalSize}}) ->
+    ?info("Conflicting changes detected on file ~p, versions: ~p vs ~p", [Uuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
     {ExternalChanges, ExternalShrink} = fslogic_file_location:get_merged_changes(ExternalDoc, ExternalChangesNum),

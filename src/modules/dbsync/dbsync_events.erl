@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([change_replicated/2]).
+-export([change_replicated/2, schedule_file_location_handling/3]).
 
 %%%===================================================================
 %%% API
@@ -33,20 +33,21 @@
 -spec change_replicated(SpaceId :: binary(), dbsync_worker:change()) ->
     any().
 change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc = #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
-    ?debug("change_replicated: changed file_meta ~p", [FileUUID]),
+    ?info("change_replicated: changed file_meta reg file ~p", [FileUUID]),
     fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
     fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
-    ?debug("change_replicated: changed file_meta ~p", [FileUUID]),
+    ?info("change_replicated: changed file_meta ~p", [FileUUID]),
     fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
-    ?debug("change_replicated: changed file_location ~p", [FileUUID]),
+    ?info("change_replicated: changed file_location ~p", [FileUUID]),
     case replication_dbsync_hook:on_file_location_change(SpaceId, Doc) of
+        ok ->
+            ok;
         {error,{{badmatch,{error,{not_found,file_meta}}}, _}} ->
-            timer:apply_after(timer:seconds(1), replication_dbsync_hook,
-                on_file_location_change, [SpaceId, Doc]);
-        _ ->
-            ok
+            spawn(?MODULE, schedule_file_location_handling, [SpaceId, Doc, 0]);
+        Error ->
+            ?error("on_file_location_change error: ~p", [Error])
     end;
 change_replicated(_SpaceId, _Change) ->
     ok.
@@ -55,3 +56,16 @@ change_replicated(_SpaceId, _Change) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+schedule_file_location_handling(SpaceId, Doc, N) when N < 15 -> %todo use definition cache_to_disk_force_delay_ms
+    timer:sleep(timer:seconds(1)),
+    case replication_dbsync_hook:on_file_location_change(SpaceId, Doc) of
+        ok ->
+            ok;
+        {error,{{badmatch,{error,{not_found,file_meta}}}, _}} ->
+            schedule_file_location_handling(SpaceId, Doc, N + 1);
+        Error ->
+            ?error("on_file_location_change error: ~p", [Error])
+    end;
+schedule_file_location_handling(_SpaceId, Doc, N) ->
+    ?warning("Could not apply file location changes: ~p, after ~p retries, due to missing file_meta", [Doc, N]).
