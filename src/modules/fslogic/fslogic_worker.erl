@@ -172,8 +172,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                 {space, SpaceId} ->
                     ?info("BY SPACE ~p", [SpaceId]),
                     #fslogic_ctx{session_id = SessionId} = Context,
-                    {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc}}}} = session:get(SessionId),
-                    {ok, ProviderIds} = oz_spaces:get_providers({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                    {ok, ProviderIds} = oz_spaces:get_providers(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             {Context, [oneprovider:get_provider_id()]};

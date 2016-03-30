@@ -54,7 +54,7 @@ preroute_message(#client_message{message_stream = undefined} = Msg, _SessId) ->
 preroute_message(#server_message{message_stream = undefined} = Msg, _SessId) ->
     router:route_message(Msg);
 preroute_message(Msg, SessId) ->
-    router:route_message(Msg).
+    sequencer:route_message(Msg, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc

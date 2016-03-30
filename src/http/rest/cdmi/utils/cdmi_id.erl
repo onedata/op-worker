@@ -20,6 +20,7 @@
 %%%--------------------------------------------------------------------
 -module(cdmi_id).
 
+-include_lib("ctool/include/logging.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
@@ -90,6 +91,7 @@
 %%--------------------------------------------------------------------
 -spec uuid_to_objectid(onedata_file_api:file_uuid()) -> {ok, binary()} | {error, atom()}.
 uuid_to_objectid(Uuid) ->
+    ?info("ASDFGHJKL ~p", [Uuid]),
     case build_objectid(http_utils:base64url_decode(Uuid)) of
         {error, Error} -> {error, Error};
         Id -> {ok, to_base16(Id)}
@@ -135,7 +137,7 @@ build_objectid(Data) ->
 -spec build_objectid(Enum :: integer(), Data :: binary()) -> binary() | {error, atom()}.
 build_objectid(Enum, Data) when is_binary(Data) ->
     Length = size(Data),
-    case (Length =< 32) of
+    case (Length =< 64) of
         true ->
             Bin = <<0:8, Enum:24, 0:8, Length:8, 0:16, Data/binary>>,
             Crc = crc16(binary_to_list(Bin)),

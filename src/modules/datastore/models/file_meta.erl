@@ -137,9 +137,9 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                          NewUUID =
                              try binary_to_term(BinParentUUID) of
                                  {space, SpaceId} ->
-                                     http_utils:base64url_encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
-                                 {{space_id, SpaceId}, _FileUUID} ->
-                                     http_utils:base64url_encode(term_to_binary({{space_id, SpaceId}, crypto:rand_bytes(10)}));
+                                     http_utils:base64url_encode(term_to_binary({{s, SpaceId}, crypto:rand_bytes(10)}));
+                                 {{s, SpaceId}, _FileUUID} ->
+                                     http_utils:base64url_encode(term_to_binary({{s, SpaceId}, crypto:rand_bytes(10)}));
                                  _ ->
                                      http_utils:base64url_encode(term_to_binary(crypto:rand_bytes(10)))
                              catch

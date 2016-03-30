@@ -72,7 +72,7 @@ get_space(FileEntry) ->
             case binary_to_term(BinFileUUID) of
                 {space, SpaceId0} ->
                     SpaceId0;
-                {{space_id, SpaceId0}, _FileUUID} ->
+                {{s, SpaceId0}, _FileUUID} ->
                     SpaceId0
             end
     end,
@@ -107,7 +107,7 @@ get_space(FileEntry, UserId) ->
             case binary_to_term(BinFileUUID) of
                 {space, SpaceId0} ->
                     SpaceId0;
-                {{space_id, SpaceId0}, _FileUUID} ->
+                {{s, SpaceId0}, _FileUUID} ->
                     SpaceId0
             end
     end,

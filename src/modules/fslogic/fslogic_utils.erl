@@ -34,8 +34,12 @@ session_to_rest_client(SessId) ->
         provider_outgoing -> provider;
         provider -> provider;
         _ ->
-            #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc} = Auth,
-            {try_user, {Macaroon, MacaroonDsc}}
+            case Auth of
+                #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc} ->
+                    {try_user, {Macaroon, MacaroonDsc}};
+                _ ->
+                    provider
+            end
     end.
 
 

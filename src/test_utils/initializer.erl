@@ -273,15 +273,33 @@ communicator_mock(Workers) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Setup and mocking related with users and spaces, done on one provider
+%% @doc Setup and mocking related with users and spaces on all given providers.
 %%--------------------------------------------------------------------
 -spec create_test_users_and_spaces([Worker :: node()], Config :: list()) -> list().
-create_test_users_and_spaces([], Config) ->
-    Config;
-create_test_users_and_spaces([Worker | Rest], Config) ->
-    StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
-    SameDomainWorkers = get_same_domain_workers(Config, ?GET_DOMAIN(Worker)),
-    initializer:space_storage_mock(SameDomainWorkers, StorageId),
+create_test_users_and_spaces(AllWorkers, Config) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
+    catch test_utils:mock_new(AllWorkers, oneprovider),
+    catch test_utils:mock_new(AllWorkers, oz_providers),
+
+    test_utils:mock_expect(AllWorkers, oz_providers, get_spaces,
+        fun(_PID) ->
+            {ok, [
+                <<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>,
+                <<"space_id5">>, <<"space_id6">>
+            ]}
+        end),
+
+    lists:foreach(fun(Domain) ->
+        StorageId = ?config({storage_id, Domain}, Config),
+
+        CWorkers = get_same_domain_workers(Config, Domain),
+        ProviderId = atom_to_binary(Domain, utf8),
+        test_utils:mock_expect(CWorkers, oneprovider, get_provider_id,
+            fun() ->
+                ProviderId
+            end),
+        initializer:space_storage_mock(CWorkers, StorageId)
+    end, Domains),
 
     Space1 = {<<"space_id1">>, <<"space_name1">>},
     Space2 = {<<"space_id2">>, <<"space_name2">>},
@@ -301,13 +319,12 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     User4 = {4, [Space4], [Group4]},
     User5 = {5, [Space5, Space6], []},
 
-    file_meta_mock_setup(SameDomainWorkers),
-    oz_spaces_mock_setup(SameDomainWorkers, [Space1, Space2, Space3, Space4, Space5, Space6]),
-    oz_groups_mock_setup(SameDomainWorkers, [Group1, Group2, Group3, Group4]),
+    file_meta_mock_setup(AllWorkers),
+    oz_spaces_mock_setup(AllWorkers, [Space1, Space2, Space3, Space4, Space5, Space6]),
+    oz_groups_mock_setup(AllWorkers, [Group1, Group2, Group3, Group4]),
 
     proplists:compact(
-        initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config)
-        ++ create_test_users_and_spaces(Rest, Config)
+        lists:flatten([initializer:setup_session(W, [User1, User2, User3, User4, User5], Config) || W <- AllWorkers])
     ).
 
 %%--------------------------------------------------------------------
@@ -357,7 +374,13 @@ name(Text, Num) ->
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}]) -> ok.
 oz_spaces_mock_setup(Workers, Spaces) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, oz_spaces),
+    test_utils:mock_expect(Workers, oz_spaces, get_providers,
+        fun(_, _SpaceId) ->
+            {ok, [atom_to_binary(Domain, utf8) || Domain <- Domains]}
+        end
+    ),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
