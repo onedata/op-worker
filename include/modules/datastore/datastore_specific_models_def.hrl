@@ -22,6 +22,14 @@
     recipient :: pid() | undefined
 }).
 
+% State of subscription tracking.
+-record(subscriptions_state, {
+    refreshing_node :: node(),
+    largest :: subscriptions:seq(),
+    missing :: [subscriptions:seq()],
+    users :: sets:set(onedata_user:id())
+}).
+
 %% Identity containing user_id
 -record(identity, {
     user_id :: onedata_user:id(),
@@ -51,12 +59,16 @@
 -record(onedata_user, {
     name :: binary(),
     space_ids :: [binary()],
-    group_ids :: [binary()]
+    group_ids :: [binary()],
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 %% Local, cached version of OZ group
 -record(onedata_group, {
-    name :: binary()
+    name :: binary(),
+    users = [] :: [{UserId :: binary(), [privileges:group_privilege()]}],
+    spaces = [] :: [SpaceId :: binary()],
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 -record(file_meta, {
@@ -102,10 +114,21 @@
     }
 }).
 
-%% Model for caching space details fetched from Global Registry
+%% Model for caching provider details fetched from OZ
+-record(provider_info, {
+    client_name :: binary(),
+    revision_history = [] :: [subscriptions:rev()]
+}).
+
+%% Model for caching space details fetched from OZ
 -record(space_info, {
     id :: binary(),
-    name :: binary()
+    name :: binary(),
+    size = [] :: [{ProviderId :: binary(), Size :: pos_integer()}],
+    users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
+    groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
+    providers = [] :: [ProviderId :: binary()],
+    revision_history = [] :: [subscriptions:rev()]
 }).
 
 %% Model that maps space to storage

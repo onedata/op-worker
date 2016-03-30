@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc gui listener starting & stopping
+%%% @doc This module is responsible for GUI listener starting and stopping.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(gui_listener).
@@ -25,12 +25,12 @@
 -export([port/0, start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
-%%% listener_starter_behaviour callbacks
+%%% listener_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback port/0.
+%% {@link listener_behaviour} callback port/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec port() -> integer().
@@ -41,7 +41,7 @@ port() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback start/1.
+%% {@link listener_behaviour} callback start/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
@@ -74,6 +74,8 @@ start() ->
         {'_', [
             {?provider_id_path, get_provider_id_handler, []},
             {"/nagios/[...]", nagios_handler, []},
+            {"/upload", upload_handler, []},
+            {"/download/:id", download_handler, []},
             {?WEBSOCKET_PREFIX_PATH ++ "[...]", gui_ws_handler, []},
             {"/[...]", gui_static_handler, {dir, DocRoot}}
         ]}
@@ -86,7 +88,9 @@ start() ->
         ranch_ssl2, [
             {ip, {127, 0, 0, 1}},
             {port, GuiPort},
-            {certfile, Cert}
+            {certfile, Cert},
+            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
+            {versions, ['tlsv1.2', 'tlsv1.1']}
         ], cowboy_protocol, [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
@@ -102,7 +106,7 @@ start() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback stop/1.
+%% {@link listener_behaviour} callback stop/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
@@ -122,16 +126,27 @@ stop() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the status of a listener.
+%% {@link listener_behaviour} callback healthcheck/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
-    case http_client:get("https://127.0.0.1:" ++ integer_to_list(GuiPort),
-        [], <<>>, [insecure]) of
-        {ok, _, _, _} ->
-            ok;
-        _ ->
-            {error, server_not_responding}
+    Endpoint = "https://127.0.0.1:" ++ integer_to_list(port()),
+    case http_client:get(Endpoint, [], <<>>, [insecure]) of
+        {ok, _, _, _} -> ok;
+        _ -> {error, server_not_responding}
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list of weak ciphers.
+%% @end
+-spec weak_ciphers() -> list().
+%%--------------------------------------------------------------------
+weak_ciphers() ->
+    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

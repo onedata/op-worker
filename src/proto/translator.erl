@@ -286,7 +286,6 @@ translate_from_protobuf(#'TreeBroadcast'{message_body = {_, MessageBody}, depth 
     };
 translate_from_protobuf(#'ChangesRequest'{since_seq = Since, until_seq = Until}) ->
     #changes_request{since_seq = Since, until_seq = Until};
-
 translate_from_protobuf(#'StatusRequest'{}) ->
     #status_request{};
 translate_from_protobuf(#'StatusReport'{space_id = SpaceId, seq_num = SeqNum}) ->
@@ -508,6 +507,7 @@ translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     {storage_test_file, #'StorageTestFile'{helper_params = Record,
         space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}};
 
+%% DBSync
 translate_to_protobuf(#dbsync_request{message_body = MessageBody}) ->
     {dbsync_request, #'DBSyncRequest'{message_body = translate_to_protobuf(MessageBody)}};
 translate_to_protobuf(#tree_broadcast{message_body = MessageBody, depth = Depth, excluded_providers = ExcludedProv,
@@ -523,7 +523,6 @@ translate_to_protobuf(#tree_broadcast{message_body = MessageBody, depth = Depth,
     }};
 translate_to_protobuf(#changes_request{since_seq = Since, until_seq = Until}) ->
     {changes_request, #'ChangesRequest'{since_seq = Since, until_seq = Until}};
-
 translate_to_protobuf(#status_request{}) ->
     {status_request, #'StatusRequest'{}};
 translate_to_protobuf(#status_report{space_id = SpaceId, seq = SeqNum}) ->
