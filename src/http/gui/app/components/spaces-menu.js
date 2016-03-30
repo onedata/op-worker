@@ -35,6 +35,36 @@ export default Ember.Component.extend({
     this.SERVICE_API.forEach(name => mainMenuService.off(name, this, name));
   }.on('willDestroyElement'),
 
+  menuItems: function() {
+    let i18n = this.get('i18n');
+    return [
+      {
+        icon: 'leave-space',
+        label: i18n.t('components.spacesMenu.drop.leave'),
+      },
+      {
+        icon: 'rename',
+        label: i18n.t('components.spacesMenu.drop.rename'),
+      },
+      {
+        icon: 'remove',
+        label: i18n.t('components.spacesMenu.drop.remove'),
+      },
+      {
+        icon: 'group-invite',
+        label: i18n.t('components.spacesMenu.drop.inviteGroup'),
+      },
+      {
+        icon: 'user-add',
+        label: i18n.t('components.spacesMenu.drop.inviteUser'),
+      },
+      {
+        icon: 'support',
+        label: i18n.t('components.spacesMenu.drop.getSupport'),
+      }
+    ];
+  }.property(),
+
   clearSpaceSelection() {
     $('.secondary-sidebar .first-level').removeClass('active');
   },

@@ -49,7 +49,6 @@ export default Ember.Route.extend({
   }.property('permissionsType'),
 
   activate() {
-    window.alert('lol');
     let permissionsType = this.get('permissionsType');
     console.debug(`show ${permissionsType} activate`);
     Ember.run.scheduleOnce('afterRender', this, function() {

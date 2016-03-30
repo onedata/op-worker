@@ -389,5 +389,13 @@ html, body {
 
 }
 
+.hover-parent {
+  &:not(:hover) {
+    .transparent-not-hovered {
+      color: transparent !important;
+    }  
+  }
+}
+
 // TODO: temporary
 @import 'data';

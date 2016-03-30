@@ -5,16 +5,42 @@
   {{#each spaces as |space|}}
     {{!-- TODO: computing entryId in model is not very elegant --}}
     {{!-- move sidebar entry creation to helper --}}
-    <li id="{{space.sidebarEntryId}}" class="first-level">
+    <li id="{{space.sidebarEntryId}}" class="first-level hover-parent">
       <div {{action 'showSpaceOptions' space}} class="secondary-sidebar-item first-level">
         <span class="item-element item-click-area">
-          <span class="item-icon">
+          <span class="item-element item-icon">
             {{icon (if space.isDefault 'space-home' 'space')
               (if space.isDefault 'color-space-default' 'color-space')}}
           </span>
 
-          <span class="item-label">
+          <span class="item-element item-label">
             {{space.name}}
+          </span>
+
+          <span class="item-element item-icon transparent-not-hovered" {{action 'openSpaceSettings'}}>
+
+            <div class="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown"
+                role="button" aria-haspopup="true" aria-expanded="false">
+                <span class="item-element item-icon transparent-not-hovered">
+                  {{icon 'settings'}}
+                </span>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-down dropdown-menu-list">
+                {{!-- TODO: foreach --}}
+                {{#each menuItems as |item|}}
+                  <li>
+                    <span class="icon">
+                      {{icon item.icon}}
+                    </span>
+                    <span class="label">
+                      {{item.label}}
+                    </span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+
           </span>
         </span>
       </div>

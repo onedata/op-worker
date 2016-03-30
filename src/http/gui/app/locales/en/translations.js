@@ -32,6 +32,14 @@ export default {
     },
     spacesMenu: {
       title: 'spaces',
+      drop: {
+        leave: 'Leave space',
+        rename: 'Rename',
+        remove: 'Remove',
+        inviteGroup: 'Invite group',
+        inviteUser: 'Invite user',
+        getSupport: 'Get support'
+      }
     },
     spacesSubmenu: {
       users: 'users',
