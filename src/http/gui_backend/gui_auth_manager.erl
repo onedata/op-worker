@@ -27,7 +27,8 @@
 %% record that can be used to perform operations on behalf of the user.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(Macaroon :: macaroon:macaroon()) -> {ok, #auth{}} | {error, term()}.
+-spec authenticate(Macaroon :: macaroon:macaroon()) ->
+    {ok, #auth{}} | {error, term()}.
 authenticate(Macaroon) ->
     try
         Caveats = macaroon:third_party_caveats(Macaroon),

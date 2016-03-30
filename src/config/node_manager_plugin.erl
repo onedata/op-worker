@@ -82,6 +82,7 @@ modules_with_args() -> node_manager:cluster_worker_modules() ++ [
         {supervisor_spec, session_manager_worker:supervisor_spec()},
         {supervisor_child_spec, session_manager_worker:supervisor_child_spec()}
     ]},
+    {subscriptions_worker, []},
     {fslogic_worker, []},
     {dbsync_worker, []}
 ].

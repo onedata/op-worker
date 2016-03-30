@@ -36,7 +36,7 @@ init(_Type, Req, _Opts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles a request producing an XML response
+%% Handles a request returning provider's id.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(term(), term()) -> {ok, cowboy_req:req(), term()}.

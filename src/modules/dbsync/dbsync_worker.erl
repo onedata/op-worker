@@ -214,7 +214,7 @@ handle({async_init_stream, Since, Until, Queue}) ->
     state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
-                catch exit(OldStream, shutdown),
+                    catch exit(OldStream, shutdown),
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
@@ -291,7 +291,7 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
-    catch consume_batches(FromProvider, SpaceId),
+        catch consume_batches(FromProvider, SpaceId),
     do_apply_batch_changes(FromProvider, SpaceId, Batch, true).
 
 %%--------------------------------------------------------------------
@@ -335,15 +335,14 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
         ModelConfig = ModelName:model_init(),
         MainDocKey = case Value of
             #links{} ->
-                couchdb_datastore_driver:links_key_to_doc_key(Key);
+                Value#links.doc_key;
             _ -> Key
         end,
 
         datastore:run_synchronized(ModelName, MainDocKey, fun() ->
             caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key, all)
+            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all)
         end),
         spawn(
             fun() ->
@@ -440,9 +439,9 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     datastore:key().
 get_sync_context(#document{key = Key, value = #file_meta{}}) ->
     Key;
-get_sync_context(#document{value = #links{key = DocKey, model = file_meta}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
-get_sync_context(#document{value = #links{key = DocKey, model = file_location}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_location}}) ->
     #model_config{store_level = StoreLevel} = file_location:model_init(),
     {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
     get_sync_context(Doc);
