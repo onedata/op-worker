@@ -347,9 +347,9 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
                                end,
 
         datastore:run_synchronized(ModelName, term_to_binary({dbsync, Key}), fun() ->
-            FlushFun(),
+            ok = FlushFun(),
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            ClearFun()
+            ok = ClearFun()
         end),
         spawn(
             fun() ->
