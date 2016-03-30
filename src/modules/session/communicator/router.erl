@@ -154,7 +154,7 @@ route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId
         }, Connection)
     end),
     ok;
-route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = _SessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
     Connection = self(),

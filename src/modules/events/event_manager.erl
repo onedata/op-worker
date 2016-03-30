@@ -191,7 +191,7 @@ handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup
                 _ ->
                     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
                     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                    {ok, #document{value = #session{auth = #auth{} = Auth}}} = session:get(SessId),
+                    {ok, #document{value = #session{auth = Auth}}} = session:get(SessId),
                     RestClient = fslogic_utils:session_to_rest_client(SessId),
                     {ok, ProviderIds} = oz_spaces:get_providers(RestClient, SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of

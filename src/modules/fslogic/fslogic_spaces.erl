@@ -67,7 +67,6 @@ get_space(FileEntry) ->
         <<"">> ->
             throw({not_a_space, FileEntry});
         _ ->
-            ?info("Decoding UUID ~p ~p", [FileUUID, FileEntry]),
             BinFileUUID = http_utils:base64url_decode(FileUUID),
             case binary_to_term(BinFileUUID) of
                 {space, SpaceId0} ->

@@ -123,11 +123,11 @@ read_dir(#fslogic_ctx{session_id = SessionId} = CTX, File, Offset, Size) ->
             Children =
                 case Offset < length(SpacesIds) of
                     true ->
-                        {ok, #document{value = #session{auth = #auth{macaroon = Macaroon, disch_macaroons = MacaroonDsc}}}} = session:get(SessionId),
+
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
 
                         Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:fetch({user, {Macaroon, MacaroonDsc}}, SpaceId),
+                            {ok, Space} = space_info:fetch(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
                             Space
                         end, SpacesIdsChunk),
 

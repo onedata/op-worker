@@ -91,7 +91,6 @@
 %%--------------------------------------------------------------------
 -spec uuid_to_objectid(onedata_file_api:file_uuid()) -> {ok, binary()} | {error, atom()}.
 uuid_to_objectid(Uuid) ->
-    ?info("ASDFGHJKL ~p", [Uuid]),
     case build_objectid(http_utils:base64url_decode(Uuid)) of
         {error, Error} -> {error, Error};
         Id -> {ok, to_base16(Id)}
