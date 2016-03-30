@@ -32,6 +32,24 @@ export default {
     },
     spacesMenu: {
       title: 'spaces',
+      create: 'Create',
+      join: 'Join',
+      drop: {
+        leave: 'Leave space',
+        rename: 'Rename',
+        remove: 'Remove',
+        inviteGroup: 'Invite group',
+        inviteUser: 'Invite user',
+        getSupport: 'Get support'
+      },
+      createModal: {
+        title: 'Create a new space',
+        enterName: 'Enter new space name:'
+      },
+      joinModal: {
+        title: 'Join a space',
+        label: 'Copy generated token and send it to the space administrator'
+      }
     },
     spacesSubmenu: {
       users: 'users',

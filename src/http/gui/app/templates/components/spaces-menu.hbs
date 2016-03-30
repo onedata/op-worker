@@ -1,20 +1,56 @@
 <div class="secondary-sidebar-header">
-  {{t 'components.spacesMenu.title'}}
+  <div class="title">
+    {{t 'components.spacesMenu.title'}}
+  </div>
+  <figure class="icon" {{action 'startCreateSpace'}}>
+    {{icon 'space-add'}}
+    <figcaption>{{t 'components.spacesMenu.create'}}</figcaption>
+  </figure>
+  <figure class="icon" {{action 'startJoinSpace'}}>
+    {{icon 'join'}}
+    <figcaption>{{t 'components.spacesMenu.join'}}</figcaption>
+  </figure>
 </div>
 <ul>
   {{#each spaces as |space|}}
     {{!-- TODO: computing entryId in model is not very elegant --}}
     {{!-- move sidebar entry creation to helper --}}
-    <li id="{{space.sidebarEntryId}}" class="first-level">
+    <li id="{{space.sidebarEntryId}}" class="first-level hover-parent">
       <div {{action 'showSpaceOptions' space}} class="secondary-sidebar-item first-level">
         <span class="item-element item-click-area">
-          <span class="item-icon">
+          <span class="item-element item-icon">
             {{icon (if space.isDefault 'space-home' 'space')
-              (if space.isDefault 'default-space-color' 'space-color')}}
+              (if space.isDefault 'color-space-default' 'color-space')}}
           </span>
 
-          <span class="item-label">
+          <span class="item-element item-label">
             {{space.name}}
+          </span>
+
+          <span class="item-element item-icon transparent-not-hovered" {{action 'openSpaceSettings'}}>
+
+            <div class="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown"
+                role="button" aria-haspopup="true" aria-expanded="false">
+                <span class="item-element item-icon transparent-not-hovered">
+                  {{icon 'settings'}}
+                </span>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-down dropdown-menu-list">
+                {{!-- TODO: foreach --}}
+                {{#each menuItems as |item|}}
+                  <li>
+                    <span class="icon">
+                      {{icon item.icon}}
+                    </span>
+                    <span class="label">
+                      {{item.label}}
+                    </span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+
           </span>
         </span>
       </div>
@@ -25,3 +61,46 @@
   {{/each}}
 
 </ul>
+
+{{!-- modals --}}
+
+{{!-- CREATE SPACE --}}
+
+{{#bs-modal openedAction='createSpaceModalOpened' open=isCreatingSpace body=false footer=false
+    title=(t "components.spacesMenu.createModal.title")
+    id="create-space"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitCreateSpace") model=this}}
+      {{bs-form-element controlType="text" property="newSpaceName" autofocus=true
+        label=(t 'components.spacesMenu.createModal.enterName')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.cancel"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- JOIN SPACE --}}
+
+{{#bs-modal openedAction='joinSpaceModalOpened' open=isJoiningSpace body=false footer=false
+    title=(t "components.spacesMenu.joinModal.title")
+    id="join-space"}}
+  {{#bs-modal-body}}
+  {{!-- TODO: select/copy to clipboard button --}}
+  {{!-- TODO: loading icon when token is null? --}}
+    {{#bs-form model=this}}
+      {{bs-form-element controlType="text" property="joinSpaceToken" autofocus=true
+        label=(t 'components.spacesMenu.joinModal.label')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button action=(action "close" target=footer) type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
