@@ -334,16 +334,23 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
-        MainDocKey = case Value of
+        {FlushFun, ClearFun} = case Value of
             #links{} ->
-                Value#links.doc_key;
-            _ -> Key
+                {
+                    fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end,
+                    fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end
+                };
+            _ ->
+                {
+                    fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key) end,
+                    fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key) end
+                }
         end,
 
-        datastore:run_synchronized(ModelName, {dbsync, MainDocKey}, fun() ->
-            caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
+        datastore:run_synchronized(ModelName, {dbsync, Key}, fun() ->
+            FlushFun(),
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all)
+            ClearFun()
         end),
         spawn(
             fun() ->
