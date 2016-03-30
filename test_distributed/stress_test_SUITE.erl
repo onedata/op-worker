@@ -85,7 +85,8 @@ many_files_creation_test(Config) ->
     ]).
 many_files_creation_test_base(Config) ->
     % Sleep because test does to many operations for Cauchbase when running for a long time
-    timer:sleep(timer:seconds(10)),
+    % TODO - make mnesia slower when Cauchbase working too slow
+    timer:sleep(timer:seconds(15)),
 
     LastFails = ?config(last_fails, Config),
     RepNum = ?config(rep_num, Config),
