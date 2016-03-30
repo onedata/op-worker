@@ -1,0 +1,2 @@
+DATABASE = 'luma_database.db'
+HOST = '0.0.0.0'

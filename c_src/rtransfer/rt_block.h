@@ -9,7 +9,7 @@
 #ifndef RT_BLOCK_H
 #define RT_BLOCK_H
 
-#include "nifpp.h"
+#include "../nifpp.h"
 #include "rt_local_term.h"
 
 #include <string>

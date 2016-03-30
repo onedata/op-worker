@@ -119,4 +119,9 @@
     entry :: term()
 }).
 
+%% Model that maps onedata user to POSIX user
+-record(posix_user, {
+    credentials :: #{storage:id() => posix_user:credentials()}
+}).
+
 -endif.

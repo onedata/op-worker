@@ -13,6 +13,7 @@ CXXFLAGS += -fPIC -std=c++14 -O3 -Wall $(shell pkg-config --cflags botan-1.10) \
 all: \
 		../priv/csr_creator_drv.so \
 		../priv/helpers_nif.so \
+		../priv/luma_nif.so \
 		../priv/rt_priority_queue_drv.so \
 		../priv/rt_map_drv.so
 
@@ -23,6 +24,10 @@ all: \
 
 ../priv/helpers_nif.so: \
 		helpers/helpers_nif.o
+	$(CXX) $? -o $@ $(LDFLAGS)
+
+../priv/luma_nif.so: \
+		luma/luma_nif.o
 	$(CXX) $? -o $@ $(LDFLAGS)
 
 ../priv/rt_priority_queue_drv.so: \
