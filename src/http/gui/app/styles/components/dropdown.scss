@@ -1,6 +1,8 @@
 $dropdown-radius: 6px;
 $dropdown-triangle-width: 8px;
 
+$dropdown-bg: #2B3037;
+
 .dropdown-menu {
   position: absolute;
   padding: 15px;
@@ -19,9 +21,9 @@ $dropdown-triangle-width: 8px;
       right: 10px;
       display: inline-block;
       border-right: $dropdown-triangle-width solid transparent;
-      border-bottom: $dropdown-triangle-width solid #ccc;
+      border-bottom: $dropdown-triangle-width solid $dropdown-bg;
       border-left: $dropdown-triangle-width solid transparent;
-      border-bottom-color: #2B3037;
+      border-bottom-color: $dropdown-bg;
       content: '';
     }
   }
@@ -34,12 +36,34 @@ $dropdown-triangle-width: 8px;
 
     &:before {
       position: absolute;
-      top: 0;
+      // draw full left triangle
+      top: $dropdown-triangle-width * 2;
       left: 2 * (-$dropdown-triangle-width);
       border-bottom: $dropdown-triangle-width solid transparent;
-      border-right: $dropdown-triangle-width solid #2B3037;
+      border-right: $dropdown-triangle-width solid $dropdown-bg;
       border-left: $dropdown-triangle-width solid transparent;
+      border-top: $dropdown-triangle-width solid transparent;
       content: '';
+    }
+  }
+
+  &.dropdown-menu-settings {
+    width: 200px;
+    border-radius: 0px !important;
+
+    li {
+      color: white;
+      padding: 4px;
+      border-radius: 0px !important;
+
+      .item-icon {
+          font-size: 30px !important;
+      }
+
+      .item-label {
+        font-size: 9pt !important;
+        text-transform: uppercase;
+      }
     }
   }
 

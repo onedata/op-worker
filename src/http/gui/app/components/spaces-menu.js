@@ -150,7 +150,9 @@ export default Ember.Component.extend({
       let sidebar = $('.secondary-sidebar');
       floaters.each(function(index, el) {
         el = $(el);
-        let updater = bindFloater(el);
+        let updater = bindFloater(el, null, {
+          offsetX: 8
+        });
         sidebar.on('scroll', updater);
         el.on('mouseover', updater);
         el.closest('.settings-dropdown').on('click', function() {
