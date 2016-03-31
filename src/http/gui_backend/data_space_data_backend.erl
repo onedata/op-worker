@@ -24,7 +24,7 @@
 -define(DEFAULT_SPACE_KEY, default_space).
 
 %% API
--export([init/0]).
+-export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
@@ -41,13 +41,22 @@
 -spec init() -> ok.
 init() ->
     % Resolve default space and put it in session memory
-    SessionId = g_session:get_session_id(),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {ok, DefaultSpace} = oz_users:get_default_space({user, {Mac, DMacs}}),
-    {ok, #file_attr{uuid = DefaultSpaceId}} = logical_file_manager:stat(
-        SessionId, {path, <<"/spaces/", DefaultSpace/binary>>}),
-    g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceId),
+    % NOTE that SpaceDir UUID is remembered rather than Space ID
+    DefaultSpaceId = op_gui_utils:get_users_default_space(),
+    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(DefaultSpaceId),
+    g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceDirId),
+    op_gui_utils:register_backend(?MODULE, self()),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback terminate/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate() -> ok.
+terminate() ->
+    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
@@ -58,11 +67,19 @@ init() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space">>, [SpaceId]) ->
-    SessionId = g_session:get_session_id(),
-    {ok, #file_attr{name = SpaceName}} = logical_file_manager:stat(
-        SessionId, {uuid, SpaceId}),
-    Res = space_record(SpaceId, SpaceName),
+find(<<"data-space">>, [SpaceDirId]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {ok, #document{
+        value = #space_info{
+            name = Name
+        }}} = space_info:get(SpaceId),
+    DefaultSpaceDirId = g_session:get_value(?DEFAULT_SPACE_KEY),
+    Res = [
+        {<<"id">>, SpaceDirId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
+        {<<"rootDir">>, SpaceDirId}
+    ],
     {ok, Res}.
 
 
@@ -74,13 +91,14 @@ find(<<"data-space">>, [SpaceId]) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
-    SessionId = g_session:get_session_id(),
-    {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
-        {path, <<"/spaces">>}, 0, 1000),
+    UserId = op_gui_utils:get_user_id(),
+    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
     Res = lists:map(
-        fun({SpaceId, SpaceName}) ->
-            space_record(SpaceId, SpaceName)
-        end, SpaceDirs),
+        fun(SpaceId) ->
+            SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+            {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
+            SpaceData
+        end, SpaceIds),
     {ok, Res}.
 
 
@@ -128,24 +146,3 @@ update_record(<<"data-space">>, _Id, _Data) ->
 delete_record(<<"data-space">>, _Id) ->
     gui_error:report_error(<<"Not iplemented">>).
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a space record based on space id and name.
-%% @end
-%%--------------------------------------------------------------------
--spec space_record(SpaceId :: binary(), SpaceName :: binary()) ->
-    proplists:proplist().
-space_record(SpaceId, SpaceName) ->
-    DefaultSpaceId = g_session:get_value(?DEFAULT_SPACE_KEY),
-    [
-        {<<"id">>, SpaceId},
-        {<<"name">>, SpaceName},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"rootDir">>, SpaceId}
-    ].

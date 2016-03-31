@@ -20,10 +20,65 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
--export([init/0]).
+-export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
+-export([process_file_meta_change/3]).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @todo temporal solution - until events are used in GUI
+%% Processes file_meta model changes and informs Ember client about changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_file_meta_change(Method :: model_behaviour:model_action(),
+    Context :: term(), ReturnValue :: term()) -> ok.
+% @TODO FILTROWANIE - PACZ NA fslogic_context:set_space_id
+process_file_meta_change(create, [#document{key = FileId} = Doc], _ReturnValue) ->
+    ?alert("Create: ~p", [FileId]),
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                {ok, Data} = file_record(SessionId, FileId),
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_created(<<"file">>, Data, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(?MODULE)),
+    ok;
+process_file_meta_change(update, [FileId, _Changes], _ReturnValue) ->
+    ?alert("Update: ~p", [FileId]),
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                {ok, Data} = file_record(SessionId, FileId),
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_updated(<<"file">>, Data, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(?MODULE)),
+    ok;
+process_file_meta_change(delete, [FileId, _DeleteFun], _ReturnValue) ->
+    ?alert("Delete: ~p", [FileId]),
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_deleted(<<"file">>, FileId, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(?MODULE)),
+    ok.
 
 %%%===================================================================
 %%% API functions
@@ -36,6 +91,18 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    op_gui_utils:register_backend(?MODULE, self()),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback terminate/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate() -> ok.
+terminate() ->
+    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
@@ -48,49 +115,7 @@ init() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, [FileId]) ->
     SessionId = g_session:get_session_id(),
-    SpacesDirUUID = get_spaces_dir_uuid(),
-    ParentUUID = case get_parent(FileId) of
-        SpacesDirUUID ->
-            null;
-        Other ->
-            Other
-    end,
-    {ok, #file_attr{
-        name = Name,
-        type = TypeAttr,
-        size = SizeAttr,
-        mtime = ModificationTime,
-        mode = PermissionsAttr}} =
-        logical_file_manager:stat(SessionId, {uuid, FileId}),
-    {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE -> {<<"dir">>, null};
-        _ -> {<<"file">>, SizeAttr}
-    end,
-    Permissions = integer_to_binary(PermissionsAttr, 8),
-    Children = case Type of
-        <<"file">> ->
-            [];
-        <<"dir">> ->
-            case logical_file_manager:ls(
-                SessionId, {uuid, FileId}, 0, 1000) of
-                {ok, Chldrn} ->
-                    Chldrn;
-                _ ->
-                    []
-            end
-    end,
-    ChildrenIds = [ChId || {ChId, _} <- Children],
-    Res = [
-        {<<"id">>, FileId},
-        {<<"name">>, Name},
-        {<<"type">>, Type},
-        {<<"permissions">>, Permissions},
-        {<<"modificationTime">>, ModificationTime},
-        {<<"size">>, Size},
-        {<<"parent">>, ParentUUID},
-        {<<"children">>, ChildrenIds}
-    ],
-    {ok, Res}.
+    file_record(SessionId, FileId).
 
 
 %%--------------------------------------------------------------------
@@ -126,48 +151,43 @@ create_record(<<"file">>, Data) ->
     try
         SessionId = g_session:get_session_id(),
         Name = proplists:get_value(<<"name">>, Data),
-        case binary:match(Name, <<"nie">>) of
-            {_, _} ->
-                gui_error:report_warning(<<"Names with 'nie' forbidden!">>);
-            nomatch ->
-                Type = proplists:get_value(<<"type">>, Data),
-                ParentUUID = proplists:get_value(<<"parent">>, Data, null),
-                {ok, ParentPath} = logical_file_manager:get_file_path(
-                    SessionId, ParentUUID),
-                Path = filename:join([ParentPath, Name]),
-                FileId = case Type of
-                    <<"file">> ->
-                        {ok, FId} = logical_file_manager:create(
-                            SessionId, Path, 8#777),
-                        FId;
-                    <<"dir">> ->
-                        {ok, DirId} = logical_file_manager:mkdir(
-                            SessionId, Path, 8#777),
-                        DirId
-                end,
-                {ok, #file_attr{
-                    name = Name,
-                    size = SizeAttr,
-                    mtime = ModificationTime,
-                    mode = PermissionsAttr}} =
-                    logical_file_manager:stat(SessionId, {uuid, FileId}),
-                Size = case Type of
-                    <<"dir">> -> null;
-                    _ -> SizeAttr
-                end,
-                Permissions = integer_to_binary(PermissionsAttr, 8),
-                Res = [
-                    {<<"id">>, FileId},
-                    {<<"name">>, Name},
-                    {<<"type">>, Type},
-                    {<<"permissions">>, Permissions},
-                    {<<"modificationTime">>, ModificationTime},
-                    {<<"size">>, Size},
-                    {<<"parent">>, ParentUUID},
-                    {<<"children">>, []}
-                ],
-                {ok, Res}
-        end
+        Type = proplists:get_value(<<"type">>, Data),
+        ParentUUID = proplists:get_value(<<"parent">>, Data, null),
+        {ok, ParentPath} = logical_file_manager:get_file_path(
+            SessionId, ParentUUID),
+        Path = filename:join([ParentPath, Name]),
+        FileId = case Type of
+            <<"file">> ->
+                {ok, FId} = logical_file_manager:create(
+                    SessionId, Path, 8#777),
+                FId;
+            <<"dir">> ->
+                {ok, DirId} = logical_file_manager:mkdir(
+                    SessionId, Path, 8#777),
+                DirId
+        end,
+        {ok, #file_attr{
+            name = Name,
+            size = SizeAttr,
+            mtime = ModificationTime,
+            mode = PermissionsAttr}} =
+            logical_file_manager:stat(SessionId, {uuid, FileId}),
+        Size = case Type of
+            <<"dir">> -> null;
+            _ -> SizeAttr
+        end,
+        Permissions = integer_to_binary(PermissionsAttr, 8),
+        Res = [
+            {<<"id">>, FileId},
+            {<<"name">>, Name},
+            {<<"type">>, Type},
+            {<<"permissions">>, Permissions},
+            {<<"modificationTime">>, ModificationTime},
+            {<<"size">>, Size},
+            {<<"parent">>, ParentUUID},
+            {<<"children">>, []}
+        ],
+        {ok, Res}
     catch _:_ ->
         gui_error:report_warning(<<"Failed to create new directory.">>)
     end.
@@ -241,6 +261,7 @@ delete_record(<<"file">>, Id) ->
     end.
 
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -252,14 +273,13 @@ delete_record(<<"file">>, Id) ->
 %% spaces dir has two different UUIDs, should be removed when this is fixed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(UUID :: binary()) -> binary().
-get_parent(UUID) ->
-    SessionId = g_session:get_session_id(),
+-spec get_parent(SessionId :: binary(), UUID :: binary()) -> binary().
+get_parent(SessionId, UUID) ->
     {ok, ParentUUID} = logical_file_manager:get_parent(
         SessionId, {uuid, UUID}),
     case logical_file_manager:get_file_path(SessionId, ParentUUID) of
         {ok, <<"/spaces">>} ->
-            get_spaces_dir_uuid();
+            get_spaces_dir_uuid(SessionId);
         _ ->
             ParentUUID
     end.
@@ -271,9 +291,8 @@ get_parent(UUID) ->
 %% Returns the UUID of user's /spaces dir.
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces_dir_uuid() -> binary().
-get_spaces_dir_uuid() ->
-    SessionId = g_session:get_session_id(),
+-spec get_spaces_dir_uuid(SessionId :: binary()) -> binary().
+get_spaces_dir_uuid(SessionId) ->
     {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces">>}),
     SpacesDirUUID.
@@ -295,3 +314,57 @@ rm_rf(Id) ->
             ok = rm_rf(ChId)
         end, Children),
     ok = logical_file_manager:unlink(SessionId, {uuid, Id}).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a file record from given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_record(SessionId :: binary(), FileId :: binary()) ->
+    {ok, proplists:proplist()}.
+file_record(SessionId, FileId) ->
+    SpacesDirUUID = get_spaces_dir_uuid(SessionId),
+    ParentUUID = case get_parent(SessionId, FileId) of
+        SpacesDirUUID ->
+            null;
+        Other ->
+            Other
+    end,
+    {ok, #file_attr{
+        name = Name,
+        type = TypeAttr,
+        size = SizeAttr,
+        mtime = ModificationTime,
+        mode = PermissionsAttr}} =
+        logical_file_manager:stat(SessionId, {uuid, FileId}),
+    {Type, Size} = case TypeAttr of
+        ?DIRECTORY_TYPE -> {<<"dir">>, null};
+        _ -> {<<"file">>, SizeAttr}
+    end,
+    Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
+    Children = case Type of
+        <<"file">> ->
+            [];
+        <<"dir">> ->
+            case logical_file_manager:ls(
+                SessionId, {uuid, FileId}, 0, 1000) of
+                {ok, Chldrn} ->
+                    Chldrn;
+                _ ->
+                    []
+            end
+    end,
+    ChildrenIds = [ChId || {ChId, _} <- Children],
+    Res = [
+        {<<"id">>, FileId},
+        {<<"name">>, Name},
+        {<<"type">>, Type},
+        {<<"permissions">>, Permissions},
+        {<<"modificationTime">>, ModificationTime},
+        {<<"size">>, Size},
+        {<<"parent">>, ParentUUID},
+        {<<"children">>, ChildrenIds}
+    ],
+    {ok, Res}.

@@ -18,7 +18,7 @@ export default DS.Model.extend({
   userPermissions: DS.hasMany('spaceUserPermission', {async: true}),
   /** Collection of group permissions - effectively all rows in permissions table */
   groupPermissions: DS.hasMany('spaceGroupPermission', {async: true}),
-  /** Wether user specified this space as default */
+  /** Whether user specified this space as default */
   isDefault: DS.attr('boolean', {defaultValue: false}),
 
 // TODO: currently not used - use list Order in templates

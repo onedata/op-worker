@@ -42,6 +42,8 @@
     event_manager :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
+    % @TODO temporary solution for changes pushing
+    data_backend_connections = [] :: [{Backend :: binary(), pid()}],
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}]
 }).

@@ -96,6 +96,18 @@ init([], _ConnState) ->
     {close, Reply :: binary(), State :: term()}.
 websocket_handle({binary, RawUpdates}, _ConnState, _State) ->
     Updates = subscription_translator:json_to_updates(RawUpdates),
+    % @Todo until subscriptions work properly, sync user on every update
+    {ok, Sesssions} = session:list(),
+    Auths = lists:usort(lists:map(
+        fun(#document{value = #session{auth = Auth}}) ->
+            Auth
+        end, Sesssions)),
+    ?info("Update from OZ, synchronizing onedata users..."),
+    lists:foreach(
+        fun(Auth) ->
+            catch onedata_user:fetch(Auth)
+        end, Auths),
+    catch space_data_backend:something_changed(),
     worker_proxy:call(subscriptions_worker, {process_updates, Updates}),
     {ok, _State};
 websocket_handle(_Msg, _ConnState, _State) ->
