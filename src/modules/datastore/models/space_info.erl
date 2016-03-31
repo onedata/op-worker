@@ -151,14 +151,14 @@ create_or_update(Doc, Diff) ->
 fetch(Client, SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
+    {ok, ProviderIds} = oz_spaces:get_providers(Client, SpaceId),
     case space_info:get(Key) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
+            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name, providers = ProviderIds}},
             {ok, _} = space_info:save(NewDoc),
-            {ok, Doc};
+            {ok, NewDoc};
         {error, {not_found, _}} ->
-            {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
-            Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
+            Doc = #document{key = Key, value = #space_info{id = Id, name = Name, providers = ProviderIds}},
             {ok, _} = space_info:create(Doc),
             {ok, Doc};
         {error, Reason} ->

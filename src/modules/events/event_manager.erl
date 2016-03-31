@@ -127,88 +127,27 @@ handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
 
 handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms} = State) ->
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
-    HandleLocally = fun() ->
-        {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
-            gen_server:cast(EvtStm, Evt),
-            EvtStm
-        end, EvtStms)}}
+    HandleLocally = fun
+        (false) ->
+            {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
+                gen_server:cast(EvtStm, Evt),
+                EvtStm
+            end, EvtStms)}};
+        (true) ->
+            {noreply, State}
     end,
 
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessId),
-
-    case {request_to_file_entry_or_provider(Evt), UserId} of
-        {_, undefined} ->
-            HandleLocally();
-        {{file, Entry}, _} ->
-            SpacesDir = fslogic_uuid:spaces_uuid(UserId),
-            case file_meta:to_uuid(Entry) of
-                {ok, SpacesDir} ->
-                    HandleLocally();
-                _ ->
-                    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
-                    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                    RestClient = fslogic_utils:session_to_rest_client(SessId),
-                    {ok, #document{value = #session{auth = Auth}}} = session:get(SessId),
-                    {ok, ProviderIds} = oz_spaces:get_providers(RestClient, SpaceId),
-                    case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
-                        {_, true} ->
-                            HandleLocally();
-                        {[H | _], false} ->
-                            provider_communicator:send(#client_message{
-                                message_body = #events{events = [Evt]},
-                                proxy_session_id = SessId,
-                                proxy_session_auth = Auth
-                            }, session_manager:get_provider_session_id(outgoing, H)),
-                            {noreply, State};
-                        {[], _} ->
-                            throw(unsupported_space)
-                    end
-            end;
-        _ ->
-            HandleLocally()
-    end;
+    handle_or_reroute(#events{events = [Evt]}, request_to_file_entry_or_provider(Evt), SessId, HandleLocally);
 
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms} = State) ->
-    HandleLocally = fun() ->
+    HandleLocally = fun(_) ->
         ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
         {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}}
     end,
 
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessId),
-
-    case {request_to_file_entry_or_provider(Sub), UserId} of
-        {_, undefined} ->
-            HandleLocally();
-        {{file, Entry}, _} ->
-            SpacesDir = fslogic_uuid:spaces_uuid(UserId),
-            case file_meta:to_uuid(Entry) of
-                {ok, SpacesDir} ->
-                    HandleLocally();
-                _ ->
-                    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
-                    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-                    {ok, #document{value = #session{auth = Auth}}} = session:get(SessId),
-                    RestClient = fslogic_utils:session_to_rest_client(SessId),
-                    {ok, ProviderIds} = oz_spaces:get_providers(RestClient, SpaceId),
-                    case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
-                        {_, true} ->
-                            HandleLocally();
-                        {[H | _], false} ->
-                            provider_communicator:send(#client_message{
-                                message_body = Sub,
-                                proxy_session_id = SessId,
-                                proxy_session_auth = Auth
-                            }, session_manager:get_provider_session_id(outgoing, H)),
-                            HandleLocally();
-                        {[], _} ->
-                            throw(unsupported_space)
-                    end
-            end;
-        _ ->
-            HandleLocally()
-    end;
+    handle_or_reroute(Sub, request_to_file_entry_or_provider(Sub), SessId, HandleLocally);
 
 handle_cast(#subscription_cancellation{id = SubId}, #state{
     event_streams = EvtStms, session_id = SessId} = State) ->
@@ -220,6 +159,7 @@ handle_cast(#subscription_cancellation{id = SubId}, #state{
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -314,3 +254,42 @@ request_to_file_entry_or_provider(#subscription{object = #permission_changed_sub
     {file, {uuid, FileUUID}};
 request_to_file_entry_or_provider(_) ->
     not_file_context.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle request locally using given function or reroute to remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_or_reroute(RequestMessage :: term(), RequestContext :: {file, file_meta:entry()} | not_file_context, SessId :: session:id(),
+    HandleLocallyFun :: fun((IsRerouted :: boolean()) -> term())) -> term().
+handle_or_reroute(_, _, undefined, HandleLocallyFun) ->
+    HandleLocallyFun(false);
+handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun) ->
+    {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
+    SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+    case file_meta:to_uuid(Entry) of
+        {ok, SpacesDir} ->
+            HandleLocallyFun(false);
+        _ ->
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+            RestClient = fslogic_utils:session_to_rest_client(SessId),
+            {ok, #space_info{providers = ProviderIds}} = space_info:get_or_fetch(RestClient, SpaceId),
+            case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                {_, true} ->
+                    HandleLocallyFun();
+                {[H | _], false} ->
+                    provider_communicator:send(#client_message{
+                        message_body = RequestMessage,
+                        proxy_session_id = SessId,
+                        proxy_session_auth = Auth
+                    }, session_manager:get_provider_session_id(outgoing, H)),
+                    HandleLocallyFun(true);
+                {[], _} ->
+                    throw(unsupported_space)
+            end
+    end;
+handle_or_reroute(_, _, _, HandleLocallyFun) ->
+    HandleLocallyFun(false).

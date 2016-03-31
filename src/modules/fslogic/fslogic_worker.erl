@@ -195,7 +195,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                                 fslogic_context:set_space_id(Context, Entry),
 
                             RestClient = fslogic_utils:session_to_rest_client(SessionId),
-                            {ok, ProviderIds} = oz_spaces:get_providers(RestClient, SpaceId),
+                            {ok, #space_info{providers = ProviderIds}} = space_info:get_or_fetch(RestClient, SpaceId),
                             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                                 {_, true} ->
                                     {NewCtx, [oneprovider:get_provider_id()]};

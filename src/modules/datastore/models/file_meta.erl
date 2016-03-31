@@ -512,7 +512,7 @@ get_scope(Entry) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(term(), UUID :: onedata_user:id()) -> ok.
+-spec setup_onedata_user(oz_endpoint:client(), UUID :: onedata_user:id()) -> ok.
 setup_onedata_user(Client, UUID) ->
     ?info("setup_onedata_user ~p", [UUID]),
     try
