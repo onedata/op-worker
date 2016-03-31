@@ -279,7 +279,7 @@ handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun) ->
             {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(RestClient, SpaceId),
             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                 {_, true} ->
-                    HandleLocallyFun();
+                    HandleLocallyFun(false);
                 {[H | _], false} ->
                     provider_communicator:send(#client_message{
                         message_body = RequestMessage,
