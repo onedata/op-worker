@@ -31,8 +31,14 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Route messages that were send to remote-proxy session on different provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec route_proxy_message(Msg :: #client_message{}, TargetSessionId :: session:id()) -> ok.
 route_proxy_message(#client_message{message_body = #events{events = Evts}} = Msg, TargetSessionId) ->
-    ?info("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
+    ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
     lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, TargetSessionId) end, Evts),
     ok.
 
@@ -145,10 +151,10 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
 route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
     message_body = #fuse_request{} = FuseRequest}) ->
     Connection = self(),
-    ?info("Fuse request: ~p ~p", [FuseRequest, SessId]),
+    ?debug("Fuse request: ~p ~p", [FuseRequest, SessId]),
     spawn(fun() ->
         FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
-        ?info("Fuse response: ~p", [FuseResponse]),
+        ?debug("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
         }, Connection)

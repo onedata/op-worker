@@ -391,7 +391,7 @@ handle_handshake(State = #state{certificate = Cert, socket = Sock,
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handle nomal client_message
+%% Handle nomal incoming message.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_normal_message(#state{}, #client_message{} | #server_message{}) ->
@@ -404,6 +404,8 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
 
     {Msg, EffectiveSessionId} =
         case {IsProvider, Msg0} of
+            %% If message comes from provider and proxy session is requested - proceed
+            %% with authorization and switch context to the proxy session.
             {true, #client_message{proxy_session_id = ProxySessionId, proxy_session_auth = Auth = #auth{}}} when ProxySessionId =/= undefined ->
                 ProviderId = provider_auth_manager:get_provider_id(Cert),
                 {ok, _} = session_manager:reuse_or_create_proxy_session(ProxySessionId, ProviderId, Auth, fuse),
@@ -411,18 +413,19 @@ handle_normal_message(State0 = #state{certificate = Cert, session_id = SessId, s
             _ ->
                 {Msg0, SessId}
         end,
-    ?info("Handle message ~p ~p ~p ~p", [IsProvider, Msg, EffectiveSessionId, SessId]),
+
+    ?debug("Handle message ~p ~p ~p ~p", [IsProvider, Msg, EffectiveSessionId, SessId]),
 
     case Msg of
+        %% Remote proxy session has received message which is now to be routed as proxy message.
         #client_message{proxy_session_id = TargetSessionId} = Msg when TargetSessionId =/= EffectiveSessionId, is_binary(TargetSessionId) ->
             router:route_proxy_message(Msg, TargetSessionId),
             {noreply, State, ?TIMEOUT};
-        _ ->
+        _ -> %% Non-proxy case
             case router:preroute_message(Msg, EffectiveSessionId) of
                 ok ->
                     {noreply, State, ?TIMEOUT};
                 {ok, ServerMsg} ->
-                    ?info("Reply ~p", [ServerMsg]),
                     send_server_message(Sock, Transp, ServerMsg),
                     {noreply, State, ?TIMEOUT};
                 {error, Reason} ->
@@ -509,6 +512,12 @@ get_cert(Socket) ->
         {ok, Der} -> public_key:pkix_decode_cert(Der, otp)
     end.
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given server_message to client_message if possible.
+%% @end
+%%--------------------------------------------------------------------
+-spec to_client_message(Msg :: #server_message{}) ->
+    #client_message{}.
 to_client_message(#server_message{message_body = Body, message_id = Id, message_stream = Stream, proxy_session_id = SessId}) ->
     #client_message{message_body = Body, message_id = Id, message_stream = Stream, proxy_session_id = SessId}.

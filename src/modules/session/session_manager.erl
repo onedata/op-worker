@@ -222,8 +222,7 @@ reuse_or_create_proxy_session(SessId, ProxyVia, Auth, SessionType) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_uuid(),
-    %%{ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
-    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui, connections = [spawn(fun Loop() -> receive M -> ?info("MOCK GUI CONN ~p", [M]) end, Loop() end)]},
+    Sess = #session{status = active, identity = Iden, auth = Auth, type = gui, connections = []},
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),

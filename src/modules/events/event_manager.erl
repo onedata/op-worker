@@ -290,13 +290,21 @@ start_event_streams(EvtStmSup, SessId) ->
         maps:put(SubId, EvtStm, Stms)
     end, #{}, Docs).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Map given request to file-scope not if the request should be always handled locally.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_to_file_entry_or_provider(#event{} | #subscription{}) ->
+    {file, file_meta:entry()} | not_file_context.
 request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUUID}}) ->
     {file, {uuid, FileUUID}};
 request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
     {file, {uuid, FileUUID}};
 request_to_file_entry_or_provider(#event{object = #update_event{}}) ->
     not_file_context;
-request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = FileUUID}}) ->
+request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = _FileUUID}}) ->
     not_file_context;
 request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
     {file, {uuid, FileUUID}};

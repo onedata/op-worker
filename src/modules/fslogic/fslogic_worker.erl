@@ -133,14 +133,14 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?info("fuse_request: ~p", [FuseRequest]),
+    ?debug("fuse_request: ~p", [FuseRequest]),
     Response = run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request),
-    ?info("fuse_response: ~p", [Response]),
+    ?debug("fuse_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?info("proxyio_request: ~p", [ProxyIORequest]),
+    ?debug("proxyio_request: ~p", [ProxyIORequest]),
     Response = run_and_catch_exceptions(fun handle_proxyio_request/2, fslogic_context:new(SessId), ProxyIORequest, proxyio_request),
-    ?info("proxyio_response: ~p", [Response]),
+    ?debug("proxyio_response: ~p", [Response]),
     Response;
 handle(_Request) ->
     ?log_bad_request(_Request),
@@ -424,9 +424,16 @@ handle_proxyio_request(_CTX, Req) ->
     erlang:error({invalid_request, Req}).
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Map given request to file-scope or provider-scope.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{} | #proxyio_request{}) ->
+    {file, file_meta:entry()} | {provider, oneprovider:id()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {path, Path}}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    ?info("PATH request ~p ~p ~p", [Path, Tokens, fslogic_path:get_canonical_file_entry(Ctx, Tokens)]),
     case fslogic_path:get_canonical_file_entry(Ctx, Tokens) of
         {path, P} = FileEntry ->
             {ok, Tokens1} = fslogic_path:verify_file_path(P),

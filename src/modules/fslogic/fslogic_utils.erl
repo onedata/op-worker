@@ -26,6 +26,12 @@
 %%% API functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns most suitable rest client for onezone request for given session.
+%% @end
+%%--------------------------------------------------------------------
+-spec session_to_rest_client(session:id()) -> oz_endpoint:client().
 session_to_rest_client(?ROOT_SESS_ID) ->
     provider;
 session_to_rest_client(SessId) ->

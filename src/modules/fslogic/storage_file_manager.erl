@@ -40,6 +40,7 @@
 %% Opens the file. To used opened descriptor, pass returned handle to other functions.
 %% File may and should be closed with release/1, but file will be closed automatically
 %% when handle goes out of scope (term will be released by Erlang's GC).
+%% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
 -spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
@@ -56,6 +57,18 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
         storage = Storage
     }.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens the file. To used opened descriptor, pass returned handle to other functions.
+%% File may and should be closed with release/1, but file will be closed automatically
+%% when handle goes out of scope (term will be released by Erlang's GC).
+%% This function (not like new_handle/5) does not assume that given file is local.
+%% Therefore handle created with this function may be used for remote files.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+    StorageId :: storage:id(), FileId :: helpers:file(), oneprovider:id()) ->
+    handle().
 new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
     {IsLocal, Storage} = case oneprovider:get_provider_id() of
         ProviderId ->

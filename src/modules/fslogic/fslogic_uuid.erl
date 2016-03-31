@@ -13,14 +13,58 @@
 -author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
     spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2]).
+-export([file_uuid_to_space_id/1, gen_file_uuid/1, gen_file_uuid/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% For given file's UUID returns Space's ID that contains this file.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_uuid_to_space_id(file_meta:uuid()) ->
+    {ok, binary()} | {not_in_space_scope, file_meta:uuid(), Reason :: term()}.
+file_uuid_to_space_id(FileUUID) ->
+    BinParentUUID = http_utils:base64url_decode(FileUUID),
+    FileUUID =
+        try binary_to_term(BinParentUUID) of
+            {space, SpaceId} ->
+                {ok, SpaceId};
+            {{s, SpaceId}, _} ->
+                {ok, SpaceId}
+        catch
+            _:Reason ->
+                ?error("Unable to decode file UUID ~p due to: ~p", [FileUUID, Reason]),
+                {not_in_space_scope, FileUUID, Reason}
+        end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates file's UUID that will be placed in given Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_file_uuid(SpaceId :: binary()) -> file_meta:uuid().
+gen_file_uuid(SpaceId) ->
+    http_utils:base64url_encode(term_to_binary({{s, SpaceId}, crypto:rand_bytes(10)})).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates generic file's UUID that will be not placed in any Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_file_uuid() -> file_meta:uuid().
+gen_file_uuid() ->
+    http_utils:base64url_encode(crypto:rand_bytes(16)).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -100,12 +100,7 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 -spec exists(datastore:key()) -> datastore:exists_return().
 exists(Key) ->
-    case ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)) of
-        true ->
-            true;
-        false ->
-            false
-    end.
+    ?RESPONSE(datastore:exists(?STORE_LEVEL, ?MODULE, Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,7 +109,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(session_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(message_id_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
