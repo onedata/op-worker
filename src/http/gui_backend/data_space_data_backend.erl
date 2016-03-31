@@ -44,11 +44,9 @@ init() ->
     SessionId = g_session:get_session_id(),
     {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
     #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {ok, DefaultSpace} = oz_users:get_default_space({user, {Mac, DMacs}}),
-    ?dump(<<"/spaces/", DefaultSpace/binary>>),
-    {ok, #file_attr{uuid = DefaultSpaceId}} = logical_file_manager:stat(
-        SessionId, {path, <<"/spaces/", DefaultSpace/binary>>}),
-    g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceId),
+    {ok, DefaultSpaceId} = oz_users:get_default_space({user, {Mac, DMacs}}),
+    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(DefaultSpaceId),
+    g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceDirId),
     op_gui_utils:register_backend(?MODULE, self()),
     ok.
 
@@ -71,11 +69,19 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space">>, [SpaceId]) ->
-    SessionId = g_session:get_session_id(),
-    {ok, #file_attr{name = SpaceName}} = logical_file_manager:stat(
-        SessionId, {uuid, SpaceId}),
-    Res = space_record(SpaceId, SpaceName),
+find(<<"data-space">>, [SpaceDirId]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {ok, #document{
+        value = #space_info{
+            name = Name
+        }}} = space_info:get(SpaceId),
+    DefaultSpaceDirId = g_session:get_value(?DEFAULT_SPACE_KEY),
+    Res = [
+        {<<"id">>, SpaceDirId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
+        {<<"rootDir">>, SpaceDirId}
+    ],
     {ok, Res}.
 
 
@@ -87,13 +93,16 @@ find(<<"data-space">>, [SpaceId]) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
-    SessionId = g_session:get_session_id(),
-    {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
-        {path, <<"/spaces">>}, 0, 1000),
+    UserId = op_gui_utils:get_user_id(),
+    {ok, #document{
+        value = #onedata_user{
+            space_ids = SpaceIds}}} = onedata_user:get(UserId),
     Res = lists:map(
-        fun({SpaceId, SpaceName}) ->
-            space_record(SpaceId, SpaceName)
-        end, SpaceDirs),
+        fun(SpaceId) ->
+            SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+            {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
+            SpaceData
+        end, SpaceIds),
     {ok, Res}.
 
 
@@ -141,24 +150,3 @@ update_record(<<"data-space">>, _Id, _Data) ->
 delete_record(<<"data-space">>, _Id) ->
     gui_error:report_error(<<"Not iplemented">>).
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a space record based on space id and name.
-%% @end
-%%--------------------------------------------------------------------
--spec space_record(SpaceId :: binary(), SpaceName :: binary()) ->
-    proplists:proplist().
-space_record(SpaceId, SpaceName) ->
-    DefaultSpaceId = g_session:get_value(?DEFAULT_SPACE_KEY),
-    [
-        {<<"id">>, SpaceId},
-        {<<"name">>, SpaceName},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"rootDir">>, SpaceId}
-    ].

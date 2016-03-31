@@ -65,31 +65,64 @@ terminate() ->
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"space">>, [SpaceId]) ->
-    {ok, #space_info{
-        name = Name,
-        size = _Size,
-        users = Users,
-        groups = Groups,
-        providers = _Providers
-    }} = space_info:get(SpaceId),
+    {ok, #document{
+        value = #space_info{
+            name = Name,
+            size = _Size,
+            users = UsersAndPerms,
+            groups = GroupPerms,
+            providers = _Providers
+        }}} = space_info:get(SpaceId),
 
     UserPermissions = lists:map(
-        fun(UserId) ->
-            ids_to_association(SpaceId, UserId)
-        end, Users),
+        fun({UserId, _UserPerms}) ->
+            ids_to_association(UserId, SpaceId)
+        end, UsersAndPerms),
 
     GroupPermissions = lists:map(
-        fun(GroupId) ->
-            ids_to_association(SpaceId, GroupId)
-        end, Groups),
+        fun({GroupId, _GroupPerms}) ->
+            ids_to_association(GroupId, SpaceId)
+        end, GroupPerms),
 
     DefaultSpaceId = g_session:get_value(?DEFAULT_SPACE_KEY),
     Res = [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
         {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"userPermissions">>, []},
+        {<<"userPermissions">>, UserPermissions},
         {<<"groupPermissions">>, []}
+    ],
+    {ok, Res};
+
+
+find(<<"space-user-permission">>, [AssocId]) ->
+    {UserId, SpaceId} = association_to_ids(AssocId),
+    {ok, #document{
+        value = #space_info{
+            users = UsersAndPerms
+        }}} = space_info:get(SpaceId),
+    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+    PermsMapped = lists:map(
+        fun(SpacePerm) ->
+            HasPerm = lists:member(SpacePerm, UserPerms),
+            {perm_db_to_gui(SpacePerm), HasPerm}
+        end, all_space_perms()),
+    Res = PermsMapped ++ [
+        {<<"id">>, AssocId},
+        {<<"user">>, UserId}
+    ],
+    {ok, Res};
+
+
+find(<<"space-user">>, [UserId]) ->
+    ?dump(UserId),
+    {ok, #document{
+        value = #onedata_user{
+            name = Name
+        }}} = onedata_user:get(UserId),
+    Res = [
+        {<<"id">>, UserId},
+        {<<"name">>, Name}
     ],
     {ok, Res}.
 
@@ -108,7 +141,7 @@ find_all(<<"space">>) ->
             space_ids = SpaceIds}}} = onedata_user:get(UserId),
     Res = lists:map(
         fun(SpaceId) ->
-            {ok, SpaceData} = find(<<"space">>, SpaceId),
+            {ok, SpaceData} = find(<<"space">>, [SpaceId]),
             SpaceData
         end, SpaceIds),
     {ok, Res}.
@@ -184,7 +217,41 @@ space_record(SpaceId, SpaceName) ->
 ids_to_association(FirstId, SecondId) ->
     <<FirstId/binary, "@", SecondId/binary>>.
 
+
 association_to_ids(AssocId) ->
     [FirstId, SecondId] = binary:split(AssocId, <<"@">>, [global]),
     {FirstId, SecondId}.
+
+
+all_space_perms() -> [
+    space_invite_user, space_remove_user,
+    space_invite_group, space_remove_group,
+    space_add_provider, space_remove_provider,
+    space_set_privileges, space_change_data,
+    space_remove, space_view_data
+].
+
+
+perm_db_to_gui(space_invite_user) -> <<"permInviteUser">>;
+perm_db_to_gui(space_remove_user) -> <<"permRemoveUser">>;
+perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
+perm_db_to_gui(space_remove_group) -> <<"permRemoveGroup">>;
+perm_db_to_gui(space_set_privileges) -> <<"permSetPrivileges">>;
+perm_db_to_gui(space_remove) -> <<"permRemoveSpace">>;
+perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
+perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>;
+perm_db_to_gui(space_change_data) -> <<"permModifySpace">>;
+perm_db_to_gui(space_view_data) -> <<"permViewSpace">>.
+
+
+perm_gui_to_db(<<"permInviteUser">>) -> space_invite_user;
+perm_gui_to_db(<<"permRemoveUser">>) -> space_remove_user;
+perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;
+perm_gui_to_db(<<"permRemoveGroup">>) -> space_remove_group;
+perm_gui_to_db(<<"permSetPrivileges">>) -> space_set_privileges;
+perm_gui_to_db(<<"permRemoveSpace">>) -> space_remove;
+perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
+perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider;
+perm_gui_to_db(<<"permModifySpace">>) -> space_change_data;
+perm_gui_to_db(<<"permViewSpace">>) -> space_view_data.
 
