@@ -111,7 +111,7 @@ wait_for_links(FileUuid, 0) ->
     ?error("Waiting for links document, for file ~p failed.", [FileUuid]),
     throw(no_link_document);
 wait_for_links(FileUuid, Retries) ->
-    case datastore:exists(?DISK_ONLY_LEVEL, file_meta, links_utils:links_doc_key(FileUuid)) of
+    case file_meta:exists({uuid, links_utils:links_doc_key(FileUuid)}) of
         {ok, true} ->
             ok;
         {ok, false} ->

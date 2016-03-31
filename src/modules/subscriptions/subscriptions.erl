@@ -109,6 +109,7 @@ ensure_initialised() ->
         false ->
             % as retrieving users is costly, first we've checked for existence
             Users = get_users_with_session(),
+            %todo add create_or_update operation to all levels of datastore and use it here
             subscriptions_state:save(#document{
                 key = ?SUBSCRIPTIONS_STATE_KEY,
                 value = #subscriptions_state{
