@@ -29,7 +29,7 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 % @todo dev
--export([support/1, process_space_info_change/3]).
+-export([support/1, something_changed/0]).
 support(Token) ->
     {ok, SpaceId} = oz_providers:support_space(provider, [
         {<<"token">>, Token}, {<<"size">>, <<"10000000">>}
@@ -42,20 +42,30 @@ support(Token) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @todo temporal solution - until events are used in GUI
-%% Processes file_meta model changes and informs Ember client about changes.
+%% Lists all spaces again and pushes the data to the client to impose refresh.
 %% @end
 %%--------------------------------------------------------------------
--spec process_space_info_change(Method :: model_behaviour:model_action(),
-    Context :: term(), ReturnValue :: term()) -> ok.
-% @TODO FILTROWANIE - PACZ NA fslogic_context:set_space_id
-process_space_info_change(create, [#document{key = SpaceId} = Doc], _ReturnValue) ->
-    ?alert("CreateSpace: ~p", [SpaceId]),
-    ok;
-process_space_info_change(update, [SpaceId, _Changes], _ReturnValue) ->
-    ?alert("UpdateSpace: ~p", [SpaceId]),
-    ok;
-process_space_info_change(delete, [SpaceId, _DeleteFun], _ReturnValue) ->
-    ?alert("DeleteSpace: ~p", [SpaceId]),
+-spec something_changed() -> ok.
+something_changed() ->
+    UpdateFun = fun() ->
+        % Let the changes to DB be saved
+        timer:sleep(1000),
+        lists:foreach(
+            fun({SessionId, Pids}) ->
+                try
+                    g_session:set_session_id(SessionId),
+                    {ok, Data} = find_all(<<"space">>),
+                    ?dump(Data),
+                    lists:foreach(
+                        fun(Pid) ->
+                            gui_async:push_updated(<<"space">>, Data, Pid)
+                        end, Pids)
+                catch T:M ->
+                    ?dump({T, M, erlang:get_stacktrace()})
+                end
+            end, op_gui_utils:get_all_backend_pids(?MODULE))
+    end,
+    spawn(UpdateFun),
     ok.
 
 
@@ -71,6 +81,7 @@ process_space_info_change(delete, [SpaceId, _DeleteFun], _ReturnValue) ->
 -spec init() -> ok.
 init() ->
     op_gui_utils:register_backend(?MODULE, self()),
+    ?dump(op_gui_utils:get_users_default_space()),
     g_session:put_value(?DEFAULT_SPACE_KEY,
         op_gui_utils:get_users_default_space()),
     ok.
@@ -198,9 +209,7 @@ find(<<"space-group">>, [GroupId]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"space">>) ->
     UserId = op_gui_utils:get_user_id(),
-    {ok, #document{
-        value = #onedata_user{
-            space_ids = SpaceIds}}} = onedata_user:get(UserId),
+    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
     Res = lists:map(
         fun(SpaceId) ->
             {ok, SpaceData} = find(<<"space">>, [SpaceId]),
@@ -268,7 +277,7 @@ update_record(<<"space">>, SpaceId, Data) ->
         NewName ->
             oz_spaces:modify_details(UserAuth, SpaceId, [{<<"name">>, NewName}])
     end,
-    gui_error:report_error(<<"Not iplemented">>).
+    ok.
 
 
 %%--------------------------------------------------------------------

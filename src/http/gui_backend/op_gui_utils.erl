@@ -142,7 +142,7 @@ get_all_backend_pids(Module) ->
                 = session:get(SessionId),
             PidsByMod = proplists:get_value(Module, Pids, []),
             PidsBySession = proplists:get_value(SessionId, Acc, []),
-            NewPidsBySession = PidsByMod ++ PidsBySession,
+            NewPidsBySession = lists:usort(PidsByMod ++ PidsBySession),
             [{SessionId, NewPidsBySession} | proplists:delete(SessionId, Acc)]
         end, [], AllSessions).
 
