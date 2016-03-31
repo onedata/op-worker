@@ -176,7 +176,7 @@ open(SessId, FileKey, OpenType) ->
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
-                    {ok, #lfm_handle{file_location = Location, provider_id = ProviderId,
+                    {ok, #lfm_handle{file_location = normalize_file_location(Location), provider_id = ProviderId,
                         sfm_handles = maps:from_list([{default, {{StorageId, FileId}, NewSFMHandle}}]),
                         fslogic_ctx = CTX, file_uuid = _UUID, open_mode = OpenType}};
                 {error, Reason} ->
@@ -293,7 +293,7 @@ get_block_map(SessId, FileKey) ->
 %% and default locations shall be used instead.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sfm_handle_key(OpType :: write | read, file_meta:uuid(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+-spec get_sfm_handle_key(OpType :: write | read, #lfm_handle{}, Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
     {default | {storage:id(), helpers:file()}, non_neg_integer()}.
 get_sfm_handle_key(OpType, #lfm_handle{file_uuid = UUID, file_location = #file_location{blocks = InitBlocks}}, Offset, Size) ->
     Blocks = try
@@ -405,25 +405,8 @@ write_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, Buffer, GenerateEvents) ->
     {Key, NewSize} = get_sfm_handle_key(write, Handle, Offset, byte_size(Buffer)),
 
-    {{DefaultStorageId, DefaultFileId}, _, _} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
-    {{BlockStorageId, BlockFileId}, SFMHandle, NewHandle = #lfm_handle{file_location = #file_location{blocks = CBlocks} = Location}}
+    {{StorageId, FileId}, SFMHandle, NewHandle = #lfm_handle{file_location = #file_location{blocks = CBlocks} = Location}}
         = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
-
-    StorageId =
-        case BlockStorageId of
-            undefined ->
-                DefaultStorageId;
-            BlockStorageId ->
-                BlockStorageId
-        end,
-
-    FileId =
-        case BlockFileId of
-            undefined ->
-                DefaultFileId;
-            BlockFileId ->
-                BlockFileId
-        end,
 
     case storage_file_manager:write(SFMHandle, Offset, binary:part(Buffer, 0, NewSize)) of
         {ok, Written} ->
@@ -485,24 +468,7 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode 
     fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle, Offset, MaxSize, GenerateEvents) ->
     {Key, NewSize} = get_sfm_handle_key(read, Handle, Offset, MaxSize),
 
-    {{DefaultStorageId, DefaultFileId}, _, _} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
-    {{BlockStorageId, BlockFileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
-
-    StorageId =
-        case BlockStorageId of
-            undefined ->
-                DefaultStorageId;
-            BlockStorageId ->
-                BlockStorageId
-        end,
-
-    FileId =
-        case BlockFileId of
-            undefined ->
-                DefaultFileId;
-            BlockFileId ->
-                BlockFileId
-        end,
+    {{StorageId, FileId}, SFMHandle, NewHandle} = get_sfm_handle_n_update_handle(Handle, Key, SFMHandles, OpenType),
 
     lfm_utils:call_fslogic(SessId, #synchronize_block{uuid = UUID, block = #file_block{offset = Offset, size = MaxSize}},
         fun(_) -> ok end),
@@ -523,3 +489,31 @@ read_internal(#lfm_handle{sfm_handles = SFMHandles, file_uuid = UUID, open_mode 
         {error, Reason2} ->
             {error, Reason2}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Returns given file_location with updated blocks filled with storage_id and/or file_id using default values if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec normalize_file_location(#file_location{}) -> #file_location{}.
+normalize_file_location(Loc = #file_location{storage_id = SID, file_id = FID, blocks = Blocks}) ->
+    NewBlocks = [normalize_file_block(SID, FID, Block) || Block <- Blocks],
+    Loc#file_location{blocks = NewBlocks}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @private
+%% Returns given block with filled storage_id and/or file_id using provided default values if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec normalize_file_block(storage:id(), helpers:file(), #file_block{}) -> #file_block{}.
+normalize_file_block(SID, FID, #file_block{storage_id = undefined, file_id = undefined} = Block) ->
+    Block#file_block{storage_id = SID, file_id = FID};
+normalize_file_block(SID, _FID, #file_block{storage_id = undefined} = Block) ->
+    Block#file_block{storage_id = SID};
+normalize_file_block(_SID, FID, #file_block{file_id = undefined} = Block) ->
+    Block#file_block{file_id = FID};
+normalize_file_block(_SID, _FID, #file_block{} = Block) ->
+    Block.
