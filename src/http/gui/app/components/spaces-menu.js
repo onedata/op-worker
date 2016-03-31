@@ -23,6 +23,7 @@ export default Ember.Component.extend({
   store: Ember.inject.service('store'),
   notify: Ember.inject.service('notify'),
   oneproviderServer: Ember.inject.service('oneproviderServer'),
+  commonModals: Ember.inject.service('commonModals'),
 
   spaces: [],
 
@@ -78,14 +79,14 @@ export default Ember.Component.extend({
         action: 'removeSpace'
       },
       {
-        icon: 'group-invite',
-        label: i18n.t('components.spacesMenu.drop.inviteGroup'),
-        action: 'inviteGroup'
-      },
-      {
         icon: 'user-add',
         label: i18n.t('components.spacesMenu.drop.inviteUser'),
         action: 'inviteUser'
+      },
+      {
+        icon: 'group-invite',
+        label: i18n.t('components.spacesMenu.drop.inviteGroup'),
+        action: 'inviteGroup'
       },
       {
         icon: 'support',
@@ -168,6 +169,11 @@ export default Ember.Component.extend({
     this.bindSpaceDrops();
   },
 
+  spaceActionMessage(notifyType, messageId, spaceName) {
+    let message = this.get('i18n').t(`components.spacesMenu.notify.${messageId}`, {spaceName: spaceName});
+    this.get('notify')[notifyType](message);
+  },
+
   actions: {
     /** Delegate to goToSpace action, should show submenu to configure Space */
     showSpaceOptions(space) {
@@ -217,7 +223,10 @@ export default Ember.Component.extend({
       // TODO: loading gif in modal?
       this.get('oneproviderServer').joinSpace(token).then(
         (spaceName) => {
-          this.get('i18n').t('components.spacesMenu.notify.joinedToSpace', {spaceName: spaceName});
+          this.spaceActionMessage('info', 'joinSuccess', spaceName);
+        },
+        (spaceName) => {
+          this.spaceActionMessage('error', 'joinFailed', spaceName);
         }
       );
     },
@@ -240,14 +249,12 @@ export default Ember.Component.extend({
       try {
         let space = this.get('spaceToLeave');
         let spaceName = space.get('name');
-        this.get('oneproviderServer').leaveSpaceToken(space).then(
+        this.get('oneproviderServer').leaveSpace(space).then(
           () => {
-            // TODO: translate
-            this.get('notify').info(`Space "${spaceName}" left successfully`);
+            this.spaceActionMessage('info', 'leaveSuccess', spaceName);
           },
           () => {
-            // TODO: better message
-            this.get('notify').error(`Cannot leave space "${spaceName}" due to error`);
+            this.spaceActionMessage('error', 'leaveFailed', spaceName);
           }
         );
       } finally {
@@ -281,10 +288,10 @@ export default Ember.Component.extend({
         let spaceName = space.get('name');
         space.destroyRecord().then(
           () => {
-            this.get('notify').info(this.get('i18n').t('components.spacesMenu.notify.spaceRemoved', {spaceName: spaceName}));
+            this.spaceActionMessage('info', 'removeSuccess', spaceName);
           },
           () => {
-            this.get('notify').error(this.get('i18n').t('components.spacesMenu.notify.spaceRemoveFailed', {spaceName: spaceName}));
+            this.spaceActionMessage('error', 'removeFailed', spaceName);
           }
         );
       } finally {
@@ -293,25 +300,21 @@ export default Ember.Component.extend({
     },
 
     inviteGroup(space) {
-      // TODO: show modal with loading
-      this.set('tokenToDisplay', null);
-      this.get('oneproviderServer').inviteGroupToken(space).then(
-        (token) => {
-          this.set('tokenToDisplay', token);
-        },
-        (error) => {
-          console.error('Invite group token fetch failed: ' + JSON.stringify(error));
-        }
-      );
+      this.get('commonModals').openModal('token-group', {
+        space: space
+      });
     },
 
-    // TODO
     inviteUser(space) {
-      this.get('oneproviderServer').inviteUserToken(space);
+      this.get('commonModals').openModal('token-user', {
+        space: space
+      });
     },
 
     getSupport(space) {
-      this.get('oneproviderServer').getSupportToken(space);
+      this.get('commonModals').openModal('token-support', {
+        space: space
+      });
     }
   }
 });

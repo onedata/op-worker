@@ -28,7 +28,7 @@
     <div class="one-th one-first">
       <div class="cell-body">
         <div class="item-element item-label">{{title}}</div>
-        <div class="item-element item-icon item-tool" {{action 'startInvite' type}}>
+        <div class="item-element item-icon item-tool" {{action 'invite' type}}>
           <figure class="icon">
             {{icon inviteButton}}
             <figcaption>{{t 'components.permissionsTable.inviteButton' type=type}}</figcaption>
@@ -147,32 +147,3 @@
 
   </div>
 </div>
-
-{{!-- MODALS --}}
-
-{{!-- ADD ITEM (user/group) --}}
-
-{{#bs-modal open=isInviting body=false footer=false
-    title=(t "components.permissionsTable.inviteModal.title" type=type)
-    id="invite-permissions"}}
-  {{#bs-modal-body}}
-    {{#if inviteToken}}
-      {{#bs-form model=this}}
-        {{bs-form-element controlType="text" property="inviteToken" autofocus=true
-          label=(t "components.permissionsTable.inviteModal.label" type=type)}}
-      {{/bs-form}}
-    {{else}}
-      <div class="modal-loading">
-        <div class="loading-throbber"></div>
-        <div class="loading-label">
-          {{t "common.modal.fetchingToken"}}
-        </div>
-      </div>
-    {{/if}}
-  {{/bs-modal-body}}
-  {{#bs-modal-footer as |footer|}}
-    {{#bs-button action=(action "close" target=footer) type="primary"}}
-      {{t "common.modal.ok"}}
-    {{/bs-button}}
-  {{/bs-modal-footer}}
-{{/bs-modal}}

@@ -8,6 +8,6 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
  */
 
-export default function(/*locale, key, context*/) {
-  return '<missing translation>';
+export default function(locale, key/*, context*/) {
+  return `<${locale}: ${key}>`;
 }

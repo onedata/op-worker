@@ -23,21 +23,10 @@ export default Ember.Service.extend({
     });
   },
 
-  inviteGroup(space) {
-    return this.get('server').privateRPC('inviteGroup', {
-      spaceId: space.get('id')
+  /** Allowed types: user, group, support */
+  getToken(type, spaceId) {
+    return this.get('server').privateRPC(`${type}Token`, {
+      spaceId: spaceId
     });
-  },
-
-  inviteUser(space) {
-    return this.get('server').privateRPC('inviteUser', {
-      spaceId: space.get('id')
-    });
-  },
-
-  getSupport(space) {
-    return this.get('server').privateRPC('getSupport', {
-      spaceId: space.get('id')
-    });
-  },
+  }
 });
