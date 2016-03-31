@@ -227,7 +227,7 @@ export default Ember.Component.extend({
     },
 
     setAsHome(space) {
-      this.get('spaces').forEach((s) => {
+      this.get('spaces').filter((s) => s.get('isDefault')).forEach((s) => {
         s.set('isDefault', false);
         s.save();
       });
