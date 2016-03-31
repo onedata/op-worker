@@ -24,7 +24,7 @@ $secondary-sidebar-icon-font-size: 38px !default;
 $top-bar-icon-font-size: 32px !default;
 
 $table-font-size: 13pt !default;
-$table-checkbox-size: 16pt !default;
+$table-checkbox-size: 64px * $responsive-multiplier !default;
 
 $transition-time: 0.25s !default;
 

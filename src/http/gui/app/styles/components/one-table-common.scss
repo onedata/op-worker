@@ -50,16 +50,16 @@
 
           // TODO: icons now are another than before
 
-          .oneicon-check {
+          .oneicon-checkbox-check {
             color: $onedata-azure;
           }
 
-          .oneicon-discard {
+          .oneicon-checkbox-x {
             color: #B2B2B2;
           }
 
-          .oneicon-check.modified,
-          .oneicon-discard.modified {
+          .oneicon-checkbox-check.modified,
+          .oneicon-checkbox-x.modified {
             color: #58C232;
           }
         }

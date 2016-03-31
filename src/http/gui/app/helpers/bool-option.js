@@ -20,7 +20,7 @@ export default Ember.Helper.helper(function(params) {
   let value = params[0];
   let isModified = params[1];
 
-  var cssClasses = (value ? 'oneicon-check' : 'oneicon-discard');
+  var cssClasses = (value ? 'oneicon-checkbox-check' : 'oneicon-checkbox-x');
   if (isModified === true) {
     cssClasses += ' modified';
   }
