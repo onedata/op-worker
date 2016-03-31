@@ -14,11 +14,11 @@
 -define(FSYNC_TIMEOUT, timer:minutes(1)).
 
 %% replica_synchronizer
--define(SYNC_TIMEOUT, timer:seconds(20)).
+-define(SYNC_TIMEOUT, timer:minutes(5)).
 
 %% gateway_connection
 -define(CONNECTION_TIMEOUT, timer:minutes(1)).
--define(REQUEST_COMPLETION_TIMEOUT, timer:seconds(30)).
+-define(REQUEST_COMPLETION_TIMEOUT, timer:minutes(5)).
 
 -define(SEND_RETRY_DELAY, timer:seconds(10)).
--define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(15)).
+-define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(5)).
