@@ -195,8 +195,18 @@ find_query(<<"space">>, _Data) ->
 %%--------------------------------------------------------------------
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-create_record(<<"space">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+create_record(<<"space">>, Data) ->
+    % todo error handling
+    Name = proplists:get_value(<<"name">>, Data, <<"">>),
+    {ok, SpaceId} = space_info:create(
+        #document{value = #space_info{name = Name}}),
+    {ok, [
+        {<<"id">>, SpaceId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, false},
+        {<<"userPermissions">>, []},
+        {<<"groupPermissions">>, []}
+    ]}.
 
 
 %%--------------------------------------------------------------------
@@ -208,6 +218,7 @@ create_record(<<"space">>, _Data) ->
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
 update_record(<<"space">>, SpaceId, Data) ->
+    % todo error handling
     ?dump({SpaceId, Data}),
     Rename = fun(NewName) ->
         Diff = fun(#space_info{} = SpaceInfo) ->
@@ -218,10 +229,12 @@ update_record(<<"space">>, SpaceId, Data) ->
     case proplists:get_value(<<"isDefault">>, Data, undefined) of
         undefined ->
             ok;
+        false ->
+            ok;
         true ->
             % @todo change when onedata_user holds default space
             UserAuth = op_gui_utils:get_user_rest_auth(),
-            oz_users:set_default_space(UserAuth, SpaceId)
+            oz_users:set_default_space(UserAuth, [{<<"spaceId">>, SpaceId}])
     end,
     case proplists:get_value(<<"name">>, Data, undefined) of
         undefined ->
