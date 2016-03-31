@@ -4,7 +4,6 @@
 
   .one-th,
   .one-td {
-    padding-top: 14px; // TODO: real middle valign
     text-align: center;
 
     // TODO: make dynamic
@@ -14,7 +13,7 @@
     }
   }
 
-  .one-hbody {
+  .one-thead {
     .one-th {
       text-transform: uppercase;
       color: #4D5664;

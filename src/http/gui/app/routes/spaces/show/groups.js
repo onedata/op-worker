@@ -12,5 +12,17 @@ import ShowPermissionsBase from './show-permissions-base';
 
 
 export default ShowPermissionsBase.extend({
- permissionsType: 'group'
+ permissionsType: 'group',
+
+ actions: {
+   inviteItem() {
+     let space = this.modelFor('spaces.show');
+     this.get('oneproviderServer').inviteGroup(space).then(
+       (token) => {
+         this.set('inviteToken', token);
+       }
+       // TODO: handle errors
+     );
+   }
+ }
 });

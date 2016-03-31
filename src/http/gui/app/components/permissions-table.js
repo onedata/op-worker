@@ -37,6 +37,10 @@ let onSaveFailure = function(permission) {
 };
 
 export default Ember.Component.extend({
+  oneproviderServer: Ember.inject.service('oneproviderServer'),
+
+  classNames: ['permissions-table'],
+
   /**
    * Collection of permissions-base model subclasses instances.
    * Each represents a sigle entity with some permissions to set.
@@ -51,10 +55,25 @@ export default Ember.Component.extend({
    */
   type: null,
 
+  /** A token generated to invite user/group, set with RPC call in action */
+  inviteToken: null,
+  isInviting: false,
+
   /** A localized title of table (based on type) */
   title: function() {
     return this.get('type') ?
       this.get('i18n').t(`spaces.show.${this.get('type')}.tableTitle`) : '';
+  }.property('type'),
+
+  inviteButton: function() {
+    switch (this.get('type')) {
+      case 'users':
+        return 'user-add';
+      case 'groups':
+        return 'group-invite';
+      default:
+        return null;
+    }
   }.property('type'),
 
   /** Should permissions table be treated as modified and not saved?
@@ -96,6 +115,16 @@ export default Ember.Component.extend({
       this.get('permissions').forEach(function(permission) {
         permission.reset();
       });
+    },
+
+    startInvite: function() {
+      this.set('isInviting', true);
+      this.get('oneproviderServer').inviteGroup(this.get('space')).then(
+        (token) => {
+          this.set('inviteToken', token);
+        }
+        // TODO: handle errors
+      );
     }
   }
 });
