@@ -15,11 +15,13 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
+
 
 %% API
 -export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
-
+-export([wait_for_links/2, wait_for_file_meta/2]).
 
 %%%===================================================================
 %%% API functions
@@ -98,3 +100,39 @@ get_local_storage_file_locations(#file_location{blocks = Blocks, storage_id = DS
 get_local_storage_file_locations(Entry) ->
     #document{} = Doc = get_local_file_location(Entry),
     get_local_storage_file_locations(Doc).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waiting for links document associated with file_meta to be present.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_links(file_meta:uuid(), non_neg_integer()) -> ok | no_return().
+wait_for_links(FileUuid, 0) ->
+    ?error("Waiting for links document, for file ~p failed.", [FileUuid]),
+    throw(no_link_document);
+wait_for_links(FileUuid, Retries) ->
+    case datastore:exists(?DISK_ONLY_LEVEL, file_meta, links_utils:links_doc_key(FileUuid)) of
+        {ok, true} ->
+            ok;
+        {ok, false} ->
+            timer:sleep(timer:seconds(1)),
+            wait_for_links(FileUuid, Retries - 1)
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Waiting for file_meta with given file_uuid to be present.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_file_meta(file_meta:uuid(), non_neg_integer()) -> ok | no_return().
+wait_for_file_meta(FileUuid, 0) ->
+    ?error("Waiting for file_meta ~p failed.", [FileUuid]),
+    throw(no_file_meta_document);
+wait_for_file_meta(FileUuid, Retries) ->
+    case file_meta:exists({uuid, FileUuid}) of
+        true ->
+            ok;
+        false ->
+            timer:sleep(timer:seconds(1)),
+            wait_for_links(FileUuid, Retries - 1)
+    end.

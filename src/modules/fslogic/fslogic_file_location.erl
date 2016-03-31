@@ -14,6 +14,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([add_change/2, get_changes/2, create_storage_file_if_not_exists/2,
@@ -90,19 +91,22 @@ get_merged_changes(Doc, N) ->
 -spec create_storage_file_if_not_exists(space_info:id(), file_meta:file_meta()) -> ok.
 create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
     value = #file_meta{mode = Mode, uid = UserId}}) ->
-    case fslogic_utils:get_local_file_locations(FileDoc) of
-        [] ->
-            create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
-            case onedata_user:exists(UserId) of
-                true ->
-                    files_to_chown:chown_file(FileUuid, UserId, SpaceId);
-                false ->
-                    files_to_chown:add(UserId, FileUuid)
-            end,
-            ok;
-        _ ->
-            ok
-    end.
+    file_location:run_synchronized(FileUuid,
+        fun() ->
+            case fslogic_utils:get_local_file_locations(FileDoc) of
+                [] ->
+                    create_storage_file(SpaceId, FileUuid, ?ROOT_SESS_ID, Mode),
+                    case onedata_user:exists(UserId) of
+                        true ->
+                            files_to_chown:chown_file(FileUuid, UserId, SpaceId);
+                        false ->
+                            files_to_chown:add(UserId, FileUuid)
+                    end,
+                    ok;
+                _ ->
+                    ok
+            end
+        end).
 
 
 %%--------------------------------------------------------------------

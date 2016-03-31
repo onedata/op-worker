@@ -13,7 +13,6 @@
 -author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
@@ -78,9 +77,6 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
     case binary_to_term(http_utils:base64url_decode(SpaceUuid)) of
         {space, SpaceId} ->
             SpaceId;
-        {default, UserId} ->
-            {ok, SpaceId} = fslogic_spaces:get_default_space_id(UserId),
-            SpaceId;
         _ ->
             throw({not_a_space, {uuid, SpaceUuid}})
     end.
@@ -99,7 +95,7 @@ spaces_uuid(UserId) ->
 %%--------------------------------------------------------------------
 -spec default_space_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
 default_space_uuid(UserId) ->
-    http_utils:base64url_encode(term_to_binary({default, UserId})).
+    http_utils:base64url_encode(UserId).
 
 %%%===================================================================
 %%% Internal functions

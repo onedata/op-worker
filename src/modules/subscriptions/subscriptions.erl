@@ -109,7 +109,7 @@ ensure_initialised() ->
         false ->
             % as retrieving users is costly, first we've checked for existence
             Users = get_users_with_session(),
-            subscriptions_state:create_or_update(#document{
+            subscriptions_state:save(#document{
                 key = ?SUBSCRIPTIONS_STATE_KEY,
                 value = #subscriptions_state{
                     largest = 0,
@@ -117,7 +117,7 @@ ensure_initialised() ->
                     users = sets:from_list(Users),
                     refreshing_node = node()
                 }
-            }, fun(State) -> {ok, State} end),
+            }),
             ok
     end.
 

@@ -144,17 +144,19 @@ create_or_update(Doc, Diff) ->
 -spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
     try
+        Client = {user, {Macaroon, DMacaroons}},
         {ok, #user_details{id = Id, name = Name}} =
-            oz_users:get_details({user, {Macaroon, DMacaroons}}),
+            oz_users:get_details(Client),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            oz_users:get_spaces({user, {Macaroon, DMacaroons}}),
-        {ok, GroupIds} = oz_users:get_groups({user, {Macaroon, DMacaroons}}),
+            oz_users:get_spaces(Client),
+        {ok, GroupIds} = oz_users:get_groups(Client),
         [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
         OnedataUser = #onedata_user{
             name = Name,
             space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
             group_ids = GroupIds
         },
+        [space_info:fetch(Client, SId) || SId <- SpaceIds],
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}

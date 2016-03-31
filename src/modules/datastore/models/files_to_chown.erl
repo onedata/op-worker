@@ -96,7 +96,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files_to_chown_bucket, [{onedata_user, create}, {onedata_user, save}], ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(files_to_chown_bucket, [{onedata_user, create}, {onedata_user, save},
+        {onedata_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -106,9 +107,11 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, _, ?GLOBAL_ONLY_LEVEL, {ok, UUID}) ->
+'after'(onedata_user, create, _, _, {ok, UUID}) ->
     chown_pending_files(UUID);
-'after'(onedata_user, save, _, ?GLOBAL_ONLY_LEVEL, {ok, UUID}) ->
+'after'(onedata_user, save, _, _, {ok, UUID}) ->
+    chown_pending_files(UUID);
+'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
     chown_pending_files(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -134,8 +137,8 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%--------------------------------------------------------------------
 -spec add(onedata_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
 add(UserId, FileUuid) ->
-    UpdateFun = fun(Doc = #document{value = Val = #files_to_chown{file_uuids = Uuids}}) ->
-        Doc#document{value = Val#files_to_chown{file_uuids = [FileUuid | Uuids]}}
+    UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
+        {ok, Val#files_to_chown{file_uuids = [FileUuid | Uuids]}}
     end,
     case update(UserId, UpdateFun) of
         {ok, Key} ->

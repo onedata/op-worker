@@ -340,18 +340,13 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
         end,
 
         datastore:run_synchronized(ModelName, MainDocKey, fun() ->
-            caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
-            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all)
+%%            caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
+            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
+%%            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all)
         end),
         spawn(
             fun() ->
-                try
-                    dbsync_events:change_replicated(SpaceId, Change)
-                catch
-                    _:Error ->
-                        ?error_stacktrace("dbsync_events:change_replicated(~p, ~p)~n~nerror: ~p", [SpaceId, Change, Error])
-                end,
+                dbsync_events:change_replicated(SpaceId, Change),
                 ok
             end),
         apply_changes(SpaceId, T)
