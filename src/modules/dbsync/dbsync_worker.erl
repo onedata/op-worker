@@ -334,34 +334,19 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
-        {FlushFun, ClearFun} = case Value of
-                                   #links{} ->
-                                       {
-                                           fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end,
-                                           fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end
-                                       };
-                                   _ ->
-                                       {
-                                           fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key) end,
-                                           fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key) end
-                                       }
-                               end,
 
-        datastore:run_synchronized(ModelName, term_to_binary({dbsync, Key}), fun() ->
-            case FlushFun() of
-                ok ->
-                    ok;
-                Error ->
-                    ?error_stacktrace("Unable to flush cache for change ~p due to: ~p", [Change, Error])
-            end,
-            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            case ClearFun() of
-                ok ->
-                    ok;
-                Error2 ->
-                    ?error_stacktrace("Unable to clear cache for change ~p due to: ~p", [Change, Error2])
-            end
+        %todo add cache manipulation functions and activate GLOBALLY_CACHED levels of datastore for file_meta and file_location
+        MainDocKey = case Value of
+            #links{} ->
+                Value#links.doc_key;
+            _ -> Key
+        end,
+        datastore:run_synchronized(ModelName, MainDocKey, fun() ->
+            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
+
+
+
         spawn(
             fun() ->
                 dbsync_events:change_replicated(SpaceId, Change),
@@ -581,7 +566,7 @@ bcast_status() ->
     lists:foreach(
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
-            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
+            ?debug("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
             {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).

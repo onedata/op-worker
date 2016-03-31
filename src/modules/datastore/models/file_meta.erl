@@ -280,8 +280,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+        ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -297,6 +297,8 @@ model_init() ->
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
+    setup_onedata_user(provider, UUID);
+'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
     setup_onedata_user(provider, UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

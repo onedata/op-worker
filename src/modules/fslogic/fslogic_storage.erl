@@ -25,21 +25,23 @@
 %%% API
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates new user's storage context based on given helper.
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_user_ctx(helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+-spec new_user_ctx(helpers:init(), session:id() | #identity{}, SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
-new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_ceph_user_ctx(SessionId, SpaceUUID);
-new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_posix_user_ctx(SessionId, SpaceUUID);
-new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
-    new_s3_user_ctx(SessionId, SpaceUUID).
+new_user_ctx(HelperInit, SessionId, SpaceUUID) when is_binary(SessionId) ->
+    {ok, #document{value = #session{identity = Identity}}} = session:get(SessionId),
+    new_user_ctx(HelperInit, Identity, SpaceUUID);
+new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, Identity, SpaceUUID) ->
+    new_ceph_user_ctx(Identity, SpaceUUID);
+new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, Identity, SpaceUUID) ->
+    new_posix_user_ctx(Identity, SpaceUUID);
+new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, Identity, SpaceUUID) ->
+    new_s3_user_ctx(Identity, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -48,10 +50,9 @@ new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_ceph_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+-spec new_ceph_user_ctx(Identity :: #identity{}, SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
-new_ceph_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+new_ceph_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
     {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} = ceph_user:get(UserId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
@@ -68,13 +69,10 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_posix_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+-spec new_posix_user_ctx(Identity :: #identity{}, SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
-new_posix_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
-    Client = fslogic_utils:session_to_rest_client(SessionId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get_or_fetch(Client, SpaceId),
+new_posix_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
+    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceUUID),
     FinalGID =
         case helpers_nif:groupname_to_gid(SpaceName) of
             {ok, GID} ->
@@ -93,10 +91,9 @@ new_posix_user_ctx(SessionId, SpaceUUID) ->
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_s3_user_ctx(SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
+-spec new_s3_user_ctx(Identity :: #identity{}, SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
-new_s3_user_ctx(SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+new_s3_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
     {ok, #document{value = #s3_user{credentials = CredentialsMap}}} = s3_user:get(UserId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
