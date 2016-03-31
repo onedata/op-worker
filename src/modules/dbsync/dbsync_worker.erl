@@ -335,22 +335,32 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
     try
         ModelConfig = ModelName:model_init(),
         {FlushFun, ClearFun} = case Value of
-            #links{} ->
-                {
-                    fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end,
-                    fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end
-                };
-            _ ->
-                {
-                    fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key) end,
-                    fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key) end
-                }
-        end,
+                                   #links{} ->
+                                       {
+                                           fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end,
+                                           fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Value#links.doc_key, all) end
+                                       };
+                                   _ ->
+                                       {
+                                           fun() -> caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, Key) end,
+                                           fun() -> caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key) end
+                                       }
+                               end,
 
         datastore:run_synchronized(ModelName, term_to_binary({dbsync, Key}), fun() ->
-            FlushFun(),
+            case FlushFun() of
+                ok ->
+                    ok;
+                Error ->
+                    ?error_stacktrace("Unable to flush cache for change ~p due to: ~p", [Change, Error])
+            end,
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            ClearFun()
+            case ClearFun() of
+                ok ->
+                    ok;
+                Error2 ->
+                    ?error_stacktrace("Unable to clear cache for change ~p due to: ~p", [Change, Error2])
+            end
         end),
         spawn(
             fun() ->
