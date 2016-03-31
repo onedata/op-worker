@@ -14,7 +14,8 @@ export default {
       cancel: 'Cancel',
       yes: 'Yes',
       no: 'No',
-      fetchingToken: 'Fetching token...'
+      fetchingToken: 'Fetching token...',
+      fetchingTokenError: 'Fetching token failed!'
     }
   },
   components: {
@@ -66,12 +67,14 @@ export default {
       },
       removeModal: {
         title: 'Remove a space',
-        label: 'Are you sure you want to remove a space "{{spaceName}}"?'
+        label: 'Are you sure you want to remove the "{{spaceName}}" space?'
       },
       notify: {
-        spaceRemoved: 'Space "{{spaceName}}" has been removed',
-        spaceRemoveFailed: 'Failed to remove space "{{spaceName}}"',
-        joinedToSpace: 'Successfully joined to space "{{spaceName}}"'
+        leaveSuccess: 'Space "{{spaceName}}" left successfully',
+        leaveFailed: 'Cannot leave space "{{spaceName}}" due to an error',
+        removeSuccess: 'Space "{{spaceName}}" has been removed',
+        removeFailed: 'Failed to remove space "{{spaceName}}"',
+        joinSuccess: 'Successfully joined to space "{{spaceName}}"'
       }
     },
     spacesSubmenu: {
@@ -142,7 +145,21 @@ export default {
     fileUpload: {
       titleUpload: 'Uploading {{count}} file(s)',
       cancelAll: 'Cancel all',
-    }
+    },
+    tokenModals: {
+      user: {
+        title: 'Invite user to the space',
+        label: 'Pass the below token to the user you want to invite'
+      },
+      group: {
+        title: 'Invite group to the space',
+        label: 'Pass the below token to the group you want to invite'
+      },
+      support: {
+        title: 'Get support for the space',
+        label: 'Pass the below token to the provider you want to request support from'
+      }
+    },
   },
   spaces: {
     show: {

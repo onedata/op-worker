@@ -37,7 +37,8 @@ let onSaveFailure = function(permission) {
 };
 
 export default Ember.Component.extend({
-  oneproviderServer: Ember.inject.service('oneproviderServer'),
+  oneproviderServer: Ember.inject.service(),
+  commonModals: Ember.inject.service(),
 
   classNames: ['permissions-table'],
 
@@ -54,10 +55,6 @@ export default Ember.Component.extend({
    * It must be injected into component.
    */
   type: null,
-
-  /** A token generated to invite user/group, set with RPC call in action */
-  inviteToken: null,
-  isInviting: false,
 
   /** A localized title of table (based on type) */
   title: function() {
@@ -117,14 +114,12 @@ export default Ember.Component.extend({
       });
     },
 
-    startInvite: function() {
-      this.set('isInviting', true);
-      this.get('oneproviderServer').inviteGroup(this.get('space')).then(
-        (token) => {
-          this.set('inviteToken', token);
-        }
-        // TODO: handle errors
-      );
-    }
+    invite(space) {
+      // TODO: plural -> singular mess
+      let type = this.get('type') === 'groups' ? 'group' : 'user';
+      this.get('commonModals').openModal(`token-${type}` , {
+        space: space
+      });
+    },
   }
 });

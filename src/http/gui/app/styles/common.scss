@@ -1,3 +1,5 @@
+$responsive-multiplier: 1 !default;
+
 // default for desktop TODO: move to desktop-common
 $sidebar-width: 68px !default;
 $top-bar-height: 72px !default;
@@ -251,9 +253,9 @@ html, body {
           // TODO: should be like div.current-sidebar-entry...
           height: 60px;
           padding-top: 18px;
-          padding-left: 33px; // SPACES is moved right slightly
+          padding-left: 33px * $responsive-multiplier; // SPACES is moved right slightly
           padding-bottom: 16px;
-          padding-right: 27px;
+          padding-right: 27px * $responsive-multiplier;
           font-size: 11pt;
         }
 
@@ -454,6 +456,19 @@ html, body {
   .loading-label {
     padding-left: 15px;
   }
+}
+
+.route-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+
+  background-color: white;
+  background-image: url("/assets/images/loading-128.gif");
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 // TODO: temporary
