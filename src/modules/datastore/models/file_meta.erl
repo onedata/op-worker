@@ -287,17 +287,23 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(onedata_user, create, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_user_and_inform_gui(UUID);
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_user_and_inform_gui(UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
-    setup_onedata_user(UUID);
+    setup_user_and_inform_gui(UUID);
 %% @TODO temporary solution, move to events for changes in files
 'after'(file_meta, Method, ?GLOBAL_ONLY_LEVEL, Context, ReturnValue) ->
     file_data_backend:process_file_meta_change(Method, Context, ReturnValue),
     ok;
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
+
+% @todo hack
+setup_user_and_inform_gui(UUID) ->
+    setup_onedata_user(UUID),
+        catch space_data_backend:something_changed(),
+        catch data_space_data_backend:something_changed().
 
 %%--------------------------------------------------------------------
 %% @doc

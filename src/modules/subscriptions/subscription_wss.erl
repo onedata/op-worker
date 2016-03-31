@@ -107,7 +107,6 @@ websocket_handle({binary, RawUpdates}, _ConnState, _State) ->
         fun(Auth) ->
             catch onedata_user:fetch(Auth)
         end, Auths),
-    catch space_data_backend:something_changed(),
     worker_proxy:call(subscriptions_worker, {process_updates, Updates}),
     {ok, _State};
 websocket_handle(_Msg, _ConnState, _State) ->

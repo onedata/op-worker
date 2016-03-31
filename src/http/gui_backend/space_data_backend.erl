@@ -20,6 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+% @todo currently unused - every time taken from OZ
 %% Key under which default space is stored in session memory.
 -define(DEFAULT_SPACE_KEY, default_space).
 
@@ -47,25 +48,30 @@ support(Token) ->
 %%--------------------------------------------------------------------
 -spec something_changed() -> ok.
 something_changed() ->
-    UpdateFun = fun() ->
-        % Let the changes to DB be saved
-        timer:sleep(1000),
-        lists:foreach(
-            fun({SessionId, Pids}) ->
-                try
-                    g_session:set_session_id(SessionId),
-                    {ok, Data} = find_all(<<"space">>),
-                    ?dump(Data),
-                    lists:foreach(
-                        fun(Pid) ->
-                            gui_async:push_updated(<<"space">>, Data, Pid)
-                        end, Pids)
-                catch T:M ->
-                    ?dump({T, M, erlang:get_stacktrace()})
-                end
-            end, op_gui_utils:get_all_backend_pids(?MODULE))
-    end,
-    spawn(UpdateFun),
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                g_session:set_session_id(SessionId),
+                {ok, Data} = find_all(<<"space">>),
+                DefSpace = op_gui_utils:get_users_default_space(),
+                lists:map(
+                    fun(Props) ->
+                        case proplists:get_value(<<"id">>, Props) of
+                            DefSpace ->
+                                [{<<"isDefault">>, true} |
+                                    proplists:delete(<<"isDefault">>, Props)];
+                            _ ->
+                                Props
+                        end
+                    end, Data),
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_updated(<<"space">>, Data, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(?MODULE)),
     ok.
 
 
@@ -81,9 +87,6 @@ something_changed() ->
 -spec init() -> ok.
 init() ->
     op_gui_utils:register_backend(?MODULE, self()),
-    ?dump(op_gui_utils:get_users_default_space()),
-    g_session:put_value(?DEFAULT_SPACE_KEY,
-        op_gui_utils:get_users_default_space()),
     ok.
 
 
@@ -125,7 +128,7 @@ find(<<"space">>, [SpaceId]) ->
             ids_to_association(GroupId, SpaceId)
         end, GroupPerms),
 
-    DefaultSpaceId = g_session:get_value(?DEFAULT_SPACE_KEY),
+    DefaultSpaceId = op_gui_utils:get_users_default_space(),
     Res = [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
@@ -260,7 +263,6 @@ create_record(<<"space">>, Data) ->
     ok | gui_error:error_result().
 update_record(<<"space">>, SpaceId, Data) ->
     % todo error handling
-    ?dump({SpaceId, Data}),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case proplists:get_value(<<"isDefault">>, Data, undefined) of
         undefined ->
