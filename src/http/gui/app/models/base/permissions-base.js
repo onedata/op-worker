@@ -22,6 +22,9 @@ export default DS.Model.extend({
   permRemoveSpace: DS.attr('boolean', {defaultValue: false}),
   permInviteUser: DS.attr('boolean', {defaultValue: false}),
   permRemoveUser: DS.attr('boolean', {defaultValue: false}),
+  permInviteGroup: DS.attr('boolean', {defaultValue: false}),
+  permRemoveGroup: DS.attr('boolean', {defaultValue: false}),
+  permSetPrivileges: DS.attr('boolean', {defaultValue: false}),
   permInviteProvider: DS.attr('boolean', {defaultValue: false}),
   permRemoveProvider: DS.attr('boolean', {defaultValue: false}),
 
@@ -36,6 +39,9 @@ export default DS.Model.extend({
   modRemoveSpace: false,
   modInviteUser: false,
   modRemoveUser: false,
+  modInviteGroup: false,
+  modRemoveGroup: false,
+  modSetPrivileges: false,
   modInviteProvider: false,
   modRemoveProvider: false,
 
@@ -43,7 +49,7 @@ export default DS.Model.extend({
    *  used mainly to iterate over these flags */
   FLAG_NAMES: [
     'ViewSpace', 'ModifySpace', 'RemoveSpace', 'InviteUser', 'RemoveUser',
-     'InviteGroup', 'RemoveGroup', 'InviteProvider', 'RemoveProvider'
+     'InviteGroup', 'RemoveGroup', 'SetPrivileges', 'InviteProvider', 'RemoveProvider'
   ],
 
   // Checks if Permission is modified using mod* flags
@@ -53,7 +59,7 @@ export default DS.Model.extend({
       return this.get('mod' + flagName);
     }, this);
   }.property('modViewSpace', 'modModifySpace', 'modRemoveSpace', 'modInviteUser',
-    'modRemoveUser', 'modInviteGroup', 'modRemoveGroup', 'modInviteProvider',
+    'modRemoveUser', 'modInviteGroup', 'modRemoveGroup', 'modSetPrivileges', 'modInviteProvider',
     'modRemoveProvider'),
 
   /*** Methods ***/
