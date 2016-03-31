@@ -347,9 +347,19 @@ apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc,
                                end,
 
         datastore:run_synchronized(ModelName, term_to_binary({dbsync, Key}), fun() ->
-            ok = FlushFun(),
+            case FlushFun() of
+                ok ->
+                    ok;
+                Error ->
+                    ?error_stacktrace("Unable to flush cache for change ~p due to: ~p", [Change, Error])
+            end,
             {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            ok = ClearFun()
+            case ClearFun() of
+                ok ->
+                    ok;
+                Error2 ->
+                    ?error_stacktrace("Unable to clear cache for change ~p due to: ~p", [Change, Error2])
+            end
         end),
         spawn(
             fun() ->
