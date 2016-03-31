@@ -109,6 +109,7 @@ find(<<"space-user-permission">>, [AssocId]) ->
         end, all_space_perms()),
     Res = PermsMapped ++ [
         {<<"id">>, AssocId},
+        {<<"space">>, SpaceId},
         {<<"user">>, UserId}
     ],
     {ok, Res};
@@ -140,6 +141,7 @@ find(<<"space-group-permission">>, [AssocId]) ->
         end, all_space_perms()),
     Res = PermsMapped ++ [
         {<<"id">>, AssocId},
+        {<<"space">>, SpaceId},
         {<<"group">>, GroupId}
     ],
     {ok, Res};
@@ -220,12 +222,7 @@ create_record(<<"space">>, Data) ->
 update_record(<<"space">>, SpaceId, Data) ->
     % todo error handling
     ?dump({SpaceId, Data}),
-    Rename = fun(NewName) ->
-        Diff = fun(#space_info{} = SpaceInfo) ->
-            {ok, SpaceInfo#space_info{name = NewName}}
-        end,
-        {ok, SpaceId} = space_info:update(SpaceId, Diff)
-    end,
+    UserAuth = op_gui_utils:get_user_rest_auth(),
     case proplists:get_value(<<"isDefault">>, Data, undefined) of
         undefined ->
             ok;
@@ -233,14 +230,13 @@ update_record(<<"space">>, SpaceId, Data) ->
             ok;
         true ->
             % @todo change when onedata_user holds default space
-            UserAuth = op_gui_utils:get_user_rest_auth(),
             oz_users:set_default_space(UserAuth, [{<<"spaceId">>, SpaceId}])
     end,
     case proplists:get_value(<<"name">>, Data, undefined) of
         undefined ->
             ok;
         NewName ->
-            Rename(NewName)
+            oz_spaces:modify_details(UserAuth, SpaceId, [{<<"name">>, NewName}])
     end,
     gui_error:report_error(<<"Not iplemented">>).
 
