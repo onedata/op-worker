@@ -427,11 +427,11 @@ handle_proxyio_request(_CTX, Req) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Map given request to file-scope or provider-scope.
+%% Map given request to file-scope, provider-scope or space-scope.
 %% @end
 %%--------------------------------------------------------------------
 -spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{} | #proxyio_request{}) ->
-    {file, file_meta:entry()} | {provider, oneprovider:id()}.
+    {file, file_meta:entry()} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {path, Path}}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     case fslogic_path:get_canonical_file_entry(Ctx, Tokens) of

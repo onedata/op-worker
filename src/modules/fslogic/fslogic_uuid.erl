@@ -31,20 +31,19 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec file_uuid_to_space_id(file_meta:uuid()) ->
-    {ok, binary()} | {not_in_space_scope, file_meta:uuid(), Reason :: term()}.
+    {ok, binary()} | {error, {not_in_space_scope, file_meta:uuid(), Reason :: term()}}.
 file_uuid_to_space_id(FileUUID) ->
     BinParentUUID = http_utils:base64url_decode(FileUUID),
-    FileUUID =
-        try binary_to_term(BinParentUUID) of
-            {space, SpaceId} ->
-                {ok, SpaceId};
-            {{s, SpaceId}, _} ->
-                {ok, SpaceId}
-        catch
-            _:Reason ->
-                ?error("Unable to decode file UUID ~p due to: ~p", [FileUUID, Reason]),
-                {not_in_space_scope, FileUUID, Reason}
-        end.
+    try binary_to_term(BinParentUUID) of
+        {space, SpaceId} ->
+            {ok, SpaceId};
+        {{s, SpaceId}, _} ->
+            {ok, SpaceId}
+    catch
+        _:Reason ->
+            ?error("Unable to decode file UUID ~p due to: ~p", [FileUUID, Reason]),
+            {error, {not_in_space_scope, FileUUID, Reason}}
+    end.
 
 
 %%--------------------------------------------------------------------
