@@ -87,7 +87,7 @@ get_space(FileEntry) ->
 -spec get_space(FileEntry :: fslogic_worker:file(), UserId :: onedata_user:id()) ->
     {ok, ScopeDoc :: datastore:document()} | {error, Reason :: term()}.
 get_space(FileEntry, UserId) ->
-    ?info("get_space ~p ~p", [FileEntry, UserId]),
+    ?debug("get_space ~p ~p", [FileEntry, UserId]),
     DefaultSpaceUUID = fslogic_uuid:default_space_uuid(UserId),
     SpacesDir = fslogic_uuid:spaces_uuid(UserId),
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
@@ -101,13 +101,16 @@ get_space(FileEntry, UserId) ->
             {ok, DefaultSpaceId} = get_default_space_id(UserId),
             DefaultSpaceId;
         _ ->
-            ?info("Decoding UUID ~p ~p", [FileUUID, FileEntry]),
             BinFileUUID = http_utils:base64url_decode(FileUUID),
-            case binary_to_term(BinFileUUID) of
+            try binary_to_term(BinFileUUID) of
                 {space, SpaceId0} ->
                     SpaceId0;
                 {{s, SpaceId0}, _FileUUID} ->
                     SpaceId0
+            catch
+                _:Reason0 ->
+                    ?error("Unable to decode file UUID ~p due to: ~p", [BinFileUUID, Reason0]),
+                    throw({not_found, file_meta})
             end
     end,
 
