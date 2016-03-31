@@ -430,7 +430,7 @@ subscribe_should_work_for_multiple_sessions(Config) ->
                 {description, "Medium number of clients connected to the server."},
                 {parameters, [?CLI_NUM(100)]}
             ]}
-            % TODO - tune mnesia not to be overloaded at Bamboo in such case
+            % TODO - tune mnesia not to be overloaded at Bamboo in such case (VFS-1575)
 %%             {config, [{name, large_client_number},
 %%                 {description, "Large number of clients connected to the server."},
 %%                 {parameters, [?CLI_NUM(500)]}
