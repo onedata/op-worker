@@ -12,9 +12,11 @@
 -module(fslogic_rename).
 -author("Mateusz Paciorek").
 
+-define(CHUNK_SIZE, 100).
+
 %% TODO future work:
-%% 1. If any provider supporting old path does not support new path
-%%    then get his changes, other providers should update their locations
+%% 1. If any provider supporting old path does not support new path -
+%%    get his changes, other providers should update their locations
 %% 2. Add 'hint' for fslogic_storage:select_storage, to suggest using
 %%    source storage if possible to avoid copying
 %% 3. Add rollback or any other means of rescuing from failed renaming
@@ -27,7 +29,6 @@
 
 %% API
 -export([rename/3]).
--export([get_all_regular_files/1]).
 
 %%%===================================================================
 %%% API functions
@@ -62,7 +63,7 @@ rename(CTX, SourceEntry, TargetPath) ->
     #fuse_response{} | no_return().
 -check_permissions([{?delete_subcontainer, {parent, 2}}, {?add_subcontainer, {parent, {path, 3}}}]).
 rename_dir(CTX, SourceEntry, TargetPath) ->
-    case check_dir_preconditions(CTX, SourceEntry, TargetPath) of
+    case check_dir_preconditions(CTX, SourceEntry, get_canonical_path(CTX, TargetPath)) of
         #fuse_response{status = #status{code = ?OK}} ->
             rename_select(CTX, SourceEntry, TargetPath);
         Error ->
@@ -76,7 +77,7 @@ rename_dir(CTX, SourceEntry, TargetPath) ->
     #fuse_response{} | no_return().
 -check_permissions([{?delete_object, {parent, 2}}, {?add_object, {parent, {path, 3}}}]).
 rename_file(CTX, SourceEntry, TargetPath) ->
-    case check_reg_preconditions(CTX, SourceEntry, TargetPath) of
+    case check_reg_preconditions(CTX, SourceEntry, get_canonical_path(CTX, TargetPath)) of
         #fuse_response{status = #status{code = ?OK}} ->
             rename_select(CTX, SourceEntry, TargetPath);
         Error ->
@@ -88,14 +89,14 @@ rename_file(CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec check_dir_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> #fuse_response{} | no_return().
-check_dir_preconditions(CTX, SourceEntry, TargetPath) ->
-    case file_meta:exists({path, TargetPath}) of
+check_dir_preconditions(CTX, SourceEntry, CanonicalTargetPath) ->
+    case file_meta:exists({path, CanonicalTargetPath}) of
         false ->
             #fuse_response{status = #status{code = ?OK}};
         true ->
-            case file_meta:get({path, TargetPath}) of
+            case file_meta:get({path, CanonicalTargetPath}) of
                 {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = TargetDoc} ->
-                    case moving_into_itself(SourceEntry, TargetPath) of
+                    case moving_into_itself(SourceEntry, CanonicalTargetPath) of
                         true ->
                             #fuse_response{status = #status{code = ?EINVAL}};
                         false ->
@@ -112,12 +113,12 @@ check_dir_preconditions(CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec check_reg_preconditions(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> #fuse_response{} | no_return().
-check_reg_preconditions(CTX, _SourceEntry, TargetPath) ->
-    case file_meta:exists({path, TargetPath}) of
+check_reg_preconditions(CTX, _SourceEntry, CanonicalTargetPath) ->
+    case file_meta:exists({path, CanonicalTargetPath}) of
         false ->
             #fuse_response{status = #status{code = ?OK}};
         true ->
-            case file_meta:get({path, TargetPath}) of
+            case file_meta:get({path, CanonicalTargetPath}) of
                 {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
                     #fuse_response{status = #status{code = ?EISDIR}};
                 {ok, TargetDoc} ->
@@ -142,23 +143,22 @@ moving_into_itself(SourceEntry, TargetPath) ->
 -spec rename_select(fslogic_worker:ctx(), fslogic_worker:file(), file_meta:path()) ->
     #fuse_response{} | no_return().
 rename_select(CTX, SourceEntry, TargetPath) ->
-    {_, TargetParentPath} = fslogic_path:basename_and_parent(TargetPath),
+    {_, TargetParentPath} = fslogic_path:basename_and_parent(get_canonical_path(CTX, TargetPath)),
     SourceSpaceUUID = get_space_uuid(CTX, SourceEntry),
     TargetSpaceUUID = get_space_uuid(CTX, {path, TargetParentPath}),
-    ?critical("~p -> ~p", [SourceSpaceUUID, TargetSpaceUUID]),
 
     case SourceSpaceUUID =:= TargetSpaceUUID of
         true ->
-            rename_interspace(CTX, SourceEntry, TargetPath);
+            rename_trivial(CTX, SourceEntry, TargetPath);
         false ->
             TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
-            {ok, TargetProviderIds} =
-                gr_spaces:get_providers(provider, TargetSpaceId),
+            {ok, TargetProviderIds} = oz_spaces:get_providers(provider, TargetSpaceId),
             TargetProvidersSet = ordsets:from_list(TargetProviderIds),
+
             SourceSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SourceSpaceUUID),
-            {ok, SourceProviderIds} =
-                gr_spaces:get_providers(provider, SourceSpaceId),
+            {ok, SourceProviderIds} = oz_spaces:get_providers(provider, SourceSpaceId),
             SourceProvidersSet = ordsets:from_list(SourceProviderIds),
+
             CommonProvidersSet = ordsets:intersection([TargetProvidersSet, SourceProvidersSet]),
             case ordsets:is_element(oneprovider:get_provider_id(), CommonProvidersSet) of
                 true ->
@@ -169,6 +169,14 @@ rename_select(CTX, SourceEntry, TargetPath) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @doc Renames file within one space.
+%%--------------------------------------------------------------------
+-spec rename_trivial(fslogic_worker:ctx(), fslogic_worker:file(),
+    file_meta:path()) -> #fuse_response{} | no_return().
+rename_trivial(CTX, SourceEntry, TargetPath) ->
+    rename_interspace(CTX, SourceEntry, TargetPath).
+
+%%--------------------------------------------------------------------
 %% @doc Renames file within one provider.
 %%--------------------------------------------------------------------
 -spec rename_interspace(fslogic_worker:ctx(), fslogic_worker:file(),
@@ -176,9 +184,8 @@ rename_select(CTX, SourceEntry, TargetPath) ->
 rename_interspace(CTX, SourceEntry, TargetPath) ->
     {ok, SourcePath} = file_meta:gen_path(SourceEntry),
     {ok, SourceParent} = file_meta:get_parent(SourceEntry),
-    {_, TargetParentPath} = fslogic_path:basename_and_parent(TargetPath),
-    SourcePathTokens = filename:split(SourcePath),
-    TargetPathTokens = filename:split(TargetPath),
+    CanonicalTargetPath = get_canonical_path(CTX, TargetPath),
+    {_, TargetParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
     SourceSpaceUUID = get_space_uuid(CTX, SourceEntry),
     TargetSpaceUUID = get_space_uuid(CTX, {path, TargetParentPath}),
 
@@ -188,15 +195,36 @@ rename_interspace(CTX, SourceEntry, TargetPath) ->
             SourceDirSnapshots = [SourceEntry],
             lists:foreach(
                 fun(Snapshot) ->
-                    ok = file_meta:rename(Snapshot, {path, TargetPath})
-                end, SourceDirSnapshots);
-        _ ->
-            ok
-    end,
+                    ok = file_meta:rename(Snapshot, {path, CanonicalTargetPath})
+                end, SourceDirSnapshots),
 
-    RegFiles = get_all_regular_files(SourceEntry),
-    lists:foreach(
-        fun(File) ->
+            for_each_child_file(SourceEntry,
+                fun
+                    (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File) ->
+                        {ok, NewPath} = file_meta:gen_path(File),
+
+                        %% TODO: get all snapshots:
+                        FileSnapshots = [File],
+                        lists:foreach(
+                            fun(Snapshot) ->
+                                ok = file_meta:rename(Snapshot, {path, get_canonical_path(CTX, NewPath)}),
+                                ok = rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, Snapshot, NewPath)
+                            end, FileSnapshots);
+                    (_Dir) ->
+                        ok
+                end,
+                fun(_) ->
+                    ok
+                end),
+
+            CurrTime = erlang:system_time(seconds),
+            ok = update_ctime({path, CanonicalTargetPath}, CurrTime),
+            ok = update_mtime_ctime(SourceParent, CurrTime),
+            ok = update_mtime_ctime({path, TargetParentPath}, CurrTime);
+
+        {ok, File} ->
+            SourcePathTokens = filename:split(SourcePath),
+            TargetPathTokens = filename:split(CanonicalTargetPath),
             {ok, OldPath} = file_meta:gen_path(File),
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
@@ -206,15 +234,14 @@ rename_interspace(CTX, SourceEntry, TargetPath) ->
             FileSnapshots = [File],
             lists:foreach(
                 fun(Snapshot) ->
-                    file_meta:rename(Snapshot, {path, NewPath}),
-                    rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, Snapshot, NewPath)
-                end, FileSnapshots)
-        end, RegFiles),
+                    ok = file_meta:rename(Snapshot, {path, NewPath}),
+                    ok = rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, Snapshot, NewPath)
+                end, FileSnapshots),
 
-    CurrTime = erlang:system_time(seconds),
-    update_ctime({path, TargetPath}, CurrTime),
-    update_mtime_ctime(SourceParent, CurrTime),
-    update_mtime_ctime({path, TargetParentPath}, CurrTime),
+            CurrTime = erlang:system_time(seconds),
+            ok = update_ctime({path, CanonicalTargetPath}, CurrTime),
+            ok = update_mtime_ctime(SourceParent, CurrTime)
+    end,
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -223,8 +250,43 @@ rename_interspace(CTX, SourceEntry, TargetPath) ->
 %%--------------------------------------------------------------------
 -spec rename_interprovider(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> #fuse_response{} | no_return().
-rename_interprovider(_CTX, _SourceEntry, _TargetPath) ->
-    %% TODO: implement
+rename_interprovider(#fslogic_ctx{session_id = SessId}, SourceEntry, TargetPath) ->
+    {ok, SourcePath} = file_meta:gen_path(SourceEntry),
+    {ok, SourceParent} = file_meta:get_parent(SourceEntry),
+    SourcePathTokens = filename:split(SourcePath),
+    TargetPathTokens = filename:split(TargetPath),
+
+    for_each_child_file(SourceEntry,
+        fun(Entry) ->
+            {ok, OldPath} = file_meta:gen_path(Entry),
+            OldTokens = filename:split(OldPath),
+            NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
+            NewPath = fslogic_path:join(NewTokens),
+
+            case Entry of
+                #document{key = SourceUuid, value = #file_meta{type = ?REGULAR_FILE_TYPE, mode = Mode}} ->
+                    {ok, TargetUuid} = logical_file_manager:create(SessId, NewPath, Mode),
+                    ok = copy_file_contents(SessId, {uuid, SourceUuid}, {uuid, TargetUuid}),
+                    ok = copy_file_attributes(SessId, {uuid, SourceUuid}, {uuid, TargetUuid}),
+                    ok = logical_file_manager:unlink(SessId, {uuid, SourceUuid});
+
+                #document{key = SourceUuid, value = #file_meta{type = ?DIRECTORY_TYPE, mode = Mode}} ->
+                    {ok, TargetUuid} = logical_file_manager:mkdir(SessId, NewPath, Mode),
+                    ok = copy_file_attributes(SessId, {uuid, SourceUuid}, {uuid, TargetUuid})
+            end
+        end,
+        fun(Entry) ->
+            case Entry of
+                #document{key = DirUuid, value = #file_meta{type = ?DIRECTORY_TYPE}} ->
+                    ok = logical_file_manager:rmdir(SessId, {uuid, DirUuid});
+
+                _File ->
+                    ok
+            end
+        end),
+
+    CurrTime = erlang:system_time(seconds),
+    ok = update_mtime_ctime(SourceParent, CurrTime),
     #fuse_response{status = #status{code = ?OK}}.
 
 %%--------------------------------------------------------------------
@@ -235,8 +297,7 @@ rename_interprovider(_CTX, _SourceEntry, _TargetPath) ->
 get_space_uuid(CTX, Entry) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, Doc} = file_meta:get(Entry),
-    {ok, #document{key = SpaceUUID}} =
-        fslogic_spaces:get_space(Doc, UserId),
+    {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Doc, UserId),
     SpaceUUID.
 
 %%--------------------------------------------------------------------
@@ -247,32 +308,51 @@ get_space_uuid(CTX, Entry) ->
     TargetPath :: file_meta:path()) -> ok.
 rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, SourceEntry, TargetPath) ->
     #fslogic_ctx{session_id = SessId} = CTX,
+    {ok, #document{key = SourceUUID, value = #file_meta{mode = Mode}}} = file_meta:get(SourceEntry),
+
     lists:foreach(
         fun(LocationDoc) ->
             #document{value = #file_location{storage_id = SourceStorageId,
                 file_id = SourceFileId}} = LocationDoc,
-            {ok, #document{key = SourceUUID}} = file_meta:get(SourceEntry),
-
             {ok, SourceStorage} = storage:get(SourceStorageId),
-            TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
-            {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
-
             SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUUID, SourceUUID, SourceStorage, SourceFileId),
 
-            Name = fslogic_path:basename(TargetPath),
-
-            CTime = erlang:system_time(seconds),
-            file_meta:update(SourceUUID, #{name => Name, mtime => CTime, ctime => CTime}),
-
+            TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
+            {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
             TargetFileId = fslogic_utils:gen_storage_file_id({uuid, SourceUUID}),
+            {ok, TargetStorage} = storage:get(TargetStorageId),
 
-            %% TODO: try: link and delete, mv, copy, panic
-            storage_file_manager:mv(SourceHandle, TargetFileId),
+            TargetDir = fslogic_path:dirname(TargetFileId),
+            TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, TargetSpaceUUID, undefined, TargetStorage, TargetDir),
+            case storage_file_manager:mkdir(TargetDirHandle, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+                ok ->
+                    ok;
+                {error, eexist} ->
+                    ok
+            end,
 
-            update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId)
+            ok = case storage_file_manager:link(SourceHandle, TargetFileId) of
+                ok ->
+                    ok = storage_file_manager:unlink(SourceHandle),
+                    ok;
+                Error ->
+                    case storage_file_manager:mv(SourceHandle, TargetFileId) of
+                        ok ->
+                            ok;
+                        Error ->
+                            TargetHandle = storage_file_manager:new_handle(SessId, TargetSpaceUUID, SourceUUID, TargetStorage, TargetFileId),
+                            ok = storage_file_manager:create(TargetHandle, Mode, true),
+
+                            ok = copy_file_contents(SessId, {uuid, SourceUUID}, {path, TargetPath}),
+                            ok = copy_file_attributes(SessId, {uuid, SourceUUID}, {path, TargetPath}),
+
+                            ok = storage_file_manager:unlink(SourceHandle)
+                    end
+            end,
+
+            ok = update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId)
 
         end, fslogic_utils:get_local_file_locations(SourceEntry)),
-
     ok.
 
 %%--------------------------------------------------------------------
@@ -297,26 +377,28 @@ update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId) ->
     ok.
 
 %%--------------------------------------------------------------------
-%% @doc Returns all regular files from directory tree starting in given entry
+%% @doc Traverses files tree depth first, executing Pre function before
+%% descending into children and executing Post function after returning
+%% from children
 %%--------------------------------------------------------------------
--spec get_all_regular_files(Entry :: fslogic_worker:file()) ->
-    [fslogic_worker:file()].
-get_all_regular_files(Entry) ->
-    get_all_regular_files(Entry, []).
-
--spec get_all_regular_files(Entry :: fslogic_worker:file(),
-    AccIn :: [fslogic_worker:file()]) -> [fslogic_worker:file()].
-get_all_regular_files(Entry, AccIn) ->
-    case file_meta:get(Entry) of
-        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
-            [FileDoc | AccIn];
-        {ok, DirDoc} ->
-            {ok, ChildrenLinks} = list_all_children(DirDoc),
-            lists:foldl(
-                fun(#child_link{uuid = ChildUUID}, Acc) ->
-                    get_all_regular_files({uuid, ChildUUID}, Acc)
-                end, AccIn, ChildrenLinks)
-    end.
+-spec for_each_child_file(Entry :: fslogic_worker:file(),
+    PreFun :: fun((fslogic_worker:file()) -> term()),
+    PostFun :: fun((fslogic_worker:file()) -> term())) -> ok.
+for_each_child_file(Entry, PreFun, PostFun) ->
+    {ok, Doc} = file_meta:get(Entry),
+    PreFun(Doc),
+    case Doc of
+        #document{value = #file_meta{type = ?DIRECTORY_TYPE}} ->
+            {ok, ChildrenLinks} = list_all_children(Doc),
+            lists:foreach(
+                fun(#child_link{uuid = ChildUUID}) ->
+                    for_each_child_file({uuid, ChildUUID}, PreFun, PostFun)
+                end, ChildrenLinks);
+        _ ->
+            ok
+    end,
+    PostFun(Doc),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc Lists all children of given entry
@@ -339,33 +421,123 @@ list_all_children(Entry, Offset, Size, AccIn) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @doc Copies file attributes to another file
+%%--------------------------------------------------------------------
+-spec copy_file_attributes(session:id(), From :: file_meta:uuid_or_path(),
+    To :: file_meta:uuid_or_path()) -> ok.
+copy_file_attributes(SessId, From, To) ->
+    {ok, #document{value = #file_meta{atime = Atime, mtime = Mtime, ctime = Ctime}}} = file_meta:get(From),
+    ok = logical_file_manager:update_times(SessId, To, Atime, Mtime, Ctime),
+
+    case logical_file_manager:get_acl(SessId, From) of
+        {ok, ACL} ->
+            ok = logical_file_manager:set_acl(SessId, To, ACL);
+        {error, enoattr} ->
+            ok
+    end,
+
+    case logical_file_manager:get_mimetype(SessId, From) of
+        {ok, Mimetype} ->
+            ok = logical_file_manager:set_mimetype(SessId, To, Mimetype);
+        {error, enoattr} ->
+            ok
+    end,
+
+    case logical_file_manager:get_transfer_encoding(SessId, From) of
+        {ok, TransferEncoding} ->
+            ok = logical_file_manager:set_transfer_encoding(SessId, To, TransferEncoding);
+        {error, enoattr} ->
+            ok
+    end,
+
+    case logical_file_manager:get_cdmi_completion_status(SessId, From) of
+        {ok, CompletionStatus} ->
+            ok = logical_file_manager:set_cdmi_completion_status(SessId, To, CompletionStatus);
+        {error, enoattr} ->
+            ok
+    end,
+
+    {ok, XattrNames} = logical_file_manager:list_xattr(SessId, From),
+
+    lists:foreach(
+        fun
+            (<<"cdmi_", _/binary>>) ->
+                ok;
+            (XattrName) ->
+                {ok, Xattr} = logical_file_manager:get_xattr(SessId, From, XattrName),
+                ok = logical_file_manager:set_xattr(SessId, To, Xattr)
+        end, XattrNames
+    ),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc Copies file contents to another file
+%%--------------------------------------------------------------------
+-spec copy_file_contents(session:id(), From :: file_meta:uuid_or_path(),
+    To :: file_meta:uuid_or_path()) -> ok.
+copy_file_contents(SessId, From, To) ->
+    {ok, FromHandle} = logical_file_manager:open(SessId, From, read),
+    {ok, ToHandle} = logical_file_manager:open(SessId, To, write),
+    copy_file_contents(SessId, FromHandle, ToHandle, 0, ?CHUNK_SIZE).
+
+-spec copy_file_contents(session:id(), FromHandle :: logical_file_manager:handle(),
+    ToHandle :: logical_file_manager:handle(), Offset :: non_neg_integer(),
+    Size :: non_neg_integer()) -> ok.
+copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
+    {ok, NewFromHandle, Data} = logical_file_manager:read(FromHandle, Offset, Size),
+    DataSize = size(Data),
+    {ok, NewToHandle, DataSize} = logical_file_manager:write(ToHandle, Offset, Data),
+    case DataSize of
+        Size ->
+            copy_file_contents(SessId, NewFromHandle, NewToHandle, Offset+Size, Size);
+        _ ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc Returns canonical form of path
+%%--------------------------------------------------------------------
+-spec get_canonical_path(fslogic_worker:ctx(), file_meta:path()) ->
+    file_meta:path().
+get_canonical_path(CTX, Path) ->
+    ?critical("Path ~p", [Path]),
+    {ok, Tokens} = fslogic_path:verify_file_path(Path),
+    ?critical("Tokens ~p", [Tokens]),
+    CanonicalFileEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
+    ?critical("CanonicalFileEntry ~p", [CanonicalFileEntry]),
+    {ok, CanonicalPath} = file_meta:gen_path(CanonicalFileEntry),
+    ?critical("CanonicalPath ~p", [CanonicalPath]),
+    CanonicalPath.
+
+
+%%--------------------------------------------------------------------
+%% @doc Updates entry ctime
+%%--------------------------------------------------------------------
+-spec update_ctime(fslogic_worker:file(), Time :: file_meta:time()) -> ok.
+update_ctime(Entry, Time) ->
+    {ok, #document{value = Meta} = Doc} = file_meta:get(Entry),
+    {ok, _} = file_meta:update(Doc, #{ctime => Time}),
+
+    spawn(
+        fun() ->
+            fslogic_event:emit_file_sizeless_attrs_update(
+                Doc#document{value = Meta#file_meta{ctime = Time}})
+        end),
+    ok.
+
+%%--------------------------------------------------------------------
 %% @doc Updates entry mtime and ctime
 %%--------------------------------------------------------------------
--spec update_mtime_ctime(fslogic_worker:file(), CurrTime :: integer()) -> ok.
-update_mtime_ctime(Entry, CurrTime) ->
+-spec update_mtime_ctime(fslogic_worker:file(), Time :: file_meta:time()) -> ok.
+update_mtime_ctime(Entry, Time) ->
     {ok, #document{value = Meta} = Doc} = file_meta:get(Entry),
-    {ok, _} = file_meta:update(Doc, #{mtime => CurrTime, ctime => CurrTime}),
+    {ok, _} = file_meta:update(Doc, #{mtime => Time, ctime => Time}),
 
     spawn(
         fun() ->
             fslogic_event:emit_file_sizeless_attrs_update(
                 Doc#document{value = Meta#file_meta{
-                    mtime = CurrTime, ctime = CurrTime
+                    mtime = Time, ctime = Time
                 }})
-        end),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @doc Updates entry ctime
-%%--------------------------------------------------------------------
--spec update_ctime(fslogic_worker:file(), CurrTime :: integer()) -> ok.
-update_ctime(Entry, CurrTime) ->
-    {ok, #document{value = Meta} = Doc} = file_meta:get(Entry),
-    {ok, _} = file_meta:update(Doc, #{ctime => CurrTime}),
-
-    spawn(
-        fun() ->
-            fslogic_event:emit_file_sizeless_attrs_update(
-                Doc#document{value = Meta#file_meta{ctime = CurrTime}})
         end),
     ok.

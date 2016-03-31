@@ -28,78 +28,427 @@
     end_per_testcase/2]).
 
 -export([
-    tmp_test/1
+    rename_file_test/1,
+    move_file_test/1,
+    move_file_interspace_test/1,
+    move_file_interprovider_test/1,
+    rename_dir_test/1,
+    move_dir_test/1,
+    move_dir_interspace_test/1,
+    move_dir_interprovider_test/1,
+    attributes_retaining_test/1
 ]).
 
 all() ->
     ?ALL([
-        tmp_test
+        rename_file_test,
+        move_file_test,
+        move_file_interspace_test,
+        move_file_interprovider_test,
+        rename_dir_test,
+        move_dir_test,
+        move_dir_interspace_test,
+        move_dir_interprovider_test,
+        attributes_retaining_test
     ]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
-tmp_test(Config) ->
+
+rename_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, 1}, Config),
 
-    {ok, TargetDirUuid} = lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/target_dir">>),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t1">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t1/renamed_file1">>, 8#770)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t1/renamed_file2">>, 8#770)),
+    {_, File3Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t1/renamed_file3">>, 8#770)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
 
-    {ok, MovedDirUuid} = lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/moved_dir">>),
-    {ok, StaticFile1Uuid} = lfm_proxy:create(W, SessId, <<"/spaces/space_name1/moved_dir/static_file1">>, 8#770),
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t1/renamed_file1_target">>, 8#770)),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, File1Uuid}, <<"/spaces/space_name1/t1/renamed_file1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t1/renamed_file1_target">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
-    {ok, RenamedDirUuid} = lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/renamed_dir">>),
-    {ok, StaticFile2Uuid} = lfm_proxy:create(W, SessId, <<"/spaces/space_name1/renamed_dir/static_file2">>, 8#770),
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, File2Uuid}, <<"/spaces/space_name1/t1/renamed_file2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t1/renamed_file2_target">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
-    {ok, MovedFileUuid} = lfm_proxy:create(W, SessId, <<"/spaces/space_name1/moved_file">>, 8#770),
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t1/renamed_file3_target">>)),
+    ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, {uuid, File3Uuid}, <<"/spaces/space_name1/t1/renamed_file3_target">>)),
+    
+    ok.
 
-    {ok, RenamedFileUuid} = lfm_proxy:create(W, SessId, <<"/spaces/space_name1/renamed_file">>, 8#770),
+move_file_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
 
-    {ok, #document{key = SourceRootUuid}} = rpc:call(W, file_meta, get_parent, [MovedDirUuid]),
-    {ok, #document{key = TargetRootUuid}} = rpc:call(W, file_meta, get_parent, [TargetDirUuid]),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t2">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t2/target_dir">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t2/moved_file1">>, 8#770)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t2/moved_file2">>, 8#770)),
+    {_, File3Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t2/moved_file3">>, 8#770)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
 
-    print_dir_structures(W, SessId, SourceRootUuid, "SourceRoot"),
-    print_dir_structures(W, SessId, TargetRootUuid, "TargetRoot"),
-    print_dir_structures(W, SessId, TargetDirUuid, "TargetDir"),
-    print_dir_structures(W, SessId, MovedDirUuid, "MovedDir"),
-    print_dir_structures(W, SessId, RenamedDirUuid, "RenamedDir"),
-    print_reg_structures(W, StaticFile1Uuid, "StaticFile1"),
-    print_reg_structures(W, StaticFile2Uuid, "StaticFile2"),
-    print_reg_structures(W, MovedFileUuid, "MovedFile"),
-    print_reg_structures(W, RenamedFileUuid, "RenamedFile"),
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t2/target_dir/moved_file1_target">>, 8#770)),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, File1Uuid}, <<"/spaces/space_name1/t2/target_dir/moved_file1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t2/target_dir/moved_file1_target">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
-    ct:print("###############################################"),
-    timer:sleep(timer:seconds(5)),
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, File2Uuid}, <<"/spaces/space_name1/t2/target_dir/moved_file2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t2/target_dir/moved_file2_target">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
 
-    %% Rename file
-    lfm_proxy:create(W, SessId, <<"/spaces/space_name1/renamed_file_target">>, 8#770), %% with overwrite
-    ok = lfm_proxy:mv(W, SessId, {uuid, RenamedFileUuid}, <<"/spaces/space_name1/renamed_file_target">>),
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t2/target_dir/moved_file3_target">>)),
+    ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, {uuid, File3Uuid}, <<"/spaces/space_name1/t2/target_dir/moved_file3_target">>)),
 
-    %% Move file
-    lfm_proxy:create(W, SessId, <<"/spaces/space_name1/target_dir/moved_file_target">>, 8#770), %% with overwrite
-    ok = lfm_proxy:mv(W, SessId, {uuid, MovedFileUuid}, <<"/spaces/space_name2/target_dir/moved_file_target">>),
+    ok.
 
-    %% Rename dir
-    lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/renamed_dir_target">>), %% with overwrite
-    ok = lfm_proxy:mv(W, SessId, {uuid, RenamedDirUuid}, <<"/spaces/space_name1/renamed_dir_target">>),
+move_file_interspace_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
 
-    %% Move dir
-    lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/target_dir/moved_dir_target">>, 8#770), %% with overwrite
-    ok = lfm_proxy:mv(W, SessId, {uuid, MovedDirUuid}, <<"/spaces/space_name2/target_dir/moved_dir_target">>),
+    test_utils:mock_expect(W, oz_spaces, get_providers,
+        fun
+            (provider, _SpaceId) ->
+                {ok, [oneprovider:get_provider_id()]};
+            (_Client, _SpaceId) ->
+                meck:passthrough([_Client, _SpaceId])
+        end),
 
-    ct:print("###############################################"),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/t3">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/t3/target_dir">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t3">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t3/moved_file1">>, 8#770)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t3/moved_file2">>, 8#770)),
+    {_, File3Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t3/moved_file3">>, 8#770)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
 
-    print_dir_structures(W, SessId, SourceRootUuid, "SourceRoot"),
-    print_dir_structures(W, SessId, TargetRootUuid, "TargetRoot"),
-    print_dir_structures(W, SessId, MovedDirUuid, "MovedDir"),
-    print_dir_structures(W, SessId, RenamedDirUuid, "RenamedDir"),
-    print_reg_structures(W, StaticFile1Uuid, "StaticFile1"),
-    print_reg_structures(W, StaticFile2Uuid, "StaticFile2"),
-    print_reg_structures(W, MovedFileUuid, "MovedFile"),
-    print_reg_structures(W, RenamedFileUuid, "RenamedFile"),
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name2/t3/target_dir/moved_file1_target">>, 8#770)),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, File1Uuid}, <<"/spaces/space_name2/t3/target_dir/moved_file1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name2/t3/target_dir/moved_file1_target">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
 
-%%    ct:print("Dir: ~p", [rpc:call(W, fslogic_rename, get_all_regular_files, [RootUuid])]),
-%%    ct:print("File: ~p", [rpc:call(W, fslogic_rename, get_all_regular_files, [MovedFileUuid])]),
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, File2Uuid}, <<"/spaces/space_name2/t3/target_dir/moved_file2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name2/t3/target_dir/moved_file2_target">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
+
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/t3/target_dir/moved_file3_target">>)),
+    ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, {uuid, File3Uuid}, <<"/spaces/space_name2/t3/target_dir/moved_file3_target">>)),
+
+    ok.
+
+move_file_interprovider_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
+
+    test_utils:mock_expect([W1, W2], oz_spaces, get_providers,
+        fun
+            (provider, <<"space_id1">>) ->
+                {ok, [rpc:call(W1, oneprovider, get_provider_id, [])]};
+            (provider, <<"space_id2">>) ->
+                {ok, [rpc:call(W2, oneprovider, get_provider_id, [])]};
+            (_Client, _SpaceId) ->
+                meck:passthrough([_Client, _SpaceId])
+        end),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, <<"/spaces/space_name2/t4">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, <<"/spaces/space_name2/t4/target_dir">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t4">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t4/moved_file1">>, 8#770)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t4/moved_file2">>, 8#770)),
+    {_, File3Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t4/moved_file3">>, 8#770)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle2, 0, <<"test2">>)),
+
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name2/t4/target_dir/moved_file1_target">>, 8#770)),
+    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {uuid, File1Uuid}, <<"/spaces/space_name2/t4/target_dir/moved_file1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, <<"/spaces/space_name2/t4/target_dir/moved_file1_target">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W1, Handle3, 0, 10)),
+
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {uuid, File2Uuid}, <<"/spaces/space_name2/t4/target_dir/moved_file2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, <<"/spaces/space_name2/t4/target_dir/moved_file2_target">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W1, Handle4, 0, 10)),
+
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name2/t4/target_dir/moved_file3_target">>)),
+    ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W1, SessId, {uuid, File3Uuid}, <<"/spaces/space_name2/t4/target_dir/moved_file3_target">>)),
+
+    ok.
+
+rename_dir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t5">>)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t5/renamed_dir1">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t5/renamed_dir1/inner_file1">>, 8#770)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t5/renamed_dir2">>)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t5/renamed_dir2/inner_file2">>, 8#770)),
+    {_, Dir3Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t5/renamed_dir3">>)),
+    {_, Dir4Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t5/renamed_dir4">>)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
+
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t5/renamed_dir1_target">>)),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, Dir1Uuid}, <<"/spaces/space_name1/t5/renamed_dir1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t5/renamed_dir1_target/inner_file1">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
+
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, Dir2Uuid}, <<"/spaces/space_name1/t5/renamed_dir2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t5/renamed_dir2_target/inner_file2">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
+
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t5/renamed_dir3_target">>, 8#770)),
+    ?assertEqual({error, ?ENOTDIR}, lfm_proxy:mv(W, SessId, {uuid, Dir3Uuid}, <<"/spaces/space_name1/t5/renamed_dir3_target">>)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t5/renamed_dir4_target">>)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t5/renamed_dir4_target/some_file">>, 8#770)),
+    ?assertEqual({error, ?ENOTEMPTY}, lfm_proxy:mv(W, SessId, {uuid, Dir4Uuid}, <<"/spaces/space_name1/t5/renamed_dir4_target">>)),
+
+    ok.
+
+move_dir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6/target_dir">>)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6/moved_dir1">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t6/moved_dir1/inner_file1">>, 8#770)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6/moved_dir2">>)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t6/moved_dir2/inner_file2">>, 8#770)),
+    {_, Dir3Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6/moved_dir3">>)),
+    {_, Dir4Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6/moved_dir4">>)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
+
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6/target_dir/moved_dir1_target">>)),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, Dir1Uuid}, <<"/spaces/space_name1/t6/target_dir/moved_dir1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t6/target_dir/moved_dir1_target/inner_file1">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
+
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, Dir2Uuid}, <<"/spaces/space_name1/t6/target_dir/moved_dir2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name1/t6/target_dir/moved_dir2_target/inner_file2">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
+
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t6/target_dir/moved_dir3_target">>, 8#770)),
+    ?assertEqual({error, ?ENOTDIR}, lfm_proxy:mv(W, SessId, {uuid, Dir3Uuid}, <<"/spaces/space_name1/t6/target_dir/moved_dir3_target">>)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t6/target_dir/moved_dir4_target">>)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t6/target_dir/moved_dir4_target/some_file">>, 8#770)),
+    ?assertEqual({error, ?ENOTEMPTY}, lfm_proxy:mv(W, SessId, {uuid, Dir4Uuid}, <<"/spaces/space_name1/t6/target_dir/moved_dir4_target">>)),
+
+    ok.
+
+move_dir_interspace_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
+
+    test_utils:mock_expect(W, oz_spaces, get_providers,
+        fun
+            (provider, _SpaceId) ->
+                {ok, [oneprovider:get_provider_id()]};
+            (_Client, _SpaceId) ->
+                meck:passthrough([_Client, _SpaceId])
+        end),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/t7">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/t7/target_dir">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t7">>)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t7/moved_dir1">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t7/moved_dir1/inner_file1">>, 8#770)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t7/moved_dir2">>)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name1/t7/moved_dir2/inner_file2">>, 8#770)),
+    {_, Dir3Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t7/moved_dir3">>)),
+    {_, Dir4Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name1/t7/moved_dir4">>)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
+
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/t7/target_dir/moved_dir1_target">>)),
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, Dir1Uuid}, <<"/spaces/space_name2/t7/target_dir/moved_dir1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name2/t7/target_dir/moved_dir1_target/inner_file1">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W, Handle3, 0, 10)),
+
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W, SessId, {uuid, Dir2Uuid}, <<"/spaces/space_name2/t7/target_dir/moved_dir2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, <<"/spaces/space_name2/t7/target_dir/moved_dir2_target/inner_file2">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
+
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name2/t7/target_dir/moved_dir3_target">>, 8#770)),
+    ?assertEqual({error, ?ENOTDIR}, lfm_proxy:mv(W, SessId, {uuid, Dir3Uuid}, <<"/spaces/space_name2/t7/target_dir/moved_dir3_target">>)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, <<"/spaces/space_name2/t7/target_dir/moved_dir4_target">>)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, <<"/spaces/space_name2/t7/target_dir/moved_dir4_target/some_file">>, 8#770)),
+    ?assertEqual({error, ?ENOTEMPTY}, lfm_proxy:mv(W, SessId, {uuid, Dir4Uuid}, <<"/spaces/space_name2/t7/target_dir/moved_dir4_target">>)),
+
+    ok.
+
+move_dir_interprovider_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
+
+    test_utils:mock_expect([W1, W2], oz_spaces, get_providers,
+        fun
+            (provider, <<"space_id1">>) ->
+                {ok, [rpc:call(W1, oneprovider, get_provider_id, [])]};
+            (provider, <<"space_id2">>) ->
+                {ok, [rpc:call(W2, oneprovider, get_provider_id, [])]};
+            (_Client, _SpaceId) ->
+                meck:passthrough([_Client, _SpaceId])
+        end),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, <<"/spaces/space_name2/t8">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, <<"/spaces/space_name2/t8/target_dir">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t8">>)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t8/moved_dir1">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t8/moved_dir1/inner_file1">>, 8#770)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t8/moved_dir2">>)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t8/moved_dir2/inner_file2">>, 8#770)),
+    {_, Dir3Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t8/moved_dir3">>)),
+    {_, Dir4Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t8/moved_dir4">>)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {uuid, File1Uuid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {uuid, File2Uuid}, write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle2, 0, <<"test2">>)),
+
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name2/t8/target_dir/moved_dir1_target">>)),
+    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {uuid, Dir1Uuid}, <<"/spaces/space_name2/t8/target_dir/moved_dir1_target">>)),
+    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, <<"/spaces/space_name2/t8/target_dir/moved_dir1_target/inner_file1">>}, read)),
+    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W1, Handle3, 0, 10)),
+
+    %% without overwrite
+    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {uuid, Dir2Uuid}, <<"/spaces/space_name2/t8/target_dir/moved_dir2_target">>)),
+    {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, <<"/spaces/space_name2/t8/target_dir/moved_dir2_target/inner_file2">>}, read)),
+    ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W1, Handle4, 0, 10)),
+
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name2/t8/target_dir/moved_dir3_target">>, 8#770)),
+    ?assertEqual({error, ?ENOTDIR}, lfm_proxy:mv(W1, SessId, {uuid, Dir3Uuid}, <<"/spaces/space_name2/t8/target_dir/moved_dir3_target">>)),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name2/t8/target_dir/moved_dir4_target">>)),
+    ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name2/t8/target_dir/moved_dir4_target/some_file">>, 8#770)),
+    ?assertEqual({error, ?ENOTEMPTY}, lfm_proxy:mv(W1, SessId, {uuid, Dir4Uuid}, <<"/spaces/space_name2/t8/target_dir/moved_dir4_target">>)),
+
+    ok.
+
+attributes_retaining_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, 1}, Config),
+    UserId = ?config({user_id, 1}, Config),
+
+    test_utils:mock_expect([W1, W2], oz_spaces, get_providers,
+        fun
+            (provider, <<"space_id1">>) ->
+                {ok, [rpc:call(W1, oneprovider, get_provider_id, [])]};
+            (provider, <<"space_id2">>) ->
+                {ok, [rpc:call(W1, oneprovider, get_provider_id, [])]};
+            (provider, <<"space_id3">>) ->
+                {ok, [rpc:call(W2, oneprovider, get_provider_id, [])]};
+            (_Client, _SpaceId) ->
+                meck:passthrough([_Client, _SpaceId])
+        end),
+
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t9">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name2/t9">>)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId, <<"/spaces/space_name3/t9">>)),
+    {_, Dir1Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t9/dir1">>)),
+    {_, File1Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t9/dir1/file1">>, 8#770)),
+    {_, Dir2Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t9/dir2">>)),
+    {_, File2Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t9/dir2/file2">>, 8#770)),
+    {_, Dir3Uuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, <<"/spaces/space_name1/t9/dir3">>)),
+    {_, File3Uuid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, <<"/spaces/space_name1/t9/dir3/file3">>, 8#770)),
+    
+    PreRenameUuids = [Dir1Uuid, File1Uuid, Dir2Uuid, File2Uuid, Dir3Uuid, File3Uuid],
+
+    Ace = #accesscontrolentity{
+        acetype = ?allow_mask,
+        aceflags = ?no_flags_mask,
+        identifier = UserId,
+        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
+    },
+    Mimetype = <<"text/html">>,
+    TransferEncoding = <<"base64">>,
+    CompletionStatus = <<"Completed">>,
+    Xattrs = [
+        #xattr{name = <<"xattr_name1">>, value = <<"xattr1">>},
+        #xattr{name = <<"xattr_name2">>, value = <<"xattr2">>}
+    ],
+
+    lists:foreach(
+      fun(Uuid) ->
+          ?assertEqual(ok, lfm_proxy:set_acl(W1, SessId, {uuid, Uuid}, [Ace])),
+          ?assertEqual(ok, lfm_proxy:set_mimetype(W1, SessId, {uuid, Uuid}, Mimetype)),
+          ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W1, SessId, {uuid, Uuid}, TransferEncoding)),
+          ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W1, SessId, {uuid, Uuid}, CompletionStatus)),
+          lists:foreach(
+              fun(Xattr) ->
+                  ?assertEqual(ok, lfm_proxy:set_xattr(W1, SessId, {uuid, Uuid}, Xattr))
+              end, Xattrs)
+      end, PreRenameUuids),
+
+    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {uuid, Dir1Uuid}, <<"/spaces/space_name1/t9/dir1_target">>)),
+    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {uuid, Dir2Uuid}, <<"/spaces/space_name2/t9/dir2_target">>)),
+    ?assertEqual(ok, lfm_proxy:mv(W1, SessId, {uuid, Dir3Uuid}, <<"/spaces/space_name3/t9/dir3_target">>)),
+
+    PostRenamePaths = [
+        <<"/spaces/space_name1/t9/dir1_target">>,
+        <<"/spaces/space_name1/t9/dir1_target/file1">>,
+        <<"/spaces/space_name2/t9/dir2_target">>,
+        <<"/spaces/space_name2/t9/dir2_target/file2">>,
+        <<"/spaces/space_name3/t9/dir3_target">>,
+        <<"/spaces/space_name3/t9/dir3_target/file3">>
+    ],
+
+    lists:foreach(
+        fun(Path) ->
+            ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(W1, SessId, {path, Path})),
+            ?assertEqual({ok, Mimetype}, lfm_proxy:get_mimetype(W1, SessId, {path, Path})),
+            ?assertEqual({ok, TransferEncoding}, lfm_proxy:get_transfer_encoding(W1, SessId, {path, Path})),
+            ?assertEqual({ok, CompletionStatus}, lfm_proxy:get_cdmi_completion_status(W1, SessId, {path, Path})),
+            lists:foreach(
+                fun(#xattr{name = XattrName} = Xattr) ->
+                    ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(W1, SessId, {path, Path}, XattrName))
+                end, Xattrs)
+        end, PostRenamePaths),
 
     ok.
 
@@ -126,29 +475,3 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-print_reg_structures(W, Uuid, Name) ->
-    {ok, Meta} = rpc:call(W, file_meta, get, [Uuid]),
-    ct:print("~p Meta ~p", [Name, Meta]),
-
-    {ok, [LocId | _]} = rpc:call(W, file_meta, get_locations, [Uuid]),
-    ct:print("~p LocId ~p", [Name, LocId]),
-    {ok, Loc} = rpc:call(W, file_location, get, [LocId]),
-    ct:print("~p Loc ~p", [Name, Loc]),
-    {ok, LocLinks} = rpc:call(W, datastore, foreach_link, [globally_cached, Loc, fun(LinkName, LinkTarget, List) -> [{LinkName, LinkTarget} | List] end, []]),
-    ct:print("~p LocLinks ~p", [Name, LocLinks]),
-
-    {ok, MetaLinks} = rpc:call(W, datastore, foreach_link, [globally_cached, Meta, fun(LinkName, LinkTarget, List) -> [{LinkName, LinkTarget} | List] end, []]),
-    ct:print("~p MetaLinks ~p", [Name, MetaLinks]),
-    ok.
-
-print_dir_structures(W, SessId, Uuid, Name) ->
-    {ok, Meta} = rpc:call(W, file_meta, get, [Uuid]),
-    ct:print("~p Meta ~p", [Name, Meta]),
-
-    {ok, Ls} = lfm_proxy:ls(W, SessId, {uuid, Uuid}, 0, 10),
-    ct:print("~p Ls ~p", [Name, Ls]),
-
-    {ok, MetaLinks} = rpc:call(W, datastore, foreach_link, [globally_cached, Meta, fun(LinkName, LinkTarget, List) -> [{LinkName, LinkTarget} | List] end, []]),
-    ct:print("~p MetaLinks ~p", [Name, MetaLinks]),
-    ok.

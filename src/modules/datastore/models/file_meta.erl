@@ -638,45 +638,48 @@ is_spaces_base_dir(#document{key = Key}) ->
     ok | datastore:generic_error().
 rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-             {ok, FileUUID} = update(Subject, #{name => NewName}),
-             {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
-             ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {snapshot_name(NewName, V), {FileUUID, ?MODEL_NAME}}),
-             ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
-             case get_current_snapshot(Subject) =:= SubjectDoc of
-                 true ->
-                     ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, Subject}),
-                     ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName);
-                 false ->
-                     ok
-             end,
-             ok
-         end);
+        CTime = erlang:system_time(seconds),
+        {ok, FileUUID} = update(Subject, #{name => NewName, mtime => CTime, ctime => CTime}),
+        {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
+        ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {snapshot_name(NewName, V), {FileUUID, ?MODEL_NAME}}),
+        case get_current_snapshot(Subject) =:= SubjectDoc of
+            true ->
+                ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName),
+                ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, Subject});
+            false ->
+                ok
+        end,
+        ok
+    end);
+
 rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, {path, NewPath}) ->
     ?run(begin
-             NewTokens = fslogic_path:split(NewPath),
-             [NewName | NewParentTokens] = lists:reverse(NewTokens),
-             NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
-             {ok, NewParent} = get({path, NewParentPath}),
+        NewTokens = fslogic_path:split(NewPath),
+        [NewName | NewParentTokens] = lists:reverse(NewTokens),
+        NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
+        {ok, NewParent} = get({path, NewParentPath}),
 
-             {ok, NewScope} = get_scope(NewParent),
-             {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
+        {ok, NewScope} = get_scope(NewParent),
+        {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
 
-             {ok, FileUUID} = update(Subject, #{name => NewName}),
-             ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {snapshot_name(NewName, V), Subject}),
-             ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
-             ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
-             case get_current_snapshot(Subject) =:= SubjectDoc of
-                 true ->
-                     ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject}),
-                     ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName);
-                 false ->
-                     ok
-             end,
+        CTime = erlang:system_time(seconds),
+        {ok, FileUUID} = update(Subject, #{name => NewName, mtime => CTime, ctime => CTime}),
 
-             ok = update_scopes(Subject, NewScope),
+        ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {snapshot_name(NewName, V), Subject}),
+        ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
+        case get_current_snapshot(Subject) =:= SubjectDoc of
+            true ->
+                ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
+                ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject});
+            false ->
+                ok
+        end,
 
-             ok
-         end).
+        ok = update_scopes(Subject, NewScope),
+        ok
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
