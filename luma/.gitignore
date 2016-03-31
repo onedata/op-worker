@@ -1,6 +1,0 @@
-config.cfg
-example_config/config.cfg
-example_config/credentials_mapping.json
-example_config/generators_mapping.json
-example_config/storage_type_to_id.json
-generators/generators.cfg
