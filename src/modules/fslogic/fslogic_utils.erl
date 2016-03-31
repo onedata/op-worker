@@ -112,9 +112,9 @@ wait_for_links(FileUuid, 0) ->
     throw(no_link_document);
 wait_for_links(FileUuid, Retries) ->
     case file_meta:exists({uuid, links_utils:links_doc_key(FileUuid)}) of
-        {ok, true} ->
+        true ->
             ok;
-        {ok, false} ->
+        false ->
             timer:sleep(timer:seconds(1)),
             wait_for_links(FileUuid, Retries - 1)
     end.
