@@ -293,6 +293,8 @@ html, body {
         color: black;
         text-decoration: none !important;
 
+        // generic elements of secondary-sidebar-item
+
         // TODO: elements that use .item-icon or .item-label should use this class
         .item-element {
           display: table-cell;
@@ -313,6 +315,11 @@ html, body {
           vertical-align: middle;
           font-size: $secondary-sidebar-font-size;
           padding-left: 1em;
+        }
+
+        // more specific
+        .settings-icon {
+          color: $onedata-graphite;
         }
       }
 

@@ -11,12 +11,12 @@
     <figcaption>{{t 'components.spacesMenu.join'}}</figcaption>
   </figure>
 </div>
-<ul>
+<ul class="spaces-list">
   {{#each spaces as |space|}}
     {{!-- TODO: computing entryId in model is not very elegant --}}
     {{!-- move sidebar entry creation to helper --}}
     <li id="{{space.sidebarEntryId}}" class="first-level hover-parent">
-      <div {{action 'showSpaceOptions' space}} class="secondary-sidebar-item first-level">
+      <div {{action (unless space.isExpanded 'showSpaceOptions' (action (mut undefProp))) space}} class="secondary-sidebar-item first-level">
         <span class="item-element item-click-area">
           <span class="item-element item-icon">
             {{icon (if space.isDefault 'space-home' 'space')
@@ -29,13 +29,13 @@
 
           <span class="item-element item-icon">
 
-            <div class="dropdown">
-              <a href="#" class="dropdown-toggle" data-toggle="dropdown"
+            <div class="dropdown settings-dropdown">
+              <div href="#" class="dropdown-toggle" data-toggle="dropdown"
                 role="button" aria-haspopup="true" aria-expanded="false">
-                <span class="item-element item-icon transparent-not-hovered">
+                <span class="item-element item-icon transparent-not-hovered settings-icon">
                   {{icon 'settings'}}
                 </span>
-              </a>
+              </div>
               <ul class="dropdown-menu dropdown-menu-right dropdown-menu-list space-dropdown-menu">
                 {{!-- TODO: foreach --}}
                 {{#each menuItems as |item|}}

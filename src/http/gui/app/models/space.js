@@ -35,5 +35,8 @@ export default DS.Model.extend({
   /** Id of this space menu element used in sidebar HTML */
   sidebarEntryId: function() {
     return 'space-entry-'+this.id;
-  }.property('id')
+  }.property('id'),
+
+  /*** Temporary properties used in view ***/
+  isExpanded: false,
 });

@@ -81,6 +81,7 @@ export default {
     permissionsTable: {
       viewSpace: 'view space',
       modifySpace: 'modify space',
+      setPrivileges: 'set privileges',
       removeSpace: 'remove space',
       inviteUser: 'invite user',
       removeUser: 'remove user',

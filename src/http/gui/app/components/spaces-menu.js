@@ -153,6 +153,11 @@ export default Ember.Component.extend({
         let updater = bindFloater(el);
         sidebar.on('scroll', updater);
         el.on('mouseover', updater);
+        el.closest('.settings-dropdown').on('click', function() {
+          window.setTimeout(() => {
+            updater();
+          }, 50);
+        });
       });
     });
   }.observes('spaces.length'),
@@ -165,6 +170,8 @@ export default Ember.Component.extend({
     /** Delegate to goToSpace action, should show submenu to configure Space */
     showSpaceOptions(space) {
       this.set('activeSpace', space);
+      this.get('spaces').forEach((s) => s.set('isExpanded', false));
+      space.set('isExpanded', true);
       this.sendAction('showSpaceOptions', space);
     },
 

@@ -28,6 +28,7 @@
     <div class="one-th one-first">{{title}}</div>
     <div class="one-th">{{t 'components.permissionsTable.viewSpace'}}</div>
     <div class="one-th">{{t 'components.permissionsTable.modifySpace'}}</div>
+    <div class="one-th">{{t 'components.permissionsTable.setPrivileges'}}</div>
     <div class="one-th">{{t 'components.permissionsTable.removeSpace'}}</div>
     <div class="one-th">{{t 'components.permissionsTable.inviteUser'}}</div>
     <div class="one-th">{{t 'components.permissionsTable.removeUser'}}</div>
@@ -55,6 +56,15 @@
           <div class="one-table-checkbox">
             <span {{action 'togglePermission' perm 'ModifySpace'}}>
               {{bool-option perm.permModifySpace perm.modModifySpace}}
+            </span>
+          </div>
+        </div>
+
+        <div class="one-td">
+          <div class="one-table-label">{{t 'components.permissionsTable.setPrivileges'}}</div>
+          <div class="one-table-checkbox">
+            <span {{action 'togglePermission' perm 'SetPrivileges'}}>
+              {{bool-option perm.permSetPrivileges perm.modSetPrivileges}}
             </span>
           </div>
         </div>
