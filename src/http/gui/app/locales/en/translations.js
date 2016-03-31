@@ -70,7 +70,8 @@ export default {
       },
       notify: {
         spaceRemoved: 'Space "{{spaceName}}" has been removed',
-        spaceRemoveFailed: 'Failed to remove space "{{spaceName}}"'
+        spaceRemoveFailed: 'Failed to remove space "{{spaceName}}"',
+        joinedToSpace: 'Successfully joined to space "{{spaceName}}"'
       }
     },
     spacesSubmenu: {
