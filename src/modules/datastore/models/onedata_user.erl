@@ -156,7 +156,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
             space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
             group_ids = GroupIds
         },
-        [space_info:fetch(Client, SId) || SId <- SpaceIds],
+        [(catch space_info:fetch(Client, SId)) || SId <- SpaceIds],
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}
