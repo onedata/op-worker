@@ -12,12 +12,13 @@
 -module(op_gui_utils).
 -author("Lukasz Opiola").
 
--include_lib("ctool/include/logging.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("global_definitions.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_user_id/0]).
+-export([get_user_id/0, get_users_default_space/0]).
 -export([register_backend/2, unregister_backend/2]).
 -export([get_all_backend_pids/1]).
 
@@ -40,6 +41,25 @@ get_user_id() ->
         _ ->
             undefined
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns the default space of current user (the one in GUI context).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_users_default_space() -> binary().
+get_users_default_space() ->
+    % @TODO this should be taken from onedata_user record and changes of this
+    % should be pushed.
+    SessionId = g_session:get_session_id(),
+    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
+    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
+    {ok, DefaultSpace} = oz_users:get_default_space({user, {Mac, DMacs}}),
+    ?dump(<<"/spaces/", DefaultSpace/binary>>),
+    {ok, #file_attr{uuid = DefaultSpaceId}} = logical_file_manager:stat(
+        SessionId, {path, <<"/spaces/", DefaultSpace/binary>>}),
+    DefaultSpaceId.
 
 
 %%--------------------------------------------------------------------
