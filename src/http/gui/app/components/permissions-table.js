@@ -56,6 +56,10 @@ export default Ember.Component.extend({
    */
   type: null,
 
+  typeSingular: function() {
+    return this.get('type') === 'groups' ? 'group' : 'user';
+  }.property('type'),
+
   /** A localized title of table (based on type) */
   title: function() {
     return this.get('type') ?
@@ -116,8 +120,7 @@ export default Ember.Component.extend({
 
     invite(space) {
       // TODO: plural -> singular mess
-      let type = this.get('type') === 'groups' ? 'group' : 'user';
-      this.get('commonModals').openModal(`token-${type}` , {
+      this.get('commonModals').openModal(`token-${this.get('typeSingular')}` , {
         space: space
       });
     },
