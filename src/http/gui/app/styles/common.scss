@@ -456,5 +456,18 @@ html, body {
   }
 }
 
+.route-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+
+  background-color: white;
+  background-image: url("/assets/images/loading-128.gif");
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 // TODO: temporary
 @import 'data';
