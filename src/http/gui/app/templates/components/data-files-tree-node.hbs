@@ -1,26 +1,24 @@
 <ul>
-  {{#each rootDir.children as |file|}}
-    {{#if file.isDir}}
-      <li class="{{levelClass}}">
-        <div id="tree-dir-{{file.id}}" class="secondary-sidebar-item dir-item single-selectable onedata-red">
-          <span class="item-element item-icon" {{action 'toggleDir' file}}>
-            {{#if file.isExpanded}}
-              {{icon "folder-open" "color-directory"}}
-            {{else}}
-              {{icon "folder" "color-directory"}}
-            {{/if}}
+  {{#each subdirsSorted as |file|}}
+    <li class="{{levelClass}}">
+      <div id="tree-dir-{{file.id}}" class="secondary-sidebar-item dir-item single-selectable onedata-red">
+        <span class="item-element item-icon" {{action 'toggleDir' file}}>
+          {{#if file.isExpanded}}
+            {{icon "folder-open" "color-directory"}}
+          {{else}}
+            {{icon "folder" "color-directory"}}
+          {{/if}}
+        </span>
+        <span class="item-element item-click-area"  {{action 'browseDir' file}}>
+          <span class="item-label">
+            {{file.name}}
           </span>
-          <span class="item-element item-click-area"  {{action 'browseDir' file}}>
-            <span class="item-label">
-              {{file.name}}
-            </span>
-          </span>
-        </div>
-        {{#if file.isExpanded}}
-          {{data-files-tree-node rootDir=file openDirInBrowser='openDirInBrowser'
-            level=nextLevel}}
-        {{/if}}
-      </li>
-    {{/if}}
+        </span>
+      </div>
+      {{#if file.isExpanded}}
+        {{data-files-tree-node rootDir=file openDirInBrowser='openDirInBrowser'
+          level=nextLevel}}
+      {{/if}}
+    </li>
   {{/each}}
 </ul>

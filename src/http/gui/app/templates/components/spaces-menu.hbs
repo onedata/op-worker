@@ -27,7 +27,7 @@
             {{space.name}}
           </span>
 
-          <span class="item-element item-icon transparent-not-hovered" {{action 'openSpaceSettings'}}>
+          <span class="item-element item-icon">
 
             <div class="dropdown">
               <a href="#" class="dropdown-toggle" data-toggle="dropdown"
@@ -36,14 +36,14 @@
                   {{icon 'settings'}}
                 </span>
               </a>
-              <ul class="dropdown-menu dropdown-menu-down dropdown-menu-list">
+              <ul class="dropdown-menu dropdown-menu-right dropdown-menu-list space-dropdown-menu">
                 {{!-- TODO: foreach --}}
                 {{#each menuItems as |item|}}
-                  <li>
-                    <span class="icon">
+                  <li {{action item.action space}}>
+                    <span class="item-icon">
                       {{icon item.icon}}
                     </span>
-                    <span class="label">
+                    <span class="item-label">
                       {{item.label}}
                     </span>
                   </li>
@@ -63,6 +63,8 @@
 </ul>
 
 {{!-- modals --}}
+
+{{!-- TODO: refactor: make a generic modals components for: enter single line, question --}}
 
 {{!-- CREATE SPACE --}}
 
@@ -87,7 +89,7 @@
 
 {{!-- JOIN SPACE --}}
 
-{{#bs-modal openedAction='joinSpaceModalOpened' open=isJoiningSpace body=false footer=false
+{{#bs-modal open=isJoiningSpace body=false footer=false
     title=(t "components.spacesMenu.joinModal.title")
     id="join-space"}}
   {{#bs-modal-body}}
@@ -101,6 +103,63 @@
   {{#bs-modal-footer as |footer|}}
     {{#bs-button action=(action "close" target=footer) type="primary"}}
       {{t "common.modal.ok"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- RENAME SPACE --}}
+
+{{#bs-modal open=spaceToRename body=false footer=false
+    title=(t "components.spacesMenu.renameModal.title")
+    id="rename-space"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitRenameSpace") model=this}}
+      {{bs-form-element controlType="text" property="renameSpaceName" autofocus=true
+        label=(t 'components.spacesMenu.renameModal.label')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.cancel"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- LEAVE SPACE --}}
+
+{{#bs-modal open=spaceToLeave body=false footer=false
+    title=(t "components.spacesMenu.leaveModal.title")
+    submitAction="submitLeaveSpace" id="leave-space"}}
+  {{#bs-modal-body}}
+    {{t 'components.spacesMenu.leaveModal.label' spaceName=spaceToLeave.name}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.yes"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.no"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- REMOVE SPACE --}}
+
+{{#bs-modal open=spaceToRemove body=false footer=false
+    title=(t "components.spacesMenu.removeModal.title")
+    submitAction="submitRemoveSpace" id="remove-space"}}
+  {{#bs-modal-body}}
+    {{t 'components.spacesMenu.removeModal.label' spaceName=spaceToRemove.name}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.yes"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.no"}}
     {{/bs-button}}
   {{/bs-modal-footer}}
 {{/bs-modal}}

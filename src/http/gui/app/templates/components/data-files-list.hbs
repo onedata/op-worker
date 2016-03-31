@@ -17,7 +17,7 @@
     </th>
   </thead>
   <tbody>
-    {{#each dir.children as |file|}}
+    {{#each filesSorted as |file|}}
     {{!-- TODO: open file when selected and enter pressed --}}
       <tr {{action "openFile" file on="doubleClick"}}
         {{action "selectFile" file on="click"}} class="{{if file.isSelected 'active'}}">

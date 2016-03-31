@@ -12,6 +12,10 @@ export default Ember.Component.extend({
   // TODO: doc
   dir: null,
 
+  // TODO: enable sorting in GUI
+  filesSorting: ['type:asc', 'name:asc'],
+  filesSorted: Ember.computed.sort('dir.children', 'filesSorting'),
+
   bindFileUpload() {
     this.get('fileUpload').assignDrop(this.$().find('.table'));
   },
