@@ -367,7 +367,7 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
+    test_utils:mock_new(Workers, [dbsync_proto, dbsync_utils]),
 
     ConfigP1 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP1]}),
     ConfigP2 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP2]}),
@@ -413,7 +413,7 @@ end_per_testcase(_, MultiConfig) ->
 
     catch task_manager:kill_all(),
 
-    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils]).
+    test_utils:mock_unload(Workers, [dbsync_proto, dbsync_utils]).
 
 
 %%%===================================================================

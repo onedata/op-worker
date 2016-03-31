@@ -212,6 +212,7 @@ end_per_testcase(Case, Config) when
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:clear_assume_all_files_in_space(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
