@@ -41,10 +41,8 @@
 -spec init() -> ok.
 init() ->
     % Resolve default space and put it in session memory
-    SessionId = g_session:get_session_id(),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {ok, DefaultSpaceId} = oz_users:get_default_space({user, {Mac, DMacs}}),
+    % NOTE that SpaceDir UUID is remembered rather than Space ID
+    DefaultSpaceId = op_gui_utils:get_users_default_space(),
     DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(DefaultSpaceId),
     g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceDirId),
     op_gui_utils:register_backend(?MODULE, self()),

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_user_id/0, get_users_default_space/0]).
+-export([get_user_id/0, get_user_rest_auth/0, get_users_default_space/0]).
 -export([register_backend/2, unregister_backend/2]).
 -export([get_all_backend_pids/1]).
 
@@ -42,6 +42,20 @@ get_user_id() ->
             undefined
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a tuple that can be used directly in REST operations on behalf of
+%% current user.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_rest_auth() -> {user, {
+    Macaroon :: macaroon:macaroon(),
+    DischargeMacaroons :: [macaroon:macaroon()]}}.
+get_user_rest_auth() ->
+    SessionId = g_session:get_session_id(),
+    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
+    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
+    {user, {Mac, DMacs}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,14 +66,21 @@ get_user_id() ->
 get_users_default_space() ->
     % @TODO this should be taken from onedata_user record and changes of this
     % should be pushed.
-    SessionId = g_session:get_session_id(),
-    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
-    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
-    {ok, DefaultSpace} = oz_users:get_default_space({user, {Mac, DMacs}}),
-    ?dump(<<"/spaces/", DefaultSpace/binary>>),
-    {ok, #file_attr{uuid = DefaultSpaceId}} = logical_file_manager:stat(
-        SessionId, {path, <<"/spaces/", DefaultSpace/binary>>}),
+    {ok, DefaultSpaceId} = oz_users:get_default_space(get_user_rest_auth()),
     DefaultSpaceId.
+%%    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(DefaultSpaceId),
+%%    g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceDirId),
+%%    op_gui_utils:register_backend(?MODULE, self()),
+
+
+%%    SessionId = g_session:get_session_id(),
+%%    {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
+%%    #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
+%%    {ok, DefaultSpace} = oz_users:get_default_space({user, {Mac, DMacs}}),
+%%    ?dump(<<"/spaces/", DefaultSpace/binary>>),
+%%    {ok, #file_attr{uuid = DefaultSpaceId}} = logical_file_manager:stat(
+%%        SessionId, {path, <<"/spaces/", DefaultSpace/binary>>}),
+%%    DefaultSpaceId.
 
 
 %%--------------------------------------------------------------------

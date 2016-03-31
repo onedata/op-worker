@@ -90,7 +90,7 @@ find(<<"space">>, [SpaceId]) ->
         {<<"name">>, Name},
         {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
         {<<"userPermissions">>, UserPermissions},
-        {<<"groupPermissions">>, []}
+        {<<"groupPermissions">>, GroupPermissions}
     ],
     {ok, Res};
 
@@ -115,13 +115,43 @@ find(<<"space-user-permission">>, [AssocId]) ->
 
 
 find(<<"space-user">>, [UserId]) ->
-    ?dump(UserId),
     {ok, #document{
         value = #onedata_user{
             name = Name
         }}} = onedata_user:get(UserId),
     Res = [
         {<<"id">>, UserId},
+        {<<"name">>, Name}
+    ],
+    {ok, Res};
+
+
+find(<<"space-group-permission">>, [AssocId]) ->
+    {GroupId, SpaceId} = association_to_ids(AssocId),
+    {ok, #document{
+        value = #space_info{
+            groups = GroupsAndPerms
+        }}} = space_info:get(SpaceId),
+    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+    PermsMapped = lists:map(
+        fun(SpacePerm) ->
+            HasPerm = lists:member(SpacePerm, GroupPerms),
+            {perm_db_to_gui(SpacePerm), HasPerm}
+        end, all_space_perms()),
+    Res = PermsMapped ++ [
+        {<<"id">>, AssocId},
+        {<<"group">>, GroupId}
+    ],
+    {ok, Res};
+
+
+find(<<"space-group">>, [GroupId]) ->
+    {ok, #document{
+        value = #onedata_group{
+            name = Name
+        }}} = onedata_group:get(GroupId),
+    Res = [
+        {<<"id">>, GroupId},
         {<<"name">>, Name}
     ],
     {ok, Res}.
@@ -177,7 +207,28 @@ create_record(<<"space">>, _Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"space">>, _Id, _Data) ->
+update_record(<<"space">>, SpaceId, Data) ->
+    ?dump({SpaceId, Data}),
+    Rename = fun(NewName) ->
+        Diff = fun(#space_info{} = SpaceInfo) ->
+            {ok, SpaceInfo#space_info{name = NewName}}
+        end,
+        {ok, SpaceId} = space_info:update(SpaceId, Diff)
+    end,
+    case proplists:get_value(<<"isDefault">>, Data, undefined) of
+        undefined ->
+            ok;
+        true ->
+            % @todo change when onedata_user holds default space
+            UserAuth = op_gui_utils:get_user_rest_auth(),
+            oz_users:set_default_space(UserAuth, SpaceId)
+    end,
+    case proplists:get_value(<<"name">>, Data, undefined) of
+        undefined ->
+            ok;
+        NewName ->
+            Rename(NewName)
+    end,
     gui_error:report_error(<<"Not iplemented">>).
 
 
@@ -195,23 +246,6 @@ delete_record(<<"space">>, _Id) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns a space record based on space id and name.
-%% @end
-%%--------------------------------------------------------------------
--spec space_record(SpaceId :: binary(), SpaceName :: binary()) ->
-    proplists:proplist().
-space_record(SpaceId, SpaceName) ->
-    DefaultSpaceId = g_session:get_value(?DEFAULT_SPACE_KEY),
-    [
-        {<<"id">>, SpaceId},
-        {<<"name">>, SpaceName},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"rootDir">>, SpaceId}
-    ].
 
 
 ids_to_association(FirstId, SecondId) ->
