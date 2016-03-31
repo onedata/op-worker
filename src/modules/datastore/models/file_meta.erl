@@ -296,6 +296,9 @@ model_init() ->
 'after'(file_meta, Method, ?GLOBAL_ONLY_LEVEL, Context, ReturnValue) ->
     file_data_backend:process_file_meta_change(Method, Context, ReturnValue),
     ok;
+'after'(space_info, Method, ?GLOBAL_ONLY_LEVEL, Context, ReturnValue) ->
+    space_data_backend:process_space_info_change(Method, Context, ReturnValue),
+    ok;
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 

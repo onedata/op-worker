@@ -26,6 +26,60 @@
 -export([process_file_meta_change/3]).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @todo temporal solution - until events are used in GUI
+%% Processes file_meta model changes and informs Ember client about changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_file_meta_change(Method :: model_behaviour:model_action(),
+    Context :: term(), ReturnValue :: term()) -> ok.
+% @TODO FILTROWANIE - PACZ NA fslogic_context:set_space_id
+process_file_meta_change(create, [#document{key = FileId} = Doc], _ReturnValue) ->
+    ?alert("Create: ~p", [FileId]),
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                {ok, Data} = file_record(SessionId, FileId),
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_created(<<"file">>, Data, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(?MODULE)),
+    ok;
+process_file_meta_change(update, [FileId, _Changes], _ReturnValue) ->
+    ?alert("Update: ~p", [FileId]),
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                {ok, Data} = file_record(SessionId, FileId),
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_updated(<<"file">>, Data, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(?MODULE)),
+    ok;
+process_file_meta_change(delete, [FileId, _DeleteFun], _ReturnValue) ->
+    ?alert("Delete: ~p", [FileId]),
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_deleted(<<"file">>, FileId, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(?MODULE)),
+    ok.
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -207,60 +261,6 @@ delete_record(<<"file">>, Id) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @todo temporal solution - until events are used in GUI
-%% Processes file_meta model changes and informs Ember client about changes.
-%% @end
-%%--------------------------------------------------------------------
--spec process_file_meta_change(Method :: model_behaviour:model_action(),
-    Context :: term(), ReturnValue :: term()) -> ok.
-% @TODO FILTROWANIE - PACZ NA fslogic_context:set_space_id
-process_file_meta_change(create, [#document{key = FileId} = Doc], _ReturnValue) ->
-    ?alert("Create: ~p", [FileId]),
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                {ok, Data} = file_record(SessionId, FileId),
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_created(<<"file">>, Data, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok;
-process_file_meta_change(update, [FileId, _Changes], _ReturnValue) ->
-    ?alert("Update: ~p", [FileId]),
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                {ok, Data} = file_record(SessionId, FileId),
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_updated(<<"file">>, Data, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok;
-process_file_meta_change(delete, [FileId, _DeleteFun], _ReturnValue) ->
-    ?alert("Delete: ~p", [FileId]),
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_deleted(<<"file">>, FileId, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok.
-
 
 %%%===================================================================
 %%% Internal functions
@@ -343,7 +343,7 @@ file_record(SessionId, FileId) ->
         ?DIRECTORY_TYPE -> {<<"dir">>, null};
         _ -> {<<"file">>, SizeAttr}
     end,
-    Permissions = integer_to_binary(PermissionsAttr, 8),
+    Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
     Children = case Type of
         <<"file">> ->
             [];

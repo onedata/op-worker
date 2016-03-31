@@ -28,6 +28,36 @@
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
+% @todo dev
+-export([support/1, process_space_info_change/3]).
+support(Token) ->
+    {ok, SpaceId} = oz_providers:support_space(provider, [
+        {<<"token">>, Token}, {<<"size">>, <<"10000000">>}
+    ]),
+    {ok, Storage} = storage:get_by_name(<<"/mnt/st1">>),
+    StorageId = storage:id(Storage),
+    {ok, _} = space_storage:add(SpaceId, StorageId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @todo temporal solution - until events are used in GUI
+%% Processes file_meta model changes and informs Ember client about changes.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_space_info_change(Method :: model_behaviour:model_action(),
+    Context :: term(), ReturnValue :: term()) -> ok.
+% @TODO FILTROWANIE - PACZ NA fslogic_context:set_space_id
+process_space_info_change(create, [#document{key = SpaceId} = Doc], _ReturnValue) ->
+    ?alert("CreateSpace: ~p", [SpaceId]),
+    ok;
+process_space_info_change(update, [SpaceId, _Changes], _ReturnValue) ->
+    ?alert("UpdateSpace: ~p", [SpaceId]),
+    ok;
+process_space_info_change(delete, [SpaceId, _DeleteFun], _ReturnValue) ->
+    ?alert("DeleteSpace: ~p", [SpaceId]),
+    ok.
+
 
 %%%===================================================================
 %%% API functions
