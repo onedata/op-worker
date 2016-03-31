@@ -534,11 +534,11 @@ end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_validate_and_unload(Worker, communicator).
+    test_utils:mock_validate_and_unload(Workers, communicator).
 
 %%%===================================================================
 %%% Internal functions
