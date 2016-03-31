@@ -70,7 +70,8 @@ export default {
       },
       notify: {
         spaceRemoved: 'Space "{{spaceName}}" has been removed',
-        spaceRemoveFailed: 'Failed to remove space "{{spaceName}}"'
+        spaceRemoveFailed: 'Failed to remove space "{{spaceName}}"',
+        joinedToSpace: 'Successfully joined to space "{{spaceName}}"'
       }
     },
     spacesSubmenu: {
@@ -79,6 +80,7 @@ export default {
       providers: 'providers'
     },
     permissionsTable: {
+      inviteButton: 'Invite {{type}}',
       viewSpace: 'view space',
       modifySpace: 'modify space',
       setPrivileges: 'set privileges',
@@ -89,6 +91,10 @@ export default {
       removeGroup: 'remove group',
       inviteProvider: 'invite provider',
       removeProvider: 'remove provider',
+      inviteModal: {
+        title: 'Invite {{type}} to space',
+        label: 'Pass the below token to the {{type}} you want to invite'
+      }
     },
     // data
     dataFilesTree: {

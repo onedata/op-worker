@@ -214,16 +214,12 @@ export default Ember.Component.extend({
 
     submitJoinSpace() {
       let token = this.get('joinSpaceToken');
-      // TODO: loading gif?
+      // TODO: loading gif in modal?
       this.get('oneproviderServer').joinSpace(token).then(
-        () => {
-          this.set('tokenToDisplay', token);
+        (spaceName) => {
+          this.get('i18n').t('components.spacesMenu.notify.joinedToSpace', {spaceName: spaceName});
         }
       );
-    },
-
-    joinSpaceModalOpened() {
-      // currently all actions in startJoinSpace
     },
 
     setAsHome(space) {
@@ -244,8 +240,9 @@ export default Ember.Component.extend({
       try {
         let space = this.get('spaceToLeave');
         let spaceName = space.get('name');
-        this.get('oneproviderServer').leaveSpace(space).then(
+        this.get('oneproviderServer').leaveSpaceToken(space).then(
           () => {
+            // TODO: translate
             this.get('notify').info(`Space "${spaceName}" left successfully`);
           },
           () => {
@@ -298,7 +295,7 @@ export default Ember.Component.extend({
     inviteGroup(space) {
       // TODO: show modal with loading
       this.set('tokenToDisplay', null);
-      this.get('oneproviderServer').inviteGroup(space).then(
+      this.get('oneproviderServer').inviteGroupToken(space).then(
         (token) => {
           this.set('tokenToDisplay', token);
         },
@@ -308,12 +305,13 @@ export default Ember.Component.extend({
       );
     },
 
+    // TODO
     inviteUser(space) {
-      this.get('oneproviderServer').inviteUser(space);
+      this.get('oneproviderServer').inviteUserToken(space);
     },
 
     getSupport(space) {
-      this.get('oneproviderServer').getSupport(space);
+      this.get('oneproviderServer').getSupportToken(space);
     }
   }
 });

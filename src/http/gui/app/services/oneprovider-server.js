@@ -12,8 +12,9 @@ import Ember from 'ember';
 export default Ember.Service.extend({
   server: Ember.inject.service('server'),
 
-  joinSpace() {
-    return this.get('server').privateRPC('joinSpace', {});
+  /** TODO: should resolve space name on success */
+  joinSpace(token) {
+    return this.get('server').privateRPC('joinSpace', {token: token});
   },
 
   leaveSpace(space) {

@@ -438,5 +438,23 @@ html, body {
   }
 }
 
+.modal-loading {
+  display: table;
+  > * {
+    display: table-cell;
+    vertical-align: middle;
+  }
+  .loading-throbber {
+    width: 32px;
+    height: 32px;
+    background-image: url("/assets/images/loading-32.gif");
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .loading-label {
+    padding-left: 15px;
+  }
+}
+
 // TODO: temporary
 @import 'data';
