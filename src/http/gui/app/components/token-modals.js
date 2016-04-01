@@ -27,7 +27,6 @@ export default Ember.Component.extend({
 
   actions: {
     getToken() {
-      window.alert('ers');
       let type = this.get('type');
       this.get('oneproviderServer').getToken(type, this.get('space.id')).then(
         (token) => {
