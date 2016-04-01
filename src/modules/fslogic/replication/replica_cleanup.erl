@@ -30,7 +30,7 @@
 -spec clean_replica_files(file_meta:uuid()) -> ok.
 clean_replica_files(FileUuid) ->
     LocalProviderId = oneprovider:get_provider_id(),
-    {ok, Locations} = file_meta:get_locations(FileUuid),
+    {ok, Locations} = file_meta:get_locations({uuid, FileUuid}),
     RemoveLocation =
         fun(LocationId) ->
             case file_location:get(LocationId) of
