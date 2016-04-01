@@ -213,10 +213,15 @@ find(<<"space-group">>, [GroupId]) ->
 find_all(<<"space">>) ->
     UserId = op_gui_utils:get_user_id(),
     {ok, SpaceIds} = onedata_user:get_spaces(UserId),
-    Res = lists:map(
+    Res = lists:filtermap(
         fun(SpaceId) ->
-            {ok, SpaceData} = find(<<"space">>, [SpaceId]),
-            SpaceData
+            try
+                {ok, SpaceData} = find(<<"space">>, [SpaceId]),
+                {true, SpaceData}
+            catch _:_ ->
+                ?error("Cannot resolve space data: ~p", [SpaceId]),
+                false
+            end
         end, SpaceIds),
     {ok, Res}.
 
@@ -313,8 +318,10 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"space">>, _Id) ->
-    gui_error:report_error(<<"Not iplemented">>).
+delete_record(<<"space">>, SpaceId) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    oz_spaces:remove(UserAuth, SpaceId),
+    ok.
 
 
 %%%===================================================================

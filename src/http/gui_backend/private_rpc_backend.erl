@@ -34,7 +34,7 @@
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
 handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, SpaceID} = gr_users:join_space(UserAuth, [{<<"token">>, Token}]),
+    {ok, SpaceID} = oz_users:join_space(UserAuth, [{<<"token">>, Token}]),
     {ok, #space_details{
         name = SpaceName
     }} = oz_spaces:get_details(UserAuth, SpaceID),
@@ -42,12 +42,12 @@ handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
 
 handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, Token} = oz_spaces:get_invite_user_token(UserAuth, SpaceId),
-    {ok, Token};
+    ok = oz_users:leave_space(UserAuth, SpaceId);
 
 handle(<<"userToken">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    ok = oz_users:leave_space(UserAuth, SpaceId);
+    {ok, Token} = oz_spaces:get_invite_user_token(UserAuth, SpaceId),
+    {ok, Token};
 
 handle(<<"groupToken">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
