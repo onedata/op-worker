@@ -146,10 +146,16 @@ translate_from_protobuf(#'Close'{uuid = UUID}) ->
     #close{uuid = UUID};
 translate_from_protobuf(#'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
     #proxyio_request{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'RemoteWrite'{byte_sequence = ByteSequence}) ->
+    #remote_write{byte_sequence = [translate_from_protobuf(BS) || BS <- ByteSequence]};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #remote_read{offset = Offset, size = Size};
-translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
-    #remote_write{offset = Offset, data = Data};
+translate_from_protobuf(#'ByteSequence'{offset = Offset, data = Data}) ->
+    #byte_sequence{offset = Offset, data = Data};
+translate_from_protobuf(#'RemoteData'{data = Data}) ->
+    #'remote_data'{data = Data};
+translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
+    #'remote_write_result'{wrote = Wrote};
 translate_from_protobuf(#'GetXattr'{uuid = UUID, name = Name}) ->
     #get_xattr{uuid = UUID, name = Name};
 translate_from_protobuf(#'SetXattr'{uuid = UUID, xattr = {xattr, Xattr}}) ->
@@ -231,16 +237,6 @@ translate_from_protobuf(#'ProxyIOResponse'{status = Status, proxyio_response = {
         status = translate_from_protobuf(Status),
         proxyio_response = translate_from_protobuf(ProxyIOResponse)
     };
-translate_from_protobuf(#'RemoteData'{data = Data}) ->
-    #'remote_data'{data = Data};
-translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
-    #'remote_write_result'{wrote = Wrote};
-translate_from_protobuf(#'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
-    #'proxyio_request'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
-translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
-    #'remote_read'{offset = Offset, size = Size};
-translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
-    #'remote_write'{offset = Offset, data = Data};
 
 %% @todo
 translate_from_protobuf(#get_xattr{uuid = Uuid, name = Name}) ->
@@ -441,17 +437,10 @@ translate_to_protobuf(#proxyio_response{status = Status, proxyio_response = Prox
         status = StatProto,
         proxyio_response = translate_to_protobuf(ProxyIOResponse)
     }};
-translate_to_protobuf(#'proxyio_response'{status = Status, proxyio_response = ProxyIOResponse}) ->
-    {proxyio_response, #'ProxyIOResponse'{
-        status = translate_to_protobuf(Status),
-        proxyio_response = translate_to_protobuf(ProxyIOResponse)
-    }};
 translate_to_protobuf(#'remote_write_result'{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 translate_to_protobuf(#remote_data{data = Data}) ->
     {remote_data, #'RemoteData'{data = Data}};
-translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
-    {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 translate_to_protobuf(#get_xattr{uuid = Uuid, name = Name}) ->
     {get_xattr, #'GetXattr'{uuid = Uuid, name = Name}};
 translate_to_protobuf(#set_xattr{uuid = Uuid, xattr = Xattr}) ->
@@ -530,19 +519,14 @@ translate_to_protobuf(#status_report{space_id = SpaceId, seq = SeqNum}) ->
 translate_to_protobuf(#batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
     {batch_update, #'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}};
 
-
-
-
-
-
-
-
 translate_to_protobuf(#'proxyio_request'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
     {proxyio_request, #'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
     {remote_read, #'RemoteRead'{offset = Offset, size = Size}};
-translate_to_protobuf(#'remote_write'{offset = Offset, data = Data}) ->
-    {remote_write, #'RemoteWrite'{offset = Offset, data = Data}};
+translate_to_protobuf(#'remote_write'{byte_sequence = ByteSequence}) ->
+    {remote_write, #'RemoteWrite'{byte_sequence = [translate_to_protobuf(BS) || BS <- ByteSequence]}};
+translate_to_protobuf(#'byte_sequence'{offset = Offset, data = Data}) ->
+    {remote_write, #'ByteSequence'{offset = Offset, data = Data}};
 translate_to_protobuf(#'get_xattr'{uuid = UUID, name = Name}) ->
     {get_xattr, #'GetXattr'{uuid = UUID, name = Name}};
 translate_to_protobuf(#'set_xattr'{uuid = UUID, xattr = Xattr}) ->
