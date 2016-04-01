@@ -20,7 +20,7 @@
         <li class="dropdown profile-dropdown">
           <a href="#" class="dropdown-toggle top-bar-item toolbar-icon" data-toggle="dropdown"
             role="button" aria-haspopup="true" aria-expanded="false">
-              {{icon 'user-profile' 'top-bar-icon'}} {{session.sessionDetails.userName}} <span class="caret"></span>
+              {{icon 'user-profile' 'top-bar-icon'}} {{trim-string session.sessionDetails.userName 14}} <span class="caret"></span>
           </a>
           <ul class="dropdown-menu dropdown-menu-down dropdown-menu-list">
             <li><a href="{{session.sessionDetails.manageProvidersURL}}">{{t 'components.topBar.manageProviders'}}</a></li>

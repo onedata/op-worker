@@ -6,7 +6,7 @@
         {{icon (if selectedSpace.isDefault 'space-home' 'space')}}
       </div>
       <div class="item-label">
-        {{selectedSpace.name}}
+        {{trim-string selectedSpace.name 14}}
       </div>
       <div class="item-icon select-arrow">
         {{icon 'arrow-down'}}
@@ -21,7 +21,7 @@
             {{icon (if s.isDefault 'space-home' 'space')}}
           </div>
           <div class="item-label">
-            {{s.name}}
+            {{trim-string s.name 14}}
           </div>
         </a>
       </li>

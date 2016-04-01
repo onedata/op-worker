@@ -50,7 +50,7 @@
   <div class="one-tbody">
     {{#each permissions as |perm|}}
       <div class="one-tr" id="perm-row-{{perm.owner.id}}">
-        <div class="one-td one-first">{{perm.owner.name}}</div>
+        <div class="one-td one-first">{{trim-string perm.owner.name 14}}</div>
 
         <div class="one-td">
           <div class="one-table-label">{{t 'components.permissionsTable.viewSpace'}}</div>
