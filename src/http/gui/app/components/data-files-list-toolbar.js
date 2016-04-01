@@ -81,6 +81,7 @@ export default Ember.Component.extend({
         icon: 'remove',
         action: 'removeSelectedFiles',
         disabled: !this.get('dir.isSomeFileSelected'),
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.remove')
       },
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
@@ -92,8 +93,14 @@ export default Ember.Component.extend({
     }
   }.observes('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
 
+  makeTooltips: function() {
+    Ember.run.scheduleOnce('afterRender', this, function() {
+      this.$().find('[data-toggle="tooltip"]').tooltip();
+    });
+  }.observes('items'),
+
   didInsertElement() {
-    this.$().find('[data-toggle="tooltip"]').tooltip();
+    this.makeTooltips();
     this.resumableJsChange();
   },
 
