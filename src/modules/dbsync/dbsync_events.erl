@@ -32,7 +32,11 @@
 %%--------------------------------------------------------------------
 -spec change_replicated(SpaceId :: binary(), dbsync_worker:change()) ->
     any().
-change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc = #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
+change_replicated(_, #change{model = file_meta, doc =  #document{key = FileUUID,
+    value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}) ->
+    ok = replica_cleanup:clean_replica_files(FileUUID);
+change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc =
+    #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?info("change_replicated: changed file_meta ~p", [FileUUID]),
     ok = fslogic_utils:wait_for_links(FileUUID, 5),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
