@@ -52,7 +52,7 @@ all() ->
 
 -define(TIMEOUT, timer:seconds(5)).
 
--define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, FuseRequest}])).
+-define(req(W, SessId, FuseRequest), rpc:call(W, worker_proxy, call, [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}])).
 
 %%%===================================================================
 %%% Test functions
@@ -536,6 +536,6 @@ init_per_testcase(_, Config) ->
     initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    initializer:clean_test_users_and_spaces(Config),
+    [_Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, communicator).

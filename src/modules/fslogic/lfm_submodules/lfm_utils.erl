@@ -29,7 +29,7 @@
 -spec call_fslogic(SessId :: session:id(), Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
 call_fslogic(SessId, Request, OKHandle) ->
-    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, Request}) of
+    case worker_proxy:call(fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = Request}}) of
         #fuse_response{status = #status{code = ?OK}, fuse_response = Response} ->
             OKHandle(Response);
         #fuse_response{status = #status{code = Code}} ->

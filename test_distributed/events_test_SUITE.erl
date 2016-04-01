@@ -179,13 +179,15 @@ init_per_testcase(Case, Config) when
         SessId
     end, lists:seq(0, 4)),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
-    [{session_ids, SessIds}, {subscription_id, SubId} | Config];
+    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    initializer:create_test_users_and_spaces([{session_ids, SessIds}, {subscription_id, SubId} | Config]);
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
-    [{session_id, SessId} | Config].
+    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    initializer:create_test_users_and_spaces([{session_id, SessId} | Config]).
 
 end_per_testcase(Case, Config) when
     Case =:= emit_read_event_should_execute_handler;
@@ -205,17 +207,21 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
-    test_utils:mock_validate_and_unload(Worker, [communicator]);
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:clear_assume_all_files_in_space(Config),
+    test_utils:mock_validate_and_unload(Workers, [communicator]);
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
-    test_utils:mock_validate_and_unload(Worker, [communicator]).
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:clear_assume_all_files_in_space(Config),
+    test_utils:mock_validate_and_unload(Workers, [communicator]).
 
 %%%===================================================================
 %%% Internal functions
@@ -242,7 +248,7 @@ session_setup(Worker) ->
 session_setup(Worker, SessId) ->
     Self = self(),
     Iden = #identity{user_id = <<"user_id">>},
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_fuse_session, [SessId, Iden, Self]
     )),
     {ok, SessId}.

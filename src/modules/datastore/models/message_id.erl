@@ -6,29 +6,32 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% OZ user data cache
+%%% Session management model, frequently invoked by incoming tcp
+%%% connections in connection
 %%% @end
 %%%-------------------------------------------------------------------
--module(onedata_user).
+-module(message_id).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("proto/common/credentials.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
--export([save/1, get/1, exists/1, delete/1, update/2, create/1,
+-export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, get_spaces/1, create_or_update/2]).
+-export([generate/0, generate/1, generate/2, encode/1, decode/1]).
 
 -export_type([id/0]).
 
--type id() :: binary().
+-type id() :: #message_id{}.
+
+-define(INT64, 16#FFFFFFFFFFFFFFF).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -40,7 +43,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec save(datastore:document()) -> {ok, datastore:key()} | datastore:generic_error().
-save(Document) ->
+save(#document{} = Document) ->
     datastore:save(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
@@ -59,19 +62,27 @@ update(Key, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(datastore:document()) -> {ok, datastore:key()} | datastore:create_error().
-create(Document) ->
+create(#document{} = Document) ->
     datastore:create(?STORE_LEVEL, Document).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link model_behaviour} callback get/1.
+%% Sets access time to current time for user session and returns old value.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of all records.
+%% @end
+%%--------------------------------------------------------------------
+-spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
+list() ->
+    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,7 +109,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(message_id_bucket, [], ?GLOBAL_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -125,73 +136,76 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch user from OZ and save it in cache.
+%% @equiv generate(undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
-    try
-        Client = {user, {Macaroon, DMacaroons}},
-        {ok, #user_details{id = Id, name = Name}} =
-            oz_users:get_details(Client),
-        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            oz_users:get_spaces(Client),
-        {ok, GroupIds} = oz_users:get_groups(Client),
-        [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
-        OnedataUser = #onedata_user{
-            name = Name,
-            space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
-            group_ids = GroupIds
-        },
-        [(catch space_info:fetch(Client, SId)) || SId <- SpaceIds],
-        OnedataUserDoc = #document{key = Id, value = OnedataUser},
-        {ok, _} = onedata_user:save(OnedataUserDoc),
-        file_meta:setup_onedata_user({user, {Macaroon, DMacaroons}}, Id),
-        {ok, OnedataUserDoc}
+-spec generate() -> {ok, #message_id{}}.
+generate() ->
+    generate(undefined).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates ID with encoded handler pid.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate(Recipient :: pid() | undefined) -> {ok, MsgId :: #message_id{}}.
+generate(Recipient) ->
+    generate(Recipient, server).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generates ID with encoded handler pid and given issuer type.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate(Recipient :: pid() | undefined, Issuer :: client | server) -> {ok, MsgId :: #message_id{}}.
+generate(Recipient, Issuer) ->
+    {ok, #message_id{
+        issuer = Issuer,
+        id = integer_to_binary(crypto:rand_uniform(0, ?INT64)),
+        recipient = Recipient
+    }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Encodes message_id to binary form.
+%% @end
+%%--------------------------------------------------------------------
+-spec encode(MsgId :: #message_id{} | undefined) -> {ok, undefined | binary()}.
+encode(undefined) ->
+    {ok, undefined};
+encode(#message_id{issuer = client, id = Id}) ->
+    {ok, Id};
+encode(MsgId = #message_id{}) ->
+    {ok, term_to_binary(MsgId)}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Decodes message_id from binary form.
+%% @end
+%%--------------------------------------------------------------------
+-spec decode(Id :: binary()) -> {ok, #message_id{}}.
+decode(undefined) ->
+    {ok, undefined};
+decode(Id) ->
+    try binary_to_term(Id) of
+        #message_id{} = MsgId ->
+            {ok, MsgId};
+        _ ->
+            {ok, #message_id{issuer = client, id = Id}}
     catch
-        _:Reason ->
-            {error, Reason}
+        _:_ ->
+            {ok, #message_id{issuer = client, id = Id}}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Get user from cache or fetch from OZ and save in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(datastore:key(), #auth{}) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Key, Token = #auth{}) ->
-    case onedata_user:get(Key) of
-        {ok, Doc} ->
-            {ok, Doc};
-        {error, {not_found, _}} -> fetch(Token);
-        Error -> Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of user space IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_spaces(UserId :: onedata_user:id()) ->
-    {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
-get_spaces(UserId) ->
-    case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->
-            {ok, SpaceIds};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================

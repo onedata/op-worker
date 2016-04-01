@@ -37,7 +37,7 @@ new(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets space ID in fslogic context.
+%% Sets space ID in fslogic context based on given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec set_space_id(CTX :: #fslogic_ctx{}, Entry :: file_meta:entry()) -> NewCTX :: #fslogic_ctx{}.

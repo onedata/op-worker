@@ -19,7 +19,8 @@
 -record(server_message, {
     message_id :: message_id:id(),
     message_stream :: #message_stream{},
-    message_body :: tuple()
+    message_body :: tuple(),
+    proxy_session_id :: session:id()
 }).
 
 -endif.

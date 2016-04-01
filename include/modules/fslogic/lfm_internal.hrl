@@ -14,6 +14,8 @@
 
 %% Internal opaque file-handle used by logical_file_manager
 -record(lfm_handle, {
+    file_location :: file_location:model_record(),
+    provider_id :: oneprovider:id(),
     sfm_handles = #{} :: sfm_handles_map(),
     fslogic_ctx :: fslogic_worker:ctx(),
     file_uuid :: file_meta:uuid(),

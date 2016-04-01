@@ -13,6 +13,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("annotations/include/annotations.hrl").
@@ -79,7 +80,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
-read_dir(CTX, File, Offset, Size) ->
+read_dir(#fslogic_ctx{session_id = SessionId} = CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),
@@ -122,9 +123,11 @@ read_dir(CTX, File, Offset, Size) ->
             Children =
                 case Offset < length(SpacesIds) of
                     true ->
+
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
+
                         Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:fetch(provider, SpaceId),
+                            {ok, Space} = space_info:fetch(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
                             Space
                         end, SpacesIdsChunk),
 

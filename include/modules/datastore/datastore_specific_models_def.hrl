@@ -15,6 +15,13 @@
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
+%% Message ID containing recipient for remote response.
+-record(message_id, {
+    issuer :: client | server,
+    id :: binary(),
+    recipient :: pid() | undefined
+}).
+
 % State of subscription tracking.
 -record(subscriptions_state, {
     refreshing_node :: node(),
@@ -42,6 +49,8 @@
     event_manager :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
+    proxy_via :: session:id() | undefined,
+    response_map = #{} :: #{},
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}]
 }).

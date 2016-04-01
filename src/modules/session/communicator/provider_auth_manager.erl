@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_provider/1, handshake/2]).
+-export([is_provider/1, handshake/2, get_provider_id/1]).
 
 %%%===================================================================
 %%% API
@@ -65,10 +65,6 @@ handshake(Cert, Conn) ->
     SessionId.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc Returns ProviderId based on provider's certificate (issued by OZ).
 %% @end
@@ -89,3 +85,7 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
         end, Attrs),
 
     str_utils:to_binary(ProviderId).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
