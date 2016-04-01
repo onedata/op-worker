@@ -39,7 +39,7 @@ export default Ember.Route.extend({
   },
 
   afterModel(spaces) {
-    this.transitionTo('spaces.show', spaces.find((s) => s.isDefault) || spaces[0]);
+    this.transitionTo('spaces.show', spaces.find((s) => s.get('isDefault')) || spaces[0]);
   },
 
   actions: {
