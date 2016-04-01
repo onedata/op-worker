@@ -480,7 +480,6 @@ activate_socket_once(Socket, Transport) ->
     ServerMessage :: #server_message{}) -> ok.
 send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     {ok, Data} = serializator:serialize_server_message(ServerMsg),
-    ?info("Sending ~p", [ServerMsg]),
     ok = Transport:send(Socket, Data).
 
 
@@ -494,7 +493,6 @@ send_server_message(Socket, Transport, #server_message{} = ServerMsg) ->
     ServerMessage :: #client_message{}) -> ok.
 send_client_message(Socket, Transport, #client_message{} = ClientMsg) ->
     {ok, Data} = serializator:serialize_client_message(ClientMsg),
-    ?info("Sending ~p", [ClientMsg]),
     ok = Transport:send(Socket, Data).
 
 

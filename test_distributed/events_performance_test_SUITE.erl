@@ -504,6 +504,7 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
+    timer:sleep(timer:seconds(3)),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
         (#write_subscription{} = Msg, _) -> Self ! Msg, ok;
@@ -519,6 +520,7 @@ init_per_testcase(_, Config) ->
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
+    timer:sleep(timer:seconds(3)),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok

@@ -73,7 +73,7 @@ changes_request(ProviderId, Since, Until) ->
     ok | {error, Reason :: term()}.
 status_report(SpaceId, Providers, CurrentSeq) ->
     AllProviders = Providers,
-%%    ?info("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
+    ?debug("Sending status ~p ~p ~p", [SpaceId, Providers, CurrentSeq]),
     send_tree_broadcast(SpaceId, AllProviders, #status_report{space_id = SpaceId, seq = dbsync_utils:encode_term(CurrentSeq)}, 3).
 
 

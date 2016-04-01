@@ -207,21 +207,21 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(Case, Config) when
     Case =:= subscribe_should_notify_all_event_managers ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:clear_assume_all_files_in_space(Config),
-    test_utils:mock_validate_and_unload(Worker, [communicator]);
+    test_utils:mock_validate_and_unload(Workers, [communicator]);
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:clear_assume_all_files_in_space(Config),
-    test_utils:mock_validate_and_unload(Worker, [communicator]).
+    test_utils:mock_validate_and_unload(Workers, [communicator]).
 
 %%%===================================================================
 %%% Internal functions
