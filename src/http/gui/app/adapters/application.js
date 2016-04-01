@@ -230,7 +230,7 @@ export default DS.RESTAdapter.extend({
    * @param {object} data - json data
    */
   RPC(type, operation, data) {
-    this.logToConsole('RPC', [type, operation, data]);
+    this.logToConsole('RPC', [type, operation, JSON.stringify(data)]);
     let payload = {
       msgType: TYPE_RPC_REQ,
       resourceType: type,

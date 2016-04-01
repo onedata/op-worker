@@ -134,11 +134,20 @@ find(<<"data-space">>, [SpaceDirId]) ->
 find_all(<<"data-space">>) ->
     UserId = op_gui_utils:get_user_id(),
     {ok, SpaceIds} = onedata_user:get_spaces(UserId),
-    Res = lists:map(
+    Res = lists:filtermap(
         fun(SpaceId) ->
-            SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-            {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
-            SpaceData
+            {ok, #document{
+                value = #space_info{
+                    providers = Providers
+                }}} = space_info:get(SpaceId),
+            case lists:member(oneprovider:get_provider_id(), Providers) of
+                false ->
+                    false;
+                true ->
+                    SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                    {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
+                    {true, SpaceData}
+            end
         end, SpaceIds),
     {ok, Res}.
 

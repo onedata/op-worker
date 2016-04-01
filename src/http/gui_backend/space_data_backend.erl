@@ -240,10 +240,10 @@ find_query(<<"space">>, _Data) ->
 -spec create_record(RsrcType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
     % todo error handling
     Name = proplists:get_value(<<"name">>, Data, <<"">>),
-    {ok, SpaceId} = space_info:create(
-        #document{value = #space_info{name = Name}}),
+    {ok, SpaceId} = oz_users:create_space(UserAuth, [{<<"name">>, Name}]),
     {ok, [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
@@ -279,6 +279,30 @@ update_record(<<"space">>, SpaceId, Data) ->
         NewName ->
             oz_spaces:modify_details(UserAuth, SpaceId, [{<<"name">>, NewName}])
     end,
+    ok;
+
+
+update_record(<<"space-user-permission">>, AssocId, Data) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    {UserId, SpaceId} = association_to_ids(AssocId),
+    {ok, #document{
+        value = #space_info{
+            users = UsersAndPerms
+        }}} = space_info:get(SpaceId),
+    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+    NewUserPerms = lists:foldl(
+        fun({PermGui, Flag}, PermsAcc) ->
+            Perm = perm_gui_to_db(PermGui),
+            case Flag of
+                true ->
+                    PermsAcc -- [Perm] ++ [Perm];
+                false ->
+                    PermsAcc -- [Perm]
+            end
+        end, UserPerms, Data),
+    oz_spaces:set_user_privileges(UserAuth, SpaceId, UserId, [
+        {<<"privileges">>, NewUserPerms}
+    ]),
     ok.
 
 
