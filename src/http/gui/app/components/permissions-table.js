@@ -118,10 +118,10 @@ export default Ember.Component.extend({
       });
     },
 
-    invite(space) {
+    invite() {
       // TODO: plural -> singular mess
       this.get('commonModals').openModal(`token-${this.get('typeSingular')}` , {
-        space: space
+        space: this.get('space')
       });
     },
   }

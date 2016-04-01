@@ -93,13 +93,13 @@
     title=(t "components.spacesMenu.joinModal.title")
     id="join-space"}}
   {{#bs-modal-body}}
-    {{#bs-form model=this}}
+    {{#bs-form action=(action "submitJoinSpace") model=this}}
       {{bs-form-element controlType="text" property="joinSpaceToken" autofocus=true
         label=(t 'components.spacesMenu.joinModal.label')}}
     {{/bs-form}}
   {{/bs-modal-body}}
   {{#bs-modal-footer as |footer|}}
-    {{#bs-button action=(action "close" target=footer) type="primary"}}
+    {{#bs-button buttonType="submit" type="primary"}}
       {{t "common.modal.ok"}}
     {{/bs-button}}
   {{/bs-modal-footer}}

@@ -219,16 +219,20 @@ export default Ember.Component.extend({
     },
 
     submitJoinSpace() {
-      let token = this.get('joinSpaceToken');
-      // TODO: loading gif in modal?
-      this.get('oneproviderServer').joinSpace(token).then(
-        (spaceName) => {
-          this.spaceActionMessage('info', 'joinSuccess', spaceName);
-        },
-        (spaceName) => {
-          this.spaceActionMessage('error', 'joinFailed', spaceName);
-        }
-      );
+      try {
+        let token = this.get('joinSpaceToken');
+        // TODO: loading gif in modal?
+        this.get('oneproviderServer').joinSpace(token).then(
+          (spaceName) => {
+            this.spaceActionMessage('info', 'joinSuccess', spaceName);
+          },
+          (spaceName) => {
+            this.spaceActionMessage('error', 'joinFailed', spaceName);
+          }
+        );
+      } finally {
+        this.set('isJoiningSpace', false);
+      }
     },
 
     setAsHome(space) {
