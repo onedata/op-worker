@@ -106,7 +106,7 @@ chown(_, _File, _UserId) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    ?info("Get attr for file entry: ~p", [File]),
+    ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
@@ -115,7 +115,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 
             #posix_user_ctx{gid = GID} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-                fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID)
+                {ok, #document{value = #session{identity = Identity}}} = session:get(SessId),
+                fslogic_storage:new_posix_user_ctx(Identity, SpaceUUID)
             catch
                 throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
             end,

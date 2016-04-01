@@ -1,34 +1,34 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% OZ user data cache
+%%% Files that need to be chowned when their owner shows in provider.
 %%% @end
 %%%-------------------------------------------------------------------
--module(onedata_user).
+-module(files_to_chown).
 -author("Tomasz Lichon").
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
--include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, get_spaces/1, create_or_update/2]).
+-export([add/2, chown_file/3]).
 
 -export_type([id/0]).
 
--type id() :: binary().
+-type id() :: onedata_user:id().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -68,8 +68,6 @@ create(Document) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(datastore:key()) -> {ok, datastore:document()} | datastore:get_error().
-get(?ROOT_USER_ID) ->
-    {ok, #document{key = ?ROOT_USER_ID, value = #onedata_user{name = <<"root">>}}};
 get(Key) ->
     datastore:get(?STORE_LEVEL, ?MODULE, Key).
 
@@ -98,7 +96,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(onedata_user_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(files_to_chown_bucket, [{onedata_user, create}, {onedata_user, save},
+        {onedata_user, create_or_update}], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -108,6 +107,12 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
+'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+    chown_pending_files(UUID);
+'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+    chown_pending_files(UUID);
+'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+    chown_pending_files(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
@@ -127,69 +132,79 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
+%% Add file that need to be chowned in future.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
-    {ok, datastore:ext_key()} | datastore:update_error().
-create_or_update(Doc, Diff) ->
-    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+-spec add(onedata_user:id(), file_meta:uuid()) -> {ok, datastore:key()} | datastore:generic_error().
+add(UserId, FileUuid) ->
+    %todo add create_or_update operation to datastore
+    UpdateFun = fun(Val = #files_to_chown{file_uuids = Uuids}) ->
+        {ok, Val#files_to_chown{file_uuids = [FileUuid | Uuids]}}
+    end,
+    case update(UserId, UpdateFun) of
+        {ok, Key} ->
+            {ok, Key};
+        {error, {not_found, files_to_chown}} ->
+            create(#document{key = UserId, value = #files_to_chown{file_uuids = [FileUuid]}});
+        Other ->
+            Other
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetch user from OZ and save it in cache.
+%% Chown specific file according to given UserId and SpaceId
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
+-spec chown_file(file_meta:uuid(), onedata_user:id(), space_info:id()) -> ok.
+chown_file(FileUuid, UserId, SpaceId) ->
+    LocalLocations = fslogic_utils:get_local_storage_file_locations({uuid, FileUuid}),
+    lists:foreach(fun({StorageId, FileId}) ->
+        try
+            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+            {ok, Storage} = storage:get(StorageId),
+            SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceUUID, FileUuid, Storage, FileId),
+
+            ok = storage_file_manager:chown(SFMHandle, UserId, SpaceId)
+        catch
+            _:Error ->
+                ?error_stacktrace("Cannot chown file ~p, due to error ~p", [FileUuid, Error])
+        end
+    end, LocalLocations).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Chown all pending files of given user
+%% @end
+%%--------------------------------------------------------------------
+-spec chown_pending_files(onedata_user:id()) -> ok.
+chown_pending_files(UserId) ->
+    case files_to_chown:get(UserId) of
+        {ok, #document{value = #files_to_chown{file_uuids = FileUuids}}} ->
+            lists:foreach(fun chown_pending_file/1, FileUuids),
+            delete(UserId);
+        {error,{not_found,files_to_chown}} ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Chown given file to its owner
+%% @end
+%%--------------------------------------------------------------------
+-spec chown_pending_file(file_meta:uuid()) -> ok.
+chown_pending_file(FileUuid) ->
     try
-        Client = {user, {Macaroon, DMacaroons}},
-        {ok, #user_details{id = Id, name = Name}} =
-            oz_users:get_details(Client),
-        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            oz_users:get_spaces(Client),
-        {ok, GroupIds} = oz_users:get_groups(Client),
-        [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
-        OnedataUser = #onedata_user{
-            name = Name,
-            space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
-            group_ids = GroupIds
-        },
-        [(catch space_info:fetch(Client, SId)) || SId <- SpaceIds],
-        OnedataUserDoc = #document{key = Id, value = OnedataUser},
-        {ok, _} = onedata_user:save(OnedataUserDoc),
-        {ok, OnedataUserDoc}
+        {ok, #document{value = #file_meta{uid = UserId}}} = file_meta:get({uuid, FileUuid}),
+        {ok, #document{key = SpaceDirUuid}} = file_meta:get_scope({uuid, FileUuid}),
+        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirUuid),
+        chown_file(FileUuid, UserId, SpaceId)
     catch
-        _:Reason ->
-            {error, Reason}
+        _:Error ->
+            ?error_stacktrace("Cannot chown pending file ~p due to error ~p", [FileUuid, Error])
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Get user from cache or fetch from OZ and save in cache.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_fetch(datastore:key(), #auth{}) ->
-    {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Key, Token) ->
-    case onedata_user:get(Key) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Token);
-        Error -> Error
-    end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of user space IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_spaces(UserId :: onedata_user:id()) ->
-    {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
-get_spaces(UserId) ->
-    case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->
-            {ok, SpaceIds};
-        {error, Reason} ->
-            {error, Reason}
-    end.

@@ -275,7 +275,7 @@ model_init() ->
         {file_meta, create},
         {file_meta, delete},
         {file_meta, update}
-    ], ?GLOBALLY_CACHED_LEVEL).
+    ], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -292,8 +292,10 @@ model_init() ->
     setup_user_and_inform_gui(UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
     setup_user_and_inform_gui(UUID);
+'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
+    setup_user_and_inform_gui(UUID);
 %% @TODO temporary solution, move to events for changes in files
-'after'(file_meta, Method, ?GLOBAL_ONLY_LEVEL, Context, ReturnValue) ->
+'after'(file_meta, Method, ?DISK_ONLY_LEVEL, Context, ReturnValue) ->
     file_data_backend:process_file_meta_change(Method, Context, ReturnValue),
     ok;
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->

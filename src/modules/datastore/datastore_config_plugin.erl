@@ -40,5 +40,6 @@ models() -> [
     space_storage,
     ceph_user,
     s3_user,
-    dbsync_state
+    dbsync_state,
+    files_to_chown
 ].
