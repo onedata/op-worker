@@ -366,25 +366,20 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Workers, [dbsync_proto, dbsync_utils]),
+
     ConfigP1 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP1]}),
     ConfigP2 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP2]}),
     ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
     ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
 
-    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
-
-    test_utils:mock_expect([WorkerP1], oneprovider, get_provider_id,
-        fun() ->
-            <<"provider_1">>
-        end),
-    test_utils:mock_expect([WorkerP2], oneprovider, get_provider_id,
-        fun() ->
-            <<"provider_2">>
-        end),
+    ProviderId1 = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP1)),
+    ProviderId2 = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP2)),
 
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_providers_for_space,
         fun(_) ->
-            [<<"provider_1">>, <<"provider_2">>]
+            [ProviderId1, ProviderId2]
         end),
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_spaces_for_provider,
         fun(_) ->
@@ -393,10 +388,11 @@ init_per_testcase(_, Config) ->
 
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, communicate,
         fun
-            (<<"provider_1">>, Message) ->
-                rpc:call(WorkerP1, dbsync_proto, handle_impl, [<<"provider_2">>, Message]);
-            (<<"provider_2">>, Message) ->
-                rpc:call(WorkerP2, dbsync_proto, handle_impl, [<<"provider_1">>, Message])
+            (ProvId, Message) ->
+                case ProvId of
+                    ProviderId1 -> rpc:call(WorkerP1, dbsync_proto, handle_impl, [ProviderId2, Message]);
+                    ProviderId2 -> rpc:call(WorkerP2, dbsync_proto, handle_impl, [ProviderId1, Message])
+                end
         end),
 
     [{all, Config}, {p1, lfm_proxy:init(ConfigWithSessionInfoP1)}, {p2, lfm_proxy:init(ConfigWithSessionInfoP2)}].
@@ -406,12 +402,12 @@ end_per_testcase(_, MultiConfig) ->
     Workers = ?config(op_worker_nodes, ?config(all, MultiConfig)),
     lfm_proxy:teardown(?config(p1, MultiConfig)),
     lfm_proxy:teardown(?config(p2, MultiConfig)),
-    initializer:clean_test_users_and_spaces(?config(p1, MultiConfig)),
-    initializer:clean_test_users_and_spaces(?config(p2, MultiConfig)),
+    initializer:clean_test_users_and_spaces_no_validate(?config(p1, MultiConfig)),
+    initializer:clean_test_users_and_spaces_no_validate(?config(p2, MultiConfig)),
 
     catch task_manager:kill_all(),
 
-    test_utils:mock_unload(Workers, [dbsync_proto, oneprovider, dbsync_utils]).
+    test_utils:mock_unload(Workers, [dbsync_proto, dbsync_utils]).
 
 
 %%%===================================================================

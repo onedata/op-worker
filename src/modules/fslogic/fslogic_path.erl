@@ -12,6 +12,7 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
@@ -106,7 +107,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
     UserId = fslogic_context:get_user_id(Ctx),
     Path = fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, UserId, ?SPACES_BASE_DIR_NAME]),
     {path, Path};
-get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
+get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
 
     Spaces = case UserId of
@@ -115,8 +116,10 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
             Docs;
         _ ->
             {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
+            Client = fslogic_utils:session_to_rest_client(SessId),
+
             lists:map(fun(SpaceId) ->
-                {ok, Doc} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                {ok, Doc} = space_info:get_or_fetch(Client, SpaceId),
                 Doc
             end, SpaceIds)
     end,

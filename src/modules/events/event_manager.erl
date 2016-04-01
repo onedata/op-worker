@@ -18,6 +18,8 @@
 -behaviour(gen_server).
 
 -include("modules/events/definitions.hrl").
+-include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -125,16 +127,27 @@ handle_cast({flush_stream, SubId, Notify}, #state{event_streams = Stms,
 
 handle_cast(#event{} = Evt, #state{session_id = SessId, event_streams = EvtStms} = State) ->
     ?debug("Handling event ~p in session ~p", [Evt, SessId]),
-    {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
-        gen_server:cast(EvtStm, Evt),
-        EvtStm
-    end, EvtStms)}};
+    HandleLocally = fun
+        (false) ->
+            {noreply, State#state{event_streams = maps:map(fun(_, EvtStm) ->
+                gen_server:cast(EvtStm, Evt),
+                EvtStm
+            end, EvtStms)}};
+        (true) ->
+            {noreply, State}
+    end,
+
+    handle_or_reroute(#events{events = [Evt]}, request_to_file_entry_or_provider(Evt), SessId, HandleLocally);
 
 handle_cast(#subscription{id = SubId} = Sub, #state{event_stream_sup = EvtStmSup,
     session_id = SessId, event_streams = EvtStms} = State) ->
-    ?debug("Adding subscription ~p to session ~p", [SubId, SessId]),
-    {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
-    {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}};
+    HandleLocally = fun(_) ->
+        ?info("Adding subscription ~p to session ~p", [SubId, SessId]),
+        {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
+        {noreply, State#state{event_streams = maps:put(SubId, EvtStm, EvtStms)}}
+    end,
+
+    handle_or_reroute(Sub, request_to_file_entry_or_provider(Sub), SessId, HandleLocally);
 
 handle_cast(#subscription_cancellation{id = SubId}, #state{
     event_streams = EvtStms, session_id = SessId} = State) ->
@@ -146,6 +159,7 @@ handle_cast(#subscription_cancellation{id = SubId}, #state{
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -215,3 +229,67 @@ start_event_streams(EvtStmSup, SessId) ->
         {ok, EvtStm} = event_stream_sup:start_event_stream(EvtStmSup, self(), Sub, SessId),
         maps:put(SubId, EvtStm, Stms)
     end, #{}, Docs).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Map given request to file-scope not if the request should be always handled locally.
+%% @end
+%%--------------------------------------------------------------------
+-spec request_to_file_entry_or_provider(#event{} | #subscription{}) ->
+    {file, file_meta:entry()} | not_file_context.
+request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#event{object = #update_event{}}) ->
+    not_file_context;
+request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = _FileUUID}}) ->
+    not_file_context;
+request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #file_location_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(#subscription{object = #permission_changed_subscription{file_uuid = FileUUID}}) ->
+    {file, {uuid, FileUUID}};
+request_to_file_entry_or_provider(_) ->
+    not_file_context.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle request locally using given function or reroute to remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_or_reroute(RequestMessage :: term(), RequestContext :: {file, file_meta:entry()} | not_file_context, SessId :: session:id(),
+    HandleLocallyFun :: fun((IsRerouted :: boolean()) -> term())) -> term().
+handle_or_reroute(_, _, undefined, HandleLocallyFun) ->
+    HandleLocallyFun(false);
+handle_or_reroute(RequestMessage, {file, Entry}, SessId, HandleLocallyFun) ->
+    {ok, #document{value = #session{auth = Auth, identity = #identity{user_id = UserId}}}} = session:get(SessId),
+    SpacesDir = fslogic_uuid:spaces_uuid(UserId),
+    case file_meta:to_uuid(Entry) of
+        {ok, SpacesDir} ->
+            HandleLocallyFun(false);
+        _ ->
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(Entry, UserId),
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+            RestClient = fslogic_utils:session_to_rest_client(SessId),
+            {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(RestClient, SpaceId),
+            case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
+                {_, true} ->
+                    HandleLocallyFun(false);
+                {[H | _], false} ->
+                    provider_communicator:send(#client_message{
+                        message_body = RequestMessage,
+                        proxy_session_id = SessId,
+                        proxy_session_auth = Auth
+                    }, session_manager:get_provider_session_id(outgoing, H)),
+                    HandleLocallyFun(true);
+                {[], _} ->
+                    throw(unsupported_space)
+            end
+    end;
+handle_or_reroute(_, _, _, HandleLocallyFun) ->
+    HandleLocallyFun(false).

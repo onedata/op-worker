@@ -24,11 +24,23 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([preroute_message/2, route_message/1]).
+-export([preroute_message/2, route_message/1, route_proxy_message/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Route messages that were send to remote-proxy session on different provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec route_proxy_message(Msg :: #client_message{}, TargetSessionId :: session:id()) -> ok.
+route_proxy_message(#client_message{message_body = #events{events = Evts}} = Msg, TargetSessionId) ->
+    ?debug("route_proxy_message ~p ~p", [TargetSessionId, Msg]),
+    lists:foreach(fun(#event{} = Evt) -> event:emit(Evt, TargetSessionId) end, Evts),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,7 +122,7 @@ route_and_ignore_answer(#client_message{session_id = SessId,
     {ok, SessId} = session:update(SessId, #{auth => Auth}),
     ok;
 route_and_ignore_answer(#client_message{session_id = SessId,
-    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
+    message_body = #fuse_request{} = FuseRequest}) ->
     ok = worker_proxy:cast(fslogic_worker, {fuse_request, SessId, FuseRequest}).
 
 %%--------------------------------------------------------------------
@@ -136,39 +148,46 @@ route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
         }, SessId)
     end),
     ok;
-route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
-    message_body = #fuse_request{fuse_request = FuseRequest}}) ->
-    ?debug("Fuse request: ~p", [FuseRequest]),
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = SessId,
+    message_body = #fuse_request{} = FuseRequest}) ->
+    Connection = self(),
+    ?debug("Fuse request: ~p ~p", [FuseRequest, SessId]),
     spawn(fun() ->
-        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, SessId, FuseRequest}),
+        FuseResponse = worker_proxy:call(fslogic_worker, {fuse_request, effective_session_id(Msg), FuseRequest}),
         ?debug("Fuse response: ~p", [FuseResponse]),
         communicator:send(#server_message{
             message_id = Id, message_body = FuseResponse
-        }, SessId)
+        }, Connection)
     end),
     ok;
-route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
+route_and_send_answer(Msg = #client_message{message_id = Id, session_id = _SessId,
     message_body = #proxyio_request{} = ProxyIORequest}) ->
     ?debug("ProxyIO request ~p", [ProxyIORequest]),
+    Connection = self(),
     spawn(fun() ->
         ProxyIOResponse = worker_proxy:call(fslogic_worker,
-            {proxyio_request, SessId, ProxyIORequest}),
+            {proxyio_request, effective_session_id(Msg), ProxyIORequest}),
 
         ?debug("ProxyIO response ~p", [ProxyIOResponse]),
         communicator:send(#server_message{message_id = Id,
-            message_body = ProxyIOResponse}, SessId)
+            message_body = ProxyIOResponse}, Connection)
     end),
     ok;
 route_and_send_answer(#client_message{message_id = Id, session_id = SessId,
     message_body = #dbsync_request{} = DBSyncRequest}) ->
     ?debug("DBSync request ~p", [DBSyncRequest]),
-    Handler = self(),
+    Connection = self(),
     spawn(fun() ->
         DBSyncResponse = worker_proxy:call(dbsync_worker,
             {dbsync_request, SessId, DBSyncRequest}),
 
         ?debug("DBSync response ~p", [DBSyncResponse]),
         communicator:send(#server_message{message_id = Id,
-            message_body = DBSyncResponse}, Handler)
-          end),
+            message_body = DBSyncResponse}, Connection)
+    end),
     ok.
+
+effective_session_id(#client_message{session_id = SessionId, proxy_session_id = undefined}) ->
+    SessionId;
+effective_session_id(#client_message{session_id = _SessionId, proxy_session_id = ProxySessionId}) ->
+    ProxySessionId.

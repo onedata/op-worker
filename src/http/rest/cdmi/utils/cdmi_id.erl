@@ -20,6 +20,7 @@
 %%%--------------------------------------------------------------------
 -module(cdmi_id).
 
+-include_lib("ctool/include/logging.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
@@ -135,7 +136,7 @@ build_objectid(Data) ->
 -spec build_objectid(Enum :: integer(), Data :: binary()) -> binary() | {error, atom()}.
 build_objectid(Enum, Data) when is_binary(Data) ->
     Length = size(Data),
-    case (Length =< 32) of
+    case (Length =< 64) of
         true ->
             Bin = <<0:8, Enum:24, 0:8, Length:8, 0:16, Data/binary>>,
             Crc = crc16(binary_to_list(Bin)),

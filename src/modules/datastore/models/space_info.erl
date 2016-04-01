@@ -13,11 +13,12 @@
 -behaviour(model_behaviour).
 
 -include("modules/datastore/datastore_specific_models_def.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([fetch/2, create_or_update/2]).
+-export([fetch/2, get_or_fetch/2, create_or_update/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -150,15 +151,35 @@ create_or_update(Doc, Diff) ->
 fetch(Client, SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
+    {ok, ProviderIds} = oz_spaces:get_providers(Client, SpaceId),
     case space_info:get(Key) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
+            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name, providers = ProviderIds}},
             {ok, _} = space_info:save(NewDoc),
             {ok, NewDoc};
         {error, {not_found, _}} ->
-            Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
+            Doc = #document{key = Key, value = #space_info{id = Id, name = Name, providers = ProviderIds}},
             {ok, _} = space_info:create(Doc),
             {ok, Doc};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get space details from cache or fetch from OZ and save in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Client, SpaceId) ->
+    Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    case space_info:get(Key) of
+        {ok, #document{} = Doc} ->
+            {ok, Doc};
+        {error, {not_found, _}} ->
+            fetch(Client, SpaceId);
         {error, Reason} ->
             {error, Reason}
     end.

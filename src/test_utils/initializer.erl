@@ -27,13 +27,45 @@
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
-    communicator_mock/1, clean_test_users_and_spaces_no_validate/1]).
+    communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
+    domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%-------------------------------------------------------------------
+%% @doc Makes workers 'think' that all files belong to given SpaceId.
+%%--------------------------------------------------------------------
+-spec assume_all_files_in_space(Config :: list(), SpaceId :: binary()) -> ok.
+assume_all_files_in_space(Config, SpaceId) ->
+    SpaceDoc = #document{key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId), value = #file_meta{}},
+    Workers = ?config(op_worker_nodes, Config),
+    catch test_utils:mock_new(Workers, fslogic_spaces),
+    test_utils:mock_expect(Workers, fslogic_spaces, get_space,
+        fun(_, _) ->
+            {ok, SpaceDoc}
+        end).
+
+
+%%-------------------------------------------------------------------
+%% @doc Reverses assume_all_files_in_space/2
+%%--------------------------------------------------------------------
+-spec clear_assume_all_files_in_space(Config :: list()) -> ok.
+clear_assume_all_files_in_space(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [fslogic_spaces]).
+
+
+%%-------------------------------------------------------------------
+%% @doc Returns provider id based on worker's domain
+%%--------------------------------------------------------------------
+-spec domain_to_provider_id(Domain :: atom()) -> binary().
+domain_to_provider_id(Domain) ->
+    atom_to_binary(Domain, unicode).
+
 
 %%--------------------------------------------------------------------
 %% @doc Setup and mocking related with users and spaces, done on each provider
@@ -55,7 +87,7 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -72,7 +104,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage]).
+    test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 clear_cache(W) ->
@@ -264,6 +296,7 @@ space_storage_mock(Workers, StorageId) ->
 %%--------------------------------------------------------------------
 -spec communicator_mock(Workers :: node() | [node()]) -> ok.
 communicator_mock(Workers) ->
+    timer:sleep(timer:seconds(3)),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _) -> ok end),
     test_utils:mock_expect(Workers, communicator, send, fun(_, _, _) -> ok end).
@@ -273,15 +306,33 @@ communicator_mock(Workers) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc Setup and mocking related with users and spaces, done on one provider
+%% @doc Setup and mocking related with users and spaces on all given providers.
 %%--------------------------------------------------------------------
 -spec create_test_users_and_spaces([Worker :: node()], Config :: list()) -> list().
-create_test_users_and_spaces([], Config) ->
-    Config;
-create_test_users_and_spaces([Worker | Rest], Config) ->
-    StorageId = ?config({storage_id, ?GET_DOMAIN(Worker)}, Config),
-    SameDomainWorkers = get_same_domain_workers(Config, ?GET_DOMAIN(Worker)),
-    initializer:space_storage_mock(SameDomainWorkers, StorageId),
+create_test_users_and_spaces(AllWorkers, Config) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
+    catch test_utils:mock_new(AllWorkers, oneprovider),
+    catch test_utils:mock_new(AllWorkers, oz_providers),
+
+    test_utils:mock_expect(AllWorkers, oz_providers, get_spaces,
+        fun(_PID) ->
+            {ok, [
+                <<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>,
+                <<"space_id5">>, <<"space_id6">>
+            ]}
+        end),
+
+    lists:foreach(fun(Domain) ->
+        StorageId = ?config({storage_id, Domain}, Config),
+
+        CWorkers = get_same_domain_workers(Config, Domain),
+        ProviderId = domain_to_provider_id(Domain),
+        test_utils:mock_expect(CWorkers, oneprovider, get_provider_id,
+            fun() ->
+                ProviderId
+            end),
+        initializer:space_storage_mock(CWorkers, StorageId)
+    end, Domains),
 
     Space1 = {<<"space_id1">>, <<"space_name1">>},
     Space2 = {<<"space_id2">>, <<"space_name2">>},
@@ -301,13 +352,12 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     User4 = {4, [Space4], [Group4]},
     User5 = {5, [Space5, Space6], []},
 
-    file_meta_mock_setup(SameDomainWorkers),
-    oz_spaces_mock_setup(SameDomainWorkers, [Space1, Space2, Space3, Space4, Space5, Space6]),
-    oz_groups_mock_setup(SameDomainWorkers, [Group1, Group2, Group3, Group4]),
+    file_meta_mock_setup(AllWorkers),
+    oz_spaces_mock_setup(AllWorkers, [Space1, Space2, Space3, Space4, Space5, Space6]),
+    oz_groups_mock_setup(AllWorkers, [Group1, Group2, Group3, Group4]),
 
     proplists:compact(
-        initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config)
-        ++ create_test_users_and_spaces(Rest, Config)
+        lists:flatten([initializer:setup_session(W, [User1, User2, User3, User4, User5], Config) || W <- AllWorkers])
     ).
 
 %%--------------------------------------------------------------------
@@ -357,9 +407,15 @@ name(Text, Num) ->
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}]) -> ok.
 oz_spaces_mock_setup(Workers, Spaces) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, oz_spaces),
+    test_utils:mock_expect(Workers, oz_spaces, get_providers,
+        fun(_, _SpaceId) ->
+            {ok, [domain_to_provider_id(Domain) || Domain <- Domains]}
+        end
+    ),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
-        fun(provider, SpaceId) ->
+        fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
             {ok, #space_details{id = SpaceId, name = SpaceName}}
         end
@@ -393,7 +449,7 @@ file_meta_mock_setup(Workers) ->
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after',
         fun(onedata_user, create, _, _, {ok, UUID}) ->
-            file_meta:setup_onedata_user(UUID),
+            file_meta:setup_onedata_user(provider, UUID),
             Self ! onedata_user_setup
         end
     ).

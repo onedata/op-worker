@@ -21,9 +21,12 @@
     session_id :: session:id(),
     file_uuid :: file_meta:uuid(),
     space_uuid :: file_meta:uuid(),
-    storage :: datastore:document(),
+    storage :: datastore:document() | undefined,
+    storage_id :: storage:id(),
     open_mode :: helpers:open_mode(),
-    needs_root_privileges :: boolean()
+    needs_root_privileges :: boolean(),
+    is_local = false :: boolean(),
+    provider_id :: oneprovider:id()
 }).
 
 -endif.

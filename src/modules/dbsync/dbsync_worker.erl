@@ -63,6 +63,7 @@ init(_Args) ->
     Since = 0,
     timer:send_after(?BROADCAST_STATUS_INTERVAL, whereis(dbsync_worker), {timer, bcast_status}),
     timer:send_after(timer:seconds(5), whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, global}}),
     {ok, #{changes_stream => undefined}}.
 
 %%--------------------------------------------------------------------
@@ -81,11 +82,11 @@ init_stream(Since, Until, Queue) ->
                 fun(SpaceId) ->
                     {SpaceId, #batch{since = Since, until = Since}}
                 end, dbsync_utils:get_spaces_for_provider())),
+            timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
             state_put({queue, Queue}, #queue{batch_map = BatchMap, since = Since});
         _ -> ok
     end,
 
-    timer:send_after(?FLUSH_QUEUE_INTERVAL, whereis(dbsync_worker), {timer, {flush_queue, Queue}}),
     couchdb_datastore_driver:changes_start_link(
         fun
             (_, stream_ended, _) ->
@@ -165,8 +166,8 @@ handle({flush_queue, QueueKey}) ->
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
-                        catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
-                    update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    spawn(fun() -> dbsync_proto:send_batch(QueueKey, SpaceId, B) end),
+                    set_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
                     case QueueKey of
                         global -> state_put(global_resume_seq, Until);
                         _ -> ok
@@ -511,6 +512,26 @@ update_current_seq(ProviderId, SpaceId, SeqNum) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sets sequence number for given Provider and Space.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_current_seq(oneprovider:id(), SpaceId :: binary(), SeqNum :: non_neg_integer()) ->
+    ok.
+set_current_seq(ProviderId, SpaceId, SeqNum) ->
+    Key = {current_seq, ProviderId, SpaceId},
+    OldValue = state_get(Key),
+    OP =
+        fun(undefined) ->
+            SeqNum;
+            (CurrentSeq) ->
+                max(SeqNum, CurrentSeq)
+        end,
+
+    state_put(Key, OP(OldValue)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Gets sequence number for local provider and given Space.
 %% @end
 %%--------------------------------------------------------------------
@@ -561,7 +582,7 @@ bcast_status() ->
     ok | no_return().
 on_status_received(ProviderId, SpaceId, SeqNum) ->
     CurrentSeq = get_current_seq(ProviderId, SpaceId),
-%%    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
+    ?info("Received status ~p ~p: ~p vs current ~p", [ProviderId, SpaceId, SeqNum, CurrentSeq]),
     case SeqNum > CurrentSeq of
         true ->
             do_request_changes(ProviderId, CurrentSeq, SeqNum);

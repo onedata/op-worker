@@ -109,7 +109,7 @@ decode_term(Data) ->
 %%--------------------------------------------------------------------
 -spec gen_request_id() -> binary().
 gen_request_id() ->
-    base64:encode(crypto:rand_bytes(32)).
+    http_utils:base64url_encode(crypto:rand_bytes(32)).
 
 
 %%--------------------------------------------------------------------

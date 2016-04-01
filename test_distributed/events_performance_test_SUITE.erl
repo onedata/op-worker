@@ -504,13 +504,15 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Self = self(),
     Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
+    timer:sleep(timer:seconds(3)),
     test_utils:mock_new(Workers, communicator),
     test_utils:mock_expect(Workers, communicator, send, fun
         (#write_subscription{} = Msg, _) -> Self ! Msg, ok;
         (#subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
         (_, _) -> ok
     end),
-    Config;
+    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    initializer:create_test_users_and_spaces(Config);
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -518,22 +520,27 @@ init_per_testcase(_, Config) ->
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
     initializer:remove_pending_messages(),
+    timer:sleep(timer:seconds(3)),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
     end),
+
+    ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
     session_setup(Worker, SessId, Iden, Self),
-    [{session_id, SessId} | Config].
+    initializer:create_test_users_and_spaces([{session_id, SessId} | Config]).
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
-    test_utils:mock_validate_and_unload(Worker, communicator).
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    test_utils:mock_validate_and_unload(Workers, communicator).
 
 %%%===================================================================
 %%% Internal functions

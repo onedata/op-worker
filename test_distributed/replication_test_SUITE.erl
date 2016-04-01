@@ -200,7 +200,7 @@ write_should_add_blocks_to_file_location(Config) ->
     {ok, [LocationId]} = ?assertMatch({ok, [_]}, rpc:call(W1, file_meta, get_locations, [{uuid, FileUuid}])),
     {ok, LocationDoc = #document{value = Location = #file_location{blocks = Blocks, size = Size, provider_id = ProviderId}}} =
         ?assertMatch({ok, _}, rpc:call(W1, file_location, get, [LocationId])),
-    ?assertEqual(atom_to_binary(?GET_DOMAIN(W1), unicode), ProviderId),
+    ?assertEqual(initializer:domain_to_provider_id(?GET_DOMAIN(W1)), ProviderId),
     ?assertEqual(10, Size),
     [Block] = ?assertMatch([#file_block{offset = 0, size = 10}], Blocks),
 
@@ -268,7 +268,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
 
 update_should_bump_replica_version(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    ProviderId = atom_to_binary(?GET_DOMAIN(W1), unicode),
+    ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(W1)),
     SessionId = <<"session_id1">>,
     {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
     {ok, Handle} = lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr),
@@ -757,7 +757,6 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
-    mock_provider_id(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -765,27 +764,13 @@ end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     tracer:start(Workers),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces(Config),
-    unmock_provider_id(Config),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     application:stop(ssl2).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-mock_provider_id(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [oneprovider]),
-    test_utils:mock_expect(Workers, oneprovider, get_provider_id,
-        fun() ->
-            atom_to_binary(?GET_DOMAIN(node()), unicode)
-        end
-    ).
-
-unmock_provider_id(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, oneprovider).
 
 bump_version(LocationDoc, 0) ->
     LocationDoc;
