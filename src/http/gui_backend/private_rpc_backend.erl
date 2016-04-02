@@ -40,21 +40,25 @@ handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
     }} = oz_spaces:get_details(UserAuth, SpaceID),
     {ok, SpaceName};
 
-handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     ok = oz_users:leave_space(UserAuth, SpaceId);
 
-handle(<<"userToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"userToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, Token} = oz_spaces:get_invite_user_token(UserAuth, SpaceId),
     {ok, Token};
 
-handle(<<"groupToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"groupToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, Token} = oz_spaces:get_invite_group_token(UserAuth, SpaceId),
     {ok, Token};
 
-handle(<<"supportToken">>, [{<<"spaceId">>, SpaceId}]) ->
+handle(<<"supportToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, Token} = oz_spaces:get_invite_provider_token(UserAuth, SpaceId),
     {ok, Token}.

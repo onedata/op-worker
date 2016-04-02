@@ -31,44 +31,6 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 
-% @todo dev
--export([something_changed/0]).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @todo temporal solution - until events are used in GUI
-%% Lists all spaces again and pushes the data to the client to impose refresh.
-%% @end
-%%--------------------------------------------------------------------
--spec something_changed() -> ok.
-something_changed() ->
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                g_session:set_session_id(SessionId),
-                {ok, Data} = find_all(<<"data-space">>),
-                DefSpace = op_gui_utils:get_users_default_space(),
-                lists:map(
-                    fun(Props) ->
-                        case proplists:get_value(<<"id">>, Props) of
-                            DefSpace ->
-                                [{<<"isDefault">>, true} |
-                                    proplists:delete(<<"isDefault">>, Props)];
-                            _ ->
-                                Props
-                        end
-                    end, Data),
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_updated(<<"data-space">>, Data, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok.
-
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -80,11 +42,6 @@ something_changed() ->
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    % Resolve default space and put it in session memory
-    % NOTE that SpaceDir UUID is remembered rather than Space ID
-%%    DefaultSpaceId = op_gui_utils:get_users_default_space(),
-%%    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(DefaultSpaceId),
-%%    g_session:put_value(?DEFAULT_SPACE_KEY, DefaultSpaceDirId),
     op_gui_utils:register_backend(?MODULE, self()),
     ok.
 
@@ -111,17 +68,24 @@ find(<<"data-space">>, [SpaceDirId]) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
+            providers = Providers,
             name = Name
         }}} = space_info:get(SpaceId),
-    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
-        op_gui_utils:get_users_default_space()),
-    Res = [
-        {<<"id">>, SpaceDirId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
-        {<<"rootDir">>, SpaceDirId}
-    ],
-    {ok, Res}.
+    % Allow only spaces that are supported by this provider
+    case lists:member(oneprovider:get_provider_id(), Providers) of
+        true ->
+            DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
+                op_gui_utils:get_users_default_space()),
+            Res = [
+                {<<"id">>, SpaceDirId},
+                {<<"name">>, Name},
+                {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
+                {<<"rootDir">>, SpaceDirId}
+            ],
+            {ok, Res};
+        false ->
+            gui_error:report_error(<<"Space not supported by this provider">>)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -132,23 +96,19 @@ find(<<"data-space">>, [SpaceDirId]) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
-    UserId = op_gui_utils:get_user_id(),
-    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
-    Res = lists:filtermap(
-        fun(SpaceId) ->
-            {ok, #document{
-                value = #space_info{
-                    providers = Providers
-                }}} = space_info:get(SpaceId),
-            case lists:member(oneprovider:get_provider_id(), Providers) of
-                false ->
-                    false;
-                true ->
-                    SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                    {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
-                    {true, SpaceData}
+    SessionId = g_session:get_session_id(),
+    {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
+        {path, <<"/spaces">>}, 0, 1000),
+    Res = lists:foldl(
+        fun({SpaceDirId, _SpaceName}, Acc) ->
+            % Returns error when this space is not supported by this provider
+            case find(<<"data-space">>, [SpaceDirId]) of
+                {ok, Data} ->
+                    Acc ++ Data;
+                _ ->
+                    Acc
             end
-        end, SpaceIds),
+        end, [], SpaceDirs),
     {ok, Res}.
 
 

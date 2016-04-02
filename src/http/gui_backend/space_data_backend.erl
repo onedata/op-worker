@@ -29,8 +29,9 @@
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
-% @todo dev
--export([support/1, something_changed/0]).
+
+%%% @todo dev
+-export([support/1]).
 support(Token) ->
     {ok, SpaceId} = oz_providers:support_space(provider, [
         {<<"token">>, Token}, {<<"size">>, <<"10000000">>}
@@ -38,41 +39,6 @@ support(Token) ->
     {ok, Storage} = storage:get_by_name(<<"/mnt/st1">>),
     StorageId = storage:id(Storage),
     {ok, _} = space_storage:add(SpaceId, StorageId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @todo temporal solution - until events are used in GUI
-%% Lists all spaces again and pushes the data to the client to impose refresh.
-%% @end
-%%--------------------------------------------------------------------
--spec something_changed() -> ok.
-something_changed() ->
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                g_session:set_session_id(SessionId),
-                {ok, Data} = find_all(<<"space">>),
-                DefSpace = op_gui_utils:get_users_default_space(),
-                lists:map(
-                    fun(Props) ->
-                        case proplists:get_value(<<"id">>, Props) of
-                            DefSpace ->
-                                [{<<"isDefault">>, true} |
-                                    proplists:delete(<<"isDefault">>, Props)];
-                            _ ->
-                                Props
-                        end
-                    end, Data),
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_updated(<<"space">>, Data, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok.
 
 
 %%%===================================================================
@@ -108,98 +74,43 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"space">>, [SpaceId]) ->
-    {ok, #document{
-        value = #space_info{
-            name = Name,
-            size = _Size,
-            users = UsersAndPerms,
-            groups = GroupPerms,
-            providers = _Providers
-        }}} = space_info:get(SpaceId),
-
-    UserPermissions = lists:map(
-        fun({UserId, _UserPerms}) ->
-            ids_to_association(UserId, SpaceId)
-        end, UsersAndPerms),
-
-    GroupPermissions = lists:map(
-        fun({GroupId, _GroupPerms}) ->
-            ids_to_association(GroupId, SpaceId)
-        end, GroupPerms),
-
-    DefaultSpaceId = op_gui_utils:get_users_default_space(),
-    Res = [
-        {<<"id">>, SpaceId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
-        {<<"userPermissions">>, UserPermissions},
-        {<<"groupPermissions">>, GroupPermissions}
-    ],
+find(<<"space">>, SpaceDirIds) ->
+    Res = lists:map(
+        fun(SpaceDirId) ->
+            space_record(SpaceDirId)
+        end, SpaceDirIds),
     {ok, Res};
 
 
-find(<<"space-user-permission">>, [AssocId]) ->
-    {UserId, SpaceId} = association_to_ids(AssocId),
-    {ok, #document{
-        value = #space_info{
-            users = UsersAndPerms
-        }}} = space_info:get(SpaceId),
-    UserPerms = proplists:get_value(UserId, UsersAndPerms),
-    PermsMapped = lists:map(
-        fun(SpacePerm) ->
-            HasPerm = lists:member(SpacePerm, UserPerms),
-            {perm_db_to_gui(SpacePerm), HasPerm}
-        end, all_space_perms()),
-    Res = PermsMapped ++ [
-        {<<"id">>, AssocId},
-        {<<"space">>, SpaceId},
-        {<<"user">>, UserId}
-    ],
+find(<<"space-user-permission">>, AssocIds) ->
+    Res = lists:map(
+        fun(AssocId) ->
+            space_user_permission_record(AssocId)
+        end, AssocIds),
     {ok, Res};
 
 
-find(<<"space-user">>, [UserId]) ->
-    {ok, #document{
-        value = #onedata_user{
-            name = Name
-        }}} = onedata_user:get(UserId),
-    Res = [
-        {<<"id">>, UserId},
-        {<<"name">>, Name}
-    ],
+find(<<"space-user">>, UserIds) ->
+    Res = lists:map(
+        fun(UserId) ->
+            space_user_record(UserId)
+        end, UserIds),
     {ok, Res};
 
 
-find(<<"space-group-permission">>, [AssocId]) ->
-    {GroupId, SpaceId} = association_to_ids(AssocId),
-    {ok, #document{
-        value = #space_info{
-            groups = GroupsAndPerms
-        }}} = space_info:get(SpaceId),
-    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
-    PermsMapped = lists:map(
-        fun(SpacePerm) ->
-            HasPerm = lists:member(SpacePerm, GroupPerms),
-            {perm_db_to_gui(SpacePerm), HasPerm}
-        end, all_space_perms()),
-    Res = PermsMapped ++ [
-        {<<"id">>, AssocId},
-        {<<"space">>, SpaceId},
-        {<<"group">>, GroupId}
-    ],
+find(<<"space-group-permission">>, AssocIds) ->
+    Res = lists:map(
+        fun(AssocId) ->
+            space_group_permission_record(AssocId)
+        end, AssocIds),
     {ok, Res};
 
 
-find(<<"space-group">>, [GroupId]) ->
-    {ok, #document{
-        value = #onedata_group{
-            name = Name
-        }}} = onedata_group:get(GroupId),
-    Res = [
-        {<<"id">>, GroupId},
-        {<<"name">>, Name}
-    ],
+find(<<"space-group">>, GroupIds) ->
+    Res = lists:map(
+        fun(GroupId) ->
+            space_group_record(GroupId)
+        end, GroupIds),
     {ok, Res}.
 
 
@@ -216,7 +127,8 @@ find_all(<<"space">>) ->
     Res = lists:filtermap(
         fun(SpaceId) ->
             try
-                {ok, SpaceData} = find(<<"space">>, [SpaceId]),
+                SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                {ok, [SpaceData]} = find(<<"space">>, [SpaceDirId]),
                 {true, SpaceData}
             catch _:_ ->
                 ?error("Cannot resolve space data: ~p", [SpaceId]),
@@ -249,8 +161,9 @@ create_record(<<"space">>, Data) ->
     % todo error handling
     Name = proplists:get_value(<<"name">>, Data, <<"">>),
     {ok, SpaceId} = oz_users:create_space(UserAuth, [{<<"name">>, Name}]),
+    SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, [
-        {<<"id">>, SpaceId},
+        {<<"id">>, SpaceDirId},
         {<<"name">>, Name},
         {<<"isDefault">>, false},
         {<<"userPermissions">>, []},
@@ -266,7 +179,8 @@ create_record(<<"space">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"space">>, SpaceId, Data) ->
+update_record(<<"space">>, SpaceDirId, Data) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     % todo error handling
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case proplists:get_value(<<"isDefault">>, Data, undefined) of
@@ -288,8 +202,9 @@ update_record(<<"space">>, SpaceId, Data) ->
 
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
+    {UserId, SpaceDirId} = association_to_ids(AssocId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {UserId, SpaceId} = association_to_ids(AssocId),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
@@ -300,13 +215,15 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             Perm = perm_gui_to_db(PermGui),
             case Flag of
                 true ->
-                    PermsAcc -- [Perm] ++ [Perm];
+                    PermsAcc ++ [Perm];
                 false ->
                     PermsAcc -- [Perm]
             end
         end, UserPerms, Data),
-    oz_spaces:set_user_privileges(UserAuth, SpaceId, UserId, [
-        {<<"privileges">>, NewUserPerms}
+
+    Res = oz_spaces:set_user_privileges(UserAuth, SpaceId, UserId, [
+        % usort - make sure there are no duplicates
+        {<<"privileges">>, lists:usort(NewUserPerms)}
     ]),
     ok.
 
@@ -318,8 +235,9 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"space">>, SpaceId) ->
+delete_record(<<"space">>, SpaceDirId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     oz_spaces:remove(UserAuth, SpaceId),
     ok.
 
@@ -327,6 +245,100 @@ delete_record(<<"space">>, SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+space_record(SpaceDirId) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {ok, #document{
+        value = #space_info{
+            name = Name,
+            size = _Size,
+            users = UsersAndPerms,
+            groups = GroupPerms,
+            providers = _Providers
+        }}} = space_info:get(SpaceId),
+
+    UserPermissions = lists:map(
+        fun({UserId, _UserPerms}) ->
+            ids_to_association(UserId, SpaceDirId)
+        end, UsersAndPerms),
+
+    GroupPermissions = lists:map(
+        fun({GroupId, _GroupPerms}) ->
+            ids_to_association(GroupId, SpaceDirId)
+        end, GroupPerms),
+
+    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
+        op_gui_utils:get_users_default_space()),
+    [
+        {<<"id">>, SpaceDirId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
+        {<<"userPermissions">>, UserPermissions},
+        {<<"groupPermissions">>, GroupPermissions}
+    ].
+
+
+space_user_permission_record(AssocId) ->
+    {UserId, SpaceDirId} = association_to_ids(AssocId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {ok, #document{
+        value = #space_info{
+            users = UsersAndPerms
+        }}} = space_info:get(SpaceId),
+    UserPerms = proplists:get_value(UserId, UsersAndPerms),
+    PermsMapped = lists:map(
+        fun(SpacePerm) ->
+            HasPerm = lists:member(SpacePerm, UserPerms),
+            {perm_db_to_gui(SpacePerm), HasPerm}
+        end, all_space_perms()),
+    PermsMapped ++ [
+        {<<"id">>, AssocId},
+        {<<"space">>, SpaceDirId},
+        {<<"user">>, UserId}
+    ].
+
+
+space_user_record(UserId) ->
+    {ok, #document{
+        value = #onedata_user{
+            name = Name
+        }}} = onedata_user:get(UserId),
+    [
+        {<<"id">>, UserId},
+        {<<"name">>, Name}
+    ].
+
+
+space_group_permission_record(AssocId) ->
+    {GroupId, SpaceDirId} = association_to_ids(AssocId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {ok, #document{
+        value = #space_info{
+            groups = GroupsAndPerms
+        }}} = space_info:get(SpaceId),
+    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+    PermsMapped = lists:map(
+        fun(SpacePerm) ->
+            HasPerm = lists:member(SpacePerm, GroupPerms),
+            {perm_db_to_gui(SpacePerm), HasPerm}
+        end, all_space_perms()),
+    PermsMapped ++ [
+        {<<"id">>, AssocId},
+        {<<"space">>, SpaceDirId},
+        {<<"group">>, GroupId}
+    ].
+
+
+space_group_record(GroupId) ->
+    {ok, #document{
+        value = #onedata_group{
+            name = Name
+        }}} = onedata_group:get(GroupId),
+    [
+        {<<"id">>, GroupId},
+        {<<"name">>, Name}
+    ].
 
 
 ids_to_association(FirstId, SecondId) ->

@@ -23,62 +23,9 @@
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
--export([process_file_meta_change/3]).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @todo temporal solution - until events are used in GUI
-%% Processes file_meta model changes and informs Ember client about changes.
-%% @end
-%%--------------------------------------------------------------------
--spec process_file_meta_change(Method :: model_behaviour:model_action(),
-    Context :: term(), ReturnValue :: term()) -> ok.
-% @TODO FILTROWANIE - PACZ NA fslogic_context:set_space_id
-process_file_meta_change(create, [#document{key = FileId} = Doc], _ReturnValue) ->
-    ?alert("Create: ~p", [FileId]),
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                {ok, Data} = file_record(SessionId, FileId),
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_created(<<"file">>, Data, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok;
-process_file_meta_change(update, [FileId, _Changes], _ReturnValue) ->
-    ?alert("Update: ~p", [FileId]),
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                {ok, Data} = file_record(SessionId, FileId),
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_updated(<<"file">>, Data, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok;
-process_file_meta_change(delete, [FileId, _DeleteFun], _ReturnValue) ->
-    ?alert("Delete: ~p", [FileId]),
-    lists:foreach(
-        fun({SessionId, Pids}) ->
-            try
-                lists:foreach(
-                    fun(Pid) ->
-                        gui_async:push_deleted(<<"file">>, FileId, Pid)
-                    end, Pids)
-            catch T:M ->
-                ?dump({T, M, erlang:get_stacktrace()})
-            end
-        end, op_gui_utils:get_all_backend_pids(?MODULE)),
-    ok.
+%% @todo (VFS-1865) Temporal solution for GUI push updates
+-export([file_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -261,7 +208,6 @@ delete_record(<<"file">>, Id) ->
     end.
 
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -275,8 +221,7 @@ delete_record(<<"file">>, Id) ->
 %%--------------------------------------------------------------------
 -spec get_parent(SessionId :: binary(), UUID :: binary()) -> binary().
 get_parent(SessionId, UUID) ->
-    {ok, ParentUUID} = logical_file_manager:get_parent(
-        SessionId, {uuid, UUID}),
+    {ok, ParentUUID} = logical_file_manager:get_parent(SessionId, {uuid, UUID}),
     case logical_file_manager:get_file_path(SessionId, ParentUUID) of
         {ok, <<"/spaces">>} ->
             get_spaces_dir_uuid(SessionId);
