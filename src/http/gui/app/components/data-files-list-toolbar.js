@@ -86,12 +86,17 @@ export default Ember.Component.extend({
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
 
+  resumable: function() {
+    return this.get('fileUpload.fileUploadComponent.resumable');
+  }.property('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
+
   resumableJsChange: function() {
-    let resumable = this.get('fileUpload.fileUploadComponent.resumable');
+    let resumable = this.get('resumable');
+    console.debug(`Toolbar resumable changed dir id: ${this.get('fileUpload.fileUploadComponent.dir.id')}`);
     if (resumable) {
       resumable.assignBrowse(this.$().find('#toolbar-file-browse'));
     }
-  }.observes('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
+  }.observes('resumable'),
 
   makeTooltips: function() {
     Ember.run.scheduleOnce('afterRender', this, function() {

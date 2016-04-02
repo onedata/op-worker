@@ -21,8 +21,20 @@ export default Ember.Component.extend({
   },
 
   didInsertElement() {
-    this.bindFileUpload();
+    this.resumableJsChange();
   },
+
+  resumable: function() {
+    return this.get('fileUpload.fileUploadComponent.resumable');
+  }.property('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
+
+  resumableJsChange: function() {
+    let resumable = this.get('resumable');
+    console.debug(`Browser resumable changed dir id: ${this.get('fileUpload.fileUploadComponent.dir.id')}`);
+    if (resumable) {
+      this.bindFileUpload();
+    }
+  }.observes('resumable'),
 
   actions: {
     openFile(file) {
