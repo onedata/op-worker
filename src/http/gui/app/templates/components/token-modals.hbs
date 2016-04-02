@@ -4,8 +4,18 @@
   {{#bs-modal-body}}
     {{#if inviteToken}}
       {{#bs-form model=this}}
-        {{bs-form-element controlType="text" property="inviteToken" autofocus=true
-          label=modalLabel}}
+        <div class="modal-row">
+          {{modalLabel}}
+        </div>
+        <div class="input-with-button modal-row">
+          {{bs-form-element controlType="text" property="inviteToken" autofocus=true id="invite-token"}}
+          {{#copy-button success='copySuccess' error='copyError'
+            clipboardTarget='#invite-token' class="btn btn-primary btn-right"}}
+           {{icon 'copy'}}
+         {{/copy-button}}
+        </div>
+
+
       {{/bs-form}}
     {{else}}
         <div class="modal-loading">

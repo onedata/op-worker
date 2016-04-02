@@ -3,6 +3,7 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   i18n: Ember.inject.service(),
   oneproviderServer: Ember.inject.service(),
+  notify: Ember.inject.service(),
 
   /** Current space that modals will use to act */
   space: null,
@@ -25,6 +26,11 @@ export default Ember.Component.extend({
     return this.get('i18n').t(`components.tokenModals.${this.get('type')}.label`);
   }.property('type'),
 
+  selectTokenText() {
+    let input = this.$().find('input')[0];
+    input.setSelectionRange(0, input.value.length);
+  },
+
   actions: {
     getToken() {
       let type = this.get('type');
@@ -37,6 +43,13 @@ export default Ember.Component.extend({
           console.error(`Token ${type} fetch failed: ` + JSON.stringify(error));
         }
       );
-    }
+    },
+    copySuccess() {
+      this.get('notify').info(this.get('i18n').t('common.notify.clipboardSuccess'));
+    },
+    copyError() {
+      this.selectTokenText();
+      this.get('notify').warn(this.get('i18n').t('common.notify.clipboardFailure'));
+    },
   }
 });

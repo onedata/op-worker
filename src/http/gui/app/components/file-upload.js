@@ -10,11 +10,13 @@ export default Ember.Component.extend({
   dir: null,
 
   uploadAddress: '/upload',
+
   resumable: function() {
     if (!this.get('dir.id')) {
       return null;
     }
 
+    console.debug(`Crenating new Resumable with dir id: ${this.get('dir.id')}`);
     let r = new Resumable({
       target: this.get('uploadAddress'),
       chunkSize: 1*1024*1024,
@@ -88,7 +90,7 @@ export default Ember.Component.extend({
     });
 
     return r;
-  }.property('uploadAddress', 'dir.id'),
+  }.property('uploadAddress', 'dir', 'dir.id'),
 
   registerComponentInService: function() {
     this.get('fileUploadService').set('fileUploadComponent', this);
