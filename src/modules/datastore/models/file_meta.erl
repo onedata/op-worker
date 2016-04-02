@@ -602,7 +602,7 @@ setup_onedata_user(Client, UUID) ->
                                     ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                                 }})
                 end
-            end, Spaces),
+                          end, Spaces),
 
             {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
                 #document{key = fslogic_uuid:default_space_uuid(UUID),
