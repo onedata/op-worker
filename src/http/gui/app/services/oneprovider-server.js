@@ -28,5 +28,11 @@ export default Ember.Service.extend({
     return this.get('server').privateRPC(`${type}Token`, {
       spaceId: spaceId
     });
+  },
+
+  fileUploadComplete(fileId) {
+    return this.get('server').privateRPC('fileUploadComplete', {
+      fileId: fileId
+    });
   }
 });

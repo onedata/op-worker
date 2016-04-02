@@ -14,6 +14,7 @@ export default {
       cancel: 'Cancel',
       yes: 'Yes',
       no: 'No',
+      close: 'Close',
       fetchingToken: 'Fetching token...',
       fetchingTokenError: 'Fetching token failed!',
     },
@@ -125,7 +126,8 @@ export default {
         permissions: 'Change element permissions',
         copy: 'Copy element',
         cut: 'Cut element',
-        remove: 'Remove element'
+        remove: 'Remove element',
+        chunks: 'Show file chunks'
       },
       renameFileModal: {
         title: 'Rename file or directory',
@@ -146,6 +148,9 @@ export default {
       editPermissionsModal: {
         title: 'Edit permissions',
         text: 'Enter new file permissions code:'
+      },
+      fileChunksModal: {
+        title: 'File chunks'
       },
     },
     fileUpload: {

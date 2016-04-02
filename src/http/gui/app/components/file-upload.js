@@ -5,6 +5,7 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   fileUploadService: Ember.inject.service('file-upload'),
   notify: Ember.inject.service('notify'),
+  oneproviderServer: Ember.inject.service(),
 
   /** Dir to put files into */
   dir: null,
@@ -23,7 +24,16 @@ export default Ember.Component.extend({
       simultaneousUploads: 4,
       testChunks: false,
       throttleProgressCallbacks: 1,
-      query: {parentId: this.get('dir.id')}
+      query: {parentId: this.get('dir.id')},
+      generateUniqueIdentifier: function() {
+        let date = new Date().getTime();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
+          function (character) {
+            let random = (date + Math.random() * 16) % 16 | 0;
+            date = Math.floor(date / 16);
+            return (character === 'x' ? random : (random & 0x7 | 0x8)).toString(16);
+          });
+      }
     });
 
     Ember.run.scheduleOnce('afterRender', this, function() {
@@ -65,6 +75,8 @@ export default Ember.Component.extend({
       r.on('fileSuccess', (file/*, message*/) => {
         $('.resumable-file-'+file.uniqueIdentifier+' .resumable-file-progress').html('(completed)');
         this.get('notify').info(`File "${file.fileName}" uploaded successfully!`);
+
+        this.get('oneproviderServer').fileUploadComplete(file.uniqueIdentifier);
       });
 
       r.on('fileError', (file, message) => {

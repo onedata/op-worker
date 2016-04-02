@@ -3,9 +3,12 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   notify: Ember.inject.service('notify'),
   fileUpload: Ember.inject.service('fileUpload'),
+  store: Ember.inject.service(),
 
   tagName: 'ul',
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
+
+  fileForChunks: null,
 
   /**
    * Holds items of toolbar. Each item is a Object with properties:
@@ -83,6 +86,13 @@ export default Ember.Component.extend({
         disabled: !this.get('dir.isSomeFileSelected'),
         tooltip: i18n.t('components.dataFilesListToolbar.tooltip.remove')
       },
+      {
+        id: 'file-chunks-tool',
+        icon: 'provider',
+        action: 'showChunks',
+        disabled: !this.get('dir.singleSelectedFile'),
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.chunks')
+      },
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
 
@@ -147,6 +157,38 @@ export default Ember.Component.extend({
       this.set('newPermissions', '');
       this.set('isEditingPermissions', true);
     },
+
+    showChunks() {
+      this.set('isFileChunksModal', true);
+      this.set('fileForChunks', this.get('dir.singleSelectedFile'));
+      let fileId = this.get('dir.id');
+      // TODO: if fileId null...
+
+      this.set('fileBlocks', [
+        new Ember.Object({
+          fileId: fileId,
+          blocks: [1,39,90,99],
+          provider: new Ember.Object({name: 'foo'})
+        }),
+        new Ember.Object({
+          fileId: fileId,
+          blocks: [40, 70, 80, 89],
+          provider: new Ember.Object({name: 'fighters'})
+        }),
+        new Ember.Object({
+          fileId: fileId,
+          blocks: [71,79],
+          provider: new Ember.Object({name: 'bar'})
+        }),
+      ]);
+
+      // TODO
+      // this.get('store').query('file-blocks', { filter: { fileId: fileId } }).then((fbs) => {
+      //   this.set('fileBlocks', fbs);
+      // });
+    },
+
+    // TODO: set fileForChunks to null on close
 
     uploadBrowse() {
       this.$('#toolbar-file-browse').trigger('click');

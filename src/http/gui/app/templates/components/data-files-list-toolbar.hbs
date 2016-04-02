@@ -126,6 +126,38 @@
   {{/bs-modal-footer}}
 {{/bs-modal}}
 
+{{!-- FILE CHUNKS --}}
+
+{{#bs-modal open=isFileChunksModal body=false footer=false
+    title="Feature not implemented"
+    id="file-chunks"}}
+  {{#bs-modal-body}}
+
+    {{!-- TODO: loader throbber when fileChunks is null --}}
+    Showing chunks for file: {{fileForChunks.name}}
+
+    {{!-- TODO: there is assumption that every fb has other provider --}}
+    <table>
+    {{#each fileBlocks as |fb|}}
+      <tr>
+        <td>
+          {{fb.provider.name}}
+        </td>
+        <td>
+          {{file-chunks-bar file=dir.singleSelectedFile fileBlocks=fb}}
+        </td>
+      </tr>
+    {{/each}}
+    </table>
+
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button action=(action "close" target=footer) type="primary"}}
+      {{t "common.modal.close"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
 {{!-- NOT IMPLEMENTED --}}
 
 {{#bs-modal open=isNotImplementedModal body=false footer=false
