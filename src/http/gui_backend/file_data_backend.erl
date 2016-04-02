@@ -88,8 +88,10 @@ find_query(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 
 
-find_query(<<"file-blocks">>, [{<<"file">>, FileId}]) ->
+find_query(<<"file-distribution">>, [{<<"filter">>, [{<<"fileId">>, FileId}]}]) ->
     {ok, Locations} = file_meta:get_locations({uuid, FileId}),
+    ?dump(FileId),
+    ?dump(Locations),
     Res = lists:map(
         fun(LocationId) ->
             {ok, #document{value = #file_location{
@@ -99,7 +101,9 @@ find_query(<<"file-blocks">>, [{<<"file">>, FileId}]) ->
             BlocksList = case Blocks of
                 [] ->
                     % @todo LOL!~
-                    [0, 3];
+                    % ABY ZAMOKOWAC, ODKOMENTUJ!
+%%                    [123423, 2023401, 3023401, 3523401, 5023401, 6023401];
+                    [0, 0];
                 _ ->
                     lists:foldl(
                         fun(#file_block{offset = Offset, size = Size}, Acc) ->
@@ -107,7 +111,8 @@ find_query(<<"file-blocks">>, [{<<"file">>, FileId}]) ->
                         end, [], Blocks)
             end,
             [
-                {<<"file">>, FileId},
+                {<<"id">>, ids_to_association(FileId, ProviderId)},
+                {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
                 {<<"blocks">>, BlocksList}
             ]
@@ -343,3 +348,12 @@ file_record(SessionId, FileId) ->
         {<<"children">>, ChildrenIds}
     ],
     {ok, Res}.
+
+
+ids_to_association(FirstId, SecondId) ->
+    <<FirstId/binary, "@", SecondId/binary>>.
+
+
+association_to_ids(AssocId) ->
+    [FirstId, SecondId] = binary:split(AssocId, <<"@">>, [global]),
+    {FirstId, SecondId}.

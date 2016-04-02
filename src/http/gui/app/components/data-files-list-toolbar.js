@@ -161,10 +161,10 @@ export default Ember.Component.extend({
     showChunks() {
       this.set('isFileChunksModal', true);
       this.set('fileForChunks', this.get('dir.singleSelectedFile'));
-      let fileId = this.get('dir.id');
+      let fileId = this.get('fileForChunks.id');
       // TODO: if fileId null...
 
-      this.get('store').query('file-blocks', { filter: { fileId: fileId } }).then(
+      this.get('store').query('file-distribution', { filter: { fileId: fileId } }).then(
         (fbs) => {
           this.set('fileBlocks', fbs);
         },

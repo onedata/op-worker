@@ -12,7 +12,6 @@ export default Ember.Component.extend({
 
   // should use new everytime?
   redrawCanvas: function() {
-    debugger;
 
     if (this.get('file.size') && this.get('fileBlocks.blocks')) {
       new FileChunksBar(this.get('canvas'), {
