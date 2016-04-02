@@ -265,14 +265,14 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
             case Name of
                 <<"cdmi_size">> -> %todo clarify what should be written to cdmi_size for directories
                     [{<<"cdmi_size">>, integer_to_binary(Attrs#file_attr.size)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
-                <<"cdmi_ctime">> -> %todo format times into yyyy-mm-ddThh-mm-ss.ssssssZ
-                    [{<<"cdmi_ctime">>, integer_to_binary(Attrs#file_attr.ctime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                <<"cdmi_ctime">> ->
+                    [{<<"cdmi_ctime">>, epoch_to_iso8601(Attrs#file_attr.ctime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_atime">> ->
-                    [{<<"cdmi_atime">>, integer_to_binary(Attrs#file_attr.atime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    [{<<"cdmi_atime">>, epoch_to_iso8601(Attrs#file_attr.atime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_mtime">> ->
-                    [{<<"cdmi_mtime">>, integer_to_binary(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    [{<<"cdmi_mtime">>, epoch_to_iso8601(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_owner">> ->
-                    [{<<"cdmi_owner">>, integer_to_binary(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    [{<<"cdmi_owner">>, epoch_to_iso8601(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 ?ACL_XATTR_NAME ->
                     case onedata_file_api:get_acl(Auth, FileKey) of
                         {ok, Acl} ->
@@ -283,3 +283,12 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
             end;
         false -> prepare_cdmi_metadata(Rest, Auth, FileKey, Attrs, Prefix)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convert unix epoch to iso8601 format.
+%% @end
+%%--------------------------------------------------------------------
+-spec epoch_to_iso8601(Epoch :: non_neg_integer()) -> binary().
+epoch_to_iso8601(Epoch) ->
+    iso8601:format({Epoch div 1000000, Epoch rem 1000000, 0}).
