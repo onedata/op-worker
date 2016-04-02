@@ -100,32 +100,6 @@
   // TODO: style
   position: relative;
 
-  &.file-drag {
-    .drop-area {
-      display: block;
-    }
-  }
-
-  .drop-area {
-    display: none;
-    z-index: 100;
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    right: 20px;
-    bottom: 20px;
-    background-color: rgba($onedata-light-gray, 0.75);
-    border: 4px dashed $onedata-graphite;
-    border-radius: 10px;
-
-    .oneicon {
-      display: block;
-      font-size: 200px;
-      height: 100%;
-      text-align: center;
-    }
-  }
-
   thead {
     th {
       padding: 8px;
@@ -176,4 +150,30 @@
 
 .dropdown.open .oneicon.oneicon-settings {
     color: $onedata-red;
+}
+
+&.file-drag {
+  .drop-area {
+    display: block;
+  }
+}
+
+.drop-area {
+  display: none;
+  z-index: 100;
+  position: fixed;
+  top: $top-bar-height + 20px;
+  left: $sidebar-width + $secondary-sidebar-width + 20px;
+  right: 20px;
+  bottom: 20px;
+  background-color: rgba($onedata-light-gray, 0.75);
+  border: 4px dashed $onedata-graphite;
+  border-radius: 10px;
+
+  .oneicon {
+    display: block;
+    font-size: 200px;
+    height: 100%;
+    text-align: center;
+  }
 }

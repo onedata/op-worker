@@ -18,6 +18,8 @@ export default Ember.Component.extend({
 
   bindFileUpload() {
     this.get('fileUpload').assignDrop(this.$().find('.table'));
+    this.get('fileUpload').assignDrop($('.primary-sidebar'));
+    this.get('fileUpload').assignDrop($('#content-scroll'));
   },
 
   didInsertElement() {
