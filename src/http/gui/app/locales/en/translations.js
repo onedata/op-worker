@@ -16,12 +16,16 @@ export default {
       no: 'No',
       fetchingToken: 'Fetching token...',
       fetchingTokenError: 'Fetching token failed!'
+    },
+    notify: {
+      clipboardSuccess: 'The text copied to clipboard',
+      clipboardFailue: 'The text cannot be copied to clipboard - please copy it manually'
     }
   },
   components: {
     topBar: {
       logout: 'Log out',
-      manageProviders: 'Manage providers'
+      manageProviders: 'Manage accounts'
     },
     mainMenu: {
       data: 'data',
@@ -161,17 +165,46 @@ export default {
       }
     },
   },
+  groups: {
+    title: 'Groups'
+  },
+  collection: {
+    title: 'Collection'
+  },
+  trash: {
+    title: 'Trash'
+  },
+  recent: {
+    title: 'Recent'
+  },
+  links: {
+    title: 'Links'
+  },
   spaces: {
+    title: 'Spaces',
     show: {
+      title: 'Space settings',
       users: {
+        title: 'Users permissions',
         tableTitle: 'users'
       },
       groups: {
+        title: 'Groups permissions',
         tableTitle: 'groups'
       },
     }
   },
   data: {
-    rootDirectory: 'Root directory'
+    title: 'Data',
+    rootDirectory: 'Root directory',
+    dataSpace: {
+      title: 'Space "{{spaceName}}"',
+      dir: {
+        title: 'File browser',
+        file: {
+          title: 'File details'
+        }
+      }
+    }
   }
 };

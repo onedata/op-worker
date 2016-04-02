@@ -9,9 +9,10 @@
     <th class="hidden-xs">
       {{t 'components.dataFilesList.size'}}
     </th>
-    <th class="hidden-xs hidden-sm">
+    {{!-- TODO: temporary disabled --}}
+    {{!-- <th class="hidden-xs hidden-sm">
       {{t 'components.dataFilesList.permissions'}}
-    </th>
+    </th> --}}
     <th class="hidden-xs">
       {{t 'components.dataFilesList.modification'}}
     </th>
@@ -33,9 +34,10 @@
             {{file.name}}
           </div>
         </td>
-        <td class="hidden-xs">
+        {{!-- TODO: temporary disabled --}}
+        {{!-- <td class="hidden-xs">
           {{file.sizeHumanReadable}}
-        </td>
+        </td> --}}
         <td class="col-permissions hidden-xs hidden-sm">
           {{file.permissionsHumanReadable}}
         </td>

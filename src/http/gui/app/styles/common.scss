@@ -471,5 +471,49 @@ html, body {
   background-repeat: no-repeat;
 }
 
+.input-with-button {
+  display: table;
+  width: 100%;
+
+  > * {
+    display: table-cell;
+  }
+
+  > *:first-child {
+    width: 100%;
+  }
+
+  input, .form-control {
+    height: 42px !important;
+    text-overflow: ellipsis;
+  }
+
+  .btn {
+    // a hack to pull up
+    margin-top: -2px;
+
+    width: 48px;
+
+    padding-top: 0;
+    padding-bottom: 0;
+    height: 42px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
+.modal-row {
+  margin-top: 10px;
+  margin-bottom: 10px;
+
+  &:first-child {
+    margin-top: auto;
+  }
+
+  &:last-child {
+    margin-bottom: auto;
+  }
+}
+
 // TODO: temporary
 @import 'data';
