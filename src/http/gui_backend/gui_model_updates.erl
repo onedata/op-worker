@@ -93,11 +93,33 @@ deleted_file(FileId) ->
 
 
 changed_user(UserId) ->
-    ok.
+    lists:foreach(
+        fun({SessionId, Pids}) ->
+            try
+                g_session:set_session_id(SessionId),
+                {ok, [UserData]} = space_data_backend:find(<<"space-user">>, [UserId]),
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_updated(<<"space-user">>, UserData, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({changed_user, T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(space_data_backend)).
 
 
 deleted_user(UserId) ->
-    ok.
+    lists:foreach(
+        fun({_SessionId, Pids}) ->
+            try
+                lists:foreach(
+                    fun(Pid) ->
+                        gui_async:push_deleted(<<"space-user">>, UserId, Pid)
+                    end, Pids)
+            catch T:M ->
+                ?dump({deleted_user, T, M, erlang:get_stacktrace()})
+            end
+        end, op_gui_utils:get_all_backend_pids(space_data_backend)).
 
 
 changed_space(UUID) ->
