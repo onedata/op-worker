@@ -13,7 +13,7 @@ export default Ember.Component.extend({
   prevSelectedSpace: null,
 
   spacesChanged: function() {
-    console.debug(`Spaces changed: ${this.get('spaces.length')}, prev: ${this.get('prevSelectedSpace')}`);
+    console.debug(`Spaces changed: len ${this.get('spaces.length')}, prev: ${this.get('prevSelectedSpace')}`);
     if (!this.get('prevSelectedSpace') && this.get('spaces.length') > 0) {
       let defaultSpace = this.get('spaces').find((s) => s.get('isDefault'));
       console.debug('spaces: ' + this.get('spaces').map((s) => s.get('isDefault')));
@@ -21,9 +21,9 @@ export default Ember.Component.extend({
         console.debug(`Will set new selectedSpace: ${defaultSpace.get('name')}`);
       } else {
         console.debug('DataSpacesSelect: no selectedSpace!');
-        debugger;
       }
 
+      this.set('prevSelectedSpace', this.get('selectedSpace'));
       this.set('selectedSpace', defaultSpace);
     }
   }.observes('spaces', 'spaces.length', 'spaces.@each.isDefault'),

@@ -176,11 +176,13 @@ export default Ember.Component.extend({
 
   actions: {
     /** Delegate to goToSpace action, should show submenu to configure Space */
-    showSpaceOptions(space) {
-      this.set('activeSpace', space);
-      this.get('spaces').forEach((s) => s.set('isExpanded', false));
-      space.set('isExpanded', true);
-      this.sendAction('showSpaceOptions', space);
+    showSpaceOptions(space, e) {
+      if (!event.path.find((el) => $(el).hasClass('oneicon-settings'))) {
+        this.set('activeSpace', space);
+        this.get('spaces').forEach((s) => s.set('isExpanded', false));
+        space.set('isExpanded', true);
+        this.sendAction('showSpaceOptions', space);
+      }
     },
 
     showUsersConfig(space) {

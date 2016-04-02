@@ -16,7 +16,7 @@
     {{!-- TODO: computing entryId in model is not very elegant --}}
     {{!-- move sidebar entry creation to helper --}}
     <li id="{{space.sidebarEntryId}}" class="first-level hover-parent">
-      <div {{action (unless space.isExpanded 'showSpaceOptions' (action (mut undefProp))) space}} class="secondary-sidebar-item first-level">
+      <div {{action (unless space.isExpanded 'showSpaceOptions' (action (mut undefProp))) space event}} class="secondary-sidebar-item first-level">
         <span class="item-element item-click-area">
           <span class="item-element item-icon">
             {{icon (if space.isDefault 'space-home' 'space')

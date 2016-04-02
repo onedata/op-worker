@@ -15,12 +15,14 @@ export default {
       yes: 'Yes',
       no: 'No',
       fetchingToken: 'Fetching token...',
-      fetchingTokenError: 'Fetching token failed!'
+      fetchingTokenError: 'Fetching token failed!',
     },
     notify: {
       clipboardSuccess: 'The text copied to clipboard',
       clipboardFailue: 'The text cannot be copied to clipboard - please copy it manually'
-    }
+    },
+    featureNotSupportedShort: 'Feature not supported',
+    featureNotSupportedLong: 'Sorry, this feature is not supported yet.',
   },
   components: {
     topBar: {
