@@ -130,41 +130,41 @@ create(#document{} = Parent, #file_meta{} = File) ->
     create(Parent, #document{value = File});
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc0) ->
     ?run(begin
-             FileDoc =
-                 case FileDoc0 of
-                     #document{key = undefined} = Doc ->
-                         NewUUID = case fslogic_uuid:file_uuid_to_space_id(ParentUUID) of
-                             {ok, SpaceId} ->
-                                 fslogic_uuid:gen_file_uuid(SpaceId);
-                             _ ->
-                                 fslogic_uuid:gen_file_uuid()
-                         end,
-                         Doc#document{key = NewUUID};
-                     _ ->
-                         FileDoc0
-                 end,
-             false = is_snapshot(FileName),
-             datastore:run_synchronized(?MODEL_NAME, ParentUUID,
-                 fun() ->
-                     case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
-                         {error, {not_found, _}} ->
-                             case create(FileDoc) of
-                                 {ok, UUID} ->
-                                     SavedDoc = FileDoc#document{key = UUID},
-                                     {ok, Scope} = get_scope(Parent),
-                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
-                                     ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
-                                     ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
-                                     {ok, UUID};
-                                 {error, Reason} ->
-                                     {error, Reason}
-                             end;
-                         {ok, _} ->
-                             {error, already_exists}
-                     end
-                 end)
+        FileDoc =
+            case FileDoc0 of
+                #document{key = undefined} = Doc ->
+                    NewUUID = case fslogic_uuid:file_uuid_to_space_id(ParentUUID) of
+                        {ok, SpaceId} ->
+                            fslogic_uuid:gen_file_uuid(SpaceId);
+                        _ ->
+                            fslogic_uuid:gen_file_uuid()
+                    end,
+                    Doc#document{key = NewUUID};
+                _ ->
+                    FileDoc0
+            end,
+        false = is_snapshot(FileName),
+        datastore:run_synchronized(?MODEL_NAME, ParentUUID,
+            fun() ->
+                case resolve_path(ParentUUID, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, FileName])) of
+                    {error, {not_found, _}} ->
+                        case create(FileDoc) of
+                            {ok, UUID} ->
+                                SavedDoc = FileDoc#document{key = UUID},
+                                {ok, Scope} = get_scope(Parent),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
+                                ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}, {scope, Scope}]),
+                                {ok, UUID};
+                            {error, Reason} ->
+                                {error, Reason}
+                        end;
+                    {ok, _} ->
+                        {error, already_exists}
+                end
+            end)
 
-         end).
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -284,10 +284,16 @@ model_init() ->
         {onedata_user, create},
         {onedata_user, save},
         {onedata_user, update},
-        {file_meta, save},
+        {onedata_user, create_or_update},
         {file_meta, create},
+        {file_meta, save},
+        {file_meta, update},
         {file_meta, delete},
-        {file_meta, update}
+        {space_info, create},
+        {space_info, save},
+        {space_info, update},
+        {space_info, create_or_update},
+        {space_info, delete}
     ], ?DISK_ONLY_LEVEL).
 
 %%--------------------------------------------------------------------
@@ -300,25 +306,52 @@ model_init() ->
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
 'after'(onedata_user, create, _, _, {ok, UUID}) ->
-    setup_user_and_inform_gui(UUID);
+    gui_model_updates:changed(onedata_user, UUID),
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
-    setup_user_and_inform_gui(UUID);
+    gui_model_updates:changed(onedata_user, UUID),
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
-    setup_user_and_inform_gui(UUID);
+    gui_model_updates:changed(onedata_user, UUID),
+    setup_onedata_user(provider, UUID);
 'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
-    setup_user_and_inform_gui(UUID);
-%% @TODO temporary solution, move to events for changes in files
-'after'(file_meta, Method, ?DISK_ONLY_LEVEL, Context, ReturnValue) ->
-    file_data_backend:process_file_meta_change(Method, Context, ReturnValue),
+    gui_model_updates:changed(onedata_user, UUID),
+    setup_onedata_user(provider, UUID);
+
+%% @todo (VFS-1865) Temporal solution for GUI push updates
+'after'(file_meta, delete, ?DISK_ONLY_LEVEL, [UUID, _DeleteFun], _RetValue) ->
+    gui_model_updates:deleted(file_meta, UUID),
     ok;
+'after'(file_meta, create, ?DISK_ONLY_LEVEL, _, {ok, UUID}) ->
+    gui_model_updates:changed(file_meta, UUID),
+    ok;
+'after'(file_meta, save, ?DISK_ONLY_LEVEL, _, {ok, UUID}) ->
+    gui_model_updates:changed(file_meta, UUID),
+    ok;
+'after'(file_meta, update, ?DISK_ONLY_LEVEL, _, {ok, UUID}) ->
+    gui_model_updates:changed(file_meta, UUID),
+    ok;
+
+'after'(space_info, delete, ?GLOBAL_ONLY_LEVEL, [UUID, _DelFun], _RetValue) ->
+    gui_model_updates:deleted(space_info, UUID),
+    ok;
+'after'(space_info, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+    gui_model_updates:changed(space_info, UUID),
+    ok;
+'after'(space_info, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+    gui_model_updates:changed(space_info, UUID),
+    ok;
+'after'(space_info, update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+    gui_model_updates:changed(space_info, UUID),
+    ok;
+'after'(space_info, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+    gui_model_updates:changed(space_info, UUID),
+    ok;
+
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
 
-% @todo hack
-setup_user_and_inform_gui(UUID) ->
-    setup_onedata_user(provider, UUID),
-        catch space_data_backend:something_changed(),
-        catch data_space_data_backend:something_changed().
+
 
 %%--------------------------------------------------------------------
 %% @doc
