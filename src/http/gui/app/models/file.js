@@ -30,6 +30,8 @@ export default DS.Model.extend({
   size: DS.attr('number'),
   permissions: DS.attr('number'),
 
+  fileBlocks: DS.hasMany('file-blocks', {async: true}),
+
   isExpanded: false,
   isSelected: false,
 
