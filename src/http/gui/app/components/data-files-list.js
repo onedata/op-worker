@@ -17,8 +17,8 @@ export default Ember.Component.extend({
   filesSorted: Ember.computed.sort('dir.children', 'filesSorting'),
 
   bindFileUpload() {
-    // this.get('fileUpload').assignDrop(this.$().find('.table'));
-    this.get('fileUpload').assignDrop($('#content-scroll'));
+     this.get('fileUpload').assignDrop(this.$().find('.table'));
+    //this.get('fileUpload').assignDrop($('#content-scroll'));
   },
 
   didInsertElement() {
