@@ -19,6 +19,8 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
+-include_lib("ctool/include/oz/oz_groups.hrl").
 
 % @todo currently unused - every time taken from OZ
 %% Key under which default space is stored in session memory.
@@ -295,18 +297,29 @@ space_user_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceDirId},
-        {<<"user">>, UserId}
+        % @todo this is assoc id so we can get user details via
+        % space REST endpoint (we need space id to do that)
+        % This is required when user hasn't logged in in this provider yet
+        {<<"user">>, AssocId}
     ].
 
 
-space_user_record(UserId) ->
-    {ok, #document{
-        value = #onedata_user{
-            name = Name
-        }}} = onedata_user:get(UserId),
+space_user_record(AssocId) ->
+    {UserId, SpaceDirId} = association_to_ids(AssocId),
+    UserName = case onedata_user:get(UserId) of
+        {ok, #document{value = #onedata_user{name = Name}}} ->
+            Name;
+        _ ->
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+            CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
+            {ok, #user_details{
+                name = Name
+            }} = oz_spaces:get_user_details(CurrentUserAuth, SpaceId, UserId),
+            Name
+    end,
     [
-        {<<"id">>, UserId},
-        {<<"name">>, Name}
+        {<<"id">>, AssocId},
+        {<<"name">>, UserName}
     ].
 
 
@@ -326,18 +339,30 @@ space_group_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceDirId},
-        {<<"group">>, GroupId}
+        % @todo this is assoc id so we can get group details via
+        % space REST endpoint (we need space id to do that)
+        % This is required when user hasn't logged in in this provider yet
+        {<<"group">>, AssocId}
     ].
 
 
-space_group_record(GroupId) ->
-    {ok, #document{
-        value = #onedata_group{
-            name = Name
-        }}} = onedata_group:get(GroupId),
+space_group_record(AssocId) ->
+    {GroupId, SpaceDirId} = association_to_ids(AssocId),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    GroupName = case onedata_group:get(GroupId) of
+        {ok, #document{value = #onedata_group{name = Name}}} ->
+            Name;
+        _ ->
+            CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+            {ok, #group_details{
+                name = Name
+            }} = oz_spaces:get_user_details(CurrentUserAuth, SpaceId, GroupId),
+            Name
+    end,
     [
-        {<<"id">>, GroupId},
-        {<<"name">>, Name}
+        {<<"id">>, AssocId},
+        {<<"name">>, GroupName}
     ].
 
 
