@@ -23,8 +23,10 @@
               (if space.isDefault 'color-space-default' 'color-space')}}
           </span>
 
-          <span class="item-element item-label">
-            {{trim-string space.name 15}}
+          <span class="item-element item-label" title={{space.name}}>
+            <div class="trim-hack select-trim-hack">
+              {{trim-string space.name 15}}
+            </div>
           </span>
 
           <span class="item-element item-icon">

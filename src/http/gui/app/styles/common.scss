@@ -493,6 +493,12 @@ html, body {
     // a hack to pull up
     margin-top: -2px;
 
+    @-moz-document url-prefix() {
+      vertical-align: baseline;
+      position: relative;
+      top: -2px;
+    }
+
     width: 48px;
 
     padding-top: 0;
@@ -514,6 +520,26 @@ html, body {
   &:last-child {
     margin-bottom: auto;
   }
+}
+
+// HACKS
+
+.trim-hack {
+  overflow: hidden;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  table-layout: fixed;
+}
+
+.select-trim-hack {
+  max-width: 90px;
+  max-height: 60px;
+}
+
+.drop-trim-hack {
+  max-width: 80px;
+  max-height: 40px;
 }
 
 // TODO: temporary

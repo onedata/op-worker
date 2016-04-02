@@ -5,8 +5,10 @@
       <div class="item-icon">
         {{icon (if selectedSpace.isDefault 'space-home' 'space')}}
       </div>
-      <div class="item-label">
-        {{trim-string selectedSpace.name 14}}
+      <div class="item-label" title="{{selectedSpace.name}}">
+        <div class="trim-hack select-trim-hack">
+          {{trim-string selectedSpace.name 14}}
+        </div>
       </div>
       <div class="item-icon select-arrow">
         {{icon 'arrow-down'}}
@@ -21,7 +23,9 @@
             {{icon (if s.isDefault 'space-home' 'space')}}
           </div>
           <div class="item-label">
-            {{trim-string s.name 14}}
+            <div class="trim-hack drop-trim-hack">
+              {{trim-string s.name 14}}
+            </div>
           </div>
         </a>
       </li>

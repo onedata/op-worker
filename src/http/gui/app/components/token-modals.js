@@ -27,7 +27,8 @@ export default Ember.Component.extend({
   }.property('type'),
 
   selectTokenText() {
-    let input = this.$().find('input')[0];
+    let input = $('#invite-token-field')[0];
+    $(input).focus();
     input.setSelectionRange(0, input.value.length);
   },
 
@@ -44,7 +45,11 @@ export default Ember.Component.extend({
         }
       );
     },
+    selectAll() {
+      this.selectTokenText();
+    },
     copySuccess() {
+      this.selectTokenText();
       this.get('notify').info(this.get('i18n').t('common.notify.clipboardSuccess'));
     },
     copyError() {

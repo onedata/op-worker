@@ -11,7 +11,9 @@
         </span>
         <span class="item-element item-click-area"  {{action 'browseDir' file}}>
           <span class="item-label">
-            {{file.name}}
+            <div class="trim-hack select-trim-hack">
+              {{trim-string file.name 15}}
+            </div>
           </span>
         </span>
       </div>

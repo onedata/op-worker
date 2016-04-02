@@ -166,6 +166,8 @@ export default Ember.Component.extend({
   }.observes('spaces.length'),
 
   didInsertElement() {
+    // reset spaces expanded state
+    this.get('spaces').forEach((s) => s.set('isExpanded', false));
     this.bindSpaceDrops();
   },
 
@@ -176,8 +178,15 @@ export default Ember.Component.extend({
 
   actions: {
     /** Delegate to goToSpace action, should show submenu to configure Space */
-    showSpaceOptions(space, e) {
-      if (!event.path.find((el) => $(el).hasClass('oneicon-settings'))) {
+    showSpaceOptions(space) {
+      // TODO: a hack for firefox
+      let shouldAct = true;
+      if (navigator.userAgent.toLowerCase().indexOf('firefox') <= -1)
+      {
+        shouldAct = !event.path.find((el) => $(el).hasClass('oneicon-settings'));
+      }
+
+      if (shouldAct) {
         this.set('activeSpace', space);
         this.get('spaces').forEach((s) => s.set('isExpanded', false));
         space.set('isExpanded', true);
@@ -222,7 +231,7 @@ export default Ember.Component.extend({
 
     submitJoinSpace() {
       try {
-        let token = this.get('joinSpaceToken');
+        let token = this.get('joinSpaceToken').trim();
         // TODO: loading gif in modal?
         this.get('oneproviderServer').joinSpace(token).then(
           (spaceName) => {
