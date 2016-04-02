@@ -70,7 +70,7 @@ changed_file(FileId) ->
                 {ok, Data} = file_data_backend:file_record(SessionId, FileId),
                 lists:foreach(
                     fun(Pid) ->
-                        gui_async:push_created(<<"file">>, Data, Pid)
+                        gui_async:push_updated(<<"file">>, Data, Pid)
                     end, Pids)
             catch T:M ->
                 ?dump({changed_file, T, M, erlang:get_stacktrace()})
