@@ -16,6 +16,7 @@
 -author("Jakub Liput").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
@@ -84,7 +85,35 @@ find_all(<<"file">>) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"file">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not iplemented">>);
+
+
+find_query(<<"file-blocks">>, [{<<"file">>, FileId}]) ->
+    {ok, Locations} = file_meta:get_locations({uuid, FileId}),
+    Res = lists:map(
+        fun(LocationId) ->
+            {ok, #document{value = #file_location{
+                provider_id = ProviderId,
+                blocks = Blocks
+            }}} = file_location:get(LocationId),
+            BlocksList = case Blocks of
+                [] ->
+                    % @todo LOL!~
+                    [0, 3];
+                _ ->
+                    lists:foldl(
+                        fun(#file_block{offset = Offset, size = Size}, Acc) ->
+                            Acc ++ [Offset, Offset + Size]
+                        end, [], Blocks)
+            end,
+            [
+                {<<"file">>, FileId},
+                {<<"provider">>, ProviderId},
+                {<<"blocks">>, BlocksList}
+            ]
+        end, Locations),
+    ?dump(Res),
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------
@@ -302,6 +331,7 @@ file_record(SessionId, FileId) ->
             end
     end,
     ChildrenIds = [ChId || {ChId, _} <- Children],
+%%    find_query(<<"file-blocks">>, [{<<"file">>, FileId}]),
     Res = [
         {<<"id">>, FileId},
         {<<"name">>, Name},

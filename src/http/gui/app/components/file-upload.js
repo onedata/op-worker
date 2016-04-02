@@ -75,13 +75,13 @@ export default Ember.Component.extend({
       r.on('fileSuccess', (file/*, message*/) => {
         $('.resumable-file-'+file.uniqueIdentifier+' .resumable-file-progress').html('(completed)');
         this.get('notify').info(`File "${file.fileName}" uploaded successfully!`);
-
         this.get('oneproviderServer').fileUploadComplete(file.uniqueIdentifier);
       });
 
       r.on('fileError', (file, message) => {
         $('.resumable-file-'+file.uniqueIdentifier+' .resumable-file-progress').html('(file could not be uploaded: '+message+')');
         this.get('notify').error(`File "${file.fileName}" upload failed: ${message}`);
+        this.get('oneproviderServer').fileUploadComplete(file.uniqueIdentifier);
       });
 
       r.on('fileProgress', function(file){

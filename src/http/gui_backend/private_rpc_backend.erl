@@ -32,6 +32,10 @@
 %%--------------------------------------------------------------------
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
+handle(<<"fileUploadComplete">>, [{<<"fileId">>, FileId}]) ->
+    upload_handler:upload_map_delete(FileId),
+    ok;
+
 handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, SpaceID} = oz_users:join_space(UserAuth, [{<<"token">>, Token}]),
