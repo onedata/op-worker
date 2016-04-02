@@ -12,10 +12,13 @@ export default Ember.Component.extend({
 
   // should use new everytime?
   redrawCanvas: function() {
-    new FileChunksBar(this.get('canvas'), {
-      file_size: this.get('file.size'),
-      chunks: this.get('fileBlocks.blocks')
-    });
+    debugger;
 
+    if (this.get('file.size') && this.get('fileBlocks.blocks')) {
+      new FileChunksBar(this.get('canvas'), {
+        file_size: this.get('file.size'),
+        chunks: this.get('fileBlocks.blocks')
+      });
+    }
   }.observes('canvas', 'file', 'file.size', 'fileBlocks', 'fileBlocks.blocks')
 });

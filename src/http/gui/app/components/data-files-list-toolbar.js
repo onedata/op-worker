@@ -164,28 +164,14 @@ export default Ember.Component.extend({
       let fileId = this.get('dir.id');
       // TODO: if fileId null...
 
-      this.set('fileBlocks', [
-        new Ember.Object({
-          fileId: fileId,
-          blocks: [1,39,90,99],
-          provider: new Ember.Object({name: 'foo'})
-        }),
-        new Ember.Object({
-          fileId: fileId,
-          blocks: [40, 70, 80, 89],
-          provider: new Ember.Object({name: 'fighters'})
-        }),
-        new Ember.Object({
-          fileId: fileId,
-          blocks: [71,79],
-          provider: new Ember.Object({name: 'bar'})
-        }),
-      ]);
-
-      // TODO
-      // this.get('store').query('file-blocks', { filter: { fileId: fileId } }).then((fbs) => {
-      //   this.set('fileBlocks', fbs);
-      // });
+      this.get('store').query('file-blocks', { filter: { fileId: fileId } }).then(
+        (fbs) => {
+          this.set('fileBlocks', fbs);
+        },
+        (error) => {
+          console.error('Error loading file blocks: ' + error);
+        }
+      );
     },
 
     // TODO: set fileForChunks to null on close
