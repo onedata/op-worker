@@ -209,7 +209,7 @@ export default {
     rootDirectory: 'Root directory',
     dataSpace: {
       title: 'Space "{{spaceName}}"',
-      nullDir: 'Space is not supported or cannot be synchronized',
+      nullDir: 'This space is not supported by any providers or cannot be synchronized',
       dir: {
         title: 'File browser',
         file: {
