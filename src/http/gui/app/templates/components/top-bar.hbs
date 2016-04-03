@@ -22,7 +22,7 @@
             role="button" aria-haspopup="true" aria-expanded="false">
               {{icon 'user-profile' 'top-bar-icon'}} {{trim-string session.sessionDetails.userName 14}} <span class="caret"></span>
           </a>
-          <ul class="dropdown-menu dropdown-menu-down dropdown-menu-list">
+          <ul class="dropdown-menu dropdown-menu-down expand-left dropdown-menu-list">
             <li><a href="{{session.sessionDetails.manageProvidersURL}}">{{t 'components.topBar.manageProviders'}}</a></li>
             <li><a href="/logout.html">{{t 'components.topBar.logout'}}</a></li>
           </ul>

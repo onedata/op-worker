@@ -184,7 +184,19 @@
 
 .file-blocks-table {
   canvas.file-chunks {
-    background-color: $onedata-light-gray;
+    // NOTE: should be synchronized with utils/file-chunks-bar.js
+    width: 380px;
+    height: 20px;
+
+    background-color: #F2F2F2;
+
+    &.error {
+      background-color: transparent;
+    }
+
+    &.loading {
+      background-color: transparent;
+    }
   }
 
   .provider-name {

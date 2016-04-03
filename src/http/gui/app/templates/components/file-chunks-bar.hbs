@@ -1,1 +1,16 @@
-<canvas id="file-chunks-{{file.id}}" class="file-chunks"></canvas>
+{{#if isRenderFailed}}
+  {{!-- TODO: translate --}}
+  <em>Chunks map creation failed</em>
+{{else}}
+  {{#if isLoading}}
+    <div class="one-row">
+      <div class="loading-throbber"></div>
+      <div class="loading-label">
+        Loading file chunks map...
+      </div>
+    </div>
+  {{else}}
+    <canvas id="file-chunks-{{file.id}}"
+      class="file-chunks {{if isLoading 'loading'}} {{if isRenderFailed 'error'}} {{if isRendered 'rendered'}}"></canvas>
+  {{/if}}
+{{/if}}
