@@ -336,7 +336,6 @@ file_record(SessionId, FileId) ->
             end
     end,
     ChildrenIds = [ChId || {ChId, _} <- Children],
-%%    find_query(<<"file-blocks">>, [{<<"file">>, FileId}]),
     Res = [
         {<<"id">>, FileId},
         {<<"name">>, Name},
