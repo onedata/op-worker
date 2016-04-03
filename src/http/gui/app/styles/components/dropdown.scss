@@ -10,6 +10,65 @@ $dropdown-bg: #2B3037;
   border-radius: $dropdown-radius !important;
   border: none;
 
+  // TODO: use scss mixins to triangle arrow
+
+  &.dropdown-menu-down {
+    min-width: 150px;
+
+    .expand-left {
+      left: auto;
+      right: 0;
+
+      &:before {
+        position: absolute;
+        top: -$dropdown-triangle-width;
+        right: 10px;
+        display: inline-block;
+        border-right: $dropdown-triangle-width solid transparent;
+        border-bottom: $dropdown-triangle-width solid $dropdown-bg;
+        border-left: $dropdown-triangle-width solid transparent;
+        border-bottom-color: $dropdown-bg;
+        content: '';
+      }
+    }
+
+    .expand-right {
+      left: 0;
+      right: auto;
+
+      &:before {
+        position: absolute;
+        top: -$dropdown-triangle-width;
+        left: 10px;
+        display: inline-block;
+        border-right: $dropdown-triangle-width solid transparent;
+        border-bottom: $dropdown-triangle-width solid $dropdown-bg;
+        border-left: $dropdown-triangle-width solid transparent;
+        border-bottom-color: $dropdown-bg;
+        content: '';
+      }
+    }
+
+    .expand-center {
+      left: -50%;
+      right: auto;
+
+      &:before {
+        position: absolute;
+        top: -$dropdown-triangle-width;
+        left: 50%;
+        margin-right: -$dropdown-triangle-width/2;
+        display: inline-block;
+        border-right: $dropdown-triangle-width solid transparent;
+        border-bottom: $dropdown-triangle-width solid $dropdown-bg;
+        border-left: $dropdown-triangle-width solid transparent;
+        border-bottom-color: $dropdown-bg;
+        content: '';
+      }
+    }
+
+  }
+
   &.dropdown-menu-down {
     left: auto;
     right: 0;

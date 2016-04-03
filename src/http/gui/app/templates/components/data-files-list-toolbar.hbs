@@ -136,9 +136,11 @@
     <div class="container-fluid">
       <div class="modal-row large-space">
         {{!-- TODO: loader throbber when fileChunks is null --}}
-        {{t 'components.dataFilesListToolbar.fileChunksModal.text' fileName=fileForChunks.name}}
+        {{t 'components.dataFilesListToolbar.fileChunksModal.text'}}
+        <strong>{{fileForChunks.name}}</strong>
       </div>
       <div class="modal-row large-space">
+        {{#if fileBlocks}}
         {{!-- NOTE: there is an assumption that every fb has other provider --}}
         <table class="table file-blocks-table">
           <thead>
@@ -153,9 +155,9 @@
             {{#each fileBlocks as |fb|}}
             <tr>
               <td class="provider-name">
-                <div class="truncate">
+                {{#bs-tooltip tagName="div" class="truncate" title=fb.provider.name}}
                   {{fb.provider.name}}
-                </div>
+                {{/bs-tooltip}}
               </td>
               <td class="chunks">
                 {{file-chunks-bar file=fileForChunks fileBlocks=fb}}
@@ -164,6 +166,15 @@
             {{/each}}
           </tbody>
         </table>
+        {{else}}
+          <div class="one-row">
+            <div class="loading-throbber"></div>
+            <div class="loading-label">
+              {{!-- TODO translate --}}
+              Loading file chunks table...
+            </div>
+          </div>
+        {{/if}}
       </div>
     </div>
 

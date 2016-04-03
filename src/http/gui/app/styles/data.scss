@@ -184,15 +184,48 @@
 
 .file-blocks-table {
   canvas.file-chunks {
-    background-color: $onedata-light-gray;
+    // NOTE: should be synchronized with utils/file-chunks-bar.js
+    width: 320px;
+    height: 20px;
+
+    border-left: 1px solid $onedata-graphite;
+    border-right: 1px solid $onedata-graphite;
+
+    background-color: #F2F2F2;
+
+    &.error {
+      background-color: transparent;
+    }
+
+    &.loading {
+      background-color: transparent;
+    }
+  }
+  .file-size {
+    width: 320px;
+    font-size: 0.7em;
+    .start {
+      float: left;
+      text-align: left;
+    }
+    .end {
+      float: right;
+      text-align: right;
+    }
   }
 
   .provider-name {
-    width: 200px;
-    max-width: 200px;
+    width: 260px;
+    max-width: 260px;
 
     .truncate {
-      max-width: 90px;
+      max-width: 150px;
     }
   }
+}
+
+.null-dir-info {
+  padding-top: 20px;
+  line-height: normal;
+  font-style: italic;
 }

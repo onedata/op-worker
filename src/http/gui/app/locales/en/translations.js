@@ -28,7 +28,7 @@ export default {
   components: {
     topBar: {
       logout: 'Log out',
-      manageProviders: 'Manage accounts'
+      manageProviders: 'Manage account'
     },
     mainMenu: {
       data: 'data',
@@ -127,7 +127,7 @@ export default {
         copy: 'Copy element',
         cut: 'Cut element',
         remove: 'Remove element',
-        chunks: 'Show file chunks'
+        chunks: 'Show file distribution'
       },
       renameFileModal: {
         title: 'Rename file or directory',
@@ -150,10 +150,10 @@ export default {
         text: 'Enter new file permissions code:'
       },
       fileChunksModal: {
-        title: 'File chunks',
-        text: 'Distribution of data for file "{{fileName}}" among providers',
+        title: 'File distribution',
+        text: 'Distribution of file blocks among providers for file',
         providerName: 'Provider',
-        dataDitribution: 'Data distribution'
+        dataDitribution: 'File blocks'
       },
     },
     fileUpload: {
@@ -209,6 +209,7 @@ export default {
     rootDirectory: 'Root directory',
     dataSpace: {
       title: 'Space "{{spaceName}}"',
+      nullDir: 'Space is not supported or cannot be synchronized',
       dir: {
         title: 'File browser',
         file: {

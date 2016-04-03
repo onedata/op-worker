@@ -569,5 +569,13 @@ html, body {
   border-bottom: none !important;
 }
 
+.one-row {
+  display: table;
+  > * {
+    display: table-cell;
+    vertical-align: middle;
+  }
+}
+
 // TODO: temporary
 @import 'data';
