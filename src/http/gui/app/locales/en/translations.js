@@ -150,7 +150,10 @@ export default {
         text: 'Enter new file permissions code:'
       },
       fileChunksModal: {
-        title: 'File chunks'
+        title: 'File chunks',
+        text: 'Distribution of data for file "{{fileName}}" among providers',
+        providerName: 'Provider',
+        dataDitribution: 'Data distribution'
       },
     },
     fileUpload: {

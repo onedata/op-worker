@@ -1,6 +1,7 @@
-var canvasWidth = 350;
+var canvasWidth = 380;
 var canvasHeight = 20;
-var fillColor = '#1ABC9C';
+// Onedata colors
+var fillColor = '#55E191';
 function FileChunksBar(canvas, JSONData) {
     canvas = canvas[0];
     this.canvas = canvas;

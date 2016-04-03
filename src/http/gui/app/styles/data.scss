@@ -177,3 +177,22 @@
     text-align: center;
   }
 }
+
+// modals
+
+// file chunks
+
+.file-blocks-table {
+  canvas.file-chunks {
+    background-color: $onedata-light-gray;
+  }
+
+  .provider-name {
+    width: 200px;
+    max-width: 200px;
+
+    .truncate {
+      max-width: 90px;
+    }
+  }
+}
