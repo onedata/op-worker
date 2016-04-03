@@ -28,7 +28,7 @@ export default {
   components: {
     topBar: {
       logout: 'Log out',
-      manageProviders: 'Manage accounts'
+      manageProviders: 'Manage account'
     },
     mainMenu: {
       data: 'data',
