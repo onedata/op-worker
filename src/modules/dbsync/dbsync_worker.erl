@@ -197,6 +197,7 @@ handle({dbsync_request, SessId, DBSyncRequest}) ->
     dbsync_proto:handle(SessId, DBSyncRequest);
 
 %% Handle stream crashes
+%% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
 handle({'EXIT', Stream, Reason}) ->
     case state_get(changes_stream) of
         Stream ->
