@@ -17,14 +17,14 @@ export default Ember.Component.extend({
       return null;
     }
 
-    console.debug(`Crenating new Resumable with dir id: ${this.get('dir.id')}`);
+    console.debug(`Creating new Resumable with dir id: ${this.get('dir.id')}`);
     let r = new Resumable({
       target: this.get('uploadAddress'),
       chunkSize: 1*1024*1024,
       simultaneousUploads: 4,
       testChunks: false,
       throttleProgressCallbacks: 1,
-      query: {parentId: this.get('dir.id')},
+      query: () => { return {parentId: this.get('dir.id')}; },
       generateUniqueIdentifier: function() {
         let date = new Date().getTime();
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
