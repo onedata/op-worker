@@ -150,15 +150,35 @@ create_or_update(Doc, Diff) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
     Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
+    {ok, #space_details{id = Id, name = Name, size = Size}} = oz_spaces:get_details(Client, SpaceId),
     {ok, ProviderIds} = oz_spaces:get_providers(Client, SpaceId),
+    {ok, UserIds} = oz_spaces:get_users(Client, SpaceId),
+    {ok, GroupIds} = oz_spaces:get_groups(Client, SpaceId),
+
+    UsersWithPrivileges = lists:map(
+        fun(UserId) ->
+            {ok, Privileges} = oz_spaces:get_user_privileges(Client, SpaceId, UserId),
+            {UserId, Privileges}
+        end, UserIds),
+
+    GroupsWithPrivileges = lists:map(
+        fun(GroupId) ->
+            {ok, Privileges} = oz_spaces:get_group_privileges(Client, SpaceId, GroupId),
+            {GroupId, Privileges}
+        end, UserIds),
+
+    NewSpaceInfo = #space_info{
+        id = Id, name = Name, providers = ProviderIds,
+        size = Size, users = UsersWithPrivileges, groups = GroupsWithPrivileges
+    },
+
     case space_info:get(Key) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name, providers = ProviderIds}},
+        {ok, #document{} = Doc} ->
+            NewDoc = Doc#document{value = NewSpaceInfo},
             {ok, _} = space_info:save(NewDoc),
             {ok, NewDoc};
         {error, {not_found, _}} ->
-            Doc = #document{key = Key, value = #space_info{id = Id, name = Name, providers = ProviderIds}},
+            Doc = #document{key = Key, value = NewSpaceInfo},
             {ok, _} = space_info:create(Doc),
             {ok, Doc};
         {error, Reason} ->
