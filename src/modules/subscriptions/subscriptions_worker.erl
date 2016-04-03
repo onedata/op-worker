@@ -94,6 +94,7 @@ handle({process_updates, Updates}) ->
     ok;
 
 handle({'EXIT', _Pid, _Reason} = Req) ->
+    %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
     %% Handle possible websocket crashes
     case subscription_wss:healthcheck() of
         {error, _} ->
