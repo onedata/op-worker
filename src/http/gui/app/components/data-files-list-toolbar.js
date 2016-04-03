@@ -103,8 +103,10 @@ export default Ember.Component.extend({
   resumableJsChange: function() {
     let resumable = this.get('resumable');
     console.debug(`Toolbar resumable changed dir id: ${this.get('fileUpload.fileUploadComponent.dir.id')}`);
-    if (resumable) {
+    if (resumable && !this.get('uploadBound')) {
+      console.debug('Binding file upload for toolbar');
       resumable.assignBrowse(this.$().find('#toolbar-file-browse'));
+      this.set('uploadBound', true);
     }
   }.observes('resumable'),
 

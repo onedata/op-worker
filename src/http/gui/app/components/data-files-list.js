@@ -16,9 +16,12 @@ export default Ember.Component.extend({
   filesSorting: ['type:asc', 'name:asc'],
   filesSorted: Ember.computed.sort('dir.children', 'filesSorting'),
 
+  uploadBound: false,
+
   bindFileUpload() {
-     this.get('fileUpload').assignDrop(this.$().find('.table'));
-    //this.get('fileUpload').assignDrop($('#content-scroll'));
+    console.debug('Binding upload area for file list');
+    //  this.get('fileUpload').assignDrop(this.$().find('.table'));
+    this.get('fileUpload').assignDrop($('#content-scroll'));
   },
 
   didInsertElement() {
@@ -32,8 +35,9 @@ export default Ember.Component.extend({
   resumableJsChange: function() {
     let resumable = this.get('resumable');
     console.debug(`Browser resumable changed dir id: ${this.get('fileUpload.fileUploadComponent.dir.id')}`);
-    if (resumable) {
+    if (resumable && !this.get('uploadBound')) {
       this.bindFileUpload();
+      this.set('uploadBound', true);
     }
   }.observes('resumable'),
 
