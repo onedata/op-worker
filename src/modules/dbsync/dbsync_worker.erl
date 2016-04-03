@@ -457,11 +457,15 @@ get_sync_context(#document{value = #file_location{uuid = FileUUID}}) ->
 -spec get_space_id(datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id(#document{key = Key} = Doc) ->
-    case state_get({space_id, Key}) of
+    try state_get({sid, Key}) of
         undefined ->
             get_space_id_not_cached(Key, Doc);
         SpaceId ->
             {ok, SpaceId}
+    catch
+        _:Reason ->
+            ?warning_stacktrace("Unable to fetch cached space_id for document ~p due to: ~p", [Key, Reason]),
+            get_space_id_not_cached(Key, Doc)
     end.
 
 
@@ -477,12 +481,12 @@ get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
     FileUUID = get_sync_context(Doc),
     case file_meta:get_scope({uuid, FileUUID}) of
         {ok, #document{key = <<"">> = Root}} ->
-            state_put({space_id, KeyToCache}, Root),
+            state_put({sid, KeyToCache}, Root),
             {ok, Root};
         {ok, #document{key = ScopeUUID}} ->
             try
                 SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-                state_put({space_id, KeyToCache}, SpaceId),
+                state_put({sid, KeyToCache}, SpaceId),
                 {ok, SpaceId}
             catch
                 _:_ -> {error, not_a_space}
