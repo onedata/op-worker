@@ -149,13 +149,16 @@ create_or_update(Doc, Diff) ->
 -spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
-    {ok, #document{
-        value = #space_info{
-            id = GlobalSpaceId
-        }}} = space_info:get(SpaceId),
-    Key = fslogic_uuid:spaceid_to_space_dir_uuid(GlobalSpaceId),
-    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, GlobalSpaceId),
-    {ok, ProviderIds} = oz_spaces:get_providers(Client, GlobalSpaceId),
+    Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
+    {ok, ProviderIds} = oz_spaces:get_providers(Client, SpaceId),
+%%    {ok, #document{
+%%        value = #space_info{
+%%            id = GlobalSpaceId
+%%        }}} = space_info:get(SpaceId),
+%%    Key = fslogic_uuid:spaceid_to_space_dir_uuid(GlobalSpaceId),
+%%    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, GlobalSpaceId),
+%%    {ok, ProviderIds} = oz_spaces:get_providers(Client, GlobalSpaceId),
     case space_info:get(Key) of
         {ok, #document{value = SpaceInfo} = Doc} ->
             NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name, providers = ProviderIds}},
@@ -178,17 +181,19 @@ fetch(Client, SpaceId) ->
 -spec get_or_fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(Client, SpaceId) ->
-    %% @todo (VFS-1860) For now, make sure we ask for global space id
-    {ok, #document{
-        value = #space_info{
-            id = GlobalSpaceId
-        }}} = space_info:get(SpaceId),
-    Key = fslogic_uuid:spaceid_to_space_dir_uuid(GlobalSpaceId),
+    Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+%%    %% @todo (VFS-1860) For now, make sure we ask for global space id
+%%    {ok, #document{
+%%        value = #space_info{
+%%            id = GlobalSpaceId
+%%        }}} = space_info:get(SpaceId),
+%%    Key = fslogic_uuid:spaceid_to_space_dir_uuid(GlobalSpaceId),
     case space_info:get(Key) of
         {ok, #document{} = Doc} ->
             {ok, Doc};
         {error, {not_found, _}} ->
-            fetch(Client, GlobalSpaceId);
+            fetch(Client, SpaceId);
+%%            fetch(Client, GlobalSpaceId);
         {error, Reason} ->
             {error, Reason}
     end.

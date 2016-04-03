@@ -294,7 +294,7 @@ get_int_param(Key, Params) ->
     binary_to_integer(get_bin_param(Key, Params)).
 
 
-%%--------------------------------------------------------------------
+%%--------------------------------------------------------------------u
 %% @private
 %% @doc
 %% Retrieves a value from a proplist. Assumes all values are binary.
@@ -347,7 +347,6 @@ create_unique_file(SessionId, OriginalPath, Counter) ->
             Ext = filename:extension(OriginalPath),
             str_utils:format_bin("~s(~B)~s", [RootNm, Counter, Ext])
     end,
-    ?alert("Trying: ~s", [ProposedPath]),
     % @todo use exists when it is implemented
     case logical_file_manager:stat(SessionId, {path, ProposedPath}) of
         {error, _} ->

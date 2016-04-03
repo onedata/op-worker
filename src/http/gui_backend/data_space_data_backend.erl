@@ -71,21 +71,23 @@ find(<<"data-space">>, [SpaceDirId]) ->
             providers = Providers,
             name = Name
         }}} = space_info:get(SpaceId),
-    % Allow only spaces that are supported by this provider
-    case lists:member(oneprovider:get_provider_id(), Providers) of
-        true ->
-            DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
-                op_gui_utils:get_users_default_space()),
-            Res = [
-                {<<"id">>, SpaceDirId},
-                {<<"name">>, Name},
-                {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
-                {<<"rootDir">>, SpaceDirId}
-            ],
-            {ok, Res};
-        false ->
-            gui_error:report_error(<<"Space not supported by this provider">>)
-    end.
+    % If the space has no support, return null rootDir which will
+    % cause the client to render a "space not supported" message
+    RootDir = case Providers of
+        [] ->
+            null;
+        _ ->
+            SpaceDirId
+    end,
+    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
+        op_gui_utils:get_users_default_space()),
+    Res = [
+        {<<"id">>, SpaceDirId},
+        {<<"name">>, Name},
+        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
+        {<<"rootDir">>, RootDir}
+    ],
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------
