@@ -40,7 +40,6 @@
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init([]) ->
     schedule_subscription_renew(),
-    schedule_connection_start(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -95,7 +94,7 @@ handle({process_updates, Updates}) ->
     ok;
 
 handle({'EXIT', _Pid, _Reason} = Req) ->
-    %% Handle stream crashes
+    %% Handle possible websocket crashes
     case subscription_wss:healthcheck() of
         {error, _} ->
             ?error("Subscriptions connection crashed: ~p", [_Reason]),
@@ -151,6 +150,8 @@ refresh_subscription() ->
         {resume_at, ResumeAt},
         {missing, Missing}
     ]),
+
+    ensure_connection_running(),
     subscription_wss:push(Message).
 
 %%--------------------------------------------------------------------
@@ -169,7 +170,9 @@ schedule_subscription_renew() ->
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Schedule (re)start of the provider - OZ link
+%% Schedule restart of the provider - OZ link.
+%% Restart is delayed as conditions which led to loosing the connection
+%% may still apply.
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_connection_start() -> ok.
@@ -180,3 +183,17 @@ schedule_connection_start() ->
     {ok, _} = timer:send_after(Delay, whereis(?MODULE),
         {timer, start_provider_connection}),
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Ensures if websocket is running & registered.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_connection_running() -> ok | {error, Reason :: term()}.
+ensure_connection_running() ->
+    case whereis(subscription_wss) of
+        undefined ->
+            worker_proxy:call(subscriptions_worker, start_provider_connection);
+        _ -> ok
+    end.
