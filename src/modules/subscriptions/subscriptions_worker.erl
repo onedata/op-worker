@@ -40,6 +40,7 @@
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init([]) ->
     schedule_subscription_renew(),
+    schedule_connection_start(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -94,7 +95,7 @@ handle({process_updates, Updates}) ->
     ok;
 
 handle({'EXIT', _Pid, _Reason} = Req) ->
-    %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
+    %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)z
     %% Handle possible websocket crashes
     case subscription_wss:healthcheck() of
         {error, _} ->
