@@ -65,22 +65,26 @@ terminate() ->
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space">>, [SpaceDirId]) ->
+    SessionId = g_session:get_session_id(),
+    Auth = op_gui_utils:get_user_rest_auth(),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
-            providers = Providers,
             name = Name
-        }}} = space_info:get(SpaceId),
-    % If the space has no support, return null rootDir which will
-    % cause the client to render a "space not supported" message
-    RootDir = case Providers of
-        [] ->
-            null;
-        _ ->
-            SpaceDirId
-    end,
+        }}} = space_info:get_or_fetch(Auth, SpaceId),
     DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
         op_gui_utils:get_users_default_space()),
+    % If current provider cannot get info about, return null rootDir which will
+    % cause the client to render a "space not supported or cannot be synced" message
+    RootDir = try
+        % This will crash if provider cannot sync this space
+        file_data_backend:get_parent(SessionId, SpaceDirId),
+        SpaceDirId
+    catch T:M ->
+        ?warning(
+            "Cannot get parent for space (~p). ~p:~p", [SpaceDirId, T, M]),
+        null
+    end,
     Res = [
         {<<"id">>, SpaceDirId},
         {<<"name">>, Name},
@@ -101,15 +105,26 @@ find_all(<<"data-space">>) ->
     SessionId = g_session:get_session_id(),
     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
         {path, <<"/spaces">>}, 0, 1000),
+    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
+        op_gui_utils:get_users_default_space()),
     Res = lists:foldl(
-        fun({SpaceDirId, _SpaceName}, Acc) ->
+        fun({SpaceDirId, SpaceName}, Acc) ->
             % Returns error when this space is not supported by this provider
-            case find(<<"data-space">>, [SpaceDirId]) of
-                {ok, Data} ->
-                    Acc ++ Data;
-                _ ->
-                    Acc
-            end
+            SpaceData = try
+                {ok, Data} = find(<<"data-space">>, [SpaceDirId]),
+                Data
+            catch
+                T:M ->
+                    ?error_stacktrace(
+                        "Cannot read space data (~p). ~p:~p", [SpaceDirId, T, M]),
+                    [
+                        {<<"id">>, SpaceDirId},
+                        {<<"name">>, SpaceName},
+                        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
+                        {<<"rootDir">>, null}
+                    ]
+            end,
+            Acc ++ [SpaceData]
         end, [], SpaceDirs),
     {ok, Res}.
 

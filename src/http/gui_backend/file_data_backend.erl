@@ -26,7 +26,7 @@
 -export([create_record/2, update_record/3, delete_record/2]).
 
 %% @todo (VFS-1865) Temporal solution for GUI push updates
--export([file_record/2]).
+-export([file_record/2, get_parent/2]).
 
 %%%===================================================================
 %%% API functions
