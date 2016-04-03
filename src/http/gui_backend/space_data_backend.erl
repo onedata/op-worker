@@ -210,7 +210,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_info:get(SpaceId),
+        }}} = space_info:get_or_fetch(UserAuth, SpaceId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     NewUserPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
@@ -227,6 +227,8 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
         % usort - make sure there are no duplicates
         {<<"privileges">>, lists:usort(NewUserPerms)}
     ]),
+    ?dump(NewUserPerms),
+    ?dump(Res),
     ok.
 
 
@@ -250,15 +252,19 @@ delete_record(<<"space">>, SpaceDirId) ->
 
 
 space_record(SpaceDirId) ->
+    Auth = op_gui_utils:get_user_rest_auth(),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             name = Name,
             size = _Size,
             users = UsersAndPerms,
-            groups = GroupPerms,
+            groups = GroupsAndPerms,
             providers = _Providers
-        }}} = space_info:get(SpaceId),
+        }}} = space_info:get_or_fetch(Auth, SpaceId),
+
+    ?dump(UsersAndPerms),
+    ?dump(GroupsAndPerms),
 
     UserPermissions = lists:map(
         fun({UserId, _UserPerms}) ->
@@ -268,7 +274,7 @@ space_record(SpaceDirId) ->
     GroupPermissions = lists:map(
         fun({GroupId, _GroupPerms}) ->
             ids_to_association(GroupId, SpaceDirId)
-        end, GroupPerms),
+        end, GroupsAndPerms),
 
     DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
         op_gui_utils:get_users_default_space()),
@@ -282,12 +288,13 @@ space_record(SpaceDirId) ->
 
 
 space_user_permission_record(AssocId) ->
+    Auth = op_gui_utils:get_user_rest_auth(),
     {UserId, SpaceDirId} = association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_info:get(SpaceId),
+        }}} = space_info:get_or_fetch(Auth, SpaceId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -324,12 +331,13 @@ space_user_record(AssocId) ->
 
 
 space_group_permission_record(AssocId) ->
+    Auth = op_gui_utils:get_user_rest_auth(),
     {GroupId, SpaceDirId} = association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             groups = GroupsAndPerms
-        }}} = space_info:get(SpaceId),
+        }}} = space_info:get_or_fetch(Auth, SpaceId),
     GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -376,34 +384,34 @@ association_to_ids(AssocId) ->
 
 
 all_space_perms() -> [
-    space_invite_user, space_remove_user,
-    space_invite_group, space_remove_group,
-    space_add_provider, space_remove_provider,
-    space_set_privileges, space_change_data,
-    space_remove, space_view_data
+    <<"space_invite_user">>, <<"space_remove_user">>,
+    <<"space_invite_group">>, <<"space_remove_group">>,
+    <<"space_add_provider">>, <<"space_remove_provider">>,
+    <<"space_set_privileges">>, <<"space_change_data">>,
+    <<"space_remove">>, <<"space_view_data">>
 ].
 
 
-perm_db_to_gui(space_invite_user) -> <<"permInviteUser">>;
-perm_db_to_gui(space_remove_user) -> <<"permRemoveUser">>;
-perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
-perm_db_to_gui(space_remove_group) -> <<"permRemoveGroup">>;
-perm_db_to_gui(space_set_privileges) -> <<"permSetPrivileges">>;
-perm_db_to_gui(space_remove) -> <<"permRemoveSpace">>;
-perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
-perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>;
-perm_db_to_gui(space_change_data) -> <<"permModifySpace">>;
-perm_db_to_gui(space_view_data) -> <<"permViewSpace">>.
+perm_db_to_gui(<<"space_invite_user">>) -> <<"permInviteUser">>;
+perm_db_to_gui(<<"space_remove_user">>) -> <<"permRemoveUser">>;
+perm_db_to_gui(<<"space_invite_group">>) -> <<"permInviteGroup">>;
+perm_db_to_gui(<<"space_remove_group">>) -> <<"permRemoveGroup">>;
+perm_db_to_gui(<<"space_set_privileges">>) -> <<"permSetPrivileges">>;
+perm_db_to_gui(<<"space_remove">>) -> <<"permRemoveSpace">>;
+perm_db_to_gui(<<"space_add_provider">>) -> <<"permInviteProvider">>;
+perm_db_to_gui(<<"space_remove_provider">>) -> <<"permRemoveProvider">>;
+perm_db_to_gui(<<"space_change_data">>) -> <<"permModifySpace">>;
+perm_db_to_gui(<<"space_view_data">>) -> <<"permViewSpace">>.
 
 
-perm_gui_to_db(<<"permInviteUser">>) -> space_invite_user;
-perm_gui_to_db(<<"permRemoveUser">>) -> space_remove_user;
-perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;
-perm_gui_to_db(<<"permRemoveGroup">>) -> space_remove_group;
-perm_gui_to_db(<<"permSetPrivileges">>) -> space_set_privileges;
-perm_gui_to_db(<<"permRemoveSpace">>) -> space_remove;
-perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
-perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider;
-perm_gui_to_db(<<"permModifySpace">>) -> space_change_data;
-perm_gui_to_db(<<"permViewSpace">>) -> space_view_data.
+perm_gui_to_db(<<"permInviteUser">>) -> <<"space_invite_user">>;
+perm_gui_to_db(<<"permRemoveUser">>) -> <<"space_remove_user">>;
+perm_gui_to_db(<<"permInviteGroup">>) -> <<"space_invite_group">>;
+perm_gui_to_db(<<"permRemoveGroup">>) -> <<"space_remove_group">>;
+perm_gui_to_db(<<"permSetPrivileges">>) -> <<"space_set_privileges">>;
+perm_gui_to_db(<<"permRemoveSpace">>) -> <<"space_remove">>;
+perm_gui_to_db(<<"permInviteProvider">>) -> <<"space_add_provider">>;
+perm_gui_to_db(<<"permRemoveProvider">>) -> <<"space_remove_provider">>;
+perm_gui_to_db(<<"permModifySpace">>) -> <<"space_change_data">>;
+perm_gui_to_db(<<"permViewSpace">>) -> <<"space_view_data">>.
 
