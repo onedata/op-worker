@@ -136,7 +136,8 @@
     <div class="container-fluid">
       <div class="modal-row large-space">
         {{!-- TODO: loader throbber when fileChunks is null --}}
-        {{t 'components.dataFilesListToolbar.fileChunksModal.text' fileName=fileForChunks.name}}
+        {{t 'components.dataFilesListToolbar.fileChunksModal.text'}}
+        <strong>{{fileForChunks.name}}</strong>
       </div>
       <div class="modal-row large-space">
         {{#if fileBlocks}}
@@ -154,9 +155,9 @@
             {{#each fileBlocks as |fb|}}
             <tr>
               <td class="provider-name">
-                <div class="truncate">
+                {{#bs-tooltip tagName="div" class="truncate" title=fb.provider.name}}
                   {{fb.provider.name}}
-                </div>
+                {{/bs-tooltip}}
               </td>
               <td class="chunks">
                 {{file-chunks-bar file=fileForChunks fileBlocks=fb}}

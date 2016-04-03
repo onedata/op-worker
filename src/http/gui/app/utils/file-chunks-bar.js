@@ -1,4 +1,4 @@
-var canvasWidth = 380;
+var canvasWidth = 320;
 var canvasHeight = 20;
 // Onedata colors
 var fillColor = '#55E191';

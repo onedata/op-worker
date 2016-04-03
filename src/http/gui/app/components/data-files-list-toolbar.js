@@ -112,7 +112,7 @@ export default Ember.Component.extend({
     Ember.run.scheduleOnce('afterRender', this, function() {
       this.$().find('[data-toggle="tooltip"]').tooltip();
     });
-  }.observes('items'),
+  }.observes('items', 'fileBlocks.@each.provider.@each.name'),
 
   didInsertElement() {
     this.makeTooltips();

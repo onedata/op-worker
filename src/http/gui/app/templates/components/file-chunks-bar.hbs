@@ -12,5 +12,13 @@
   {{else}}
     <canvas id="file-chunks-{{file.id}}"
       class="file-chunks {{if isLoading 'loading'}} {{if isRenderFailed 'error'}} {{if isRendered 'rendered'}}"></canvas>
+    <div class="file-size">
+      <div class="start">
+        0
+      </div>
+      <div class="end">
+        {{file.sizeHumanReadable}}
+      </div>
+    </div>
   {{/if}}
 {{/if}}
