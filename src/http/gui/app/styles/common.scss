@@ -513,6 +513,11 @@ html, body {
   margin-top: 10px;
   margin-bottom: 10px;
 
+  &.large-space {
+    margin-top: 25px;
+    margin-bottom: 25px;
+  }
+
   &:first-child {
     margin-top: auto;
   }
@@ -540,6 +545,28 @@ html, body {
 .drop-trim-hack {
   max-width: 80px;
   max-height: 40px;
+}
+
+// base class for string truncation
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Bootstrap extensions
+
+.table-no-border>thead>tr>th,
+.table-no-border>tbody>tr>th,
+.table-no-border>tfoot>tr>th,
+.table-no-border>thead>tr>td,
+.table-no-border>tbody>tr>td,
+.table-no-border>tfoot>tr>td,
+.table-no-border>tbody,
+.table-no-border>thead,
+.table-no-border>tfoot{
+  border-top: none !important;
+  border-bottom: none !important;
 }
 
 // TODO: temporary

@@ -129,26 +129,46 @@
 {{!-- FILE CHUNKS --}}
 
 {{#bs-modal open=isFileChunksModal body=false footer=false
-    title="Feature not implemented"
+    title=(t 'components.dataFilesListToolbar.fileChunksModal.title')
     id="file-chunks"}}
   {{#bs-modal-body}}
 
-    {{!-- TODO: loader throbber when fileChunks is null --}}
-    Showing chunks for file: {{fileForChunks.name}}
+    <div class="container-fluid">
+      <div class="modal-row large-space">
+        {{!-- TODO: loader throbber when fileChunks is null --}}
+        {{t 'components.dataFilesListToolbar.fileChunksModal.text' fileName=fileForChunks.name}}
+      </div>
+      <div class="modal-row large-space">
+        {{!-- NOTE: there is an assumption that every fb has other provider --}}
+        <table class="table file-blocks-table">
+          <thead>
+            <th>
+              {{t 'components.dataFilesListToolbar.fileChunksModal.providerName'}}
+            </th>
+            <th>
+              {{t 'components.dataFilesListToolbar.fileChunksModal.dataDitribution'}}
+            </th>
+          </thead>
+          <tbody>
+            {{#each fileBlocks as |fb|}}
+            <tr>
+              <td class="provider-name">
+                <div class="truncate">
+                  {{fb.provider.name}}
+                </div>
+              </td>
+              <td class="chunks">
+                {{file-chunks-bar file=fileForChunks fileBlocks=fb}}
+              </td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-    {{!-- TODO: there is assumption that every fb has other provider --}}
-    <table>
-    {{#each fileBlocks as |fb|}}
-      <tr>
-        <td>
-          {{fb.provider.name}}
-        </td>
-        <td>
-          {{file-chunks-bar file=fileForChunks fileBlocks=fb}}
-        </td>
-      </tr>
-    {{/each}}
-    </table>
+
+
 
   {{/bs-modal-body}}
   {{#bs-modal-footer as |footer|}}
