@@ -165,7 +165,7 @@ fetch(Client, SpaceId) ->
         fun(GroupId) ->
             {ok, Privileges} = oz_spaces:get_group_privileges(Client, SpaceId, GroupId),
             {GroupId, Privileges}
-        end, UserIds),
+        end, GroupIds),
 
     NewSpaceInfo = #space_info{
         id = Id, name = Name, providers = ProviderIds,
