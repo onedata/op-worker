@@ -2,15 +2,19 @@ $onedata-red: #F14549;
 $onedata-azure: #5192EB;
 $onedata-gold: #F5A700;
 $onedata-graphite: #2F333A;
+// TODO: used as a dropright menu background
+$onedata-graphite-2: #2B3037;
+$onedata-gray: #B6BAC0;
 $onedata-snow: #F6F7F8;
 $onedata-light-gray: #FAFAFA;
 $onedata-light-azure: #F2F7FA;
 $onedata-fresh-green: #97C31B;
+$onedata-mint-green: #55E191;
 // TODO: same as graphite?
 $onedata-topbar-graphite: #363A42;
 
 // elements colors
-$color-folder: #B6BAC0;
+$color-folder: $onedata-gray;
 // TODO: onedata-red ?
 $color-file: #F63A39;
 $color-toolbar-icon: $onedata-graphite;
@@ -41,12 +45,12 @@ $color-notify-error: $onedata-red;
 /// Color classes
 // TODO: all classes should start with "color-"
 
-.default-space-color {
-  color: $onedata-gold !important;
+.color-space-default {
+  color: $onedata-red !important;
 }
 
-.space-color {
-  color: $onedata-azure !important;
+.color-space {
+  color: $onedata-gray !important;
 }
 
 .color-directory {

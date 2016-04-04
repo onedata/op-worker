@@ -9,15 +9,16 @@
     <th class="hidden-xs">
       {{t 'components.dataFilesList.size'}}
     </th>
-    <th class="hidden-xs hidden-sm">
+    {{!-- TODO: temporary disabled --}}
+    {{!-- <th class="hidden-xs hidden-sm">
       {{t 'components.dataFilesList.permissions'}}
-    </th>
+    </th> --}}
     <th class="hidden-xs">
       {{t 'components.dataFilesList.modification'}}
     </th>
   </thead>
   <tbody>
-    {{#each dir.children as |file|}}
+    {{#each filesSorted as |file|}}
     {{!-- TODO: open file when selected and enter pressed --}}
       <tr {{action "openFile" file on="doubleClick"}}
         {{action "selectFile" file on="click"}} class="{{if file.isSelected 'active'}}">
@@ -36,9 +37,10 @@
         <td class="hidden-xs">
           {{file.sizeHumanReadable}}
         </td>
-        <td class="col-permissions hidden-xs hidden-sm">
+        {{!-- TODO: temporary disabled --}}
+        {{!-- <td class="col-permissions hidden-xs hidden-sm">
           {{file.permissionsHumanReadable}}
-        </td>
+        </td> --}}
         <td class="hidden-xs">
           {{file.modificationMoment}}
         </td>

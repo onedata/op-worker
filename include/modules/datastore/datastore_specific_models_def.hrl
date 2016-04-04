@@ -51,6 +51,8 @@
     connections = [] :: [pid()],
     proxy_via :: session:id() | undefined,
     response_map = #{} :: #{},
+    % @TODO temporary solution for changes pushing
+    data_backend_connections = [] :: [{Backend :: binary(), pid()}],
     % Key-value in-session memory
     memory = [] :: [{Key :: term(), Value :: term()}]
 }).

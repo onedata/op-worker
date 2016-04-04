@@ -1,12 +1,12 @@
 .one-table {
-  .one-hbody .one-th,
+  .one-thead .one-th,
   .one-tbody .one-td {
     float: left;
     width: 100%;
     text-align: center;
   }
 
-  .one-hbody {
+  .one-thead {
     overflow: hidden;
     clear: both;
 

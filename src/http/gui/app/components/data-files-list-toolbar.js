@@ -3,9 +3,12 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   notify: Ember.inject.service('notify'),
   fileUpload: Ember.inject.service('fileUpload'),
+  store: Ember.inject.service(),
 
   tagName: 'ul',
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
+
+  fileForChunks: null,
 
   /**
    * Holds items of toolbar. Each item is a Object with properties:
@@ -81,19 +84,40 @@ export default Ember.Component.extend({
         icon: 'remove',
         action: 'removeSelectedFiles',
         disabled: !this.get('dir.isSomeFileSelected'),
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.remove')
+      },
+      {
+        id: 'file-chunks-tool',
+        icon: 'provider',
+        action: 'showChunks',
+        disabled: !this.get('dir.singleSelectedFile'),
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.chunks')
       },
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
 
+  resumable: function() {
+    return this.get('fileUpload.fileUploadComponent.resumable');
+  }.property('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
+
   resumableJsChange: function() {
-    let resumable = this.get('fileUpload.fileUploadComponent.resumable');
-    if (resumable) {
+    let resumable = this.get('resumable');
+    console.debug(`Toolbar resumable changed dir id: ${this.get('fileUpload.fileUploadComponent.dir.id')}`);
+    if (resumable && !this.get('uploadBound')) {
+      console.debug('Binding file upload for toolbar');
       resumable.assignBrowse(this.$().find('#toolbar-file-browse'));
+      this.set('uploadBound', true);
     }
-  }.observes('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
+  }.observes('resumable'),
+
+  makeTooltips: function() {
+    Ember.run.scheduleOnce('afterRender', this, function() {
+      this.$().find('[data-toggle="tooltip"]').tooltip();
+    });
+  }.observes('items', 'fileBlocks.@each.provider.@each.name'),
 
   didInsertElement() {
-    this.$().find('[data-toggle="tooltip"]').tooltip();
+    this.makeTooltips();
     this.resumableJsChange();
   },
 
@@ -135,6 +159,24 @@ export default Ember.Component.extend({
       this.set('newPermissions', '');
       this.set('isEditingPermissions', true);
     },
+
+    showChunks() {
+      this.set('isFileChunksModal', true);
+      this.set('fileForChunks', this.get('dir.singleSelectedFile'));
+      let fileId = this.get('fileForChunks.id');
+      // TODO: if fileId null...
+
+      this.get('store').query('file-distribution', { filter: { fileId: fileId } }).then(
+        (fbs) => {
+          this.set('fileBlocks', fbs);
+        },
+        (error) => {
+          console.error('Error loading file blocks: ' + error);
+        }
+      );
+    },
+
+    // TODO: set fileForChunks to null on close
 
     uploadBrowse() {
       this.$('#toolbar-file-browse').trigger('click');

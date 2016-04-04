@@ -37,6 +37,11 @@ let onSaveFailure = function(permission) {
 };
 
 export default Ember.Component.extend({
+  oneproviderServer: Ember.inject.service(),
+  commonModals: Ember.inject.service(),
+
+  classNames: ['permissions-table'],
+
   /**
    * Collection of permissions-base model subclasses instances.
    * Each represents a sigle entity with some permissions to set.
@@ -51,10 +56,25 @@ export default Ember.Component.extend({
    */
   type: null,
 
+  typeSingular: function() {
+    return this.get('type') === 'groups' ? 'group' : 'user';
+  }.property('type'),
+
   /** A localized title of table (based on type) */
   title: function() {
     return this.get('type') ?
       this.get('i18n').t(`spaces.show.${this.get('type')}.tableTitle`) : '';
+  }.property('type'),
+
+  inviteButton: function() {
+    switch (this.get('type')) {
+      case 'users':
+        return 'user-add';
+      case 'groups':
+        return 'group-invite';
+      default:
+        return null;
+    }
   }.property('type'),
 
   /** Should permissions table be treated as modified and not saved?
@@ -96,6 +116,13 @@ export default Ember.Component.extend({
       this.get('permissions').forEach(function(permission) {
         permission.reset();
       });
-    }
+    },
+
+    invite() {
+      // TODO: plural -> singular mess
+      this.get('commonModals').openModal(`token-${this.get('typeSingular')}` , {
+        space: this.get('space')
+      });
+    },
   }
 });

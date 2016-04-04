@@ -18,7 +18,7 @@ export default DS.Model.extend({
   userPermissions: DS.hasMany('spaceUserPermission', {async: true}),
   /** Collection of group permissions - effectively all rows in permissions table */
   groupPermissions: DS.hasMany('spaceGroupPermission', {async: true}),
-  /** Wether user specified this space as default */
+  /** Whether user specified this space as default */
   isDefault: DS.attr('boolean', {defaultValue: false}),
 
 // TODO: currently not used - use list Order in templates
@@ -35,5 +35,8 @@ export default DS.Model.extend({
   /** Id of this space menu element used in sidebar HTML */
   sidebarEntryId: function() {
     return 'space-entry-'+this.id;
-  }.property('id')
+  }.property('id'),
+
+  /*** Temporary properties used in view ***/
+  isExpanded: false,
 });
