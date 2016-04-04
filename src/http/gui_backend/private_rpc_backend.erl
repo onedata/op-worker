@@ -38,11 +38,19 @@ handle(<<"fileUploadComplete">>, [{<<"fileId">>, FileId}]) ->
 
 handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, SpaceID} = oz_users:join_space(UserAuth, [{<<"token">>, Token}]),
-    {ok, #space_details{
-        name = SpaceName
-    }} = oz_spaces:get_details(UserAuth, SpaceID),
-    {ok, SpaceName};
+    case oz_users:join_space(UserAuth, [{<<"token">>, Token}]) of
+        {ok, SpaceID} ->
+            {ok, #space_details{
+                name = SpaceName
+            }} = oz_spaces:get_details(UserAuth, SpaceID),
+            {ok, SpaceName};
+        {error, {
+            400,
+            <<"invalid_request">>,
+            <<"invalid 'token' value: ", _/binary>>
+        }} ->
+            gui_error:report_warning(<<"Invalid token value.">>)
+    end;
 
 handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceDirId}]) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),

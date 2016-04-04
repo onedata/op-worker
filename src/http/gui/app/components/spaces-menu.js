@@ -237,8 +237,11 @@ export default Ember.Component.extend({
           (spaceName) => {
             this.spaceActionMessage('info', 'joinSuccess', spaceName);
           },
-          (spaceName) => {
-            this.spaceActionMessage('error', 'joinFailed', spaceName);
+          (errorJson) => {
+            console.log(errorJson.message);
+            let message = this.get('i18n').t('components.spacesMenu.notify.joinFailed', {errorDetails: errorJson.message});
+            this.get('notify')['error'](message);
+            //this.spaceActionMessage('error', 'joinFailed', message);
           }
         );
       } finally {

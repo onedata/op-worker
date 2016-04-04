@@ -81,7 +81,8 @@ export default {
         leaveFailed: 'Cannot leave space "{{spaceName}}" due to an error',
         removeSuccess: 'Space "{{spaceName}}" has been removed',
         removeFailed: 'Failed to remove space "{{spaceName}}"',
-        joinSuccess: 'Successfully joined to space "{{spaceName}}"'
+        joinSuccess: 'Successfully joined space "{{spaceName}}"',
+        joinFailed: 'Cannot join space: "{{errorDetails}}"'
       }
     },
     spacesSubmenu: {
