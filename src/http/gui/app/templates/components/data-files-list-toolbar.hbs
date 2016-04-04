@@ -140,7 +140,7 @@
         <strong>{{fileForChunks.name}}</strong>
       </div>
       <div class="modal-row large-space">
-        {{#if fileBlocks}}
+        {{#if fileBlocksSorted}}
         {{!-- NOTE: there is an assumption that every fb has other provider --}}
         <table class="table file-blocks-table">
           <thead>
@@ -152,7 +152,7 @@
             </th>
           </thead>
           <tbody>
-            {{#each fileBlocks as |fb|}}
+            {{#each fileBlocksSorted as |fb|}}
             <tr>
               <td class="provider-name">
                 {{#bs-tooltip tagName="div" class="truncate" title=fb.provider.name}}

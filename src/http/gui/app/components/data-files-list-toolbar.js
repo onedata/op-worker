@@ -9,6 +9,8 @@ export default Ember.Component.extend({
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
 
   fileForChunks: null,
+  fileBlocksSorting: ['provider.name'],
+  fileBlocksSorted: Ember.computed.sort('fileBlocks', 'fileBlocksSorting'),
 
   /**
    * Holds items of toolbar. Each item is a Object with properties:

@@ -49,6 +49,9 @@ export default Ember.Component.extend({
    * It must be injected into component.
    */
   permissions: [],
+  permissionsSorting: ['owner'],
+  permissionsSorted: Ember.computed.sort('permissions', 'permissionsSorting'),
+
 
   /**
    * A type of table: users/groups

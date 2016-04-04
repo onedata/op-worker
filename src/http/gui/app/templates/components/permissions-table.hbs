@@ -48,7 +48,7 @@
     <div class="one-th">{{t 'components.permissionsTable.removeProvider'}}</div>
   </div>
   <div class="one-tbody">
-    {{#each permissions as |perm|}}
+    {{#each permissionsSorted as |perm|}}
       <div class="one-tr" id="perm-row-{{perm.owner.id}}">
         <div class="one-td one-first">{{trim-string perm.owner.name 14}}</div>
 

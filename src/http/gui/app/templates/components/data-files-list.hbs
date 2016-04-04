@@ -3,48 +3,57 @@
     {{icon 'upload'}}
   </div>
   <thead>
-    <th>
-      {{t 'components.dataFilesList.files'}}
-    </th>
-    <th class="hidden-xs">
-      {{t 'components.dataFilesList.size'}}
-    </th>
-    {{!-- TODO: temporary disabled --}}
-    {{!-- <th class="hidden-xs hidden-sm">
-      {{t 'components.dataFilesList.permissions'}}
-    </th> --}}
-    <th class="hidden-xs">
-      {{t 'components.dataFilesList.modification'}}
-    </th>
+  <th>
+    {{t 'components.dataFilesList.files'}}
+  </th>
+  <th class="hidden-xs">
+    {{t 'components.dataFilesList.size'}}
+  </th>
+  {{!-- TODO: temporary disabled --}}
+  {{!-- <th class="hidden-xs hidden-sm">
+    {{t 'components.dataFilesList.permissions'}}
+  </th> --}}
+  <th class="hidden-xs">
+    {{t 'components.dataFilesList.modification'}}
+  </th>
   </thead>
   <tbody>
-    {{#each filesSorted as |file|}}
-    {{!-- TODO: open file when selected and enter pressed --}}
-      <tr {{action "openFile" file on="doubleClick"}}
-        {{action "selectFile" file on="click"}} class="{{if file.isSelected 'active'}}">
-        <td id="file-{{file.id}}">
-          <div class="file-icon">
+  {{#each filesSorted as |file|}}
+  {{!-- TODO: open file when selected and enter pressed --}}
+    <tr {{action "openFile" file on="doubleClick"}}
+      {{action "selectFile" file on="click"}}
+        class="{{if file.isSelected 'active'}}">
+      <td id="file-{{file.id}}">
+        <div class="file-icon">
+          {{#if file.isBroken}}
+            {{icon "file" "color-directory"}}
+          {{else}}
             {{#if file.isDir}}
               {{icon "folder" "color-directory"}}
             {{else}}
               {{icon "file" "color-file"}}
             {{/if}}
-          </div>
-          <div class="file-label">
+          {{/if}}
+        </div>
+        <div class="file-label">
+          {{#if file.isBroken}}
+            <i>This file is not yet synced</i>
+          {{else}}
             {{file.name}}
-          </div>
-        </td>
-        <td class="hidden-xs">
-          {{file.sizeHumanReadable}}
-        </td>
-        {{!-- TODO: temporary disabled --}}
-        {{!-- <td class="col-permissions hidden-xs hidden-sm">
-          {{file.permissionsHumanReadable}}
-        </td> --}}
-        <td class="hidden-xs">
-          {{file.modificationMoment}}
-        </td>
-      </tr>
-    {{/each}}
+          {{/if}}
+        </div>
+      </td>
+      <td class="hidden-xs">
+        {{file.sizeHumanReadable}}
+      </td>
+      {{!-- TODO: temporary disabled --}}
+      {{!-- <td class="col-permissions hidden-xs hidden-sm">
+        {{file.permissionsHumanReadable}}
+      </td> --}}
+      <td class="hidden-xs">
+        {{file.modificationMoment}}
+      </td>
+    </tr>
+  {{/each}}
   </tbody>
 </table>
