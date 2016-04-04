@@ -96,20 +96,6 @@ export default Ember.Component.extend({
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
 
-  resumable: function() {
-    return this.get('fileUpload.fileUploadComponent.resumable');
-  }.property('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
-
-  resumableJsChange: function() {
-    let resumable = this.get('resumable');
-    console.debug(`Toolbar resumable changed dir id: ${this.get('fileUpload.fileUploadComponent.dir.id')}`);
-    if (resumable && !this.get('uploadBound')) {
-      console.debug('Binding file upload for toolbar');
-      resumable.assignBrowse(this.$().find('#toolbar-file-browse'));
-      this.set('uploadBound', true);
-    }
-  }.observes('resumable'),
-
   makeTooltips: function() {
     Ember.run.scheduleOnce('afterRender', this, function() {
       this.$().find('[data-toggle="tooltip"]').tooltip();
@@ -118,7 +104,11 @@ export default Ember.Component.extend({
 
   didInsertElement() {
     this.makeTooltips();
-    this.resumableJsChange();
+    console.debug('Binding upload button for files toolbar');
+    // NOTE: file upload component has dir set by data-files-list component,
+    // so data-files-list _must_ be used when using this toolbar
+    // if this changes - please copy "dirChanged" method from files-list here
+    this.get('fileUpload').assignBrowse(this.$().find('#toolbar-file-browse'));
   },
 
   actions: {
