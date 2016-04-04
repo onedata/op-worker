@@ -2,6 +2,10 @@
 .btn {
   border: none !important;
   padding: 10px 40px;
+
+  .oneicon {
+    font-size: 40px;
+  }
 }
 
 .btn-primary {
@@ -28,4 +32,14 @@
   &:active:focus, &:active:hover, &:focus, &:active {
     background-color: darken($color-button-default, 10%);
   }
+}
+
+.btn-right {
+  border-top-left-radius: 0px;
+  border-bottom-left-radius: 0px;
+}
+
+.btn-left {
+  border-top-right-radius: 0px;
+  border-bottom-right-radius: 0px;
 }

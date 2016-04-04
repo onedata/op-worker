@@ -177,7 +177,8 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
                     #fslogic_ctx{session_id = SessionId} = Context,
-                    {ok, ProviderIds} = oz_spaces:get_providers(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
+                    {ok, #document{value = #space_info{providers = ProviderIds}}} =
+                        space_info:get_or_fetch(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             {Context, [oneprovider:get_provider_id()]};

@@ -1,5 +1,7 @@
 {{!-- The main layout --}}
 
+{{page-title "Oneprovider"}}
+
 <div id="app">
   <header>
     {{#top-bar}}
@@ -22,4 +24,6 @@
     <a {{action close}} class='close-button'>{{icon 'checkbox-x'}}</a>
     <span class='message'>{{message.text}}</span>
   {{/ember-notify}}
+
+  {{common-modals}}
 </div>

@@ -127,7 +127,7 @@ read_dir(#fslogic_ctx{session_id = SessionId} = CTX, File, Offset, Size) ->
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
 
                         Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:fetch(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
+                            {ok, Space} = space_info:get_or_fetch(fslogic_utils:session_to_rest_client(SessionId), SpaceId),
                             Space
                         end, SpacesIdsChunk),
 

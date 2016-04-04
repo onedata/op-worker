@@ -32,18 +32,27 @@
 %%--------------------------------------------------------------------
 -spec change_replicated(SpaceId :: binary(), dbsync_worker:change()) ->
     any().
-change_replicated(_, #change{model = file_meta, doc =  #document{key = FileUUID,
+change_replicated(_, #change{model = file_meta, doc = #document{key = FileUUID,
     value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}) ->
-    ok = replica_cleanup:clean_replica_files(FileUUID);
+    ok = replica_cleanup:clean_replica_files(FileUUID),
+    %% @todo (VFS-1865) Temporal solution for GUI push updates
+    gui_model_updates:deleted(file_meta, FileUUID),
+    ok;
 change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc =
     #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
     ?info("change_replicated: changed file_meta ~p", [FileUUID]),
     ok = fslogic_utils:wait_for_links(FileUUID, 5),
     ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
-    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
+    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
+    %% @todo (VFS-1865) Temporal solution for GUI push updates
+    gui_model_updates:changed(file_meta, FileUUID),
+    ok;
 change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
     ?info("change_replicated: changed file_meta ~p", [FileUUID]),
-    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
+    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []),
+    %% @todo (VFS-1865) Temporal solution for GUI push updates
+    gui_model_updates:changed(file_meta, FileUUID),
+    ok;
 change_replicated(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
     ?info("change_replicated: changed file_location ~p", [FileUUID]),
     ok = fslogic_utils:wait_for_file_meta(FileUUID, 5),

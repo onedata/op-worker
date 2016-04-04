@@ -15,6 +15,7 @@
 -behaviour(rpc_backend_behaviour).
 
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
 -export([handle/2]).
@@ -31,5 +32,37 @@
 %%--------------------------------------------------------------------
 -spec handle(FunctionId :: binary(), RequestData :: term()) ->
     ok | {ok, ResponseData :: term()} | gui_error:error_result().
-handle(_, _) ->
-    gui_error:report_error(<<"Not implemented">>).
+handle(<<"fileUploadComplete">>, [{<<"fileId">>, FileId}]) ->
+    upload_handler:upload_map_delete(FileId),
+    ok;
+
+handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    {ok, SpaceID} = oz_users:join_space(UserAuth, [{<<"token">>, Token}]),
+    {ok, #space_details{
+        name = SpaceName
+    }} = oz_spaces:get_details(UserAuth, SpaceID),
+    {ok, SpaceName};
+
+handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    ok = oz_users:leave_space(UserAuth, SpaceId);
+
+handle(<<"userToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    {ok, Token} = oz_spaces:get_invite_user_token(UserAuth, SpaceId),
+    {ok, Token};
+
+handle(<<"groupToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    {ok, Token} = oz_spaces:get_invite_group_token(UserAuth, SpaceId),
+    {ok, Token};
+
+handle(<<"supportToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    {ok, Token} = oz_spaces:get_invite_provider_token(UserAuth, SpaceId),
+    {ok, Token}.

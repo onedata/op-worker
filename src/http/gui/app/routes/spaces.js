@@ -38,6 +38,10 @@ export default Ember.Route.extend({
     return this.store.findAll('space');
   },
 
+  //afterModel(spaces) {
+  //  this.transitionTo('spaces.show', spaces.find((s) => s.get('isDefault')) || spaces[0]);
+  //},
+
   actions: {
     /** Show submenu for Space */
     goToSpace(space) {
