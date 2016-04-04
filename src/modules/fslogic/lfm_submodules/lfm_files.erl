@@ -18,6 +18,7 @@
 -include("proto/oneclient/event_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 %% API
 %% Functions operating on directories or files
@@ -29,7 +30,7 @@
 
 -compile({no_auto_import, [unlink/1]}).
 
--define(FSYNC_TIMEOUT, timer:seconds(2)).
+
 
 %%%===================================================================
 %%% API

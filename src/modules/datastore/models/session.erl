@@ -308,7 +308,7 @@ remove_connection(SessId, Con) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth(SessId :: id()) ->
-    {ok, Auth :: #auth{}} | {error, Reason :: term()}.
+    {ok, Auth :: #auth{}} | {ok, undefined} | {error, Reason :: term()}.
 get_auth(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} ->

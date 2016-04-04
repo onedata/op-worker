@@ -1576,7 +1576,8 @@ end_per_testcase(choose_adequate_handler, Config) ->
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
     unmock_user_auth(Config),
-    initializer:clean_test_users_and_spaces(Config),
+     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
     application:stop(ssl2).
 
