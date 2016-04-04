@@ -375,11 +375,11 @@ space_group_record(AssocId) ->
 
 
 ids_to_association(FirstId, SecondId) ->
-    <<FirstId/binary, "@", SecondId/binary>>.
+    <<FirstId/binary, ".", SecondId/binary>>.
 
 
 association_to_ids(AssocId) ->
-    [FirstId, SecondId] = binary:split(AssocId, <<"@">>, [global]),
+    [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
     {FirstId, SecondId}.
 
 
