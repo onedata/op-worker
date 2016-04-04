@@ -63,7 +63,14 @@ terminate() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, [FileId]) ->
     SessionId = g_session:get_session_id(),
-    file_record(SessionId, FileId).
+    try
+        file_record(SessionId, FileId)
+    catch T:M ->
+        ?warning("Cannot get meta-data for file (~p). ~p:~p", [
+            FileId, T, M
+        ]),
+        {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -350,9 +357,9 @@ file_record(SessionId, FileId) ->
 
 
 ids_to_association(FirstId, SecondId) ->
-    <<FirstId/binary, "@", SecondId/binary>>.
+    <<FirstId/binary, ".", SecondId/binary>>.
 
 
 association_to_ids(AssocId) ->
-    [FirstId, SecondId] = binary:split(AssocId, <<"@">>, [global]),
+    [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
     {FirstId, SecondId}.

@@ -48,13 +48,17 @@ export default Ember.Component.extend({
           this.set('inviteToken', token);
         },
         (error) => {
-          this.set('errorMessage', error);
+          // this.set('errorMessage', error);
           console.error(`Token ${type} fetch failed: ` + JSON.stringify(error));
         }
       );
     },
     selectAll() {
       this.selectTokenText();
+    },
+    closeModal() {
+      this.set('inviteToken', null);
+      this.set('errorMessage', null);
     },
     copySuccess() {
       this.selectTokenText();

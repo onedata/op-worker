@@ -526,7 +526,7 @@ translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
 translate_to_protobuf(#'remote_write'{byte_sequence = ByteSequence}) ->
     {remote_write, #'RemoteWrite'{byte_sequence = [translate_to_protobuf(BS) || BS <- ByteSequence]}};
 translate_to_protobuf(#'byte_sequence'{offset = Offset, data = Data}) ->
-    {remote_write, #'ByteSequence'{offset = Offset, data = Data}};
+    #'ByteSequence'{offset = Offset, data = Data};
 translate_to_protobuf(#'get_xattr'{uuid = UUID, name = Name}) ->
     {get_xattr, #'GetXattr'{uuid = UUID, name = Name}};
 translate_to_protobuf(#'set_xattr'{uuid = UUID, xattr = Xattr}) ->

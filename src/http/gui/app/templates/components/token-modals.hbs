@@ -1,5 +1,5 @@
 {{#bs-modal openedAction='getToken' open=isOpened body=false footer=false
-    title=modalTitle
+    title=modalTitle closeAction='closeModal'
     id=modalId}}
   {{#bs-modal-body}}
     {{#if inviteToken}}
@@ -18,13 +18,13 @@
     {{else}}
         <div class="modal-loading">
           {{#if errorMessage}}
+            <div class="loading-label">
+              {{t "common.modal.fetchingTokenError"}}
+            </div>
+          {{else}}
             <div class="loading-throbber"></div>
             <div class="loading-label">
               {{t "common.modal.fetchingToken"}}
-            </div>
-          {{else}}
-            <div class="loading-label">
-              {{t "common.modal.fetchingTokenError"}}
             </div>
           {{/if}}
         </div>
