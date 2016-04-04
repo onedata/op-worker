@@ -25,7 +25,6 @@ export default Ember.Component.extend({
   },
 
   dirChanged: function() {
-    debugger;
     this.set('fileUpload.dir', this.get('dir'));
   }.observes('dir'),
 
