@@ -63,7 +63,14 @@ terminate() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, [FileId]) ->
     SessionId = g_session:get_session_id(),
-    file_record(SessionId, FileId).
+    try
+        file_record(SessionId, FileId)
+    catch T:M ->
+        ?warning("Cannot get meta-data for file (~p). ~p:~p", [
+            FileId, T, M
+        ]),
+        {ok, [{<<"id">>, FileId}, {<<"type">>, <<"broken">>}]}
+    end.
 
 
 %%--------------------------------------------------------------------
