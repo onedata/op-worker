@@ -531,6 +531,7 @@ html, body {
 
 // HACKS
 
+// DEPRECATED
 .trim-hack {
   overflow: hidden;
 
@@ -539,14 +540,40 @@ html, body {
   table-layout: fixed;
 }
 
-.select-trim-hack {
-  max-width: 90px;
-  max-height: 60px;
+.truncate-secondary-sidebar-select {
+  max-width: $secondary-sidebar-width - 110px;
 }
 
-.drop-trim-hack {
-  max-width: 80px;
-  max-height: 40px;
+.truncate-secondary-sidebar-item {
+  max-width: $secondary-sidebar-width - 70px;
+
+  &.level-1 {
+    max-width: $secondary-sidebar-width - 100px;
+  }
+
+  &.level-2 {
+    max-width: $secondary-sidebar-width - 120px;
+  }
+
+  &.level-3 {
+    max-width: $secondary-sidebar-width - 140px;
+  }
+
+  &.level-4 {
+    max-width: $secondary-sidebar-width - 160px;
+  }
+
+  &.level-5 {
+    max-width: $secondary-sidebar-width - 180px;
+  }
+
+  &.level-6 {
+    max-width: $secondary-sidebar-width - 200px;
+  }
+}
+
+.truncate-drop {
+  max-width: $secondary-sidebar-width - 70px;
 }
 
 // base class for string truncation
