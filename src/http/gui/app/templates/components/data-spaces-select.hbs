@@ -6,8 +6,8 @@
         {{icon (if selectedSpace.isDefault 'space-home' 'space')}}
       </div>
       <div class="item-label" title="{{selectedSpace.name}}">
-        <div class="trim-hack select-trim-hack">
-          {{trim-string selectedSpace.name 14}}
+        <div class="truncate truncate-secondary-sidebar-select">
+          {{selectedSpace.name}}
         </div>
       </div>
       <div class="item-icon select-arrow">
@@ -23,8 +23,8 @@
             {{icon (if s.isDefault 'space-home' 'space')}}
           </div>
           <div class="item-label">
-            <div class="trim-hack drop-trim-hack">
-              {{trim-string s.name 14}}
+            <div class="truncate truncate-drop">
+              {{s.name}}
             </div>
           </div>
         </a>
