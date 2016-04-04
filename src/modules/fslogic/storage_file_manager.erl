@@ -243,7 +243,7 @@ write(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, O
 write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUuid, storage_id = SID, file = FID}, Offset, Data) ->
     ProxyIORequest = #proxyio_request{
         file_uuid = FileUuid, storage_id = SID, file_id = FID,
-        proxyio_request = #remote_write{offset = Offset, data = Data}},
+        proxyio_request = #remote_write{byte_sequence = [#byte_sequence{offset = Offset, data = Data}]}},
     ?info("remote_write: ~p ~p", [FileUuid, SessionId]),
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
         #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_write_result{wrote = Wrote}} ->

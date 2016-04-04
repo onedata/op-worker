@@ -410,9 +410,9 @@ handle_read_events(Evts, _Ctx) ->
 
 handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
     file_uuid = FileUuid, storage_id = SID, file_id = FID,
-    proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
+    proxyio_request = #remote_write{byte_sequence = ByteSequence}}) ->
 
-    fslogic_proxyio:write(SessionId, FileUuid, SID, FID, Offset, Data);
+    fslogic_proxyio:write(SessionId, FileUuid, SID, FID, ByteSequence);
 
 handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
     file_uuid = FileUuid, storage_id = SID, file_id = FID,
