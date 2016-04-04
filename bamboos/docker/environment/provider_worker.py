@@ -32,9 +32,6 @@ class ProviderWorkerConfigurator:
                     'string': '/root/gui_static'}
         return cfg
 
-    def pre_start_commands(self, bindir, config, domain, worker_ips):
-        return ''
-
     def configure_started_instance(self, bindir, instance, config,
                                    container_ids, output, storages_dockers=None):
         this_config = config[self.domains_attribute()][instance]
