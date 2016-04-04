@@ -26,6 +26,14 @@ export default Ember.Component.extend({
     return this.get('i18n').t(`components.tokenModals.${this.get('type')}.label`);
   }.property('type'),
 
+  formElementId: function() {
+    return `invite-form-${this.get('modalId')}`;
+  }.property('modalId'),
+
+  clipboardTarget: function() {
+    return `#${this.get('formElementId')} input`;
+  }.property('formElementId'),
+
   selectTokenText() {
     let input = $('#invite-token-field')[0];
     $(input).focus();

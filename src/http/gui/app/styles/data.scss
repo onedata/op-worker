@@ -229,3 +229,16 @@
   line-height: normal;
   font-style: italic;
 }
+
+.files-list {
+  height: 100%;
+
+  // component - TODO: move to other file?
+  .data-files-list {
+    height: 100%;
+  }
+}
+
+.file-upload {
+
+}
