@@ -10,16 +10,20 @@ export default Ember.Component.extend({
   /** Space currently selected */
   selectedSpace: null,
 
-  // selectedSpace: function() {
-  //   return this.get('spaces').find((s) => s.id === this.get('selectedSpaceId'));
-  // }.property('selectedSpaceId'),
-
   prevSelectedSpace: null,
 
   spacesChanged: function() {
-    console.warn(`Spaces changed: ${this.get('spaces.length')}, prev: ${this.get('prevSelectedSpace')}`);
+    console.debug(`Spaces changed: len ${this.get('spaces.length')}, prev: ${this.get('prevSelectedSpace')}`);
     if (!this.get('prevSelectedSpace') && this.get('spaces.length') > 0) {
       let defaultSpace = this.get('spaces').find((s) => s.get('isDefault'));
+      console.debug('spaces: ' + this.get('spaces').map((s) => s.get('isDefault')));
+      if (defaultSpace) {
+        console.debug(`Will set new selectedSpace: ${defaultSpace.get('name')}`);
+      } else {
+        console.debug('DataSpacesSelect: no selectedSpace!');
+      }
+
+      this.set('prevSelectedSpace', this.get('selectedSpace'));
       this.set('selectedSpace', defaultSpace);
     }
   }.observes('spaces', 'spaces.length', 'spaces.@each.isDefault'),
@@ -31,11 +35,6 @@ export default Ember.Component.extend({
   }.observes('selectedSpace'),
 
   didInsertElement() {
-    // let selectInstance = new Select({
-    //   el: document.querySelector('select'),
-    //   className: 'select-theme-onedata'
-    // });
-
     console.warn('did insert spaces');
     this.spacesChanged();
   },
@@ -46,9 +45,4 @@ export default Ember.Component.extend({
       this.set('selectedSpace', space);
     }
   }
-
-  // something: function() {
-  //   let a = this.get('spaces').toArray()[0].get('rootDir').get('children').toArray();
-  //   return a.length > 0 && a[0].get('name');
-  // }.property('spaces.@each.rootDir.@each.children.@each.name')
 });

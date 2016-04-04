@@ -16,14 +16,17 @@
 -author("Jakub Liput").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
--export([init/0]).
+-export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
+%% @todo (VFS-1865) Temporal solution for GUI push updates
+-export([file_record/2, get_parent/2]).
 
 %%%===================================================================
 %%% API functions
@@ -36,6 +39,18 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    op_gui_utils:register_backend(?MODULE, self()),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link data_backend_behaviour} callback terminate/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate() -> ok.
+terminate() ->
+    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
@@ -48,49 +63,7 @@ init() ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, [FileId]) ->
     SessionId = g_session:get_session_id(),
-    SpacesDirUUID = get_spaces_dir_uuid(),
-    ParentUUID = case get_parent(FileId) of
-        SpacesDirUUID ->
-            null;
-        Other ->
-            Other
-    end,
-    {ok, #file_attr{
-        name = Name,
-        type = TypeAttr,
-        size = SizeAttr,
-        mtime = ModificationTime,
-        mode = PermissionsAttr}} =
-        logical_file_manager:stat(SessionId, {uuid, FileId}),
-    {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE -> {<<"dir">>, null};
-        _ -> {<<"file">>, SizeAttr}
-    end,
-    Permissions = integer_to_binary(PermissionsAttr, 8),
-    Children = case Type of
-        <<"file">> ->
-            [];
-        <<"dir">> ->
-            case logical_file_manager:ls(
-                SessionId, {uuid, FileId}, 0, 1000) of
-                {ok, Chldrn} ->
-                    Chldrn;
-                _ ->
-                    []
-            end
-    end,
-    ChildrenIds = [ChId || {ChId, _} <- Children],
-    Res = [
-        {<<"id">>, FileId},
-        {<<"name">>, Name},
-        {<<"type">>, Type},
-        {<<"permissions">>, Permissions},
-        {<<"modificationTime">>, ModificationTime},
-        {<<"size">>, Size},
-        {<<"parent">>, ParentUUID},
-        {<<"children">>, ChildrenIds}
-    ],
-    {ok, Res}.
+    file_record(SessionId, FileId).
 
 
 %%--------------------------------------------------------------------
@@ -112,7 +85,40 @@ find_all(<<"file">>) ->
 -spec find_query(ResourceType :: binary(), Data :: proplists:proplist()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_query(<<"file">>, _Data) ->
-    gui_error:report_error(<<"Not iplemented">>).
+    gui_error:report_error(<<"Not iplemented">>);
+
+
+find_query(<<"file-distribution">>, [{<<"filter">>, [{<<"fileId">>, FileId}]}]) ->
+    {ok, Locations} = file_meta:get_locations({uuid, FileId}),
+    ?dump(FileId),
+    ?dump(Locations),
+    Res = lists:map(
+        fun(LocationId) ->
+            {ok, #document{value = #file_location{
+                provider_id = ProviderId,
+                blocks = Blocks
+            }}} = file_location:get(LocationId),
+            BlocksList = case Blocks of
+                [] ->
+                    % @todo LOL!~
+                    % ABY ZAMOKOWAC, ODKOMENTUJ!
+%%                    [123423, 2023401, 3023401, 3523401, 5023401, 6023401];
+                    [0, 0];
+                _ ->
+                    lists:foldl(
+                        fun(#file_block{offset = Offset, size = Size}, Acc) ->
+                            Acc ++ [Offset, Offset + Size]
+                        end, [], Blocks)
+            end,
+            [
+                {<<"id">>, ids_to_association(FileId, ProviderId)},
+                {<<"fileId">>, FileId},
+                {<<"provider">>, ProviderId},
+                {<<"blocks">>, BlocksList}
+            ]
+        end, Locations),
+    ?dump(Res),
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------
@@ -126,48 +132,43 @@ create_record(<<"file">>, Data) ->
     try
         SessionId = g_session:get_session_id(),
         Name = proplists:get_value(<<"name">>, Data),
-        case binary:match(Name, <<"nie">>) of
-            {_, _} ->
-                gui_error:report_warning(<<"Names with 'nie' forbidden!">>);
-            nomatch ->
-                Type = proplists:get_value(<<"type">>, Data),
-                ParentUUID = proplists:get_value(<<"parent">>, Data, null),
-                {ok, ParentPath} = logical_file_manager:get_file_path(
-                    SessionId, ParentUUID),
-                Path = filename:join([ParentPath, Name]),
-                FileId = case Type of
-                    <<"file">> ->
-                        {ok, FId} = logical_file_manager:create(
-                            SessionId, Path, 8#777),
-                        FId;
-                    <<"dir">> ->
-                        {ok, DirId} = logical_file_manager:mkdir(
-                            SessionId, Path, 8#777),
-                        DirId
-                end,
-                {ok, #file_attr{
-                    name = Name,
-                    size = SizeAttr,
-                    mtime = ModificationTime,
-                    mode = PermissionsAttr}} =
-                    logical_file_manager:stat(SessionId, {uuid, FileId}),
-                Size = case Type of
-                    <<"dir">> -> null;
-                    _ -> SizeAttr
-                end,
-                Permissions = integer_to_binary(PermissionsAttr, 8),
-                Res = [
-                    {<<"id">>, FileId},
-                    {<<"name">>, Name},
-                    {<<"type">>, Type},
-                    {<<"permissions">>, Permissions},
-                    {<<"modificationTime">>, ModificationTime},
-                    {<<"size">>, Size},
-                    {<<"parent">>, ParentUUID},
-                    {<<"children">>, []}
-                ],
-                {ok, Res}
-        end
+        Type = proplists:get_value(<<"type">>, Data),
+        ParentUUID = proplists:get_value(<<"parent">>, Data, null),
+        {ok, ParentPath} = logical_file_manager:get_file_path(
+            SessionId, ParentUUID),
+        Path = filename:join([ParentPath, Name]),
+        FileId = case Type of
+            <<"file">> ->
+                {ok, FId} = logical_file_manager:create(
+                    SessionId, Path, 8#777),
+                FId;
+            <<"dir">> ->
+                {ok, DirId} = logical_file_manager:mkdir(
+                    SessionId, Path, 8#777),
+                DirId
+        end,
+        {ok, #file_attr{
+            name = Name,
+            size = SizeAttr,
+            mtime = ModificationTime,
+            mode = PermissionsAttr}} =
+            logical_file_manager:stat(SessionId, {uuid, FileId}),
+        Size = case Type of
+            <<"dir">> -> null;
+            _ -> SizeAttr
+        end,
+        Permissions = integer_to_binary(PermissionsAttr, 8),
+        Res = [
+            {<<"id">>, FileId},
+            {<<"name">>, Name},
+            {<<"type">>, Type},
+            {<<"permissions">>, Permissions},
+            {<<"modificationTime">>, ModificationTime},
+            {<<"size">>, Size},
+            {<<"parent">>, ParentUUID},
+            {<<"children">>, []}
+        ],
+        {ok, Res}
     catch _:_ ->
         gui_error:report_warning(<<"Failed to create new directory.">>)
     end.
@@ -252,14 +253,12 @@ delete_record(<<"file">>, Id) ->
 %% spaces dir has two different UUIDs, should be removed when this is fixed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(UUID :: binary()) -> binary().
-get_parent(UUID) ->
-    SessionId = g_session:get_session_id(),
-    {ok, ParentUUID} = logical_file_manager:get_parent(
-        SessionId, {uuid, UUID}),
+-spec get_parent(SessionId :: binary(), UUID :: binary()) -> binary().
+get_parent(SessionId, UUID) ->
+    {ok, ParentUUID} = logical_file_manager:get_parent(SessionId, {uuid, UUID}),
     case logical_file_manager:get_file_path(SessionId, ParentUUID) of
         {ok, <<"/spaces">>} ->
-            get_spaces_dir_uuid();
+            get_spaces_dir_uuid(SessionId);
         _ ->
             ParentUUID
     end.
@@ -271,9 +270,8 @@ get_parent(UUID) ->
 %% Returns the UUID of user's /spaces dir.
 %% @end
 %%--------------------------------------------------------------------
--spec get_spaces_dir_uuid() -> binary().
-get_spaces_dir_uuid() ->
-    SessionId = g_session:get_session_id(),
+-spec get_spaces_dir_uuid(SessionId :: binary()) -> binary().
+get_spaces_dir_uuid(SessionId) ->
     {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces">>}),
     SpacesDirUUID.
@@ -295,3 +293,66 @@ rm_rf(Id) ->
             ok = rm_rf(ChId)
         end, Children),
     ok = logical_file_manager:unlink(SessionId, {uuid, Id}).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Constructs a file record from given FileId.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_record(SessionId :: binary(), FileId :: binary()) ->
+    {ok, proplists:proplist()}.
+file_record(SessionId, FileId) ->
+    SpacesDirUUID = get_spaces_dir_uuid(SessionId),
+    ParentUUID = case get_parent(SessionId, FileId) of
+        SpacesDirUUID ->
+            null;
+        Other ->
+            Other
+    end,
+    {ok, #file_attr{
+        name = Name,
+        type = TypeAttr,
+        size = SizeAttr,
+        mtime = ModificationTime,
+        mode = PermissionsAttr}} =
+        logical_file_manager:stat(SessionId, {uuid, FileId}),
+    {Type, Size} = case TypeAttr of
+        ?DIRECTORY_TYPE -> {<<"dir">>, null};
+        _ -> {<<"file">>, SizeAttr}
+    end,
+    Permissions = integer_to_binary((PermissionsAttr rem 1000), 8),
+    Children = case Type of
+        <<"file">> ->
+            [];
+        <<"dir">> ->
+            case logical_file_manager:ls(
+                SessionId, {uuid, FileId}, 0, 1000) of
+                {ok, Chldrn} ->
+                    Chldrn;
+                _ ->
+                    []
+            end
+    end,
+    ChildrenIds = [ChId || {ChId, _} <- Children],
+    Res = [
+        {<<"id">>, FileId},
+        {<<"name">>, Name},
+        {<<"type">>, Type},
+        {<<"permissions">>, Permissions},
+        {<<"modificationTime">>, ModificationTime},
+        {<<"size">>, Size},
+        {<<"parent">>, ParentUUID},
+        {<<"children">>, ChildrenIds}
+    ],
+    {ok, Res}.
+
+
+ids_to_association(FirstId, SecondId) ->
+    <<FirstId/binary, "@", SecondId/binary>>.
+
+
+association_to_ids(AssocId) ->
+    [FirstId, SecondId] = binary:split(AssocId, <<"@">>, [global]),
+    {FirstId, SecondId}.

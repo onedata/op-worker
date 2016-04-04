@@ -5,23 +5,35 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   fileUploadService: Ember.inject.service('file-upload'),
   notify: Ember.inject.service('notify'),
+  oneproviderServer: Ember.inject.service(),
 
   /** Dir to put files into */
   dir: null,
 
   uploadAddress: '/upload',
+
   resumable: function() {
     if (!this.get('dir.id')) {
       return null;
     }
 
+    console.debug(`Creating new Resumable with dir id: ${this.get('dir.id')}`);
     let r = new Resumable({
       target: this.get('uploadAddress'),
       chunkSize: 1*1024*1024,
       simultaneousUploads: 4,
       testChunks: false,
       throttleProgressCallbacks: 1,
-      query: {parentId: this.get('dir.id')}
+      query: () => { return {parentId: this.get('dir.id')}; },
+      generateUniqueIdentifier: function() {
+        let date = new Date().getTime();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
+          function (character) {
+            let random = (date + Math.random() * 16) % 16 | 0;
+            date = Math.floor(date / 16);
+            return (character === 'x' ? random : (random & 0x7 | 0x8)).toString(16);
+          });
+      }
     });
 
     Ember.run.scheduleOnce('afterRender', this, function() {
@@ -63,11 +75,13 @@ export default Ember.Component.extend({
       r.on('fileSuccess', (file/*, message*/) => {
         $('.resumable-file-'+file.uniqueIdentifier+' .resumable-file-progress').html('(completed)');
         this.get('notify').info(`File "${file.fileName}" uploaded successfully!`);
+        this.get('oneproviderServer').fileUploadComplete(file.uniqueIdentifier);
       });
 
       r.on('fileError', (file, message) => {
         $('.resumable-file-'+file.uniqueIdentifier+' .resumable-file-progress').html('(file could not be uploaded: '+message+')');
         this.get('notify').error(`File "${file.fileName}" upload failed: ${message}`);
+        this.get('oneproviderServer').fileUploadComplete(file.uniqueIdentifier);
       });
 
       r.on('fileProgress', function(file){
@@ -88,7 +102,7 @@ export default Ember.Component.extend({
     });
 
     return r;
-  }.property('uploadAddress', 'dir.id'),
+  }.property('uploadAddress', 'dir', 'dir.id'),
 
   registerComponentInService: function() {
     this.get('fileUploadService').set('fileUploadComponent', this);

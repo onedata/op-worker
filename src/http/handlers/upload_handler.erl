@@ -31,7 +31,8 @@
 %% Cowboy API
 -export([init/3, handle/2, terminate/3]).
 %% API
--export([upload_map_insert/2, upload_map_lookup/1, upload_map_lookup/2]).
+-export([upload_map_insert/2, upload_map_delete/1]).
+-export([upload_map_lookup/1, upload_map_lookup/2]).
 -export([clean_upload_map/0]).
 
 %% ====================================================================
@@ -70,6 +71,18 @@ upload_map_lookup(Key) ->
 upload_map_lookup(Key, Default) ->
     Map = g_session:get_value(?UPLOAD_MAP, #{}),
     maps:get(Key, Map, Default).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes a Key Value pair from upload map.
+%% @end
+%%--------------------------------------------------------------------
+-spec upload_map_delete(Key :: term()) -> ok.
+upload_map_delete(Key) ->
+    Map = g_session:get_value(?UPLOAD_MAP, #{}),
+    NewMap = maps:remove(Key, Map),
+    g_session:put_value(?UPLOAD_MAP, NewMap).
 
 
 %%--------------------------------------------------------------------
@@ -155,8 +168,10 @@ handle_http_upload(Req) ->
                 Type:Message ->
                     ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
                         [g_session:get_user_id(), Type, Message]),
-                    % Return 204 - resumable will retry the upload
-                    g_ctx:reply(204, [], <<"">>)
+%%                    % Return 204 - resumable will retry the upload
+                        % @todo not stable
+%%                    g_ctx:reply(204, [], <<"">>)
+                    g_ctx:reply(500, [], <<"">>)
             end
     end,
     g_ctx:finish().
@@ -281,7 +296,7 @@ get_int_param(Key, Params) ->
     binary_to_integer(get_bin_param(Key, Params)).
 
 
-%%--------------------------------------------------------------------
+%%--------------------------------------------------------------------u
 %% @private
 %% @doc
 %% Retrieves a value from a proplist. Assumes all values are binary.

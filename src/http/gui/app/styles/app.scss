@@ -45,6 +45,8 @@ $icomoon-font-path: 'fonts/oneicons';
 // TODO: this is style from VFS-1508, will be changed
 // @import 'components/file-browser'
 
+@import 'floater';
+
 @media screen
   and (min-width: $min-width-desktop-large) {
     $global-min-width: $min-width-desktop-large;
@@ -108,3 +110,4 @@ $icomoon-font-path: 'fonts/oneicons';
 @import 'components/button';
 @import 'components/notify';
 @import 'components/file-upload';
+@import 'components/permissions-table';
