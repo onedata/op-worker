@@ -165,10 +165,23 @@ export default Ember.Component.extend({
     });
   }.observes('spaces.length'),
 
+  spacesChanged: function() {
+    if (!this.get('activeSpace')) {
+      if (this.get('spaces.length') > 0) {
+        let spaceToGo = this.get('spaces').find((s) => s.get('isDefault'));
+        if (spaceToGo) {
+          this.sendAction('showSpaceOptions', spaceToGo);
+        }
+      }
+
+    }
+  }.observes('spaces.length'),
+
   didInsertElement() {
     // reset spaces expanded state
     this.get('spaces').forEach((s) => s.set('isExpanded', false));
     this.bindSpaceDrops();
+    this.spacesChanged();
   },
 
   spaceActionMessage(notifyType, messageId, spaceName) {
