@@ -168,8 +168,10 @@ handle_http_upload(Req) ->
                 Type:Message ->
                     ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
                         [g_session:get_user_id(), Type, Message]),
-                    % Return 204 - resumable will retry the upload
-                    g_ctx:reply(204, [], <<"">>)
+%%                    % Return 204 - resumable will retry the upload
+                        % @todo not stable
+%%                    g_ctx:reply(204, [], <<"">>)
+                    g_ctx:reply(500, [], <<"">>)
             end
     end,
     g_ctx:finish().
