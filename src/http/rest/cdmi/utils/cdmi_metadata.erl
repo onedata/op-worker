@@ -272,7 +272,7 @@ prepare_cdmi_metadata([Name | Rest], FileKey, Auth, Attrs, Prefix) ->
                 <<"cdmi_mtime">> ->
                     [{<<"cdmi_mtime">>, epoch_to_iso8601(Attrs#file_attr.mtime)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 <<"cdmi_owner">> ->
-                    [{<<"cdmi_owner">>, epoch_to_iso8601(Attrs#file_attr.uid)} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
+                    [{<<"cdmi_owner">>, Attrs#file_attr.uid} | prepare_cdmi_metadata(Rest, FileKey, Auth, Attrs, Prefix)];
                 ?ACL_XATTR_NAME ->
                     case onedata_file_api:get_acl(Auth, FileKey) of
                         {ok, Acl} ->
