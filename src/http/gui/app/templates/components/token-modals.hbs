@@ -8,14 +8,12 @@
           {{modalLabel}}
         </div>
         <div class="input-with-button modal-row">
-          {{bs-form-element controlType="text" property="inviteToken" autofocus=true id="invite-token"}}
+          {{bs-form-element controlType="text" property="inviteToken" autofocus=true id=formElementId}}
           {{#copy-button success='copySuccess' error='copyError'
-            clipboardTarget='#invite-token' class="btn btn-primary btn-right"}}
+            clipboardTarget=clipboardTarget class="btn btn-primary btn-right"}}
            {{icon 'copy'}}
          {{/copy-button}}
         </div>
-
-
       {{/bs-form}}
     {{else}}
         <div class="modal-loading">

@@ -9,6 +9,8 @@ export default Ember.Component.extend({
   notify: Ember.inject.service('notify'),
   fileUpload: Ember.inject.service('file-upload'),
 
+  classNames: ['data-files-list'],
+
   // TODO: doc
   dir: null,
 
@@ -16,30 +18,15 @@ export default Ember.Component.extend({
   filesSorting: ['type:asc', 'name:asc'],
   filesSorted: Ember.computed.sort('dir.children', 'filesSorting'),
 
-  uploadBound: false,
-
-  bindFileUpload() {
-    console.debug('Binding upload area for file list');
-    //  this.get('fileUpload').assignDrop(this.$().find('.table'));
-    this.get('fileUpload').assignDrop($('#content-scroll'));
-  },
-
   didInsertElement() {
-    this.resumableJsChange();
+    this.dirChanged();
+    console.debug('Binding upload area for file list');
+    this.get('fileUpload').assignDrop(this.$());
   },
 
-  resumable: function() {
-    return this.get('fileUpload.fileUploadComponent.resumable');
-  }.property('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
-
-  resumableJsChange: function() {
-    let resumable = this.get('resumable');
-    console.debug(`Browser resumable changed dir id: ${this.get('fileUpload.fileUploadComponent.dir.id')}`);
-    if (resumable && !this.get('uploadBound')) {
-      this.bindFileUpload();
-      this.set('uploadBound', true);
-    }
-  }.observes('resumable'),
+  dirChanged: function() {
+    this.set('fileUpload.dir', this.get('dir'));
+  }.observes('dir'),
 
   actions: {
     openFile(file) {
