@@ -36,6 +36,9 @@ export default DS.Model.extend({
   // TODO: implement B, MB, GB, TODO: move to helper
   sizeHumanReadable: function() {
     let bytes = this.get('size');
+    if (bytes != 0 && !bytes) {
+      return '';
+    }
     if (bytes === null || bytes === 'undefined') {
       return '';
     }
@@ -67,6 +70,10 @@ export default DS.Model.extend({
 
   isDir: function () {
     return this.get('type') === 'dir';
+  }.property('type'),
+
+  isBroken: function () {
+    return this.get('type') === 'broken';
   }.property('type'),
 
   resetBrowserState() {
