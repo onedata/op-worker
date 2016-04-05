@@ -148,15 +148,14 @@ create_or_update(Doc, Diff) ->
 -spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
-    Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
-    case space_info:get(Key) of
+    case space_info:get(Id) of
         {ok, #document{value = SpaceInfo} = Doc} ->
             NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
             {ok, _} = space_info:save(NewDoc),
             {ok, NewDoc};
         {error, {not_found, _}} ->
-            Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
+            Doc = #document{key = Id, value = #space_info{id = Id, name = Name}},
             {ok, _} = space_info:create(Doc),
             {ok, Doc};
         {error, Reason} ->

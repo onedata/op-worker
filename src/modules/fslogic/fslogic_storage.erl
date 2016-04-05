@@ -72,7 +72,8 @@ new_ceph_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
 -spec new_posix_user_ctx(Identity :: #identity{}, SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
 new_posix_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
-    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceUUID),
+    SpaceId =  fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceId),
     FinalGID =
         case helpers_nif:groupname_to_gid(SpaceName) of
             {ok, GID} ->

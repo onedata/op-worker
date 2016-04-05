@@ -766,7 +766,8 @@ gen_path2(Entry, Tokens) ->
         {ok, {?ROOT_DIR_UUID, _}} ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, {SpaceBaseDirUUID, _}} ->
-            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
+            SpaceId =  fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+            {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceId),
             gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
             gen_path2({uuid, ParentUUID}, [Name | Tokens])

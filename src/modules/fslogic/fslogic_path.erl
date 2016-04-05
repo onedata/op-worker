@@ -116,7 +116,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
         _ ->
             {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
             lists:map(fun(SpaceId) ->
-                {ok, Doc} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                {ok, Doc} = space_info:get(SpaceId),
                 Doc
             end, SpaceIds)
     end,
