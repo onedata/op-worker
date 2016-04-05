@@ -9,7 +9,7 @@
 #ifndef RT_INTERVAL_H
 #define RT_INTERVAL_H
 
-#include "nifpp.h"
+#include "../nifpp.h"
 
 namespace one {
 namespace provider {

@@ -9,7 +9,7 @@
 #ifndef RT_PRIORITY_QUEUE_H
 #define RT_PRIORITY_QUEUE_H
 
-#include "nifpp.h"
+#include "../nifpp.h"
 #include "rt_block.h"
 #include "rt_interval.h"
 

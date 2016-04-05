@@ -15,14 +15,27 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st1"
+                },
+                {
+                    "type": "ceph",
+                    "name": "ceph",
+                    "pool": "onedata:8"
+                },
+                {
+                    "type": "s3",
+                    "name": "s3",
+                    "bucket": "onedata"
                 }
             ],
             "users": [
-                "user1"
+                "u1"
             ],
             "groups": {
-                "group1": [
-                    "user1"
+                "s1": [
+                    "u1"
+                ],
+                "fuse": [
+                    "u1"
                 ]
             }
         }
@@ -31,37 +44,33 @@
         "p1": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
-            "gui_livereload": "none",
             "cluster_manager": {
-                "cm1": {
+                "cm": {
                     "vm.args": {
-                        "setcookie": "cookie1"
+                        "setcookie": "test_cookie"
                     },
                     "sys.config": {
-                        "cluster_manager": {
-                            "cm_nodes": [
-                                "cm1"
-                            ],
-                            "worker_num": 1
-                        }
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
                     "vm.args": {
-                        "setcookie": "cookie1"
+                        "setcookie": "test_cookie"
                     },
                     "sys.config": {
-                        "op_worker": {
-                            "cm_nodes": [
-                                "cm1"
-                            ],
-                            "db_nodes": [
-                                "dbnode1"
-                            ],
-                            "verify_oz_cert": false
-                        }
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "global_registry_domain": "gr",
+                        "verify_gr_cert": false
                     }
                 }
             }
