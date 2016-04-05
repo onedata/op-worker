@@ -58,7 +58,6 @@ init() ->
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space">>, [SpaceDirId]) ->
-    %% todo: ensure ID is correct
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
@@ -88,7 +87,6 @@ find_all(<<"data-space">>) ->
             space_ids = SpaceIds}}} = onedata_user:get(UserId),
     Res = lists:map(
         fun(SpaceId) ->
-            %% todo: ensure ID is correct
             SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
             SpaceData
