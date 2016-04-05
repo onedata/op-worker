@@ -15,9 +15,10 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([fetch/2, create_or_update/2]).
+-export([fetch/2, create_or_update/2, get_or_fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -139,6 +140,20 @@ before(_ModelName, _Method, _Level, _Context) ->
     {ok, datastore:ext_key()} | datastore:update_error().
 create_or_update(Doc, Diff) ->
     datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get user from cache or fetch from OZ and save in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Client :: oz_endpoint:client(), datastore:key()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Client, Key) ->
+    case space_info:get(Key) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Client, Key);
+        Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

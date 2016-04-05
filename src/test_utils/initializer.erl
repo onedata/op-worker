@@ -247,7 +247,8 @@ setup_storage([Worker | Rest], Config) ->
 -spec teardown_storage(Config :: list()) -> ok.
 teardown_storage(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
-    lists:foreach(fun(Worker) -> teardown_storage(Worker, Config) end, DomainWorkers).
+    lists:foreach(fun(Worker) ->
+        teardown_storage(Worker, Config) end, DomainWorkers).
 
 %%--------------------------------------------------------------------
 %% @doc Mocks space_storage module, so that it returns default storage for all spaces.
@@ -390,10 +391,12 @@ oz_groups_mock_setup(Workers, Groups) ->
 -spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
 file_meta_mock_setup(Workers) ->
     Self = self(),
+    Handler = fun(UUID) ->
+        file_meta:setup_onedata_user(UUID),
+        Self ! onedata_user_setup
+    end,
     test_utils:mock_new(Workers, file_meta),
-    test_utils:mock_expect(Workers, file_meta, 'after',
-        fun(onedata_user, create, _, _, {ok, UUID}) ->
-            file_meta:setup_onedata_user(UUID),
-            Self ! onedata_user_setup
-        end
-    ).
+    test_utils:mock_expect(Workers, file_meta, 'after', fun
+        (onedata_user, create_or_update, _, _, {ok, UUID}) -> Handler(UUID);
+        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID)
+    end).

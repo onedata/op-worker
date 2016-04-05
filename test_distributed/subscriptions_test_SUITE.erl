@@ -26,7 +26,9 @@
 -export([registers_for_updates/1, accounts_incoming_updates/1,
     saves_the_actual_data/1, updates_with_the_actual_data/1,
     resolves_conflicts/1, registers_for_updates_with_users/1,
-    applies_deletion/1]).
+    applies_deletion/1,
+    new_user_with_present_space_triggers_file_meta_creation/1,
+    updated_user_with_present_space_triggers_file_meta_creation/1]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
@@ -39,6 +41,8 @@
 )).
 
 all() -> ?ALL([
+    new_user_with_present_space_triggers_file_meta_creation,
+    updated_user_with_present_space_triggers_file_meta_creation,
     registers_for_updates,
     accounts_incoming_updates,
     saves_the_actual_data,
@@ -65,8 +69,8 @@ registers_for_updates_with_users(Config) ->
     expect_message([], 0, []),
 
     %% when
-    create_session(Node, U1),
-    create_session(Node, U2),
+    create_rest_session(Node, U1),
+    create_rest_session(Node, U2),
 
     %% then
     expect_message([U1, U2], 0, []),
@@ -146,10 +150,14 @@ saves_the_actual_data(Config) ->
             [<<"S1">>, <<"S2">>],
             [{<<"U1">>, Priv1}, {<<"U2">>, []}]
         )),
-        update(3, [<<"r2">>, <<"r1">>], U1,
+        update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+    ]),
+    expect_message([], 3, []),
+
+    push_update(Node, [
+        update(4, [<<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
-        ),
-        update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        )
     ]),
     expect_message([], 4, []),
 
@@ -179,6 +187,65 @@ saves_the_actual_data(Config) ->
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, provider_info, P1)),
+    ok.
+
+new_user_with_present_space_triggers_file_meta_creation(Config) ->
+    %% given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
+    Priv1 = privileges:space_admin(),
+    SessionID = <<"session">>,
+    create_fuse_session(Node, SessionID, U1),
+
+    %% when
+    push_update(Node, [
+        update(1, [<<"r2">>, <<"r1">>], S1, space(
+            <<"space_name">>, S1, [{U1, Priv1}], [], [P1], [{P1, 1000}]
+        )),
+        update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+    ]),
+    expect_message([U1], 2, []),
+
+    push_update(Node, [
+        update(3, [<<"r2">>, <<"r1">>], U1,
+            user(<<"onedata ftw">>, [], [S1])
+        )
+    ]),
+    expect_message([U1], 3, []),
+
+    %% then
+    FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
+    ?assertMatch({ok, _}, lfm_proxy:open(Node, SessionID, {path, FilePath}, write)),
+    ok.
+
+updated_user_with_present_space_triggers_file_meta_creation(Config) ->
+    %% given
+    [Node | _] = ?config(op_worker_nodes, Config),
+    {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
+    Priv1 = privileges:space_admin(),
+    SessionID = <<"session">>,
+    create_fuse_session(Node, SessionID, U1),
+
+    %% when
+    push_update(Node, [
+        update(1, [<<"r2">>, <<"r1">>], S1, space(
+            <<"space_name">>, S1, [{U1, Priv1}], [], [P1], [{P1, 1000}]
+        )),
+        update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+    ]),
+    expect_message([U1], 3, []),
+
+    push_update(Node, [
+        update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+    ]),
+    expect_message([U1], 4, []),
+
+    %% then
+    FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
+    ?assertMatch({ok, _}, lfm_proxy:open(Node, SessionID, {path, FilePath}, write)),
     ok.
 
 updates_with_the_actual_data(Config) ->
@@ -324,12 +391,13 @@ resolves_conflicts(Config) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-init_per_suite(Config1) ->
-    ?TEST_INIT(Config1, ?TEST_FILE(Config1, "env_desc.json")).
+init_per_suite(Config) ->
+    ConfigWithNodes = ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [initializer]),
+    initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
-    test_node_starter:clean_environment(Config),
-    ok.
+    initializer:teardown_storage(Config),
+    test_node_starter:clean_environment(Config).
 
 init_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
@@ -344,18 +412,33 @@ init_per_testcase(_, Config) ->
         {ok, Self}
     end),
 
-    reset_state(Nodes),
-    flush(),
+    initializer:communicator_mock(Nodes),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
+    FinalConfig = lfm_proxy:init(ConfigWithSessionInfo),
 
-    Config.
+    reset_state(Nodes),
+    FinalConfig.
 
 reset_state(Nodes) ->
+    clear_sessions(Nodes),
     rpc:call(hd(Nodes), subscriptions_state, delete, [?SUBSCRIPTIONS_STATE_KEY]),
-    rpc:call(hd(Nodes), subscriptions, ensure_initialised, []).
+    rpc:call(hd(Nodes), subscriptions, ensure_initialised, []),
+    flush().
+
+clear_sessions(Nodes) ->
+    {ok, Docs} = rpc:call(hd(Nodes), session, list, []),
+    lists:foreach(fun(#document{key = Key}) ->
+        ok = rpc:call(hd(Nodes), session, delete, [Key])
+    end, Docs).
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, subscription_wss),
+
+    lfm_proxy:teardown(Config),
+    initializer:clean_test_users_and_spaces(Config),
+    test_utils:mock_validate_and_unload(Nodes, [communicator]),
+
     ok.
 
 %%%===================================================================
@@ -392,9 +475,17 @@ update(Seq, Revs, ID, Core) ->
 fetch(Node, Model, ID) ->
     rpc:call(Node, Model, get, [ID]).
 
-create_session(Node, UserID) ->
+get_provider_id(Node) ->
+    rpc:call(Node, oneprovider, get_provider_id, []).
+
+create_rest_session(Node, UserID) ->
     ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_rest_session, [
         #identity{user_id = UserID}, #auth{}
+    ])).
+
+create_fuse_session(Node, SessionID, UserID) ->
+    ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_fuse_session, [
+        SessionID, #identity{user_id = UserID}, self()
     ])).
 
 expectation(Users, ResumeAt, Missing) ->
@@ -416,7 +507,6 @@ expect_message(Match, Retries) ->
     receive
         Match -> ok;
         _Any ->
-            ct:print("Miss ~p ~p", [_Any, Match]),
             expect_message(Match, Retries - 1)
     after
         ?MESSAGES_WAIT_TIMEOUT -> ?assertMatch(Match, <<"timeout">>)

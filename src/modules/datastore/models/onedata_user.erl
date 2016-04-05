@@ -18,6 +18,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1,
@@ -156,7 +157,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
             space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
             group_ids = GroupIds
         },
-        [(catch space_info:fetch(Client, SId)) || SId <- SpaceIds],
+        [(catch space_info:get_or_fetch(Client, SId)) || SId <- SpaceIds],
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}
