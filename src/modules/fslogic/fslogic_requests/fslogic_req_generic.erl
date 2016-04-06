@@ -126,7 +126,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
                     UID;
                 _ ->
-                    fslogic_utils:gen_storage_uid(UserID)
+                    luma_utils:gen_storage_uid(UserID)
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,

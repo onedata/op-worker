@@ -51,6 +51,9 @@
     name :: binary(),
     space_ids :: [binary()],
     group_ids :: [binary()],
+    connected_accounts :: proplists:proplist(),
+    alias :: string() | integer() | binary(),
+    email_list :: [binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 
