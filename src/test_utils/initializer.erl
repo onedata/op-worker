@@ -374,7 +374,7 @@ name(Text, Num) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), binary()}]) ->
+    [{binary(), binary()}], [{binary(), [binary()]}]) ->
     ok.
 oz_spaces_mock_setup(Workers, Spaces, Users) ->
     test_utils:mock_new(Workers, oz_spaces),
@@ -404,7 +404,7 @@ oz_spaces_mock_setup(Workers, Spaces, Users) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_groups_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), binary()}]) -> ok.
+    [{binary(), binary()}], [{binary(), [binary()]}]) -> ok.
 oz_groups_mock_setup(Workers, Groups, Users) ->
     test_utils:mock_new(Workers, oz_groups),
     test_utils:mock_expect(Workers, oz_groups, get_details,
