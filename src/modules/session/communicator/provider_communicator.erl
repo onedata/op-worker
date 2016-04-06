@@ -18,13 +18,11 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 %% API
 -export([send/2, send/3, send_async/2, communicate/2, communicate_async/2,
     communicate_async/3]).
-
--define(SEND_RETRY_DELAY, timer:seconds(5)).
--define(DEFAULT_REQUEST_TIMEOUT, timer:seconds(30)).
 
 %%%===================================================================
 %%% API

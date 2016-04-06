@@ -18,6 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
@@ -47,7 +48,7 @@
 
 -performance({test_cases, []}).
 all() ->
-    [
+    ?ALL([
         dbsync_trigger_should_create_local_file_location,
         write_should_add_blocks_to_file_location,
         truncate_should_change_size_and_blocks,
@@ -63,7 +64,7 @@ all() ->
         remote_irrelevant_change_should_not_notify_clients,
         conflicting_remote_changes_should_be_reconciled,
         rtransfer_config_should_work
-    ].
+    ]).
 
 
 

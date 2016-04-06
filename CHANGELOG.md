@@ -4,6 +4,14 @@
 CHANGELOG
 ---------
 
+### 3.0.0-alpha3
+
+* VFS-1598 Fix oz_plugin module.
+* Add DBSync's stream restarter
+* VFS-1558: Changes in Polish i18n
+* Include Erlang ERTS include directory when building c_src/ .
+
+
 ### 3.0.0-alpha2
 
 * VFS-1665 Pull in ctool with new Macaroons.
