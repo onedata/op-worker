@@ -15,7 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([new_user_ctx/3, get_posix_user_ctx/3, new_posix_user_ctx/2]).
+-export([new_user_ctx/3, get_posix_user_ctx/3]).
 
 %%%===================================================================
 %%% API functions
@@ -41,30 +41,11 @@ new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
 %% @doc Returns posix user ctx for file attrs
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_user_ctx(StorageType :: helpers:name(), SessionId :: session:id(),
+-spec get_posix_user_ctx(StorageType :: helpers:name(),
+    SessionIdOrIdentity :: session:id() | session:identity(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
-get_posix_user_ctx(_, SessionId, SpaceUUID) ->
-    new_posix_user_ctx(SessionId, SpaceUUID).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for all posix-compilant helpers.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_posix_user_ctx(SessionIdOrIdentity :: session:id() | session:identity(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
-    UserId = luma_utils:get_user_id(SessionIdOrIdentity),
-    {ok, #document{value = #file_meta{name = SpaceName}}} =
-        file_meta:get({uuid, SpaceUUID}),
-
-    UID = luma_utils:gen_storage_uid(UserId),
-    GID = luma_utils:gen_storage_gid(SpaceName, SpaceUUID),
-
-    #posix_user_ctx{uid = UID, gid = GID}.
-
+get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
+    new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID).
 
 %%%===================================================================
 %%% Internal functions
@@ -126,6 +107,25 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
             s3_user:add(UserId, StorageId, AccessKey, SecretKey),
             Credentials
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new user's storage context for all posix-compilant helpers.
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_posix_user_ctx(SessionIdOrIdentity :: session:id() | session:identity(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
+    UserId = luma_utils:get_user_id(SessionIdOrIdentity),
+    {ok, #document{value = #file_meta{name = SpaceName}}} =
+        file_meta:get({uuid, SpaceUUID}),
+
+    UID = luma_utils:gen_storage_uid(UserId),
+    GID = luma_utils:gen_storage_gid(SpaceName, SpaceUUID),
+
+    #posix_user_ctx{uid = UID, gid = GID}.
 
 
 %%--------------------------------------------------------------------

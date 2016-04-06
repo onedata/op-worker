@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Util functions for luma
+%%% Util functions for luma.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(luma_utils).
@@ -18,12 +18,11 @@
 
 %% API
 -export([get_user_id/1, get_s3_user/2, get_ceph_user/2, get_posix_user/2,
-    gen_storage_uid/1, gen_storage_gid/2]).
+    gen_storage_uid/1, gen_storage_gid/2, get_storage_id/1, get_storage_type/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -45,7 +44,6 @@ get_s3_user(UserId, StorageId) ->
             undefined
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets Ceph credentials from datastore.
@@ -65,7 +63,6 @@ get_ceph_user(UserId, StorageId) ->
         _ ->
             undefined
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -87,7 +84,6 @@ get_posix_user(UserId, StorageId) ->
             undefined
     end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Get user_id from identity or session_id
@@ -100,7 +96,6 @@ get_user_id(SessionId) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
         session:get(SessionId),
     UserId.
-
 
 %%--------------------------------------------------------------------
 %% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id, space id, etc)
@@ -130,6 +125,27 @@ gen_storage_gid(SpaceName, SpaceUUID) ->
         {error, _} ->
             luma_utils:gen_storage_uid(SpaceUUID)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc Returns StorageType for given StorageId
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_type(storage:id()) -> helpers:name().
+get_storage_type(StorageId) ->
+    {ok, Doc} = storage:get(StorageId),
+    {ok, #helper_init{name = StorageType}} = fslogic_storage:select_helper(Doc),
+    StorageType.
+
+%%--------------------------------------------------------------------
+%% @doc Returns StorageId for given SpaceUUID
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_id(SpaceUUID :: file_meta:uuid()) -> storage:id().
+get_storage_id(SpaceUUID) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
+        space_storage:get(SpaceId),
+    StorageId.
 
 %%%===================================================================
 %%% Internal functions

@@ -17,37 +17,13 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
 %% API
--export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
+-export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
 -export([wait_for_links/2, wait_for_file_meta/2]).
--export([get_storage_type/1, get_storage_id/1, gen_storage_gid/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc Returns StorageType for given StorageId
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_type(storage:id()) -> helpers:name().
-get_storage_type(StorageId) ->
-    {ok, Doc} = storage:get(StorageId),
-    {ok, #helper_init{name = StorageType}} = fslogic_storage:select_helper(Doc),
-    StorageType.
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns StorageId for given SpaceUUID
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_id(SpaceUUID :: file_meta:uuid()) -> storage:id().
-get_storage_id(SpaceUUID) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} =
-        space_storage:get(SpaceId),
-    StorageId.
-
 
 %%--------------------------------------------------------------------
 %% @doc Create random sequence consisting of lowercase ASCII letters.

@@ -155,15 +155,6 @@ chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID},
     HelperHandle = helpers:new_handle(HelperInit),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
 
-    #posix_user_ctx{gid = GID, uid = UID} = try
-        {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-        StorageId = fslogic_utils:get_storage_id(SpaceUUID),
-        StorageType = fslogic_utils:get_storage_type(StorageId),
-        fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
-    catch
-        throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
-    end,
-
     case StorageType of
         ?DIRECTIO_HELPER_NAME ->
             #posix_user_ctx{uid = Uid, gid = Gid} = fslogic_storage:get_posix_user_ctx(?DIRECTIO_HELPER_NAME, #identity{user_id = UserId}, SpaceUuid),

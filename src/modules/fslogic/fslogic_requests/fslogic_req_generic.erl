@@ -116,8 +116,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 
             #posix_user_ctx{gid = GID, uid = UID} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-                StorageId = fslogic_utils:get_storage_id(SpaceUUID),
-                StorageType = fslogic_utils:get_storage_type(StorageId),
+                StorageId = luma_utils:get_storage_id(SpaceUUID),
+                StorageType = luma_utils:get_storage_type(StorageId),
                 fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
             catch
                 throw:{not_a_space, _} -> ?ROOT_POSIX_CTX

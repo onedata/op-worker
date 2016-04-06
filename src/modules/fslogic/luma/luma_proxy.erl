@@ -17,10 +17,8 @@
 -include("deps/ctool/include/utils/utils.hrl").
 -include_lib("ctool/include/oz/oz_users.hrl").
 
-
 %% API
 -export([new_user_ctx/3, get_posix_user_ctx/3]).
-
 
 %%%===================================================================
 %%% API functions
@@ -46,14 +44,13 @@ new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, SessionId, SpaceUUID) ->
 %% @doc Retrieves posix user ctx for file attrs from LUMA server
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_user_ctx(StorageType :: helpers:name(), SessionId :: session:id(),
+-spec get_posix_user_ctx(StorageType :: helpers:name(), SessionIdOrIdentity :: session:id() | session:identity(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
-get_posix_user_ctx(?DIRECTIO_HELPER_NAME, SessionId, SpaceUUID) ->
-    new_posix_user_ctx(SessionId, SpaceUUID);
-get_posix_user_ctx(_, SessionId, SpaceUUID) ->
-    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
-        session:get(SessionId),
-    StorageId = fslogic_utils:get_storage_id(SpaceUUID),
+get_posix_user_ctx(?DIRECTIO_HELPER_NAME, SessionIdOrIdentity, SpaceUUID) ->
+    new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID);
+get_posix_user_ctx(_, SessionIdOrIdentity, SpaceUUID) ->
+    UserId = luma_utils:get_user_id(SessionIdOrIdentity),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
 
     case luma_utils:get_posix_user(UserId, StorageId) of
         {ok, Credentials} ->
@@ -63,38 +60,7 @@ get_posix_user_ctx(_, SessionId, SpaceUUID) ->
             };
         _ ->
             {ok, Response} = get_credentials_from_luma(UserId,
-                ?DIRECTIO_HELPER_NAME, ?DIRECTIO_HELPER_NAME, SessionId),
-
-            UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
-            posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
-                UserCtx#posix_user_ctx.gid),
-            UserCtx
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves user context from LUMA server for all posix-compilant helpers
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_posix_user_ctx(SessionIdOrIdentity :: session:id() | session:identity(),
-    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
-new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
-    UserId = luma_utils:get_user_id(SessionIdOrIdentity),
-    StorageId = fslogic_utils:get_storage_id(SpaceUUID),
-
-    case luma_utils:get_posix_user(UserId, StorageId) of
-        {ok, Credentials} ->
-            #posix_user_ctx{
-                uid = posix_user:uid(Credentials),
-                gid = posix_user:gid(Credentials)
-            };
-        _ ->
-            StorageType = fslogic_utils:get_storage_type(StorageId),
-
-            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
-                StorageId, SessionIdOrIdentity),
+                ?DIRECTIO_HELPER_NAME, ?DIRECTIO_HELPER_NAME, SessionIdOrIdentity),
 
             UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
             posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
@@ -118,7 +84,7 @@ new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
 new_ceph_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
         session:get(SessionId),
-    StorageId = fslogic_utils:get_storage_id(SpaceUUID),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
 
     case luma_utils:get_ceph_user(UserId, StorageId) of
         {ok, Credentials} ->
@@ -127,7 +93,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
                 user_key = ceph_user:key(Credentials)
             };
         undefined ->
-            StorageType = fslogic_utils:get_storage_type(StorageId),
+            StorageType = luma_utils:get_storage_type(StorageId),
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
                 StorageId, SessionId),
 
@@ -149,7 +115,7 @@ new_ceph_user_ctx(SessionId, SpaceUUID) ->
 new_s3_user_ctx(SessionId, SpaceUUID) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} =
         session:get(SessionId),
-    StorageId = fslogic_utils:get_storage_id(SpaceUUID),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
     case luma_utils:get_s3_user(UserId, StorageId) of
         {ok, Credentials} ->
             #s3_user_ctx{
@@ -157,7 +123,7 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
                 secret_key = s3_user:secret_key(Credentials)
             };
         _ ->
-            StorageType = fslogic_utils:get_storage_type(StorageId),
+            StorageType = luma_utils:get_storage_type(StorageId),
             {ok, Response} = get_credentials_from_luma(UserId, StorageType,
                 StorageId, SessionId),
 
@@ -169,6 +135,37 @@ new_s3_user_ctx(SessionId, SpaceUUID) ->
                 access_key = AccessKey,
                 secret_key = SecretKey
             }
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves user context from LUMA server for all posix-compilant helpers
+%% This context may and should be used with helpers:set_user_ctx/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_posix_user_ctx(SessionIdOrIdentity :: session:id() | session:identity(),
+    SpaceUUID :: file_meta:uuid()) -> helpers:user_ctx().
+new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
+    UserId = luma_utils:get_user_id(SessionIdOrIdentity),
+    StorageId = luma_utils:get_storage_id(SpaceUUID),
+
+    case luma_utils:get_posix_user(UserId, StorageId) of
+        {ok, Credentials} ->
+            #posix_user_ctx{
+                uid = posix_user:uid(Credentials),
+                gid = posix_user:gid(Credentials)
+            };
+        _ ->
+            StorageType = luma_utils:get_storage_type(StorageId),
+
+            {ok, Response} = get_credentials_from_luma(UserId, StorageType,
+                StorageId, SessionIdOrIdentity),
+
+            UserCtx = parse_posix_ctx_from_luma(Response, SpaceUUID),
+            posix_user:add(UserId, StorageId, UserCtx#posix_user_ctx.uid,
+                UserCtx#posix_user_ctx.gid),
+            UserCtx
     end.
 
 
