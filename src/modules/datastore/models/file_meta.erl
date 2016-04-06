@@ -26,9 +26,6 @@
 %% How many entries shall be processed in one batch for set_scope operation.
 -define(SET_SCOPE_BATCH_SIZE, 100).
 
--define(ROOT_DIR_UUID, <<"">>).
--define(ROOT_DIR_NAME, <<"">>).
-
 %% Separator used in filename for specifying snapshot version.
 -define(SNAPSHOT_SEPARATOR, "::").
 
@@ -40,7 +37,7 @@
     'after'/5, before/4]).
 
 -export([resolve_path/1, create/2, get_scope/1, list_children/3, get_parent/1,
-    gen_path/2, gen_storage_path/1, rename/2, setup_onedata_user/1]).
+    rename/2, setup_onedata_user/1]).
 -export([get_ancestors/1, attach_location/3, get_locations/1, get_space_dir/1]).
 -export([snapshot_name/2, to_uuid/1, is_root_dir/1, is_spaces_base_dir/1,
     is_spaces_dir/2]).
@@ -393,34 +390,6 @@ get_ancestors2(Key, Acc) ->
     {ok, {ParentKey, ?MODEL_NAME}} = datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
     get_ancestors2(ParentKey, [ParentKey | Acc]).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Generate file_meta:path() for given file_meta:entry()
-%% @end
-%%--------------------------------------------------------------------
--spec gen_path(entry(), SessId :: session:id()) ->
-    {ok, path()} | datastore:generic_error().
-gen_path({path, Path}, _SessId) when is_binary(Path) ->
-    {ok, Path};
-gen_path(Entry, SessId) ->
-    ?run(begin
-             gen_path2(Entry, SessId, [])
-         end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Generate storage file_meta:path() for given file_meta:entry()
-%% @end
-%%--------------------------------------------------------------------
--spec gen_storage_path(entry()) -> {ok, path()} | datastore:generic_error().
-gen_storage_path({path, Path}) when is_binary(Path) ->
-    {ok, Path};
-gen_storage_path(Entry) ->
-    ?run(begin
-        gen_storage_path2(Entry, [])
-    end).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Resolves given file_meta:path() and returns file_meta:entry() along with list of
@@ -749,44 +718,6 @@ set_scopes6(Entry, NewScopeUUID, [Setter | Setters], SettersBak, Offset, BatchSi
             ok = set_scopes6(Entry, NewScopeUUID, Setters, [Setter | SettersBak], Offset + BatchSize, BatchSize)
     end,
     ok = set_scopes6([{uuid, UUID} || #child_link{uuid = UUID} <- ChildLinks], NewScopeUUID, Setters, [Setter | SettersBak], 0, BatchSize).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Internal helper for gen_path/1. Accumulates all file meta names
-%% and concatenates them into path().
-%% @end
-%%--------------------------------------------------------------------
--spec gen_path2(entry(), session:id(), [name()]) ->
-    {ok, path()} | datastore:generic_error() | no_return().
-gen_path2(Entry, SessId, Tokens) ->
-    SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
-    {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = get(Entry),
-    case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
-        {ok, {?ROOT_DIR_UUID, _}} ->
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
-        {ok, {SpaceBaseDirUUID, _}} ->
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
-            {ok, #document{value = #space_info{name = SpaceName}}} = space_info:fetch(SpaceId, SessId),
-            gen_path2({uuid, SpaceBaseDirUUID}, SessId, [SpaceName | Tokens]);
-        {ok, {ParentUUID, _}} ->
-            gen_path2({uuid, ParentUUID}, SessId, [Name | Tokens])
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Internal helper for gen_storage_path/1. Accumulates all file meta names
-%% and concatenates them into storage path().
-%% @end
-%%--------------------------------------------------------------------
--spec gen_storage_path2(entry(), [name()]) -> {ok, path()} | datastore:generic_error() | no_return().
-gen_storage_path2(Entry, Tokens) ->
-    {ok, #document{value = #file_meta{name = Name}} = Doc} = get(Entry),
-    case datastore:fetch_link(?LINK_STORE_LEVEL, Doc, parent) of
-        {ok, {?ROOT_DIR_UUID, _}} ->
-            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
-        {ok, {ParentUUID, _}} ->
-            gen_storage_path2({uuid, ParentUUID}, [Name | Tokens])
-    end.
 
 
 %%--------------------------------------------------------------------

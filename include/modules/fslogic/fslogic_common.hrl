@@ -34,6 +34,8 @@
 }).
 
 %% root user definitions
+-define(ROOT_DIR_UUID, <<"">>).
+-define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 -define(ROOT_SESS, #session{identity = #identity{user_id = ?ROOT_USER_ID}}).

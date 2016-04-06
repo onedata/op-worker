@@ -59,7 +59,7 @@ uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
     case default_space_uuid(UserId) =:= FileUuid of
         true -> <<"/">>;
         false ->
-            {ok, Path} = file_meta:gen_path({uuid, FileUuid}, SessId),
+            {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
     end.
 

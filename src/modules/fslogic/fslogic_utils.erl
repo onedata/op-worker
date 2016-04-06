@@ -105,7 +105,7 @@ get_parent(File) ->
 -spec gen_storage_file_id(Entry :: fslogic_worker:file()) ->
     helpers:file() | no_return().
 gen_storage_file_id(Entry) ->
-    {ok, Path} = file_meta:gen_storage_path(Entry),
+    {ok, Path} = fslogic_path:gen_storage_path(Entry),
     {ok, #document{value = #file_meta{version = Version}}} = file_meta:get(Entry),
     file_meta:snapshot_name(Path, Version).
 

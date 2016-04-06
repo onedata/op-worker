@@ -19,11 +19,11 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
--define(call(N, M, A), ?call(N, file_meta, M, A)).
--define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
+-define(call(N, F, A), ?call(N, file_meta, F, A)).
+-define(call(N, M, F, A), rpc:call(N, M, F, A)).
 
--define(call_with_time(N, M, A), ?call_with_time(N, file_meta, M, A)).
--define(call_with_time(N, Mod, M, A), rpc:call(N, ?MODULE, exec_and_check_time, [Mod, M, A])).
+-define(call_with_time(N, F, A), ?call_with_time(N, file_meta, F, A)).
+-define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, exec_and_check_time/3]).
@@ -192,9 +192,9 @@ basic_operations_test_core(Config) ->
     #document{key = Level20Key} = UL20,
 
     space_info_mock(Workers, <<"Space 1">>),
-    {{A30, U30}, GenPathLevel1} = ?call_with_time(Worker1, gen_path, [{uuid, U21}, ?ROOT_SESS_ID]),
-    {{A31, U31}, GenPathLevel2} = ?call_with_time(Worker2, gen_path, [{uuid, U22}, ?ROOT_SESS_ID]),
-    {{A32, U32}, GenPathLevel3} = ?call_with_time(Worker2, gen_path, [{uuid, U23}, ?ROOT_SESS_ID]),
+    {{A30, U30}, GenPathLevel1} = ?call_with_time(Worker1, fslogic_path, gen_path, [{uuid, U21}, ?ROOT_SESS_ID]),
+    {{A31, U31}, GenPathLevel2} = ?call_with_time(Worker2, fslogic_path, gen_path, [{uuid, U22}, ?ROOT_SESS_ID]),
+    {{A32, U32}, GenPathLevel3} = ?call_with_time(Worker2, fslogic_path, gen_path, [{uuid, U23}, ?ROOT_SESS_ID]),
     ?assertMatch({ok, <<"/spaces/Space 1/dir2/file1">>}, {A30, U30}),
     ?assertMatch({ok, <<"/spaces/Space 1/dir2/file2">>}, {A31, U31}),
     ?assertMatch({ok, <<"/spaces/Space 1/dir2/file3">>}, {A32, U32}),
@@ -209,7 +209,7 @@ basic_operations_test_core(Config) ->
     ?assertMatch({ok, {#document{key = Level20Key}, _}}, {A43, U43}),
 
 
-    {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, gen_path, [UL20, ?ROOT_SESS_ID]),
+    {{AL20_2, UL20_2}, GenPathLevel20} = ?call_with_time(Worker2, fslogic_path, gen_path, [UL20, ?ROOT_SESS_ID]),
     ?assertMatch({ok, Level20Path}, {AL20_2, UL20_2}),
     test_utils:mock_validate_and_unload(Workers, space_info),
 
