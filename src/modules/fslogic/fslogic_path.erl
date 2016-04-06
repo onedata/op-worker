@@ -123,7 +123,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
 
     Len = size(SpaceName),
     MatchedSpacesIds = lists:filtermap(fun
-        (#document{value = #space_info{id = Id, name = Name}}) ->
+        (#document{key = Id, value = #space_info{name = Name}}) ->
             CommonPrefixLen = binary:longest_common_prefix([
                 SpaceName,
                 <<Name/binary, ?SPACE_NAME_ID_SEPARATOR, Id/binary>>

@@ -81,42 +81,42 @@ accounts_incoming_updates(Config) ->
     S1 = ?ID(s1),
 
     push_update(Node, [
-        update(1, [<<"r1">>], S1, space(S1, S1))
+        update(1, [<<"r1">>], S1, space(S1))
     ]),
     expect_message([], 1, []),
 
     push_update(Node, [
-        update(2, [<<"r1">>], S1, space(S1, S1)),
-        update(3, [<<"r1">>], S1, space(S1, S1)),
-        update(4, [<<"r1">>], S1, space(S1, S1))
+        update(2, [<<"r1">>], S1, space(S1)),
+        update(3, [<<"r1">>], S1, space(S1)),
+        update(4, [<<"r1">>], S1, space(S1))
     ]),
     expect_message([], 4, []),
 
     push_update(Node, [
-        update(5, [<<"r1">>], S1, space(S1, S1)),
-        update(7, [<<"r1">>], S1, space(S1, S1)),
-        update(9, [<<"r1">>], S1, space(S1, S1))
+        update(5, [<<"r1">>], S1, space(S1)),
+        update(7, [<<"r1">>], S1, space(S1)),
+        update(9, [<<"r1">>], S1, space(S1))
     ]),
     expect_message([], 9, [6, 8]),
 
     push_update(Node, [
-        update(10, [<<"r1">>], S1, space(S1, S1)),
-        update(11, [<<"r1">>], S1, space(S1, S1)),
-        update(12, [<<"r1">>], S1, space(S1, S1))
+        update(10, [<<"r1">>], S1, space(S1)),
+        update(11, [<<"r1">>], S1, space(S1)),
+        update(12, [<<"r1">>], S1, space(S1))
     ]),
     expect_message([], 12, [6, 8]),
 
     push_update(Node, [
-        update(1, [<<"r1">>], S1, space(S1, S1)),
-        update(2, [<<"r1">>], S1, space(S1, S1)),
-        update(3, [<<"r1">>], S1, space(S1, S1))
+        update(1, [<<"r1">>], S1, space(S1)),
+        update(2, [<<"r1">>], S1, space(S1)),
+        update(3, [<<"r1">>], S1, space(S1))
     ]),
     expect_message([], 12, [6, 8]),
 
     push_update(Node, [
-        update(6, [<<"r1">>], S1, space(S1, S1)),
-        update(8, [<<"r1">>], S1, space(S1, S1)),
-        update(15, [<<"r1">>], S1, space(S1, S1))
+        update(6, [<<"r1">>], S1, space(S1)),
+        update(8, [<<"r1">>], S1, space(S1)),
+        update(15, [<<"r1">>], S1, space(S1))
     ]),
 
     push_update(Node, [
@@ -139,10 +139,8 @@ saves_the_actual_data(Config) ->
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(
             <<"space xp">>,
-            S1,
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
             [{<<"G1">>, Priv2}],
-            [<<"P1">>, <<"P2">>],
             [{<<"P1">>, 1000}]
         )),
         update(2, [<<"r2">>, <<"r1">>], G1, group(
@@ -163,11 +161,9 @@ saves_the_actual_data(Config) ->
 
     %% then
     ?assertMatch({ok, (#document{key = S1, value = #space_info{
-        id = S1,
         name = <<"space xp">>,
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         groups = [{<<"G1">>, Priv2}],
-        providers = [<<"P1">>, <<"P2">>],
         size = [{<<"P1">>, 1000}],
         revision_history = [<<"r2">>, <<"r1">>]}})
     }, fetch(Node, space_info, S1)),
@@ -200,7 +196,7 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
     %% when
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(
-            <<"space_name">>, S1, [{U1, Priv1}], [], [P1], [{P1, 1000}]
+            <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
         )),
         update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
     ]),
@@ -230,7 +226,7 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
     %% when
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(
-            <<"space_name">>, S1, [{U1, Priv1}], [], [P1], [{P1, 1000}]
+            <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
         )),
         update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
         update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
@@ -256,7 +252,7 @@ updates_with_the_actual_data(Config) ->
     Priv2 = privileges:space_admin(),
 
     push_update(Node, [
-        update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>, S1)),
+        update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
         update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
         update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
@@ -267,10 +263,8 @@ updates_with_the_actual_data(Config) ->
     push_update(Node, [
         update(5, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
             <<"space xp">>,
-            S1,
             [{<<"U1">>, Priv1}, {<<"U2">>, []}],
             [{<<"G1">>, Priv2}],
-            [<<"P1">>, <<"P2">>],
             [{<<"P1">>, 1000}]
         )),
         update(6, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(
@@ -287,11 +281,9 @@ updates_with_the_actual_data(Config) ->
 
     %% then
     ?assertMatch({ok, (#document{key = S1, value = #space_info{
-        id = S1,
         name = <<"space xp">>,
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         groups = [{<<"G1">>, Priv2}],
-        providers = [<<"P1">>, <<"P2">>],
         size = [{<<"P1">>, 1000}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}})
     }, fetch(Node, space_info, S1)),
@@ -318,7 +310,7 @@ applies_deletion(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     {P1, S1, U1, G1} = {?ID(p1), ?ID(s1), ?ID(u1), ?ID(g1)},
     push_update(Node, [
-        update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>, S1)),
+        update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
         update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
         update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
@@ -351,7 +343,7 @@ resolves_conflicts(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     {S1, U1, G1} = {?ID(s1), ?ID(u1), ?ID(g1)},
     push_update(Node, [
-        update(1, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(<<"space xp">>, S1)),
+        update(1, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(<<"space xp">>)),
         update(2, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"group lol">>)),
         update(3, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
@@ -361,7 +353,7 @@ resolves_conflicts(Config) ->
 
     %% when
     push_update(Node, [
-        update(4, [<<"r2">>, <<"r1">>], S1, space(<<"space">>, S1)),
+        update(4, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(5, [<<"r3">>], G1, group(<<"group">>)),
         update(6, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
             user(<<"onedata">>, [], [])
@@ -371,7 +363,6 @@ resolves_conflicts(Config) ->
 
     %% then
     ?assertMatch({ok, #document{key = S1, value = #space_info{
-        id = S1,
         name = <<"space xp">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, space_info, S1)),
@@ -454,11 +445,11 @@ push_update(Node, Updates) ->
 provider(Name) ->
     {provider, [{client_name, Name}]}.
 
-space(Name, ID) ->
-    space(Name, ID, [], [], [], []).
-space(Name, ID, UsersWithPrivileges, GroupsWithPrivileges, PIDs, Supports) ->
-    {space, [{id, ID}, {name, Name}, {providers, PIDs}, {users,
-        UsersWithPrivileges}, {groups, GroupsWithPrivileges}, {size, Supports}]}.
+space(Name) ->
+    space(Name, [], [], []).
+space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
+    {space, [{name, Name}, {users, UsersWithPrivileges},
+        {groups, GroupsWithPrivileges}, {size, Supports}]}.
 
 group(Name) ->
     group(Name, [], []).

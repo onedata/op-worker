@@ -163,14 +163,35 @@ get_or_fetch(Client, Key) ->
 -spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
-    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
+    {ok, #space_details{id = Id, name = Name, size = Size}} =
+        oz_spaces:get_details(Client, SpaceId),
+    {ok, GroupIds} = oz_spaces:get_groups(Client, Id),
+    {ok, UserIds} = oz_spaces:get_users(Client, Id),
+
+    GroupsWithPrivileges = utils:pmap(fun(GID) ->
+        {ok, Privileges} = oz_spaces:get_group_privileges(Client, Id, GID),
+        {GID, Privileges}
+    end, GroupIds),
+    UsersWithPrivileges = utils:pmap(fun(UID) ->
+        {ok, Privileges} = oz_spaces:get_user_privileges(Client, Id, UID),
+        {UID, Privileges}
+    end, UserIds),
+
     case space_info:get(Id) of
         {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
+            NewDoc = Doc#document{key = Id, value = SpaceInfo#space_info{
+                users = UsersWithPrivileges,
+                groups = GroupsWithPrivileges,
+                size = Size,
+                name = Name}},
             {ok, _} = space_info:save(NewDoc),
             {ok, NewDoc};
         {error, {not_found, _}} ->
-            Doc = #document{key = Id, value = #space_info{id = Id, name = Name}},
+            Doc = #document{key = Id, value = #space_info{
+                users = UsersWithPrivileges,
+                groups = GroupsWithPrivileges,
+                size = Size,
+                name = Name}},
             {ok, _} = space_info:create(Doc),
             {ok, Doc};
         {error, Reason} ->
