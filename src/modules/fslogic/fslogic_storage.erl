@@ -20,7 +20,7 @@
 
 %% API
 -export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2]).
--export([new_user_ctx/3, get_posix_user_ctx/3, new_posix_user_ctx/2]).
+-export([new_user_ctx/3, get_posix_user_ctx/3]).
 
 %%%===================================================================
 %%% API
@@ -44,22 +44,11 @@ new_user_ctx(StorageType, SessionId, SpaceUUID) ->
 %% @doc Retrieves posix user ctx for file attrs
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_user_ctx(StorageType :: helpers:name(), SessionId :: session:id(),
+-spec get_posix_user_ctx(StorageType :: helpers:name(), SessionIdOrIdentity :: session:id() | session:identity(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
-get_posix_user_ctx(StorageType, SessionId, SpaceUUID) ->
+get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID) ->
     LumaType = luma_type(),
-    LumaType:get_posix_user_ctx(StorageType, SessionId, SpaceUUID).
-
-
-%%--------------------------------------------------------------------
-%% @doc Creates new posix user ctx for file attrs
-%% @end
-%%--------------------------------------------------------------------
--spec new_posix_user_ctx(SessionIdOrIdentity :: session:id() | session:identity(),
-    SpaceUUID :: file_meta:uuid()) -> term().
-new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID) ->
-    LumaType = luma_type(),
-    LumaType:new_posix_user_ctx(SessionIdOrIdentity, SpaceUUID).
+    LumaType:get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
