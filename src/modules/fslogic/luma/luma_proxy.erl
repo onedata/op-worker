@@ -188,8 +188,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity) -
         {ok, undefined} ->
             UserId = luma_utils:get_user_id(SessionIdOrIdentity),
             case onedata_user:get(UserId) of
-                {ok, #onedata_user{name = Name, alias = Alias, email_list = EmailList,
-                    connected_accounts = ConnectedAccounts}} ->
+                {ok, #document{value = #onedata_user{name = Name, alias = Alias,
+                    email_list = EmailList, connected_accounts = ConnectedAccounts}}} ->
 
                     UserDetailsList = ?record_to_list(user_details, #user_details{
                         name = Name,
@@ -260,7 +260,8 @@ parse_posix_ctx_from_luma(Response, SpaceUUID) ->
 %% Get auth from session_id, returns undefined when identity is given.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(session:id() | session:identity()) -> onedata_user:id().
+-spec get_auth(session:id() | session:identity()) ->
+    {ok, session:auth() | undefined} | {error, term()}.
 get_auth(#identity{}) ->
     {ok, undefined};
 get_auth(SessionId) ->
