@@ -41,5 +41,6 @@ models() -> [
     ceph_user,
     s3_user,
     dbsync_state,
-    files_to_chown
+    files_to_chown,
+    posix_user
 ].

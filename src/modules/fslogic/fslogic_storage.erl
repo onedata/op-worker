@@ -11,6 +11,7 @@
 -module(fslogic_storage).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/helpers.hrl").
@@ -19,11 +20,12 @@
 
 %% API
 -export([select_helper/1, select_storage/1, new_storage/2, new_helper_init/2]).
--export([new_user_ctx/3, new_posix_user_ctx/2]).
+-export([new_user_ctx/3, get_posix_user_ctx/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -31,17 +33,11 @@
 %% This context may and should be used with helpers:set_user_ctx/2.
 %% @end
 %%--------------------------------------------------------------------
--spec new_user_ctx(helpers:init(), session:id() | #identity{}, SpaceUUID :: file_meta:uuid()) ->
+-spec new_user_ctx(StorageType :: helpers:init(), SessionId :: session:id(), SpaceUUID :: file_meta:uuid()) ->
     helpers:user_ctx().
-new_user_ctx(HelperInit, SessionId, SpaceUUID) when is_binary(SessionId) ->
-    {ok, #document{value = #session{identity = Identity}}} = session:get(SessionId),
-    new_user_ctx(HelperInit, Identity, SpaceUUID);
-new_user_ctx(#helper_init{name = ?CEPH_HELPER_NAME}, Identity, SpaceUUID) ->
-    new_ceph_user_ctx(Identity, SpaceUUID);
-new_user_ctx(#helper_init{name = ?DIRECTIO_HELPER_NAME}, Identity, SpaceUUID) ->
-    new_posix_user_ctx(Identity, SpaceUUID);
-new_user_ctx(#helper_init{name = ?S3_HELPER_NAME}, Identity, SpaceUUID) ->
-    new_s3_user_ctx(Identity, SpaceUUID).
+new_user_ctx(StorageType, SessionId, SpaceUUID) ->
+    LumaType = luma_type(),
+    LumaType:new_user_ctx(StorageType, SessionId, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -64,26 +60,14 @@ new_ceph_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for all posix-compilant helpers.
-%% This context may and should be used with helpers:set_user_ctx/2.
+%% @doc Retrieves posix user ctx for file attrs
 %% @end
 %%--------------------------------------------------------------------
--spec new_posix_user_ctx(Identity :: #identity{}, SpaceUUID :: file_meta:uuid()) ->
-    helpers:user_ctx().
-new_posix_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
-    SpaceId =  fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceId),
-    FinalGID =
-        case helpers_nif:groupname_to_gid(SpaceName) of
-            {ok, GID} ->
-                GID;
-            {error, _} ->
-                fslogic_utils:gen_storage_uid(SpaceUUID)
-        end,
-
-    FinalUID = fslogic_utils:gen_storage_uid(UserId),
-    #posix_user_ctx{uid = FinalUID, gid = FinalGID}.
+-spec get_posix_user_ctx(StorageType :: helpers:name(), SessionIdOrIdentity :: session:id() | session:identity(),
+    SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
+get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID) ->
+    LumaType = luma_type(),
+    LumaType:get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID).
 
 
 %%--------------------------------------------------------------------
@@ -161,3 +145,18 @@ new_storage(Name, Helpers) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns luma module to use based on config
+%% @end
+%%--------------------------------------------------------------------
+-spec luma_type() -> luma_proxy | luma_provider.
+luma_type() ->
+    case application:get_env(?APP_NAME, enable_luma_proxy) of
+        {ok, true} ->
+            luma_proxy;
+        {ok, false} ->
+            luma_provider
+    end.

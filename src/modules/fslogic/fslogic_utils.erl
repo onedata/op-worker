@@ -10,37 +10,20 @@
 %% ===================================================================
 -module(fslogic_utils).
 
-
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_common_internal.hrl").
 
-
 %% API
--export([random_ascii_lowercase_sequence/1, gen_storage_uid/1, get_parent/1, gen_storage_file_id/1]).
+-export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
 -export([wait_for_links/2, wait_for_file_meta/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc Generates storage UID/GID based arbitrary binary (e.g. user's global id, space id, etc)
-%% @end
-%%--------------------------------------------------------------------
--spec gen_storage_uid(ID :: binary()) -> non_neg_integer().
-gen_storage_uid(?ROOT_USER_ID) ->
-    0;
-gen_storage_uid(ID) ->
-    <<UID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, ID),
-    {ok, LowestUID} = application:get_env(?APP_NAME, lowest_generated_storage_uid),
-    {ok, HighestUID} = application:get_env(?APP_NAME, highest_generated_storage_uid),
-    LowestUID + UID0 rem HighestUID.
-
 
 %%--------------------------------------------------------------------
 %% @doc Create random sequence consisting of lowercase ASCII letters.
@@ -101,6 +84,7 @@ get_local_storage_file_locations(Entry) ->
     #document{} = Doc = get_local_file_location(Entry),
     get_local_storage_file_locations(Doc).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Waiting for links document associated with file_meta to be present.
@@ -118,6 +102,7 @@ wait_for_links(FileUuid, Retries) ->
             timer:sleep(timer:seconds(1)),
             wait_for_links(FileUuid, Retries - 1)
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

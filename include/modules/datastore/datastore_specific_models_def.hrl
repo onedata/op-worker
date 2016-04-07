@@ -51,6 +51,9 @@
     name :: binary(),
     space_ids :: [binary()],
     group_ids :: [binary()],
+    connected_accounts :: proplists:proplist(),
+    alias :: string() | integer() | binary(),
+    email_list :: [binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 
@@ -145,6 +148,11 @@
 %% The Key of this document is UserId.
 -record(files_to_chown, {
     file_uuids = [] :: [file_meta:uuid()]
+}).
+
+%% Model that maps onedata user to POSIX user
+-record(posix_user, {
+    credentials :: #{storage:id() => posix_user:credentials()}
 }).
 
 -endif.
