@@ -32,25 +32,25 @@
 %%--------------------------------------------------------------------
 -spec change_replicated(SpaceId :: binary(), dbsync_worker:change()) ->
     any().
-change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc = #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
-    ?debug("change_replicated: changed file_meta ~p", [FileUUID]),
-    fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
-    fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
+change_replicated(_, #change{model = file_meta, doc =  #document{key = FileUUID,
+    value = #file_meta{type = ?REGULAR_FILE_TYPE}, deleted = true}}) ->
+    ok = replica_cleanup:clean_replica_files(FileUUID);
+change_replicated(SpaceId, #change{model = file_meta, doc = FileDoc =
+    #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}}}) ->
+    ?info("change_replicated: changed file_meta ~p", [FileUUID]),
+    ok = fslogic_utils:wait_for_links(FileUUID, 5),
+    ok = fslogic_file_location:create_storage_file_if_not_exists(SpaceId, FileDoc),
+    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(_SpaceId, #change{model = file_meta, doc = #document{key = FileUUID, value = #file_meta{}}}) ->
-    ?debug("change_replicated: changed file_meta ~p", [FileUUID]),
-    fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
+    ?info("change_replicated: changed file_meta ~p", [FileUUID]),
+    ok = fslogic_event:emit_file_attr_update({uuid, FileUUID}, []);
 change_replicated(SpaceId, #change{model = file_location, doc = Doc = #document{value = #file_location{uuid = FileUUID}}}) ->
-    ?debug("change_replicated: changed file_location ~p", [FileUUID]),
-    case replication_dbsync_hook:on_file_location_change(SpaceId, Doc) of
-        {error,{{badmatch,{error,{not_found,file_meta}}}, _}} ->
-            timer:apply_after(timer:seconds(1), replication_dbsync_hook,
-                on_file_location_change, [SpaceId, Doc]);
-        _ ->
-            ok
-    end;
+    ?info("change_replicated: changed file_location ~p", [FileUUID]),
+    ok = fslogic_utils:wait_for_file_meta(FileUUID, 5),
+    ok = fslogic_utils:wait_for_links(FileUUID, 5),
+    ok = replication_dbsync_hook:on_file_location_change(SpaceId, Doc);
 change_replicated(_SpaceId, _Change) ->
     ok.
-
 
 %%%===================================================================
 %%% Internal functions

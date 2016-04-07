@@ -19,6 +19,7 @@
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 -record(gwcstate, {
     remote :: {inet:ip_address(), inet:port_number()},
@@ -28,8 +29,6 @@
     rtransfer_opts :: [rtransfer:opt()]
 }).
 
--define(CONNECTION_TIMEOUT, timer:seconds(10)).
--define(REQUEST_COMPLETION_TIMEOUT, timer:seconds(10)).
 
 -export([start_link/4]).
 %% gen_server callbacks
