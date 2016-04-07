@@ -32,6 +32,9 @@ class ProviderWorkerConfigurator:
                     'string': '/root/gui_static'}
         return cfg
 
+    def pre_start_commands(self, domain):
+        return 'escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json'
+
     def configure_started_instance(self, bindir, instance, config,
                                    container_ids, output, storages_dockers=None):
         this_config = config[self.domains_attribute()][instance]
