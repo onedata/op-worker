@@ -68,11 +68,6 @@ def _node_up(image, bindir, config, dns_servers, db_node_mappings, logdir,
     db_nodes = config['nodes']['node']['sys.config'][app_name]['db_nodes']
 
     sys_config = config['nodes']['node']['sys.config']
-    sys_config[app_name]['external_ip'] = {'string': "IP_PLACEHOLDER"}
-    # todo: external_ip in cluster_worker should be obtained via plugin
-    if 'cluster_worker' not in sys_config:
-        sys_config['cluster_worker'] = {}
-    sys_config['cluster_worker']['external_ip'] = {'string': "IP_PLACEHOLDER"}
 
     for i in range(len(db_nodes)):
         db_nodes[i] = db_node_mappings[db_nodes[i]]
@@ -87,16 +82,13 @@ bash /root/bin/chown_logs.sh &
 cat <<"EOF" > /tmp/gen_dev_args.json
 {gen_dev_args}
 EOF
-sed -i.bak s/\"IP_PLACEHOLDER\"/\"`ip addr show eth0 | grep "inet\\b" | awk '{{print $2}}' | cut -d/ -f1`\"/g /tmp/gen_dev_args.json
-escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
-mkdir -p /root/bin/node/data/
-touch /root/bin/node/data/dns.config
-sed -i.bak s/onedata.org/{domain}/g /root/bin/node/data/dns.config
+{pre_start_commands}
 /root/bin/node/bin/{executable} console'''
+    pre_start_commands = configurator.pre_start_commands(domain)
 
     command = command.format(
-        domain=domain,
         gen_dev_args=json.dumps({configurator.app_name(): config}),
+        pre_start_commands=pre_start_commands,
         uid=os.geteuid(),
         gid=os.getegid(),
         executable=configurator.app_name()

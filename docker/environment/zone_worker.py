@@ -31,6 +31,8 @@ class OZWorkerConfigurator:
 
     def tweak_config(self, cfg, uid, instance):
         sys_config = cfg['nodes']['node']['sys.config'][self.app_name()]
+        sys_config['external_ip'] = {'string': "IP_PLACEHOLDER"}
+
         if 'http_domain' in sys_config:
             domain = worker.cluster_domain(instance, uid)
             sys_config['http_domain'] = {'string': domain}
@@ -43,7 +45,8 @@ class OZWorkerConfigurator:
         return cfg
 
     def configure_started_instance(self, bindir, instance, config,
-                                   container_ids, output, storages_dockers=None):
+                                   container_ids, output,
+                                   storages_dockers=None):
         this_config = config[self.domains_attribute()][instance]
         # Check if gui_livereload is enabled in env and turn it on
         if 'gui_livereload' in this_config:
@@ -61,6 +64,15 @@ Starting GUI livereload
                         DOCKER_BINDIR_PATH,
                         '/root/bin/node',
                         mode=mode)
+
+    def pre_start_commands(self, domain):
+        return '''
+sed -i.bak s/\"IP_PLACEHOLDER\"/\"`ip addr show eth0 | grep "inet\\b" | awk '{{print $2}}' | cut -d/ -f1`\"/g /tmp/gen_dev_args.json
+escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
+mkdir -p /root/bin/node/data/
+touch /root/bin/node/data/dns.config
+sed -i.bak s/onedata.org/{domain}/g /root/bin/node/data/dns.config
+        '''.format(domain=domain)
 
     def extra_volumes(self, config, bindir):
         extra_volumes = []
