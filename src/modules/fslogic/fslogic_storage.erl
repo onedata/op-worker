@@ -44,11 +44,12 @@ new_user_ctx(StorageType, SessionId, SpaceUUID) ->
 %% @doc Retrieves posix user ctx for file attrs
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_user_ctx(StorageType :: helpers:name(), SessionId :: session:id(),
+-spec get_posix_user_ctx(StorageType :: helpers:name(), SessionIdOrIdentity :: session:id() | session:identity(),
     SpaceUUID :: file_meta:uuid()) -> #posix_user_ctx{}.
-get_posix_user_ctx(StorageType, SessionId, SpaceUUID) ->
+get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID) ->
     LumaType = luma_type(),
-    LumaType:get_posix_user_ctx(StorageType, SessionId, SpaceUUID).
+    LumaType:get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID).
+
 
 %%--------------------------------------------------------------------
 %% @doc
