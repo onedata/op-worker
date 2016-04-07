@@ -40,11 +40,11 @@
 all() ->
     ?STRESS_ALL(?STRESS_CASES, ?STRESS_NO_CLEARING_CASES).
 
--define(REQUEST_TIMEOUT, timer:seconds(30)).
--define(TIMEOUT, timer:seconds(60)).
+-define(REQUEST_TIMEOUT, timer:minutes(5)).
+-define(TIMEOUT, timer:minutes(5)).
 -define(call_store(Fun, Args), erlang:apply(file_meta, Fun, Args)).
 -define(call(N, M, A), ?call(N, file_meta, M, A)).
--define(call(N, Mod, M, A), rpc:call(N, Mod, M, A)).
+-define(call(N, Mod, M, A), rpc:call(N, Mod, M, A, ?TIMEOUT)).
 
 %%%===================================================================
 %%% Test functions
@@ -53,7 +53,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 99.9},
+            {success_rate, 95},
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -76,11 +76,18 @@ many_files_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
             [{name, threads_num}, {value, 20}, {description, "Number of threads used during the test."}],
-            [{name, files_per_thead}, {value, 10}, {description, "Number of files used by single threads."}]
+            [{name, files_per_thead}, {value, 10}, {description, "Number of files used by single threads."}],
+            [{name, clear_ratio}, {value, 1.25}, {description,
+                "Ratio used to calculate number of clearing threads " ++
+                    "(threads_num/clear_ratio thrads are used to clear documents)."}]
         ]},
         {description, "Performs multiple datastore operations using many threads. Level - database."}
     ]).
 many_files_creation_test_base(Config) ->
+    % Sleep because test does to many operations for Cauchbase when running for a long time
+    % TODO - make mnesia slower when Cauchbase working too slow
+    timer:sleep(timer:seconds(15)),
+
     LastFails = ?config(last_fails, Config),
     RepNum = ?config(rep_num, Config),
     case LastFails of
@@ -145,7 +152,7 @@ many_files_creation_test_base(Config) ->
     ?assertEqual([], ErrorsList2),
     ?assertEqual(OpsNum, OkNum2),
 
-    ClearRatio = 2,
+    ClearRatio = ?config(clear_ratio, Config),
     NewTN = round(ThreadsNum / ClearRatio),
     NewCT = 1,
     DelOpsNum = FilesPerThead * NewTN,
@@ -186,7 +193,7 @@ many_files_creation_test_base(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json")).
+    ?TEST_INIT(Config, ?TEST_FILE(Config, "env_desc.json"), [model_file_meta_test_SUITE]).
 
 end_per_suite(Config) ->
     test_node_starter:clean_environment(Config).
