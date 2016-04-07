@@ -8,7 +8,14 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
 */
 export default {
+  common: {
+    modal: {
+      ok: 'OK',
+      cancel: 'Anuluj'
+    }
+  },
   components: {
+    // layout
     topBar: {
       logout: 'Wyloguj',
       manageProviders: 'Zarządzaj dostawcami'
@@ -21,8 +28,10 @@ export default {
       trash: 'kosz',
       spaces: 'miejsca',
       groups: 'grupy',
-      token: 'token'
+      token: 'tokeny',
+      providers: 'dostawcy'
     },
+    // spaces
     spacesMenu: {
       title: 'miejsca',
     },
@@ -41,6 +50,53 @@ export default {
       removeGroup: 'usuwanie grup',
       inviteProvider: 'zapraszanie dostawców',
       removeProvider: 'usuwanie dostawców'
+    },
+    // data
+    dataFilesTree: {
+      rootDirectory: 'Katalog główny'
+    },
+    dataFilesList: {
+      files: 'pliki',
+      size: 'rozmiar',
+      modification: 'modyfikacja',
+      permissions: 'uprawnienia'
+    },
+    dataFilesListToolbar: {
+      tooltip: {
+        createDir: 'Utwórz katalog',
+        createFile: 'Utwórz plik',
+        shareFile: 'Udostępnij element',
+        uploadFile: 'Załaduj plik',
+        rename: 'Zmień nazwę elementu',
+        permissions: 'Zmień uprawnienia elementu',
+        copy: 'Kopiuj element',
+        cut: 'Wytnij element',
+        remove: 'Usuń element'
+      },
+      renameFileModal: {
+        title: 'Zmiana nazwy pliku lub katalogu',
+        enterName: 'Zmień nazwę elementu "{{currentName}}" na:'
+      },
+      createDirModal: {
+        title: 'Nowy katalog',
+        enterName: 'Wprowadź nazwę nowego katalogu:'
+      },
+      createFileModal: {
+        title: 'Nowy plik',
+        enterName: 'Wprowadź nazwę nowego pliku:'
+      },
+      removeFilesModal: {
+        title: 'Usuwanie plików',
+        text: 'Czy chcesz usunąć wybrane elementy?'
+      },
+      editPermissionsModal: {
+        title: 'Zmiana uprawnień',
+        text: 'Wprowadź nowy kod uprawnień:'
+      },
+    },
+    fileUpload: {
+      titleUpload: 'Wysyłanie {{count}} pliku',
+      cancelAll: 'Anuluj wszystkie',
     }
   },
   spaces: {
@@ -52,5 +108,5 @@ export default {
         tableTitle: 'grupy'
       }
     }
-  }
+  },
 };

@@ -20,7 +20,7 @@
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
--export([create_gui_session/1]).
+-export([create_gui_session/2]).
 -export([remove_session/1]).
 -export([get_provider_session_id/2, session_id_to_provider_id/1]).
 -export([reuse_or_create_provider_session/4]).
@@ -63,11 +63,13 @@ reuse_or_create_fuse_session(SessId, Iden, Auth, Con) ->
     end,
     case session:update(SessId, Diff) of
         {ok, SessId} ->
+            subscribe_user(Iden),
             {ok, reused};
         {error, {not_found, _}} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, fuse]),
+                    subscribe_user(Iden),
                     {ok, created};
                 {error, already_exists} ->
                     reuse_or_create_fuse_session(SessId, Iden, Auth, Con);
@@ -101,11 +103,13 @@ reuse_or_create_provider_session(SessId, SessionType, Iden, Con) ->
            end,
     case session:update(SessId, Diff) of
         {ok, SessId} ->
+            subscribe_user(Iden),
             {ok, reused};
         {error, {not_found, _}} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, provider]),
+                    subscribe_user(Iden),
                     {ok, created};
                 {error, already_exists} ->
                     reuse_or_create_provider_session(SessId, SessionType, Iden, Con);
@@ -150,11 +154,13 @@ reuse_or_create_rest_session(Iden, Auth) ->
     end,
     case session:update(SessId, Diff) of
         {ok, SessId} ->
+            subscribe_user(Iden),
             {ok, SessId};
         {error, {not_found, _}} ->
             case session:create(#document{key = SessId, value = Sess}) of
                 {ok, SessId} ->
                     supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, rest]),
+                    subscribe_user(Iden),
                     {ok, SessId};
                 {error, already_exists} ->
                     reuse_or_create_rest_session(Iden);
@@ -170,15 +176,15 @@ reuse_or_create_rest_session(Iden, Auth) ->
 %% Creates GUI session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec create_gui_session(Auth :: session:auth()) ->
+-spec create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
-create_gui_session(Auth) ->
+create_gui_session(Iden, Auth) ->
     SessId = datastore_utils:gen_uuid(),
-    {ok, #document{value = #identity{} = Iden}} = identity:get_or_fetch(Auth),
     Sess = #session{status = active, identity = Iden, auth = Auth, type = gui},
     case session:create(#document{key = SessId, value = Sess}) of
         {ok, SessId} ->
             supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, gui]),
+            subscribe_user(Iden),
             {ok, SessId};
         {error, Reason} ->
             {error, Reason}
@@ -218,3 +224,16 @@ session_id_to_provider_id(SessId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Includes user in subscription (if identity belongs to an user).
+%% @end
+%%--------------------------------------------------------------------
+-spec subscribe_user(Iden :: session:identity()) -> ok.
+subscribe_user(Iden) ->
+    UID = Iden#identity.user_id,
+    case UID of
+        undefined -> ok;
+        _ -> subscriptions:put_user(UID)
+    end.

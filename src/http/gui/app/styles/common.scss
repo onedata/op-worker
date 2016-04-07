@@ -4,6 +4,7 @@ $top-bar-height: 72px !default;
 $global-min-width: 1000px !default;
 // $secondary-sidebar-width: 352px;
 $secondary-sidebar-width: 352px !default;
+$secondary-sidebar-item-padding: $secondary-sidebar-width * 0.077 !default;
 
 $content-padding: 12px !default;
 
@@ -16,9 +17,9 @@ $sidebar-item-hover-color: $onedata-red;
 
 /// Font and icon sizes
 $secondary-sidebar-font-size: 13pt !default;
-$secondary-sidebar-icon-font-size: 16pt !default;
+$secondary-sidebar-icon-font-size: 38px !default;
 
-$top-bar-icon-font-size: 16pt !default;
+$top-bar-icon-font-size: 32px !default;
 
 $table-font-size: 13pt !default;
 $table-checkbox-size: 16pt !default;
@@ -60,24 +61,77 @@ html, body {
     //transition: left 0.25s;
 
     .navbar {
-      min-height: $top-bar-height;
+      height: $top-bar-height;
       margin-bottom: 0;
       border: none;
       border-radius: 0;
       background: none;
 
+      .top-bar-item {
+        // important because we want all items height to fit bar height
+        min-height: $top-bar-height !important;
+      }
+
+      .toolbar-icon {
+        color: $color-toolbar-icon;
+        // we do not want hover
+        background-color: transparent !important;
+        cursor: pointer; cursor: hand;
+
+        &:hover {
+          color: $onedata-red !important;
+        }
+
+        &.disabled {
+          color: $color-toolbar-icon-disabled;
+          pointer-events: none;
+          cursor: default;
+        }
+      }
+
       .navbar-brand {
-        padding-left: 42px;
+        width: 156px;
+        margin-left: 32px;
+        margin-right: 62px;
+        // TODO: svg
+        background-image: url("/assets/images/logo.png");
+        background-position: center center;
+        background-repeat: no-repeat;
       }
 
       .top-bar-icon {
-        font-size: $top-bar-icon-font-size;
+        // important because we to force top bar icons to be equally sized
+        font-size: $top-bar-icon-font-size !important;
+      }
+
+      // TODO: left only for first, disable right for last
+      .toolbar-group {
+        border-right: solid 1px $color-toolbar-separator;
+
+        &.navbar-right {
+          &:first-of-type {
+            border-right: none;
+          }
+        }
+
       }
 
       .navbar-nav {
+        // TODO: probably > li can be used... consider it
+        // TODO: .top-bar-item
+        > li > a {
+          // important because we want all items height to fit bar height
+          min-height: $top-bar-height !important;
+        }
+
         .profile-dropdown {
           margin-left: 10px;
           margin-right: 10px;
+
+          .oneicon {
+            font-size: 40px;
+            vertical-align: middle;
+          }
         }
       }
     }
@@ -110,14 +164,12 @@ html, body {
       .small-logo {
         height: $top-bar-height;
         width: $sidebar-width;
-        padding-top: 15px;
         text-align: center;
 
-        img {
-          padding: 0;
-          width: 41px;
-          height: 27px;
-        }
+        // TODO: use SVG
+        background-image: url("/assets/images/logo-short.png");
+        background-repeat: no-repeat;
+        background-position: center center;
       }
 
       // TODO
@@ -125,9 +177,12 @@ html, body {
 
       li {
         overflow: hidden;
-        font-size: 18pt;
         vertical-align: middle;
         border-bottom: solid #565960 1px;
+
+        .oneicon {
+          font-size: 40px;
+        }
 
         a {
           display: table;
@@ -147,9 +202,11 @@ html, body {
             max-height: $sidebar-item-height;
             text-align: center;
             color: #fff;
+            cursor: pointer; cursor: hand;
 
             figcaption {
-              padding-top: 4px;
+              // pull up
+              margin-top: -3px;
               font-size: 8pt;
               font-weight: lighter;
               letter-spacing: 0.05em;
@@ -201,47 +258,65 @@ html, body {
         font-size: 11pt;
       }
 
+
+      // "active" item of list item
+      .secondary-sidebar-item {
+        display: table;
+        width: 100%;
+        height: 60px;
+        line-height: 60px;
+        border-top: #ebebeb 1px solid;
+        padding-left: $secondary-sidebar-item-padding;
+        padding-right: $secondary-sidebar-item-padding;
+        list-style-type: none;
+        font-size: $secondary-sidebar-font-size;
+        color: black;
+        text-decoration: none !important;
+
+        // TODO: elements that use .item-icon or .item-label should use this class
+        .item-element {
+          display: table-cell;
+          vertical-align: middle;
+        }
+
+        .item-icon {
+          display: table-cell;
+          width: 1.5em;
+          vertical-align: middle;
+          font-size: $secondary-sidebar-icon-font-size;
+          text-align: center;
+        }
+
+        .item-label {
+          display: table-cell;
+          width: 100%;
+          vertical-align: middle;
+          font-size: $secondary-sidebar-font-size;
+          padding-left: 1em;
+        }
+      }
+
+
       ul {
         padding: 0;
 
+        // list item is a container for "action" item and its application childs
         li {
           list-style-type: none;
-
-          .secondary-sidebar-item {
-            border-top: #ebebeb 1px solid;
-            /* TODO: padding is probably bad idea */
-            padding-left: $secondary-sidebar-width / 13;
-            padding-right: $secondary-sidebar-width / 13;
-            padding-top: 18px;
-            padding-bottom: 16px;
-            list-style-type: none;
-            font-size: $secondary-sidebar-font-size;
-            height: 60px;
-
-            .item-icon {
-              display: block;
-              float: left;
-              width: 2.2em;
-              font-size: $secondary-sidebar-icon-font-size;
-              text-align: center;
-            }
-
-            .item-label {
-              font-size: $secondary-sidebar-font-size;
-              padding-left: 0.5em;
-            }
-          }
+          line-height: 18px;
 
           ul.submenu {
+            .secondary-sidebar-item {
+              padding-left: $secondary-sidebar-item-padding * 3.64;
+            }
+
+            // when is a child of non-active parent, it is invisible
             display: none;
             background-color: $onedata-light-gray;
-            li {
-              .secondary-sidebar-item {
-                padding-left: $secondary-sidebar-width * 0.28;
 
-                .item-label {
+            .secondary-sidebar-item {
+              .item-label {
                   text-transform: capitalize;
-                }
               }
 
               &:hover,
@@ -251,8 +326,14 @@ html, body {
             }
           }
 
+          &.first-level {
+            // TODO: this causes a left "margin" of horizontal lines...
+            border-left: 4px solid;
+            border-left-color: transparent;
+          }
+
           &.active.first-level {
-            border-left: 4px solid $onedata-azure;
+            border-left-color: $onedata-azure;
 
             .secondary-sidebar-item.first-level {
               background-color: $onedata-light-azure;
@@ -262,11 +343,16 @@ html, body {
           &:hover {
             .secondary-sidebar-item.first-level {
               background-color: $onedata-light-azure;
+
+              .secondary-sidebar-item.first-level {
+                background-color: transparent;
+              }
             }
           }
 
           // active first-level entry
           &.active {
+            // submenu uncollapses when parent menu is clicked
             ul.submenu {
               display: block;
             }
@@ -276,6 +362,11 @@ html, body {
             }
           }
         }
+      }
+
+      // special styles for sidebar lists which are trees
+      ul.tree {
+
       }
     }
 
@@ -291,3 +382,6 @@ html, body {
   }
 
 }
+
+// TODO: temporary
+@import 'data';
