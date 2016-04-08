@@ -414,6 +414,31 @@ oz_spaces_mock_setup(Workers, Spaces) ->
             {ok, [domain_to_provider_id(Domain) || Domain <- Domains]}
         end
     ),
+
+    test_utils:mock_expect(Workers, oz_spaces, get_users,
+        fun(_, _SpaceId) ->
+            {ok, []}
+        end
+    ),
+
+    test_utils:mock_expect(Workers, oz_spaces, get_groups,
+        fun(_, _SpaceId) ->
+            {ok, []}
+        end
+    ),
+
+    test_utils:mock_expect(Workers, oz_spaces, get_user_privileges,
+        fun(_, _SpaceId, _UserId) ->
+            {ok, []}
+        end
+    ),
+
+    test_utils:mock_expect(Workers, oz_spaces, get_group_privileges,
+        fun(_, _SpaceId, _GroupId) ->
+            {ok, []}
+        end
+    ),
+
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
