@@ -162,7 +162,7 @@ get_or_fetch(Client, Key) ->
 -spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
-    {ok, #space_details{id = Id, name = Name, size = Size}} =
+    {ok, #space_details{id = Id, name = Name, providers_supports = Supports}} =
         oz_spaces:get_details(Client, SpaceId),
     {ok, GroupIds} = oz_spaces:get_groups(Client, Id),
     {ok, UserIds} = oz_spaces:get_users(Client, Id),
@@ -179,7 +179,7 @@ fetch(Client, SpaceId) ->
     Doc = #document{key = Id, value = #space_info{
         users = UsersWithPrivileges,
         groups = GroupsWithPrivileges,
-        providers_supports = Size,
+        providers_supports = Supports,
         name = Name}},
     {ok, _} = space_info:create(Doc),
     {ok, Doc}.

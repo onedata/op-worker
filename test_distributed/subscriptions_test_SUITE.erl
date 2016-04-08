@@ -212,7 +212,10 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
     %% then
     FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, SessionID, {path, FilePath}, write)),
+    OpenResult = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
+    ?assertMatch({ok, _}, OpenResult),
+    {ok, Handle} = OpenResult,
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, <<"yolo">>)),
     ok.
 
 updated_user_with_present_space_triggers_file_meta_creation(Config) ->
@@ -241,7 +244,10 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
     %% then
     FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
-    ?assertMatch({ok, _}, lfm_proxy:open(Node, SessionID, {path, FilePath}, write)),
+    OpenResult = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
+    ?assertMatch({ok, _}, OpenResult),
+    {ok, Handle} = OpenResult,
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, <<"yolo">>)),
     ok.
 
 updates_with_the_actual_data(Config) ->
