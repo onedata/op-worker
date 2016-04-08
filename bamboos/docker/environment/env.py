@@ -175,23 +175,24 @@ def setup_worker(worker, bin_worker, domains_name, bin_cm, config, config_path,
 def _start_storages(config, config_path, ceph_image, s3_image):
     storages_dockers = {'ceph': {}, 's3': {}}
     docker_ids = []
-    for key, cfg in config['os_configs'].iteritems():
-        for storage in cfg['storages']:
-            if isinstance(storage, basestring):
-                sys.stderr.write('''WARNING:
-    Detected deprecated syntax at os_configs.{0}.storages
-    Change entry "{1}" to: {{ "type": "posix", "name": "{1}" }}
-    In file {2}'''.format(key, storage, config_path))
-                break
-            if storage['type'] == 'ceph' and storage['name'] not in storages_dockers['ceph']:
-                pool = tuple(storage['pool'].split(':'))
-                result = ceph.up(ceph_image, [pool])
-                docker_ids.extend(result['docker_ids'])
-                del result['docker_ids']
-                storages_dockers['ceph'][storage['name']] = result
-            elif storage['type'] == 's3' and storage['name'] not in storages_dockers['s3']:
-                result = s3.up(s3_image, [storage['bucket']])
-                docker_ids.extend(result['docker_ids'])
-                del result['docker_ids']
-                storages_dockers['s3'][storage['name']] = result
+    if 'os_configs' in config:
+        for key, cfg in config['os_configs'].iteritems():
+            for storage in cfg['storages']:
+                if isinstance(storage, basestring):
+                    sys.stderr.write('''WARNING:
+        Detected deprecated syntax at os_configs.{0}.storages
+        Change entry "{1}" to: {{ "type": "posix", "name": "{1}" }}
+        In file {2}'''.format(key, storage, config_path))
+                    break
+                if storage['type'] == 'ceph' and storage['name'] not in storages_dockers['ceph']:
+                    pool = tuple(storage['pool'].split(':'))
+                    result = ceph.up(ceph_image, [pool])
+                    docker_ids.extend(result['docker_ids'])
+                    del result['docker_ids']
+                    storages_dockers['ceph'][storage['name']] = result
+                elif storage['type'] == 's3' and storage['name'] not in storages_dockers['s3']:
+                    result = s3.up(s3_image, [storage['bucket']])
+                    docker_ids.extend(result['docker_ids'])
+                    del result['docker_ids']
+                    storages_dockers['s3'][storage['name']] = result
     return storages_dockers, docker_ids
