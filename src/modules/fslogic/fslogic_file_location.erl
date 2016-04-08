@@ -88,7 +88,7 @@ get_merged_changes(Doc, N) ->
 %% Create storage file and file_location if there is no file_location defined
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file_if_not_exists(space_info:id(), file_meta:file_meta()) -> ok.
+-spec create_storage_file_if_not_exists(space_info:id(), datastore:document()) -> ok.
 create_storage_file_if_not_exists(SpaceId, FileDoc = #document{key = FileUuid,
     value = #file_meta{mode = Mode, uid = UserId}}) ->
     file_location:run_synchronized(FileUuid,

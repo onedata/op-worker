@@ -100,6 +100,7 @@ on_init([]) ->
 
         %% Load NIFs
         ok = helpers_nif:init(),
+        ok = luma_nif:init(),
         ok
     catch
         _:Error ->

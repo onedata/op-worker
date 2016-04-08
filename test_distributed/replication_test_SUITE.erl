@@ -128,7 +128,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
 
     %then
-    Uid = rpc:call(W1, fslogic_utils, gen_storage_uid, [UserId]),
+    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [UserId]),
     {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"file_to_compare::1">>])]),
     {ok, FileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"test_file::1">>])]),
     ?assertEqual(Uid, FileInfo#file_info.uid),
@@ -175,7 +175,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
 
     %then
-    Uid = rpc:call(W1, fslogic_utils, gen_storage_uid, [ExternalUser]),
+    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [ExternalUser]),
     {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"file_to_compare::1">>])]),
     {ok, FileInfo1} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"test_file::1">>])]),
     {ok, FileInfo2} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"test_file2::1">>])]),
