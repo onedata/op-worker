@@ -164,7 +164,7 @@ saves_the_actual_data(Config) ->
         name = <<"space xp">>,
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         groups = [{<<"G1">>, Priv2}],
-        size = [{<<"P1">>, 1000}],
+        providers_supports = [{<<"P1">>, 1000}],
         revision_history = [<<"r2">>, <<"r1">>]}})
     }, fetch(Node, space_info, S1)),
     ?assertMatch({ok, #document{key = G1, value = #onedata_group{
@@ -284,7 +284,7 @@ updates_with_the_actual_data(Config) ->
         name = <<"space xp">>,
         users = [{<<"U1">>, Priv1}, {<<"U2">>, []}],
         groups = [{<<"G1">>, Priv2}],
-        size = [{<<"P1">>, 1000}],
+        providers_supports = [{<<"P1">>, 1000}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}})
     }, fetch(Node, space_info, S1)),
     ?assertMatch({ok, #document{key = G1, value = #onedata_group{
@@ -449,7 +449,7 @@ space(Name) ->
     space(Name, [], [], []).
 space(Name, UsersWithPrivileges, GroupsWithPrivileges, Supports) ->
     {space, [{name, Name}, {users, UsersWithPrivileges},
-        {groups, GroupsWithPrivileges}, {size, Supports}]}.
+        {groups, GroupsWithPrivileges}, {providers_supports, Supports}]}.
 
 group(Name) ->
     group(Name, [], []).

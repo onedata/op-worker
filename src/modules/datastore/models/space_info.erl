@@ -15,7 +15,6 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([fetch/2, create_or_update/2, get_or_fetch/2]).
@@ -177,23 +176,10 @@ fetch(Client, SpaceId) ->
         {UID, Privileges}
     end, UserIds),
 
-    case space_info:get(Id) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{key = Id, value = SpaceInfo#space_info{
-                users = UsersWithPrivileges,
-                groups = GroupsWithPrivileges,
-                size = Size,
-                name = Name}},
-            {ok, _} = space_info:save(NewDoc),
-            {ok, NewDoc};
-        {error, {not_found, _}} ->
-            Doc = #document{key = Id, value = #space_info{
-                users = UsersWithPrivileges,
-                groups = GroupsWithPrivileges,
-                size = Size,
-                name = Name}},
-            {ok, _} = space_info:create(Doc),
-            {ok, Doc};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    Doc = #document{key = Id, value = #space_info{
+        users = UsersWithPrivileges,
+        groups = GroupsWithPrivileges,
+        providers_supports = Size,
+        name = Name}},
+    {ok, _} = space_info:create(Doc),
+    {ok, Doc}.
