@@ -41,25 +41,6 @@ new_user_ctx(StorageType, SessionId, SpaceUUID) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for Ceph storage helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_ceph_user_ctx(Identity :: #identity{}, SpaceUUID :: file_meta:uuid()) ->
-    helpers:user_ctx().
-new_ceph_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
-    {ok, #document{value = #ceph_user{credentials = CredentialsMap}}} = ceph_user:get(UserId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
-    {ok, Credentials} = maps:find(StorageId, CredentialsMap),
-    #ceph_user_ctx{
-        user_name = ceph_user:name(Credentials),
-        user_key = ceph_user:key(Credentials)
-    }.
-
-
-%%--------------------------------------------------------------------
 %% @doc Retrieves posix user ctx for file attrs
 %% @end
 %%--------------------------------------------------------------------
@@ -68,25 +49,6 @@ new_ceph_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
 get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID) ->
     LumaType = luma_type(),
     LumaType:get_posix_user_ctx(StorageType, SessionIdOrIdentity, SpaceUUID).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates new user's storage context for Amazon S3 storage helper.
-%% This context may and should be used with helpers:set_user_ctx/2.
-%% @end
-%%--------------------------------------------------------------------
--spec new_s3_user_ctx(Identity :: #identity{}, SpaceUUID :: file_meta:uuid()) ->
-    helpers:user_ctx().
-new_s3_user_ctx(#identity{user_id = UserId}, SpaceUUID) ->
-    {ok, #document{value = #s3_user{credentials = CredentialsMap}}} = s3_user:get(UserId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, #document{value = #space_storage{storage_ids = [StorageId | _]}}} = space_storage:get(SpaceId),
-    {ok, Credentials} = maps:find(StorageId, CredentialsMap),
-    #s3_user_ctx{
-        access_key = s3_user:access_key(Credentials),
-        secret_key = s3_user:secret_key(Credentials)
-    }.
 
 
 %%--------------------------------------------------------------------
