@@ -228,7 +228,6 @@ rename_interspace(CTX, SourceEntry, LogicalTargetPath) ->
                         FileSnapshots = [File],
                         lists:foreach(
                             fun(Snapshot) ->
-                                ok = file_meta:rename(Snapshot, {path, get_canonical_path(CTX, NewPath)}),
                                 ok = rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, Snapshot, NewPath)
                             end, FileSnapshots);
                     (_Dir) ->
@@ -336,7 +335,6 @@ rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, SourceEntry, TargetPath
             #document{value = #file_location{storage_id = SourceStorageId,
                 file_id = SourceFileId}} = LocationDoc,
             {ok, SourceStorage} = storage:get(SourceStorageId),
-            SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUUID, SourceUUID, SourceStorage, SourceFileId),
 
             TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
             {ok, #document{key = TargetStorageId}} = fslogic_storage:select_storage(TargetSpaceId),
@@ -352,21 +350,23 @@ rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, SourceEntry, TargetPath
                     ok
             end,
 
+            SourceHandle = storage_file_manager:new_handle(SessId, SourceSpaceUUID, SourceUUID, SourceStorage, SourceFileId),
             ok = case storage_file_manager:link(SourceHandle, TargetFileId) of
                 ok ->
                     ok = storage_file_manager:unlink(SourceHandle),
                     ok;
                 Error ->
-                    case storage_file_manager:mv(SourceHandle, TargetFileId) of
+                    SourceRootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SourceSpaceUUID, SourceUUID, SourceStorage, SourceFileId),
+                    TargetHandle = storage_file_manager:new_handle(SessId, TargetSpaceUUID, SourceUUID, TargetStorage, TargetFileId),
+                    case storage_file_manager:mv(SourceRootHandle, TargetFileId) of
                         ok ->
+                            StorageType = fslogic_utils:get_storage_type(TargetStorageId),
+                            #posix_user_ctx{gid = GID} = fslogic_storage:get_posix_user_ctx(StorageType, SessId, TargetSpaceUUID),
+                            ok = storage_file_manager:chown(TargetHandle, -1, GID),
                             ok;
                         Error ->
-                            TargetHandle = storage_file_manager:new_handle(SessId, TargetSpaceUUID, SourceUUID, TargetStorage, TargetFileId),
                             ok = storage_file_manager:create(TargetHandle, Mode, true),
-
-                            ok = copy_file_contents(SessId, {uuid, SourceUUID}, {path, TargetPath}),
-                            ok = copy_file_attributes(SessId, {uuid, SourceUUID}, {path, TargetPath}),
-
+                            ok = copy_file_contents_sfm(SourceHandle, TargetHandle),
                             ok = storage_file_manager:unlink(SourceHandle)
                     end
             end,
@@ -374,6 +374,7 @@ rename_on_storage(CTX, SourceSpaceUUID, TargetSpaceUUID, SourceEntry, TargetPath
             ok = update_location(LocationDoc, TargetFileId, TargetSpaceUUID, TargetStorageId)
 
         end, fslogic_utils:get_local_file_locations(SourceEntry)),
+    ok = fslogic_req_generic:chmod_storage_files(CTX, SourceEntry, Mode),
     ok.
 
 %%--------------------------------------------------------------------
@@ -492,7 +493,7 @@ copy_file_attributes(SessId, From, To) ->
     ok.
 
 %%--------------------------------------------------------------------
-%% @doc Copies file contents to another file
+%% @doc Copies file contents to another file on lfm level
 %%--------------------------------------------------------------------
 -spec copy_file_contents(session:id(), From :: file_meta:uuid_or_path(),
     To :: file_meta:uuid_or_path()) -> ok.
@@ -516,18 +517,38 @@ copy_file_contents(SessId, FromHandle, ToHandle, Offset, Size) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @doc Copies file contents to another file on sfm level
+%%--------------------------------------------------------------------
+-spec copy_file_contents_sfm(HandleFrom :: storage_file_manager:handle(),
+    HandleTo :: storage_file_manager:handle()) -> ok.
+copy_file_contents_sfm(FromHandle, ToHandle) ->
+    {ok, OpenFromHandle} = storage_file_manager:open(FromHandle, read),
+    {ok, OpenToHandle} = storage_file_manager:open(ToHandle, write),
+    copy_file_contents_sfm(OpenFromHandle, OpenToHandle, 0, ?CHUNK_SIZE).
+
+-spec copy_file_contents_sfm(HandleFrom :: storage_file_manager:handle(),
+    HandleTo :: storage_file_manager:handle(), Offset :: non_neg_integer(),
+    Size :: non_neg_integer()) -> ok.
+copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
+    {ok, Data} = storage_file_manager:read(FromHandle, Offset, Size),
+    DataSize = size(Data),
+    {ok, DataSize} = storage_file_manager:write(ToHandle, Offset, Data),
+    case DataSize of
+        Size ->
+            copy_file_contents_sfm(FromHandle, ToHandle, Offset+Size, Size);
+        _ ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
 %% @doc Returns canonical form of path
 %%--------------------------------------------------------------------
 -spec get_canonical_path(fslogic_worker:ctx(), file_meta:path()) ->
     file_meta:path().
 get_canonical_path(CTX, Path) ->
-    ?critical("Path ~p", [Path]),
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    ?critical("Tokens ~p", [Tokens]),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    ?critical("CanonicalFileEntry ~p", [CanonicalFileEntry]),
     {ok, CanonicalPath} = file_meta:gen_path(CanonicalFileEntry),
-    ?critical("CanonicalPath ~p", [CanonicalPath]),
     CanonicalPath.
 
 
