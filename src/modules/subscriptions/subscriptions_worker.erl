@@ -95,7 +95,7 @@ handle({process_updates, Updates}) ->
     ok;
 
 handle({'EXIT', _Pid, _Reason} = Req) ->
-    %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)z
+    %% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
     %% Handle possible websocket crashes
     case subscription_wss:healthcheck() of
         {error, _} ->
@@ -153,6 +153,7 @@ refresh_subscription() ->
         {missing, Missing}
     ]),
 
+    %% todo: remove once VFS-1877 is resolved (and exit handler does it's job)
     ensure_connection_running(),
     subscription_wss:push(Message).
 
