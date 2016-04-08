@@ -38,11 +38,13 @@
     terminate_handler = fun(_) -> ok end :: event_stream:terminate_handler(),
     event_handler = fun(_, _) -> ok end :: event_stream:event_handler(),
     admission_rule :: event_stream:admission_rule(),
-    aggregation_rule :: event_stream:aggregation_rule(),
+    aggregation_rule = fun(#event{} = E1, #event{} = E2) ->
+        E2#event{counter = E1#event.counter + E2#event.counter}
+    end :: event_stream:aggregation_rule(),
     transition_rule = fun(Meta, #event{counter = Counter}) ->
         Meta + Counter
     end :: event_stream:transition_rule(),
-    emission_rule = fun(_) -> false end :: event_stream:emission_rule(),
+    emission_rule = fun(_) -> true end :: event_stream:emission_rule(),
     emission_time = infinity :: event_stream:emission_time()
 }).
 
@@ -92,9 +94,6 @@
     admission_rule = fun
         (#event{object = #update_event{object = #file_attr{}}}) -> true;
         (_) -> false
-    end,
-    aggregation_rule = fun(#event{} = E1, #event{} = E2) ->
-        E2#event{counter = E1#event.counter + E2#event.counter}
     end
 }).
 
@@ -103,9 +102,6 @@
     admission_rule = fun
         (#event{object = #update_event{object = #file_location{}}}) -> true;
         (_) -> false
-    end,
-    aggregation_rule = fun(#event{} = E1, #event{} = E2) ->
-        E2#event{counter = E1#event.counter + E2#event.counter}
     end
 }).
 
@@ -123,9 +119,6 @@
     admission_rule = fun
         (#event{object = #file_removal_event{}}) -> true;
         (_) -> false
-    end,
-    aggregation_rule = fun(#event{} = E1, #event{} = E2) ->
-        E2#event{counter = E1#event.counter + E2#event.counter}
     end
 }).
 
