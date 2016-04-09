@@ -103,7 +103,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     lists:foreach(fun(W) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
-    end, DomainWorkers),
+    end, Workers),
     test_utils:mock_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
 
 
