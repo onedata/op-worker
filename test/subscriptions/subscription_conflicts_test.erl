@@ -30,7 +30,7 @@ creates_docs_with_proper_value_test_() ->
         [fun() ->
             % given
             Space = #space_info{
-                id = <<"space1">>, name = <<"space1name">>,
+                name = <<"space1name">>,
                 revision_history = undefined
             },
             UpdateDoc = #document{
@@ -45,9 +45,11 @@ creates_docs_with_proper_value_test_() ->
 
             %then
             {CreateDoc, _} = last_create_or_update(space_info),
-            Expectation = UpdateDoc#document{value = Space#space_info{
-                revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
-            }},
+            Expectation = UpdateDoc#document{
+                key = <<"some key">>,
+                value = Space#space_info{
+                    revision_history = [<<"r4">>, <<"r3">>, <<"r2">>, <<"r1">>]
+                }},
             ?assertMatch(Expectation, CreateDoc)
         end]}.
 

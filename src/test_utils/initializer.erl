@@ -247,7 +247,8 @@ setup_storage([Worker | Rest], Config) ->
 -spec teardown_storage(Config :: list()) -> ok.
 teardown_storage(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
-    lists:foreach(fun(Worker) -> teardown_storage(Worker, Config) end, DomainWorkers).
+    lists:foreach(fun(Worker) ->
+        teardown_storage(Worker, Config) end, DomainWorkers).
 
 %%--------------------------------------------------------------------
 %% @doc Mocks space_storage module, so that it returns default storage for all spaces.
@@ -289,11 +290,13 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     Space4 = {<<"space_id4">>, <<"space_name4">>},
     Space5 = {<<"space_id5">>, <<"space_name">>},
     Space6 = {<<"space_id6">>, <<"space_name">>},
+    Spaces = [Space1, Space2, Space3, Space4, Space5, Space6],
 
     Group1 = {<<"group_id1">>, <<"group_name1">>},
     Group2 = {<<"group_id2">>, <<"group_name2">>},
     Group3 = {<<"group_id3">>, <<"group_name3">>},
     Group4 = {<<"group_id4">>, <<"group_name4">>},
+    Groups = [Group1, Group2, Group3, Group4],
 
     User1 = {1, [Space1, Space2, Space3, Space4], [Group1, Group2, Group3, Group4]},
     User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
@@ -301,9 +304,25 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     User4 = {4, [Space4], [Group4]},
     User5 = {5, [Space5, Space6], []},
 
+    SpaceUsers = [
+        {<<"space_id1">>, [<<"user_id1">>]},
+        {<<"space_id2">>, [<<"user_id1">>, <<"user_id2">>]},
+        {<<"space_id3">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>]},
+        {<<"space_id4">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>, <<"user_id4">>]},
+        {<<"space_id5">>, [<<"user_id5">>]},
+        {<<"space_id6">>, [<<"user_id5">>]}
+    ],
+
+    GroupUsers = [
+        {<<"group_id1">>, [<<"user_id1">>]},
+        {<<"group_id2">>, [<<"user_id1">>, <<"user_id2">>]},
+        {<<"group_id3">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>]},
+        {<<"group_id4">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>, <<"user_id4">>]}
+    ],
+
     file_meta_mock_setup(SameDomainWorkers),
-    oz_spaces_mock_setup(SameDomainWorkers, [Space1, Space2, Space3, Space4, Space5, Space6]),
-    oz_groups_mock_setup(SameDomainWorkers, [Group1, Group2, Group3, Group4]),
+    oz_spaces_mock_setup(SameDomainWorkers, Spaces, SpaceUsers),
+    oz_groups_mock_setup(SameDomainWorkers, Groups, GroupUsers),
 
     proplists:compact(
         initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config)
@@ -355,15 +374,27 @@ name(Text, Num) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}]) -> ok.
-oz_spaces_mock_setup(Workers, Spaces) ->
+    [{binary(), binary()}], [{binary(), [binary()]}]) ->
+    ok.
+oz_spaces_mock_setup(Workers, Spaces, Users) ->
     test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(provider, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
             {ok, #space_details{id = SpaceId, name = SpaceName}}
         end
-    ).
+    ),
+
+    test_utils:mock_expect(Workers, oz_spaces, get_users,
+        fun(provider, SpaceId) ->
+            {ok, proplists:get_value(SpaceId, Users)} end),
+    test_utils:mock_expect(Workers, oz_spaces, get_groups,
+        fun(provider, _) -> {ok, []} end),
+
+    test_utils:mock_expect(Workers, oz_spaces, get_user_privileges,
+        fun(provider, _, _) -> {ok, privileges:space_privileges()} end),
+    test_utils:mock_expect(Workers, oz_spaces, get_group_privileges,
+        fun(provider, _, _) -> {ok, privileges:group_privileges()} end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -373,15 +404,24 @@ oz_spaces_mock_setup(Workers, Spaces) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_groups_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}]) -> ok.
-oz_groups_mock_setup(Workers, Groups) ->
+    [{binary(), binary()}], [{binary(), [binary()]}]) -> ok.
+oz_groups_mock_setup(Workers, Groups, Users) ->
     test_utils:mock_new(Workers, oz_groups),
     test_utils:mock_expect(Workers, oz_groups, get_details,
         fun({user, _}, GroupId) ->
             GroupName = proplists:get_value(GroupId, Groups),
             {ok, #group_details{id = GroupId, name = GroupName}}
         end
-    ).
+    ),
+
+    test_utils:mock_expect(Workers, oz_groups, get_users,
+        fun({user, _}, GroupId) ->
+            {ok, proplists:get_value(GroupId, Users)} end),
+    test_utils:mock_expect(Workers, oz_groups, get_spaces,
+        fun({user, _}, _) -> {ok, []} end),
+
+    test_utils:mock_expect(Workers, oz_groups, get_user_privileges,
+        fun({user, _}, _, _) -> {ok, privileges:space_privileges()} end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -390,10 +430,12 @@ oz_groups_mock_setup(Workers, Groups) ->
 -spec file_meta_mock_setup(Workers :: node() | [node()]) -> ok.
 file_meta_mock_setup(Workers) ->
     Self = self(),
+    Handler = fun(UUID) ->
+        file_meta:setup_onedata_user(UUID),
+        Self ! onedata_user_setup
+    end,
     test_utils:mock_new(Workers, file_meta),
-    test_utils:mock_expect(Workers, file_meta, 'after',
-        fun(onedata_user, create, _, _, {ok, UUID}) ->
-            file_meta:setup_onedata_user(UUID),
-            Self ! onedata_user_setup
-        end
-    ).
+    test_utils:mock_expect(Workers, file_meta, 'after', fun
+        (onedata_user, create_or_update, _, _, {ok, UUID}) -> Handler(UUID);
+        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID)
+    end).

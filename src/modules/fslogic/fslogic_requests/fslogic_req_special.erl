@@ -124,12 +124,12 @@ read_dir(CTX, File, Offset, Size) ->
                     true ->
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
                         Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:fetch(provider, SpaceId),
+                            {ok, Space} = space_info:get_or_fetch(provider, SpaceId),
                             Space
                         end, SpacesIdsChunk),
 
                         SpaceUuidByName = lists:foldl(fun(Space, Map) ->
-                            #document{value = #space_info{id = Id, name = Name}} = Space,
+                            #document{key = Id, value = #space_info{name = Name}} = Space,
                             maps:put(Name, [Id | maps:get(Name, Map, [])], Map)
                         end, #{}, Spaces),
 
@@ -138,7 +138,8 @@ read_dir(CTX, File, Offset, Size) ->
                             (_, UUIDs) -> binary:longest_common_prefix(UUIDs) + 1
                         end, SpaceUuidByName),
 
-                        lists:map(fun(#document{key = UUID, value = #space_info{id = Id, name = Name}}) ->
+                        lists:map(fun(#document{key = Id, value = #space_info{name = Name}}) ->
+                            UUID = fslogic_uuid:spaceid_to_space_dir_uuid(Id),
                             case maps:find(Name, MinDiffPrefLenByName) of
                                 {ok, 0} ->
                                     #child_link{uuid = UUID, name = Name};

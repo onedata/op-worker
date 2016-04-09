@@ -267,7 +267,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
         ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
 
 %%--------------------------------------------------------------------
@@ -529,7 +529,7 @@ setup_onedata_user(UUID) ->
                 true ->
                     fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
                 false ->
-                    space_info:fetch(provider, SpaceId),
+                    space_info:get_or_fetch(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
@@ -766,7 +766,8 @@ gen_path2(Entry, Tokens) ->
         {ok, {?ROOT_DIR_UUID, _}} ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, {SpaceBaseDirUUID, _}} ->
-            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
+            SpaceId =  fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+            {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceId),
             gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
             gen_path2({uuid, ParentUUID}, [Name | Tokens])
