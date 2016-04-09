@@ -321,16 +321,17 @@ create_test_users_and_spaces(AllWorkers, Config) ->
             ]}
         end),
 
-    lists:foreach(fun(Domain) ->
+    MasterWorkers = lists:map(fun(Domain) ->
         StorageId = ?config({storage_id, Domain}, Config),
 
-        CWorkers = get_same_domain_workers(Config, Domain),
+        [MWorker | _] = CWorkers = get_same_domain_workers(Config, Domain),
         ProviderId = domain_to_provider_id(Domain),
         test_utils:mock_expect(CWorkers, oneprovider, get_provider_id,
             fun() ->
                 ProviderId
             end),
-        initializer:space_storage_mock(CWorkers, StorageId)
+        initializer:space_storage_mock(CWorkers, StorageId),
+        MWorker
     end, Domains),
 
     Space1 = {<<"space_id1">>, <<"space_name1">>},
@@ -356,7 +357,7 @@ create_test_users_and_spaces(AllWorkers, Config) ->
     oz_groups_mock_setup(AllWorkers, [Group1, Group2, Group3, Group4]),
 
     proplists:compact(
-        lists:flatten([initializer:setup_session(W, [User1, User2, User3, User4, User5], Config) || W <- AllWorkers])
+        lists:flatten([initializer:setup_session(W, [User1, User2, User3, User4, User5], Config) || W <- MasterWorkers])
     ).
 
 %%--------------------------------------------------------------------
