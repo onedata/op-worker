@@ -24,7 +24,7 @@
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
-    create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
+    create_test_users_and_spaces/1, create_test_users_and_spaces/2, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
