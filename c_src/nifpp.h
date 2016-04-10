@@ -32,16 +32,17 @@
 // Only define map functions if they are available
 #define NIFPP_HAS_MAPS                                                         \
     ((ERL_NIF_MAJOR_VERSION > 2) ||                                            \
-     (ERL_NIF_MAJOR_VERSION == 2 && ERL_NIF_MINOR_VERSION >= 6))
+        (ERL_NIF_MAJOR_VERSION == 2 && ERL_NIF_MINOR_VERSION >= 6))
 
+#include <array>
+#include <deque>
+#include <list>
+#include <memory>
+#include <set>
 #include <string>
 #include <tuple>
-#include <array>
-#include <vector>
-#include <list>
-#include <deque>
-#include <set>
 #include <unordered_set>
+#include <vector>
 #if NIFPP_HAS_MAPS
 #include <map>
 #include <unordered_map>
@@ -68,7 +69,7 @@ struct TERM {
 };
 
 static_assert(sizeof(TERM) == sizeof(ERL_NIF_TERM),
-              "TERM size does not match ERL_NIF_TERM");
+    "TERM size does not match ERL_NIF_TERM");
 
 class str_atom : public std::string {
 public:
@@ -112,7 +113,8 @@ public:
     {
         if (enif_alloc_binary(_size, this)) {
             needs_release = true;
-        } else {
+        }
+        else {
             needs_release = false;
         }
     }
@@ -130,8 +132,8 @@ public:
         }
     }
 
-    friend TERM make(ErlNifEnv *env,
-                     binary &var); // make can set owns_data to false
+    friend TERM make(
+        ErlNifEnv *env, binary &var); // make can set owns_data to false
 
 protected:
     bool needs_release;
@@ -252,12 +254,14 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::string &var)
     }
     var.resize(len + 1); // +1 for terminating null
     ret = enif_get_string(env, term, &*(var.begin()), var.size(),
-                          ERL_NIF_LATIN1); // full list iteration
+        ERL_NIF_LATIN1); // full list iteration
     if (ret > 0) {
         var.resize(ret - 1); // trim terminating null
-    } else if (ret == 0) {
+    }
+    else if (ret == 0) {
         var.resize(0);
-    } else {
+    }
+    else {
         // oops string somehow got truncated
         // var is correct size so do nothing
     }
@@ -265,8 +269,9 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::string &var)
 }
 inline TERM make(ErlNifEnv *env, const std::string &var)
 {
-    return TERM(enif_make_string_len(env, &(*(var.begin())), var.size(),
-                                     ERL_NIF_LATIN1));
+    nifpp::binary bin{var.size()};
+    std::memcpy(bin.data, var.data(), var.size());
+    return nifpp::make(env, bin);
 }
 
 // bool
@@ -280,7 +285,8 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, bool &var)
     if (strcmp(buf, "true") == 0) {
         var = true;
         return 1;
-    } else if (strcmp(buf, "false") == 0) {
+    }
+    else if (strcmp(buf, "false") == 0) {
         var = false;
         return 1;
     }
@@ -565,7 +571,7 @@ resource_ptr<T> dynamic_pointer_cast(resource_ptr<U> const &p)
 }
 
 namespace detail //(resource detail)
-    {
+{
 
 template <typename T> struct dtor_wrapper {
     T obj;
@@ -623,25 +629,25 @@ int get(ErlNifEnv *env, ERL_NIF_TERM term, resource_ptr<T> &var)
 }
 template <typename T> int get(ErlNifEnv *env, ERL_NIF_TERM term, T *&var)
 {
-    return enif_get_resource(env, term, detail::resource_data<T>::type,
-                             (void **)&var);
+    return enif_get_resource(
+        env, term, detail::resource_data<T>::type, (void **)&var);
 }
 template <typename T> TERM make(ErlNifEnv *env, const resource_ptr<T> &var)
 {
     return TERM(enif_make_resource(env, (void *)var.get()));
 }
 template <typename T>
-TERM make_resource_binary(ErlNifEnv *env, const resource_ptr<T> &var,
-                          const void *data, size_t size)
+TERM make_resource_binary(
+    ErlNifEnv *env, const resource_ptr<T> &var, const void *data, size_t size)
 {
     return TERM(enif_make_resource_binary(env, (void *)var.get(), data, size));
 }
 
 template <typename T>
 int register_resource(ErlNifEnv *env, const char *module_str, const char *name,
-                      ErlNifResourceFlags flags = ErlNifResourceFlags(
-                          ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER),
-                      ErlNifResourceFlags * tried = nullptr)
+    ErlNifResourceFlags flags = ErlNifResourceFlags(
+        ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER),
+    ErlNifResourceFlags *tried = nullptr)
 {
     ErlNifResourceType *type = enif_open_resource_type(
         env, module_str, name, &detail::resource_dtor<T>, flags, tried);
@@ -649,7 +655,8 @@ int register_resource(ErlNifEnv *env, const char *module_str, const char *name,
     if (!type) {
         detail::resource_data<T>::type = 0;
         return 0;
-    } else {
+    }
+    else {
         detail::resource_data<T>::type = type;
         return 1;
     }
@@ -665,8 +672,8 @@ resource_ptr<T> construct_resource(Args &&... args)
 
         // immediately assign to resource pointer so that release will be called
         // if construction fails
-        resource_ptr<T> rptr(reinterpret_cast<T *>(mem),
-                             false); // note: private ctor
+        resource_ptr<T> rptr(
+            reinterpret_cast<T *>(mem), false); // note: private ctor
         // inhibit destructor in case ctor fails
         reinterpret_cast<detail::dtor_wrapper<T> *>(mem)->constructed = false;
 
@@ -676,7 +683,8 @@ resource_ptr<T> construct_resource(Args &&... args)
         // ctor succeeded, enable dtor
         reinterpret_cast<detail::dtor_wrapper<T> *>(mem)->constructed = true;
         return std::move(rptr);
-    } else {
+    }
+    else {
         return resource_ptr<T>();
     }
 }
@@ -736,8 +744,8 @@ int get(ErlNifEnv *env, ERL_NIF_TERM term, std::tuple<Ts...> &var)
 namespace detail {
 template <int I> struct tuple_to_arrayer {
     template <typename... Ts>
-    static void go(ErlNifEnv *env, const std::tuple<Ts...> &t,
-                   ERL_NIF_TERM *end)
+    static void go(
+        ErlNifEnv *env, const std::tuple<Ts...> &t, ERL_NIF_TERM *end)
     {
         tuple_to_arrayer<I - 1>::go(env, t, --end);
         *end = make(env, std::get<I - 1>(t));
@@ -746,8 +754,8 @@ template <int I> struct tuple_to_arrayer {
 
 template <> struct tuple_to_arrayer<0> {
     template <typename... Ts>
-    static void go(ErlNifEnv *env, const std::tuple<Ts...> &t,
-                   ERL_NIF_TERM *end)
+    static void go(
+        ErlNifEnv *env, const std::tuple<Ts...> &t, ERL_NIF_TERM *end)
     {
     }
 };
@@ -962,8 +970,8 @@ int map_for_each(ErlNifEnv *env, ERL_NIF_TERM term, const F &f)
     TERM key_term, value_term;
     TK key;
     TV value;
-    while (enif_map_iterator_get_pair(env, &iter, (ERL_NIF_TERM *)&key_term,
-                                      (ERL_NIF_TERM *)&value_term)) {
+    while (enif_map_iterator_get_pair(
+        env, &iter, (ERL_NIF_TERM *)&key_term, (ERL_NIF_TERM *)&value_term)) {
         if (!get(env, key_term, key))
             goto error; // conversion failure
         if (!get(env, value_term, value))
@@ -984,8 +992,8 @@ template <typename TK, typename TV>
 int get(ErlNifEnv *env, ERL_NIF_TERM term, std::map<TK, TV> &var)
 {
     var.clear();
-    return map_for_each<TK, TV>(env, term,
-                                [&var](TK key, TV value) { var[key] = value; });
+    return map_for_each<TK, TV>(
+        env, term, [&var](TK key, TV value) { var[key] = value; });
 }
 
 template <typename TK, typename TV>
@@ -994,7 +1002,7 @@ TERM make(ErlNifEnv *env, const std::map<TK, TV> &var)
     TERM map(enif_make_new_map(env));
     for (auto i = var.begin(); i != var.end(); i++) {
         enif_make_map_put(env, map, make(env, i->first), make(env, i->second),
-                          (ERL_NIF_TERM *)&map);
+            (ERL_NIF_TERM *)&map);
     }
     return map;
 }
@@ -1003,8 +1011,8 @@ template <typename TK, typename TV>
 int get(ErlNifEnv *env, ERL_NIF_TERM term, std::unordered_map<TK, TV> &var)
 {
     var.clear();
-    return map_for_each<TK, TV>(env, term,
-                                [&var](TK key, TV value) { var[key] = value; });
+    return map_for_each<TK, TV>(
+        env, term, [&var](TK key, TV value) { var[key] = value; });
 }
 
 template <typename TK, typename TV>
@@ -1013,13 +1021,23 @@ TERM make(ErlNifEnv *env, const std::unordered_map<TK, TV> &var)
     TERM map(enif_make_new_map(env));
     for (auto i = var.begin(); i != var.end(); i++) {
         enif_make_map_put(env, map, make(env, i->first), make(env, i->second),
-                          (ERL_NIF_TERM *)&map);
+            (ERL_NIF_TERM *)&map);
     }
     return map;
 }
 #endif // NIFPP_HAS_MAPS
 
 // convenience wrappers for get()
+template <typename T>
+int get(ErlNifEnv *env, ERL_NIF_TERM term, std::shared_ptr<T> &var)
+{
+    std::shared_ptr<T> *ptr;
+    if (!get(env, term, ptr))
+        return 0;
+
+    var = *ptr;
+    return 1;
+}
 
 template <typename T> T get(ErlNifEnv *env, ERL_NIF_TERM term)
 {
