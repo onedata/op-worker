@@ -26,9 +26,19 @@
 %% API
 -export([fetch/1, get_or_fetch/2, get_spaces/1, create_or_update/2]).
 
--export_type([id/0]).
+-export_type([id/0, connected_account/0]).
 
 -type id() :: binary().
+
+%% Oauth connected accounts in form of proplist:
+%%[
+%%    {<<"provider_id">>, binary()},
+%%    {<<"user_id">>, binary()},
+%%    {<<"login">>, binary()},
+%%    {<<"name">>, binary()},
+%%    {<<"email_list">>, [binary()]}
+%%]
+-type connected_account() :: proplists:proplist().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -160,7 +170,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
             alias = Alias,
             email_list = EmailList
         },
-        [(catch space_info:fetch(Client, SId)) || SId <- SpaceIds],
+        [(catch space_info:get_or_fetch(Client, SId)) || SId <- SpaceIds],
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}

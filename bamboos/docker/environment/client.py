@@ -107,11 +107,13 @@ EOF
     command += '''bash'''
 
     volumes = [(bindir, '/root/build', 'ro')]
-    if isinstance(os_config['storages'][0], basestring):
-        posix_storages = config['os_config']['storages']
-    else:
-        posix_storages = [s['name'] for s in os_config['storages']
-                          if s['type'] == 'posix']
+    posix_storages = []
+    if os_config['storages']:
+        if isinstance(os_config['storages'][0], basestring):
+            posix_storages = config['os_config']['storages']
+        else:
+            posix_storages = [s['name'] for s in os_config['storages']
+                              if s['type'] == 'posix']
     volumes += [common.volume_for_storage(s) for s in posix_storages]
 
     if logdir:
