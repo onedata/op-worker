@@ -17,7 +17,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([fetch/2]).
+-export([fetch/2, create_or_update/2, get_or_fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -131,23 +131,55 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get user from cache or fetch from OZ and save in cache.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Client :: oz_endpoint:client(), datastore:key()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Client, Key) ->
+    case space_info:get(Key) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Client, Key);
+        Error -> Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Fetches space details from Global Registry and stores them in database.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 fetch(Client, SpaceId) ->
-    Key = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    {ok, #space_details{id = Id, name = Name}} = oz_spaces:get_details(Client, SpaceId),
-    case space_info:get(Key) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{value = SpaceInfo#space_info{id = Id, name = Name}},
-            {ok, _} = space_info:save(NewDoc),
-            {ok, NewDoc};
-        {error, {not_found, _}} ->
-            Doc = #document{key = Key, value = #space_info{id = Id, name = Name}},
-            {ok, _} = space_info:create(Doc),
-            {ok, Doc};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    {ok, #space_details{id = Id, name = Name, providers_supports = Supports}} =
+        oz_spaces:get_details(Client, SpaceId),
+    {ok, GroupIds} = oz_spaces:get_groups(Client, Id),
+    {ok, UserIds} = oz_spaces:get_users(Client, Id),
+
+    GroupsWithPrivileges = utils:pmap(fun(GID) ->
+        {ok, Privileges} = oz_spaces:get_group_privileges(Client, Id, GID),
+        {GID, Privileges}
+    end, GroupIds),
+    UsersWithPrivileges = utils:pmap(fun(UID) ->
+        {ok, Privileges} = oz_spaces:get_user_privileges(Client, Id, UID),
+        {UID, Privileges}
+    end, UserIds),
+
+    Doc = #document{key = Id, value = #space_info{
+        users = UsersWithPrivileges,
+        groups = GroupsWithPrivileges,
+        providers_supports = Supports,
+        name = Name}},
+    {ok, _} = space_info:create(Doc),
+    {ok, Doc}.

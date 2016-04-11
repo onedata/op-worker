@@ -12,10 +12,10 @@ Run the script with -h flag to learn about script's running options.
 from __future__ import print_function
 import json
 import os
-from environment import common, cluster_worker, provider_ccm, dns
+from environment import common, cluster_worker, cluster_manager, dns
 
 parser = common.standard_arg_parser(
-    'Bring up bare cluster nodes (workers and ccms).')
+    'Bring up bare cluster nodes (workers and cms).')
 parser.add_argument(
     '-l', '--logdir',
     action='store',
@@ -29,35 +29,48 @@ parser.add_argument(
     help='the path to cluster-worker repository (precompiled)',
     dest='bin_op_worker')
 parser.add_argument(
-    '-bccm', '--bin-ccm',
+    '-bcm', '--bin-cm',
     action='store',
-    default=os.getcwd() + '/op_ccm',
-    help='the path to op_ccm repository (precompiled)',
-    dest='bin_op_ccm')
+    default=os.getcwd() + '/cluster_manager',
+    help='the path to cluster_manager repository (precompiled)',
+    dest='bin_cluster_manager')
+parser.add_argument(
+    '-do', '--domain',
+    action='store',
+    default='provider_domains',
+    help='worker domain name, can be: provider_domains or cluster_domains',
+    dest='domains_name')
 
 # Prepare config
 args = parser.parse_args()
-config = common.parse_json_file(args.config_path)
+config = common.parse_json_config_file(args.config_path)
 output = {
-    'op_ccm_nodes': [],
+    'cluster_manager_nodes': [],
     'cluster_worker_nodes': [],
 }
-uid = common.generate_uid()
+uid = args.uid
 
 # Start DNS
-[dns_server], dns_output = dns.maybe_start('auto', uid)
-common.merge(output, dns_output)
+if args.dns == 'auto':
+    [dns_server], dns_output = dns.maybe_start('auto', uid)
+    common.merge(output, dns_output)
+else:
+    dns_server = args.dns
 
-# Start ccms
-ccm_output = provider_ccm.up(args.image, args.bin_op_ccm, dns_server, uid, args.config_path, args.logdir)
-common.merge(output, ccm_output)
+# Start cms
+cm_output = cluster_manager.up(args.image, args.bin_cluster_manager, dns_server,
+                               uid, args.config_path, args.logdir,
+                               args.domains_name)
+common.merge(output, cm_output)
 
 # Start workers
-worker_output = cluster_worker.up(args.image, args.bin_op_worker, dns_server, uid, args.config_path, args.logdir)
+worker_output = cluster_worker.up(args.image, args.bin_op_worker, dns_server,
+                                  uid, args.config_path, args.logdir)
 common.merge(output, worker_output)
 
-# Make sure domain are added to the dns server
-dns.maybe_restart_with_configuration('auto', uid, output)
+if dns_server != 'none':
+    # Make sure domain are added to the dns server
+    dns.maybe_restart_with_configuration('auto', uid, output)
 
 # Print results
 print(json.dumps(output))

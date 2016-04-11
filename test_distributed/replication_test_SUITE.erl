@@ -18,9 +18,10 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("annotations/include/annotations.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
-
+-include_lib("kernel/include/file.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -28,6 +29,8 @@
 
 -export([
     dbsync_trigger_should_create_local_file_location/1,
+    local_file_location_should_have_correct_uid_for_local_user/1,
+    local_file_location_should_be_chowned_when_missing_user_appears/1,
     write_should_add_blocks_to_file_location/1,
     truncate_should_change_size_and_blocks/1,
     write_and_truncate_should_not_update_remote_file_location/1,
@@ -47,8 +50,10 @@
 
 -performance({test_cases, []}).
 all() ->
-    [
+    ?ALL([
         dbsync_trigger_should_create_local_file_location,
+        local_file_location_should_have_correct_uid_for_local_user,
+        local_file_location_should_be_chowned_when_missing_user_appears,
         write_should_add_blocks_to_file_location,
         truncate_should_change_size_and_blocks,
         write_and_truncate_should_not_update_remote_file_location,
@@ -63,8 +68,7 @@ all() ->
         remote_irrelevant_change_should_not_notify_clients,
         conflicting_remote_changes_should_be_reconciled,
         rtransfer_config_should_work
-    ].
-
+    ]).
 
 
 %%%===================================================================
@@ -98,6 +102,89 @@ dbsync_trigger_should_create_local_file_location(Config) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessionId, {uuid, FileUuid}, rdwr)),
     ?assertMatch({ok, 3}, lfm_proxy:write(W1, Handle, 0, <<"aaa">>)),
     ?assertMatch({ok, <<"aaa">>}, lfm_proxy:read(W1, Handle, 0, 3)).
+
+local_file_location_should_have_correct_uid_for_local_user(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    UserId = <<"user_id1">>,
+    SessionId = <<"session_id1">>,
+    StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
+    CTime = erlang:monotonic_time(micro_seconds),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    FileMeta = #file_meta{
+        mode = 8#777,
+        name = <<"test_file">>,
+        type = ?REGULAR_FILE_TYPE,
+        mtime = CTime,
+        atime = CTime,
+        ctime = CTime,
+        uid = UserId
+    },
+    {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, _} = lfm_proxy:create(W1, SessionId, <<"file_to_compare">>, 8#777),
+
+    %when
+    rpc:call(W1, dbsync_events, change_replicated,
+        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+
+    %then
+    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [UserId]),
+    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"file_to_compare::1">>])]),
+    {ok, FileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"test_file::1">>])]),
+    ?assertEqual(Uid, FileInfo#file_info.uid),
+    ?assertNotEqual(0, FileInfo#file_info.uid),
+    ?assertEqual(CorrectFileInfo#file_info.uid, FileInfo#file_info.uid),
+    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo#file_info.gid).
+
+local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    ExternalUser = <<"external_user_id">>,
+    SessionId = <<"session_id1">>,
+    StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
+    CTime = erlang:monotonic_time(micro_seconds),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    FileMeta = #file_meta{
+        mode = 8#777,
+        name = <<"test_file">>,
+        type = ?REGULAR_FILE_TYPE,
+        mtime = CTime,
+        atime = CTime,
+        ctime = CTime,
+        uid = ExternalUser
+    },
+    FileMeta2 = #file_meta{
+        mode = 8#777,
+        name = <<"test_file2">>,
+        type = ?REGULAR_FILE_TYPE,
+        mtime = CTime,
+        atime = CTime,
+        ctime = CTime,
+        uid = ExternalUser
+    },
+    {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
+    {ok, FileUuid2} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
+    {ok, _} = lfm_proxy:create(W1, SessionId, <<"file_to_compare">>, 8#777),
+
+    %when
+    rpc:call(W1, dbsync_events, change_replicated,
+        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
+    rpc:call(W1, dbsync_events, change_replicated,
+        [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid2, value = FileMeta2}}]),
+    rpc:call(W1, onedata_user, create, [#document{key = ExternalUser, value = #onedata_user{name = <<"User">>, space_ids = [SpaceId]}}]),
+    timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
+
+    %then
+    Uid = rpc:call(W1, luma_utils, gen_storage_uid, [ExternalUser]),
+    {ok, CorrectFileInfo} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"file_to_compare::1">>])]),
+    {ok, FileInfo1} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"test_file::1">>])]),
+    {ok, FileInfo2} = rpc:call(W1, file, read_file_info, [filename:join([StorageDir, <<"spaces">>, SpaceId, <<"test_file2::1">>])]),
+    ?assertEqual(Uid, FileInfo1#file_info.uid),
+    ?assertEqual(Uid, FileInfo2#file_info.uid),
+    ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo1#file_info.uid),
+    ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo2#file_info.uid),
+    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo1#file_info.gid),
+    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo2#file_info.gid).
 
 write_should_add_blocks_to_file_location(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -621,7 +708,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         [#file_block{offset = 5, size = 1}]
     ],
     rpc:call(W1, file_location, save, [LocalDoc#document{value =
-        LocalLocation#file_location{version_vector = NewLocalVV, recent_changes = {[], LocalChanges}}}]),
+    LocalLocation#file_location{version_vector = NewLocalVV, recent_changes = {[], LocalChanges}}}]),
 
     % when
     rpc:call(W1, dbsync_events, change_replicated, [SpaceId,
@@ -703,4 +790,4 @@ unmock_provider_id(Config) ->
 bump_version(LocationDoc, 0) ->
     LocationDoc;
 bump_version(LocationDoc, N) when N > 0 ->
-    bump_version(version_vector:bump_version(LocationDoc), N-1).
+    bump_version(version_vector:bump_version(LocationDoc), N - 1).

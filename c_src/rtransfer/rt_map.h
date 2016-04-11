@@ -9,7 +9,7 @@
 #ifndef RT_MAP_H
 #define RT_MAP_H
 
-#include "nifpp.h"
+#include "../nifpp.h"
 #include "rt_block.h"
 
 #include <list>

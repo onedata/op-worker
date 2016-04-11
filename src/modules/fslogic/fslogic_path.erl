@@ -116,14 +116,14 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
         _ ->
             {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
             lists:map(fun(SpaceId) ->
-                {ok, Doc} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
+                {ok, Doc} = space_info:get(SpaceId),
                 Doc
             end, SpaceIds)
     end,
 
     Len = size(SpaceName),
     MatchedSpacesIds = lists:filtermap(fun
-        (#document{value = #space_info{id = Id, name = Name}}) ->
+        (#document{key = Id, value = #space_info{name = Name}}) ->
             CommonPrefixLen = binary:longest_common_prefix([
                 SpaceName,
                 <<Name/binary, ?SPACE_NAME_ID_SEPARATOR, Id/binary>>

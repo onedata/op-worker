@@ -60,7 +60,7 @@
 -type posix_permissions() :: non_neg_integer().
 
 -export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
-    size/0, mode/0, time/0, posix_permissions/0]).
+    size/0, mode/0, time/0, posix_permissions/0, file_meta/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -267,8 +267,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+        ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -284,6 +284,8 @@ model_init() ->
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
     setup_onedata_user(UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
+    setup_onedata_user(UUID);
+'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
     setup_onedata_user(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
@@ -527,7 +529,7 @@ setup_onedata_user(UUID) ->
                 true ->
                     fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
                 false ->
-                    space_info:fetch(provider, SpaceId),
+                    space_info:get_or_fetch(provider, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
@@ -764,7 +766,8 @@ gen_path2(Entry, Tokens) ->
         {ok, {?ROOT_DIR_UUID, _}} ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, {SpaceBaseDirUUID, _}} ->
-            {ok, #document{value = #space_info{id = SpaceId, name = SpaceName}}} = space_info:get(UUID),
+            SpaceId =  fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+            {ok, #document{value = #space_info{name = SpaceName}}} = space_info:get(SpaceId),
             gen_path2({uuid, SpaceBaseDirUUID}, [<<SpaceName/binary, "#", SpaceId/binary>> | Tokens]);
         {ok, {ParentUUID, _}} ->
             gen_path2({uuid, ParentUUID}, [Name | Tokens])
