@@ -156,7 +156,7 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
     Sent :: integer(), BufSize :: integer()) -> ok.
 stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
     {ok, NewHandle, BytesRead} = logical_file_manager:read(
-        FileHandle, BytesSent, BufSize),
+        FileHandle, BytesSent, min(Size-BytesSent, BufSize)),
     ok = Transport:send(Socket, BytesRead),
     NewSent = BytesSent + size(BytesRead),
     case NewSent >= Size of
@@ -175,9 +175,8 @@ stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
 %%--------------------------------------------------------------------
 -spec get_download_buffer_size() -> integer().
 get_download_buffer_size() ->
-    {ok, Value} = application:get_env(
-        ?APP_NAME, gui_download_buffer, ?DEFAULT_DOWNLOAD_BUFFER_SIZE),
-    Value.
+    application:get_env(
+        ?APP_NAME, gui_download_buffer, ?DEFAULT_DOWNLOAD_BUFFER_SIZE).
 
 
 %%--------------------------------------------------------------------

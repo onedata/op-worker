@@ -1,7 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @author Jakub Liput
-%%% @copyright (C) 2015-2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -11,19 +10,14 @@
 %%% the data-space model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
--module(data_space_data_backend).
+-module(provider_data_backend).
 -author("Lukasz Opiola").
--author("Jakub Liput").
 
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
-
-
-% @todo currently unused - every time taken from OZ
-%% Key under which default space is stored in session memory.
--define(DEFAULT_SPACE_KEY, default_space).
+-include_lib("ctool/include/oz/oz_providers.hrl").
 
 %% API
 -export([init/0, terminate/0]).
@@ -42,7 +36,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    op_gui_utils:register_backend(?MODULE, self()),
     ok.
 
 
@@ -53,7 +46,6 @@ init() ->
 %%--------------------------------------------------------------------
 -spec terminate() -> ok.
 terminate() ->
-    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
@@ -64,32 +56,13 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"data-space">>, [SpaceDirId]) ->
-    SessionId = g_session:get_session_id(),
-    Auth = op_gui_utils:get_user_rest_auth(),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
-    {ok, #document{
-        value = #space_info{
-            name = Name
-        }}} = space_info:get_or_fetch(Auth, SpaceId),
-    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
-        op_gui_utils:get_users_default_space()),
-    % If current provider cannot get info about, return null rootDir which will
-    % cause the client to render a "space not supported or cannot be synced" message
-    RootDir = try
-        % This will crash if provider cannot sync this space
-        file_data_backend:get_parent(SessionId, SpaceDirId),
-        SpaceDirId
-    catch T:M ->
-        ?warning(
-            "Cannot get parent for space (~p). ~p:~p", [SpaceDirId, T, M]),
-        null
-    end,
+find(<<"provider">>, [ProviderId]) ->
+    {ok, #provider_details{
+        name = Name
+    }} = oz_providers:get_details(provider, ProviderId),
     Res = [
-        {<<"id">>, SpaceDirId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
-        {<<"rootDir">>, RootDir}
+        {<<"id">>, ProviderId},
+        {<<"name">>, Name}
     ],
     {ok, Res}.
 
@@ -105,26 +78,15 @@ find_all(<<"data-space">>) ->
     SessionId = g_session:get_session_id(),
     {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
         {path, <<"/spaces">>}, 0, 1000),
-    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
-        op_gui_utils:get_users_default_space()),
     Res = lists:foldl(
-        fun({SpaceDirId, SpaceName}, Acc) ->
+        fun({SpaceDirId, _SpaceName}, Acc) ->
             % Returns error when this space is not supported by this provider
-            SpaceData = try
-                {ok, Data} = find(<<"data-space">>, [SpaceDirId]),
-                Data
-            catch
-                T:M ->
-                    ?error_stacktrace(
-                        "Cannot read space data (~p). ~p:~p", [SpaceDirId, T, M]),
-                    [
-                        {<<"id">>, SpaceDirId},
-                        {<<"name">>, SpaceName},
-                        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
-                        {<<"rootDir">>, null}
-                    ]
-            end,
-            Acc ++ [SpaceData]
+            case find(<<"data-space">>, [SpaceDirId]) of
+                {ok, Data} ->
+                    Acc ++ Data;
+                _ ->
+                    Acc
+            end
         end, [], SpaceDirs),
     {ok, Res}.
 
