@@ -92,7 +92,7 @@ emit_permission_changed(FileUuid) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Send event informing subscribed client that permissions of file has changed.
+%% Send event informing subscribed client about file removal.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_removal(FileUuid :: file_meta:uuid()) ->
