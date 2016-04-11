@@ -14,10 +14,12 @@ export default Ember.Route.extend({
   },
 
   afterModel(dataSpace) {
-    Ember.run.scheduleOnce('afterRender', this, function() {
-      console.debug('selected data-space: ' + dataSpace.get('id'));
-      // TODO: this should use data-spaces-select service or something...
-    });
+    if (dataSpace) {
+      Ember.run.scheduleOnce('afterRender', this, function() {
+        console.debug('selected data-space: ' + dataSpace.get('id'));
+        // TODO: this should use data-spaces-select service or something...
+      });
+    }
   },
 
   renderTemplate() {

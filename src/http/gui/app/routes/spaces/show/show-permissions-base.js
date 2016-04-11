@@ -35,10 +35,17 @@ let onSaveFailure = function(permission) {
 
 export default Ember.Route.extend({
   spacesMenuService: Ember.inject.service('spaces-menu'),
+  oneproviderServer: Ember.inject.service('oneproviderServer'),
+
+  /** Abstract: <string> should be set in subclasses, eg. user, group */
+  permissionsType: null,
 
   model() {
     var space = this.modelFor('spaces.show');
-    return space.get(this.get('collectionName'));
+    return {
+      space: space,
+      permissions: space.get(this.get('collectionName'))
+    };
   },
 
   collectionName: function() {
@@ -91,6 +98,6 @@ export default Ember.Route.extend({
       allPermissions.forEach(function(permission) {
         permission.reset();
       });
-    }
+    },
   }
 });

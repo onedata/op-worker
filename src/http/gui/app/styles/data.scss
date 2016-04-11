@@ -60,6 +60,10 @@
     }
   }
 
+  .select-arrow {
+    padding-top: 10px;
+  }
+
   .level-1 .secondary-sidebar-item {
     padding-left: ($secondary-sidebar-item-padding + 22px) !important;
   }
@@ -95,32 +99,6 @@
 .table.files-table {
   // TODO: style
   position: relative;
-
-  &.file-drag {
-    .drop-area {
-      display: block;
-    }
-  }
-
-  .drop-area {
-    display: none;
-    z-index: 100;
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    right: 20px;
-    bottom: 20px;
-    background-color: rgba($onedata-light-gray, 0.75);
-    border: 4px dashed $onedata-graphite;
-    border-radius: 10px;
-
-    .oneicon {
-      display: block;
-      font-size: 200px;
-      height: 100%;
-      text-align: center;
-    }
-  }
 
   thead {
     th {
@@ -168,4 +146,99 @@
       }
     }
   }
+}
+
+.dropdown.open .oneicon.oneicon-settings {
+    color: $onedata-red;
+}
+
+&.file-drag {
+  .drop-area {
+    display: block;
+  }
+}
+
+.drop-area {
+  display: none;
+  z-index: 100;
+  position: fixed;
+  top: $top-bar-height + 20px;
+  left: $sidebar-width + $secondary-sidebar-width + 20px;
+  right: 20px;
+  bottom: 20px;
+  background-color: rgba($onedata-light-gray, 0.75);
+  border: 4px dashed $onedata-graphite;
+  border-radius: 10px;
+
+  .oneicon {
+    display: block;
+    font-size: 200px;
+    height: 100%;
+    text-align: center;
+  }
+}
+
+// modals
+
+// file chunks
+
+.file-blocks-table {
+  canvas.file-chunks {
+    // NOTE: should be synchronized with utils/file-chunks-bar.js
+    width: 320px;
+    height: 20px;
+
+    border-left: 1px solid $onedata-graphite;
+    border-right: 1px solid $onedata-graphite;
+
+    background-color: #F2F2F2;
+
+    &.error {
+      background-color: transparent;
+    }
+
+    &.loading {
+      background-color: transparent;
+    }
+  }
+  .file-size {
+    width: 320px;
+    font-size: 0.7em;
+    .start {
+      float: left;
+      text-align: left;
+    }
+    .end {
+      float: right;
+      text-align: right;
+    }
+  }
+
+  .provider-name {
+    width: 260px;
+    max-width: 260px;
+
+    .truncate {
+      max-width: 150px;
+    }
+  }
+}
+
+.null-dir-info {
+  padding-top: 20px;
+  line-height: normal;
+  font-style: italic;
+}
+
+.files-list {
+  height: 100%;
+
+  // component - TODO: move to other file?
+  .data-files-list {
+    height: 100%;
+  }
+}
+
+.file-upload {
+
 }

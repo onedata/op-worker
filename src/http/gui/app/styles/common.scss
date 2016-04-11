@@ -1,3 +1,5 @@
+$responsive-multiplier: 1 !default;
+
 // default for desktop TODO: move to desktop-common
 $sidebar-width: 68px !default;
 $top-bar-height: 72px !default;
@@ -22,7 +24,7 @@ $secondary-sidebar-icon-font-size: 38px !default;
 $top-bar-icon-font-size: 32px !default;
 
 $table-font-size: 13pt !default;
-$table-checkbox-size: 16pt !default;
+$table-checkbox-size: 64px * $responsive-multiplier !default;
 
 $transition-time: 0.25s !default;
 
@@ -94,8 +96,9 @@ html, body {
         margin-left: 32px;
         margin-right: 62px;
         // TODO: svg
-        background-image: url("/assets/images/logo.png");
-        background-position: center center;
+        background-image: url("/assets/images/logo-dark.svg");
+        background-position: center left;
+        background-size: auto 26px;
         background-repeat: no-repeat;
       }
 
@@ -135,8 +138,6 @@ html, body {
         }
       }
     }
-
-
   }
 
   nav.primary-sidebar {
@@ -167,7 +168,8 @@ html, body {
         text-align: center;
 
         // TODO: use SVG
-        background-image: url("/assets/images/logo-short.png");
+        background-image: url("/assets/images/logo-short-light.svg");
+        background-size: 40px 26px;
         background-repeat: no-repeat;
         background-position: center center;
       }
@@ -196,19 +198,12 @@ html, body {
             background-color: $sidebar-item-hover-color;
           }
 
+          // TODO: generic figure styles moved up
           figure {
-            display: table-cell;
-            vertical-align: middle;
             max-height: $sidebar-item-height;
-            text-align: center;
             color: #fff;
-            cursor: pointer; cursor: hand;
 
             figcaption {
-              // pull up
-              margin-top: -3px;
-              font-size: 8pt;
-              font-weight: lighter;
               letter-spacing: 0.05em;
               text-transform: capitalize;
             }
@@ -245,17 +240,46 @@ html, body {
 
       border-right: #E6E6E6 2px solid;
 
+      // TODO: responsive variables?
       .secondary-sidebar-header {
-        text-transform: uppercase;
-        border-top: none;
-        // TODO: should be like div.current-sidebar-entry...
-        height: 60px;
-        padding-top: 18px;
-        padding-left: 33px; // SPACES is moved right slightly
-        padding-bottom: 16px;
-        padding-right: 27px;
         color: #4D5664; // TODO: graphite2?
-        font-size: 11pt;
+
+        > * {
+          display: table-cell;
+        }
+
+        .title {
+          width: 100%;
+          text-transform: uppercase;
+          border-top: none;
+          // TODO: should be like div.current-sidebar-entry...
+          height: 60px;
+          padding-top: 18px;
+          padding-left: 33px * $responsive-multiplier; // SPACES is moved right slightly
+          padding-bottom: 16px;
+          padding-right: 27px * $responsive-multiplier;
+          font-size: 11pt;
+        }
+
+        figure {
+          figcaption {
+            // pull up
+            margin-top: -10px;
+          }
+        }
+
+        .icon {
+          &:first-of-type {
+            padding-left: 15px;
+          }
+
+          font-size: 28px;
+          padding-right: 15px;
+
+          &:hover {
+            color: $onedata-red;
+          }
+        }
       }
 
 
@@ -272,6 +296,8 @@ html, body {
         font-size: $secondary-sidebar-font-size;
         color: black;
         text-decoration: none !important;
+
+        // generic elements of secondary-sidebar-item
 
         // TODO: elements that use .item-icon or .item-label should use this class
         .item-element {
@@ -293,6 +319,11 @@ html, body {
           vertical-align: middle;
           font-size: $secondary-sidebar-font-size;
           padding-left: 1em;
+        }
+
+        // more specific
+        .settings-icon {
+          color: $onedata-graphite;
         }
       }
 
@@ -321,7 +352,7 @@ html, body {
 
               &:hover,
               &.active {
-                color: $onedata-azure;
+                color: $onedata-red;
               }
             }
           }
@@ -333,16 +364,16 @@ html, body {
           }
 
           &.active.first-level {
-            border-left-color: $onedata-azure;
+            border-left-color: $onedata-red;
 
             .secondary-sidebar-item.first-level {
-              background-color: $onedata-light-azure;
+              background-color: $onedata-light-gray;
             }
           }
 
           &:hover {
             .secondary-sidebar-item.first-level {
-              background-color: $onedata-light-azure;
+              background-color: $onedata-light-gray;
 
               .secondary-sidebar-item.first-level {
                 background-color: transparent;
@@ -355,6 +386,12 @@ html, body {
             // submenu uncollapses when parent menu is clicked
             ul.submenu {
               display: block;
+
+              .active {
+                .secondary-sidebar-item {
+                  color: $onedata-red;
+                }
+              }
             }
 
             .secondary-sidebar-item {
@@ -381,6 +418,192 @@ html, body {
     }
   }
 
+  figure {
+    display: table-cell;
+    vertical-align: middle;
+    text-align: center;
+    cursor: pointer; cursor: hand;
+
+    figcaption {
+      // pull up
+      margin-top: -3px;
+      font-size: 8pt;
+      font-weight: lighter;
+    }
+  }
+
+}
+
+.hover-parent {
+  &:not(:hover) {
+    .transparent-not-hovered {
+      color: transparent !important;
+    }
+  }
+}
+
+.loading-throbber {
+  width: 32px;
+  height: 32px;
+  background-image: url("/assets/images/loading-32.gif");
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.loading-label {
+  padding-left: 15px;
+}
+
+.modal-loading {
+  display: table;
+  > * {
+    display: table-cell;
+    vertical-align: middle;
+  }
+}
+
+.route-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+
+  background-color: white;
+  background-image: url("/assets/images/loading-128.gif");
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.input-with-button {
+  display: table;
+  width: 100%;
+
+  > * {
+    display: table-cell;
+  }
+
+  > *:first-child {
+    width: 100%;
+  }
+
+  input, .form-control {
+    height: 42px !important;
+    text-overflow: ellipsis;
+  }
+
+  .btn {
+    // a hack to pull up
+    margin-top: -2px;
+
+    @-moz-document url-prefix() {
+      vertical-align: baseline;
+      position: relative;
+      top: -2px;
+    }
+
+    width: 48px;
+
+    padding-top: 0;
+    padding-bottom: 0;
+    height: 42px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
+.modal-row {
+  margin-top: 10px;
+  margin-bottom: 10px;
+
+  &.large-space {
+    margin-top: 25px;
+    margin-bottom: 25px;
+  }
+
+  &:first-child {
+    margin-top: auto;
+  }
+
+  &:last-child {
+    margin-bottom: auto;
+  }
+}
+
+// HACKS
+
+// DEPRECATED
+.trim-hack {
+  overflow: hidden;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  table-layout: fixed;
+}
+
+.truncate-secondary-sidebar-select {
+  max-width: $secondary-sidebar-width - 110px;
+}
+
+.truncate-secondary-sidebar-item {
+  max-width: $secondary-sidebar-width - 70px;
+
+  &.level-1 {
+    max-width: $secondary-sidebar-width - 100px;
+  }
+
+  &.level-2 {
+    max-width: $secondary-sidebar-width - 120px;
+  }
+
+  &.level-3 {
+    max-width: $secondary-sidebar-width - 140px;
+  }
+
+  &.level-4 {
+    max-width: $secondary-sidebar-width - 160px;
+  }
+
+  &.level-5 {
+    max-width: $secondary-sidebar-width - 180px;
+  }
+
+  &.level-6 {
+    max-width: $secondary-sidebar-width - 200px;
+  }
+}
+
+.truncate-drop {
+  max-width: $secondary-sidebar-width - 70px;
+}
+
+// base class for string truncation
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Bootstrap extensions
+
+.table-no-border>thead>tr>th,
+.table-no-border>tbody>tr>th,
+.table-no-border>tfoot>tr>th,
+.table-no-border>thead>tr>td,
+.table-no-border>tbody>tr>td,
+.table-no-border>tfoot>tr>td,
+.table-no-border>tbody,
+.table-no-border>thead,
+.table-no-border>tfoot{
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+.one-row {
+  display: table;
+  > * {
+    display: table-cell;
+    vertical-align: middle;
+  }
 }
 
 // TODO: temporary

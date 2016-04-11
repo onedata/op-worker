@@ -1,20 +1,58 @@
 <div class="secondary-sidebar-header">
-  {{t 'components.spacesMenu.title'}}
+  <div class="title">
+    {{t 'components.spacesMenu.title'}}
+  </div>
+  <figure class="icon" {{action 'startCreateSpace'}}>
+    {{icon 'space-add'}}
+    <figcaption>{{t 'components.spacesMenu.create'}}</figcaption>
+  </figure>
+  <figure class="icon" {{action 'startJoinSpace'}}>
+    {{icon 'join'}}
+    <figcaption>{{t 'components.spacesMenu.join'}}</figcaption>
+  </figure>
 </div>
-<ul>
+<ul class="spaces-list">
   {{#each spaces as |space|}}
     {{!-- TODO: computing entryId in model is not very elegant --}}
     {{!-- move sidebar entry creation to helper --}}
-    <li id="{{space.sidebarEntryId}}" class="first-level">
-      <div {{action 'showSpaceOptions' space}} class="secondary-sidebar-item first-level">
+    <li id="{{space.sidebarEntryId}}" class="first-level hover-parent">
+      <div {{action (unless space.isExpanded 'showSpaceOptions' (action (mut undefProp))) space event}} class="secondary-sidebar-item first-level">
         <span class="item-element item-click-area">
-          <span class="item-icon">
+          <span class="item-element item-icon">
             {{icon (if space.isDefault 'space-home' 'space')
-              (if space.isDefault 'default-space-color' 'space-color')}}
+              (if space.isDefault 'color-space-default' 'color-space')}}
           </span>
 
-          <span class="item-label">
-            {{space.name}}
+          <span class="item-element item-label" title="{{space.name}}">
+            <div class="truncate truncate-secondary-sidebar-select">
+              {{space.name}}
+            </div>
+          </span>
+
+          <span class="item-element item-icon">
+
+            <div class="dropdown settings-dropdown">
+              <div href="#" class="dropdown-toggle" data-toggle="dropdown"
+                role="button" aria-haspopup="true" aria-expanded="false">
+                <span class="item-element item-icon transparent-not-hovered settings-icon">
+                  {{icon 'settings'}}
+                </span>
+              </div>
+              <ul class="dropdown-menu dropdown-menu-right dropdown-menu-list space-dropdown-menu dropdown-menu-settings">
+                {{!-- TODO: foreach --}}
+                {{#each menuItems as |item|}}
+                  <li {{action item.action space}}>
+                    <span class="item-icon">
+                      {{icon item.icon}}
+                    </span>
+                    <span class="item-label">
+                      {{item.label}}
+                    </span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+
           </span>
         </span>
       </div>
@@ -25,3 +63,103 @@
   {{/each}}
 
 </ul>
+
+{{!-- modals --}}
+
+{{!-- TODO: refactor: make a generic modals components for: enter single line, question --}}
+
+{{!-- CREATE SPACE --}}
+
+{{#bs-modal openedAction='createSpaceModalOpened' open=isCreatingSpace body=false footer=false
+    title=(t "components.spacesMenu.createModal.title")
+    id="create-space"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitCreateSpace") model=this}}
+      {{bs-form-element controlType="text" property="newSpaceName" autofocus=true
+        label=(t 'components.spacesMenu.createModal.enterName')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.cancel"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- JOIN SPACE --}}
+
+{{#bs-modal open=isJoiningSpace body=false footer=false
+    title=(t "components.spacesMenu.joinModal.title")
+    id="join-space"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitJoinSpace") model=this}}
+      {{bs-form-element controlType="text" property="joinSpaceToken" autofocus=true
+        label=(t 'components.spacesMenu.joinModal.label')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- RENAME SPACE --}}
+
+{{#bs-modal open=spaceToRename body=false footer=false
+    title=(t "components.spacesMenu.renameModal.title")
+    id="rename-space"}}
+  {{#bs-modal-body}}
+    {{#bs-form action=(action "submitRenameSpace") model=this}}
+      {{bs-form-element controlType="text" property="renameSpaceName" autofocus=true
+        label=(t 'components.spacesMenu.renameModal.label')}}
+    {{/bs-form}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.ok"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.cancel"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- LEAVE SPACE --}}
+
+{{#bs-modal open=spaceToLeave body=false footer=false
+    title=(t "components.spacesMenu.leaveModal.title")
+    submitAction="submitLeaveSpace" id="leave-space"}}
+  {{#bs-modal-body}}
+    {{t 'components.spacesMenu.leaveModal.label' spaceName=spaceToLeave.name}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.yes"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.no"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}
+
+{{!-- REMOVE SPACE --}}
+
+{{#bs-modal open=spaceToRemove body=false footer=false
+    title=(t "components.spacesMenu.removeModal.title")
+    submitAction="submitRemoveSpace" id="remove-space"}}
+  {{#bs-modal-body}}
+    {{t 'components.spacesMenu.removeModal.label' spaceName=spaceToRemove.name}}
+  {{/bs-modal-body}}
+  {{#bs-modal-footer as |footer|}}
+    {{#bs-button buttonType="submit" type="primary"}}
+      {{t "common.modal.yes"}}
+    {{/bs-button}}
+    {{#bs-button action=(action "close" target=footer) type="default"}}
+      {{t "common.modal.no"}}
+    {{/bs-button}}
+  {{/bs-modal-footer}}
+{{/bs-modal}}

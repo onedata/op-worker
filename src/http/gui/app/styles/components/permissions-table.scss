@@ -1,0 +1,27 @@
+.permissions-table {
+  .item-tool {
+    &:hover {
+      color: $onedata-red;
+    }
+  }
+
+  .item-icon {
+    width: 76px;
+  }
+
+  figure {
+    // pull up
+    position: relative;
+    top: -7px;
+
+    font-size: 2em;
+    .oneicon {
+      // pull down
+      position: relative !important;
+      top: 10px !important;
+    }
+    figcaption {
+      text-transform: none;
+    }
+  }
+}

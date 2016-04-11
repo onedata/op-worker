@@ -36,21 +36,24 @@ export default DS.Model.extend({
   // TODO: implement B, MB, GB, TODO: move to helper
   sizeHumanReadable: function() {
     let bytes = this.get('size');
+    if (bytes != 0 && !bytes) {
+      return '';
+    }
     if (bytes === null || bytes === 'undefined') {
       return '';
     }
 
     let number = bytes;
     let unit = 'B';
-    if (bytes > 999999999) {
+    if (bytes > 1073741824) {
       unit = 'GB';
-      number = bytes/1000000000;
-    } else if (bytes > 999999) {
+      number = bytes/1073741824;
+    } else if (bytes >= 1048576) {
       unit = 'MB';
-      number = bytes/1000000;
-    } else if (bytes > 999) {
+      number = bytes/1048576;
+    } else if (bytes >= 1024) {
       unit = 'KB';
-      number = bytes/1000;
+      number = bytes/1024;
     }
     return `${Math.round(number * 100) / 100} ${unit}`;
   }.property('size'),
@@ -67,6 +70,10 @@ export default DS.Model.extend({
 
   isDir: function () {
     return this.get('type') === 'dir';
+  }.property('type'),
+
+  isBroken: function () {
+    return this.get('type') === 'broken';
   }.property('type'),
 
   resetBrowserState() {

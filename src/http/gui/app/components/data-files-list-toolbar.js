@@ -3,9 +3,14 @@ import Ember from 'ember';
 export default Ember.Component.extend({
   notify: Ember.inject.service('notify'),
   fileUpload: Ember.inject.service('fileUpload'),
+  store: Ember.inject.service(),
 
   tagName: 'ul',
   classNames: ['nav', 'navbar-nav', 'navbar-right', 'toolbar-group'],
+
+  fileForChunks: null,
+  fileBlocksSorting: ['provider.name'],
+  fileBlocksSorted: Ember.computed.sort('fileBlocks', 'fileBlocksSorting'),
 
   /**
    * Holds items of toolbar. Each item is a Object with properties:
@@ -81,20 +86,31 @@ export default Ember.Component.extend({
         icon: 'remove',
         action: 'removeSelectedFiles',
         disabled: !this.get('dir.isSomeFileSelected'),
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.remove')
+      },
+      {
+        id: 'file-chunks-tool',
+        icon: 'provider',
+        action: 'showChunks',
+        disabled: !this.get('dir.singleSelectedFile'),
+        tooltip: i18n.t('components.dataFilesListToolbar.tooltip.chunks')
       },
     ];
   }.property('dir.isSomeFileSelected', 'dir.singleSelectedFile'),
 
-  resumableJsChange: function() {
-    let resumable = this.get('fileUpload.fileUploadComponent.resumable');
-    if (resumable) {
-      resumable.assignBrowse(this.$().find('#toolbar-file-browse'));
-    }
-  }.observes('fileUpload', 'fileUploadComponent', 'fileUpload.fileUploadComponent.resumable'),
+  makeTooltips: function() {
+    Ember.run.scheduleOnce('afterRender', this, function() {
+      this.$().find('[data-toggle="tooltip"]').tooltip();
+    });
+  }.observes('items', 'fileBlocks.@each.provider.@each.name'),
 
   didInsertElement() {
-    this.$().find('[data-toggle="tooltip"]').tooltip();
-    this.resumableJsChange();
+    this.makeTooltips();
+    console.debug('Binding upload button for files toolbar');
+    // NOTE: file upload component has dir set by data-files-list component,
+    // so data-files-list _must_ be used when using this toolbar
+    // if this changes - please copy "dirChanged" method from files-list here
+    this.get('fileUpload').assignBrowse(this.$().find('#toolbar-file-browse'));
   },
 
   actions: {
@@ -135,6 +151,24 @@ export default Ember.Component.extend({
       this.set('newPermissions', '');
       this.set('isEditingPermissions', true);
     },
+
+    showChunks() {
+      this.set('isFileChunksModal', true);
+      this.set('fileForChunks', this.get('dir.singleSelectedFile'));
+      let fileId = this.get('fileForChunks.id');
+      // TODO: if fileId null...
+
+      this.get('store').query('file-distribution', { filter: { fileId: fileId } }).then(
+        (fbs) => {
+          this.set('fileBlocks', fbs);
+        },
+        (error) => {
+          console.error('Error loading file blocks: ' + error);
+        }
+      );
+    },
+
+    // TODO: set fileForChunks to null on close
 
     uploadBrowse() {
       this.$('#toolbar-file-browse').trigger('click');

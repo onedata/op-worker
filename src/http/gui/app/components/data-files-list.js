@@ -9,16 +9,24 @@ export default Ember.Component.extend({
   notify: Ember.inject.service('notify'),
   fileUpload: Ember.inject.service('file-upload'),
 
+  classNames: ['data-files-list'],
+
   // TODO: doc
   dir: null,
 
-  bindFileUpload() {
-    this.get('fileUpload').assignDrop(this.$().find('.table'));
-  },
+  // TODO: enable sorting in GUI
+  filesSorting: ['type:asc', 'name:asc'],
+  filesSorted: Ember.computed.sort('dir.children', 'filesSorting'),
 
   didInsertElement() {
-    this.bindFileUpload();
+    this.dirChanged();
+    console.debug('Binding upload area for file list');
+    this.get('fileUpload').assignDrop(this.$());
   },
+
+  dirChanged: function() {
+    this.set('fileUpload.dir', this.get('dir'));
+  }.observes('dir'),
 
   actions: {
     openFile(file) {

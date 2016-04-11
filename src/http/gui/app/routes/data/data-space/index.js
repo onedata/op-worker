@@ -7,11 +7,11 @@ export default Ember.Route.extend({
     let dataSpace = this.modelFor('data.data-space');
     let rootDir = dataSpace.get('rootDir');
 
-    if (rootDir) {
+    if (rootDir && rootDir.get('id')) {
       console.debug(`Redirecting to root dir "${rootDir.get('id')}" of space "${dataSpace.get('id')}"`);
       this.transitionTo('data.data-space.dir', rootDir.get('id'));
     } else {
-      console.error(`Data space "${dataSpace.get('id')}" has no rootDir!`);
+      console.warn(`Data space "${dataSpace.get('id')}" has no rootDir!`);
     }
   },
 });
