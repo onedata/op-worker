@@ -85,10 +85,8 @@ props_to_value(onedata_group, Props) ->
     };
 props_to_value(space_info, Props) ->
     #space_info{
-        id = proplists:get_value(<<"id">>, Props),
         name = proplists:get_value(<<"name">>, Props),
-        providers = proplists:get_value(<<"providers">>, Props),
-        size = proplists:get_value(<<"size">>, Props),
+        providers_supports = proplists:get_value(<<"providers_supports">>, Props),
         groups = process_ids_with_privileges(proplists:get_value(<<"groups">>, Props)),
         users = process_ids_with_privileges(proplists:get_value(<<"users">>, Props))
     };

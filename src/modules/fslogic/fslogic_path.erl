@@ -142,7 +142,7 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, 
     {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
 
     MatchedSpaceIds = lists:filter(fun(SpaceId) ->
-        {ok, #document{value = #space_info{name = Name}}} = space_info:fetch(SpaceId, SessId),
+        {ok, #document{value = #space_info{name = Name}}} = space_info:get_or_fetch(SessId, SpaceId),
         Name =:= SpaceName
     end, SpaceIds),
 
@@ -229,7 +229,8 @@ gen_path(Entry, SessId, Tokens) ->
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
         {ok, #document{key = SpaceBaseDirUUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
-            {ok, #document{value = #space_info{name = SpaceName}}} = space_info:fetch(SpaceId, SessId),
+            {ok, #document{value = #space_info{name = SpaceName}}} =
+                space_info:get_or_fetch(SessId, SpaceId),
             gen_path({uuid, SpaceBaseDirUUID}, SessId, [SpaceName | Tokens]);
         {ok, #document{key = ParentUUID}} ->
             gen_path({uuid, ParentUUID}, SessId, [Name | Tokens])

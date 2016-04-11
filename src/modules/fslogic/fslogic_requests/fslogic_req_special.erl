@@ -125,7 +125,8 @@ read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
                         lists:map(fun(SpaceId) ->
                             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                            {ok, #document{value = #space_info{name = Name}}} = space_info:fetch(SpaceId, SessId),
+                            {ok, #document{value = #space_info{name = Name}}} =
+                                space_info:get_or_fetch(SessId, SpaceId),
                             #child_link{uuid = SpaceUUID, name = Name}
                         end, SpacesIdsChunk);
                     false ->

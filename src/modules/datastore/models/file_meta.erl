@@ -264,7 +264,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, create_or_update}, {onedata_user, save}, {onedata_user, update}],
         ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
 
 %%--------------------------------------------------------------------
@@ -497,8 +497,10 @@ setup_onedata_user(UserId) ->
             SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             case exists({uuid, SpaceDirUuid}) of
                 true ->
-                    fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID}, {uuid, SpaceDirUuid});
+                    fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID},
+                        {uuid, SpaceDirUuid});
                 false ->
+                    space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
                     {ok, _} = create({uuid, SpacesRootUUID},
                         #document{key = SpaceDirUuid,
                             value = #file_meta{
@@ -507,7 +509,7 @@ setup_onedata_user(UserId) ->
                                 ctime = CTime, uid = ?ROOT_USER_ID, is_scope = true
                             }})
             end
-                      end, Spaces),
+        end, Spaces),
 
         {ok, RootUUID} = create({uuid, ?ROOT_DIR_UUID},
             #document{key = fslogic_uuid:default_space_uuid(UserId),
