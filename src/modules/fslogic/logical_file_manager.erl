@@ -63,8 +63,8 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/3, cp/2, get_file_path/2]).
 %% Functions operating on files
--export([create/3, open/3, fsync/1, write/3, read/3, truncate/2, truncate/3,
-    get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
+-export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
+    truncate/3, get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/2, set_acl/2, set_acl/3, get_acl/1, get_acl/2,
     remove_acl/1, remove_acl/2]).
@@ -197,6 +197,18 @@ unlink(Handle) ->
 unlink(SessId, FileEntry) ->
     ?run(fun() -> lfm_files:unlink(SessId, FileEntry) end).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new file with default mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(SessId :: session:id(), Path :: file_meta:path()) ->
+    {ok, file_meta:uuid()} | error_reply().
+create(SessId, Path) ->
+    ?run(fun() -> lfm_files:create(SessId, Path) end).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new file.
@@ -206,7 +218,7 @@ unlink(SessId, FileEntry) ->
     Mode :: file_meta:posix_permissions()) ->
     {ok, file_meta:uuid()} | error_reply().
 create(SessId, Path, Mode) ->
-    ?run(fun() -> lfm_files:create(SessId, Path, Mode) end ).
+    ?run(fun() -> lfm_files:create(SessId, Path, Mode) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -454,7 +466,8 @@ get_transfer_encoding(SessId, FileKey) ->
 -spec set_transfer_encoding(session:id(), file_key(), xattr:transfer_encoding()) ->
     ok | error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
-    ?run(fun() -> lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding) end).
+    ?run(fun() ->
+        lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -476,7 +489,8 @@ get_cdmi_completion_status(SessId, FileKey) ->
 -spec set_cdmi_completion_status(session:id(), file_key(), xattr:cdmi_completion_status()) ->
     ok | error_reply().
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    ?run(fun() -> lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
+    ?run(fun() ->
+        lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
 
 %%--------------------------------------------------------------------
 %% @doc Returns mimetype of file.

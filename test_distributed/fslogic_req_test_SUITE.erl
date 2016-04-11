@@ -540,12 +540,12 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, fslogic_utils),
-    test_utils:mock_expect(Workers, fslogic_utils, get_storage_type, fun(_) -> ?DIRECTIO_HELPER_NAME end),
+    test_utils:mock_new(Workers, luma_utils),
+    test_utils:mock_expect(Workers, luma_utils, get_storage_type, fun(_) -> ?DIRECTIO_HELPER_NAME end),
     initializer:communicator_mock(Workers),
     initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, communicator).
+    test_utils:mock_validate_and_unload(Workers, [communicator, luma_utils]).

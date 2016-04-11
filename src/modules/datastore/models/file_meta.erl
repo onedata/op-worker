@@ -60,7 +60,7 @@
 -type posix_permissions() :: non_neg_integer().
 
 -export_type([uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0, offset/0,
-    size/0, mode/0, time/0, posix_permissions/0]).
+    size/0, mode/0, time/0, posix_permissions/0, file_meta/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -267,8 +267,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata_user, save}, {onedata_user, update}],
-        ?GLOBALLY_CACHED_LEVEL).
+    ?MODEL_CONFIG(files, [{onedata_user, create}, {onedata, create_or_update}, {onedata_user, save}, {onedata_user, update}],
+        ?DISK_ONLY_LEVEL). % todo fix links and use GLOBALLY_CACHED
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -284,6 +284,8 @@ model_init() ->
 'after'(onedata_user, save, _, _, {ok, UUID}) ->
     setup_onedata_user(UUID);
 'after'(onedata_user, update, _, _, {ok, UUID}) ->
+    setup_onedata_user(UUID);
+'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
     setup_onedata_user(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.

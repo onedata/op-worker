@@ -17,6 +17,6 @@ export default Ember.Helper.helper(function(params) {
   let name = params[0];
   let classes = params[1] || '';
 
-  var html = '<span class="oneicon-'+name+' '+classes+'"></span>';
+  var html = '<span class="oneicon oneicon-'+name+' '+classes+'"></span>';
   return new Ember.Handlebars.SafeString(html);
 });

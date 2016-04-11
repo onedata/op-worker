@@ -108,7 +108,7 @@ chown(_, _File, _UserId) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    ?info("Get attr for file entry: ~p", [File]),
+    ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
@@ -117,8 +117,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 
             #posix_user_ctx{gid = GID, uid = UID} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-                StorageId = fslogic_utils:get_storage_id(SpaceUUID),
-                StorageType = fslogic_utils:get_storage_type(StorageId),
+                StorageId = luma_utils:get_storage_id(SpaceUUID),
+                StorageType = luma_utils:get_storage_type(StorageId),
                 fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
             catch
                 throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
@@ -127,7 +127,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
                     UID;
                 _ ->
-                    fslogic_utils:gen_storage_uid(UserID)
+                    luma_utils:gen_storage_uid(UserID)
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,

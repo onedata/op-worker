@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/sfm_handle.hrl").
+-include("modules/fslogic/helpers.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -152,11 +153,20 @@ chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
 %%--------------------------------------------------------------------
 -spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) ->
     ok | logical_file_manager:error_reply().
-chown(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, session_id = SessionId}, User, Group) ->
-    {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
+chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID}, UserId, SpaceId) ->
+    {ok, #helper_init{name = StorageType} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
-    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
-    helpers:chown(HelperHandle, FileId, User, Group).
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+
+    case StorageType of
+        ?DIRECTIO_HELPER_NAME ->
+            #posix_user_ctx{uid = Uid, gid = Gid} = fslogic_storage:get_posix_user_ctx(?DIRECTIO_HELPER_NAME, #identity{user_id = UserId}, SpaceUuid),
+            helpers:chown(HelperHandle, FileId, Uid, Gid);
+        _ ->
+            ok
+    end;
+chown(_,_,_) ->
+    throw(?EPERM).
 
 
 %%--------------------------------------------------------------------
