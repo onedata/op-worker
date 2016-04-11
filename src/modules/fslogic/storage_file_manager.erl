@@ -188,9 +188,10 @@ symlink(_Path, _TargetFileHandle) ->
 %%--------------------------------------------------------------------
 -spec link(FileHandleFrom :: handle(), FileTo :: helpers:file()) ->
     ok | logical_file_manager:error_reply().
-link(#sfm_handle{storage = Storage, file = FileFrom}, FileTo) ->
+link(#sfm_handle{storage = Storage, file = FileFrom, space_uuid = SpaceUUID, session_id = SessionId}, FileTo) ->
     {ok, #helper_init{} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, SessionId, SpaceUUID)),
     helpers:link(HelperHandle, FileFrom, FileTo).
 
 %%--------------------------------------------------------------------
