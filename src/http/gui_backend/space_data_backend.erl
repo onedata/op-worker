@@ -184,7 +184,7 @@ update_record(<<"space">>, SpaceDirId, Data) ->
     ok;
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
-    {UserId, SpaceDirId} = association_to_ids(AssocId),
+    {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, #document{
@@ -249,12 +249,12 @@ space_record(SpaceDirId) ->
 
     UserPermissions = lists:map(
         fun({UserId, _UserPerms}) ->
-            ids_to_association(UserId, SpaceDirId)
+            op_gui_utils:ids_to_association(UserId, SpaceDirId)
         end, UsersAndPerms),
 
     GroupPermissions = lists:map(
         fun({GroupId, _GroupPerms}) ->
-            ids_to_association(GroupId, SpaceDirId)
+            op_gui_utils:ids_to_association(GroupId, SpaceDirId)
         end, GroupsAndPerms),
 
     DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
@@ -277,7 +277,7 @@ space_record(SpaceDirId) ->
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
-    {UserId, SpaceDirId} = association_to_ids(AssocId),
+    {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
@@ -308,7 +308,7 @@ space_user_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec space_user_record(AssocId :: binary()) -> proplists:proplist().
 space_user_record(AssocId) ->
-    {UserId, SpaceDirId} = association_to_ids(AssocId),
+    {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     UserName = case onedata_user:get(UserId) of
         {ok, #document{value = #onedata_user{name = Name}}} ->
             Name;
@@ -336,7 +336,7 @@ space_user_record(AssocId) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
-    {GroupId, SpaceDirId} = association_to_ids(AssocId),
+    {GroupId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
@@ -367,7 +367,7 @@ space_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec space_group_record(AssocId :: binary()) -> proplists:proplist().
 space_group_record(AssocId) ->
-    {GroupId, SpaceDirId} = association_to_ids(AssocId),
+    {GroupId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     GroupName = case onedata_group:get(GroupId) of
         {ok, #document{value = #onedata_group{name = Name}}} ->
@@ -384,29 +384,6 @@ space_group_record(AssocId) ->
         {<<"id">>, AssocId},
         {<<"name">>, GroupName}
     ].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates an associative ID from two IDs which can be easily decoupled later.
-%% @end
-%%--------------------------------------------------------------------
--spec ids_to_association(FirstId :: binary(), SecondId :: binary()) -> binary().
-ids_to_association(FirstId, SecondId) ->
-    <<FirstId/binary, ".", SecondId/binary>>.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Decouples an associative ID into two separate IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec association_to_ids(AssocId :: binary()) -> {binary(), binary()}.
-association_to_ids(AssocId) ->
-    [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
-    {FirstId, SecondId}.
 
 
 %%--------------------------------------------------------------------

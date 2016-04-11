@@ -20,16 +20,9 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
-
-% @todo currently unused - every time taken from OZ
-%% Key under which default space is stored in session memory.
--define(DEFAULT_SPACE_KEY, default_space).
-
-%% API
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
-
 
 %%%===================================================================
 %%% API functions
@@ -42,7 +35,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    op_gui_utils:register_backend(?MODULE, self()),
     ok.
 
 
@@ -53,7 +45,6 @@ init() ->
 %%--------------------------------------------------------------------
 -spec terminate() -> ok.
 terminate() ->
-    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
@@ -75,7 +66,8 @@ find(<<"data-space">>, [SpaceDirId]) ->
     DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
         op_gui_utils:get_users_default_space()),
     % If current provider cannot get info about, return null rootDir which will
-    % cause the client to render a "space not supported or cannot be synced" message
+    % cause the client to render a
+    % "space not supported or cannot be synced" message
     RootDir = try
         % This will crash if provider cannot sync this space
         file_data_backend:get_parent(SessionId, SpaceDirId),

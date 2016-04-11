@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements data_backend_behaviour and is used to synchronize
-%%% the data-space model used in Ember application.
+%%% the provider model used in Ember application.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_data_backend).
@@ -75,20 +75,7 @@ find(<<"provider">>, [ProviderId]) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
-    SessionId = g_session:get_session_id(),
-    {ok, SpaceDirs} = logical_file_manager:ls(SessionId,
-        {path, <<"/spaces">>}, 0, 1000),
-    Res = lists:foldl(
-        fun({SpaceDirId, _SpaceName}, Acc) ->
-            % Returns error when this space is not supported by this provider
-            case find(<<"data-space">>, [SpaceDirId]) of
-                {ok, Data} ->
-                    Acc ++ Data;
-                _ ->
-                    Acc
-            end
-        end, [], SpaceDirs),
-    {ok, Res}.
+    gui_error:report_error(<<"Not iplemented">>).
 
 
 %%--------------------------------------------------------------------

@@ -19,6 +19,7 @@
 
 %% API
 -export([get_user_rest_auth/0, get_users_default_space/0]).
+-export([ids_to_association/2, association_to_ids/1]).
 
 %%%===================================================================
 %%% API functions
@@ -51,3 +52,26 @@ get_users_default_space() ->
     % changes of this should be pushed.
     {ok, DefaultSpaceId} = oz_users:get_default_space(get_user_rest_auth()),
     DefaultSpaceId.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates an associative ID from two IDs which can be easily decoupled later.
+%% @end
+%%--------------------------------------------------------------------
+-spec ids_to_association(FirstId :: binary(), SecondId :: binary()) -> binary().
+ids_to_association(FirstId, SecondId) ->
+    <<FirstId/binary, ".", SecondId/binary>>.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Decouples an associative ID into two separate IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec association_to_ids(AssocId :: binary()) -> {binary(), binary()}.
+association_to_ids(AssocId) ->
+    [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
+    {FirstId, SecondId}.

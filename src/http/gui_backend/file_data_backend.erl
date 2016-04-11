@@ -25,8 +25,8 @@
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
 
-%% @todo (VFS-1865) Temporal solution for GUI push updates
--export([file_record/2, get_parent/2]).
+% @TODO DO NOT EXPORT THIS! used in data space data backend.
+-export([get_parent/2]).
 
 %%%===================================================================
 %%% API functions
@@ -39,7 +39,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    op_gui_utils:register_backend(?MODULE, self()),
     ok.
 
 
@@ -50,7 +49,6 @@ init() ->
 %%--------------------------------------------------------------------
 -spec terminate() -> ok.
 terminate() ->
-    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
@@ -95,10 +93,8 @@ find_query(<<"file">>, _Data) ->
     gui_error:report_error(<<"Not iplemented">>);
 
 
-find_query(<<"file-distribution">>, [{<<"filter">>, [{<<"fileId">>, FileId}]}]) ->
+find_query(<<"file-distribution">>, [{<<"fileId">>, FileId}]) ->
     {ok, Locations} = file_meta:get_locations({uuid, FileId}),
-    ?dump(FileId),
-    ?dump(Locations),
     Res = lists:map(
         fun(LocationId) ->
             {ok, #document{value = #file_location{
@@ -107,9 +103,6 @@ find_query(<<"file-distribution">>, [{<<"filter">>, [{<<"fileId">>, FileId}]}]) 
             }}} = file_location:get(LocationId),
             BlocksList = case Blocks of
                 [] ->
-                    % @todo LOL!~
-                    % ABY ZAMOKOWAC, ODKOMENTUJ!
-%%                    [123423, 2023401, 3023401, 3523401, 5023401, 6023401];
                     [0, 0];
                 _ ->
                     lists:foldl(
@@ -118,13 +111,12 @@ find_query(<<"file-distribution">>, [{<<"filter">>, [{<<"fileId">>, FileId}]}]) 
                         end, [], Blocks)
             end,
             [
-                {<<"id">>, ids_to_association(FileId, ProviderId)},
+                {<<"id">>, op_gui_utils:ids_to_association(FileId, ProviderId)},
                 {<<"fileId">>, FileId},
                 {<<"provider">>, ProviderId},
                 {<<"blocks">>, BlocksList}
             ]
         end, Locations),
-    ?dump(Res),
     {ok, Res}.
 
 
@@ -177,7 +169,12 @@ create_record(<<"file">>, Data) ->
         ],
         {ok, Res}
     catch _:_ ->
-        gui_error:report_warning(<<"Failed to create new directory.">>)
+        case proplists:get_value(<<"type">>, Data, <<"dir">>) of
+            <<"dir">> ->
+                gui_error:report_warning(<<"Failed to create new directory.">>);
+            <<"file">> ->
+                gui_error:report_warning(<<"Failed to create new fiel.">>)
+        end
     end.
 
 
@@ -192,43 +189,25 @@ create_record(<<"file">>, Data) ->
 update_record(<<"file">>, FileId, Data) ->
     try
         SessionId = g_session:get_session_id(),
-        % @todo uncomment when mv is supported
-%%    Rename = fun(_NewName) ->
-%%        {ok, OldPath} = logical_file_manager:get_file_path(SessionId, FileId),
-%%        DirName = filename:dirname(OldPath),
-%%        {ok, OldPath} = logical_file_manager:mv(SessionId, FileId),
-%%        ok
-%%    end,
-        Chmod = fun(NewPermsBin) ->
-            Perms = case is_integer(NewPermsBin) of
-                true ->
-                    binary_to_integer(integer_to_binary(NewPermsBin), 8);
-                false ->
-                    binary_to_integer(NewPermsBin, 8)
-            end,
-            case Perms >= 0 andalso Perms =< 8#777 of
-                true ->
-                    ok = logical_file_manager:set_perms(
-                        SessionId, {uuid, FileId}, Perms);
-                false ->
-                    gui_error:report_warning(<<"Cannot change permissions, "
-                    "invalid octal value.">>)
-            end
-        end,
-        % @todo uncomment when mv is supported
-%%    case proplists:get_value(<<"name">>, Data, undefined) of
-%%        undefined ->
-%%            ok;
-%%        NewName ->
-%%            Rename(NewName)
-%%    end,
         case proplists:get_value(<<"permissions">>, Data, undefined) of
             undefined ->
                 ok;
             NewPerms ->
-                Chmod(NewPerms)
-        end,
-        ok
+                Perms = case is_integer(NewPerms) of
+                    true ->
+                        binary_to_integer(integer_to_binary(NewPerms), 8);
+                    false ->
+                        binary_to_integer(NewPerms, 8)
+                end,
+                case Perms >= 0 andalso Perms =< 8#777 of
+                    true ->
+                        ok = logical_file_manager:set_perms(
+                            SessionId, {uuid, FileId}, Perms);
+                    false ->
+                        gui_error:report_warning(<<"Cannot change permissions, "
+                        "invalid octal value.">>)
+                end
+        end
     catch _:_ ->
         gui_error:report_warning(<<"Cannot change permissions.">>)
     end.
@@ -354,12 +333,3 @@ file_record(SessionId, FileId) ->
         {<<"children">>, ChildrenIds}
     ],
     {ok, Res}.
-
-
-ids_to_association(FirstId, SecondId) ->
-    <<FirstId/binary, ".", SecondId/binary>>.
-
-
-association_to_ids(AssocId) ->
-    [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
-    {FirstId, SecondId}.

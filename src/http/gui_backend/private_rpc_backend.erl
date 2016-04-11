@@ -38,6 +38,7 @@ handle(<<"fileUploadComplete">>, [{<<"fileId">>, FileId}]) ->
 
 handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
+    % @TODO VFS-1860 should use space_info join!
     case oz_users:join_space(UserAuth, [{<<"token">>, Token}]) of
         {ok, SpaceID} ->
             {ok, #space_details{
