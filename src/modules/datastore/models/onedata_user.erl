@@ -170,7 +170,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
             alias = Alias,
             email_list = EmailList
         },
-        [(catch space_info:fetch(Client, SId)) || SId <- SpaceIds],
+        [(catch space_info:get_or_fetch(Client, SId)) || SId <- SpaceIds],
         OnedataUserDoc = #document{key = Id, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}
