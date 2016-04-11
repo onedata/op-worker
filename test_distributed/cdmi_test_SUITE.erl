@@ -325,17 +325,17 @@ metadata_test(Config) ->
         {<<"value">>, FileContent}, {<<"valuetransferencoding">>, <<"utf-8">>}, {<<"mimetype">>, <<"text/plain">>},
         {<<"metadata">>, [{<<"my_metadata">>, <<"my_value">>}, {<<"cdmi_not_allowed">>, <<"my_value">>}]}],
     RawRequestBody1 = json_utils:encode(RequestBody1),
-    Before = now_in_secs(),
+    Before = calendar:now_to_datetime(now()),
     {ok, Code1, _Headers1, Response1} = do_request(Worker, FileName, put, RequestHeaders1, RawRequestBody1),
-    After = now_in_secs(),
+    After = calendar:now_to_datetime(now()),
 
     ?assertEqual(201, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
     Metadata1 = proplists:get_value(<<"metadata">>, CdmiResponse1),
     ?assertEqual(<<"15">>, proplists:get_value(<<"cdmi_size">>, Metadata1)),
-    CTime1 = binary_to_integer(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
-    ATime1 = binary_to_integer(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
-    MTime1 = binary_to_integer(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
+    CTime1 = iso8601:parse(proplists:get_value(<<"cdmi_ctime">>, Metadata1)),
+    ATime1 = iso8601:parse(proplists:get_value(<<"cdmi_atime">>, Metadata1)),
+    MTime1 = iso8601:parse(proplists:get_value(<<"cdmi_mtime">>, Metadata1)),
     ?assert(Before =< ATime1),
     ?assert(Before =< MTime1),
     ?assert(Before =< CTime1),
@@ -1699,10 +1699,6 @@ absolute_binary_path(Path) ->
 ensure_begins_with_slash(Path) ->
     ReversedBinary = list_to_binary(lists:reverse(Path)),
     lists:reverse(binary_to_list(filepath_utils:ensure_ends_with_slash(ReversedBinary))).
-
-% Returns current time in seconds
-now_in_secs() ->
-    erlang:system_time(seconds).
 
 mock_opening_file_without_perms(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
