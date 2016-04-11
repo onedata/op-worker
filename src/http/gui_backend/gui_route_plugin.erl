@@ -120,7 +120,7 @@ session_details() ->
     {ok, #document{
         value = #onedata_user{
             name = Name
-        }}} = onedata_user:get(op_gui_utils:get_user_id()),
+        }}} = onedata_user:get(g_session:get_user_id()),
     Res = [
         {<<"userName">>, Name},
         {<<"manageProvidersURL">>,

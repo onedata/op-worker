@@ -19,7 +19,7 @@
 
 % Default buffer size used to send file to a client. It is used if env variable
 % gui_download_buffer cannot be found.
--define(DEFAULT_DOWNLOAD_BUFFER_SIZE, 4194304). % 1MB
+-define(DEFAULT_DOWNLOAD_BUFFER_SIZE, 4194304). % 4MB
 
 %% Cowboy API
 -export([init/3, handle/2, terminate/3]).
@@ -68,6 +68,7 @@ terminate(_Reason, _Req, _State) ->
 %% ====================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Asserts the validity of multipart POST request and proceeds with
 %% parsing or returns an error. Returns list of parsed filed values and
@@ -111,6 +112,7 @@ handle_http_download(Req, FileId) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns a cowboy-compliant streaming function, that will be evaluated
 %% by cowboy to send data (file content) to receiving socket.
@@ -134,6 +136,7 @@ cowboy_file_stream_fun(FileHandle, Size) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Function that will be evaluated by cowboy to stream a file to client.
 %% NOTE! Filename must be a unicode string (not utf8)
@@ -146,6 +149,7 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Function that will be evaluated by cowboy to stream a file to client.
 %% NOTE! Filename must be a unicode string (not utf8)
@@ -156,7 +160,7 @@ stream_file(Socket, Transport, FileHandle, Size, BufSize) ->
     Sent :: integer(), BufSize :: integer()) -> ok.
 stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
     {ok, NewHandle, BytesRead} = logical_file_manager:read(
-        FileHandle, BytesSent, min(Size-BytesSent, BufSize)),
+        FileHandle, BytesSent, min(Size - BytesSent, BufSize)),
     ok = Transport:send(Socket, BytesRead),
     NewSent = BytesSent + size(BytesRead),
     case NewSent >= Size of
@@ -168,6 +172,7 @@ stream_file(Socket, Transport, FileHandle, Size, BytesSent, BufSize) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns buffer size for file downloads, as specified in config,
 %% or a default value if not found in config.
@@ -180,6 +185,7 @@ get_download_buffer_size() ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc Returns attachment headers that will cause web browser to
 %% interpret received data as attachment (and save it to disk).
 %% Proper filename is set, both in utf8 encoding and legacy for older browsers,

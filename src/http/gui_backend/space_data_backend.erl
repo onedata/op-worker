@@ -1,7 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @author Jakub Liput
-%%% @copyright (C) 2015-2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -22,26 +21,11 @@
 -include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/oz/oz_groups.hrl").
 
-% @todo currently unused - every time taken from OZ
-%% Key under which default space is stored in session memory.
--define(DEFAULT_SPACE_KEY, default_space).
 
 %% API
 -export([init/0, terminate/0]).
 -export([find/2, find_all/1, find_query/2]).
 -export([create_record/2, update_record/3, delete_record/2]).
-
-
-%%% @todo dev
--export([support/1]).
-support(Token) ->
-    {ok, SpaceId} = oz_providers:support_space(provider, [
-        {<<"token">>, Token}, {<<"size">>, <<"10000000">>}
-    ]),
-    {ok, Storage} = storage:get_by_name(<<"/mnt/st1">>),
-    StorageId = storage:id(Storage),
-    {ok, _} = space_storage:add(SpaceId, StorageId).
-
 
 %%%===================================================================
 %%% API functions
@@ -54,7 +38,6 @@ support(Token) ->
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    op_gui_utils:register_backend(?MODULE, self()),
     ok.
 
 
@@ -65,7 +48,6 @@ init() ->
 %%--------------------------------------------------------------------
 -spec terminate() -> ok.
 terminate() ->
-    op_gui_utils:unregister_backend(?MODULE, self()),
     ok.
 
 
@@ -83,7 +65,6 @@ find(<<"space">>, SpaceDirIds) ->
         end, SpaceDirIds),
     {ok, Res};
 
-
 find(<<"space-user-permission">>, AssocIds) ->
     Res = lists:map(
         fun(AssocId) ->
@@ -91,14 +72,12 @@ find(<<"space-user-permission">>, AssocIds) ->
         end, AssocIds),
     {ok, Res};
 
-
-find(<<"space-user">>, UserIds) ->
+find(<<"space-user">>, AssocIds) ->
     Res = lists:map(
-        fun(UserId) ->
-            space_user_record(UserId)
-        end, UserIds),
+        fun(AssocId) ->
+            space_user_record(AssocId)
+        end, AssocIds),
     {ok, Res};
-
 
 find(<<"space-group-permission">>, AssocIds) ->
     Res = lists:map(
@@ -107,12 +86,11 @@ find(<<"space-group-permission">>, AssocIds) ->
         end, AssocIds),
     {ok, Res};
 
-
-find(<<"space-group">>, GroupIds) ->
+find(<<"space-group">>, AssocIds) ->
     Res = lists:map(
-        fun(GroupId) ->
-            space_group_record(GroupId)
-        end, GroupIds),
+        fun(AssocId) ->
+            space_group_record(AssocId)
+        end, AssocIds),
     {ok, Res}.
 
 
@@ -124,11 +102,12 @@ find(<<"space-group">>, GroupIds) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"space">>) ->
-    UserId = op_gui_utils:get_user_id(),
+    UserId = g_session:get_user_id(),
     {ok, SpaceIds} = onedata_user:get_spaces(UserId),
     Res = lists:filtermap(
         fun(SpaceId) ->
             try
+                % @TODO Use only OZ space ids!!!
                 SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 {ok, [SpaceData]} = find(<<"space">>, [SpaceDirId]),
                 {true, SpaceData}
@@ -160,7 +139,8 @@ find_query(<<"space">>, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    % todo error handling
+    % @TODO Use space_info create!!!!
+    % @todo error handling
     Name = proplists:get_value(<<"name">>, Data, <<"">>),
     {ok, SpaceId} = oz_users:create_space(UserAuth, [{<<"name">>, Name}]),
     SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
@@ -183,7 +163,8 @@ create_record(<<"space">>, Data) ->
     ok | gui_error:error_result().
 update_record(<<"space">>, SpaceDirId, Data) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
-    % todo error handling
+    % @TODO Use space_info modify!!!!
+    % @todo error handling
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case proplists:get_value(<<"isDefault">>, Data, undefined) of
         undefined ->
@@ -201,7 +182,6 @@ update_record(<<"space">>, SpaceDirId, Data) ->
             oz_spaces:modify_details(UserAuth, SpaceId, [{<<"name">>, NewName}])
     end,
     ok;
-
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
     {UserId, SpaceDirId} = association_to_ids(AssocId),
@@ -223,12 +203,11 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             end
         end, UserPerms, Data),
 
-    Res = oz_spaces:set_user_privileges(UserAuth, SpaceId, UserId, [
+    % @TODO Use space_info modify!!!!
+    oz_spaces:set_user_privileges(UserAuth, SpaceId, UserId, [
         % usort - make sure there are no duplicates
         {<<"privileges">>, lists:usort(NewUserPerms)}
     ]),
-    ?dump(NewUserPerms),
-    ?dump(Res),
     ok.
 
 
@@ -242,6 +221,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
 delete_record(<<"space">>, SpaceDirId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    % @TODO Use space_info delete!!!!
     oz_spaces:remove(UserAuth, SpaceId),
     ok.
 
@@ -250,21 +230,22 @@ delete_record(<<"space">>, SpaceDirId) ->
 %%% Internal functions
 %%%===================================================================
 
-
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space record based on space id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_record(SpaceDirId :: binary()) -> proplists:proplist().
 space_record(SpaceDirId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             name = Name,
-            size = _Size,
             users = UsersAndPerms,
-            groups = GroupsAndPerms,
-            providers = _Providers
+            groups = GroupsAndPerms
         }}} = space_info:get_or_fetch(Auth, SpaceId),
-
-    ?dump(UsersAndPerms),
-    ?dump(GroupsAndPerms),
 
     UserPermissions = lists:map(
         fun({UserId, _UserPerms}) ->
@@ -287,6 +268,13 @@ space_record(SpaceDirId) ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space_user_permission record based on its id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
     {UserId, SpaceDirId} = association_to_ids(AssocId),
@@ -304,6 +292,7 @@ space_user_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceDirId},
+        % @TODO VFS-1860 should be fixed
         % @todo this is assoc id so we can get user details via
         % space REST endpoint (we need space id to do that)
         % This is required when user hasn't logged in in this provider yet
@@ -311,6 +300,13 @@ space_user_permission_record(AssocId) ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space_user record based on its id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_user_record(AssocId :: binary()) -> proplists:proplist().
 space_user_record(AssocId) ->
     {UserId, SpaceDirId} = association_to_ids(AssocId),
     UserName = case onedata_user:get(UserId) of
@@ -330,6 +326,14 @@ space_user_record(AssocId) ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space_group_permission record based on its id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_group_permission_record(AssocId :: binary()) ->
+    proplists:proplist().
 space_group_permission_record(AssocId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
     {GroupId, SpaceDirId} = association_to_ids(AssocId),
@@ -347,6 +351,7 @@ space_group_permission_record(AssocId) ->
     PermsMapped ++ [
         {<<"id">>, AssocId},
         {<<"space">>, SpaceDirId},
+        % @TODO VFS-1860 should be fixed
         % @todo this is assoc id so we can get group details via
         % space REST endpoint (we need space id to do that)
         % This is required when user hasn't logged in in this provider yet
@@ -354,6 +359,13 @@ space_group_permission_record(AssocId) ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns a client-compliant space_group record based on its id.
+%% @end
+%%--------------------------------------------------------------------
+-spec space_group_record(AssocId :: binary()) -> proplists:proplist().
 space_group_record(AssocId) ->
     {GroupId, SpaceDirId} = association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
@@ -374,15 +386,36 @@ space_group_record(AssocId) ->
     ].
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates an associative ID from two IDs which can be easily decoupled later.
+%% @end
+%%--------------------------------------------------------------------
+-spec ids_to_association(FirstId :: binary(), SecondId :: binary()) -> binary().
 ids_to_association(FirstId, SecondId) ->
     <<FirstId/binary, ".", SecondId/binary>>.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Decouples an associative ID into two separate IDs.
+%% @end
+%%--------------------------------------------------------------------
+-spec association_to_ids(AssocId :: binary()) -> {binary(), binary()}.
 association_to_ids(AssocId) ->
     [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
     {FirstId, SecondId}.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns all allowed space permissions.
+%% @end
+%%--------------------------------------------------------------------
+-spec all_space_perms() -> [binary()].
 all_space_perms() -> [
     <<"space_invite_user">>, <<"space_remove_user">>,
     <<"space_invite_group">>, <<"space_remove_group">>,
@@ -392,6 +425,13 @@ all_space_perms() -> [
 ].
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a space permission from internal form to client-compliant form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_db_to_gui(binary()) -> binary().
 perm_db_to_gui(<<"space_invite_user">>) -> <<"permInviteUser">>;
 perm_db_to_gui(<<"space_remove_user">>) -> <<"permRemoveUser">>;
 perm_db_to_gui(<<"space_invite_group">>) -> <<"permInviteGroup">>;
@@ -404,6 +444,13 @@ perm_db_to_gui(<<"space_change_data">>) -> <<"permModifySpace">>;
 perm_db_to_gui(<<"space_view_data">>) -> <<"permViewSpace">>.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Converts a space permission from client-compliant form to internal form.
+%% @end
+%%--------------------------------------------------------------------
+-spec perm_gui_to_db(binary()) -> binary().
 perm_gui_to_db(<<"permInviteUser">>) -> <<"space_invite_user">>;
 perm_gui_to_db(<<"permRemoveUser">>) -> <<"space_remove_user">>;
 perm_gui_to_db(<<"permInviteGroup">>) -> <<"space_invite_group">>;
@@ -414,4 +461,3 @@ perm_gui_to_db(<<"permInviteProvider">>) -> <<"space_add_provider">>;
 perm_gui_to_db(<<"permRemoveProvider">>) -> <<"space_remove_provider">>;
 perm_gui_to_db(<<"permModifySpace">>) -> <<"space_change_data">>;
 perm_gui_to_db(<<"permViewSpace">>) -> <<"space_view_data">>.
-
