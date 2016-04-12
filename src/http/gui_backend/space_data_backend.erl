@@ -377,7 +377,7 @@ space_group_record(AssocId) ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
             {ok, #group_details{
                 name = Name
-            }} = oz_spaces:get_user_details(CurrentUserAuth, SpaceId, GroupId),
+            }} = oz_spaces:get_group_details(CurrentUserAuth, SpaceId, GroupId),
             Name
     end,
     [
