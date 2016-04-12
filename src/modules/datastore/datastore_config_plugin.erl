@@ -25,6 +25,7 @@
 %%--------------------------------------------------------------------
 -spec models() -> Models :: [model_behaviour:model_type()].
 models() -> [
+    subscriptions_state,
     subscription,
     session,
     onedata_user,
@@ -34,10 +35,12 @@ models() -> [
     storage,
     file_location,
     xattr,
+    provider_info,
     space_info,
     space_storage,
     ceph_user,
     s3_user,
     dbsync_state,
+    files_to_chown,
     posix_user
 ].

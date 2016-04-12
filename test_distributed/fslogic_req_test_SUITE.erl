@@ -63,7 +63,6 @@ fslogic_get_file_attr_test(Config) ->
 
     {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
     {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    {SessId5, _UserId5} = {?config({session_id, 5}, Config), ?config({user_id, 5}, Config)},
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
@@ -80,8 +79,7 @@ fslogic_get_file_attr_test(Config) ->
         {SessId1, <<"space_id1">>, 8#1770, 0, <<"/spaces/space_name1">>},
         {SessId2, <<"space_id2">>, 8#1770, 0, <<"/spaces/space_name2">>},
         {SessId1, <<"space_id3">>, 8#1770, 0, <<"/spaces/space_name3">>},
-        {SessId5, <<"space_id5">>, 8#1770, 0, <<"/spaces/space_name#space_id5">>},
-        {SessId5, <<"space_id6">>, 8#1770, 0, <<"/spaces/space_name#space_id6">>}
+        {SessId2, <<"space_id4">>, 8#1770, 0, <<"/spaces/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/t1_dir">>}}
@@ -150,7 +148,6 @@ fslogic_read_dir_test(Config) ->
     {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
     {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
     {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
-    {SessId5, _UserId5} = {?config({session_id, 5}, Config), ?config({user_id, 5}, Config)},
 
     ValidateReadDir = fun({SessId, Path, NameList}) ->
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
@@ -194,32 +191,11 @@ fslogic_read_dir_test(Config) ->
         {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME]},
         {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME]},
         {SessId3, <<"/">>, [?SPACES_BASE_DIR_NAME]},
-        {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]},
-        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME]}
-    ]),
-
-    ValidateReadDir2 = fun({SessId, Path, Offset, Size, ExpectedNames}) ->
-        FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
-        #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} =
-            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-
-        Response = ?req(Worker, SessId, #get_file_children{uuid = FileUUID, offset = Offset, size = Size}),
-        #fuse_response{fuse_response = #file_children{child_links = Links}} =
-            ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
-
-        RespNames = lists:map(fun(#child_link{name = Name}) -> Name end, Links),
-        ?assertEqual(ExpectedNames, lists:sort(RespNames))
-    end,
-
-    lists:foreach(ValidateReadDir2, [
-        {SessId5, <<"/spaces">>, 0, 1, [<<"space_name">>]},
-        {SessId5, <<"/spaces">>, 1, 1, [<<"space_name">>]},
-        {SessId5, <<"/spaces">>, 0, 2, [<<"space_name#space_id5">>, <<"space_name#space_id6">>]}
+        {SessId4, <<"/">>, [?SPACES_BASE_DIR_NAME]}
     ]),
 
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
-    RootUUID5 = get_uuid_privileged(Worker, SessId5, <<"/">>),
 
     lists:foreach(fun({SessId, RootUUID, Dirs}) ->
         lists:foreach(fun(Name) ->
@@ -229,19 +205,18 @@ fslogic_read_dir_test(Config) ->
         end, Dirs)
     end, [
         {SessId1, RootUUID1, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
-        {SessId2, RootUUID2, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
-        {SessId5, RootUUID5, [<<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]}
+        {SessId2, RootUUID2, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]}
     ]),
 
     lists:foreach(ValidateReadDir, [
         {SessId1, <<"/spaces/space_name1">>, [<<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
         {SessId1, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
         {SessId2, <<"/spaces/space_name2">>, [<<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
-        {SessId5, <<"/spaces/space_name#space_id5">>, [<<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]},
         {SessId1, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir11">>, <<"t3_dir12">>, <<"t3_dir13">>, <<"t3_dir14">>, <<"t3_dir15">>]},
-        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]},
-        {SessId5, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir51">>, <<"t3_dir52">>, <<"t3_dir53">>, <<"t3_dir54">>, <<"t3_dir55">>]}
-    ]).
+        {SessId2, <<"/">>, [?SPACES_BASE_DIR_NAME, <<"t3_dir21">>, <<"t3_dir22">>, <<"t3_dir23">>, <<"t3_dir24">>, <<"t3_dir25">>]}
+    ]),
+
+    ok.
 
 chmod_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
@@ -501,7 +476,7 @@ update_times_test(Config) ->
         end, [SessId1, SessId2, SessId3, SessId4]).
 
 
-%% Get uuid of given by path file. Possible as root to bypass permissions checks.
+%% Get uuid of given by path file. Possible as a space member to bypass permissions checks.
 get_uuid_privileged(Worker, SessId, Path) ->
     SessId1 = case Path of
                   <<"/">> ->
@@ -509,7 +484,8 @@ get_uuid_privileged(Worker, SessId, Path) ->
                   <<"/spaces">> ->
                       SessId;
                   _ ->
-                      ?ROOT_SESS_ID
+                      {ok, [_, _, SpaceName | _]} = fslogic_path:verify_file_path(Path),
+                      hd(get(SpaceName))
               end,
     get_uuid(Worker, SessId1, Path).
 
@@ -532,12 +508,12 @@ end_per_suite(Config) ->
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, fslogic_utils),
-    test_utils:mock_expect(Workers, fslogic_utils, get_storage_type, fun(_) -> ?DIRECTIO_HELPER_NAME end),
+    test_utils:mock_new(Workers, luma_utils),
+    test_utils:mock_expect(Workers, luma_utils, get_storage_type, fun(_) -> ?DIRECTIO_HELPER_NAME end),
     initializer:communicator_mock(Workers),
     initializer:create_test_users_and_spaces(Config).
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces(Config),
-    test_utils:mock_validate_and_unload(Workers, communicator).
+    test_utils:mock_validate_and_unload(Workers, [communicator, luma_utils]).

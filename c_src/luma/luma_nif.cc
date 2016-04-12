@@ -1,9 +1,10 @@
 #include "../nifpp.h"
-#include <string>
 
-#include <rados/librados.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
+#include <rados/librados.hpp>
+
+#include <string>
 
 extern "C" {
 
@@ -63,9 +64,9 @@ static ERL_NIF_TERM create_ceph_user_nif(
     std::vector<std::string> strs;
     boost::split(strs, out, boost::is_any_of("\n "));
 
-    return nifpp::make(env, std::make_tuple(nifpp::str_atom{"ok"},
-                                std::make_tuple(ceph_user_name,
-                                                strs[strs.size() - 2])));
+    return nifpp::make(
+        env, std::make_tuple(nifpp::str_atom{"ok"},
+                 std::make_tuple(ceph_user_name, strs[strs.size() - 2])));
 }
 
 static ErlNifFunc nif_funcs[] = {{"create_ceph_user", 6, create_ceph_user_nif}};

@@ -8,6 +8,12 @@
  * @license This software is released under the MIT license cited in 'LICENSE.txt'.
 */
 export default {
+  common: {
+    modal: {
+      ok: 'OK',
+      cancel: 'Cancel'
+    }
+  },
   components: {
     topBar: {
       logout: 'Log out',
@@ -21,7 +27,8 @@ export default {
       trash: 'trash',
       spaces: 'spaces',
       groups: 'groups',
-      token: 'token'
+      token: 'tokens',
+      providers: 'providers'
     },
     spacesMenu: {
       title: 'spaces',
@@ -41,6 +48,53 @@ export default {
       removeGroup: 'remove group',
       inviteProvider: 'invite provider',
       removeProvider: 'remove provider',
+    },
+    // data
+    dataFilesTree: {
+      rootDirectory: 'Root directory'
+    },
+    dataFilesList: {
+      files: 'files',
+      size: 'size',
+      modification: 'modification',
+      permissions: 'permissions'
+    },
+    dataFilesListToolbar: {
+      tooltip: {
+        createDir: 'Create directory',
+        createFile: 'Create file',
+        shareFile: 'Share element',
+        uploadFile: 'Upload file',
+        rename: 'Rename element',
+        permissions: 'Change element permissions',
+        copy: 'Copy element',
+        cut: 'Cut element',
+        remove: 'Remove element'
+      },
+      renameFileModal: {
+        title: 'Rename file or directory',
+        enterName: 'Rename the item "{{currentName}}" to:'
+      },
+      createDirModal: {
+        title: 'New directory',
+        enterName: 'Enter new directory name:'
+      },
+      createFileModal: {
+        title: 'New file',
+        enterName: 'Enter new file name:'
+      },
+      removeFilesModal: {
+        title: 'Remove files',
+        text: 'Do you want to remove selected files?'
+      },
+      editPermissionsModal: {
+        title: 'Edit permissions',
+        text: 'Enter new file permissions code:'
+      },
+    },
+    fileUpload: {
+      titleUpload: 'Uploading {{count}} file(s)',
+      cancelAll: 'Cancel all',
     }
   },
   spaces: {
@@ -52,5 +106,8 @@ export default {
         tableTitle: 'groups'
       },
     }
+  },
+  data: {
+    rootDirectory: 'Root directory'
   }
 };

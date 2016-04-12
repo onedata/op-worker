@@ -1,23 +1,23 @@
+#include "../nifpp.h"
 #include "helpers/storageHelperFactory.h"
 
-#include <asio/executor_work.hpp>
 #include <asio.hpp>
+#include <asio/executor_work.hpp>
 
-#include <string>
-#include <memory>
-#include <vector>
-#include <random>
-#include <tuple>
 #include <map>
+#include <memory>
+#include <random>
 #include <sstream>
+#include <string>
 #include <system_error>
+#include <tuple>
 #include <unordered_map>
-#include "nifpp.h"
+#include <vector>
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <pwd.h>
 #include <grp.h>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 namespace {
 /**
@@ -384,8 +384,8 @@ void handle_value(NifCTX &ctx, asio::mutable_buffer buffer)
     asio::buffer_copy(asio::mutable_buffer{bin.data, bin.size}, buffer);
     enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
         nifpp::make(ctx.localEnv,
-                  std::make_tuple(ctx.reqId,
-                        std::make_tuple(ok, nifpp::make(ctx.localEnv, bin)))));
+            std::make_tuple(ctx.reqId,
+                std::make_tuple(ok, nifpp::make(ctx.localEnv, bin)))));
 }
 
 /**
@@ -399,7 +399,7 @@ void handle_value(NifCTX &ctx, struct stat &s)
             s.st_atime, s.st_mtime, s.st_ctime, s.st_blksize, s.st_blocks);
     enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
         nifpp::make(ctx.localEnv,
-                  std::make_tuple(ctx.reqId, std::make_tuple(ok, record))));
+            std::make_tuple(ctx.reqId, std::make_tuple(ok, record))));
 }
 
 /**
@@ -409,7 +409,7 @@ template <class T> void handle_value(NifCTX &ctx, T &response)
 {
     enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
         nifpp::make(ctx.localEnv,
-                  std::make_tuple(ctx.reqId, std::make_tuple(ok, response))));
+            std::make_tuple(ctx.reqId, std::make_tuple(ok, response))));
 }
 
 /**
@@ -436,8 +436,8 @@ template <class... T> void handle_result(NifCTX ctx, error_t e, T... value)
             reason = it->second;
 
         enif_send(nullptr, &ctx.reqPid, ctx.localEnv,
-            nifpp::make(ctx.localEnv, std::make_tuple(ctx.reqId,
-                                          std::make_tuple(error, reason))));
+            nifpp::make(ctx.localEnv,
+                std::make_tuple(ctx.reqId, std::make_tuple(error, reason))));
     }
 }
 
@@ -462,9 +462,9 @@ ERL_NIF_TERM set_threads_number(
                         service, workers, result->second)) {
                     return nifpp::make(
                         env, std::make_tuple(error,
-                                 std::make_tuple(nifpp::str_atom(
-                                                     "wrong_thread_number"),
-                                                 name, result->second)));
+                                 std::make_tuple(
+                                     nifpp::str_atom("wrong_thread_number"),
+                                     name, result->second)));
                 }
             }
         }
@@ -663,9 +663,8 @@ ERL_NIF_TERM write(
     auto sData = std::make_shared<std::string>(std::move(data));
     ctx.helperObj->ash_write(ctx.helperCTX, file,
         asio::const_buffer(sData->data(), sData->size()), offset, "",
-        [ctx, file, offset, sData](int size, error_t e) {
-            handle_result(ctx, e, size);
-        });
+        [ctx, file, offset, sData](
+            int size, error_t e) { handle_result(ctx, e, size); });
 
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
@@ -702,9 +701,9 @@ static int load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
     return !(nifpp::register_resource<helper_ptr>(env, nullptr, "helper_ptr") &&
         nifpp::register_resource<helper_ctx_ptr>(
-                 env, nullptr, "helper_ctx_ptr") &&
+            env, nullptr, "helper_ctx_ptr") &&
         nifpp::register_resource<fuse_file_info>(
-                 env, nullptr, "fuse_file_info"));
+            env, nullptr, "fuse_file_info"));
 }
 
 static ERL_NIF_TERM sh_set_threads_number(

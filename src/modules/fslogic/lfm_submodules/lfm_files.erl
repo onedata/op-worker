@@ -17,6 +17,7 @@
 -include("modules/fslogic/lfm_internal.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include("timeouts.hrl").
 
@@ -24,8 +25,8 @@
 %% Functions operating on directories or files
 -export([exists/1, mv/2, cp/2, get_parent/2, get_file_path/2]).
 %% Functions operating on files
--export([create/3, open/3, fsync/1, write/3, write_without_events/3, read/3,
-    read_without_events/3, truncate/2, truncate/3, get_block_map/1,
+-export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
+    read/3, read_without_events/3, truncate/2, truncate/3, get_block_map/1,
     get_block_map/2, unlink/1, unlink/2]).
 
 -compile({no_auto_import, [unlink/1]}).
@@ -120,6 +121,18 @@ unlink(SessId, FileEntry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates a new file with default mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(SessId :: session:id(), Path :: file_meta:path()) ->
+    {ok, file_meta:uuid()} | logical_file_manager:error_reply().
+create(SessId, Path) ->
+    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+    create(SessId, Path, DefaultMode).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates a new file.
 %% @end
 %%--------------------------------------------------------------------
@@ -130,7 +143,7 @@ create(SessId, Path, Mode) ->
     CTX = fslogic_context:new(SessId),
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalPath} = file_meta:gen_path(Entry),
+    {ok, CanonicalPath} = fslogic_path:gen_path(Entry, SessId),
     {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
     case file_meta:resolve_path(ParentPath) of
         {ok, {#document{key = ParentUUID}, _}} ->

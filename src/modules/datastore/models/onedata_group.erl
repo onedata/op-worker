@@ -23,7 +23,7 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/2, get_or_fetch/2]).
+-export([fetch/2, get_or_fetch/2, create_or_update/2]).
 
 -export_type([id/0]).
 
@@ -124,16 +124,36 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Fetch group from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}, GroupId) ->
     try
+        Client = {user, {Macaroon, DMacaroons}},
         {ok, #group_details{id = Id, name = Name}} =
-            oz_groups:get_details({user, {Macaroon, DMacaroons}}, GroupId),
+            oz_groups:get_details(Client, GroupId),
+        {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
+        {ok, UserIds} = oz_groups:get_users(Client, Id),
+        UsersWithPrivileges = utils:pmap(fun(UID) ->
+            {ok, Privileges} = oz_groups:get_user_privileges(Client, Id, UID),
+            {UID, Privileges}
+        end, UserIds),
+
         %todo consider getting user_details for each group member and storing it as onedata_user
-        OnedataGroupDoc = #document{key = Id, value = #onedata_group{name = Name}},
+        OnedataGroupDoc = #document{key = Id, value = #onedata_group{
+            users = UsersWithPrivileges, spaces = SpaceIds, name = Name}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
         {ok, OnedataGroupDoc}
     catch
