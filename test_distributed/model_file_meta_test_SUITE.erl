@@ -375,7 +375,7 @@ end_per_suite(Config) ->
 
 space_info_mock(Workers, SpaceName) ->
     test_utils:mock_new(Workers, space_info),
-    test_utils:mock_expect(Workers, space_info, fetch, fun(_, _) ->
+    test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _) ->
         {ok, #document{value = #space_info{name = SpaceName}}}
     end).
 
