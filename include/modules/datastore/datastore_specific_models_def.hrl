@@ -52,7 +52,7 @@
     space_ids :: [binary()],
     group_ids :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],
-    alias :: string() | integer() | binary(),
+    alias :: binary(),
     email_list :: [binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).

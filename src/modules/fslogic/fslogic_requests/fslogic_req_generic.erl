@@ -147,12 +147,21 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                          FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 delete(CTX, File) ->
-    case file_meta:get(File) of
+    FuseResponse = case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
             delete_dir(CTX, FileDoc);
         {ok, FileDoc} ->
             delete_file(CTX, FileDoc)
-    end.
+    end,
+    case FuseResponse of
+        #fuse_response{status = #status{code = ?OK}} ->
+            {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, File),
+            fslogic_event:emit_file_removal(UUID);
+        _ ->
+            ok
+    end,
+    FuseResponse.
+
 
 
 %%--------------------------------------------------------------------
