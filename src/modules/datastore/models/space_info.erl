@@ -12,15 +12,17 @@
 -author("Krzysztof Trzepla").
 -behaviour(model_behaviour).
 
+-include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_specific_models_def.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_model.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([fetch/2, create_or_update/2, get_or_fetch/2]).
+-export([create_or_update/2, get_or_fetch/2, get_or_fetch/3]).
 
 %% model_behaviour callbacks
--export([save/1, get/1, list/0, exists/1, delete/1, update/2, create/1, model_init/0,
+-export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
     'after'/5, before/4]).
 
 -type id() :: binary().
@@ -70,15 +72,6 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list() -> {ok, [datastore:document()]} | datastore:generic_error() | no_return().
-list() ->
-    datastore:list(?STORE_LEVEL, ?MODEL_NAME, ?GET_ALL, []).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% {@link model_behaviour} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
@@ -102,7 +95,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec model_init() -> model_behaviour:model_config().
 model_init() ->
-    ?MODEL_CONFIG(space_info_bucket, [], ?GLOBAL_ONLY_LEVEL).
+    ?MODEL_CONFIG(space_info_bucket, [], ?GLOBALLY_CACHED_LEVEL).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -142,44 +135,138 @@ create_or_update(Doc, Diff) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get user from cache or fetch from OZ and save in cache.
+%% Gets space info from the database in user context associated with session.
+%% If space info is not found fetches it from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Client :: oz_endpoint:client(), datastore:key()) ->
+-spec get_or_fetch(SessId :: session:id(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Client, Key) ->
-    case space_info:get(Key) of
-        {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Client, Key);
-        Error -> Error
-    end.
+get_or_fetch(?ROOT_SESS_ID, SpaceId) ->
+    fetch(provider, SpaceId, ?ROOT_USER_ID);
+get_or_fetch(SessId, SpaceId) ->
+    {ok, #document{value = #session{
+        auth = #auth{macaroon = Macaroon, disch_macaroons = DischMacaroons},
+        identity = #identity{user_id = UserId}
+    }}} = session:get(SessId),
+    fetch({user, {Macaroon, DischMacaroons}}, SpaceId, UserId).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Fetches space details from Global Registry and stores them in database.
+%% Gets space info from the database in user context. If space info is not found
+%% fetches it from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
+-spec get_or_fetch(Client :: oz_endpoint:client(), SpaceId :: binary(),
+    UserId :: onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(Client, SpaceId, UserId) ->
+    case get(SpaceId, UserId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, {not_found, _}} -> fetch(Client, SpaceId, UserId);
+        Error -> Error
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets space info from the database in user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(SpaceId :: binary(), UserId :: onedata_user:id()) ->
     {ok, datastore:document()} | datastore:get_error().
-fetch(Client, SpaceId) ->
-    {ok, #space_details{id = Id, name = Name, providers_supports = Supports}} =
-        oz_spaces:get_details(Client, SpaceId),
-    {ok, GroupIds} = oz_spaces:get_groups(Client, Id),
-    {ok, UserIds} = oz_spaces:get_users(Client, Id),
+get(SpaceId, UserId) ->
+    case datastore:fetch_link(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, UserId) of
+        {ok, {LinkKey, _}} -> space_info:get(LinkKey);
+        {error, link_not_found} -> {error, {not_found, ?MODEL_NAME}};
+        {error, Reason} -> {error, Reason}
+    end.
 
-    GroupsWithPrivileges = utils:pmap(fun(GID) ->
-        {ok, Privileges} = oz_spaces:get_group_privileges(Client, Id, GID),
-        {GID, Privileges}
-    end, GroupIds),
-    UsersWithPrivileges = utils:pmap(fun(UID) ->
-        {ok, Privileges} = oz_spaces:get_user_privileges(Client, Id, UID),
-        {UID, Privileges}
-    end, UserIds),
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Fetches space info from onezone in provider context and stores it
+%% in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(SpaceId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+fetch(SpaceId) ->
+    SpaceInfo = get_info(provider, SpaceId),
+    Doc = #document{key = SpaceId, value = SpaceInfo},
+    {ok, _} = save(Doc),
+    {ok, Doc}.
 
-    Doc = #document{key = Id, value = #space_info{
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Fetches space info from onezone in user context and stores it in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch(Client :: oz_endpoint:client(), SpaceId :: binary(),
+    UserId :: onedata_user:id()) -> {ok, datastore:document()} | datastore:get_error().
+fetch(Client, SpaceId, UserId) ->
+    #space_info{
         users = UsersWithPrivileges,
         groups = GroupsWithPrivileges,
         providers_supports = Supports,
-        name = Name}},
-    {ok, _} = space_info:create(Doc),
-    {ok, Doc}.
+        name = Name
+    } = Info = get_info(Client, SpaceId),
+
+    case get(SpaceId, UserId) of
+        {ok, #document{value = SpaceInfo} = Doc} ->
+            NewDoc = Doc#document{value = SpaceInfo#space_info{
+                users = UsersWithPrivileges,
+                groups = GroupsWithPrivileges,
+                providers_supports = Supports,
+                name = Name
+            }},
+            {ok, _} = save(NewDoc),
+            {ok, NewDoc};
+        {error, {not_found, _}} ->
+            {ok, #document{key = ParentKey}} = fetch(SpaceId),
+            Doc = #document{value = Info},
+            {ok, Key} = save(Doc),
+            ok = datastore:add_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME,
+                {UserId, {Key, ?MODEL_NAME}}),
+            {ok, Doc};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets space info from onezone.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_info(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
+    SpaceInfo :: #space_info{}.
+get_info(Client, SpaceId) ->
+    {ok, #space_details{name = Name, providers_supports = Supports}} =
+        oz_spaces:get_details(Client, SpaceId),
+    {ok, GroupIds} = oz_spaces:get_groups(Client, SpaceId),
+    {ok, UserIds} = oz_spaces:get_users(Client, SpaceId),
+
+    GroupsWithPrivileges = utils:pmap(fun(GroupId) ->
+        {ok, Privileges} =
+            oz_spaces:get_group_privileges(Client, SpaceId, GroupId),
+        {GroupId, Privileges}
+    end, GroupIds),
+    UsersWithPrivileges = utils:pmap(fun(UserId) ->
+        {ok, Privileges} =
+            oz_spaces:get_user_privileges(Client, SpaceId, UserId),
+        {UserId, Privileges}
+    end, UserIds),
+
+    #space_info{
+        users = UsersWithPrivileges,
+        groups = GroupsWithPrivileges,
+        providers_supports = Supports,
+        name = Name
+    }.
+

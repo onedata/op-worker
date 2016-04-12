@@ -79,7 +79,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     Offset :: file_meta:offset(), Count :: file_meta:size()) ->
     FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}, {?list_container, 2}]).
-read_dir(CTX, File, Offset, Size) ->
+read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
     UserId = fslogic_context:get_user_id(CTX),
     {ok, #document{key = Key} = FileDoc} = file_meta:get(File),
     {ok, ChildLinks} = file_meta:list_children(FileDoc, Offset, Size),
@@ -123,31 +123,12 @@ read_dir(CTX, File, Offset, Size) ->
                 case Offset < length(SpacesIds) of
                     true ->
                         SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
-                        Spaces = lists:map(fun(SpaceId) ->
-                            {ok, Space} = space_info:get_or_fetch(provider, SpaceId),
-                            Space
-                        end, SpacesIdsChunk),
-
-                        SpaceUuidByName = lists:foldl(fun(Space, Map) ->
-                            #document{key = Id, value = #space_info{name = Name}} = Space,
-                            maps:put(Name, [Id | maps:get(Name, Map, [])], Map)
-                        end, #{}, Spaces),
-
-                        MinDiffPrefLenByName = maps:map(fun
-                            (_, [_]) -> 0;
-                            (_, UUIDs) -> binary:longest_common_prefix(UUIDs) + 1
-                        end, SpaceUuidByName),
-
-                        lists:map(fun(#document{key = Id, value = #space_info{name = Name}}) ->
-                            UUID = fslogic_uuid:spaceid_to_space_dir_uuid(Id),
-                            case maps:find(Name, MinDiffPrefLenByName) of
-                                {ok, 0} ->
-                                    #child_link{uuid = UUID, name = Name};
-                                {ok, Len} ->
-                                    #child_link{uuid = UUID,name = <<Name/binary,
-                                        ?SPACE_NAME_ID_SEPARATOR, Id:Len/binary>>}
-                            end
-                        end, Spaces);
+                        lists:map(fun(SpaceId) ->
+                            SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                            {ok, #document{value = #space_info{name = Name}}} =
+                                space_info:get_or_fetch(SessId, SpaceId),
+                            #child_link{uuid = SpaceUUID, name = Name}
+                        end, SpacesIdsChunk);
                     false ->
                         []
                 end,

@@ -239,7 +239,8 @@ handle_fuse_request(Ctx, #change_mode{uuid = UUID, mode = Mode}) ->
 handle_fuse_request(Ctx, #rename{uuid = UUID, target_path = TargetPath}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(TargetPath),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
-    {ok, CanonicalTargetPath} = file_meta:gen_path(CanonicalFileEntry),
+    #fslogic_ctx{session_id = SessId} = Ctx,
+    {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalFileEntry, SessId),
     fslogic_req_generic:rename(Ctx, {uuid, UUID}, CanonicalTargetPath);
 handle_fuse_request(Ctx, #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, UUID}, ATime, MTime, CTime);

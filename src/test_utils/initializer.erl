@@ -151,7 +151,7 @@ setup_session(_Worker, [], Config) ->
 setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     Self = self(),
 
-    {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
+    {SpaceIds, SpaceNames} = lists:unzip(Spaces),
     {GroupIds, _GroupNames} = lists:unzip(Groups),
 
     Name = fun(Text, Num) -> name(Text, Num) end,
@@ -161,8 +161,15 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     Iden = #identity{user_id = UserId},
     UserName = Name("username", UserNum),
 
+    lists:foreach(fun(SpaceName) ->
+        case get(SpaceName) of
+            undefined -> put(SpaceName, [SessId]);
+            SessIds -> put(SpaceName, [SessId | SessIds])
+        end
+    end, SpaceNames),
+
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Self])),
+        reuse_or_create_fuse_session, [SessId, Iden, #auth{}, Self])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{
@@ -288,9 +295,7 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     Space2 = {<<"space_id2">>, <<"space_name2">>},
     Space3 = {<<"space_id3">>, <<"space_name3">>},
     Space4 = {<<"space_id4">>, <<"space_name4">>},
-    Space5 = {<<"space_id5">>, <<"space_name">>},
-    Space6 = {<<"space_id6">>, <<"space_name">>},
-    Spaces = [Space1, Space2, Space3, Space4, Space5, Space6],
+    Spaces = [Space1, Space2, Space3, Space4],
 
     Group1 = {<<"group_id1">>, <<"group_name1">>},
     Group2 = {<<"group_id2">>, <<"group_name2">>},
@@ -302,15 +307,12 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
     User3 = {3, [Space3, Space4], [Group3, Group4]},
     User4 = {4, [Space4], [Group4]},
-    User5 = {5, [Space5, Space6], []},
 
     SpaceUsers = [
         {<<"space_id1">>, [<<"user_id1">>]},
         {<<"space_id2">>, [<<"user_id1">>, <<"user_id2">>]},
         {<<"space_id3">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>]},
-        {<<"space_id4">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>, <<"user_id4">>]},
-        {<<"space_id5">>, [<<"user_id5">>]},
-        {<<"space_id6">>, [<<"user_id5">>]}
+        {<<"space_id4">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>, <<"user_id4">>]}
     ],
 
     GroupUsers = [
@@ -325,7 +327,7 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     oz_groups_mock_setup(SameDomainWorkers, Groups, GroupUsers),
 
     proplists:compact(
-        initializer:setup_session(Worker, [User1, User2, User3, User4, User5], Config)
+        initializer:setup_session(Worker, [User1, User2, User3, User4], Config)
         ++ create_test_users_and_spaces(Rest, Config)
     ).
 
@@ -379,22 +381,22 @@ name(Text, Num) ->
 oz_spaces_mock_setup(Workers, Spaces, Users) ->
     test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
-        fun(provider, SpaceId) ->
+        fun(_, SpaceId) ->
             SpaceName = proplists:get_value(SpaceId, Spaces),
             {ok, #space_details{id = SpaceId, name = SpaceName}}
         end
     ),
 
     test_utils:mock_expect(Workers, oz_spaces, get_users,
-        fun(provider, SpaceId) ->
+        fun(_, SpaceId) ->
             {ok, proplists:get_value(SpaceId, Users)} end),
     test_utils:mock_expect(Workers, oz_spaces, get_groups,
-        fun(provider, _) -> {ok, []} end),
+        fun(_, _) -> {ok, []} end),
 
     test_utils:mock_expect(Workers, oz_spaces, get_user_privileges,
-        fun(provider, _, _) -> {ok, privileges:space_privileges()} end),
+        fun(_, _, _) -> {ok, privileges:space_privileges()} end),
     test_utils:mock_expect(Workers, oz_spaces, get_group_privileges,
-        fun(provider, _, _) -> {ok, privileges:group_privileges()} end).
+        fun(_, _, _) -> {ok, privileges:group_privileges()} end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -415,13 +417,13 @@ oz_groups_mock_setup(Workers, Groups, Users) ->
     ),
 
     test_utils:mock_expect(Workers, oz_groups, get_users,
-        fun({user, _}, GroupId) ->
+        fun(_, GroupId) ->
             {ok, proplists:get_value(GroupId, Users)} end),
     test_utils:mock_expect(Workers, oz_groups, get_spaces,
-        fun({user, _}, _) -> {ok, []} end),
+        fun(_, _) -> {ok, []} end),
 
     test_utils:mock_expect(Workers, oz_groups, get_user_privileges,
-        fun({user, _}, _, _) -> {ok, privileges:space_privileges()} end).
+        fun(_, _, _) -> {ok, privileges:space_privileges()} end).
 
 %%--------------------------------------------------------------------
 %% @private
