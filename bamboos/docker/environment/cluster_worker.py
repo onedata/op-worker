@@ -19,8 +19,8 @@ class ClusterWorkerConfigurator:
     def tweak_config(self, cfg, uid, instance):
         return cfg
 
-    def pre_start_commands(self, bindir, config, domain, worker_ips):
-        return ''
+    def pre_start_commands(self, domain):
+        return 'escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json'
 
     def configure_started_instance(self, bindir, instance, config, container_ids, output,
                                    storages_dockers):

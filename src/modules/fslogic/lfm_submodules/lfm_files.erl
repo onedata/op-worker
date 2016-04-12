@@ -143,7 +143,7 @@ create(SessId, Path, Mode) ->
     CTX = fslogic_context:new(SessId),
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalPath} = file_meta:gen_path(Entry),
+    {ok, CanonicalPath} = fslogic_path:gen_path(Entry, SessId),
     {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
     case file_meta:resolve_path(ParentPath) of
         {ok, {#document{key = ParentUUID}, _}} ->

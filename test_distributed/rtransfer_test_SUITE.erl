@@ -24,9 +24,10 @@
 -export([less_than_block_fetch_test/1, exact_block_size_fetch_test/1,
     more_than_block_fetch_test/1, more_than_block_fetch_test2/1, cancel_fetch_test/1,
     error_open_fun_test/1, error_read_fun_test/1, error_write_fun_test/1, many_requests_test/1,
-    many_requests_to_one_file/1, request_bigger_than_file_test/1, offset_greater_than_file_size_test/1]).
+    many_same_requests_test/1, many_requests_to_one_file/1, request_bigger_than_file_test/1,
+    offset_greater_than_file_size_test/1]).
 
--export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1, data_counter/1]).
+-export([read_fun/1, write_fun/1, counter/1, onCompleteCounter/1, data_counter/2]).
 
 all() ->
     ?ALL([
@@ -37,6 +38,7 @@ all() ->
         %% TODO - uncomment below test after resolving VFS-1573
         %% cancel_fetch_test,
         many_requests_test,
+        many_same_requests_test,
         many_requests_to_one_file,
         %% TODO - uncomment below 3 tests after resolving VFS-1574
         %% error_open_fun_test,
@@ -222,7 +224,7 @@ many_requests_test(Config) ->
     DataSize = 32,
     RequestsNum = 1000,
     Data = generate_binary(DataSize),
-    CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0}]),
+    CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0, reason => []}]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
@@ -232,6 +234,32 @@ many_requests_test(Config) ->
     ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
     ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
     Refs = generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize),
+    fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
+
+    timer:sleep(?SLEEP_TIMEOUT),
+    stop_counter(CounterPid),
+    %% then
+    ?assertReceivedMatch(
+        {counterOnComplete, {ok, RequestsNum}, {errors, 0}}, ?TIMEOUT).
+
+many_same_requests_test(Config) ->
+    %% test fetching many files
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+
+    %% given
+    DataSize = 32,
+    RequestsNum = 1000,
+    Data = generate_binary(DataSize),
+    CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0, reason => []}]),
+    WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
+    ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
+    RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
+    RtransferOpts2 = [ReadFunOpt, WriteFunOpt, get_binding(Worker2) | ?DEFAULT_RTRANSFER_OPTS],
+
+    %% when
+    ?assertMatch({ok, _}, start_rtransfer(Worker1, RtransferOpts1)),
+    ?assertMatch({ok, _}, start_rtransfer(Worker2, RtransferOpts2)),
+    Refs = generate_many_same_requests(RequestsNum, Worker1, Worker2, DataSize),
     fetch_many(Refs, Worker1, notify_fun(), on_complete_fun(CounterPid)),
 
     timer:sleep(?SLEEP_TIMEOUT),
@@ -251,7 +279,7 @@ many_requests_to_one_file(Config) ->
     %% should be 511 requests
     RequestsNum = DataSize div Chunk + (DataSize - 1) div Chunk,
     Data = generate_binary(DataSize),
-    CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0}]),
+    CounterPid = spawn(?MODULE, onCompleteCounter, [#{ok => 0, errors => 0, reason => []}]),
     WriteFunOpt = make_opt_fun(write_fun, {ok, ?FILE_HANDLE2, DataSize}),
     ReadFunOpt = make_opt_fun(read_fun, {ok, ?FILE_HANDLE2, Data}),
     RtransferOpts1 = [ReadFunOpt, WriteFunOpt, get_binding(Worker1) | ?DEFAULT_RTRANSFER_OPTS],
@@ -367,9 +395,9 @@ request_bigger_than_file_test(Config) ->
     %% given
     DataSize = 8 * ?TEST_BLOCK_SIZE,
     %% offset is bigger than DataSize
-    Offset = DataSize div 3,
-    SizeToFetch = DataSize - Offset,
-    DataCounterPid = spawn(?MODULE, data_counter, [SizeToFetch]),
+    RequestOffset = DataSize div 3,
+    SizeToFetch = DataSize - RequestOffset,
+    DataCounterPid = spawn(?MODULE, data_counter, [DataSize, SizeToFetch]),
     CounterPid = spawn(?MODULE, counter, [0]),
 
     WriteFunOpt = {write_fun,
@@ -380,8 +408,8 @@ request_bigger_than_file_test(Config) ->
     %% read_fun that will simulate subsequent reads from file
     %% last read will return <<"">> when it reaches end of file
     ReadFunOpt = {read_fun,
-        fun(_Handle, _Offset, Size) ->
-            DataCounterPid ! {self(), request, Size},
+        fun(_Handle, Offset, Size) ->
+            DataCounterPid ! {self(), request, Offset, Size},
             ReadSize = receive
                 {data_counter, Return} -> Return
             end,
@@ -394,7 +422,7 @@ request_bigger_than_file_test(Config) ->
 
     %% when
     prepare_rtransfer({Worker1, RtransferOpts1}, {Worker2, RtransferOpts2},
-        ?TEST_FILE_UUID, Offset, DataSize, notify_fun(CounterPid), on_complete_fun(self())
+        ?TEST_FILE_UUID, RequestOffset, DataSize, notify_fun(CounterPid), on_complete_fun(self())
     ),
 
     ?assertReceivedMatch({on_complete, {ok, SizeToFetch}}, ?TIMEOUT),
@@ -531,31 +559,48 @@ counter(State) ->
 stop_counter(CounterPid) ->
     CounterPid ! {return, self()}.
 
-data_counter(ActualSize) ->
+data_counter(DataSize, ActualSize) ->
     receive
-        {Pid, request, RequestedSize} when RequestedSize >= ActualSize ->
-            Pid ! {data_counter, ActualSize},
-            data_counter(0);
-        {Pid, request, RequestedSize} ->
-            Pid ! {data_counter, RequestedSize},
-            data_counter(ActualSize - RequestedSize)
+        {Pid, request, Offset, RequestedSize} when RequestedSize >= ActualSize ->
+            AvailableSize = erlang:max(erlang:min(DataSize - Offset, ActualSize), 0),
+            Pid ! {data_counter, AvailableSize},
+            data_counter(DataSize, ActualSize - AvailableSize);
+        {Pid, request, Offset, RequestedSize} ->
+            AvailableSize = erlang:max(erlang:min(DataSize - Offset, RequestedSize), 0),
+            Pid ! {data_counter, AvailableSize},
+            data_counter(DataSize, ActualSize - AvailableSize)
     end.
 
-onCompleteCounter(#{ok := OK, errors := Errors} = State) ->
+onCompleteCounter(#{ok := OK, errors := Errors, reason := Reason} = State) ->
     receive
         {on_complete, {ok, _DataSize}} ->
             onCompleteCounter(State#{ok => OK + 1});
-        {on_complete, {error, _Error}} ->
-            onCompleteCounter(State#{errors => Errors + 1});
+        {on_complete, {error, Error}} ->
+            onCompleteCounter(State#{errors => Errors + 1, reason => [Error | Reason]});
         {return, Pid} ->
-            Pid ! {counterOnComplete, {ok, maps:get(ok, State)}, {errors, maps:get(errors, State)}}
+            case maps:get(errors, State) of
+                0 ->
+                    Pid ! {counterOnComplete, {ok, maps:get(ok, State)},
+                        {errors, maps:get(errors, State)}};
+                _ ->
+                    Pid ! {counterOnComplete, {ok, maps:get(ok, State)},
+                        {errors, maps:get(errors, State)}, {reason, Reason}}
+            end
     end.
 
 generate_requests_to_many_files(RequestsNum, Worker1, Worker2, DataSize) ->
     [
         remote_apply(Worker1, rtransfer, prepare_request,
-            [Worker2, <<?TEST_FILE_UUID/binary, I>>, ?TEST_OFFSET, DataSize])
+            [Worker2, <<?TEST_FILE_UUID/binary, (list_to_binary(integer_to_list(I)))/binary>>,
+                ?TEST_OFFSET, DataSize])
         || I <- lists:seq(1, RequestsNum)
+    ].
+
+generate_many_same_requests(RequestsNum, Worker1, Worker2, DataSize) ->
+    [
+        remote_apply(Worker1, rtransfer, prepare_request,
+            [Worker2, <<?TEST_FILE_UUID/binary>>, ?TEST_OFFSET, DataSize])
+        || _ <- lists:seq(1, RequestsNum)
     ].
 
 generate_requests_to_one_file(RequestsNum, Worker1, Worker2, Chunk) ->
