@@ -25,8 +25,6 @@
 -define(SPACES_BASE_DIR_UUID, base64:encode(?SPACES_BASE_DIR_NAME)).
 -define(DIRECTORY_SEPARATOR, "/").
 -define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
-%% Separator between space name and ID used in case of space name clash
--define(SPACE_NAME_ID_SEPARATOR, "#").
 
 %% Context definition
 -record(fslogic_ctx, {
@@ -36,6 +34,8 @@
 }).
 
 %% root user definitions
+-define(ROOT_DIR_UUID, <<"">>).
+-define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 -define(ROOT_SESS, #session{identity = #identity{user_id = ?ROOT_USER_ID}}).

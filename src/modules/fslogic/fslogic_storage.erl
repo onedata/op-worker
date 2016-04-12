@@ -110,6 +110,7 @@ new_storage(Name, Helpers) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns luma module to use based on config
 %% @end
