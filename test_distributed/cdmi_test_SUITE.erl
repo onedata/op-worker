@@ -447,22 +447,22 @@ metadata_test(Config) ->
     UserName1 = ?config({user_name, 1}, Config),
     FileName2 = "acl_test_file.txt",
     Ace1 = [
-        {<<"acetype">>, ?allow},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?read}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
     ],
     Ace2 = [
-        {<<"acetype">>, ?deny},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, <<(?read)/binary, ", ", (?execute)/binary>>}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask bor ?execute_mask)}
     ],
     Ace3 = [
-        {<<"acetype">>, ?allow},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?write}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
     ],
 
     create_file(Config, FileName2),
@@ -489,10 +489,10 @@ metadata_test(Config) ->
 
     %%-- create forbidden by acl ---
     Ace4 = [
-        {<<"acetype">>, ?deny},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?deny_mask)},
         {<<"identifier">>, <<UserName1/binary, "#", UserId1/binary>>},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?write}],
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}],
     RequestBody18 = [{<<"metadata">>, [{<<"cdmi_acl">>, [Ace1, Ace4]}]}],
     RawRequestBody18 = json_utils:encode(RequestBody18),
     RequestHeaders18 = [user_1_token_header(), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
@@ -1245,22 +1245,12 @@ copy_move_test(Config) ->
     ?assertEqual(FileData, get_file_content(Config, FileName)),
     RequestHeaders3 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     RequestBody3 = json_utils:encode([{<<"move">>, list_to_binary(FileName)}]),
-    tracer:start([Worker]),
-    tracer:trace_calls(logical_file_manager),
-    tracer:trace_calls(fslogic_req_generic),
-    tracer:trace_calls(fslogic_req_regular),
-    tracer:trace_calls(storage_file_manager),
     {ok, Code3, _Headers3, _Response3} = do_request(Worker, NewMoveFileName, put, RequestHeaders3, RequestBody3),
-    tracer:stop(),
     ?assertEqual(201, Code3),
 
     ?assert(not object_exists(Config, FileName)),
     ?assert(object_exists(Config, NewMoveFileName)),
-    ct:print("1"),
-    tracer:start(Worker),
-    tracer:trace_calls(storage_file_manager),
     ?assertEqual(FileData, get_file_content(Config, NewMoveFileName)),
-    tracer:stop().
     %%------------------------------
 
     %%---------- file cp ----------- (copy file, with xattrs and acl)
@@ -1340,7 +1330,7 @@ copy_move_test(Config) ->
     % assert destination files have been created
     ?assert(object_exists(Config, NewDirName2)),
     ?assertEqual({ok, Xattrs}, get_xattrs(Config, NewDirName2)),
-    ?assertEqual({ok, Acl}, get_acl(NewDirName2)),
+    ?assertEqual({ok, Acl}, get_acl(Config, NewDirName2)),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir1"))),
     ?assert(object_exists(Config, filename:join(NewDirName2, "dir2"))),
     ?assert(object_exists(Config, filename:join([NewDirName2, "dir1", "1"]))),
@@ -1432,34 +1422,34 @@ acl_test(Config) ->
     Identifier1 = <<UserName1/binary, "#", UserId1/binary>>,
 
     Read = [
-        {<<"acetype">>, ?allow},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?read}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask)}
     ],
     Write = [
-        {<<"acetype">>, ?allow},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?write}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_mask)}
     ],
     Execute = [
-        {<<"acetype">>, ?allow},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?execute}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?execute_mask)}
     ],
     WriteAcl = [
-        {<<"acetype">>, ?allow},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?write_acl}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?write_acl_mask)}
     ],
     Delete = [
-        {<<"acetype">>, ?allow},
+        {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
         {<<"identifier">>, Identifier1},
-        {<<"aceflags">>, ?no_flags},
-        {<<"acemask">>, ?delete}
+        {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
+        {<<"acemask">>, fslogic_acl:bitmask_to_binary(?delete_mask)}
     ],
 
     MetadataAclRead = json_utils:encode([{<<"metadata">>, [{<<"cdmi_acl">>, [Read, WriteAcl]}]}]),
