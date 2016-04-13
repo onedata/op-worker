@@ -54,7 +54,8 @@
     connected_accounts :: [onedata_user:connected_account()],
     alias :: binary(),
     email_list :: [binary()],
-    revision_history = [] :: [subscriptions:rev()]
+    revision_history = [] :: [subscriptions:rev()],
+    public_only = false ::boolean()
 }).
 
 %% Local, cached version of OZ group
