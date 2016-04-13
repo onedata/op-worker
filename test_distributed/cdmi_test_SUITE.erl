@@ -50,7 +50,8 @@
     partial_upload_test/1,
     acl_test/1,
     errors_test/1,
-    accept_header_test/1
+    accept_header_test/1,
+    copy_move_test/1
 ]).
 
 all() ->
@@ -75,7 +76,8 @@ all() ->
         partial_upload_test,
         acl_test,
         errors_test,
-        accept_header_test
+        accept_header_test,
+        copy_move_test
     ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -1197,7 +1199,154 @@ out_of_range_test(Config) ->
     ?assertMatch([{<<"error_invalid_childrenrange">>, _}], CdmiResponse4).
     %%------------------------------
 
-%todo put copy_move_test from demo here, after implementing mv and cp in logical_file_manager
+% tests copy and move operations on dataobjects and containers
+copy_move_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    FileName = "move_test_file.txt",
+    DirName = "move_test_dir/",
+    FileUri = list_to_binary(filename:join("/", FileName)),
+    FileData = <<"data">>,
+    create_file(Config, FileName),
+    mkdir(Config, DirName),
+    write_to_file(Config, FileName, FileData, 0),
+    NewMoveFileName = "new_move_test_file",
+    NewMoveDirName = "new_move_test_dir/",
+
+    %%--- conflicting mv/cpy ------- (we cannot move and copy at the same time)
+    ?assertEqual(FileData, get_file_content(Config, FileName)),
+
+    RequestHeaders1 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestBody1 = json_utils:encode([{<<"move">>, FileUri}, {<<"copy">>, FileUri}]),
+    {ok, Code1, _Headers1, Response1} = do_request(Worker, NewMoveFileName, put, RequestHeaders1, RequestBody1),
+    ?assertEqual(400, Code1),
+    CdmiResponse1 = json_utils:decode(Response1),
+    ?assertMatch([{<<"error_conflicting_body_fields">>, _}], CdmiResponse1),
+
+    ?assertEqual(FileData, get_file_content(Config, FileName)),
+    %%------------------------------
+
+    %%----------- dir mv -----------
+    ?assert(object_exists(Config, DirName)),
+    ?assert(not object_exists(Config, NewMoveDirName)),
+
+    RequestHeaders2 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    RequestBody2 = json_utils:encode([{<<"move">>, list_to_binary(DirName)}]),
+    {ok, Code2, _Headers2, _Response2} = do_request(Worker, NewMoveDirName, put, RequestHeaders2, RequestBody2),
+    ?assertEqual(201, Code2),
+
+    ?assert(not object_exists(Config, DirName)),
+    ?assert(object_exists(Config, NewMoveDirName)),
+    %%------------------------------
+
+    %%---------- file mv -----------
+    ?assert(object_exists(Config, FileName)),
+    ?assert(not object_exists(Config, NewMoveFileName)),
+    ?assertEqual(FileData, get_file_content(Config, FileName)),
+    RequestHeaders3 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestBody3 = json_utils:encode([{<<"move">>, list_to_binary(FileName)}]),
+    tracer:start([Worker]),
+    tracer:trace_calls(logical_file_manager),
+    tracer:trace_calls(fslogic_req_generic),
+    tracer:trace_calls(fslogic_req_regular),
+    tracer:trace_calls(storage_file_manager),
+    {ok, Code3, _Headers3, _Response3} = do_request(Worker, NewMoveFileName, put, RequestHeaders3, RequestBody3),
+    tracer:stop(),
+    ?assertEqual(201, Code3),
+
+    ?assert(not object_exists(Config, FileName)),
+    ?assert(object_exists(Config, NewMoveFileName)),
+    ct:print("1"),
+    tracer:start(Worker),
+    tracer:trace_calls(storage_file_manager),
+    ?assertEqual(FileData, get_file_content(Config, NewMoveFileName)),
+    tracer:stop().
+    %%------------------------------
+
+    %%---------- file cp ----------- (copy file, with xattrs and acl)
+    % create file to copy
+    FileName2 = "copy_test_file.txt",
+    UserId1 = ?config({user_id, 1}, Config),
+    create_file(Config, FileName2),
+    FileData2 = <<"data">>,
+    Acl = [#accesscontrolentity{
+        acetype = ?allow_mask,
+        identifier = UserId1,
+        aceflags = ?no_flags_mask,
+        acemask = ?all_perms_mask}],
+    Xattrs = [#xattr{name = <<"key1">>, value = <<"value1">>}, #xattr{name = <<"key2">>, value = <<"value2">>}],
+    set_acl(Config, FileName2, Acl),
+    add_xattrs(Config, FileName2, Xattrs),
+    write_to_file(Config, FileName2, FileData2, 0),
+
+    % assert source file is created and destination does not exist
+    NewFileName2 = "copy_test_file2.txt",
+    ?assert(object_exists(Config, FileName2)),
+    ?assert(not object_exists(Config, NewFileName2)),
+    ?assertEqual(FileData2, get_file_content(Config, FileName2)),
+    ?assertEqual({ok, Acl}, get_acl(Config, FileName2)),
+
+    % copy file using cdmi
+    RequestHeaders4 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestBody4 = json_utils:encode([{<<"copy">>, list_to_binary(FileName2)}]),
+    {ok, Code4, _Headers4, _Response4} = do_request(Worker, NewFileName2, put, RequestHeaders4, RequestBody4),
+    ?assertEqual(201, Code4),
+
+    % assert new file is created
+    ?assert(object_exists(Config, FileName2)),
+    ?assert(object_exists(Config, NewFileName2)),
+    ?assertEqual(FileData2, get_file_content(Config, NewFileName2)),
+    ?assertEqual({ok, Xattrs}, get_xattrs(Config, NewFileName2)),
+    ?assertEqual({ok, Acl}, get_acl(Config, NewFileName2)),
+    %%------------------------------
+
+    %%---------- dir cp ------------
+    % create dir to copy (with some subdirs and subfiles)
+    DirName2 = "copy_dir/",
+    mkdir(Config, DirName2),
+    ?assert(object_exists(Config, DirName2)),
+    NewDirName2 = "new_copy_dir/",
+    set_acl(Config, DirName2, Acl),
+    add_xattrs(Config, DirName2, Xattrs),
+    mkdir(Config, filename:join(DirName2, "dir1")),
+    mkdir(Config, filename:join(DirName2, "dir2")),
+    create_file(Config, filename:join([DirName2, "dir1", "1"])),
+    create_file(Config, filename:join([DirName2, "dir1", "2"])),
+    create_file(Config, filename:join(DirName2, "3")),
+
+    % assert source files are successfully created, and destination file does not exist
+    ?assert(object_exists(Config, DirName2)),
+    ?assert(object_exists(Config, filename:join(DirName2, "dir1"))),
+    ?assert(object_exists(Config, filename:join(DirName2, "dir2"))),
+    ?assert(object_exists(Config, filename:join([DirName2, "dir1", "1"]))),
+    ?assert(object_exists(Config, filename:join([DirName2, "dir1", "2"]))),
+    ?assert(object_exists(Config, filename:join(DirName2, "3"))),
+    ?assert(not object_exists(Config, NewDirName2)),
+
+    % copy dir using cdmi
+    RequestHeaders5 = [user_1_token_header(), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
+    RequestBody5 = json_utils:encode([{<<"copy">>, list_to_binary(DirName2)}]),
+    {ok, Code5, _Headers5, _Response5} = do_request(Worker, NewDirName2, put, RequestHeaders5, RequestBody5),
+    ?assertEqual(201, Code5),
+
+    % assert source files still exists
+    ?assert(object_exists(Config, DirName2)),
+    ?assert(object_exists(Config, filename:join(DirName2, "dir1"))),
+    ?assert(object_exists(Config, filename:join(DirName2, "dir2"))),
+    ?assert(object_exists(Config, filename:join([DirName2, "dir1", "1"]))),
+    ?assert(object_exists(Config, filename:join([DirName2, "dir1", "2"]))),
+    ?assert(object_exists(Config, filename:join(DirName2, "3"))),
+
+    % assert destination files have been created
+    ?assert(object_exists(Config, NewDirName2)),
+    ?assertEqual({ok, Xattrs}, get_xattrs(Config, NewDirName2)),
+    ?assertEqual({ok, Acl}, get_acl(NewDirName2)),
+    ?assert(object_exists(Config, filename:join(NewDirName2, "dir1"))),
+    ?assert(object_exists(Config, filename:join(NewDirName2, "dir2"))),
+    ?assert(object_exists(Config, filename:join([NewDirName2, "dir1", "1"]))),
+    ?assert(object_exists(Config, filename:join([NewDirName2, "dir1", "2"]))),
+    ?assert(object_exists(Config, filename:join(NewDirName2, "3"))).
+    %%------------------------------
 
 % tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
 partial_upload_test(Config) ->
@@ -1692,6 +1841,35 @@ mkdir(Config, Path) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, 1}, Config),
     lfm_proxy:mkdir(Worker, SessionId, absolute_binary_path(Path)).
+
+set_acl(Config, Path, Acl) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, 1}, Config),
+    lfm_proxy:set_acl(Worker, SessionId, {path, absolute_binary_path(Path)}, Acl).
+
+get_acl(Config, Path) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, 1}, Config),
+    lfm_proxy:get_acl(Worker, SessionId, {path, absolute_binary_path(Path)}).
+
+add_xattrs(Config, Path, Xattrs) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, 1}, Config),
+    lists:foreach(fun(Xattr) ->
+        ok = lfm_proxy:set_xattr(Worker, SessionId, {path, absolute_binary_path(Path)}, Xattr)
+    end, Xattrs).
+
+get_xattrs(Config, Path) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, 1}, Config),
+    {ok, Xattrs} = lfm_proxy:list_xattr(Worker, SessionId, {path, absolute_binary_path(Path)}),
+    lists:filtermap(
+    fun
+        (<<"cdmi_", _/binary>>) ->
+            false;
+        (Xattr) ->
+            {true, lfm_proxy:get_xattr(Worker, SessionId, {path, absolute_binary_path(Path)}, Xattr)}
+    end, Xattrs).
 
 absolute_binary_path(Path) ->
     list_to_binary(ensure_begins_with_slash(Path)).
