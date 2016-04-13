@@ -26,13 +26,14 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves user document.
-%% Provided user auth be authorised to access user details.
+%% Provided client should be authorised to access user details.
 %% @end
 %%--------------------------------------------------------------------
--spec get(Auth :: #auth{}, UserId :: binary()) ->
+-spec get(oz_endpoint:client(), UserId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
-get(Auth, UserId) ->
-    onedata_user:get_or_fetch(Auth, UserId).
+get({user, {Macaroon, DischMacaroon}}, UserId) ->
+    onedata_user:get_or_fetch(UserId,
+        #auth{macaroon = Macaroon, disch_macaroons = DischMacaroon}).
 
 
 

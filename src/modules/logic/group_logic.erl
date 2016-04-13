@@ -26,13 +26,14 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves group document.
-%% Provided user auth be authorised to access group details.
+%% Provided client should be authorised to access group details.
 %% @end
 %%--------------------------------------------------------------------
--spec get(Auth :: #auth{}, UserId :: binary()) ->
+-spec get(oz_endpoint:client(), GroupId :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-get(Auth, UserId) ->
-    onedata_group:get_or_fetch(Auth, UserId).
+get({user, {Macaroon, DischMacaroon}}, GroupId) ->
+    onedata_group:get_or_fetch(GroupId,
+        #auth{macaroon = Macaroon, disch_macaroons = DischMacaroon}).
 
 
 
