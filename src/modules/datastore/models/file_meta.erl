@@ -514,7 +514,7 @@ setup_onedata_user(Client, UserId) ->
                         fix_parent_links({uuid, ?SPACES_BASE_DIR_UUID},
                             {uuid, SpaceDirUuid});
                     false ->
-                        space_info:get_or_fetch(Client, SpaceId),
+                        space_info:get_or_fetch(Client, SpaceId, UserId),
                         {ok, _} = create({uuid, SpacesRootUUID},
                             #document{key = SpaceDirUuid,
                                 value = #file_meta{

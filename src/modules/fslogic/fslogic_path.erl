@@ -143,7 +143,7 @@ get_canonical_file_entry(#fslogic_ctx{session_id = SessId} = Ctx, [<<?DIRECTORY_
     {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
 
     MatchedSpaceIds = lists:filter(fun(SpaceId) ->
-        {ok, #document{value = #space_info{name = Name}}} = space_info:get_or_fetch(SessId, SpaceId),
+        {ok, #document{value = #space_info{name = Name}}} = space_info:get_or_fetch(SessId, SpaceId, UserId),
         Name =:= SpaceName
     end, SpaceIds),
 
