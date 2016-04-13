@@ -20,7 +20,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([fetch/2, get_or_fetch/2, create_or_update/2, get_or_fetch/3]).
+-export([get_or_fetch/2, create_or_update/2, get_or_fetch/3, get_providers/1]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -122,6 +122,17 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Extracts providers' list from space_info record.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_providers(#space_info{}) -> [oneprovider:id()].
+get_providers(#space_info{providers_supports = ProviderSupports}) ->
+    [ProviderId || {ProviderId, _} <- ProviderSupports].
+
 
 %%--------------------------------------------------------------------
 %% @doc

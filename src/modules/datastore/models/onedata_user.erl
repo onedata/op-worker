@@ -174,7 +174,7 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
         [(catch space_info:get_or_fetch(Client, SpaceId, UserId)) || SpaceId <- SpaceIds],
         OnedataUserDoc = #document{key = UserId, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
-        file_meta:setup_onedata_user({user, {Macaroon, DMacaroons}}, Id),
+        file_meta:setup_onedata_user({user, {Macaroon, DMacaroons}}, UserId),
         {ok, OnedataUserDoc}
     catch
         _:Reason ->

@@ -378,7 +378,7 @@ create_test_users_and_spaces(AllWorkers, Config) ->
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
 
     proplists:compact(
-        lists:flatten([initializer:setup_session(W, [User1, User2, User3, User4, User5], Config) || W <- MasterWorkers])
+        lists:flatten([initializer:setup_session(W, [User1, User2, User3, User4], Config) || W <- MasterWorkers])
     ).
 
 %%--------------------------------------------------------------------
@@ -426,8 +426,9 @@ name(Text, Num) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}]) -> ok.
-oz_spaces_mock_setup(Workers, Spaces) ->
+    [{binary(), binary()}], [{binary(), [binary()]}]) ->
+    ok.
+oz_spaces_mock_setup(Workers, Spaces, Users) ->
     Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
