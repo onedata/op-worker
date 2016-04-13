@@ -18,8 +18,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/oz/oz_users.hrl").
--include_lib("ctool/include/oz/oz_groups.hrl").
 
 
 %% API
@@ -139,10 +137,9 @@ find_query(<<"space">>, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    % @TODO Use space_info create!!!!
     % @todo error handling
     Name = proplists:get_value(<<"name">>, Data, <<"">>),
-    {ok, SpaceId} = oz_users:create_space(UserAuth, [{<<"name">>, Name}]),
+    {ok, SpaceId} = space_logic:create(UserAuth, #space_info{name = Name}),
     SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, [
         {<<"id">>, SpaceDirId},
@@ -163,23 +160,19 @@ create_record(<<"space">>, Data) ->
     ok | gui_error:error_result().
 update_record(<<"space">>, SpaceDirId, Data) ->
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
-    % @TODO Use space_info modify!!!!
+    UserAuth = op_gui_utils:get_user_rest_auth(),
     % @todo error handling
     UserAuth = op_gui_utils:get_user_rest_auth(),
     case proplists:get_value(<<"isDefault">>, Data, undefined) of
-        undefined ->
-            ok;
-        false ->
-            ok;
+        undefined -> ok;
+        false -> ok;
         true ->
             % @todo change when onedata_user holds default space
-            oz_users:set_default_space(UserAuth, [{<<"spaceId">>, SpaceId}])
+            space_logic:set_default(UserAuth, SpaceId)
     end,
     case proplists:get_value(<<"name">>, Data, undefined) of
-        undefined ->
-            ok;
-        NewName ->
-            oz_spaces:modify_details(UserAuth, SpaceId, [{<<"name">>, NewName}])
+        undefined -> ok;
+        NewName -> space_logic:set_name(UserAuth, SpaceId, NewName)
     end,
     ok;
 
@@ -190,7 +183,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_info:get_or_fetch(UserAuth, SpaceId),
+        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     NewUserPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
@@ -203,11 +196,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             end
         end, UserPerms, Data),
 
-    % @TODO Use space_info modify!!!!
-    oz_spaces:set_user_privileges(UserAuth, SpaceId, UserId, [
-        % usort - make sure there are no duplicates
-        {<<"privileges">>, lists:usort(NewUserPerms)}
-    ]),
+    space_logic:set_user_privileges(UserAuth, SpaceId, UserId, NewUserPerms),
     ok.
 
 
@@ -221,8 +210,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
 delete_record(<<"space">>, SpaceDirId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
-    % @TODO Use space_info delete!!!!
-    oz_spaces:remove(UserAuth, SpaceId),
+    space_logic:delete(UserAuth, SpaceId),
     ok.
 
 
@@ -238,14 +226,13 @@ delete_record(<<"space">>, SpaceDirId) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceDirId :: binary()) -> proplists:proplist().
 space_record(SpaceDirId) ->
-    Auth = op_gui_utils:get_user_rest_auth(),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
-        }}} = space_info:get_or_fetch(Auth, SpaceId),
+        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
 
     UserPermissions = lists:map(
         fun({UserId, _UserPerms}) ->
@@ -276,13 +263,12 @@ space_record(SpaceDirId) ->
 %%--------------------------------------------------------------------
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
-    Auth = op_gui_utils:get_user_rest_auth(),
     {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_info:get_or_fetch(Auth, SpaceId),
+        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -308,18 +294,10 @@ space_user_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec space_user_record(AssocId :: binary()) -> proplists:proplist().
 space_user_record(AssocId) ->
-    {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
-    UserName = case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{name = Name}}} ->
-            Name;
-        _ ->
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
-            CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
-            {ok, #user_details{
-                name = Name
-            }} = oz_spaces:get_user_details(CurrentUserAuth, SpaceId, UserId),
-            Name
-    end,
+    {UserId, _} = op_gui_utils:association_to_ids(AssocId),
+    CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
+    {ok, #document{value = #onedata_user{name = UserName}}} =
+        user_logic:get(CurrentUserAuth, UserId),
     [
         {<<"id">>, AssocId},
         {<<"name">>, UserName}
@@ -335,13 +313,12 @@ space_user_record(AssocId) ->
 -spec space_group_permission_record(AssocId :: binary()) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
-    Auth = op_gui_utils:get_user_rest_auth(),
     {GroupId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             groups = GroupsAndPerms
-        }}} = space_info:get_or_fetch(Auth, SpaceId),
+        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
     GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -367,19 +344,9 @@ space_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec space_group_record(AssocId :: binary()) -> proplists:proplist().
 space_group_record(AssocId) ->
-    {GroupId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
-    GroupName = case onedata_group:get(GroupId) of
-        {ok, #document{value = #onedata_group{name = Name}}} ->
-            Name;
-        _ ->
-            CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
-            {ok, #group_details{
-                name = Name
-            }} = oz_spaces:get_group_details(CurrentUserAuth, SpaceId, GroupId),
-            Name
-    end,
+    {GroupId, _} = op_gui_utils:association_to_ids(AssocId),
+    {ok, #document{value = #onedata_group{name = GroupName}}} =
+        onedata_group:get(GroupId),
     [
         {<<"id">>, AssocId},
         {<<"name">>, GroupName}
