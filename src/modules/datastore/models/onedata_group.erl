@@ -141,10 +141,19 @@ create_or_update(Doc, Diff) ->
 -spec fetch(Auth :: #auth{}, GroupId :: id()) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons}, GroupId) ->
     try
+        Client = {user, {Macaroon, DMacaroons}},
         {ok, #group_details{id = Id, name = Name}} =
-            oz_groups:get_details({user, {Macaroon, DMacaroons}}, GroupId),
+            oz_groups:get_details(Client, GroupId),
+        {ok, SpaceIds} = oz_groups:get_spaces(Client, Id),
+        {ok, UserIds} = oz_groups:get_users(Client, Id),
+        UsersWithPrivileges = utils:pmap(fun(UID) ->
+            {ok, Privileges} = oz_groups:get_user_privileges(Client, Id, UID),
+            {UID, Privileges}
+        end, UserIds),
+
         %todo consider getting user_details for each group member and storing it as onedata_user
-        OnedataGroupDoc = #document{key = Id, value = #onedata_group{name = Name}},
+        OnedataGroupDoc = #document{key = Id, value = #onedata_group{
+            users = UsersWithPrivileges, spaces = SpaceIds, name = Name}},
         {ok, _} = onedata_user:save(OnedataGroupDoc),
         {ok, OnedataGroupDoc}
     catch

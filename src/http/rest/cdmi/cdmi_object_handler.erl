@@ -274,12 +274,13 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
     RawValue = cdmi_encoder:decode(Value, RequestedValueTransferEncoding, Range),
     RawValueSize = byte_size(RawValue),
     Attrs = get_attr(Auth, Path),
+    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
 
     % create object using create/cp/mv
     {ok, OperationPerformed} =
         case {Attrs, RequestedCopyURI, RequestedMoveURI} of
             {undefined, undefined, undefined} ->
-                {ok, _} = onedata_file_api:create(Auth, Path, 8#777),
+                {ok, _} = onedata_file_api:create(Auth, Path, DefaultMode),
                 {ok, created};
             {#file_attr{}, undefined, undefined} ->
                 {ok, none};
