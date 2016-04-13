@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc
+%%% @doc Interface between provider and users.
+%%% Operations may involve interactions with OZ api
+%%% or cached records from the datastore.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(user_logic).
@@ -17,6 +19,16 @@
 
 -export([get/2]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves user document.
+%% Provided user auth be authorised to access user details.
+%% @end
+%%--------------------------------------------------------------------
 -spec get(Auth :: #auth{}, UserId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(Auth, UserId) ->

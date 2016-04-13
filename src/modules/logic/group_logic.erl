@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc
+%%% @doc Interface between provider and groups.
+%%% Operations may involve interactions with OZ api
+%%% or cached records from the datastore.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(group_logic).
@@ -17,8 +19,18 @@
 
 -export([get/2]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves group document.
+%% Provided user auth be authorised to access group details.
+%% @end
+%%--------------------------------------------------------------------
 -spec get(Auth :: #auth{}, UserId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
+    {ok, datastore:document()} | {error, Reason :: term()}.
 get(Auth, UserId) ->
     onedata_group:get_or_fetch(Auth, UserId).
 

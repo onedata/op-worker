@@ -139,7 +139,7 @@ create_record(<<"space">>, Data) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     % @todo error handling
     Name = proplists:get_value(<<"name">>, Data, <<"">>),
-    {ok, SpaceId} = space_logic:create(UserAuth, #space_info{name = Name}),
+    {ok, SpaceId} = space_logic:create_user_space(UserAuth, #space_info{name = Name}),
     SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, [
         {<<"id">>, SpaceDirId},
@@ -183,7 +183,7 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
+        }}} = space_logic:get(UserAuth, SpaceId, UserId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     NewUserPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
@@ -226,13 +226,14 @@ delete_record(<<"space">>, SpaceDirId) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceDirId :: binary()) -> proplists:proplist().
 space_record(SpaceDirId) ->
+    Auth = op_gui_utils:get_user_rest_auth(),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
-        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
+        }}} = space_logic:get(Auth, SpaceId, g_session:get_user_id()),
 
     UserPermissions = lists:map(
         fun({UserId, _UserPerms}) ->
@@ -263,12 +264,13 @@ space_record(SpaceDirId) ->
 %%--------------------------------------------------------------------
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
+    Auth = op_gui_utils:get_user_rest_auth(),
     {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
+        }}} = space_logic:get(Auth, SpaceId, UserId),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -313,12 +315,13 @@ space_user_record(AssocId) ->
 -spec space_group_permission_record(AssocId :: binary()) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
+    Auth = op_gui_utils:get_user_rest_auth(),
     {GroupId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     {ok, #document{
         value = #space_info{
             groups = GroupsAndPerms
-        }}} = space_logic:get(g_session:get_session_id(), SpaceId),
+        }}} = space_logic:get(Auth, SpaceId, g_session:get_user_id()),
     GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
