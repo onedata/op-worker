@@ -77,7 +77,7 @@ all() ->
         acl_test,
         errors_test,
         accept_header_test
-%%        copy_move_test %todo enable when copy/move will be working properly
+%%        copy_move_test %todo split into smaller tests and enable when copy/move will be working properly
     ]).
 
 -define(TIMEOUT, timer:seconds(5)).
