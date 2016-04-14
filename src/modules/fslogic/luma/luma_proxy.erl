@@ -210,8 +210,8 @@ get_credentials_from_luma(UserId, StorageType, StorageId, SessionIdOrIdentity) -
     end,
 
     case http_client:get(
-        <<(list_to_binary(LUMAHostname))/binary, ":",
-            (list_to_binary(LUMAPort))/binary,
+        <<(atom_to_binary(LUMAHostname, latin1))/binary, ":",
+            (integer_to_binary(LUMAPort))/binary,
             "/get_user_credentials?"
             "global_id=", UserId/binary,
             "&storage_type=", StorageType/binary,
