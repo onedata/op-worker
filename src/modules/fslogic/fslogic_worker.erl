@@ -177,9 +177,8 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
             case request_to_file_entry_or_provider(Context, Request) of
                 {space, SpaceId} ->
                     #fslogic_ctx{session_id = SessionId} = Context,
-                    {ok, #document{value = #space_info{} = SpaceInfo}} =
+                    {ok, #document{value = #space_info{providers = ProviderIds}}} =
                         space_info:get_or_fetch(SessionId, SpaceId),
-                    ProviderIds = space_info:get_providers(SpaceInfo),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             {Context, [oneprovider:get_provider_id()]};
@@ -196,8 +195,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                             #fslogic_ctx{space_id = SpaceId, session_id = SessionId} = NewCtx =
                                 fslogic_context:set_space_id(Context, Entry),
 
-                            {ok, #document{value = #space_info{} = SpaceInfo}} = space_info:get_or_fetch(SessionId, SpaceId),
-                            ProviderIds = space_info:get_providers(SpaceInfo),
+                            {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessionId, SpaceId),
                             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                                 {_, true} ->
                                     {NewCtx, [oneprovider:get_provider_id()]};

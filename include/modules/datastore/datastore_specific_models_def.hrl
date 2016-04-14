@@ -126,6 +126,7 @@
 %% Model for caching space details fetched from OZ
 -record(space_info, {
     name :: binary(),
+    providers = [],
     providers_supports = [] :: [{ProviderId :: binary(), Size :: pos_integer()}],
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],

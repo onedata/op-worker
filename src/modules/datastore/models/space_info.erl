@@ -20,7 +20,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([get_or_fetch/2, create_or_update/2, get_or_fetch/3, get_providers/1]).
+-export([get_or_fetch/2, create_or_update/2, get_or_fetch/3]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -122,16 +122,6 @@ before(_ModelName, _Method, _Level, _Context) ->
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Extracts providers' list from space_info record.
-%% @end
-%%--------------------------------------------------------------------
--spec get_providers(#space_info{}) -> [oneprovider:id()].
-get_providers(#space_info{providers_supports = ProviderSupports}) ->
-    [ProviderId || {ProviderId, _} <- ProviderSupports].
 
 
 %%--------------------------------------------------------------------
@@ -264,6 +254,8 @@ get_info(Client, SpaceId) ->
     {ok, GroupIds} = oz_spaces:get_groups(Client, SpaceId),
     {ok, UserIds} = oz_spaces:get_users(Client, SpaceId),
 
+    {ok, ProviderIds} = oz_spaces:get_providers(Client, SpaceId),
+
     GroupsWithPrivileges = utils:pmap(fun(GroupId) ->
         {ok, Privileges} =
             oz_spaces:get_group_privileges(Client, SpaceId, GroupId),
@@ -279,6 +271,7 @@ get_info(Client, SpaceId) ->
         users = UsersWithPrivileges,
         groups = GroupsWithPrivileges,
         providers_supports = Supports,
-        name = Name
+        name = Name,
+        providers = ProviderIds
     }.
 
