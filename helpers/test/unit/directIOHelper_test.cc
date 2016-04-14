@@ -53,7 +53,7 @@ protected:
 
     boost::filesystem::path testFilePath;
     boost::filesystem::path testFileId;
-    std::map<std::string, std::string> testParameters;
+    std::unordered_map<std::string, std::string> testParameters;
 
     std::shared_ptr<std::promise<void>> pv1;
     std::shared_ptr<std::promise<void>> pv2;
@@ -223,7 +223,7 @@ TEST_F(DirectIOHelperTest, shouldRelease)
     proxy->ash_release(ctx, testFileId,
         std::bind(&DirectIOHelperTest::set_void_promise, this, pv1, _1));
     EXPECT_NO_THROW(pv1->get_future().get());
-    EXPECT_EQ(0, ctx->fh);
+    EXPECT_EQ(-1, ctx->fh);
 }
 
 TEST_F(DirectIOHelperTest, shouldRunSync)
