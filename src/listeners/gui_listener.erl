@@ -47,8 +47,6 @@ port() ->
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
     % Get params from env for gui
-    {ok, DocRoot} =
-        application:get_env(?APP_NAME, gui_static_files_root),
     {ok, GuiPort} = application:get_env(?APP_NAME, gui_https_port),
     {ok, GuiNbAcceptors} =
         application:get_env(?APP_NAME, gui_number_of_acceptors),
@@ -57,6 +55,16 @@ start() ->
     {ok, Timeout} =
         application:get_env(?APP_NAME, gui_socket_timeout_seconds),
     {ok, Cert} = application:get_env(?APP_NAME, web_ssl_cert_path),
+
+    % Resolve static files root. First, check if there is a non-empty dir
+    % located in gui_custom_static_root. If not, use default.
+    {ok, CstmRoot} = application:get_env(?APP_NAME, gui_custom_static_root),
+    {ok, DefRoot} = application:get_env(?APP_NAME, gui_default_static_root),
+    DocRoot = case file:list_dir_all(CstmRoot) of
+        {error, enoent} -> DefRoot;
+        {ok, []} -> DefRoot;
+        {ok, _} -> CstmRoot
+    end,
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
