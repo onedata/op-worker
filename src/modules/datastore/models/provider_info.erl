@@ -146,12 +146,12 @@ create_or_update(Doc, Diff) ->
 %% Get provider from cache or fetch from OZ and save in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(ID :: binary()) ->
+-spec get_or_fetch(ProviderId :: id()) ->
     {ok, datastore:document()} | datastore:get_error().
-get_or_fetch(Key) ->
-    case provider_info:get(Key) of
+get_or_fetch(ProviderId) ->
+    case provider_info:get(ProviderId) of
         {ok, Doc} -> {ok, Doc};
-        {error, {not_found, _}} -> fetch(Key);
+        {error, {not_found, _}} -> fetch(ProviderId);
         Error -> Error
     end.
 
@@ -161,18 +161,17 @@ get_or_fetch(Key) ->
 %% Fetch provider from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(ID :: binary()) -> {ok, datastore:document()} | {error, Reason :: term()}.
-fetch(ID) ->
+-spec fetch(ProviderId :: id()) ->
+    {ok, datastore:document()} | {error, Reason :: term()}.
+fetch(ProviderId) ->
     try
-        case oz_providers:get_details(provider, ID) of
-            {ok, #provider_details{name = Name}} ->
-                Doc = #document{key = ID, value = #provider_info{
-                    client_name = Name
-                }},
-                {ok, ID} = provider_info:save(Doc),
-                {ok, Doc};
-            Error -> Error
-        end
+        {ok, #provider_details{name = Name}} =
+            oz_providers:get_details(provider, ProviderId),
+        Doc = #document{key = ProviderId, value = #provider_info{
+            client_name = Name
+        }},
+        {ok, _} = provider_info:save(Doc),
+        {ok, Doc}
     catch
         _:Reason ->
             {error, Reason}

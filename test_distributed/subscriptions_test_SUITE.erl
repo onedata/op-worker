@@ -177,7 +177,7 @@ saves_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
-        space_ids = [<<"C">>, <<"D">>],
+        spaces = [{<<"C">>, _}, {<<"D">>, _}],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
@@ -305,7 +305,7 @@ updates_with_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
-        space_ids = [<<"C">>, <<"D">>],
+        spaces = [{<<"C">>, _}, {<<"D">>, _}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
@@ -381,7 +381,7 @@ resolves_conflicts(Config) ->
     }, fetch(Node, onedata_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
         name = <<"onedata ftw">>,
-        group_ids = [<<"A">>, <<"B">>], space_ids = [<<"C">>, <<"D">>],
+        group_ids = [<<"A">>, <<"B">>], spaces = [{<<"C">>, _}, {<<"D">>, _}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
     ok.

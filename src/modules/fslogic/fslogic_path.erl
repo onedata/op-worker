@@ -105,7 +105,8 @@ gen_path({path, Path}, _SessId) when is_binary(Path) ->
     {ok, Path};
 gen_path(Entry, SessId) ->
     ?run(begin
-        gen_path(Entry, SessId, [])
+        {ok, UserId} = session:get_user_id(SessId),
+        gen_path(Entry, UserId, [])
     end).
 
 %%--------------------------------------------------------------------
@@ -138,18 +139,16 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
     {path, Path};
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
-    #fslogic_ctx{session_id = SessId} = Ctx,
-    {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
+    {ok, #document{value = #onedata_user{spaces = Spaces}}} = onedata_user:get(UserId),
 
-    MatchedSpaceIds = lists:filter(fun(SpaceId) ->
-        {ok, #document{value = #space_info{name = Name}}} = space_info:get_or_fetch(SessId, SpaceId),
+    MatchedSpaces = lists:filter(fun({_, Name}) ->
         Name =:= SpaceName
-    end, SpaceIds),
+    end, Spaces),
 
-    case MatchedSpaceIds of
+    case MatchedSpaces of
         [] ->
             throw(?ENOENT);
-        [SpaceId] ->
+        [{SpaceId, _}] ->
             {path, fslogic_path:join(
                 [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
     end;
@@ -219,9 +218,9 @@ is_space_dir(Path) ->
 %% and concatenates them into path().
 %% @end
 %%--------------------------------------------------------------------
--spec gen_path(file_meta:entry(), session:id(), [file_meta:name()]) ->
+-spec gen_path(file_meta:entry(), onedata_user:id(), [file_meta:name()]) ->
     {ok, file_meta:path()} | datastore:generic_error() | no_return().
-gen_path(Entry, SessId, Tokens) ->
+gen_path(Entry, UserId, Tokens) ->
     SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
     {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
@@ -230,10 +229,10 @@ gen_path(Entry, SessId, Tokens) ->
         {ok, #document{key = SpaceBaseDirUUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
             {ok, #document{value = #space_info{name = SpaceName}}} =
-                space_info:get_or_fetch(SessId, SpaceId),
-            gen_path({uuid, SpaceBaseDirUUID}, SessId, [SpaceName | Tokens]);
+                space_info:get(SpaceId, UserId),
+            gen_path({uuid, SpaceBaseDirUUID}, UserId, [SpaceName | Tokens]);
         {ok, #document{key = ParentUUID}} ->
-            gen_path({uuid, ParentUUID}, SessId, [Name | Tokens])
+            gen_path({uuid, ParentUUID}, UserId, [Name | Tokens])
     end.
 
 %%--------------------------------------------------------------------

@@ -139,6 +139,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
 local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
+    SpaceName = <<"space_name1">>,
     ExternalUser = <<"external_user_id">>,
     SessionId = <<"session_id1">>,
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
@@ -171,7 +172,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid, value = FileMeta}}]),
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #change{model = file_meta, doc = #document{key = FileUuid2, value = FileMeta2}}]),
-    rpc:call(W1, onedata_user, create, [#document{key = ExternalUser, value = #onedata_user{name = <<"User">>, space_ids = [SpaceId]}}]),
+    rpc:call(W1, onedata_user, create, [#document{key = ExternalUser, value = #onedata_user{name = <<"User">>, spaces = [{SpaceId, SpaceName}]}}]),
     timer:sleep(timer:seconds(1)), % need to wait for asynchronous trigger
 
     %then

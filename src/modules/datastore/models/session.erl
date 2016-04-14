@@ -27,7 +27,7 @@
 -export([const_get/1, get_session_supervisor_and_node/1, get_event_manager/1,
     get_event_managers/0, get_sequencer_manager/1, get_random_connection/1,
     get_connections/1, get_auth/1, remove_connection/2, get_rest_session_id/1,
-    all_with_user/0]).
+    all_with_user/0, get_user_id/1]).
 
 -type id() :: binary().
 -type auth() :: #auth{}.
@@ -200,6 +200,22 @@ all_with_user() ->
             {next, Acc}
     end,
     datastore:list(?STORE_LEVEL, ?MODEL_NAME, Filter, []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns ID of user associated with session.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_user_id(SessId :: id()) ->
+    {ok, UserId :: onedata_user:id()} | {error, Reason :: term()}.
+get_user_id(SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} ->
+            {ok, UserId};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns session supervisor and node on which supervisor is running.

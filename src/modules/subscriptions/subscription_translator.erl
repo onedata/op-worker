@@ -75,7 +75,7 @@ props_to_value(onedata_user, Props) ->
     #onedata_user{
         name = proplists:get_value(<<"name">>, Props),
         group_ids = proplists:get_value(<<"group_ids">>, Props),
-        space_ids = proplists:get_value(<<"space_ids">>, Props)
+        spaces = proplists:get_value(<<"spaces">>, Props)
     };
 props_to_value(onedata_group, Props) ->
     #onedata_group{
