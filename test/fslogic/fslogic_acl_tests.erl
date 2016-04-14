@@ -51,7 +51,7 @@ acl_conversion_test() ->
             [
                 {<<"acetype">>, fslogic_acl:bitmask_to_binary(?allow_mask)},
                 {<<"identifier">>, AceName1},
-                {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags)},
+                {<<"aceflags">>, fslogic_acl:bitmask_to_binary(?no_flags_mask)},
                 {<<"acemask">>, fslogic_acl:bitmask_to_binary(?read_mask bor ?write_mask)}
             ],
             [
