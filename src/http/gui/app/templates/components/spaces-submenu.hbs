@@ -4,11 +4,13 @@
       <li class="{{item.type}}-permissions">
         <div {{action 'changeActiveOption' item.type}}
           class="secondary-sidebar-item">
-          <span class="item-icon">
-            {{icon item.icon 'space-color'}}
-          </span>
-          <span class="item-label">
-            {{item.label}}
+          <span class="item-element item-click-area">
+            <span class="item-icon">
+              {{icon item.icon 'space-color'}}
+            </span>
+            <span class="item-label">
+              {{t item.labelI18n}}
+            </span>
           </span>
         </div>
       </li>

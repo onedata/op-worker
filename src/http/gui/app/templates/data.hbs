@@ -1,1 +1,11 @@
-{{outlet}}
+{{!-- A Spaces view: sidebar with spaces list and content (if fit to screen) --}}
+
+{{!-- Secondary sidebar --}}
+<nav class="secondary-sidebar">
+  {{data-spaces-select spaces=model goToDataSpace="goToDataSpace"}}
+  {{outlet "data-space"}}
+</nav>
+
+<div id="content-scroll">
+  {{outlet "dir"}}
+</div>

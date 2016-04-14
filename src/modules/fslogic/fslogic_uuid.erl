@@ -54,11 +54,12 @@ ensure_uuid(CTX, {path, Path}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec uuid_to_path(fslogic_worker:ctx(), file_meta:uuid()) -> file_meta:path().
-uuid_to_path(#fslogic_ctx{session = #session{identity = #identity{user_id = Uid}}}, FileUuid) ->
-    case default_space_uuid(Uid) =:= FileUuid of
+uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
+    identity = #identity{user_id = UserId}}}, FileUuid) ->
+    case default_space_uuid(UserId) =:= FileUuid of
         true -> <<"/">>;
         false ->
-            {ok, Path} = file_meta:gen_path({uuid, FileUuid}),
+            {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
     end.
 

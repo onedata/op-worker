@@ -27,7 +27,7 @@
 
 -define(MODELS_TO_SYNC, [file_meta, file_location]).
 -define(BROADCAST_STATUS_INTERVAL, timer:seconds(15)).
--define(FLUSH_QUEUE_INTERVAL, 200).
+-define(FLUSH_QUEUE_INTERVAL, 1000).
 -define(GLOBAL_STREAM_RESTART_INTERVAL, 500).
 
 -type queue_id() :: binary().
@@ -100,8 +100,7 @@ init_stream(Since, Until, Queue) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(Request) -> Result when
-    Request :: ping | healthcheck |
-    {driver_call, Module :: atom(), Method :: atom(), Args :: [term()]},
+    Request :: ping | healthcheck | term(),
     Result :: nagios_handler:healthcheck_response() | ok | pong | {ok, Response} |
     {error, Reason},
     Response :: term(),
@@ -110,6 +109,7 @@ handle(ping) ->
     pong;
 
 handle(healthcheck) ->
+    ensure_global_stream_active(),
     case state_get(changes_stream) of
         Stream when is_pid(Stream) ->
             ok;
@@ -160,12 +160,17 @@ handle({QueueKey, #change{seq = Seq, doc = #document{key = Key} = Doc} = Change}
 %% Push changes from queue to providers
 handle({flush_queue, QueueKey}) ->
     ?debug("[ DBSync ] Flush queue ~p", [QueueKey]),
+    ensure_global_stream_active(),
     state_update({queue, QueueKey},
         fun(#queue{batch_map = BatchMap, removed = IsRemoved} = Queue) ->
             NewBatchMap = maps:map(
                 fun(SpaceId, #batch{until = Until} = B) ->
                         catch dbsync_proto:send_batch(QueueKey, SpaceId, B),
                     update_current_seq(oneprovider:get_provider_id(), SpaceId, Until),
+                    case QueueKey of
+                        global -> state_put(global_resume_seq, Until);
+                        _ -> ok
+                    end,
                     #batch{since = Until, until = Until}
                 end,
                 BatchMap),
@@ -191,6 +196,7 @@ handle({dbsync_request, SessId, DBSyncRequest}) ->
     dbsync_proto:handle(SessId, DBSyncRequest);
 
 %% Handle stream crashes
+%% todo: ensure VFS-1877 is resolved (otherwise it probably isn't working)
 handle({'EXIT', Stream, Reason}) ->
     case state_get(changes_stream) of
         Stream ->
@@ -203,10 +209,13 @@ handle({'EXIT', Stream, Reason}) ->
         _ ->
             ?warning("Unknown stream crash ~p: ~p", [Stream, Reason])
     end;
+handle({async_init_stream, undefined, Until, Queue}) ->
+    handle({async_init_stream, 0, Until, Queue});
 handle({async_init_stream, Since, Until, Queue}) ->
-    state_update(changes_stream, fun(_) ->
+    state_update(changes_stream, fun(OldStream) ->
         case catch init_stream(Since, infinity, Queue) of
             {ok, Pid} ->
+                    catch exit(OldStream, shutdown),
                 Pid;
             Reason ->
                 ?warning("Unable to start stream ~p (since ~p until ~p) due to: ~p", [Queue, Since, Until, Reason]),
@@ -283,7 +292,7 @@ queue_push(QueueKey, #change{seq = Until} = Change, SpaceId) ->
     ok | no_return().
 apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = Since, until = Until} = Batch) ->
     ?debug("Pre-Apply changes from ~p ~p: ~p", [FromProvider, SpaceId, Batch]),
-    catch consume_batches(FromProvider, SpaceId),
+        catch consume_batches(FromProvider, SpaceId),
     do_apply_batch_changes(FromProvider, SpaceId, Batch, true).
 
 %%--------------------------------------------------------------------
@@ -325,18 +334,19 @@ do_apply_batch_changes(FromProvider, SpaceId, #batch{changes = Changes, since = 
 apply_changes(SpaceId, [#change{doc = #document{key = Key, value = Value} = Doc, model = ModelName} = Change | T]) ->
     try
         ModelConfig = ModelName:model_init(),
+
+        %todo add cache manipulation functions and activate GLOBALLY_CACHED levels of datastore for file_meta and file_location
         MainDocKey = case Value of
             #links{} ->
-                couchdb_datastore_driver:links_key_to_doc_key(Key);
+                Value#links.doc_key;
             _ -> Key
         end,
-
         datastore:run_synchronized(ModelName, MainDocKey, fun() ->
-            caches_controller:flush(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
-            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, MainDocKey, all),
-            caches_controller:clear(?GLOBAL_ONLY_LEVEL, ModelName, Key, all)
+            {ok, _} = couchdb_datastore_driver:force_save(ModelConfig, Doc)
         end),
+
+
+
         spawn(
             fun() ->
                 dbsync_events:change_replicated(SpaceId, Change),
@@ -427,9 +437,9 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
     datastore:key().
 get_sync_context(#document{key = Key, value = #file_meta{}}) ->
     Key;
-get_sync_context(#document{value = #links{key = DocKey, model = file_meta}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
-get_sync_context(#document{value = #links{key = DocKey, model = file_location}}) ->
+get_sync_context(#document{value = #links{doc_key = DocKey, model = file_location}}) ->
     #model_config{store_level = StoreLevel} = file_location:model_init(),
     {ok, #document{value = #file_location{}} = Doc} = datastore:get(StoreLevel, file_location, DocKey),
     get_sync_context(Doc);
@@ -536,7 +546,7 @@ bcast_status() ->
     lists:foreach(
         fun(SpaceId) ->
             CurrentSeq = get_current_seq(SpaceId),
-%%            ?info("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
+            ?debug("DBSync broadcast for space ~p: ~p", [SpaceId, CurrentSeq]),
             {ok, Providers} = oz_spaces:get_providers(provider, SpaceId),
             dbsync_proto:status_report(SpaceId, Providers -- [oneprovider:get_provider_id()], CurrentSeq)
         end, SpaceIds).
@@ -607,3 +617,31 @@ consume_batches(ProviderId, SpaceId) ->
         do_apply_batch_changes(ProviderId, SpaceId, Batch, false)
     end, Batches).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether given term is valid stream reference.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_valid_stream(term()) -> boolean().
+is_valid_stream(Stream) when is_pid(Stream) ->
+    try erlang:process_info(Stream) =/= undefined
+    catch _:_ -> node(Stream) =/= node() end;
+is_valid_stream(_) ->
+    false.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Restarts global stream if necessary.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_global_stream_active() -> ok.
+ensure_global_stream_active() ->
+    case is_valid_stream(state_get(changes_stream)) of
+        true -> ok;
+        false ->
+            Since = state_get(global_resume_seq),
+            timer:send_after(0, whereis(dbsync_worker), {timer, {async_init_stream, Since, infinity, global}}),
+            ok
+    end.

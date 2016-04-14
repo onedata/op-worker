@@ -54,7 +54,7 @@ get_default_space_id(UserId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns space document for given file.
+%% Returns file_meta space document for given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space(FileEntry :: fslogic_worker:file(), UserId :: onedata_user:id()) ->

@@ -20,9 +20,9 @@ export default Ember.Component.extend({
   space: null,
 
   items: [
-    {type: 'user', label: 'users', icon: 'user'},
-    {type: 'group', label: 'groups', icon: 'groups'},
-    {type: 'provider', label: 'providers', icon: 'provider'},
+    {type: 'user', labelI18n: 'components.spacesSubmenu.users', icon: 'user'},
+    {type: 'group', labelI18n: 'components.spacesSubmenu.groups', icon: 'group'},
+    {type: 'provider', labelI18n: 'components.spacesSubmenu.providers', icon: 'provider'},
   ],
 
   sidebarEntryId: function() {

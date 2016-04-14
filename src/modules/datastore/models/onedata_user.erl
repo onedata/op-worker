@@ -24,11 +24,21 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, get_spaces/1]).
+-export([fetch/1, get_or_fetch/2, get_spaces/1, create_or_update/2]).
 
--export_type([id/0]).
+-export_type([id/0, connected_account/0]).
 
 -type id() :: binary().
+
+%% Oauth connected accounts in form of proplist:
+%%[
+%%    {<<"provider_id">>, binary()},
+%%    {<<"user_id">>, binary()},
+%%    {<<"login">>, binary()},
+%%    {<<"name">>, binary()},
+%%    {<<"email_list">>, [binary()]}
+%%]
+-type connected_account() :: proplists:proplist().
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -127,24 +137,42 @@ before(_ModelName, _Method, _Level, _Context) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Updates document with using ID from document. If such object does not exist,
+%% it initialises the object with the document.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_or_update(datastore:ext_key(), Diff :: datastore:document_diff()) ->
+    {ok, datastore:ext_key()} | datastore:update_error().
+create_or_update(Doc, Diff) ->
+    datastore:create_or_update(?STORE_LEVEL, Doc, Diff).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Fetch user from OZ and save it in cache.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(Auth :: #auth{}) -> {ok, datastore:document()} | {error, Reason :: term()}.
 fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
     try
-        {ok, #user_details{id = Id, name = Name}} =
-            oz_users:get_details({user, {Macaroon, DMacaroons}}),
+        Client = {user, {Macaroon, DMacaroons}},
+        {ok, #user_details{
+            id = UserId, name = Name, connected_accounts = ConnectedAccounts,
+            alias = Alias, email_list = EmailList}
+        } = oz_users:get_details(Client),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
-            oz_users:get_spaces({user, {Macaroon, DMacaroons}}),
-        {ok, GroupIds} = oz_users:get_groups({user, {Macaroon, DMacaroons}}),
+            oz_users:get_spaces(Client),
+        {ok, GroupIds} = oz_users:get_groups(Client),
         [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
         OnedataUser = #onedata_user{
             name = Name,
             space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
-            group_ids = GroupIds
+            group_ids = GroupIds,
+            connected_accounts = ConnectedAccounts,
+            alias = Alias,
+            email_list = EmailList
         },
-        OnedataUserDoc = #document{key = Id, value = OnedataUser},
+        [(catch space_info:get_or_fetch(Client, SpaceId, UserId)) || SpaceId <- SpaceIds],
+        OnedataUserDoc = #document{key = UserId, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}
     catch

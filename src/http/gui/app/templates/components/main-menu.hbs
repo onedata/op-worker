@@ -1,16 +1,15 @@
 <ul>
-  <div class="small-logo">
-    <img src="assets/images/logoshort.png" alt="Onedata" />
-  </div>
-  {{!-- TODO: mains is a bad name... --}}
-  {{#each mains as |mainPage|}}
-    <li>
-      <a id="main-{{mainPage.name}}" {{action 'activateItem' mainPage.name}}>
-        <figure>
-          {{icon mainPage.icon}}
-          <figcaption>{{mainPage.name}}</figcaption>
-        </figure>
-      </a>
-    </li>
+  <div class="small-logo"></div>
+  {{#each menuItems as |menuItem|}}
+    {{#unless menuItem.disabled}}
+      <li>
+        <a id="main-{{mainPage.name}}" {{action 'activateItem' menuItem.name}}>
+          <figure>
+            {{icon menuItem.icon}}
+            <figcaption>{{t menuItem.titleI18n}}</figcaption>
+          </figure>
+        </a>
+      </li>
+    {{/unless}}
   {{/each}}
 </ul>

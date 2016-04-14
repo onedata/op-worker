@@ -19,6 +19,7 @@
 -include("modules/rtransfer/gateway.hrl").
 -include("modules/rtransfer/registered_names.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 
 -record(gwcstate, {
     remote :: {inet:ip_address(), inet:port_number()},
@@ -28,8 +29,6 @@
     rtransfer_opts :: [rtransfer:opt()]
 }).
 
--define(CONNECTION_TIMEOUT, timer:seconds(10)).
--define(REQUEST_COMPLETION_TIMEOUT, timer:seconds(10)).
 
 -export([start_link/4]).
 %% gen_server callbacks
@@ -140,7 +139,19 @@ handle_cast(#gw_fetch{} = Action, #gwcstate{socket = Socket, waiting_requests = 
         ok ->
             Hash = gateway:compute_request_hash(Data),
             Timer = erlang:send_after(?REQUEST_COMPLETION_TIMEOUT, self(), {request_timeout, Hash}),
-            ets:insert(TID, {Hash, Action, Timer}),
+            case ets:insert_new(TID, {Hash, Action, Timer}) of
+                true -> ok;
+                false ->
+                    PrevNotify = case ets:lookup(TID, Hash) of
+                        [] -> [];
+                        [{_, #gw_fetch{notify = Notify}, PrevTimer}]->
+                            erlang:cancel_timer(PrevTimer),
+                            Notify
+                    end,
+                    AllNotify = sets:from_list(Action#gw_fetch.notify ++ PrevNotify),
+                    MergedActions = Action#gw_fetch{notify = sets:to_list(AllNotify)},
+                    ets:insert(TID, {Hash, MergedActions, Timer})
+            end,
             {noreply, State, ?connection_close_timeout}
     end;
 

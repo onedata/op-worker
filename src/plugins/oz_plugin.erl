@@ -31,7 +31,7 @@
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().
 get_oz_url() ->
-    {ok, Hname} = application:get_env(?APP_NAME, zone_domain),
+    {ok, Hname} = application:get_env(?APP_NAME, oz_domain),
     Hostname = str_utils:to_list(Hname),
     {ok, Port} = application:get_env(?APP_NAME, oz_rest_port),
     string:join(["https://", Hostname, ":", integer_to_list(Port)], "").

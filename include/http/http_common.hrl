@@ -18,4 +18,7 @@
 %% Includes from cowboy
 -type req() :: cowboy_req:req().
 
+%% Endpoint used to get provider's id
+-define(provider_id_path, "/get_provider_id").
+
 -endif.

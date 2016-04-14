@@ -11,10 +11,9 @@ import json
 import os
 import random
 import string
+from timeouts import *
 
 from . import common, docker, dns, cluster_manager, worker
-
-APPMOCK_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 
 
 def domain(appmock_instance, uid):
@@ -84,7 +83,10 @@ def _node_up(image, bindir, config, config_path, dns_servers, logdir):
     # file_name must be preserved as it must match the Erlang module name
     sys_config['app_description_file'] = '/tmp/' + app_desc_file_name
 
-    command = '''set -e
+    command = '''mkdir -p /root/bin/node/log/
+echo 'while ((1)); do chown -R {uid}:{gid} /root/bin/node/log; sleep 1; done' > /root/bin/chown_logs.sh
+bash /root/bin/chown_logs.sh &
+set -e
 cat <<"EOF" > /tmp/{app_desc_file_name}
 {app_desc_file}
 EOF
@@ -94,6 +96,8 @@ EOF
 escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json
 /root/bin/node/bin/appmock console'''
     command = command.format(
+        uid=os.geteuid(),
+        gid=os.getegid(),
         app_desc_file_name=app_desc_file_name,
         app_desc_file=open(app_desc_file_path, 'r').read(),
         gen_dev_args=json.dumps({'appmock': config}))

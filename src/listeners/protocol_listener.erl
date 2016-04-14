@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc protocol listener starting & stopping
+%%% @doc This module is responsible for clients' protocol listener starting
+%%% and stopping.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(protocol_listener).
@@ -24,23 +25,23 @@
 -export([port/0, start/0, stop/0, healthcheck/0]).
 
 %%%===================================================================
-%%% listener_starter_behaviour callbacks
+%%% listener_behaviour callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback port/0.
+%% {@link listener_behaviour} callback port/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec port() -> integer().
 port() ->
-    {ok, Port} = application:get_env(?CLUSTER_WORKER_APP_NAME, protocol_handler_port),
+    {ok, Port} = application:get_env(?APP_NAME, protocol_handler_port),
     Port.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback start/1.
+%% {@link listener_behaviour} callback start/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
@@ -59,7 +60,9 @@ start() ->
         ranch_ssl2, [
             {ip, Ip},
             {port, Port},
-            {certfile, CertFile}
+            {certfile, CertFile},
+            {ciphers, ssl:cipher_suites() -- weak_ciphers()},
+            {versions, ['tlsv1.2', 'tlsv1.1']}
         ],
         connection, []
     ),
@@ -71,7 +74,7 @@ start() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link listener_starter_behaviour} callback stop/1.
+%% {@link listener_behaviour} callback stop/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
@@ -88,16 +91,31 @@ stop() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the status of a listener.
+%% {@link listener_behaviour} callback healthcheck/0.
 %% @end
 %%--------------------------------------------------------------------
 -spec healthcheck() -> ok | {error, server_not_responding}.
 healthcheck() ->
-    {ok, ProtoPort} = application:get_env(?APP_NAME, protocol_handler_port),
-    case ssl2:connect("127.0.0.1", ProtoPort, [{packet, 4}, {active, false}]) of
+    {ok, Timeout} = application:get_env(?CLUSTER_WORKER_APP_NAME,
+        nagios_healthcheck_timeout),
+    case ssl2:connect("127.0.0.1", port(), [{packet, 4}, {active, false}], Timeout) of
         {ok, Sock} ->
             ssl2:close(Sock),
             ok;
         _ ->
             {error, server_not_responding}
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns list of weak ciphers.
+%% @end
+-spec weak_ciphers() -> list().
+%%--------------------------------------------------------------------
+weak_ciphers() ->
+    [{dhe_rsa, des_cbc, sha}, {rsa, des_cbc, sha}].

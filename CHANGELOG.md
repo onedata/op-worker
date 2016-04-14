@@ -4,6 +4,53 @@
 CHANGELOG
 ---------
 
+### 3.0.0-beta1
+
+* VFS-1802 Improve proxyio performance.
+* VFS-1521: Get providers for space from cache instead of OZ
+* VFS-1521: Resolve issues with too long document.key in dbsync's state
+* VFS-1768: BS Tooltip component; style improvements in file chunks modal
+* VFS-1768: Prevent opening space page when clicking on space settings icon; blocking Groups page with generic info message
+* VFS-1553: Improvements in permissions table; add users/groups action stub
+* VFS-1770 first reactive GUI for files
+* VFS-1553: Create and join space buttons/modals
+* VFS-1757 Change application ports availability checking procedure.
+* VFS-1549: Uploaded file name in upload widget
+* VFS-1549: Modification time display
+* VFS-1549: Dragging file on file browser initial support
+* VFS-1728-increase timeouts, timeouts definitions in separate file
+* VFS-1549: Added ember-notify
+* VFS-1745 Improve handling pending files.
+* VFS-1549: Permissions modal
+* VFS-1745 Use fslogic_storage:new_user_ctx to generate uid and gid in chown function.
+* VFS-1746, Adjust db_sync to new cluster_worker
+* VFS-1549: Modals for create dir and file
+* VFS-1549: First modal for file browser
+* VFS-1549: File browser toolbar, with previous functions
+* VFS-1734 fix a bug in unique filename resolver
+* VFS-1734 server side file upload
+* VFS-1521 Enable cross-provider subscriptions
+* VFS-1629 added delete messages handling
+* VFS-1629 user included in subscription when gets session
+* VFS-1629 propagating updates to the datastore
+* VFS-1629 connected provider to the OZ (over websocket)
+* VFS-1629 registering connection under name
+* VFS-1521 Enable file_location update in lfm
+* VFS-1629 simple user subscriptions
+* VFS-1521 Proxy read and write events
+* VFS-1521 Implement remote ProxyIO
+* VFS-1521 Improve logging
+* VFS-1521 Fixup provider proxy communication
+
+
+### 3.0.0-alpha3
+
+* VFS-1598 Fix oz_plugin module.
+* Add DBSync's stream restarter
+* VFS-1558: Changes in Polish i18n
+* Include Erlang ERTS include directory when building c_src/ .
+
+
 ### 3.0.0-alpha2
 
 * VFS-1665 Pull in ctool with new Macaroons.

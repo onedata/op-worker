@@ -39,3 +39,7 @@ c_src/rt_container/*.o
 c_src/oneproxy/build/*
 
 docs/_build/
+
+# OS X
+.DS_Store
+._*

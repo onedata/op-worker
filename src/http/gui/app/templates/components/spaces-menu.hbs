@@ -1,5 +1,5 @@
 <div class="secondary-sidebar-header">
-  spaces
+  {{t 'components.spacesMenu.title'}}
 </div>
 <ul>
   {{#each spaces as |space|}}
@@ -7,16 +7,15 @@
     {{!-- move sidebar entry creation to helper --}}
     <li id="{{space.sidebarEntryId}}" class="first-level">
       <div {{action 'showSpaceOptions' space}} class="secondary-sidebar-item first-level">
-        <span class="item-icon">
-          {{#if space.isDefault}}
-            {{icon 'spacedefault' 'default-space-color'}}
-          {{else}}
-            {{icon 'space' 'space-color'}}
-          {{/if}}
-        </span>
+        <span class="item-element item-click-area">
+          <span class="item-icon">
+            {{icon (if space.isDefault 'space-home' 'space')
+              (if space.isDefault 'default-space-color' 'space-color')}}
+          </span>
 
-        <span class="item-label">
-          {{space.name}}
+          <span class="item-label">
+            {{space.name}}
+          </span>
         </span>
       </div>
 

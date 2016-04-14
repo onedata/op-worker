@@ -11,6 +11,7 @@
 -module(fslogic_req_generic).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/events/types.hrl").
@@ -106,23 +107,31 @@ chown(_, _File, _UserId) ->
                            FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
-    ?info("Get attr for file entry: ~p", [File]),
+    ?debug("Get attr for file entry: ~p", [File]),
     case file_meta:get(File) of
         {ok, #document{key = UUID, value = #file_meta{
             type = Type, mode = Mode, atime = ATime, mtime = MTime,
-            ctime = CTime, uid = UID, name = Name}} = FileDoc} ->
+            ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
-            #posix_user_ctx{gid = GID} = try
+            #posix_user_ctx{gid = GID, uid = UID} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
-                fslogic_storage:new_posix_user_ctx(SessId, SpaceUUID)
+                StorageId = luma_utils:get_storage_id(SpaceUUID),
+                StorageType = luma_utils:get_storage_type(StorageId),
+                fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
             catch
                 throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
+            end,
+            FinalUID = case  session:get(SessId) of
+                {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
+                    UID;
+                _ ->
+                    luma_utils:gen_storage_uid(UserID)
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
                 uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
-                ctime = CTime, uid = fslogic_utils:gen_storage_uid(UID), size = Size, name = Name
+                ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};
         {error, {not_found, _}} ->
             #fuse_response{status = #status{code = ?ENOENT}}
@@ -138,12 +147,21 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                          FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 delete(CTX, File) ->
-    case file_meta:get(File) of
+    FuseResponse = case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
             delete_dir(CTX, FileDoc);
         {ok, FileDoc} ->
             delete_file(CTX, FileDoc)
-    end.
+    end,
+    case FuseResponse of
+        #fuse_response{status = #status{code = ?OK}} ->
+            {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, File),
+            fslogic_event:emit_file_removal(UUID);
+        _ ->
+            ok
+    end,
+    FuseResponse.
+
 
 
 %%--------------------------------------------------------------------

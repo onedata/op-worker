@@ -45,10 +45,17 @@ export default Ember.Component.extend({
    */
   permissions: [],
 
-  /** A title of first header in table (e.g. users/groups)
+  /**
+   * A type of table: users/groups
    * It must be injected into component.
    */
-  title: null,
+  type: null,
+
+  /** A localized title of table (based on type) */
+  title: function() {
+    return this.get('type') ?
+      this.get('i18n').t(`spaces.show.${this.get('type')}.tableTitle`) : '';
+  }.property('type'),
 
   /** Should permissions table be treated as modified and not saved?
    *  It is true when at least one permission model in collection is modified.

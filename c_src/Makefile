@@ -4,15 +4,16 @@ ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts
 
 LDFLAGS += $(shell pkg-config --libs botan-1.10) \
 -Wl,-rpath -Wl,$$ORIGIN/helpers/lib -L ../priv/helpers/lib -lhelpers \
--lboost_filesystem -lrados -ls3 -lglog -shared
+-lboost_filesystem -lrados -ls3 -lglog $(shell pkg-config --libs fuse) -shared
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall $(shell pkg-config --cflags botan-1.10) \
 -isystem ../priv/helpers/include -isystem $(ERTS_INCLUDE_DIR) \
--D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE
+-D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE $(shell pkg-config --cflags fuse)
 
 all: \
 		../priv/csr_creator_drv.so \
 		../priv/helpers_nif.so \
+		../priv/luma_nif.so \
 		../priv/rt_priority_queue_drv.so \
 		../priv/rt_map_drv.so
 
@@ -23,6 +24,10 @@ all: \
 
 ../priv/helpers_nif.so: \
 		helpers/helpers_nif.o
+	$(CXX) $? -o $@ $(LDFLAGS)
+
+../priv/luma_nif.so: \
+		luma/luma_nif.o
 	$(CXX) $? -o $@ $(LDFLAGS)
 
 ../priv/rt_priority_queue_drv.so: \
