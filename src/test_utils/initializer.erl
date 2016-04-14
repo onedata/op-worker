@@ -446,7 +446,7 @@ oz_spaces_mock_setup(Workers, Spaces, Users) ->
 
     test_utils:mock_expect(Workers, oz_spaces, get_users,
         fun(_, SpaceId) ->
-            {ok, proplists:get_value(SpaceId, Users)} end),
+            {ok, proplists:get_value(SpaceId, Users, [])} end),
     test_utils:mock_expect(Workers, oz_spaces, get_groups,
         fun(_, _) -> {ok, []} end),
 
