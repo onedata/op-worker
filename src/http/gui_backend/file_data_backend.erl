@@ -39,6 +39,8 @@
 %%--------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
+    SessionId = g_session:get_session_id(),
+    ?dump(SessionId),
     ok.
 
 
@@ -60,6 +62,7 @@ terminate() ->
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"file">>, [FileId]) ->
+    ?dump(FileId),
     SessionId = g_session:get_session_id(),
     try
         file_record(SessionId, FileId)

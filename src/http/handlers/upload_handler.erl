@@ -315,7 +315,7 @@ get_int_param(Key, Params) ->
     binary_to_integer(get_bin_param(Key, Params)).
 
 
-%%--------------------------------------------------------------------u
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Retrieves a value from a proplist. Assumes all values are binary.

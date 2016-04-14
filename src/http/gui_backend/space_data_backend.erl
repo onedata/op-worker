@@ -58,11 +58,11 @@ terminate() ->
 %%--------------------------------------------------------------------
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
-find(<<"space">>, SpaceDirIds) ->
+find(<<"space">>, SpaceIds) ->
     Res = lists:map(
-        fun(SpaceDirId) ->
-            space_record(SpaceDirId)
-        end, SpaceDirIds),
+        fun(SpaceId) ->
+            space_record(SpaceId)
+        end, SpaceIds),
     {ok, Res};
 
 find(<<"space-user-permission">>, AssocIds) ->
@@ -104,17 +104,10 @@ find(<<"space-group">>, AssocIds) ->
 find_all(<<"space">>) ->
     UserId = g_session:get_user_id(),
     {ok, SpaceIds} = onedata_user:get_spaces(UserId),
-    Res = lists:filtermap(
+    Res = lists:map(
         fun(SpaceId) ->
-            try
-                % @TODO Use only OZ space ids!!!
-                SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                {ok, [SpaceData]} = find(<<"space">>, [SpaceDirId]),
-                {true, SpaceData}
-            catch _:_ ->
-                ?error("Cannot resolve space data: ~p", [SpaceId]),
-                false
-            end
+            {ok, [SpaceData]} = find(<<"space">>, [SpaceId]),
+            SpaceData
         end, SpaceIds),
     {ok, Res}.
 
@@ -143,9 +136,8 @@ create_record(<<"space">>, Data) ->
     % @todo error handling
     Name = proplists:get_value(<<"name">>, Data, <<"">>),
     {ok, SpaceId} = oz_users:create_space(UserAuth, [{<<"name">>, Name}]),
-    SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, [
-        {<<"id">>, SpaceDirId},
+        {<<"id">>, SpaceId},
         {<<"name">>, Name},
         {<<"isDefault">>, false},
         {<<"userPermissions">>, []},
@@ -161,8 +153,7 @@ create_record(<<"space">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"space">>, SpaceDirId, Data) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+update_record(<<"space">>, SpaceId, Data) ->
     % @TODO Use space_info modify!!!!
     % @todo error handling
     UserAuth = op_gui_utils:get_user_rest_auth(),
@@ -184,8 +175,7 @@ update_record(<<"space">>, SpaceDirId, Data) ->
     ok;
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
-    {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, #document{
         value = #space_info{
@@ -218,9 +208,8 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
 %%--------------------------------------------------------------------
 -spec delete_record(RsrcType :: binary(), Id :: binary()) ->
     ok | gui_error:error_result().
-delete_record(<<"space">>, SpaceDirId) ->
+delete_record(<<"space">>, SpaceId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
     % @TODO Use space_info delete!!!!
     oz_spaces:remove(UserAuth, SpaceId),
     ok.
@@ -236,33 +225,30 @@ delete_record(<<"space">>, SpaceDirId) ->
 %% Returns a client-compliant space record based on space id.
 %% @end
 %%--------------------------------------------------------------------
--spec space_record(SpaceDirId :: binary()) -> proplists:proplist().
-space_record(SpaceDirId) ->
-    Auth = op_gui_utils:get_user_rest_auth(),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+-spec space_record(SpaceId :: binary()) -> proplists:proplist().
+space_record(SpaceId) ->
     {ok, #document{
         value = #space_info{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
-        }}} = space_info:get_or_fetch(Auth, SpaceId),
+        }}} = space_info:get(SpaceId),
 
     UserPermissions = lists:map(
         fun({UserId, _UserPerms}) ->
-            op_gui_utils:ids_to_association(UserId, SpaceDirId)
+            op_gui_utils:ids_to_association(UserId, SpaceId)
         end, UsersAndPerms),
 
     GroupPermissions = lists:map(
         fun({GroupId, _GroupPerms}) ->
-            op_gui_utils:ids_to_association(GroupId, SpaceDirId)
+            op_gui_utils:ids_to_association(GroupId, SpaceId)
         end, GroupsAndPerms),
 
-    DefaultSpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(
-        op_gui_utils:get_users_default_space()),
+    DefaultSpaceId = op_gui_utils:get_users_default_space(),
     [
-        {<<"id">>, SpaceDirId},
+        {<<"id">>, SpaceId},
         {<<"name">>, Name},
-        {<<"isDefault">>, SpaceDirId =:= DefaultSpaceDirId},
+        {<<"isDefault">>, SpaceId =:= DefaultSpaceId},
         {<<"userPermissions">>, UserPermissions},
         {<<"groupPermissions">>, GroupPermissions}
     ].
@@ -277,8 +263,7 @@ space_record(SpaceDirId) ->
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
-    {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
@@ -291,7 +276,7 @@ space_user_permission_record(AssocId) ->
         end, all_space_perms()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"space">>, SpaceDirId},
+        {<<"space">>, SpaceId},
         % @TODO VFS-1860 should be fixed
         % @todo this is assoc id so we can get user details via
         % space REST endpoint (we need space id to do that)
@@ -308,13 +293,15 @@ space_user_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec space_user_record(AssocId :: binary()) -> proplists:proplist().
 space_user_record(AssocId) ->
-    {UserId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
+    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     UserName = case onedata_user:get(UserId) of
         {ok, #document{value = #onedata_user{name = Name}}} ->
             Name;
         _ ->
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
             CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
+            % @TODO VFS-1860 should be fixed
+            % @todo this is assoc id so we can get user details via
+            % space REST endpoint (we need space id to do that)
             {ok, #user_details{
                 name = Name
             }} = oz_spaces:get_user_details(CurrentUserAuth, SpaceId, UserId),
@@ -336,8 +323,7 @@ space_user_record(AssocId) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
-    {GroupId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #space_info{
             groups = GroupsAndPerms
@@ -350,7 +336,7 @@ space_group_permission_record(AssocId) ->
         end, all_space_perms()),
     PermsMapped ++ [
         {<<"id">>, AssocId},
-        {<<"space">>, SpaceDirId},
+        {<<"space">>, SpaceId},
         % @TODO VFS-1860 should be fixed
         % @todo this is assoc id so we can get group details via
         % space REST endpoint (we need space id to do that)
@@ -367,14 +353,16 @@ space_group_permission_record(AssocId) ->
 %%--------------------------------------------------------------------
 -spec space_group_record(AssocId :: binary()) -> proplists:proplist().
 space_group_record(AssocId) ->
-    {GroupId, SpaceDirId} = op_gui_utils:association_to_ids(AssocId),
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+    {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     GroupName = case onedata_group:get(GroupId) of
         {ok, #document{value = #onedata_group{name = Name}}} ->
             Name;
         _ ->
+            % @TODO VFS-1860 should be fixed
+            % @todo this is assoc id so we can get group details via
+            % space REST endpoint (we need space id to do that)
+            % This is required when user hasn't logged in in this provider yet
             CurrentUserAuth = op_gui_utils:get_user_rest_auth(),
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
             {ok, #group_details{
                 name = Name
             }} = oz_spaces:get_group_details(CurrentUserAuth, SpaceId, GroupId),
