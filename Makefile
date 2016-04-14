@@ -78,7 +78,7 @@ generate: deps compile gui_prod
 	./rebar generate $(OVERLAY_VARS)
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
-clean: relclean pkgclean gui_clean
+clean: relclean pkgclean gui_clean distclean
 	./rebar clean
 
 distclean:

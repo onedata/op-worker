@@ -14,11 +14,12 @@
 -include_lib("ctool/include/posix/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, ls/4, get_children_count/2, rmdir/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, get_file_path/2]).
+-export([exists/1, mv/3, cp/3, get_file_path/2]).
 %% Functions operating on files
 -export([create/3, open/3, write/3, read/3, truncate/2, truncate/3,
     get_block_map/1, get_block_map/2, unlink/1, unlink/2, fsync/1]).
@@ -38,8 +39,6 @@
 %%--------------------------------------------------------------------
 %% IDs of entities
 -type file_uuid() :: binary().
--type group_id() :: binary().
--type user_id() :: binary().
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
@@ -54,8 +53,7 @@
 -type permission_type() :: root | owner | delete | read | write | execute | rdwr.
 -type file_attributes() :: #file_attr{}.
 -type xattr_name() :: binary().
--type access_control_entity() :: term(). % TODO should be a proper record
--type block_range() :: term(). % TODO should be a proper record
+-type access_control_entity() :: #accesscontrolentity{}.
 -type share_id() :: binary().
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
@@ -126,21 +124,21 @@ exists(FileKey) ->
 %%--------------------------------------------------------------------
 %% @doc Moves a file or directory to a new location.
 %%--------------------------------------------------------------------
--spec mv(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
-mv(FileKeyFrom, PathTo) ->
-    logical_file_manager:mv(FileKeyFrom, PathTo).
+-spec mv(onedata_auth_api:auth(), file_id_or_path(), file_path()) -> ok | error_reply().
+mv(Auth, FileEntry, TargetPath) ->
+    logical_file_manager:mv(Auth, FileEntry, TargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Copies a file or directory to given location.
 %%--------------------------------------------------------------------
--spec cp(FileKeyFrom :: file_key(), PathTo :: file_path()) -> ok | error_reply().
-cp(PathFrom, PathTo) ->
-    logical_file_manager:cp(PathFrom, PathTo).
+-spec cp(onedata_auth_api:auth(), file_id_or_path(), file_path()) -> ok | error_reply().
+cp(Auth, FileEntry, TargetPath) ->
+    logical_file_manager:cp(Auth, FileEntry, TargetPath).
 
 %%--------------------------------------------------------------------
 %% @doc Returns full path of file
 %%--------------------------------------------------------------------
--spec get_file_path(Auth :: onedata_auth_api:auth(), Uuid :: file_meta:uuid()) ->
+-spec get_file_path(Auth :: onedata_auth_api:auth(), Uuid :: file_uuid()) ->
     {ok, file_path()}.
 get_file_path(Auth, Uuid) ->
     logical_file_manager:get_file_path(Auth, Uuid).
@@ -151,7 +149,7 @@ get_file_path(Auth, Uuid) ->
 -spec unlink(file_handle()) -> ok | error_reply().
 unlink(Handle) ->
     logical_file_manager:unlink(Handle).
--spec unlink(onedata_auth_api:auth(), fslogic_worker:file()) -> ok | error_reply().
+-spec unlink(onedata_auth_api:auth(), file_id_or_path()) -> ok | error_reply().
 unlink(Auth, FileEntry) ->
     logical_file_manager:unlink(Auth, FileEntry).
 
