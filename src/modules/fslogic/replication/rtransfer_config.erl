@@ -69,8 +69,11 @@ rtransfer_opts() ->
                 lfm_files:write_without_events(Handle, Offset, Buffer)
             end},
         {close_fun,
-            fun(Handle) ->
-                lfm_files:fsync(Handle)
+            fun
+                (Handle = #lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = ?ROOT_SESS_ID}, open_mode = write}) ->
+                    lfm_files:fsync(Handle);
+                (_) ->
+                    ok
             end},
         {ranch_opts,
             [
