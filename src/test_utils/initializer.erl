@@ -173,7 +173,8 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{
-            name = UserName, space_ids = SpaceIds, group_ids = GroupIds
+            name = UserName, space_ids = SpaceIds, group_ids = GroupIds,
+            default_space = hd(SpaceIds)
         }}
     ]),
     [{ok, _} = rpc:call(Worker, onedata_group, get_or_fetch, [Id, #auth{}]) || Id <- GroupIds],

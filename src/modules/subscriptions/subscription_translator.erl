@@ -73,6 +73,11 @@ json_to_updates(Raw) ->
     Value :: subscriptions:record().
 props_to_value(onedata_user, Props) ->
     #onedata_user{
+        default_space = case proplists:get_value(<<"default_space">>, Props) of
+            <<"undefined">> -> undefined;
+            Value -> Value
+        end,
+        public_only = proplists:get_value(<<"public_only">>, Props),
         name = proplists:get_value(<<"name">>, Props),
         group_ids = proplists:get_value(<<"group_ids">>, Props),
         space_ids = proplists:get_value(<<"space_ids">>, Props)

@@ -165,7 +165,8 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
         [{ok, _} = onedata_group:get_or_fetch(Gid, Auth) || Gid <- GroupIds],
         OnedataUser = #onedata_user{
             name = Name,
-            space_ids = [DefaultSpaceId | SpaceIds -- [DefaultSpaceId]],
+            space_ids = SpaceIds,
+            default_space = DefaultSpaceId,
             group_ids = GroupIds,
             connected_accounts = ConnectedAccounts,
             alias = Alias,

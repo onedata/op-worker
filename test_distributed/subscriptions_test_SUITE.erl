@@ -132,7 +132,7 @@ accounts_incoming_updates(Config) ->
 saves_the_actual_data(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, S1, U1, G1} = {?ID(p1), ?ID(s1), ?ID(u1), ?ID(g1)},
+    {P1, S1, U1, U2, G1} = {?ID(p1), ?ID(s1), ?ID(u1), ?ID(u2), ?ID(g1)},
     Priv1 = privileges:space_user(),
     Priv2 = privileges:space_admin(),
 
@@ -155,10 +155,13 @@ saves_the_actual_data(Config) ->
 
     push_update(Node, [
         update(4, [<<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>], S1)
+        ),
+        update(5, [<<"r2">>, <<"r1">>], U2,
+            public_only_user(<<"bombastic">>)
         )
     ]),
-    expect_message([], 4, []),
+    expect_message([], 5, []),
 
     %% then
     ?assertMatch({ok, (#document{key = S1, value = #space_info{
@@ -178,8 +181,13 @@ saves_the_actual_data(Config) ->
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
         space_ids = [<<"C">>, <<"D">>],
+        default_space = S1,
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
+    ?assertMatch({ok, #document{key = U2, value = #onedata_user{
+        name = <<"bombastic">>,
+        revision_history = []}}
+    }, fetch(Node, onedata_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r2">>, <<"r1">>]}}
@@ -206,7 +214,7 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
 
     push_update(Node, [
         update(3, [<<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [], [S1])
+            user(<<"onedata ftw">>, [], [S1], S1)
         )
     ]),
     expect_message([U1], 3, []),
@@ -235,12 +243,12 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
             <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
         )),
         update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], S1))
     ]),
     expect_message([U1], 3, []),
 
     push_update(Node, [
-        update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+        update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1], S1))
     ]),
     expect_message([U1], 4, []),
 
@@ -256,14 +264,14 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
 updates_with_the_actual_data(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, S1, U1, G1} = {?ID(p1), ?ID(s1), ?ID(u1), ?ID(g1)},
+    {P1, S1, U1, U2, G1} = {?ID(p1), ?ID(s1), ?ID(u1), ?ID(u2), ?ID(g1)},
     Priv1 = privileges:space_user(),
     Priv2 = privileges:space_admin(),
 
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], S1)),
         update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
     ]),
     expect_message([], 4, []),
@@ -282,11 +290,14 @@ updates_with_the_actual_data(Config) ->
             [{<<"U1">>, Priv1}, {<<"U2">>, []}]
         )),
         update(7, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>], S1)
         ),
-        update(8, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        update(8, [<<"r2">>, <<"r1">>], U2,
+            public_only_user(<<"bombastic">>)
+        ),
+        update(9, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
     ]),
-    expect_message([], 8, []),
+    expect_message([], 9, []),
 
     %% then
     ?assertMatch({ok, (#document{key = S1, value = #space_info{
@@ -306,8 +317,13 @@ updates_with_the_actual_data(Config) ->
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
         space_ids = [<<"C">>, <<"D">>],
+        default_space = S1,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
+    ?assertMatch({ok, #document{key = U2, value = #onedata_user{
+        name = <<"bombastic">>,
+        revision_history = []}}
+    }, fetch(Node, onedata_user, U2)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
         client_name = <<"diginet rulz">>,
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
@@ -321,7 +337,7 @@ applies_deletion(Config) ->
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(2, [<<"r2">>, <<"r1">>], G1, group(<<"group">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], S1)),
         update(4, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet">>))
     ]),
     expect_message([], 4, []),
@@ -355,7 +371,7 @@ resolves_conflicts(Config) ->
         update(1, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(<<"space xp">>)),
         update(2, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"group lol">>)),
         update(3, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>], S1)
         )
     ]),
     expect_message([], 3, []),
@@ -365,7 +381,7 @@ resolves_conflicts(Config) ->
         update(4, [<<"r2">>, <<"r1">>], S1, space(<<"space">>)),
         update(5, [<<"r3">>], G1, group(<<"group">>)),
         update(6, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
-            user(<<"onedata">>, [], [])
+            user(<<"onedata">>, [], [], S1)
         )
     ]),
     expect_message([], 6, []),
@@ -380,7 +396,7 @@ resolves_conflicts(Config) ->
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
-        name = <<"onedata ftw">>,
+        name = <<"onedata ftw">>, default_space = S1,
         group_ids = [<<"A">>, <<"B">>], space_ids = [<<"C">>, <<"D">>],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
@@ -465,8 +481,13 @@ group(Name) ->
 group(Name, SIDs, UsersWithPrivileges) ->
     {group, [{name, Name}, {spaces, SIDs}, {users, UsersWithPrivileges}]}.
 
-user(Name, GIDs, SIDs) ->
-    {user, [{name, Name}, {group_ids, GIDs}, {space_ids, SIDs}]}.
+public_only_user(Name) ->
+    user(Name, [], [], undefined, true).
+user(Name, GIDs, SIDs, DefaultSpace) ->
+    user(Name, GIDs, SIDs, DefaultSpace, false).
+user(Name, GIDs, SIDs, DefaultSpace, PublicOnly) ->
+    {user, [{name, Name}, {group_ids, GIDs}, {space_ids, SIDs},
+        {public_only, PublicOnly}, {default_space, DefaultSpace}]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].
