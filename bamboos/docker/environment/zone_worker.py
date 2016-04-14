@@ -6,8 +6,7 @@ Brings up a set of cluster-worker nodes. They can create separate clusters.
 """
 
 import os
-import re
-from . import worker, common, gui_livereload
+from . import docker, common, worker, gui_livereload
 
 DOCKER_BINDIR_PATH = '/root/build'
 
@@ -31,39 +30,57 @@ class OZWorkerConfigurator:
 
     def tweak_config(self, cfg, uid, instance):
         sys_config = cfg['nodes']['node']['sys.config'][self.app_name()]
-        sys_config['external_ip'] = {'string': "IP_PLACEHOLDER"}
+        sys_config['external_ip'] = {'string': 'IP_PLACEHOLDER'}
 
         if 'http_domain' in sys_config:
             domain = worker.cluster_domain(instance, uid)
             sys_config['http_domain'] = {'string': domain}
-        # If livereload bases on gui output dir mount, change the location
-        # from where static files are served to that dir.
-        if 'gui_livereload' in cfg:
-            if cfg['gui_livereload'] in ['mount_output', 'mount_output_poll']:
-                sys_config['gui_custom_static_root'] = {
-                    'string': '/root/gui_static'}
+
+
         return cfg
 
-    def configure_started_instance(self, bindir, instance, config,
+    # Called BEFORE the instance (cluster of workers) is started
+    def pre_configure_instance(self, instance, uid, config):
+        this_config = config[self.domains_attribute()][instance]
+        print('GUI for: {0}'.format(common.format_hostname(instance, uid)))
+        # Prepare static dockers with GUI (if required) - they are reused by
+        # whole cluster (instance)
+        if 'gui' in this_config and isinstance(this_config['gui'], dict):
+            mount_path = this_config['gui']['mount_path']
+            print('    static root: {0}'.format(mount_path))
+            if 'host' in this_config['gui']['mount_from']:
+                host_volume_path = this_config['gui']['mount_from']['host']
+                print('    from host:   {0}'.format(host_volume_path))
+            elif 'docker' in this_config['gui']['mount_from']:
+                static_docker_image = this_config['gui']['mount_from']['docker']
+                # Create volume name from docker image name and instance name
+                volume_name = self.gui_files_volume_name(
+                    static_docker_image, instance)
+                # Create the volume from given image
+                docker.create_volume(
+                    path=mount_path,
+                    name=volume_name,
+                    image=static_docker_image,
+                    command='/bin/true')
+                print('    from docker: {0}'.format(static_docker_image))
+            livereload_flag = this_config['gui']['livereload']
+            print('    livereload:  {0}'.format(livereload_flag))
+        else:
+            print('    config not found, skipping')
+
+
+    # Called AFTER the instance (cluster of workers) has been started
+    def post_configure_instance(self, bindir, instance, config,
                                    container_ids, output,
                                    storages_dockers=None):
         this_config = config[self.domains_attribute()][instance]
         # Check if gui_livereload is enabled in env and turn it on
-        if 'gui_livereload' in this_config:
-            mode = this_config['gui_livereload']
-            if mode != 'none':
-                print '''\
-Starting GUI livereload
-    zone: {0}
-    mode: {1}'''.format(instance, mode)
+        if 'gui' in config and isinstance(config['gui'], dict):
+            livereload_flag = this_config['gui']['livereload']
+            livereload_dir = this_config['gui']['mount_path']
+            if livereload_flag:
                 for container_id in container_ids:
-                    gui_livereload.run(
-                        container_id,
-                        os.path.join(bindir, 'rel/gui.config'),
-                        'rel/oz_worker',
-                        DOCKER_BINDIR_PATH,
-                        '/root/bin/node',
-                        mode=mode)
+                    gui_livereload.run(container_id, livereload_dir)
 
     def pre_start_commands(self, domain):
         return '''
@@ -74,16 +91,21 @@ touch /root/bin/node/data/dns.config
 sed -i.bak s/onedata.org/{domain}/g /root/bin/node/data/dns.config
         '''.format(domain=domain)
 
-    def extra_volumes(self, config, bindir):
+    def extra_volumes(self, config, bindir, instance):
         extra_volumes = []
-        # Check if gui_livereload is enabled in env and add required volumes
-        if 'gui_livereload' in config:
-            extra_volumes += gui_livereload.required_volumes(
-                os.path.join(bindir, 'rel/gui.config'),
-                bindir,
-                'rel/oz_worker',
-                DOCKER_BINDIR_PATH,
-                mode=config['gui_livereload'])
+        # Check if gui mount is enabled in env and add required volumes
+        if 'gui' in config and isinstance(config['gui'], dict):
+            if 'host' in config['gui']['mount_from']:
+                # Mount a path on host to static root dir on OZ docker
+                mount_path = config['gui']['mount_path']
+                host_volume_path = config['gui']['mount_from']['host']
+                extra_volumes.append((host_volume_path, mount_path, 'ro'))
+            elif 'docker' in config['gui']['mount_from']:
+                static_docker_image = config['gui']['mount_from']['docker']
+                # Create volume name from docker image name
+                volume_name = self.gui_files_volume_name(
+                    static_docker_image, instance)
+                extra_volumes.append({'volumes_from': volume_name})
         return extra_volumes
 
     def app_name(self):
@@ -97,3 +119,9 @@ sed -i.bak s/onedata.org/{domain}/g /root/bin/node/data/dns.config
 
     def nodes_list_attribute(self):
         return "oz_worker_nodes"
+
+    # Create volume name from docker image name and instance name
+    def gui_files_volume_name(self, image_name, instance_name):
+        volume_name = image_name.split('/')[-1].replace(
+            ':', '_').replace('-', '_')
+        return '{0}_{1}'.format(instance_name, volume_name)

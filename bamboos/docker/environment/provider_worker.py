@@ -35,32 +35,53 @@ class ProviderWorkerConfigurator:
     def pre_start_commands(self, domain):
         return 'escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json'
 
-    def configure_started_instance(self, bindir, instance, config,
+        # Called BEFORE the instance (cluster of workers) is started
+    def pre_configure_instance(self, instance, uid, config):
+        this_config = config[self.domains_attribute()][instance]
+        print('GUI for: {0}'.format(common.format_hostname(instance, uid)))
+        # Prepare static dockers with GUI (if required) - they are reused by
+        # whole cluster (instance)
+        if 'gui' in this_config and isinstance(this_config['gui'], dict):
+            mount_path = this_config['gui']['mount_path']
+            print('    static root: {0}'.format(mount_path))
+            if 'host' in this_config['gui']['mount_from']:
+                host_volume_path = this_config['gui']['mount_from']['host']
+                print('    from host:   {0}'.format(host_volume_path))
+            elif 'docker' in this_config['gui']['mount_from']:
+                static_docker_image = this_config['gui']['mount_from']['docker']
+                # Create volume name from docker image name and instance name
+                volume_name = self.gui_files_volume_name(
+                    static_docker_image, instance)
+                # Create the volume from given image
+                docker.create_volume(
+                    path=mount_path,
+                    name=volume_name,
+                    image=static_docker_image,
+                    command='/bin/true')
+                print('    from docker: {0}'.format(static_docker_image))
+            livereload_flag = this_config['gui']['livereload']
+            print('    livereload:  {0}'.format(livereload_flag))
+        else:
+            print('    config not found, skipping')
+
+    # Called AFTER the instance (cluster of workers) has been started
+    def post_configure_instance(self, bindir, instance, config,
                                    container_ids, output, storages_dockers=None):
         this_config = config[self.domains_attribute()][instance]
         # Check if gui_livereload is enabled in env and turn it on
-        if 'gui_livereload' in this_config:
-            mode = this_config['gui_livereload']
-            if mode != 'none':
-                print '''\
-Starting GUI livereload
-    provider: {0}
-    mode: {1}'''.format(instance, mode)
+        if 'gui' in config and isinstance(config['gui'], dict):
+            livereload_flag = this_config['gui']['livereload']
+            livereload_dir = this_config['gui']['mount_path']
+            if livereload_flag:
                 for container_id in container_ids:
-                    gui_livereload.run(
-                        container_id,
-                        os.path.join(bindir, 'rel/gui.config'),
-                        'rel/op_worker',
-                        DOCKER_BINDIR_PATH,
-                        '/root/bin/node',
-                        mode=mode)
+                    gui_livereload.run(container_id, livereload_dir)
         if 'os_config' in this_config:
             os_config = this_config['os_config']
             create_storages(config['os_configs'][os_config]['storages'],
                             output[self.nodes_list_attribute()],
                             this_config[self.app_name()], bindir, storages_dockers)
 
-    def extra_volumes(self, config, bindir):
+    def extra_volumes(self, config, bindir, instance):
         if 'os_config' in config and config['os_config']['storages']:
             if isinstance(config['os_config']['storages'][0], basestring):
                 posix_storages = config['os_config']['storages']
@@ -71,14 +92,19 @@ Starting GUI livereload
             posix_storages = []
 
         extra_volumes = [common.volume_for_storage(s) for s in posix_storages]
-        # Check if gui_livereload is enabled in env and add required storages
-        if 'gui_livereload' in config:
-            extra_volumes += gui_livereload.required_volumes(
-                os.path.join(bindir, 'rel/gui.config'),
-                bindir,
-                'rel/op_worker',
-                DOCKER_BINDIR_PATH,
-                mode=config['gui_livereload'])
+        # Check if gui mount is enabled in env and add required volumes
+        if 'gui' in config and isinstance(config['gui'], dict):
+            if 'host' in config['gui']['mount_from']:
+                # Mount a path on host to static root dir on OP docker
+                mount_path = config['gui']['mount_path']
+                host_volume_path = config['gui']['mount_from']['host']
+                extra_volumes.append((host_volume_path, mount_path, 'ro'))
+            elif 'docker' in config['gui']['mount_from']:
+                static_docker_image = config['gui']['mount_from']['docker']
+                # Create volume name from docker image name
+                volume_name = self.gui_files_volume_name(
+                    static_docker_image, instance)
+                extra_volumes.append({'volumes_from': volume_name})
         return extra_volumes
 
     def app_name(self):
@@ -92,6 +118,12 @@ Starting GUI livereload
 
     def nodes_list_attribute(self):
         return "op_worker_nodes"
+
+    # Create volume name from docker image name and instance name
+    def gui_files_volume_name(self, image_name, instance_name):
+        volume_name = image_name.split('/')[-1].replace(
+            ':', '_').replace('-', '_')
+        return '{0}_{1}'.format(instance_name, volume_name)
 
 
 def create_storages(storages, op_nodes, op_config, bindir, storages_dockers):

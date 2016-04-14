@@ -147,7 +147,13 @@
     },
     "zone_domains": {
         "oz": {
-            "gui_livereload": "none",
+            "gui": {
+                "mount_path": "/var/www/html",
+                "mount_from": {
+                    "host": "/Users/lopiola/git/oz-gui-homepage/rel"
+                },
+                "livereload": true
+            },
             "db_driver": "couchdb",
             "cluster_manager": {
                 "cm": {
