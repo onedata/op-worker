@@ -28,21 +28,40 @@
     resolves_conflicts/1, registers_for_updates_with_users/1,
     applies_deletion/1,
     new_user_with_present_space_triggers_file_meta_creation/1,
-    updated_user_with_present_space_triggers_file_meta_creation/1]).
+    new_user_with_present_space_triggers_file_meta_creation2/1,
+    new_user_with_present_space_triggers_file_meta_creation3/1,
+    updated_user_with_present_space_triggers_file_meta_creation/1,
+    updated_user_with_present_space_triggers_file_meta_creation2/1,
+    updated_user_with_present_space_triggers_file_meta_creation3/1,
+    add_user_to_group_triggers_file_meta_creation/1,
+    add_space_to_group_triggers_file_meta_creation/1,
+    add_provider_to_space_triggers_file_meta_creation/1,
+    space_without_support_test/1]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
 -define(MESSAGES_RECEIVE_ATTEMPTS, 30).
 
 %% appends function name to id (atom) and yields binary accepted by the db
--define(ID(Id), list_to_binary(
-    atom_to_list(Id) ++ " # " ++
-        atom_to_list(element(2, element(2, process_info(self(), current_function))))
+-define(ID(Id),
+    ?ID(Id, element(2, element(2, process_info(self(), current_function))))
+).
+
+-define(ID(Id, Ext), list_to_binary(
+    atom_to_list(Id) ++ " # " ++ atom_to_list(Ext)
 )).
 
 all() -> ?ALL([
     new_user_with_present_space_triggers_file_meta_creation,
+    new_user_with_present_space_triggers_file_meta_creation2,
+    new_user_with_present_space_triggers_file_meta_creation3,
     updated_user_with_present_space_triggers_file_meta_creation,
+    updated_user_with_present_space_triggers_file_meta_creation2,
+    updated_user_with_present_space_triggers_file_meta_creation3,
+    add_user_to_group_triggers_file_meta_creation,
+    add_space_to_group_triggers_file_meta_creation,
+    add_provider_to_space_triggers_file_meta_creation,
+    space_without_support_test,
     registers_for_updates,
     accounts_incoming_updates,
     saves_the_actual_data,
@@ -185,29 +204,16 @@ saves_the_actual_data(Config) ->
     }, fetch(Node, provider_info, P1)),
     ok.
 
-new_user_with_present_space_triggers_file_meta_creation(Config) ->
+check_file_operations_test_base(Config, UpdateFun, IdExt) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
-    {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
+    {P1, S1, U1, G1} = {get_provider_id(Node), ?ID(s1, IdExt), ?ID(u1, IdExt), ?ID(g1, IdExt)},
     Priv1 = privileges:space_admin(),
     SessionID = <<"session">>,
     create_fuse_session(Node, SessionID, U1),
 
     %% when
-    push_update(Node, [
-        update(1, [<<"r2">>, <<"r1">>], S1, space(
-            <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
-        )),
-        update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
-    ]),
-    expect_message([U1], 2, []),
-
-    push_update(Node, [
-        update(3, [<<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [], [S1])
-        )
-    ]),
-    expect_message([U1], 3, []),
+    UpdateFun(Node, S1, U1, P1, Priv1, G1),
 
     %% then
     FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
@@ -217,8 +223,207 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
     {ok, Handle} = OpenResult,
     ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, <<"yolo">>)),
     ok.
+
+new_user_with_present_space_triggers_file_meta_creation(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        ]),
+        expect_message([U1], 2, []),
+
+        push_update(Node, [
+            update(3, [<<"r2">>, <<"r1">>], U1,
+                user(<<"onedata ftw">>, [], [S1])
+            )
+        ]),
+        expect_message([U1], 3, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+new_user_with_present_space_triggers_file_meta_creation2(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
+            update(3, [<<"r2">>, <<"r1">>], U1,
+                user(<<"onedata ftw">>, [], [S1])
+            )
+        ]),
+        expect_message([U1], 3, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+new_user_with_present_space_triggers_file_meta_creation3(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        ]),
+        expect_message([U1], 1, []),
+
+        push_update(Node, [
+            update(2, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            ))
+        ]),
+        expect_message([U1], 2, []),
+
+        push_update(Node, [
+            update(3, [<<"r2">>, <<"r1">>], U1,
+                user(<<"onedata ftw">>, [], [S1])
+            )
+        ]),
+        expect_message([U1], 3, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
 
 updated_user_with_present_space_triggers_file_meta_creation(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+        ]),
+        expect_message([U1], 3, []),
+
+        push_update(Node, [
+            update(4, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            )),
+            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+        ]),
+        expect_message([U1], 5, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+        ]),
+        expect_message([U1], 1, []),
+
+        push_update(Node, [
+            update(2, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [], [], [{P1, 1000}]
+            )),
+            update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        ]),
+        expect_message([U1], 3, []),
+
+        push_update(Node, [
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1])),
+            update(5, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            ))
+        ]),
+        expect_message([U1], 5, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+updated_user_with_present_space_triggers_file_meta_creation3(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+        ]),
+        expect_message([U1], 1, []),
+
+        push_update(Node, [
+            update(2, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [], [], [{P1, 1000}]
+            )),
+            update(3, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
+        ]),
+        expect_message([U1], 3, []),
+
+        push_update(Node, [
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+        ]),
+        expect_message([U1], 4, []),
+
+        push_update(Node, [
+            update(5, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            ))
+        ]),
+        expect_message([U1], 5, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+add_user_to_group_triggers_file_meta_creation(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
+            update(4, [<<"r2">>, <<"r1">>], G1, group(<<"onedata_gr">>, [S1], []))
+        ]),
+        expect_message([U1], 4, []),
+
+        push_update(Node, [
+            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"onedata">>, [], [{U1, Priv1}]))
+        ]),
+        expect_message([U1], 5, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+add_space_to_group_triggers_file_meta_creation(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
+            update(4, [<<"r2">>, <<"r1">>], G1, group(<<"onedata_gr">>, [], [{U1, Priv1}]))
+        ]),
+        expect_message([U1], 4, []),
+
+        push_update(Node, [
+            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"onedata">>, [S1], []))
+        ]),
+        expect_message([U1], 5, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+add_provider_to_space_triggers_file_meta_creation(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], []
+            )),
+            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+        ]),
+        expect_message([U1], 3, []),
+
+        push_update(Node, [
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            ))
+        ]),
+        expect_message([U1], 4, [])
+    end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+space_without_support_test(Config) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
     {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
@@ -229,26 +434,18 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
     %% when
     push_update(Node, [
         update(1, [<<"r2">>, <<"r1">>], S1, space(
-            <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            <<"space_name">>, [{U1, Priv1}], [], []
         )),
         update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
     ]),
     expect_message([U1], 3, []),
 
-    push_update(Node, [
-        update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
-    ]),
-    expect_message([U1], 4, []),
-
     %% then
     FilePath = <<"/spaces/space_name/", (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
-    OpenResult = lfm_proxy:open(Node, SessionID, {path, FilePath}, write),
-    ?assertMatch({ok, _}, OpenResult),
-    {ok, Handle} = OpenResult,
-    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, <<"yolo">>)),
+    ?assertMatch({error, _}, lfm_proxy:create(Node, SessionID, FilePath, 8#240)),
     ok.
+
 
 updates_with_the_actual_data(Config) ->
     %% given
