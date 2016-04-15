@@ -181,8 +181,8 @@ fetch(Client) ->
     OnedataUserDoc = #document{key = UserId, value = OnedataUser},
     {ok, _} = onedata_user:save(OnedataUserDoc),
 
-    [{ok, _} = space_info:get_or_fetch(Client, SpaceId, UserId) || SpaceId <- SpaceIds],
-    [{ok, _} = onedata_group:get_or_fetch(Client, GroupId) || GroupId <- GroupIds],
+    [space_info:get_or_fetch(Client, SpaceId, UserId) || SpaceId <- SpaceIds],
+    [onedata_group:get_or_fetch(Client, GroupId) || GroupId <- GroupIds],
 
     {ok, OnedataUserDoc}.
 
