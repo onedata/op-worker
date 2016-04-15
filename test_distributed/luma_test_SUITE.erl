@@ -189,11 +189,11 @@ s3_user_provider_test(Config) ->
     %% mock invocation of amazonaws_iam API calls
     test_utils:mock_new(Worker, amazonaws_iam),
     test_utils:mock_expect(Worker, amazonaws_iam, create_user,
-        fun(_, _, _, _, _) -> ok end),
-    test_utils:mock_expect(Worker, amazonaws_iam, create_access_key,
-        fun(_, _, _, _, _) -> {ok, {AccessKey, SecretKey}} end),
-    test_utils:mock_expect(Worker, amazonaws_iam, allow_access_to_bucket,
         fun(_, _, _, _, _, _) -> ok end),
+    test_utils:mock_expect(Worker, amazonaws_iam, create_access_key,
+        fun(_, _, _, _, _, _) -> {ok, {AccessKey, SecretKey}} end),
+    test_utils:mock_expect(Worker, amazonaws_iam, allow_access_to_bucket,
+        fun(_, _, _, _, _, _, _) -> ok end),
 
     test_utils:mock_new(Worker, file_meta),
     test_utils:mock_expect(Worker, file_meta, get, fun(_) ->
@@ -208,9 +208,9 @@ s3_user_provider_test(Config) ->
         [#helper_init{name = ?S3_HELPER_NAME}, ?SESSION_ID, SpaceUUID])),
 
     %% amazonaws_iam API should be requested only once for new user
-    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, create_user, 5, 1),
-    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, create_access_key, 5, 1),
-    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, allow_access_to_bucket, 6, 1).
+    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, create_user, 6, 1),
+    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, create_access_key, 6, 1),
+    test_utils:mock_assert_num_calls(Worker, amazonaws_iam, allow_access_to_bucket, 7, 1).
 
 s3_user_proxy_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
