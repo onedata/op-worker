@@ -147,7 +147,8 @@ command = command.format(
     shed_privileges=(platform.system() == 'Linux' and os.geteuid() != 0),
     groups=args.groups)
 
-reflect = [(args.src, 'rw')]
+# Mount docker socket so dockers can start dockers
+reflect = [(args.src, 'rw'), ('/var/run/docker.sock', 'rw')]
 reflect.extend(zip(args.reflect, ['rw'] * len(args.reflect)))
 if args.mount_cache:
     reflect.extend([('/var/cache/ccache', 'rw'), ('/var/cache/beamcache', 'rw')])
