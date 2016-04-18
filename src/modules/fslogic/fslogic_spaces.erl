@@ -69,7 +69,7 @@ get_space(FileEntry, UserId) ->
     end,
     #document{key = SpaceUUID} = SpaceDoc,
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
+    {ok, SpaceIds} = user_logic:get_spaces(UserId),
     case (is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds)) orelse UserId == ?ROOT_USER_ID of
         true -> {ok, SpaceDoc};
         false -> throw({not_a_space, FileEntry})

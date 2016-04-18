@@ -24,7 +24,7 @@
     model_init/0, 'after'/5, before/4]).
 
 %% API
--export([fetch/1, get_or_fetch/2, get_spaces/1, create_or_update/2]).
+-export([fetch/1, get_or_fetch/2, create_or_update/2]).
 
 -export_type([id/0, connected_account/0]).
 
@@ -193,19 +193,4 @@ get_or_fetch(Key, Token) ->
         {ok, Doc} -> {ok, Doc};
         {error, {not_found, _}} -> fetch(Token);
         Error -> Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of user space IDs.
-%% @end
-%%--------------------------------------------------------------------
--spec get_spaces(UserId :: onedata_user:id()) ->
-    {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
-get_spaces(UserId) ->
-    case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->
-            {ok, SpaceIds};
-        {error, Reason} ->
-            {error, Reason}
     end.

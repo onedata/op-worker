@@ -100,8 +100,9 @@ find(<<"space-group">>, AssocIds) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"space">>) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
-    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
+    {ok, SpaceIds} = user_logic:get_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
             {ok, [SpaceData]} = find(<<"space">>, [SpaceId]),
@@ -162,7 +163,7 @@ update_record(<<"space">>, SpaceId, Data) ->
         false ->
             ok;
         true ->
-            space_logic:set_default(UserAuth, SpaceId)
+            user_logic:set_default_space(UserAuth, SpaceId)
     end,
     case proplists:get_value(<<"name">>, Data, undefined) of
         undefined ->
@@ -222,17 +223,18 @@ delete_record(<<"space">>, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
+    UserId = g_session:get_user_id(),
     Auth = op_gui_utils:get_user_rest_auth(),
     {ok, #document{
         value = #space_info{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
-        }}} = space_logic:get(Auth, SpaceId, g_session:get_user_id()),
+        }}} = space_logic:get(Auth, SpaceId, UserId),
 
     UserPermissions = lists:map(
-        fun({UserId, _UserPerms}) ->
-            op_gui_utils:ids_to_association(UserId, SpaceId)
+        fun({UsId, _UsPerms}) ->
+            op_gui_utils:ids_to_association(UsId, SpaceId)
         end, UsersAndPerms),
 
     GroupPermissions = lists:map(
@@ -240,7 +242,7 @@ space_record(SpaceId) ->
             op_gui_utils:ids_to_association(GroupId, SpaceId)
         end, GroupsAndPerms),
 
-    DefaultSpaceId = op_gui_utils:get_users_default_space(),
+    DefaultSpaceId = user_logic:get_default_space(Auth, UserId),
     [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},

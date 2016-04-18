@@ -61,17 +61,6 @@ delete(Client, SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets space as default for an user.
-%% User identity is determined using provided client.
-%% @end
-%%--------------------------------------------------------------------
--spec set_default(oz_endpoint:client(), SpaceId :: binary()) ->
-    ok | {error, Reason :: term()}.
-set_default(Client, SpaceId) ->
-    oz_users:set_default_space(Client, SpaceId).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Sets name for an user.
 %% User identity is determined using provided client.
 %% @end
@@ -93,5 +82,5 @@ set_name(Client, SpaceId, Name) ->
 set_user_privileges(Client, SpaceId, UserId, Privileges) ->
     oz_spaces:set_user_privileges(Client, SpaceId, UserId, [
         % usort - make sure there are no duplicates
-        {<<"privileges">>, lists:usort(Privileges)}
+        {<<"privileges">>, Privileges}
     ]).

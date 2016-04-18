@@ -56,12 +56,14 @@ terminate() ->
 -spec find(ResourceType :: binary(), Ids :: [binary()]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find(<<"data-space">>, [SpaceId]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    UserId = g_session:get_user_id(),
     {ok, #document{
         value = #space_info{
             name = Name,
             providers_supports = Providers
-        }}} = space_info:get(SpaceId),
-    DefaultSpaceId = op_gui_utils:get_users_default_space(),
+        }}} = space_logic:get(UserAuth, SpaceId, UserId),
+    DefaultSpaceId = user_logic:get_default_space(UserAuth, UserId),
     % If current provider is not supported, return null rootDir which will
     % cause the client to render a "space not supported" message.
     RootDir = case Providers of
@@ -87,8 +89,9 @@ find(<<"data-space">>, [SpaceId]) ->
 -spec find_all(ResourceType :: binary()) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
-    {ok, SpaceIds} = onedata_user:get_spaces(UserId),
+    {ok, SpaceIds} = user_logic:get_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
             {ok, Data} = find(<<"data-space">>, [SpaceId]),
