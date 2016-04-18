@@ -14,8 +14,8 @@
 #####################################################################
 
 # Configuration
-STATIC_FILES_IMAGE='docker.onedata.org/oz-gui-default:VFS-1825'
-TARGET_DIR='rel/oz_worker/data/gui_static'
+STATIC_FILES_IMAGE='docker.onedata.org/op-gui-default:VFS-1825'
+TARGET_DIR='rel/op_worker/data/gui_static'
 
 # Fail on any command failure
 set -e
@@ -34,7 +34,9 @@ mkdir -p ${TARGET_DIR}
 rm -rf ${TARGET_DIR}
 
 # Copy the files ( -L = follow symbolic links )
-docker cp -L ${CONTAINER_ID}:/var/www/html ${TARGET_DIR}
+# @TODO until we use docker 1.9 (in onedata/builder) cp from /artefact rather
+# than /var/www/html because 1.9 client does not support follow symbolic links.
+docker cp ${CONTAINER_ID}:/artefact ${TARGET_DIR}
 
 # Remove unneeded container
 docker rm -f ${CONTAINER_ID}
