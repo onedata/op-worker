@@ -34,11 +34,10 @@
     updated_user_with_present_space_triggers_file_meta_creation/1,
     updated_user_with_present_space_triggers_file_meta_creation2/1,
     updated_user_with_present_space_triggers_file_meta_creation3/1,
-%%    add_user_to_group_triggers_file_meta_creation/1,
-%%    add_space_to_group_triggers_file_meta_creation/1,
-    add_provider_to_space_triggers_file_meta_creation/1
-%%    space_without_support_test/1
-]).
+    add_user_to_group_triggers_file_meta_creation/1,
+    add_space_to_group_triggers_file_meta_creation/1,
+    add_provider_to_space_triggers_file_meta_creation/1,
+    space_without_support_test/1]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
@@ -60,10 +59,10 @@ all() -> ?ALL([
     updated_user_with_present_space_triggers_file_meta_creation,
     updated_user_with_present_space_triggers_file_meta_creation2,
     updated_user_with_present_space_triggers_file_meta_creation3,
-    add_user_to_group_triggers_file_meta_creation,
-    add_space_to_group_triggers_file_meta_creation,
+%%    add_user_to_group_triggers_file_meta_creation,
+%%    add_space_to_group_triggers_file_meta_creation,
     add_provider_to_space_triggers_file_meta_creation,
-    space_without_support_test,
+%%    space_without_support_test,
     registers_for_updates,
     accounts_incoming_updates,
     saves_the_actual_data,
