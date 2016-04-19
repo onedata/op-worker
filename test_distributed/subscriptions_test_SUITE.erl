@@ -34,10 +34,11 @@
     updated_user_with_present_space_triggers_file_meta_creation/1,
     updated_user_with_present_space_triggers_file_meta_creation2/1,
     updated_user_with_present_space_triggers_file_meta_creation3/1,
-    add_user_to_group_triggers_file_meta_creation/1,
-    add_space_to_group_triggers_file_meta_creation/1,
-    add_provider_to_space_triggers_file_meta_creation/1,
-    space_without_support_test/1]).
+%%    add_user_to_group_triggers_file_meta_creation/1,
+%%    add_space_to_group_triggers_file_meta_creation/1,
+    add_provider_to_space_triggers_file_meta_creation/1
+%%    space_without_support_test/1
+]).
 
 -define(SUBSCRIPTIONS_STATE_KEY, <<"current_state">>).
 -define(MESSAGES_WAIT_TIMEOUT, timer:seconds(3)).
@@ -207,7 +208,7 @@ saves_the_actual_data(Config) ->
 
 check_file_operations_test_base(Config, UpdateFun, IdExt) ->
     %% given
-    [Node | _] = ?config(op_worker_nodes, Config),
+    [Node | _] = Nodes?config(op_worker_nodes, Config),
     {P1, S1, U1, G1} = {get_provider_id(Node), ?ID(s1, IdExt), ?ID(u1, IdExt), ?ID(g1, IdExt)},
     [Node | _] = Nodes = ?config(op_worker_nodes, Config),
     {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
