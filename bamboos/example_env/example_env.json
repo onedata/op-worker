@@ -79,7 +79,6 @@
         "p1": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
-            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -119,7 +118,6 @@
         "p2.oz": {
             "db_driver": "couchdb",
             "os_config": "cfg2",
-            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -215,13 +213,6 @@
     "zone_domains": {
         "oz": {
             "db_driver": "couchdb",
-            "gui": {
-                "mount_path": "/var/www/html",
-                "mount_from": {
-                    "host": "/Users/lopiola/git/oz-gui-default/rel"
-                },
-                "livereload": true
-            },
             "cluster_manager": {
                 "cm": {
                     "vm.args": {

@@ -41,14 +41,16 @@ class ProviderWorkerConfigurator:
         print('GUI for: {0}'.format(common.format_hostname(instance, uid)))
         # Prepare static dockers with GUI (if required) - they are reused by
         # whole cluster (instance)
-        if 'gui' in this_config and isinstance(this_config['gui'], dict):
-            mount_path = this_config['gui']['mount_path']
+        if 'gui_override' in this_config and isinstance(
+                this_config['gui_override'], dict):
+            gui_config = this_config['gui_override']
+            mount_path = gui_config['mount_path']
             print('    static root: {0}'.format(mount_path))
-            if 'host' in this_config['gui']['mount_from']:
-                host_volume_path = this_config['gui']['mount_from']['host']
+            if 'host' in gui_config['mount_from']:
+                host_volume_path = gui_config['mount_from']['host']
                 print('    from host:   {0}'.format(host_volume_path))
-            elif 'docker' in this_config['gui']['mount_from']:
-                static_docker_image = this_config['gui']['mount_from']['docker']
+            elif 'docker' in gui_config['mount_from']:
+                static_docker_image = gui_config['mount_from']['docker']
                 # Create volume name from docker image name and instance name
                 volume_name = self.gui_files_volume_name(
                     static_docker_image, instance)
@@ -59,7 +61,7 @@ class ProviderWorkerConfigurator:
                     image=static_docker_image,
                     command='/bin/true')
                 print('    from docker: {0}'.format(static_docker_image))
-            livereload_flag = this_config['gui']['livereload']
+            livereload_flag = gui_config['livereload']
             print('    livereload:  {0}'.format(livereload_flag))
         else:
             print('    config not found, skipping')
@@ -69,9 +71,11 @@ class ProviderWorkerConfigurator:
                                    container_ids, output, storages_dockers=None):
         this_config = config[self.domains_attribute()][instance]
         # Check if gui_livereload is enabled in env and turn it on
-        if 'gui' in config and isinstance(config['gui'], dict):
-            livereload_flag = this_config['gui']['livereload']
-            livereload_dir = this_config['gui']['mount_path']
+        if 'gui_override' in config and isinstance(config['gui_override'],
+                                                   dict):
+            gui_config = this_config['gui_override']
+            livereload_flag = gui_config['livereload']
+            livereload_dir = gui_config['mount_path']
             if livereload_flag:
                 for container_id in container_ids:
                     gui_livereload.run(container_id, livereload_dir)
@@ -93,14 +97,15 @@ class ProviderWorkerConfigurator:
 
         extra_volumes = [common.volume_for_storage(s) for s in posix_storages]
         # Check if gui mount is enabled in env and add required volumes
-        if 'gui' in config and isinstance(config['gui'], dict):
-            if 'host' in config['gui']['mount_from']:
-                # Mount a path on host to static root dir on OP docker
-                mount_path = config['gui']['mount_path']
-                host_volume_path = config['gui']['mount_from']['host']
+        if 'gui_override' in config and isinstance(config['gui_override'], dict):
+            gui_config = config['gui_override']
+            if 'host' in gui_config['mount_from']:
+                # Mount a path on host to static root dir on OZ docker
+                mount_path = gui_config['mount_path']
+                host_volume_path = gui_config['mount_from']['host']
                 extra_volumes.append((host_volume_path, mount_path, 'ro'))
-            elif 'docker' in config['gui']['mount_from']:
-                static_docker_image = config['gui']['mount_from']['docker']
+            elif 'docker' in gui_config['mount_from']:
+                static_docker_image = gui_config['mount_from']['docker']
                 # Create volume name from docker image name
                 volume_name = self.gui_files_volume_name(
                     static_docker_image, instance)
