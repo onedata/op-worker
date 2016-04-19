@@ -12,10 +12,12 @@
 -author("Rafal Slota").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/posix/errors.hrl").
 
 %% API
+-export([gen_path/2, gen_storage_path/1]).
 -export([verify_file_path/1, get_canonical_file_entry/2]).
 -export([basename/1, split/1, join/1, is_space_dir/1, basename_and_parent/1]).
 -export([dirname/1]).
@@ -93,6 +95,34 @@ binary_join(List, Sep) ->
     end, <<>>, List).
 
 %%--------------------------------------------------------------------
+%% @doc
+%% Generate file_meta:path() for given file_meta:entry()
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_path(file_meta:entry(), SessId :: session:id()) ->
+    {ok, file_meta:path()} | datastore:generic_error().
+gen_path({path, Path}, _SessId) when is_binary(Path) ->
+    {ok, Path};
+gen_path(Entry, SessId) ->
+    ?run(begin
+        gen_path(Entry, SessId, [])
+    end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generate storage file_meta:path() for given file_meta:entry()
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_path(file_meta:entry()) ->
+    {ok, file_meta:path()} | datastore:generic_error().
+gen_storage_path({path, Path}) when is_binary(Path) ->
+    {ok, Path};
+gen_storage_path(Entry) ->
+    ?run(begin
+        gen_storage_path(Entry, [])
+    end).
+
+%%--------------------------------------------------------------------
 %% @doc Gets file's full name (user's root is added to name, but only when
 %% asking about non-group dir).
 %% @end
@@ -108,37 +138,20 @@ get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME])
     {path, Path};
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceName | Tokens]) ->
     UserId = fslogic_context:get_user_id(Ctx),
+    #fslogic_ctx{session_id = SessId} = Ctx,
+    {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
 
-    Spaces = case UserId of
-        ?ROOT_USER_ID ->
-            {ok, Docs} = space_info:list(),
-            Docs;
-        _ ->
-            {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} = onedata_user:get(UserId),
-            lists:map(fun(SpaceId) ->
-                {ok, Doc} = space_info:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)),
-                Doc
-            end, SpaceIds)
-    end,
+    MatchedSpaceIds = lists:filter(fun(SpaceId) ->
+        {ok, #document{value = #space_info{name = Name}}} = space_info:get_or_fetch(SessId, SpaceId),
+        Name =:= SpaceName
+    end, SpaceIds),
 
-    Len = size(SpaceName),
-    MatchedSpacesIds = lists:filtermap(fun
-        (#document{value = #space_info{id = Id, name = Name}}) ->
-            CommonPrefixLen = binary:longest_common_prefix([
-                SpaceName,
-                <<Name/binary, ?SPACE_NAME_ID_SEPARATOR, Id/binary>>
-            ]),
-            case CommonPrefixLen of
-                Len -> {true, Id};
-                _ -> false
-            end
-    end, Spaces),
-
-    case MatchedSpacesIds of
+    case MatchedSpaceIds of
         [] ->
             throw(?ENOENT);
         [SpaceId] ->
-            {path, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
+            {path, fslogic_path:join(
+                [<<?DIRECTORY_SEPARATOR>>, ?SPACES_BASE_DIR_NAME, SpaceId | Tokens])}
     end;
 get_canonical_file_entry(Ctx, Tokens) ->
     {ok, DefaultSpaceId} = fslogic_spaces:get_default_space_id(Ctx),
@@ -173,7 +186,8 @@ basename(Path) ->
 %% @doc Returns file's name and its parent's path.
 %% @end
 %%--------------------------------------------------------------------
--spec basename_and_parent(Path :: file_meta:path()) -> {Name :: file_meta:name(), Parent :: file_meta:path()}.
+-spec basename_and_parent(Path :: file_meta:path()) ->
+    {Name :: file_meta:name(), Parent :: file_meta:path()}.
 basename_and_parent(Path) ->
     case lists:reverse(split(Path)) of
         [Leaf | Tokens] ->
@@ -192,4 +206,50 @@ is_space_dir(Path) ->
         [?SPACES_BASE_DIR_NAME] -> true;
         [?SPACES_BASE_DIR_NAME, _SpaceName] -> true;
         _ -> false
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Internal helper for gen_path/2. Accumulates all file meta names
+%% and concatenates them into path().
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_path(file_meta:entry(), session:id(), [file_meta:name()]) ->
+    {ok, file_meta:path()} | datastore:generic_error() | no_return().
+gen_path(Entry, SessId, Tokens) ->
+    SpaceBaseDirUUID = ?SPACES_BASE_DIR_UUID,
+    {ok, #document{key = UUID, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
+    case file_meta:get_parent(Doc) of
+        {ok, #document{key = ?ROOT_DIR_UUID}} ->
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
+        {ok, #document{key = SpaceBaseDirUUID}} ->
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(UUID),
+            {ok, #document{value = #space_info{name = SpaceName}}} =
+                space_info:get_or_fetch(SessId, SpaceId),
+            gen_path({uuid, SpaceBaseDirUUID}, SessId, [SpaceName | Tokens]);
+        {ok, #document{key = ParentUUID}} ->
+            gen_path({uuid, ParentUUID}, SessId, [Name | Tokens])
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Internal helper for gen_storage_path/1. Accumulates all file meta names
+%% and concatenates them into storage path().
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_storage_path(file_meta:entry(), [file_meta:name()]) ->
+    {ok, file_meta:path()} | datastore:generic_error() | no_return().
+gen_storage_path(Entry, Tokens) ->
+    {ok, #document{value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
+    case file_meta:get_parent(Doc) of
+        {ok, #document{key = ?ROOT_DIR_UUID}} ->
+            {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, Name | Tokens])};
+        {ok, #document{key = ParentUUID}} ->
+            gen_storage_path({uuid, ParentUUID}, [Name | Tokens])
     end.
