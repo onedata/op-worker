@@ -10,10 +10,8 @@ providers <-> oz environment.
 """
 
 import subprocess
-
+from timeouts import *
 from . import common, docker
-
-DNS_WAIT_FOR_SECONDS = 60
 
 
 def _dns_ready(dns):
@@ -85,7 +83,7 @@ def up(uid, hosts, dnses, dns_to_restart):
 
     ip = common.get_docker_ip(dns)
 
-    common.wait_until(_dns_ready, [dns], DNS_WAIT_FOR_SECONDS)
+    common.wait_until(_dns_ready, [dns], DNS_WAIT_SECONDS)
 
     return {'dns': ip, 'docker_ids': [dns]}
 

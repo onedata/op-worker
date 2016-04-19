@@ -25,7 +25,7 @@ from environment import docker
 
 
 def default_keys_location():
-    ssh_dir = expanduser("~/.ssh")
+    ssh_dir = expanduser('~/.ssh')
     ssh_slash_docker = os.path.join(ssh_dir, 'docker')
     if os.path.isdir(ssh_slash_docker):
         ssh_dir = ssh_slash_docker
@@ -134,6 +134,12 @@ for root, dirs, files in os.walk(ssh_home):
     for file in files:
         os.chmod(os.path.join(root, file), 0o600)
 
+try:
+    os.makedirs('/root/.docker/')
+except:
+    pass
+shutil.copyfile('/root/docker_config/config.json', '/root/.docker/config.json')
+
 sh_command = 'eval $(ssh-agent) > /dev/null; ssh-add 2>&1; {command} {params}'
 ret = subprocess.call(['sh', '-c', sh_command])
 sys.exit(ret)
@@ -147,10 +153,22 @@ command = command.format(
     shed_privileges=(platform.system() == 'Linux' and os.geteuid() != 0),
     groups=args.groups)
 
-reflect = [(args.src, 'rw')]
+# Mount docker socket so dockers can start dockers
+reflect = [(args.src, 'rw'), ('/var/run/docker.sock', 'rw')]
 reflect.extend(zip(args.reflect, ['rw'] * len(args.reflect)))
 if args.mount_cache:
-    reflect.extend([('/var/cache/ccache', 'rw'), ('/var/cache/beamcache', 'rw')])
+    reflect.extend([
+        ('/var/cache/ccache', 'rw'), ('/var/cache/beamcache', 'rw')
+    ])
+
+# Mount keys required for git and docker config that holds auth to
+# docker.onedata.org, so the docker can pull images from there.
+# It cannot be mounted under ~/.docker/config.json because docker uses
+# it during start. Mount it in /root/docker_config and then cp the json.
+volumes = [
+    (args.keys, '/tmp/keys', 'ro'),
+    (expanduser('~/.docker'), '/root/docker_config', 'ro')
+]
 
 split_envs = [e.split('=') for e in args.envs]
 envs = {kv[0]: kv[1] for kv in split_envs}
@@ -159,7 +177,7 @@ ret = docker.run(tty=True,
                  interactive=True,
                  rm=True,
                  reflect=reflect,
-                 volumes=[(args.keys, '/tmp/keys', 'ro')],
+                 volumes=volumes,
                  envs=envs,
                  workdir=args.workdir if args.workdir else args.src,
                  image=args.image,
