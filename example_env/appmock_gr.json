@@ -24,7 +24,10 @@
     "os_configs": {
         "cfg1": {
             "storages": [
-                "/mnt/st1"
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                }
             ],
             "users": [
                 "user1"
@@ -66,9 +69,9 @@
                                 "cm1"
                             ],
                             "db_nodes": [
-                                "riaknode1"
+                                "dbnode1"
                             ],
-                            "zone_domain": "oz",
+                            "oz_domain": "oz",
                             "verify_oz_cert": false
                         }
                     }
