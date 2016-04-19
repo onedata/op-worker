@@ -150,9 +150,11 @@ chmod(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
 %%--------------------------------------------------------------------
 -spec chown(FileHandle :: handle(), User :: user_id(), Group :: group_id()) ->
     ok | logical_file_manager:error_reply().
-chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID}, UserId, SpaceId) ->
+chown(#sfm_handle{storage = Storage, file = FileId, session_id = ?ROOT_SESS_ID, space_uuid = SpaceUUID}, UserId, SpaceId) ->
+
     {ok, #helper_init{name = StorageType} = HelperInit} = fslogic_storage:select_helper(Storage),
     HelperHandle = helpers:new_handle(HelperInit),
+    helpers:set_user_ctx(HelperHandle, fslogic_storage:new_user_ctx(HelperInit, ?ROOT_SESS_ID, SpaceUUID)),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
 
     case StorageType of
