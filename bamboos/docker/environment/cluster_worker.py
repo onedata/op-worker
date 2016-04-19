@@ -10,9 +10,12 @@ from . import worker
 DOCKER_BINDIR_PATH = '/root/build'
 
 
-def up(image, bindir, dns_server, uid, config_path, logdir=None, storages_dockers=None):
+def up(image, bindir, dns_server, uid, config_path, logdir=None,
+       storages_dockers=None, luma_config=None):
     return worker.up(image, bindir, dns_server, uid, config_path,
-                     ClusterWorkerConfigurator(), logdir, storages_dockers)
+                     ClusterWorkerConfigurator(), logdir,
+                     storages_dockers=storages_dockers,
+                     luma_config=luma_config)
 
 
 class ClusterWorkerConfigurator:
