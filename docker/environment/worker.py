@@ -203,10 +203,10 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
             gen_dev_cfg['os_config'] = config['os_configs'][os_config]
 
         # If present, include gui config
-        if 'gui' in config[configurator.domains_attribute()][instance]:
+        if 'gui_override' in config[configurator.domains_attribute()][instance]:
             gui_config = config[configurator.domains_attribute()][instance][
-                'gui']
-            gen_dev_cfg['gui'] = gui_config
+                'gui_override']
+            gen_dev_cfg['gui_override'] = gui_config
 
         # Tweak configs, retrieve list of db nodes to start
         configs = []
