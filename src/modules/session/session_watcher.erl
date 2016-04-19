@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Krzysztof Trzepla
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -29,7 +29,7 @@
 %% session_id - ID of session associated with sequencer manager
 -record(state, {
     session_id :: session:id(),
-    max_inactivity_period :: non_neg_integer()
+    session_ttl :: non_neg_integer()
 }).
 
 %%%===================================================================
@@ -61,9 +61,9 @@ start_link(SessId, SessType) ->
     {stop, Reason :: term()} | ignore.
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
-    {ok, SessId} = session:update(SessId, #{watcher => self()}),
-    Period = get_max_inactivity_period(SessType),
-    {ok, #state{session_id = SessId, max_inactivity_period = Period}}.
+    TTL = get_session_ttl(SessType),
+    schedule_session_status_checkup(TTL),
+    {ok, #state{session_id = SessId, session_ttl = TTL}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -93,9 +93,8 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_cast(schedule_session_status_checkup,
-    #state{max_inactivity_period = Period} = Status) ->
-    schedule_session_status_checkup(Period),
+handle_cast(schedule_session_status_checkup, #state{session_ttl = TTL} = Status) ->
+    schedule_session_status_checkup(TTL),
     {noreply, Status, hibernate};
 
 handle_cast(Request, State) ->
@@ -113,22 +112,21 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_info(session_status_checkup, #state{session_id = SessId,
-    max_inactivity_period = Period} = State) ->
+    session_ttl = TTL} = State) ->
     case session:const_get(SessId) of
-        {ok, #document{value = #session{status = active}}} ->
-            {noreply, State, hibernate};
         {ok, #document{value = #session{status = inactive}}} ->
-            case is_max_inactivity_period_exceeded(SessId, Period) of
+            {stop, normal, State};
+        {ok, #document{value = #session{connections = [_ | _]}}} ->
+            schedule_session_status_checkup(TTL),
+            {noreply, State, hibernate};
+        {ok, #document{value = #session{status = active}}} ->
+            case is_session_ttl_exceeded(SessId, TTL) of
                 true ->
                     {stop, normal, State};
-                false ->
-                    {noreply, State, hibernate};
                 {false, RemainingTime} ->
                     schedule_session_status_checkup(RemainingTime),
                     {noreply, State, hibernate}
             end;
-        {ok, #document{value = #session{status = phantom}}} ->
-            {stop, normal, State};
         {error, Reason} ->
             {stop, Reason, State}
     end;
@@ -150,7 +148,6 @@ handle_info(Info, State) ->
     State :: #state{}) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
-    session:update(SessId, #{watcher => undefined}),
     worker_proxy:cast(?SESSION_MANAGER_WORKER, {remove_session, SessId}).
 
 %%--------------------------------------------------------------------
@@ -171,65 +168,52 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns max inactivity period for given session type.
+%% Returns session TTL for given session type.
 %% @end
 %%--------------------------------------------------------------------
--spec get_max_inactivity_period(SessType :: session:type()) ->
+-spec get_session_ttl(SessType :: session:type()) ->
     Milliseconds :: non_neg_integer().
-get_max_inactivity_period(gui) ->
-    {ok, Period} = application:get_env(?APP_NAME,
-        gui_session_max_inactivity_period_in_seconds_before_removal),
+get_session_ttl(gui) ->
+    {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
     timer:seconds(Period);
-get_max_inactivity_period(fuse) ->
-    {ok, Period} = application:get_env(?APP_NAME,
-        fuse_session_max_inactivity_period_in_seconds_before_removal),
+get_session_ttl(fuse) ->
+    {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
     timer:seconds(Period);
-get_max_inactivity_period(rest) ->
-    {ok, Period} = application:get_env(?APP_NAME,
-        rest_session_max_inactivity_period_in_seconds_before_removal),
+get_session_ttl(rest) ->
+    {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
     timer:seconds(Period);
-get_max_inactivity_period(provider) ->
-    {ok, Period} = application:get_env(?APP_NAME,
-        provider_session_max_inactivity_period_in_seconds_before_removal),
+get_session_ttl(provider) ->
+    {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
     timer:seconds(Period);
-get_max_inactivity_period(provider_outgoing) ->
-    {ok, Period} = application:get_env(?APP_NAME,
-        provider_session_max_inactivity_period_in_seconds_before_removal),
+get_session_ttl(provider_outgoing) ->
+    {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
     timer:seconds(Period).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether session inactivity period exceeds maximal allowed inactivity
-%% period for session type. If maximal period is exceeded session is marked
-%% as 'phantom' for later removal. Returns false for active session, false and
-%% remaining time to removal for inactive session that does not exceed allowed
-%% inactivity period and true for inactive session that exceeded maximal allowed
-%% inactivity period.
+%% Checks whether session inactivity period exceeds TTL. If session TTL is
+%% exceeded, session is marked as 'inactive' for later removal. Returns false and
+%% remaining time to removal for session that does not exceed TTL
+%% and true for inactive session that exceeded TTL.
 %% @end
 %%--------------------------------------------------------------------
--spec is_max_inactivity_period_exceeded(SessId :: session:id(),
-    MaxInactivityPeriod :: non_neg_integer()) ->
-    boolean() | {false, RemainingTime :: non_neg_integer()}.
-is_max_inactivity_period_exceeded(SessId, MaxInactivityPeriod) ->
+-spec is_session_ttl_exceeded(SessId :: session:id(), TTL :: session:ttl()) ->
+    true | {false, RemainingTime :: non_neg_integer()}.
+is_session_ttl_exceeded(SessId, TTL) ->
     Diff = fun
-        (#session{status = active}) ->
-            {error, active_session};
-        (#session{status = inactive, accessed = Accessed} = Sess) ->
+        (#session{status = active, accessed = Accessed} = Sess) ->
             InactivityPeriod = timer:now_diff(os:timestamp(), Accessed) div 1000,
-            case InactivityPeriod >= MaxInactivityPeriod of
-                true ->
-                    {ok, Sess#session{status = phantom}};
-                false ->
-                    {error, {period_not_exceeded, MaxInactivityPeriod - InactivityPeriod}}
+            case InactivityPeriod >= TTL of
+                true -> {ok, Sess#session{status = inactive}};
+                false -> {error, {ttl_not_exceeded, TTL - InactivityPeriod}}
             end;
         (#session{} = Sess) ->
-            {ok, Sess#session{status = phantom}}
+            {ok, Sess#session{status = inactive}}
     end,
     case session:update(SessId, Diff) of
         {ok, SessId} -> true;
-        {error, active_session} -> false;
-        {error, {period_not_exceeded, RemainingTime}} -> {false, RemainingTime};
+        {error, {ttl_not_exceeded, RemainingTime}} -> {false, RemainingTime};
         {error, _} -> true
     end.
 

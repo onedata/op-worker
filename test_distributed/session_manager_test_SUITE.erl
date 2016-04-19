@@ -62,15 +62,9 @@ session_manager_session_creation_and_reuse_test(Config) ->
 
     lists:foreach(fun({SessId, Iden, Workers}) ->
         Answers = utils:pmap(fun(Worker) ->
-            rpc:call(Worker, session_manager,
-                reuse_or_create_fuse_session, [SessId, Iden, Self])
+            ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
+                reuse_or_create_fuse_session, [SessId, Iden, Self]))
         end, Workers),
-
-        AnswersWithoutCreatedAnswer = lists:delete({ok, created}, Answers),
-        ?assertNotEqual(Answers, AnswersWithoutCreatedAnswer),
-        ?assert(lists:all(fun(Answer) ->
-            Answer =:= {ok, reused}
-        end, AnswersWithoutCreatedAnswer)),
 
         % Check connections have been added to session
         {ok, Cons} = ?assertMatch({ok, _},
@@ -100,21 +94,20 @@ session_manager_session_components_running_test(Config) ->
             node = Node,
             supervisor = SessSup,
             event_manager = EvtMan,
-            sequencer_manager = SeqMan,
-            watcher = Watcher
+            sequencer_manager = SeqMan
         }}} = Doc,
 
         % Check session infrastructure is running.
         lists:foreach(fun(Pid) ->
             ?assert(is_pid(Pid)),
             ?assertNotEqual(undefined, rpc:call(Node, erlang, process_info, [Pid]))
-        end, [SessSup, EvtMan, SeqMan, Watcher]),
+        end, [SessSup, EvtMan, SeqMan]),
 
-        [SessSup, EvtMan, SeqMan, Watcher]
+        [SessSup, EvtMan, SeqMan]
     end, SessIds),
 
     % Check whether session manager returns different session supervisors, event
-    % managers, sequencer managers and session watcher for different sessions.
+    % managers and sequencer managers for different sessions.
     lists:foreach(fun({Pid1, Pid2}) ->
         ?assertNotEqual(Pid1, Pid2)
     end, lists:zip(Pids1, Pids2)),
@@ -128,8 +121,8 @@ session_manager_supervision_tree_structure_test(Config) ->
     Idents = ?config(identities, Config),
 
     [
-        {Node1, [SessSup1, EvtMan1, SeqMan1, Watcher1]},
-        {Node2, [SessSup2, EvtMan2, SeqMan2, Watcher2]}
+        {Node1, [SessSup1, EvtMan1, SeqMan1]},
+        {Node2, [SessSup2, EvtMan2, SeqMan2]}
     ] = lists:map(fun({SessId, Iden}) ->
         Doc = rpc:call(Worker, session, get, [SessId]),
 
@@ -139,26 +132,25 @@ session_manager_supervision_tree_structure_test(Config) ->
             node = Node,
             supervisor = SessSup,
             event_manager = EvtMan,
-            sequencer_manager = SeqMan,
-            watcher = Watcher
+            sequencer_manager = SeqMan
         }}} = Doc,
 
-        {Node, [SessSup, EvtMan, SeqMan, Watcher]}
+        {Node, [SessSup, EvtMan, SeqMan]}
     end, lists:zip(SessIds, Idents)),
 
     % Check supervision tree structure.
     ?assertEqual(true, is_child({session_manager_worker_sup, Node1}, SessSup1)),
     ?assertEqual(true, is_child({session_manager_worker_sup, Node2}, SessSup2)),
     [
-        [EvtManSup1, SeqManSup1, Watcher1],
-        [EvtManSup2, SeqManSup2, Watcher2]
+        [EvtManSup1, SeqManSup1],
+        [EvtManSup2, SeqManSup2]
     ] = lists:map(fun(SessSup) ->
         lists:map(fun(ChildId) ->
             Answer = get_child(SessSup, ChildId),
             ?assertMatch({ok, _}, Answer),
             {ok, Child} = Answer,
             Child
-        end, [event_manager_sup, sequencer_manager_sup, session_watcher])
+        end, [event_manager_sup, sequencer_manager_sup])
     end, [SessSup1, SessSup2]),
     lists:foreach(fun({Sup, Child}) ->
         ?assert(is_child(Sup, Child))
@@ -183,11 +175,10 @@ session_manager_session_removal_test(Config) ->
             node = Node,
             supervisor = SessSup,
             event_manager = EvtMan,
-            sequencer_manager = SeqMan,
-            watcher = Watcher
+            sequencer_manager = SeqMan
         }}} = Doc,
 
-        {Node, [SessSup, EvtMan, SeqMan, Watcher]}
+        {Node, [SessSup, EvtMan, SeqMan]}
     end, lists:zip(SessIds, Idents)),
 
     utils:pforeach(fun({SessId, Node, Pids, Worker}) ->
@@ -244,7 +235,7 @@ session_supervisor_child_crash_test(Config) ->
     Iden = #identity{user_id = <<"user_id">>},
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
-        ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+        ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
             reuse_or_create_fuse_session, [SessId, Iden, Self])),
 
         {ok, {SessSup, Node}} = rpc:call(Worker, session,
@@ -314,9 +305,9 @@ init_per_testcase(Case, Config) when
     Iden2 = #identity{user_id = <<"user_id_2">>},
 
     initializer:communicator_mock(Workers),
-    ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
+    ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_fuse_session, [SessId1, Iden1, Self])),
-    ?assertEqual({ok, created}, rpc:call(hd(Workers), session_manager,
+    ?assertMatch({ok, _}, rpc:call(hd(Workers), session_manager,
         reuse_or_create_fuse_session, [SessId2, Iden2, Self])),
 
     [{session_ids, [SessId1, SessId2]}, {identities, [Iden1, Iden2]} | Config].
