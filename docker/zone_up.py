@@ -44,14 +44,11 @@ output = {
     'cluster_manager_nodes': [],
     'oz_worker_nodes': [],
 }
-uid = args.uid
+uid = common.generate_uid()
 
 # Start DNS
-if args.dns == 'auto':
-    [dns_server], dns_output = dns.maybe_start('auto', uid)
-    common.merge(output, dns_output)
-else:
-    dns_server = args.dns
+[dns_server], dns_output = dns.maybe_start('auto', uid)
+common.merge(output, dns_output)
 
 # Start cms
 cm_output = cluster_manager.up(args.image, args.bin_cluster_manager,
@@ -64,9 +61,8 @@ worker_output = zone_worker.up(args.image, args.bin_oz, dns_server, uid,
                                args.config_path, args.logdir)
 common.merge(output, worker_output)
 
-if dns_server != 'none':
-    # Make sure domain are added to the dns server
-    dns.maybe_restart_with_configuration('auto', uid, output)
+# Make sure domain are added to the dns server
+dns.maybe_restart_with_configuration('auto', uid, output)
 
 # Print results
 print(json.dumps(output))

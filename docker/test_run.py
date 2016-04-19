@@ -11,23 +11,10 @@ import argparse
 import os
 import platform
 import sys
+
 from environment import docker
-import glob
-import xml.etree.ElementTree as ElementTree
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-
-
-def skipped_test_exists(junit_report_path):
-    reports = glob.glob(junit_report_path)
-    # if there are many reports, check only the last one
-    reports.sort()
-    tree = ElementTree.parse(reports[-1])
-    testsuite = tree.getroot()
-    if testsuite.attrib['skips'] != '0':
-        return True
-    return False
-
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -47,13 +34,6 @@ parser.add_argument(
     help='Test dir to run.',
     dest='test_dir')
 
-parser.add_argument(
-    '--report-path', '-r',
-    action='store',
-    default='test-reports/results.xml',
-    help='Path to JUnit tests report',
-    dest='report_path')
-
 [args, pass_args] = parser.parse_known_args()
 
 command = '''
@@ -67,7 +47,7 @@ if {shed_privileges}:
     os.setregid({gid}, {gid})
     os.setreuid({uid}, {uid})
 
-command = ['py.test'] + {args} + ['{test_dir}'] + ['--junitxml={report_path}']
+command = ['py.test'] + {args} + ['{test_dir}'] + ['--junitxml=test-reports/results.xml']
 ret = subprocess.call(command)
 sys.exit(ret)
 '''
@@ -76,8 +56,7 @@ command = command.format(
     uid=os.geteuid(),
     gid=os.getegid(),
     test_dir=args.test_dir,
-    shed_privileges=(platform.system() == 'Linux'),
-    report_path=args.report_path)
+    shed_privileges=(platform.system() == 'Linux'))
 
 ret = docker.run(tty=True,
                  rm=True,
@@ -87,8 +66,4 @@ ret = docker.run(tty=True,
                           ('/var/run/docker.sock', 'rw')],
                  image=args.image,
                  command=['python', '-c', command])
-
-if ret != 0 and not skipped_test_exists(args.report_path):
-    ret = 0
-
 sys.exit(ret)
