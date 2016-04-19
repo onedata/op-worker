@@ -18,7 +18,8 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 
--export([get/2, get_spaces/2, get_spaces/1, get_default_space/2, set_default_space/2]).
+-export([get/2, get_spaces/2, get_spaces/1]).
+-export([get_default_space/2, set_default_space/2]).
 
 %%%===================================================================
 %%% API
