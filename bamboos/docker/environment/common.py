@@ -15,7 +15,6 @@ import requests
 import time
 import sys
 from . import docker
-from timeouts import *
 
 try:
     import xml.etree.cElementTree as eTree
@@ -28,7 +27,7 @@ requests.packages.urllib3.disable_warnings()
 def nagios_up(ip, port=None, protocol='https'):
     url = '{0}://{1}{2}/nagios'.format(protocol, ip, (':' + port) if port else '')
     try:
-        r = requests.get(url, verify=False, timeout=REQUEST_TIMEOUT)
+        r = requests.get(url, verify=False, timeout=5)
         if r.status_code != requests.codes.ok:
             return False
 

@@ -46,48 +46,36 @@
                         "setcookie": "cookie1"
                     },
                     "sys.config": {
-                        "cluster_manager": {
-                            "cm_nodes": [
-                                "cm1"
-                            ],
-                            "worker_num": 1
-                        }
-                    }
-                }
-            },
-            "op_worker": {
-                "worker1": {
-                    "vm.args": {
-                        "setcookie": "cookie1"
-                    },
-                    "sys.config": {
-                        "op_worker": {
-                            "cm_nodes": [
-                                "cm1"
-                            ],
-                            "db_nodes": [
-                                "riaknode1"
-                            ],
-                            "zone_domain": "oz",
-                            "verify_oz_cert": false
-                        }
+                        "cm_nodes": [
+                            "cm1"
+                        ],
+                        "worker_num": 1
                     }
                 }
             }
         }
     },
     "appmock_domains": {
-        "oz": {
-            "appmock": {
-                "appmock1": {
-                    "mocked_app": "oz_worker",
-                    "vm.args": {
-                        "setcookie": "cookie2"
-                    },
-                    "sys.config": {
-                        "appmock": {
-                            "app_description_file": "./example_app_description.erl"
-                        }
+        "p1": {
+            "appmock1": {
+                "mocked_app": "op_worker",
+                "vm.args": {
+                    "setcookie": "cookie1"
+                },
+                "sys.config": {
+                    "appmock": {
+                        "app_description_file": "./example_app_description.erl"
+                    }
+                }
+            },
+            "appmock2": {
+                "mocked_app": "op_worker",
+                "vm.args": {
+                    "setcookie": "cookie1"
+                },
+                "sys.config": {
+                    "appmock": {
+                        "app_description_file": "./example_app_description.erl"
                     }
                 }
             }

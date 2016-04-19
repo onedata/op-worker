@@ -16,10 +16,7 @@
     "os_configs": {
         "cfg1": {
             "storages": [
-                {
-                    "type": "posix",
-                    "name": "/mnt/st1"
-                }
+                "/mnt/st1"
             ],
             "users": [
                 "user1",
@@ -41,6 +38,7 @@
         "p1": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
+            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -70,7 +68,7 @@
                                 "dbnode1"
                             ],
                             "verify_oz_cert": false,
-                            "oz_domain": "oz"
+                            "zone_domain": "oz"
                         }
                     }
                 }
@@ -79,7 +77,8 @@
     },
     "zone_domains": {
         "oz": {
-            "db_driver": "couchdb",
+            "gui_livereload": "none",
+            "db_driver": "couchbase",
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
@@ -146,6 +145,7 @@
         "spaces": {
             "space1": {
                 "displayed_name": "space1",
+                "storage": "/mnt/st1",
                 "users": [
                     "user1",
                     "user2",
@@ -154,28 +154,28 @@
                 "groups": [
                     "group1"
                 ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
+                "providers": [
+                    {
+                        "provider": "p1",
                         "supported_size": 1000000000
                     }
-                }
+                ]
             },
             "space2": {
                 "displayed_name": "space2",
+                "storage": "/mnt/st1",
                 "users": [
-                    "user1",
                     "user2"
                 ],
                 "groups": [
                     "group2"
                 ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
+                "providers": [
+                    {
+                        "provider": "p1",
                         "supported_size": 1000000000
                     }
-                }
+                ]
             }
         }
     }
