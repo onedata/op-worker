@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -208,9 +209,12 @@ check_file_operations_test_base(Config, UpdateFun, IdExt) ->
     %% given
     [Node | _] = ?config(op_worker_nodes, Config),
     {P1, S1, U1, G1} = {get_provider_id(Node), ?ID(s1, IdExt), ?ID(u1, IdExt), ?ID(g1, IdExt)},
+    [Node | _] = Nodes = ?config(op_worker_nodes, Config),
+    {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
     Priv1 = privileges:space_admin(),
     SessionID = <<"session">>,
     create_fuse_session(Node, SessionID, U1),
+    oz_spaces_mock(Nodes, <<"space_name">>),
 
     %% when
     UpdateFun(Node, S1, U1, P1, Priv1, G1),
@@ -425,11 +429,12 @@ add_provider_to_space_triggers_file_meta_creation(Config) ->
 
 space_without_support_test(Config) ->
     %% given
-    [Node | _] = ?config(op_worker_nodes, Config),
+    [Node | _] = Nodes = ?config(op_worker_nodes, Config),
     {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
     Priv1 = privileges:space_admin(),
     SessionID = <<"session">>,
     create_fuse_session(Node, SessionID, U1),
+    oz_spaces_mock(Nodes, <<"space_name">>),
 
     %% when
     push_update(Node, [
@@ -679,7 +684,7 @@ create_rest_session(Node, UserID) ->
 
 create_fuse_session(Node, SessionID, UserID) ->
     ?assertMatch({ok, _}, rpc:call(Node, session_manager, reuse_or_create_fuse_session, [
-        SessionID, #identity{user_id = UserID}, self()
+        SessionID, #identity{user_id = UserID}, #auth{}, self()
     ])).
 
 expectation(Users, ResumeAt, Missing) ->
@@ -710,3 +715,11 @@ expect_message(Match, Retries) ->
 flush() ->
     receive _ -> ok
     after 0 -> ok end.
+
+oz_spaces_mock(Nodes, SpaceName) ->
+    test_utils:mock_expect(Nodes, oz_spaces, get_details,
+        fun(_, _) -> {ok, #space_details{name = SpaceName}} end),
+    test_utils:mock_expect(Nodes, oz_spaces, get_users,
+        fun(_, _) -> {ok, []} end),
+    test_utils:mock_expect(Nodes, oz_spaces, get_groups,
+        fun(_, _) -> {ok, []} end).

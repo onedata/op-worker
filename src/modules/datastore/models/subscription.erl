@@ -29,7 +29,8 @@
 
 -type id() :: integer().
 -type object() :: #file_attr_subscription{} | #file_location_subscription{} |
-#read_subscription{} | #write_subscription{} | #permission_changed_subscription{}.
+#read_subscription{} | #write_subscription{} | #permission_changed_subscription{} |
+#file_removal_subscription{}.
 -type cancellation() :: #subscription_cancellation{}.
 
 %%%===================================================================

@@ -155,9 +155,10 @@ create_or_update(Doc, Diff) ->
 fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
     try
         Client = {user, {Macaroon, DMacaroons}},
-        {ok, #user_details{id = Id, name = Name, connected_accounts = ConnectedAccounts,
-            alias = Alias, email_list = EmailList}} =
-            oz_users:get_details(Client),
+        {ok, #user_details{
+            id = UserId, name = Name, connected_accounts = ConnectedAccounts,
+            alias = Alias, email_list = EmailList}
+        } = oz_users:get_details(Client),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}} =
             oz_users:get_spaces(Client),
         {ok, GroupIds} = oz_users:get_groups(Client),
@@ -170,8 +171,8 @@ fetch(#auth{macaroon = Macaroon, disch_macaroons = DMacaroons} = Auth) ->
             alias = Alias,
             email_list = EmailList
         },
-        [(catch space_info:get_or_fetch(Client, SId)) || SId <- SpaceIds],
-        OnedataUserDoc = #document{key = Id, value = OnedataUser},
+        [(catch space_info:get_or_fetch(Client, SpaceId, UserId)) || SpaceId <- SpaceIds],
+        OnedataUserDoc = #document{key = UserId, value = OnedataUser},
         {ok, _} = onedata_user:save(OnedataUserDoc),
         {ok, OnedataUserDoc}
     catch
