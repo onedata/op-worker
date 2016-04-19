@@ -169,7 +169,6 @@ volumes = [
     (args.keys, '/tmp/keys', 'ro'),
     (expanduser('~/.docker'), '/root/docker_config', 'ro')
 ]
-print(volumes)
 
 split_envs = [e.split('=') for e in args.envs]
 envs = {kv[0]: kv[1] for kv in split_envs}
