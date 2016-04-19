@@ -13,9 +13,12 @@ from . import common, docker, worker, gui_livereload
 DOCKER_BINDIR_PATH = '/root/build'
 
 
-def up(image, bindir, dns_server, uid, config_path, logdir=None, storages_dockers=None):
+def up(image, bindir, dns_server, uid, config_path, logdir=None,
+       storages_dockers=None, luma_config=None):
     return worker.up(image, bindir, dns_server, uid, config_path,
-                     ProviderWorkerConfigurator(), logdir, storages_dockers)
+                     ProviderWorkerConfigurator(), logdir,
+                     storages_dockers=storages_dockers,
+                     luma_config=luma_config)
 
 
 class ProviderWorkerConfigurator:
@@ -36,7 +39,8 @@ class ProviderWorkerConfigurator:
         return 'escript bamboos/gen_dev/gen_dev.escript /tmp/gen_dev_args.json'
 
     def configure_started_instance(self, bindir, instance, config,
-                                   container_ids, output, storages_dockers=None):
+                                   container_ids, output, storages_dockers=None,
+                                   luma_config=None):
         this_config = config[self.domains_attribute()][instance]
         # Check if gui_livereload is enabled in env and turn it on
         if 'gui_livereload' in this_config:
@@ -126,19 +130,23 @@ def create_storages(storages, op_nodes, op_config, bindir, storages_dockers):
             pool = storage['pool'].split(':')[0]
             command = ['escript', script_paths['ceph'], cookie,
                        first_node, storage['name'], "ceph",
-                       config['host_name'], pool, config['username'], config['key']]
+                       config['host_name'], pool, config['username'],
+                       config['key']]
             assert 0 is docker.exec_(container, command, tty=True,
                                      stdout=sys.stdout, stderr=sys.stderr)
         elif storage['type'] == 's3':
             config = storages_dockers['s3'][storage['name']]
             command = ['escript', script_paths['s3'], cookie,
                        first_node, storage['name'], config['host_name'],
-                       storage['bucket'], config['access_key'], config['secret_key'],
-                       "iam.amazonaws.com"]
+                       storage['bucket'], config['access_key'],
+                       config['secret_key'],
+                       config.get('iam_request_scheme', 'https'),
+                       config.get('iam_host', 'iam.amazonaws.com')]
             assert 0 is docker.exec_(container, command, tty=True,
                                      stdout=sys.stdout, stderr=sys.stderr)
         else:
-            raise RuntimeError('Unknown storage type: {}'.format(storage['type']))
+            raise RuntimeError(
+                'Unknown storage type: {}'.format(storage['type']))
     # clean-up
     for _, script_name in script_names.iteritems():
         command = ['rm', os.path.join(bindir, script_name)]
