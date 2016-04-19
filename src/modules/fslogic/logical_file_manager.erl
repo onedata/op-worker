@@ -61,7 +61,7 @@
 %% Functions operating on directories
 -export([mkdir/2, mkdir/3, rmdir/2, ls/4, get_children_count/2, get_parent/2]).
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, get_file_path/2]).
+-export([exists/1, mv/3, cp/3, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, read/3, truncate/2,
     truncate/3, get_block_map/1, get_block_map/2, unlink/1, unlink/2]).
@@ -157,20 +157,20 @@ exists(FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileKeyFrom :: file_key(), PathTo :: file_meta:path()) ->
+-spec mv(session:id(), fslogic_worker:file(), file_meta:path()) ->
     ok | error_reply().
-mv(FileKeyFrom, PathTo) ->
-    ?run(fun() -> lfm_files:mv(FileKeyFrom, PathTo) end).
+mv(SessId, FileEntry, TargetPath) ->
+    ?run(fun() -> lfm_files:mv(SessId, FileEntry, TargetPath) end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
--spec cp(FileKeyFrom :: file_key(), PathTo :: file_meta:path()) ->
+-spec cp(session:id(), file_meta:uuid_or_path(), file_meta:path()) ->
     ok | error_reply().
-cp(PathFrom, PathTo) ->
-    ?run(fun() -> lfm_files:cp(PathFrom, PathTo) end).
+cp(Auth, FileEntry, TargetPath) ->
+    ?run(fun() -> lfm_files:cp(Auth, FileEntry, TargetPath) end).
 
 %%--------------------------------------------------------------------
 %% @doc
