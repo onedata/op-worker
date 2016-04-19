@@ -13,7 +13,7 @@ DOCKER_BINDIR_PATH = '/root/build'
 
 
 def up(image, bindir, dns_server, uid, config_path, logdir=None,
-       dnsconfig_path=None):
+       dnsconfig_path=None, storages_dockers=None, luma_config=None):
     if dnsconfig_path is None:
         config = common.parse_json_config_file(config_path)
         input_dir = config['dirs_config']['oz_worker']['input_dir']
@@ -46,7 +46,8 @@ class OZWorkerConfigurator:
 
     def configure_started_instance(self, bindir, instance, config,
                                    container_ids, output,
-                                   storages_dockers=None):
+                                   storages_dockers=None,
+                                   luma_config=None):
         this_config = config[self.domains_attribute()][instance]
         # Check if gui_livereload is enabled in env and turn it on
         if 'gui_livereload' in this_config:
