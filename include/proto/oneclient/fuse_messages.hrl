@@ -90,8 +90,8 @@
     size :: non_neg_integer()
 }).
 
--record(close, {
-    uuid :: file_meta:uuid()
+-record(release, {
+    handle_id :: binary()
 }).
 
 -record(get_xattr, {
@@ -176,7 +176,7 @@
 
 -type fuse_request() :: #get_file_attr{} | #get_file_children{} | #get_parent{} | #create_dir{} |
                         #delete_file{} | #update_times{} | #change_mode{} | #rename{} |
-                        #close{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
+                        #release{} | #truncate{} | #get_helper_params{} | #get_new_file_location{} |
                         #get_file_location{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
                         #list_xattr{} | #get_acl{} | #set_acl{} | #remove_acl{} |
                         #get_transfer_encoding{} | #set_transfer_encoding{} | #get_cdmi_completion_status{} |

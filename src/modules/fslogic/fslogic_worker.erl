@@ -252,6 +252,8 @@ handle_fuse_request(Ctx, #get_file_location{uuid = UUID, flags = Flags}) ->
     fslogic_req_regular:get_file_location(NewCtx, {uuid, UUID}, Flags);
 handle_fuse_request(Ctx, #truncate{uuid = UUID, size = Size}) ->
     fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
+handle_fuse_request(Ctx, #release{handle_id = HandleId}) ->
+    fslogic_req_regular:release(Ctx, HandleId);
 handle_fuse_request(Ctx, #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
 handle_fuse_request(Ctx, #get_xattr{uuid = UUID, name = XattrName}) ->
@@ -339,16 +341,16 @@ handle_read_events(Evts, _Ctx) ->
     end, Evts).
 
 handle_proxyio_request(SessionId, #proxyio_request{
-    file_uuid = FileUuid, storage_id = SID, file_id = FID,
+    parameters = Parameters, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
 
-    fslogic_proxyio:write(SessionId, FileUuid, SID, FID, Offset, Data);
+    fslogic_proxyio:write(SessionId, Parameters, SID, FID, Offset, Data);
 
 handle_proxyio_request(SessionId, #proxyio_request{
-    file_uuid = FileUuid, storage_id = SID, file_id = FID,
+    parameters = Parameters, storage_id = SID, file_id = FID,
     proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
 
-    fslogic_proxyio:read(SessionId, FileUuid, SID, FID, Offset, Size);
+    fslogic_proxyio:read(SessionId, Parameters, SID, FID, Offset, Size);
 
 handle_proxyio_request(_SessionId, Req) ->
     ?log_bad_request(Req),
