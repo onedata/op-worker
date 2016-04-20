@@ -62,8 +62,7 @@ def _tweak_config(config, name, instance, uid, configurator):
 
 
 def _node_up(image, bindir, dns_servers, instance, config, db_node_mappings,
-             logdir,
-             configurator):
+             logdir, configurator):
     app_name = configurator.app_name()
     node_name = config['nodes']['node']['vm.args']['name']
     db_nodes = config['nodes']['node']['sys.config'][app_name]['db_nodes']
@@ -175,14 +174,18 @@ def _db_driver_module(db_driver):
 
 
 def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
-       storages_dockers=None):
+       storages_dockers=None, luma_config=None):
     config = common.parse_json_config_file(config_path)
+    if luma_config:
+        _add_luma_config(config, luma_config)
+
     input_dir = config['dirs_config'][configurator.app_name()]['input_dir']
     dns_servers, output = dns.maybe_start(dns_server, uid)
 
     # Workers of every cluster are started together
     # here we call that an instance
     for instance in config[configurator.domains_attribute()]:
+        instance_config = config[configurator.domains_attribute()][instance]
         current_output = {}
 
         gen_dev_cfg = {
@@ -190,23 +193,18 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
                 'input_dir': input_dir,
                 'target_dir': '/root/bin'
             },
-            'nodes': config[configurator.domains_attribute()][instance][
-                configurator.app_name()],
-            'db_driver': _db_driver(
-                config[configurator.domains_attribute()][instance])
+            'nodes': instance_config[configurator.app_name()],
+            'db_driver': _db_driver(instance_config)
         }
 
         # If present, include os_config
-        if 'os_config' in config[configurator.domains_attribute()][instance]:
-            os_config = config[configurator.domains_attribute()][instance][
-                'os_config']
+        if 'os_config' in instance_config:
+            os_config = instance_config['os_config']
             gen_dev_cfg['os_config'] = config['os_configs'][os_config]
 
         # If present, include gui config
-        if 'gui_override' in config[configurator.domains_attribute()][instance]:
-            gui_config = config[configurator.domains_attribute()][instance][
-                'gui_override']
-            gen_dev_cfg['gui_override'] = gui_config
+        if 'gui_override' in instance_config:
+            gen_dev_cfg['gui_override'] = instance_config['gui_override']
 
         # Tweak configs, retrieve list of db nodes to start
         configs = []
@@ -220,8 +218,7 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
 
         db_node_mappings = None
         db_out = None
-        db_driver = _db_driver(
-            config[configurator.domains_attribute()][instance])
+        db_driver = _db_driver(instance_config)
 
         # Start db nodes, obtain mappings
         if db_driver == 'riak':
@@ -272,3 +269,20 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
     # Make sure domains are added to the dns server.
     dns.maybe_restart_with_configuration(dns_server, uid, output)
     return output
+
+
+def _add_luma_config(config, luma_config):
+    for key in config['provider_domains']:
+        if config['provider_domains'][key].get('enable_luma_proxy'):
+            op_workers = config['provider_domains'][key]['op_worker']
+
+            for wrk_key in op_workers:
+                if not op_workers[wrk_key]['sys.config']:
+                    op_workers[wrk_key]['sys.config'] = {}
+                if not op_workers[wrk_key]['sys.config']['op_worker']:
+                    op_workers[wrk_key]['sys.config']['op_worker'] = {}
+
+                op_workers[wrk_key]['sys.config']['op_worker'][
+                    'enable_luma_proxy'] = True
+                op_workers[wrk_key]['sys.config']['op_worker'][
+                    'luma_hostname'] = luma_config['host_name']
