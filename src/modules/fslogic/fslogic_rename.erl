@@ -41,10 +41,10 @@
 -spec rename(fslogic_worker:ctx(), SourceEntry :: fslogic_worker:file(),
     LogicalTargetPath :: file_meta:path()) ->
     #fuse_response{} | no_return().
-rename(CTX, SourceEntry, LogicalTargetPath) ->
+rename(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
     {ok, Tokens} = fslogic_path:verify_file_path(LogicalTargetPath),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalTargetPath} = file_meta:gen_path(CanonicalFileEntry),
+    {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalFileEntry, SessId),
     rename(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath).
 
 %%--------------------------------------------------------------------
@@ -202,8 +202,8 @@ rename_trivial(CTX, SourceEntry, LogicalTargetPath) ->
 %%--------------------------------------------------------------------
 -spec rename_interspace(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> #fuse_response{} | no_return().
-rename_interspace(CTX, SourceEntry, LogicalTargetPath) ->
-    {ok, SourcePath} = file_meta:gen_path(SourceEntry),
+rename_interspace(#fslogic_ctx{session_id = SessId} = CTX, SourceEntry, LogicalTargetPath) ->
+    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
     {ok, SourceParent} = file_meta:get_parent(SourceEntry),
     CanonicalTargetPath = get_canonical_path(CTX, LogicalTargetPath),
     {_, TargetParentPath} = fslogic_path:basename_and_parent(CanonicalTargetPath),
@@ -222,8 +222,6 @@ rename_interspace(CTX, SourceEntry, LogicalTargetPath) ->
             for_each_child_file(SourceEntry,
                 fun
                     (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = File) ->
-                        {ok, NewPath} = file_meta:gen_path(File),
-
                         %% TODO: get all snapshots:
                         FileSnapshots = [File],
                         lists:foreach(
@@ -245,7 +243,7 @@ rename_interspace(CTX, SourceEntry, LogicalTargetPath) ->
         {ok, File} ->
             SourcePathTokens = filename:split(SourcePath),
             TargetPathTokens = filename:split(CanonicalTargetPath),
-            {ok, OldPath} = file_meta:gen_path(File),
+            {ok, OldPath} = fslogic_path:gen_path(File, SessId),
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
@@ -271,14 +269,14 @@ rename_interspace(CTX, SourceEntry, LogicalTargetPath) ->
 -spec rename_interprovider(fslogic_worker:ctx(), fslogic_worker:file(),
     file_meta:path()) -> #fuse_response{} | no_return().
 rename_interprovider(#fslogic_ctx{session_id = SessId}, SourceEntry, LogicalTargetPath) ->
-    {ok, SourcePath} = file_meta:gen_path(SourceEntry),
+    {ok, SourcePath} = fslogic_path:gen_path(SourceEntry, SessId),
     {ok, SourceParent} = file_meta:get_parent(SourceEntry),
     SourcePathTokens = filename:split(SourcePath),
     TargetPathTokens = filename:split(LogicalTargetPath),
 
     for_each_child_file(SourceEntry,
         fun(Entry) ->
-            {ok, OldPath} = file_meta:gen_path(Entry),
+            {ok, OldPath} = fslogic_path:gen_path(Entry, SessId),
             OldTokens = filename:split(OldPath),
             NewTokens = TargetPathTokens ++ lists:sublist(OldTokens, length(SourcePathTokens) + 1, length(OldTokens)),
             NewPath = fslogic_path:join(NewTokens),
@@ -541,10 +539,10 @@ copy_file_contents_sfm(FromHandle, ToHandle, Offset, Size) ->
 %%--------------------------------------------------------------------
 -spec get_canonical_path(fslogic_worker:ctx(), file_meta:path()) ->
     file_meta:path().
-get_canonical_path(CTX, Path) ->
+get_canonical_path(#fslogic_ctx{session_id = SessId} = CTX, Path) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalPath} = file_meta:gen_path(CanonicalFileEntry),
+    {ok, CanonicalPath} = fslogic_path:gen_path(CanonicalFileEntry, SessId),
     CanonicalPath.
 
 
