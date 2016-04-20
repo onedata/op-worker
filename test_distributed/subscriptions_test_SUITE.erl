@@ -30,7 +30,7 @@
     applies_deletion/1,
     new_user_with_present_space_triggers_file_meta_creation/1,
     new_user_with_present_space_triggers_file_meta_creation2/1,
-    new_user_with_present_space_triggers_file_meta_creation3/1,
+    new_user_with_new_space_triggers_file_meta_creation/1,
     updated_user_with_present_space_triggers_file_meta_creation/1,
     updated_user_with_present_space_triggers_file_meta_creation2/1,
     updated_user_with_present_space_triggers_file_meta_creation3/1,
@@ -55,7 +55,7 @@
 all() -> ?ALL([
     new_user_with_present_space_triggers_file_meta_creation,
     new_user_with_present_space_triggers_file_meta_creation2,
-    new_user_with_present_space_triggers_file_meta_creation3,
+    new_user_with_new_space_triggers_file_meta_creation,
     updated_user_with_present_space_triggers_file_meta_creation,
     updated_user_with_present_space_triggers_file_meta_creation2,
     updated_user_with_present_space_triggers_file_meta_creation3,
@@ -249,22 +249,6 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
 new_user_with_present_space_triggers_file_meta_creation2(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], S1, space(
-                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
-            )),
-            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1,
-                user(<<"onedata ftw">>, [], [S1])
-            )
-        ]),
-        expect_message([U1], 3, [])
-    end,
-
-    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
-
-new_user_with_present_space_triggers_file_meta_creation3(Config) ->
-    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
-        push_update(Node, [
             update(1, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
         ]),
         expect_message([U1], 1, []),
@@ -283,6 +267,22 @@ new_user_with_present_space_triggers_file_meta_creation3(Config) ->
         ]),
         expect_message([U1], 3, [])
     end,
+
+    check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
+
+new_user_with_new_space_triggers_file_meta_creation(Config) ->
+    UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
+        push_update(Node, [
+            update(1, [<<"r2">>, <<"r1">>], S1, space(
+                <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
+            )),
+            update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
+            update(3, [<<"r2">>, <<"r1">>], U1,
+                user(<<"onedata ftw">>, [], [S1])
+            )
+        ]),
+        expect_message([U1], 3, [])
+                end,
 
     check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
 
