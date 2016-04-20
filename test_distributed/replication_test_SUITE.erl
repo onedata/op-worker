@@ -722,6 +722,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         blocks = [#file_block{offset = 4, size = 4}]}},
         rpc:call(W1, fslogic_utils, get_local_file_location, [{uuid, FileUuid}])).
 
+
 rtransfer_config_should_work(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessionId = <<"session_id1">>,
