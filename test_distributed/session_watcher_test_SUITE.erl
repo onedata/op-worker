@@ -26,6 +26,8 @@
     session_watcher_should_not_remove_session_with_connections/1,
     session_watcher_should_remove_session_without_connections/1,
     session_watcher_should_remove_inactive_session/1,
+    session_watcher_should_remove_session_on_error/1,
+    session_watcher_should_retry_session_removal/1,
     session_get_should_update_session_access_time/1,
     session_update_should_update_session_access_time/1,
     session_save_should_update_session_access_time/1,
@@ -37,13 +39,15 @@ all() ->
         session_watcher_should_not_remove_session_with_connections,
         session_watcher_should_remove_session_without_connections,
         session_watcher_should_remove_inactive_session,
+        session_watcher_should_remove_session_on_error,
+        session_watcher_should_retry_session_removal,
         session_get_should_update_session_access_time,
         session_update_should_update_session_access_time,
         session_save_should_update_session_access_time,
         session_create_should_set_session_access_time
     ]).
 
--define(TIMEOUT, timer:seconds(5)).
+-define(TIMEOUT, timer:seconds(10)).
 
 -define(call(N, F, A), ?call(N, session, F, A)).
 -define(call(N, M, F, A), rpc:call(N, M, F, A)).
@@ -64,6 +68,17 @@ session_watcher_should_remove_session_without_connections(Config) ->
 
 session_watcher_should_remove_inactive_session(Config) ->
     set_session_status(Config, inactive),
+    ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
+
+session_watcher_should_remove_session_on_error(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
+    ?call(Worker, delete, [SessId]),
+    ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
+
+session_watcher_should_retry_session_removal(Config) ->
+    set_session_status(Config, inactive),
+    ?assertReceivedMatch({remove_session, _}, ?TIMEOUT),
     ?assertReceivedMatch({remove_session, _}, ?TIMEOUT).
 
 session_get_should_update_session_access_time(Config) ->
@@ -120,7 +135,7 @@ end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Pid = ?config(session_watcher, Config),
-    stop_session_watcher(Pid, SessId),
+    stop_session_watcher(Worker, Pid, SessId),
     test_utils:mock_validate_and_unload(Worker, [worker_proxy]).
 
 %%%===================================================================
@@ -152,9 +167,10 @@ start_session_watcher(Worker, SessId) ->
 %% Stops sequencer stream for outgoing messages.
 %% @end
 %%--------------------------------------------------------------------
--spec stop_session_watcher(Pid :: pid(), SessId :: session:id()) -> true.
-stop_session_watcher(Pid, SessId) ->
-    session:delete(SessId),
+-spec stop_session_watcher(Worker :: node(), Pid :: pid(),
+    SessId :: session:id()) -> true.
+stop_session_watcher(Worker, Pid, SessId) ->
+    ?call(Worker, delete, [SessId]),
     exit(Pid, shutdown).
 
 

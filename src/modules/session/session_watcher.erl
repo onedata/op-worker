@@ -32,6 +32,8 @@
     session_ttl :: non_neg_integer()
 }).
 
+-define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(5)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -111,24 +113,33 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(session_status_checkup, #state{session_id = SessId,
+handle_info(remove_session, #state{session_id = SessId} = State) ->
+    worker_proxy:cast(?SESSION_MANAGER_WORKER, {remove_session, SessId}),
+    schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
+    {noreply, State, hibernate};
+
+handle_info(check_session_status, #state{session_id = SessId,
     session_ttl = TTL} = State) ->
-    case session:const_get(SessId) of
+    RemoveSession = case session:const_get(SessId) of
         {ok, #document{value = #session{status = inactive}}} ->
-            {stop, normal, State};
+            true;
         {ok, #document{value = #session{connections = [_ | _]}}} ->
-            schedule_session_status_checkup(TTL),
-            {noreply, State, hibernate};
+            {false, TTL};
         {ok, #document{value = #session{status = active}}} ->
-            case is_session_ttl_exceeded(SessId, TTL) of
-                true ->
-                    {stop, normal, State};
-                {false, RemainingTime} ->
-                    schedule_session_status_checkup(RemainingTime),
-                    {noreply, State, hibernate}
-            end;
-        {error, Reason} ->
-            {stop, Reason, State}
+            is_session_ttl_exceeded(SessId, TTL);
+        {error, _} = Error ->
+            {false, Error}
+    end,
+
+    case RemoveSession of
+        true ->
+            schedule_session_removal(0),
+            {noreply, State};
+        {false, {error, Reason} } ->
+            {stop, Reason, State};         
+        {false, RemainingTime} ->
+            schedule_session_status_checkup(RemainingTime),
+            {noreply, State, hibernate}
     end;
 
 handle_info(Info, State) ->
@@ -227,4 +238,16 @@ is_session_ttl_exceeded(SessId, TTL) ->
 -spec schedule_session_status_checkup(Delay :: non_neg_integer()) ->
     TimeRef :: reference().
 schedule_session_status_checkup(Delay) ->
-    erlang:send_after(Delay, self(), session_status_checkup).
+    erlang:send_after(Delay, self(), check_session_status).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Schedules session removal that should take place after 'Delay'
+%% milliseconds.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_session_removal(Delay :: non_neg_integer()) ->
+    TimeRef :: reference().
+schedule_session_removal(Delay) ->
+    erlang:send_after(Delay, self(), remove_session).
