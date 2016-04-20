@@ -21,10 +21,13 @@
 -export([emit/1, emit/2, flush/2, flush/3, subscribe/1, subscribe/2,
     unsubscribe/1, unsubscribe/2]).
 
--export_type([key/0, object/0, update_object/0, counter/0, subscription/0, manager_ref/0]).
+-export_type([key/0, object/0, update_object/0, counter/0, subscription/0,
+    manager_ref/0]).
 
+-type event() :: #event{}.
 -type key() :: term().
--type object() :: #read_event{} | #update_event{} | #write_event{} | #permission_changed_event{}.
+-type object() :: #read_event{} | #update_event{} | #write_event{}
+| #permission_changed_event{} | #file_removal_event{}.
 -type update_object() :: #file_attr{} | #file_location{}.
 -type counter() :: non_neg_integer().
 -type subscription() :: #subscription{}.
@@ -43,7 +46,7 @@
 %% Sends an event to all event managers.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: #event{} | object()) -> ok | {error, Reason :: term()}.
+-spec emit(Evt :: event() | object()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
     emit(Evt, get_event_managers()).
 
@@ -52,7 +55,7 @@ emit(Evt) ->
 %% Sends an event to the event manager associated with a session.
 %% @end
 %%--------------------------------------------------------------------
--spec emit(Evt :: #event{} | object(), Ref :: event:manager_ref()) ->
+-spec emit(Evt :: event() | object(), Ref :: event:manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, Ref}) ->
     ExcludedEvtMans = sets:from_list(get_event_managers(as_list(Ref))),
@@ -164,7 +167,7 @@ unsubscribe(SubId, Ref) ->
 %% in aggregation process. Events with the same key will be aggregated.
 %% @end
 %%--------------------------------------------------------------------
--spec set_key(Evt :: #event{}) -> NewEvt :: #event{}.
+-spec set_key(Evt :: event()) -> NewEvt :: event().
 set_key(#event{object = #read_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
 
@@ -178,6 +181,9 @@ set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = E
     Evt#event{key = Uuid};
 
 set_key(#event{object = #permission_changed_event{file_uuid = Uuid}} = Evt) ->
+    Evt#event{key = Uuid};
+
+set_key(#event{object = #file_removal_event{file_uuid = Uuid}} = Evt) ->
     Evt#event{key = Uuid}.
 
 %%--------------------------------------------------------------------

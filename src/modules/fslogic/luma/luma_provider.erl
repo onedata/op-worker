@@ -174,15 +174,16 @@ create_s3_user(UserId, StorageId) ->
     AdminAccessKey = maps:get(<<"access_key">>, Args),
     AdminSecretKey = maps:get(<<"secret_key">>, Args),
     BucketName = maps:get(<<"bucket_name">>, Args),
+    IAMRequestScheme = maps:get(<<"iam_request_scheme">>, Args, <<"https">>),
     IAMHost = maps:get(<<"iam_host">>, Args, <<"iam.amazonaws.com">>),
     Region = maps:get(<<"region">>, Args, <<"us-east-1">>),
 
-    ok = amazonaws_iam:create_user(AdminAccessKey, AdminSecretKey, IAMHost,
-        Region, UserId),
+    ok = amazonaws_iam:create_user(AdminAccessKey, AdminSecretKey, IAMRequestScheme,
+        IAMHost, Region, UserId),
     {ok, {AccessKey, SecretKey}} =
         amazonaws_iam:create_access_key(AdminAccessKey, AdminSecretKey,
-            IAMHost, Region, UserId),
+            IAMRequestScheme, IAMHost, Region, UserId),
     ok = amazonaws_iam:allow_access_to_bucket(AdminAccessKey, AdminSecretKey,
-        IAMHost, Region, UserId, BucketName),
+        IAMRequestScheme, IAMHost, Region, UserId, BucketName),
 
     {ok, #s3_user_ctx{access_key = AccessKey, secret_key = SecretKey}}.

@@ -43,7 +43,9 @@
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
     % Key-value in-session memory
-    memory = [] :: [{Key :: term(), Value :: term()}]
+    memory = [] :: [{Key :: term(), Value :: term()}],
+    % Handles for opened files
+    handles = #{} :: #{binary() => storage_file_manager:handle()}
 }).
 
 %% Local, cached version of OZ user
@@ -51,8 +53,8 @@
     name :: binary(),
     space_ids :: [binary()],
     group_ids :: [binary()],
-    connected_accounts :: proplists:proplist(),
-    alias :: string() | integer() | binary(),
+    connected_accounts :: [onedata_user:connected_account()],
+    alias :: binary(),
     email_list :: [binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
@@ -102,6 +104,7 @@
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
+    handle_id :: binary() | undefined,
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]
@@ -116,12 +119,10 @@
 
 %% Model for caching space details fetched from OZ
 -record(space_info, {
-    id :: binary(),
     name :: binary(),
-    size = [] :: [{ProviderId :: binary(), Size :: pos_integer()}],
+    providers_supports = [] :: [{ProviderId :: binary(), Size :: pos_integer()}],
     users = [] :: [{UserId :: binary(), [privileges:space_privilege()]}],
     groups = [] :: [{GroupId :: binary(), [privileges:space_privilege()]}],
-    providers = [] :: [ProviderId :: binary()],
     revision_history = [] :: [subscriptions:rev()]
 }).
 

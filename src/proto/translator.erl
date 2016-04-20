@@ -78,6 +78,10 @@ translate_from_protobuf(#'PermissionChangedSubscription'{} = Record) ->
     #permission_changed_subscription{
         file_uuid = Record#'PermissionChangedSubscription'.file_uuid
     };
+translate_from_protobuf(#'FileRemovalSubscription'{} = Record) ->
+    #file_removal_subscription{
+        file_uuid = Record#'FileRemovalSubscription'.file_uuid
+    };
 translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
     #subscription_cancellation{id = Id};
 translate_from_protobuf(#'FileBlock'{offset = Off, size = S}) ->
@@ -137,10 +141,11 @@ translate_from_protobuf(#'GetHelperParams'{storage_id = SID, force_proxy_io = Fo
     #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy};
 translate_from_protobuf(#'Truncate'{uuid = UUID, size = Size}) ->
     #truncate{uuid = UUID, size = Size};
-translate_from_protobuf(#'Close'{uuid = UUID}) ->
-    #close{uuid = UUID};
-translate_from_protobuf(#'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
-    #proxyio_request{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
+translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
+    #release{handle_id = HandleId};
+translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = {_, Record}}) ->
+    #proxyio_request{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
+        storage_id = SID, file_id = FID, proxyio_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #remote_read{offset = Offset, size = Size};
 translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
@@ -163,6 +168,8 @@ translate_from_protobuf(#'VerifyStorageTestFile'{storage_id = SId, space_uuid = 
     file_id = FId, file_content = FContent}) ->
     #verify_storage_test_file{storage_id = SId, space_uuid = SpaceUuid,
         file_id = FId, file_content = FContent};
+translate_from_protobuf(#'Parameter'{key = Key, value = Value}) ->
+    {Key, Value};
 
 %% DBSync
 translate_from_protobuf(#'DBSyncRequest'{message_body = {_, MessageBody}}) ->
@@ -208,6 +215,8 @@ translate_to_protobuf(#update_event{object = Type}) ->
     {update_event, #'UpdateEvent'{object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#permission_changed_event{file_uuid = FileUuid}) ->
     {permission_changed_event, #'PermissionChangedEvent'{file_uuid = FileUuid}};
+translate_to_protobuf(#file_removal_event{file_uuid = FileUuid}) ->
+    {file_removal_event, #'FileRemovalEvent'{file_uuid = FileUuid}};
 translate_to_protobuf(#subscription{id = Id, object = Type}) ->
     {subscription, #'Subscription'{id = Id, object = translate_to_protobuf(Type)}};
 translate_to_protobuf(#read_subscription{} = Sub) ->
@@ -297,7 +306,8 @@ translate_to_protobuf(#file_location{} = Record) ->
         file_id = Record#file_location.file_id,
         blocks = lists:map(fun(Block) ->
             translate_to_protobuf(Block)
-        end, Record#file_location.blocks)
+        end, Record#file_location.blocks),
+        handle_id = Record#file_location.handle_id
     }};
 translate_to_protobuf(#file_block{offset = Off, size = S, file_id = FID, storage_id = SID}) ->
     #'FileBlock'{offset = Off, size = S, file_id = FID, storage_id = SID};
