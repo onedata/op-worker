@@ -209,8 +209,6 @@ check_file_operations_test_base(Config, UpdateFun, IdExt) ->
     %% given
     [Node | _] = Nodes = ?config(op_worker_nodes, Config),
     {P1, S1, U1, G1} = {get_provider_id(Node), ?ID(s1, IdExt), ?ID(u1, IdExt), ?ID(g1, IdExt)},
-    [Node | _] = Nodes = ?config(op_worker_nodes, Config),
-    {P1, S1, U1} = {get_provider_id(Node), ?ID(s1), ?ID(u1)},
     Priv1 = privileges:space_admin(),
     SessionID = <<"session">>,
     create_fuse_session(Node, SessionID, U1),
