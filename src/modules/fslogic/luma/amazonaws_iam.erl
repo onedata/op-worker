@@ -14,7 +14,7 @@
 -include_lib("xmerl/include/xmerl.hrl").
 
 %% API
--export([create_user/5, create_access_key/5, allow_access_to_bucket/6]).
+-export([create_user/6, create_access_key/6, allow_access_to_bucket/7]).
 
 %%%===================================================================
 %%% API
@@ -25,12 +25,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec create_user(AdminAccessKey :: binary(), AdminSecretKey :: binary(),
-    Host :: binary(), Region :: binary(), UserName :: binary()) ->
-    ok | {error, Reason :: term()}.
-create_user(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
-    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region,
-        <<"CreateUser">>,
-        [{<<"UserName">>, UserName}]) of
+    RequestScheme :: binary(), Host :: binary(), Region :: binary(),
+    UserName :: binary()) -> ok | {error, Reason :: term()}.
+create_user(AdminAccessKey, AdminSecretKey, RequestScheme, Host, Region, UserName) ->
+    case execute_iam_query(AdminAccessKey, AdminSecretKey, RequestScheme, Host, Region,
+        <<"CreateUser">>, [{<<"UserName">>, UserName}]) of
         {ok, 200, _, _} ->
             ok;
         {ok, 409, _, Body} ->
@@ -50,12 +49,11 @@ create_user(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_access_key(AdminAccessKey :: binary(), AdminSecretKey :: binary(),
-    Host :: binary(), Region :: binary(), UserName :: binary()) ->
+    RequestScheme :: binary(), Host :: binary(), Region :: binary(), UserName :: binary()) ->
     {ok, {AccessKey :: binary(), SecretKey :: binary()}} | {error, Reason :: term()}.
-create_access_key(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
-    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region,
-        <<"CreateAccessKey">>,
-        [{<<"UserName">>, UserName}]) of
+create_access_key(AdminAccessKey, AdminSecretKey, RequestScheme, Host, Region, UserName) ->
+    case execute_iam_query(AdminAccessKey, AdminSecretKey, RequestScheme, Host, Region,
+        <<"CreateAccessKey">>, [{<<"UserName">>, UserName}]) of
         {ok, 200, _, Body} ->
             {XML, _} = xmerl_scan:string(binary_to_list(Body)),
             AccessKey = xml_val(
@@ -75,11 +73,11 @@ create_access_key(AdminAccessKey, AdminSecretKey, Host, Region, UserName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec allow_access_to_bucket(AdminAccessKey :: binary(),
-    AdminSecretKey :: binary(), Host :: binary(), Region :: binary(),
-    UserName :: binary(), BucketName :: binary()) ->
+    AdminSecretKey :: binary(), RequestScheme :: binary(), Host :: binary(),
+    Region :: binary(), UserName :: binary(), BucketName :: binary()) ->
     ok | {error, Reason :: term()}.
-allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region,
-    UserName, BucketName) ->
+allow_access_to_bucket(AdminAccessKey, AdminSecretKey, RequestScheme, Host,
+    Region, UserName, BucketName) ->
     Policy = [{<<"Version">>, <<"2012-10-17">>},
         {<<"Statement">>, [
             [{<<"Effect">>, <<"Allow">>},
@@ -97,7 +95,7 @@ allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region,
     PolicyDocument = re:replace(PolicyDocumentEscaped, <<"[*]">>, <<"%2A">>,
         [{return, binary}, global]),
 
-    case execute_iam_query(AdminAccessKey, AdminSecretKey, Host, Region,
+    case execute_iam_query(AdminAccessKey, AdminSecretKey, RequestScheme, Host, Region,
         <<"PutUserPolicy">>, [{<<"UserName">>, UserName}, {<<"PolicyName">>,
             <<BucketName/binary, "-access">>},
             {<<"PolicyDocument">>, PolicyDocument}]) of
@@ -121,10 +119,10 @@ allow_access_to_bucket(AdminAccessKey, AdminSecretKey, Host, Region,
 %% @end
 %%--------------------------------------------------------------------
 -spec execute_iam_query(AccessKey :: binary(), SecretKey :: binary(),
-    Host :: binary(), Region :: binary(), Action :: binary(),
-    Params :: [{binary(), binary()}]) ->
+    RequestScheme :: binary(), Host :: binary(), Region :: binary(),
+    Action :: binary(), Params :: [{binary(), binary()}]) ->
     {ok, integer(), list(), binary()} |{error, Reason :: term()}.
-execute_iam_query(AccessKey, SecretKey, Host, Region, Action, Params) ->
+execute_iam_query(AccessKey, SecretKey, RequestScheme, Host, Region, Action, Params) ->
     {Date, Time} = erlang:universaltime(),
     DatestampString = lists:flatten(io_lib:format("~4.10.0b~2.10.0b~2.10.0b",
         tuple_to_list(Date))),
@@ -177,8 +175,8 @@ execute_iam_query(AccessKey, SecretKey, Host, Region, Action, Params) ->
     FinalQuerystring = <<CanonicalQuerystring/binary, "&X-Amz-Signature=",
         Signature/binary>>,
 
-    RequestURL = <<"https://", Host/binary, CanonicalURI/binary, "?",
-        FinalQuerystring/binary>>,
+    RequestURL = <<RequestScheme/binary, "://", Host/binary,
+        CanonicalURI/binary, "?", FinalQuerystring/binary>>,
     %% TODO VFS-1674 Change hackney use for Amazon IAM to http_client
     {ok, Status, Headers, Ref} = hackney:request(get, RequestURL, [],
         <<"">>, [insecure]),

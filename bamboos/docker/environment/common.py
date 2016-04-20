@@ -24,6 +24,8 @@ except ImportError:
 
 requests.packages.urllib3.disable_warnings()
 
+HOST_STORAGE_PATH = "/tmp/onedata/storage"
+
 
 def nagios_up(ip, port=None, protocol='https'):
     url = '{0}://{1}{2}/nagios'.format(protocol, ip, (':' + port) if port else '')
@@ -231,4 +233,18 @@ def volume_for_storage(storage):
     """Returns tuple (path_on_host, path_on_docker, read_write_mode)
     for a given storage
     """
-    return os.path.join('/tmp/onedata/storage/', storage), storage, 'rw'
+    return storage_host_path(storage), storage, 'rw'
+
+
+def storage_host_path(storage):
+    """Returns path to storage on host
+    """
+    return os.path.join(HOST_STORAGE_PATH, ensure_relative_path(storage))
+
+
+def ensure_relative_path(path):
+    """Ensures that given path is relative (doesn't start with '/')
+    """
+    if path[0] == "/":
+        return path[1:]
+    return path
