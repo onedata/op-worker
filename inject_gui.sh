@@ -14,8 +14,8 @@
 #####################################################################
 
 # Configuration
-STATIC_FILES_IMAGE='docker.onedata.org/oz-gui-default:VFS-1825'
-TARGET_DIR='rel/oz_worker/data/gui_static'
+STATIC_FILES_IMAGE='docker.onedata.org/op-gui-default:VFS-1825'
+TARGET_DIR='rel/op_worker/data/gui_static'
 
 # Fail on any command failure
 set -e
@@ -37,7 +37,7 @@ rm -rf ${TARGET_DIR}
 # Copy the files ( -L = follow symbolic links ) - warning:
 #   this works on docker client 1.10+ !
 # Use path from docker create volume
-docker cp ${CONTAINER_ID}:/var/www/html ${TARGET_DIR}
+docker cp -L ${CONTAINER_ID}:/var/www/html ${TARGET_DIR}
 
 # Remove unneeded container
 docker rm -f ${CONTAINER_ID}
