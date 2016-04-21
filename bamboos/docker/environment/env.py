@@ -201,13 +201,14 @@ def _start_storages(config, config_path, ceph_image, s3_image, image, uid):
                 if storage['type'] == 'ceph' and storage['name'] not in \
                         storages_dockers['ceph']:
                     pool = tuple(storage['pool'].split(':'))
-                    result = ceph.up(ceph_image, [pool])
+                    result = ceph.up(ceph_image, [pool], storage['name'], uid)
                     docker_ids.extend(result['docker_ids'])
                     del result['docker_ids']
                     storages_dockers['ceph'][storage['name']] = result
                 elif storage['type'] == 's3' and storage['name'] not in \
                         storages_dockers['s3']:
-                    result = s3.up(s3_image, [storage['bucket']])
+                    result = s3.up(s3_image, [storage['bucket']],
+                                   storage['name'], uid)
                     docker_ids.extend(result['docker_ids'])
                     del result['docker_ids']
 
