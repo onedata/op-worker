@@ -38,15 +38,15 @@ class OZWorkerConfigurator:
 
         return cfg
 
-    # Called BEFORE the instance (cluster of workers) is started
-    def pre_configure_instance(self, instance, uid, config):
+    # Called BEFORE the instance (cluster of workers) is started,
+    # once for every instance
+    def pre_configure_instance(self, instance, instance_domain, config):
         this_config = config[self.domains_attribute()][instance]
         if 'gui_override' in this_config and isinstance(
                 this_config['gui_override'], dict):
             # Preconfigure GUI override
             gui_config = this_config['gui_override']
-            hostname = common.format_hostname(instance, uid)
-            gui.override_gui(gui_config, instance, hostname)
+            gui.override_gui(gui_config, instance_domain)
 
     # Called AFTER the instance (cluster of workers) has been started
     def post_configure_instance(self, bindir, instance, config, container_ids,
@@ -72,13 +72,13 @@ touch /root/bin/node/data/dns.config
 sed -i.bak s/onedata.org/{domain}/g /root/bin/node/data/dns.config
         '''.format(domain=domain)
 
-    def extra_volumes(self, config, bindir, instance):
+    def extra_volumes(self, config, bindir, instance_domain):
         extra_volumes = []
         # Check if gui override is enabled in env and add required volumes
         if 'gui_override' in config and isinstance(config['gui_override'],
                                                    dict):
             gui_config = config['gui_override']
-            extra_volumes.extend(gui.extra_volumes(gui_config, instance))
+            extra_volumes.extend(gui.extra_volumes(gui_config, instance_domain))
         return extra_volumes
 
     def app_name(self):
