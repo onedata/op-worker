@@ -11,8 +11,8 @@ import os
 from . import common, docker
 
 
-def override_gui(gui_config, instance, hostname):
-    print('GUI override for: {0}'.format(hostname))
+def override_gui(gui_config, instance_domain):
+    print('GUI override for: {0}'.format(instance_domain))
     # Prepare static dockers with GUI (if required) - they are reused by
     # whole cluster (instance)
     mount_path = gui_config['mount_path']
@@ -22,8 +22,10 @@ def override_gui(gui_config, instance, hostname):
         print('    from host:   {0}'.format(host_volume_path))
     elif 'docker' in gui_config['mount_from']:
         static_docker_image = gui_config['mount_from']['docker']
-        # Create volume name from docker image name and instance name
-        volume_name = gui_files_volume_name(static_docker_image, instance)
+        # Create volume name from docker image name and instance domain
+        volume_name = gui_files_volume_name(
+            static_docker_image, instance_domain)
+        print(volume_name)
         # Create the volume from given image
         docker.create_volume(
             path=mount_path,
@@ -35,7 +37,7 @@ def override_gui(gui_config, instance, hostname):
     print('    livereload:  {0}'.format(livereload_flag))
 
 
-def extra_volumes(gui_config, instance):
+def extra_volumes(gui_config, instance_domain):
     if 'host' in gui_config['mount_from']:
         # Mount a path on host to static root dir on OZ docker
         mount_path = gui_config['mount_path']
@@ -45,7 +47,7 @@ def extra_volumes(gui_config, instance):
         static_docker_image = gui_config['mount_from']['docker']
         # Create volume name from docker image name
         volume_name = gui_files_volume_name(
-            static_docker_image, instance)
+            static_docker_image, instance_domain)
         return [{'volumes_from': volume_name}]
 
 
@@ -89,8 +91,8 @@ node gui_livereload.js {dir_to_watch} poll /tmp/gui_livereload/cert.pem'''
         output=True)
 
 
-# Create volume name from docker image name and instance name
-def gui_files_volume_name(image_name, instance_name):
+# Create volume name from docker image name and instance domain
+def gui_files_volume_name(image_name, instance_domain):
     volume_name = image_name.split('/')[-1].replace(
-        ':', '_').replace('-', '_')
-    return '{0}_{1}'.format(instance_name, volume_name)
+        ':', '-').replace('_', '-').replace('.', '-')
+    return '{0}-{1}'.format(volume_name, instance_domain)
