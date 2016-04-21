@@ -53,25 +53,42 @@ handle(<<"joinSpace">>, [{<<"token">>, Token}]) ->
             gui_error:report_warning(<<"Invalid token value.">>)
     end;
 
-handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceDirId}]) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+handle(<<"leaveSpace">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    ok = oz_users:leave_space(UserAuth, SpaceId);
+    case space_logic:leave_space(UserAuth, SpaceId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot leave space due to unknown error.">>)
+    end;
 
-handle(<<"userToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+handle(<<"userToken">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, Token} = oz_spaces:get_invite_user_token(UserAuth, SpaceId),
-    {ok, Token};
+    case space_logic:get_invite_user_token(UserAuth, SpaceId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite user token due to unknown error.">>)
+    end;
 
-handle(<<"groupToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+handle(<<"groupToken">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, Token} = oz_spaces:get_invite_group_token(UserAuth, SpaceId),
-    {ok, Token};
+    case space_logic:get_invite_group_token(UserAuth, SpaceId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite group token due to unknown error.">>)
+    end;
 
-handle(<<"supportToken">>, [{<<"spaceId">>, SpaceDirId}]) ->
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceDirId),
+handle(<<"supportToken">>, [{<<"spaceId">>, SpaceId}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    {ok, Token} = oz_spaces:get_invite_provider_token(UserAuth, SpaceId),
-    {ok, Token}.
+    case space_logic:get_invite_provider_token(UserAuth, SpaceId) of
+        {ok, Token} ->
+            {ok, Token};
+        {error, _} ->
+            gui_error:report_error(
+                <<"Cannot get invite provider token due to unknown error.">>)
+    end.
