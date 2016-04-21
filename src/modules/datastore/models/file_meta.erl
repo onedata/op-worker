@@ -130,7 +130,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
              FileDoc =
                  case FileDoc0 of
                      #document{key = undefined} = Doc ->
-                         fslogic_uuid:gen_file_uuid(),
+                         NewUUID = fslogic_uuid:gen_file_uuid(),
                          Doc#document{key = NewUUID};
                      _ ->
                          FileDoc0

@@ -240,8 +240,9 @@ translate_from_protobuf(#'RemoteData'{data = Data}) ->
     #'remote_data'{data = Data};
 translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
     #'remote_write_result'{wrote = Wrote};
-translate_from_protobuf(#'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
-    #'proxyio_request'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
+translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
+    #'proxyio_request'{parameters = parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
+        storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #'remote_read'{offset = Offset, size = Size};
 translate_from_protobuf(#'RemoteWrite'{offset = Offset, data = Data}) ->
@@ -508,8 +509,8 @@ translate_to_protobuf(#get_helper_params{storage_id = SID, force_proxy_io = Forc
     {get_helper_params, #'GetHelperParams'{storage_id = SID, force_proxy_io = ForceProxy}};
 translate_to_protobuf(#truncate{uuid = UUID, size = Size}) ->
     {truncate, #'Truncate'{uuid = UUID, size = Size}};
-translate_to_protobuf(#close{uuid = UUID}) ->
-    {close, #'Close'{uuid = UUID}};
+translate_to_protobuf(#release{handle_id = HandleId}) ->
+    {release, #'Release'{handle_id = HandleId}};
 
 translate_to_protobuf(#storage_test_file{helper_params = HelperParams,
     space_uuid = SpaceUuid, file_id = FileId, file_content = FileContent}) ->
@@ -542,13 +543,12 @@ translate_to_protobuf(#batch_update{space_id = SpaceId, since_seq = Since, until
 
 
 
-
-
-
-
-
-translate_to_protobuf(#'proxyio_request'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
-    {proxyio_request, #'ProxyIORequest'{file_uuid = FileUUID, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)}};
+translate_to_protobuf(#'proxyio_request'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
+    ParametersProto = lists:map(
+        fun({Key, Value}) ->
+            #'Parameter'{key = Key, value = Value}
+        end, maps:to_list(Parameters)),
+    {proxyio_request, #'ProxyIORequest'{parameters = ParametersProto, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
     {remote_read, #'RemoteRead'{offset = Offset, size = Size}};
 translate_to_protobuf(#'remote_write'{offset = Offset, data = Data}) ->

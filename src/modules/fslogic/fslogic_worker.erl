@@ -415,19 +415,18 @@ handle_read_events(Evts, _Ctx) ->
         end
     end, Evts).
 
-handle_proxyio_request(SessionId, #proxyio_request{
-    parameters = Parameters, storage_id = SID, file_id = FID,
+handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
+    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
+    FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    fslogic_proxyio:write(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, Offset, Data);
 
-    fslogic_proxyio:write(SessionId, Parameters, SID, FID, Offset, Data);
 
 handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
-    parameters = Parameters, storage_id = SID, file_id = FID,
-handle_proxyio_request(SessionId, #proxyio_request{
-    parameters = Parameters, storage_id = SID, file_id = FID,
+    parameters = Parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}, storage_id = SID, file_id = FID,
     proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
-
-    fslogic_proxyio:read(SessionId, Parameters, SID, FID, Offset, Size);
+    FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
+    fslogic_proxyio:read(SessionId, Parameters#{?PROXYIO_PARAMETER_FILE_UUID := FileUUID}, SID, FID, Offset, Size);
 
 handle_proxyio_request(_CTX, Req) ->
     ?log_bad_request(Req),
@@ -514,8 +513,8 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_sto
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
-request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{file_uuid = UUID}) ->
-    {file, {guid, UUID}};
+request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := GUID}}) ->
+    {file, {guid, GUID}};
 request_to_file_entry_or_provider(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
