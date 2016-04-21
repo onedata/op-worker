@@ -24,7 +24,7 @@
 
 %% API
 %% Functions operating on directories or files
--export([exists/1, mv/2, cp/2, get_parent/2, get_file_path/2]).
+-export([exists/1, mv/3, cp/3, get_parent/2, get_file_path/2]).
 %% Functions operating on files
 -export([create/2, create/3, open/3, fsync/1, write/3, write_without_events/3,
     read/3, read_without_events/3, truncate/2, truncate/3, get_block_map/1,
@@ -54,10 +54,15 @@ exists(_FileKey) ->
 %% Moves a file or directory to a new location.
 %% @end
 %%--------------------------------------------------------------------
--spec mv(FileKeyFrom :: logical_file_manager:file_key(), PathTo :: file_meta:path()) ->
+-spec mv(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(), TargetPath :: file_meta:path()) ->
     ok | logical_file_manager:error_reply().
-mv(_FileKeyFrom, _PathTo) ->
-    ok.
+mv(SessId, FileKey, TargetPath) ->
+    CTX = fslogic_context:new(SessId),
+    {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #rename{uuid = UUID, target_path = TargetPath},
+        fun(_) ->
+            ok
+        end).
 
 
 %%--------------------------------------------------------------------
@@ -65,9 +70,9 @@ mv(_FileKeyFrom, _PathTo) ->
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
--spec cp(FileKeyFrom :: logical_file_manager:file_key(), PathTo :: file_meta:path()) ->
+-spec cp(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(), TargetPath :: file_meta:path()) ->
     ok | logical_file_manager:error_reply().
-cp(_PathFrom, _PathTo) ->
+cp(_SessId, _FileKey, _TargetPath) ->
     ok.
 
 

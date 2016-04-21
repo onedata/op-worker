@@ -52,7 +52,9 @@
     proxy_via :: session:id() | undefined,
     response_map = #{} :: #{},
     % Key-value in-session memory
-    memory = [] :: [{Key :: term(), Value :: term()}]
+    memory = [] :: [{Key :: term(), Value :: term()}],
+    % Handles for opened files
+    handles = #{} :: #{binary() => storage_file_manager:handle()}
 }).
 
 %% Local, cached version of OZ user
@@ -111,6 +113,7 @@
     blocks = [] :: [fslogic_blocks:block()],
     version_vector = #{},
     size = 0 :: non_neg_integer() | undefined,
+    handle_id :: binary() | undefined,
     recent_changes = {[], []} :: {
         OldChanges :: [fslogic_file_location:change()],
         NewChanges :: [fslogic_file_location:change()]

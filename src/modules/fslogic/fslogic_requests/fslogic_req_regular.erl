@@ -18,7 +18,8 @@
 -include_lib("annotations/include/annotations.hrl").
 
 %% API
--export([get_file_location/3, get_new_file_location/5, truncate/3, get_helper_params/3]).
+-export([get_file_location/3, get_new_file_location/5, truncate/3,
+    get_helper_params/3, release/2]).
 -export([get_parent/2, synchronize_block/3]).
 
 %%%===================================================================
@@ -169,11 +170,34 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         }
     ) end),
 
+    {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
+        false ->
+            {ok, Storage} = fslogic_storage:select_storage(SpaceId),
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
+            {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
+            save_handle(SessId, Handle);
+        true ->
+            {ok, undefined}
+    end,
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
-            space_id = SpaceUUID})}.
+            space_id = SpaceUUID, handle_id = HandleId})}.
+
+
+%%--------------------------------------------------------------------
+%% @doc Removes file handle saved in session.
+%% @end
+%%--------------------------------------------------------------------
+-spec release(#fslogic_ctx{}, HandleId :: binary()) ->
+    no_return() | #fuse_response{}.
+release(#fslogic_ctx{session_id = SessId}, HandleId) ->
+    {ok, #document{value = #session{handles = Handles}}} = session:get(SessId),
+    UpdatedHandles = maps:remove(HandleId, Handles),
+    {ok, SessId} = session:update(SessId, #{handles => UpdatedHandles}),
+    #fuse_response{status = #status{code = ?OK}}.
 
 
 %%--------------------------------------------------------------------
@@ -206,49 +230,74 @@ synchronize_block(_Ctx, {uuid, Uuid}, Block)  ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv get_file_location(CTX, File) with permission check
+%% @equiv get_file_location(CTX, File, Mode) with permission check
 %%--------------------------------------------------------------------
 -spec get_file_location_for_read(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}]).
 get_file_location_for_read(CTX, File) ->
-    get_file_location(CTX, File).
+    get_file_location_impl(CTX, File, read).
 
 %%--------------------------------------------------------------------
-%% @equiv get_file_location(CTX, File) with permission check
+%% @equiv get_file_location(CTX, File, Mode) with permission check
 %%--------------------------------------------------------------------
 -spec get_file_location_for_write(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?write_object, 2}]).
-get_file_location_for_write(CTX, File) -> get_file_location(CTX, File).
+get_file_location_for_write(CTX, File) ->
+    get_file_location_impl(CTX, File, write).
 
 %%--------------------------------------------------------------------
-%% @equiv get_file_location(CTX, File) with permission check
+%% @equiv get_file_location_impl(CTX, File, Mode) with permission check
 %%--------------------------------------------------------------------
 -spec get_file_location_for_rdwr(fslogic_worker:ctx(), fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
 -check_permissions([{traverse_ancestors, 2}, {?read_object, 2}, {?write_object, 2}]).
-get_file_location_for_rdwr(CTX, File) -> get_file_location(CTX, File).
+get_file_location_for_rdwr(CTX, File) ->
+    get_file_location_impl(CTX, File, rdwr).
 
 %%--------------------------------------------------------------------
 %% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.
 %% For best performance use following arg types: document -> uuid -> path
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
+-spec get_file_location_impl(fslogic_worker:ctx(), File :: fslogic_worker:file(),
+    helpers:open_mode()) ->
     no_return() | #fuse_response{}.
-get_file_location(#fslogic_ctx{space_id = SpaceId} = CTX, File) ->
+get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Mode) ->
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
 
-    {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
+    {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
     FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
 
     #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
+    {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
+        false ->
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
+            {ok, Handle} = storage_file_manager:open(SFMHandle, Mode),
+            save_handle(SessId, Handle);
+        true ->
+            {ok, undefined}
+    end,
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_id = SpaceUUID})}.
+            space_id = SpaceUUID, handle_id = HandleId})}.
+
+%%--------------------------------------------------------------------
+%% @doc Saves file handle in user's session, returns id of saved handle
+%% @end
+%%--------------------------------------------------------------------
+-spec save_handle(session:id(), storage_file_manager:handle()) ->
+    {ok, binary()}.
+save_handle(SessionId, Handle) ->
+    HandleId = base64:encode(crypto:rand_bytes(20)),
+    {ok, #document{value = #session{handles = Handles}}} = session:get(SessionId),
+    UpdatedHandles = maps:put(HandleId, Handle, Handles),
+    {ok, SessionId} = session:update(SessionId, #{handles => UpdatedHandles}),
+    {ok, HandleId}.
