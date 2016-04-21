@@ -49,14 +49,6 @@ deps:
 ## Also a release is not nescesary for us.
 ## We prevent reltool from creating a release.
 ## todo: find better solution
-##
-## Generates a dev release
-generate_dev: deps compile
-	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
-	./rebar generate $(OVERLAY_VARS)
-	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
-	# Copy GUI static files into release
-	./inject_gui.sh
 
 ## Generates a production release
 generate: deps compile
@@ -78,7 +70,7 @@ distclean:
 
 rel: generate
 
-test_rel: generate_dev cm_rel appmock_rel
+test_rel: generate cm_rel appmock_rel
 
 cm_rel:
 	ln -sf deps/cluster_worker/cluster_manager/
