@@ -114,6 +114,7 @@ import os, shutil, subprocess, sys
 os.environ['HOME'] = '/root'
 
 ssh_home = '/root/.ssh'
+docker_home = '/root/.docker/'
 if {shed_privileges}:
     useradd = ['useradd', '--create-home', '--uid', '{uid}', 'maketmp']
     if {groups}:
@@ -124,6 +125,9 @@ if {shed_privileges}:
     os.environ['PATH'] = os.environ['PATH'].replace('sbin', 'bin')
     os.environ['HOME'] = '/home/maketmp'
     ssh_home = '/home/maketmp/.ssh'
+    docker_home = '/home/maketmp/.docker'
+    docker_gid = os.stat('/var/run/docker.sock').st_gid
+    os.setgroups([docker_gid])
     os.setregid({gid}, {gid})
     os.setreuid({uid}, {uid})
 
@@ -135,10 +139,13 @@ for root, dirs, files in os.walk(ssh_home):
         os.chmod(os.path.join(root, file), 0o600)
 
 try:
-    os.makedirs('/root/.docker/')
+    os.makedirs(docker_home)
 except:
     pass
-shutil.copyfile('/root/docker_config/config.json', '/root/.docker/config.json')
+shutil.copyfile(
+    '/tmp/docker_config/config.json',
+    os.path.join(docker_home, 'config.json'
+))
 
 sh_command = 'eval $(ssh-agent) > /dev/null; ssh-add 2>&1; {command} {params}'
 ret = subprocess.call(['sh', '-c', sh_command])
@@ -167,7 +174,7 @@ if args.mount_cache:
 # it during start. Mount it in /root/docker_config and then cp the json.
 volumes = [
     (args.keys, '/tmp/keys', 'ro'),
-    (expanduser('~/.docker'), '/root/docker_config', 'ro')
+    (expanduser('~/.docker'), '/tmp/docker_config', 'ro')
 ]
 
 split_envs = [e.split('=') for e in args.envs]
