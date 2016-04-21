@@ -609,16 +609,15 @@ is_spaces_base_dir(#document{key = Key}) ->
 %% Internel helper function for rename/2.
 %% @end
 %%--------------------------------------------------------------------
--spec rename3(Subject :: datastore:document(), ParentUUID :: uuid(), {name, NewName :: name()} | {path, NewPath :: path()}) ->
+-spec rename3(Subject :: datastore:document(), ParentUUID :: uuid(),
+    {name, NewName :: name()} | {path, NewPath :: path()}) ->
     ok | datastore:generic_error().
-rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {name, NewName}) ->
+rename3(#document{value = #file_meta{name = OldName, version = V}} = Subject, ParentUUID, {name, NewName}) ->
     ?run(begin
-        CTime = erlang:system_time(seconds),
-        {ok, FileUUID} = update(Subject, #{name => NewName, mtime => CTime, ctime => CTime}),
-        {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
+        {ok, FileUUID} = update(Subject, #{name => NewName}),
         ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
         ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {snapshot_name(NewName, V), {FileUUID, ?MODEL_NAME}}),
-        case get_current_snapshot(Subject) =:= SubjectDoc of
+        case get_current_snapshot(Subject) =:= Subject of
             true ->
                 ok = datastore:delete_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, OldName),
                 ok = datastore:add_links(?LINK_STORE_LEVEL, ParentUUID, ?MODEL_NAME, {NewName, Subject});
@@ -628,23 +627,19 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, ParentUUID, {na
         ok
     end);
 
-rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, {path, NewPath}) ->
+rename3(#document{value = #file_meta{name = OldName, version = V}} = Subject, OldParentUUID, {path, NewPath}) ->
     ?run(begin
         NewTokens = fslogic_path:split(NewPath),
         [NewName | NewParentTokens] = lists:reverse(NewTokens),
         NewParentPath = fslogic_path:join(lists:reverse(NewParentTokens)),
         {ok, NewParent} = get({path, NewParentPath}),
-
         {ok, NewScope} = get_scope(NewParent),
-        {ok, #document{value = #file_meta{version = V}} = SubjectDoc} = get(Subject),
-
-        CTime = erlang:system_time(seconds),
-        {ok, FileUUID} = update(Subject, #{name => NewName, mtime => CTime, ctime => CTime}),
+        {ok, FileUUID} = update(Subject, #{name => NewName}),
 
         ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, snapshot_name(OldName, V)),
         ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {snapshot_name(NewName, V), Subject}),
         ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
-        case get_current_snapshot(Subject) =:= SubjectDoc of
+        case get_current_snapshot(Subject) =:= Subject of
             true ->
                 ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
                 ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject});
