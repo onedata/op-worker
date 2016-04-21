@@ -71,8 +71,8 @@ emit_file_sizeless_attrs_update(FileEntry) ->
 emit_file_location_update(FileEntry, ExcludedSessions) ->
     try
         {ok, #document{} = File} = file_meta:get(FileEntry),
-        #document{value = #file_location{} = FileLocation} = fslogic_utils:get_local_file_location(File),
-        event:emit(#event{object = #update_event{object = file_location:ensure_blocks_not_empty(FileLocation)}},
+        #document{value = #file_location{uuid = FileUuid} = FileLocation} = fslogic_utils:get_local_file_location(File),
+        event:emit(#event{object = #update_event{object = file_location:ensure_blocks_not_empty(FileLocation#file_location{uuid = fslogic_uuid:to_file_guid(FileUuid)})}},
             {exclude, ExcludedSessions})
     catch
         _:Reason ->
@@ -88,7 +88,7 @@ emit_file_location_update(FileEntry, ExcludedSessions) ->
 -spec emit_permission_changed(FileUuid :: file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
 emit_permission_changed(FileUuid) ->
-    event:emit(#event{object = #permission_changed_event{file_uuid = FileUuid}}).
+    event:emit(#event{object = #permission_changed_event{file_uuid = fslogic_uuid:to_file_guid(FileUuid)}}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -98,7 +98,7 @@ emit_permission_changed(FileUuid) ->
 -spec emit_file_removal(FileUuid :: file_meta:uuid()) ->
     ok | {error, Reason :: term()}.
 emit_file_removal(FileUuid) ->
-    event:emit(#event{object = #file_removal_event{file_uuid = FileUuid}}).
+    event:emit(#event{object = #file_removal_event{file_uuid = fslogic_uuid:to_file_guid(FileUuid)}}).
 
 %%%===================================================================
 %%% Internal functions

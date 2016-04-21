@@ -130,12 +130,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
              FileDoc =
                  case FileDoc0 of
                      #document{key = undefined} = Doc ->
-                         NewUUID = case fslogic_uuid:file_uuid_to_space_id(ParentUUID) of
-                             {ok, SpaceId} ->
-                                 fslogic_uuid:gen_file_uuid(SpaceId);
-                             _ ->
-                                 fslogic_uuid:gen_file_uuid()
-                         end,
+                         fslogic_uuid:gen_file_uuid(),
                          Doc#document{key = NewUUID};
                      _ ->
                          FileDoc0
@@ -575,9 +570,11 @@ get_space_dir(SpaceId) ->
 %% Returns uuid() for given file_meta:entry(). Providers for example path() -> uuid() conversion.
 %% @end
 %%--------------------------------------------------------------------
--spec to_uuid(entry()) -> {ok, uuid()} | datastore:generic_error().
+-spec to_uuid(entry() | {guid, fslogic_worker:file_guid()}) -> {ok, uuid()} | datastore:generic_error().
 to_uuid({uuid, UUID}) ->
     {ok, UUID};
+to_uuid({guid, GUID}) ->
+    {ok, fslogic_uuid:file_guid_to_uuid(GUID)};
 to_uuid(#document{key = UUID}) ->
     {ok, UUID};
 to_uuid({path, Path}) ->

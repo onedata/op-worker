@@ -34,10 +34,13 @@
 
 -type ctx() :: #fslogic_ctx{}.
 -type file() :: file_meta:entry(). %% Type alias for better code organization
+-type ext_file() :: file_meta:entry() | {guid, file_guid()}.
 -type open_flags() :: rdwr | write | read.
 -type posix_permissions() :: file_meta:posix_permissions().
+-type file_guid() :: binary().
+-type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
--export_type([ctx/0, file/0, open_flags/0, posix_permissions/0]).
+-export_type([ctx/0, file/0, open_flags/0, posix_permissions/0, file_guid/0, ext_file/0, file_guid_or_path/0]).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -133,9 +136,9 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?debug("fuse_request: ~p", [FuseRequest]),
+    ?info("fuse_request: ~p", [FuseRequest]),
     Response = run_and_catch_exceptions(fun handle_fuse_request/2, fslogic_context:new(SessId), FuseRequest, fuse_request),
-    ?debug("fuse_response: ~p", [Response]),
+    ?info("fuse_response: ~p", [Response]),
     Response;
 handle({proxyio_request, SessId, ProxyIORequest}) ->
     ?debug("proxyio_request: ~p", [ProxyIORequest]),
@@ -294,65 +297,67 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {pa
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {uuid, UUID}}}) ->
+    fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     fslogic_req_generic:get_file_attr(Ctx, Entry);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #delete_file{uuid = UUID}}) ->
-    fslogic_req_generic:delete(Ctx, {uuid, UUID});
+    fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode}}) ->
-    fslogic_req_special:mkdir(Ctx, {uuid, ParentUUID}, Name, Mode);
+    fslogic_req_special:mkdir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentUUID)}, Name, Mode);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_children{uuid = UUID, offset = Offset, size = Size}}) ->
-    fslogic_req_special:read_dir(Ctx, {uuid, UUID}, Offset, Size);
+    fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Offset, Size);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_parent{uuid = UUID}}) ->
-    fslogic_req_regular:get_parent(Ctx, {uuid, UUID});
+    fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #change_mode{uuid = UUID, mode = Mode}}) ->
-    fslogic_req_generic:chmod(Ctx, {uuid, UUID}, Mode);
+    fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Mode);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #rename{uuid = UUID, target_path = TargetPath}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(TargetPath),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     #fslogic_ctx{session_id = SessId} = Ctx,
     {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalFileEntry, SessId),
-    fslogic_req_generic:rename(Ctx, {uuid, UUID}, CanonicalTargetPath);
+    fslogic_req_generic:rename(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, CanonicalTargetPath);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}}) ->
-    fslogic_req_generic:update_times(Ctx, {uuid, UUID}, ATime, MTime, CTime);
+    fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_new_file_location{name = Name, parent_uuid = ParentUUID,
     flags = Flags, mode = Mode}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {uuid, ParentUUID}),
-    fslogic_req_regular:get_new_file_location(NewCtx, {uuid, ParentUUID}, Name, Mode, Flags);
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, ParentUUID}),
+    fslogic_req_regular:get_new_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentUUID)}, Name, Mode, Flags);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_location{uuid = UUID, flags = Flags}}) ->
-    NewCtx = fslogic_context:set_space_id(Ctx, {uuid, UUID}),
-    fslogic_req_regular:get_file_location(NewCtx, {uuid, UUID}, Flags);
+    NewCtx = fslogic_context:set_space_id(Ctx, {guid, UUID}),
+    fslogic_req_regular:get_file_location(NewCtx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Flags);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #truncate{uuid = UUID, size = Size}}) ->
-    fslogic_req_regular:truncate(Ctx, {uuid, UUID}, Size);
+    fslogic_req_regular:truncate(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Size);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_helper_params{storage_id = SID, force_proxy_io = ForceProxy}}) ->
     fslogic_req_regular:get_helper_params(Ctx, SID, ForceProxy);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID, name = XattrName}}) ->
-    fslogic_req_generic:get_xattr(Ctx, {uuid, UUID}, XattrName);
+    fslogic_req_generic:get_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, XattrName);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_xattr{uuid = UUID, xattr = Xattr}}) ->
-    fslogic_req_generic:set_xattr(Ctx, {uuid, UUID}, Xattr);
+    fslogic_req_generic:set_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Xattr);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #remove_xattr{uuid = UUID, name = XattrName}}) ->
-    fslogic_req_generic:remove_xattr(Ctx, {uuid, UUID}, XattrName);
+    fslogic_req_generic:remove_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, XattrName);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #list_xattr{uuid = UUID}}) ->
-    fslogic_req_generic:list_xattr(Ctx, {uuid, UUID});
+    fslogic_req_generic:list_xattr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_acl{uuid = UUID}}) ->
-    fslogic_req_generic:get_acl(Ctx, {uuid, UUID});
+    fslogic_req_generic:get_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_acl{uuid = UUID, acl = Acl}}) ->
-    fslogic_req_generic:set_acl(Ctx, {uuid, UUID}, Acl);
+    fslogic_req_generic:set_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Acl);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #remove_acl{uuid = UUID}}) ->
-    fslogic_req_generic:remove_acl(Ctx, {uuid, UUID});
+    fslogic_req_generic:remove_acl(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_transfer_encoding{uuid = UUID}}) ->
-    fslogic_req_generic:get_transfer_encoding(Ctx, {uuid, UUID});
+    fslogic_req_generic:get_transfer_encoding(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_transfer_encoding{uuid = UUID, value = Value}}) ->
-    fslogic_req_generic:set_transfer_encoding(Ctx, {uuid, UUID}, Value);
+    fslogic_req_generic:set_transfer_encoding(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_cdmi_completion_status{uuid = UUID}}) ->
-    fslogic_req_generic:get_cdmi_completion_status(Ctx, {uuid, UUID});
+    fslogic_req_generic:get_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_cdmi_completion_status{uuid = UUID, value = Value}}) ->
-    fslogic_req_generic:set_cdmi_completion_status(Ctx, {uuid, UUID}, Value);
+    fslogic_req_generic:set_cdmi_completion_status(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_mimetype{uuid = UUID}}) ->
-    fslogic_req_generic:get_mimetype(Ctx, {uuid, UUID});
+    fslogic_req_generic:get_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #set_mimetype{uuid = UUID, value = Value}}) ->
-    fslogic_req_generic:set_mimetype(Ctx, {uuid, UUID}, Value);
+    fslogic_req_generic:set_mimetype(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Value);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID, block = Block}}) ->
-    fslogic_req_regular:synchronize_block(Ctx, {uuid, UUID}, Block);
+    fslogic_req_regular:synchronize_block(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Block);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_storage_test_file{storage_id = SID, file_uuid = FileUUID}}) ->
     fuse_config_manager:create_storage_test_file(Ctx, SID, FileUUID);
 handle_fuse_request(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{storage_id = SID, space_uuid = SpaceUUID,
@@ -364,7 +369,8 @@ handle_fuse_request(_Ctx, Req) ->
 
 handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results = lists:map(fun(#event{object = #write_event{
-        blocks = Blocks, file_uuid = FileUUID, file_size = FileSize}}) ->
+        blocks = Blocks, file_uuid = FileGUID, file_size = FileSize}}) ->
+        FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
         case replica_updater:update(FileUUID, Blocks, FileSize, true) of
             {ok, size_changed} ->
                 MTime = erlang:system_time(seconds),
@@ -394,7 +400,8 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
     Results.
 
 handle_read_events(Evts, _Ctx) ->
-    lists:map(fun(#event{object = #read_event{file_uuid = FileUUID}}) ->
+    lists:map(fun(#event{object = #read_event{file_uuid = FileGUID}}) ->
+        FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
         case fslogic_times:calculate_atime({uuid, FileUUID}) of
             actual ->
                 ok;
@@ -412,13 +419,13 @@ handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
     file_uuid = FileUuid, storage_id = SID, file_id = FID,
     proxyio_request = #remote_write{offset = Offset, data = Data}}) ->
 
-    fslogic_proxyio:write(SessionId, FileUuid, SID, FID, Offset, Data);
+    fslogic_proxyio:write(SessionId, fslogic_uuid:file_guid_to_uuid(FileUuid), SID, FID, Offset, Data);
 
 handle_proxyio_request(#fslogic_ctx{session_id = SessionId}, #proxyio_request{
     file_uuid = FileUuid, storage_id = SID, file_id = FID,
     proxyio_request = #remote_read{offset = Offset, size = Size}}) ->
 
-    fslogic_proxyio:read(SessionId, FileUuid, SID, FID, Offset, Size);
+    fslogic_proxyio:read(SessionId, fslogic_uuid:file_guid_to_uuid(FileUuid), SID, FID, Offset, Size);
 
 handle_proxyio_request(_CTX, Req) ->
     ?log_bad_request(Req),
@@ -432,7 +439,7 @@ handle_proxyio_request(_CTX, Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec request_to_file_entry_or_provider(fslogic_worker:ctx(), #fuse_request{} | #proxyio_request{}) ->
-    {file, file_meta:entry()} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
+    {file, file_meta:entry() | {guid, fslogic_worker:file_guid()}} | {provider, oneprovider:id()} | {space, SpaceId :: binary()}.
 request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {path, Path}}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     case fslogic_path:get_canonical_file_entry(Ctx, Tokens) of
@@ -447,64 +454,66 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_at
         OtherFileEntry ->
             {file, OtherFileEntry}
     end;
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {uuid, FileGUID}}}) ->
+    {file, {guid, FileGUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     {file, Entry};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #delete_file{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_dir{parent_uuid = ParentUUID}}) ->
-    {file, {uuid, ParentUUID}};
+    {file, {guid, ParentUUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_children{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_parent{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #change_mode{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #rename{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #update_times{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_new_file_location{parent_uuid = ParentUUID}}) ->
-    {file, {uuid, ParentUUID}};
+    {file, {guid, ParentUUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_location{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #truncate{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_helper_params{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_xattr{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_xattr{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #remove_xattr{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #list_xattr{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_acl{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_acl{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #remove_acl{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_transfer_encoding{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_transfer_encoding{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_cdmi_completion_status{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_cdmi_completion_status{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_mimetype{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #set_mimetype{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #synchronize_block{uuid = UUID}}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{file_uuid = UUID}) ->
-    {file, {uuid, UUID}};
+    {file, {guid, UUID}};
 request_to_file_entry_or_provider(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

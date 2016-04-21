@@ -19,11 +19,41 @@
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
     spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2]).
 -export([file_uuid_to_space_id/1, gen_file_uuid/1, gen_file_uuid/0]).
+-export([to_file_guid/2, unpack_file_guid/1, file_guid_to_uuid/1, to_file_guid/1, ensure_guid/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
+-spec to_file_guid(file_meta:uuid(), SpaceId :: binary() | undefined) ->
+    fslogic_worker:file_guid().
+to_file_guid(FileUUID, SpaceId) ->
+    http_utils:base64url_encode(term_to_binary({guid, FileUUID, SpaceId})).
+
+
+-spec to_file_guid(file_meta:uuid()) ->
+    fslogic_worker:file_guid().
+to_file_guid(FileUUID) ->
+    SpaceId = fslogic_spaces:get_space_id(FileUUID),
+    http_utils:base64url_encode(term_to_binary({guid, FileUUID, SpaceId})).
+
+-spec unpack_file_guid(FileGUID :: fslogic_worker:file_guid()) ->
+    {file_meta:uuid(), SpaceId :: binary() | undefined}.
+unpack_file_guid(FileGUID) ->
+    try binary_to_term(http_utils:base64url_decode(FileGUID)) of
+        {guid, FileUUID, SpaceId} ->
+            {FileUUID, SpaceId};
+        _ ->
+            {FileGUID, undefined}
+    catch
+        _:_ ->
+            {FileGUID, undefined}
+    end.
+
+file_guid_to_uuid(FileGUID) ->
+    {FileUUID, _} = unpack_file_guid(FileGUID),
+    FileUUID.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,6 +120,24 @@ ensure_uuid(_CTX, #document{key = UUID}) ->
     {uuid, UUID};
 ensure_uuid(CTX, {path, Path}) ->
     {uuid, path_to_uuid(CTX, Path)}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Converts given file entry to GUID.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:file()) ->
+    {guid, fslogic_worker:file_guid()}.
+ensure_guid(_CTX, {uuid, UUID}) ->
+    {guid, to_file_guid(UUID)};
+ensure_guid(_CTX, {guid, GUID}) ->
+    {guid, GUID};
+ensure_guid(_CTX, #document{key = UUID}) ->
+    {guid, to_file_guid(UUID)};
+ensure_guid(CTX, {path, Path}) ->
+    SpaceId = fslogic_spaces:get_space_id(CTX, Path),
+    {guid, to_file_guid(path_to_uuid(CTX, Path), SpaceId)}.
 
 %%--------------------------------------------------------------------
 %% @doc

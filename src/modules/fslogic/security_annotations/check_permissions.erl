@@ -54,7 +54,7 @@ before_advice(#annotation{data = AccessDefinitions}, _M, _F,
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
     Args;
-before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_uuid = FileUUID} = Handle | RestOfArgs] = Args) ->
+before_advice(#annotation{data = AccessDefinitions}, _M, _F, [#sfm_handle{session_id = SessionId, file_guid = FileUUID} = Handle | RestOfArgs] = Args) ->
     {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
     ExpandedAccessDefinitions = expand_access_definitions(AccessDefinitions, UserId, Args, #{}, #{}, #{}),
     [ok = rules:check(Def) || Def <- ExpandedAccessDefinitions],
@@ -114,7 +114,7 @@ expand_access_definitions([{CheckType, ItemDefinition} | Rest], UserId, Inputs, 
 %%      E.g. for virtual "/" directory returns deafult space file.
 %%--------------------------------------------------------------------
 -spec get_validation_subject(onedata_user:id(), fslogic_worker:file()) -> fslogic_worker:file() | no_return().
-get_validation_subject(UserId, #sfm_handle{file_uuid = FileUUID}) ->
+get_validation_subject(UserId, #sfm_handle{file_guid = FileUUID}) ->
     get_validation_subject(UserId, {uuid, FileUUID});
 get_validation_subject(UserId, FileEntry) ->
     {ok, #document{key = FileId, value = #file_meta{}} = FileDoc} = file_meta:get(FileEntry),

@@ -239,19 +239,19 @@ start_event_streams(EvtStmSup, SessId) ->
 -spec request_to_file_entry_or_provider(#event{} | #subscription{}) ->
     {file, file_meta:entry()} | not_file_context.
 request_to_file_entry_or_provider(#event{object = #read_event{file_uuid = FileUUID}}) ->
-    {file, {uuid, FileUUID}};
+    {file, {guid, FileUUID}};
 request_to_file_entry_or_provider(#event{object = #write_event{file_uuid = FileUUID}}) ->
-    {file, {uuid, FileUUID}};
+    {file, {guid, FileUUID}};
 request_to_file_entry_or_provider(#event{object = #update_event{}}) ->
     not_file_context;
 request_to_file_entry_or_provider(#event{object = #permission_changed_event{file_uuid = _FileUUID}}) ->
     not_file_context;
 request_to_file_entry_or_provider(#subscription{object = #file_attr_subscription{file_uuid = FileUUID}}) ->
-    {file, {uuid, FileUUID}};
+    {file, {guid, FileUUID}};
 request_to_file_entry_or_provider(#subscription{object = #file_location_subscription{file_uuid = FileUUID}}) ->
-    {file, {uuid, FileUUID}};
+    {file, {guid, FileUUID}};
 request_to_file_entry_or_provider(#subscription{object = #permission_changed_subscription{file_uuid = FileUUID}}) ->
-    {file, {uuid, FileUUID}};
+    {file, {guid, FileUUID}};
 request_to_file_entry_or_provider(_) ->
     not_file_context.
 

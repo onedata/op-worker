@@ -171,7 +171,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = UUID, provider_id = oneprovider:get_provider_id(),
+            uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
             space_id = SpaceUUID})}.
 
@@ -237,7 +237,7 @@ get_file_location_for_rdwr(CTX, File) -> get_file_location(CTX, File).
 %%--------------------------------------------------------------------
 -spec get_file_location(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
     no_return() | #fuse_response{}.
-get_file_location(CTX, File) ->
+get_file_location(#fslogic_ctx{space_id = SpaceId} = CTX, File) ->
     {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
 
     {ok, #document{key = StorageId, value = _Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
@@ -249,6 +249,6 @@ get_file_location(CTX, File) ->
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = UUID, provider_id = oneprovider:get_provider_id(),
+            uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
             space_id = SpaceUUID})}.

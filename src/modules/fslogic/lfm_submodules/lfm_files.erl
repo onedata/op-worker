@@ -148,9 +148,11 @@ create(SessId, Path, Mode) ->
     {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
     case file_meta:resolve_path(ParentPath) of
         {ok, {#document{key = ParentUUID}, _}} ->
+            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
             lfm_utils:call_fslogic(SessId,
                 #get_new_file_location{
-                    name = Name, parent_uuid = ParentUUID, mode = Mode
+                    name = Name, parent_uuid = fslogic_uuid:to_file_guid(ParentUUID, SpaceId), mode = Mode
                 },
                 fun(#file_location{uuid = UUID}) -> {ok, UUID} end
             );
@@ -163,16 +165,16 @@ create(SessId, Path, Mode) ->
 %% Opens a file in selected mode and returns a file handle used to read or write.
 %% @end
 %%--------------------------------------------------------------------
--spec open(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec open(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     OpenType :: helpers:open_mode()) ->
     {ok, logical_file_manager:handle()} | logical_file_manager:error_reply().
 open(SessId, FileKey, OpenType) ->
     CTX = fslogic_context:new(SessId),
-    {uuid, FileUUID} = fslogic_uuid:ensure_uuid(CTX, FileKey),
-    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileUUID, flags = OpenType},
+    {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
+    lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileGUID, flags = OpenType},
         fun(#file_location{provider_id = ProviderId, uuid = _UUID, file_id = FileId, storage_id = StorageId} = Location) ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}, fslogic_context:get_user_id(CTX)),
-            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId),
+            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileGUID, StorageId, FileId, ProviderId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->

@@ -44,14 +44,14 @@
 %% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileGUID :: fslogic_worker:file_guid(),
   Storage :: datastore:document(), FileId :: helpers:file()) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
+new_handle(SessionId, SpaceUUID, FileGUID, Storage, FileId) ->
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,
-        file_uuid = FileUUID,
+        file_guid = FileGUID,
         file = FileId,
         provider_id = oneprovider:get_provider_id(),
         is_local = true,
@@ -67,10 +67,10 @@ new_handle(SessionId, SpaceUUID, FileUUID, Storage, FileId) ->
 %% Therefore handle created with this function may be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileUUID :: file_meta:uuid(),
+-spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileGUID :: fslogic_worker:file_guid(),
     StorageId :: storage:id(), FileId :: helpers:file(), oneprovider:id()) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
+new_handle(SessionId, SpaceUUID, FileGUID, StorageId, FileId, ProviderId) ->
     {IsLocal, Storage} = case oneprovider:get_provider_id() of
         ProviderId ->
             {ok, S} = storage:get(StorageId),
@@ -81,7 +81,7 @@ new_handle(SessionId, SpaceUUID, FileUUID, StorageId, FileId, ProviderId) ->
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,
-        file_uuid = FileUUID,
+        file_guid = FileGUID,
         file = FileId,
         provider_id = ProviderId,
         is_local = IsLocal,
@@ -240,11 +240,11 @@ write(#sfm_handle{is_local = true, open_mode = read}, _, _) -> throw(?EPERM);
 write(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, Buffer) ->
     helpers:write(HelperHandle, File, Offset, Buffer);
 
-write(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUuid, storage_id = SID, file = FID}, Offset, Data) ->
+write(#sfm_handle{is_local = false, session_id = SessionId, file_guid = FileGUID, storage_id = SID, file = FID}, Offset, Data) ->
     ProxyIORequest = #proxyio_request{
-        file_uuid = FileUuid, storage_id = SID, file_id = FID,
+        file_uuid = FileGUID, storage_id = SID, file_id = FID,
         proxyio_request = #remote_write{offset = Offset, data = Data}},
-    ?info("remote_write: ~p ~p", [FileUuid, SessionId]),
+    ?info("remote_write: ~p ~p", [FileGUID, SessionId]),
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
         #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_write_result{wrote = Wrote}} ->
             {ok, Wrote};
@@ -266,11 +266,11 @@ read(#sfm_handle{is_local = true, open_mode = write}, _, _) -> throw(?EPERM);
 read(#sfm_handle{is_local = true, helper_handle = HelperHandle, file = File}, Offset, MaxSize) ->
     helpers:read(HelperHandle, File, Offset, MaxSize);
 
-read(#sfm_handle{is_local = false, session_id = SessionId, file_uuid = FileUuid, storage_id = SID, file = FID}, Offset, Size) ->
+read(#sfm_handle{is_local = false, session_id = SessionId, file_guid = FileGUID, storage_id = SID, file = FID}, Offset, Size) ->
     ProxyIORequest = #proxyio_request{
-        file_uuid = FileUuid, storage_id = SID, file_id = FID,
+        file_uuid = FileGUID, storage_id = SID, file_id = FID,
         proxyio_request = #remote_read{offset = Offset, size = Size}},
-    ?info("remote_read: ~p ~p", [FileUuid, SessionId]),
+    ?info("remote_read: ~p ~p", [FileGUID, SessionId]),
     case worker_proxy:call(fslogic_worker, {proxyio_request, SessionId, ProxyIORequest}) of
         #proxyio_response{status = #status{code = ?OK}, proxyio_response = #remote_data{data = Data}} ->
             {ok, Data};

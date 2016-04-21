@@ -114,13 +114,14 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             ctime = CTime, uid = UserID, name = Name}} = FileDoc} ->
             Size = fslogic_blocks:get_file_size(File),
 
-            #posix_user_ctx{gid = GID, uid = UID} = try
+            {#posix_user_ctx{gid = GID, uid = UID}, SpaceId} = try
                 {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+                SId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
                 StorageId = luma_utils:get_storage_id(SpaceUUID),
                 StorageType = luma_utils:get_storage_type(StorageId),
-                fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID)
+                {fslogic_storage:get_posix_user_ctx(StorageType, SessId, SpaceUUID), SId}
             catch
-                throw:{not_a_space, _} -> ?ROOT_POSIX_CTX
+                throw:{not_a_space, _} -> {?ROOT_POSIX_CTX, undefined}
             end,
             FinalUID = case  session:get(SessId) of
                 {ok, #document{value = #session{identity = #identity{user_id = UserID}}}} ->
@@ -130,7 +131,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
-                uuid = UUID, type = Type, mode = Mode, atime = ATime, mtime = MTime,
+                uuid = fslogic_uuid:to_file_guid(UUID, SpaceId),
+                type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};
         {error, {not_found, _}} ->

@@ -286,6 +286,8 @@ get_file_test(Config) ->
     ?assert(is_binary(ObjectID)),
     %%------------------------------
 
+    ct:print("OBJ ID ~p", [ObjectID]),
+
     %%-------- read by id ----------
     RequestHeaders6 = [?CDMI_VERSION_HEADER, user_1_token_header()],
     {ok, Code6, _Headers6, Response6} = do_request(Worker, "cdmi_objectid/" ++ binary_to_list(ObjectID), get, RequestHeaders6, []),
