@@ -249,7 +249,7 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
                 user(<<"onedata ftw">>, [], [S1], S1)
             )
         ]),
-        expect_message([U1], 3, []),
+        expect_message([U1], 3, [])
     end,
 
     check_file_operations_test_base(Config, UpdateFun, ?FUNCTION).
@@ -270,7 +270,7 @@ new_user_with_present_space_triggers_file_meta_creation2(Config) ->
 
         push_update(Node, [
             update(3, [<<"r2">>, <<"r1">>], U1,
-                user(<<"onedata ftw">>, [], [S1])
+                user(<<"onedata ftw">>, [], [S1], S1)
             )
         ]),
         expect_message([U1], 3, [])
@@ -286,7 +286,7 @@ new_user_with_new_space_triggers_file_meta_creation(Config) ->
             )),
             update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
             update(3, [<<"r2">>, <<"r1">>], U1,
-                user(<<"onedata ftw">>, [], [S1])
+                user(<<"onedata ftw">>, [], [S1], S1)
             )
         ]),
         expect_message([U1], 3, [])
@@ -301,7 +301,7 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
                 <<"space_name">>, [], [], [{P1, 1000}]
             )),
             update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined))
         ]),
         expect_message([U1], 3, []),
 
@@ -309,7 +309,7 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
             update(4, [<<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
             )),
-            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1], S1))
         ]),
         expect_message([U1], 5, [])
     end,
@@ -319,7 +319,7 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
 updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined))
         ]),
         expect_message([U1], 1, []),
 
@@ -332,7 +332,7 @@ updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1])),
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1], S1)),
             update(5, [<<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
             ))
@@ -345,7 +345,7 @@ updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
 updated_user_with_present_space_triggers_file_meta_creation3(Config) ->
     UpdateFun = fun(Node, S1, U1, P1, Priv1, _G1) ->
         push_update(Node, [
-            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], []))
+            update(1, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined))
         ]),
         expect_message([U1], 1, []),
 
@@ -358,7 +358,7 @@ updated_user_with_present_space_triggers_file_meta_creation3(Config) ->
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1], S1))
         ]),
         expect_message([U1], 4, []),
 
@@ -379,7 +379,7 @@ add_user_to_group_triggers_file_meta_creation(Config) ->
                 <<"space_name">>, [], [], [{P1, 1000}]
             )),
             update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined)),
             update(4, [<<"r2">>, <<"r1">>], G1, group(<<"onedata_gr">>, [S1], []))
         ]),
         expect_message([U1], 4, []),
@@ -399,7 +399,7 @@ add_space_to_group_triggers_file_meta_creation(Config) ->
                 <<"space_name">>, [], [], [{P1, 1000}]
             )),
             update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [])),
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [], undefined)),
             update(4, [<<"r2">>, <<"r1">>], G1, group(<<"onedata_gr">>, [], [{U1, Priv1}]))
         ]),
         expect_message([U1], 4, []),
@@ -419,7 +419,7 @@ add_provider_to_space_triggers_file_meta_creation(Config) ->
                 <<"space_name">>, [{U1, Priv1}], [], []
             )),
             update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1], S1))
         ]),
         expect_message([U1], 3, []),
 
