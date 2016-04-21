@@ -14,8 +14,8 @@
 #####################################################################
 
 # Configuration
-STATIC_FILES_IMAGE='docker.onedata.org/op-gui-default:VFS-1825'
-TARGET_DIR='rel/op_worker/data/gui_static'
+STATIC_FILES_IMAGE='docker.onedata.org/oz-gui-default:VFS-1825'
+TARGET_DIR='rel/oz_worker/data/gui_static'
 
 # Fail on any command failure
 set -e
@@ -24,7 +24,8 @@ echo "Copying static GUI files"
 echo "    from image: ${STATIC_FILES_IMAGE}"
 echo "    under path: ${TARGET_DIR}"
 
-# Create docker volume based on given image
+# Create docker volume based on given image. Path /var/www/html is arbitrarily
+# chosen, could be anything really - it must be later referenced in docker cp.
 CONTAINER_ID=`docker create -v /var/www/html ${STATIC_FILES_IMAGE} /bin/true`
 
 # Create required dirs
@@ -33,10 +34,10 @@ mkdir -p ${TARGET_DIR}
 # Remove old files (if any)
 rm -rf ${TARGET_DIR}
 
-# Copy the files ( -L = follow symbolic links )
-# @TODO until we use docker 1.9 (in onedata/builder) cp from /artefact rather
-# than /var/www/html because 1.9 client does not support follow symbolic links.
-docker cp ${CONTAINER_ID}:/artefact ${TARGET_DIR}
+# Copy the files ( -L = follow symbolic links ) - warning:
+#   this works on docker client 1.10+ !
+# Use path from docker create volume
+docker cp ${CONTAINER_ID}:/var/www/html ${TARGET_DIR}
 
 # Remove unneeded container
 docker rm -f ${CONTAINER_ID}
