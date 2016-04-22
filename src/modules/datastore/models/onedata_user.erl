@@ -164,7 +164,7 @@ fetch(Client) ->
         oz_users:get_spaces(Client),
     {ok, GroupIds} = oz_users:get_groups(Client),
 
-    Spaces = lists:map(fun(SpaceId) ->
+    Spaces = utils:pmap(fun(SpaceId) ->
         {ok, #space_details{name = SpaceName}} =
             oz_spaces:get_details(Client, SpaceId),
         {SpaceId, SpaceName}
@@ -181,8 +181,13 @@ fetch(Client) ->
     OnedataUserDoc = #document{key = UserId, value = OnedataUser},
     {ok, _} = onedata_user:save(OnedataUserDoc),
 
-    [space_info:get_or_fetch(Client, SpaceId, UserId) || SpaceId <- SpaceIds],
-    [onedata_group:get_or_fetch(Client, GroupId) || GroupId <- GroupIds],
+    utils:pforeach(fun(SpaceId) ->
+        space_info:get_or_fetch(Client, SpaceId, UserId)
+    end, SpaceIds),
+
+    utils:pforeach(fun(GroupId) ->
+        onedata_group:get_or_fetch(Client, GroupId)
+    end, GroupIds),
 
     {ok, OnedataUserDoc}.
 

@@ -648,8 +648,9 @@ ERL_NIF_TERM open(
 ERL_NIF_TERM read(NifCTX ctx, const std::string file, off_t offset, size_t size)
 {
     auto buf = std::make_shared<std::vector<char>>(size);
+    auto parameters = std::unordered_map<std::string, std::string>({});
     ctx.helperObj->ash_read(ctx.helperCTX, file,
-        asio::mutable_buffer(buf->data(), size), offset, "",
+        asio::mutable_buffer(buf->data(), size), offset, parameters,
         [ctx, buf](asio::mutable_buffer mbuf, error_t e) {
             handle_result(ctx, e, mbuf);
         });
@@ -661,8 +662,9 @@ ERL_NIF_TERM write(
     NifCTX ctx, const std::string file, const off_t offset, std::string data)
 {
     auto sData = std::make_shared<std::string>(std::move(data));
+    auto parameters = std::unordered_map<std::string, std::string>({});
     ctx.helperObj->ash_write(ctx.helperCTX, file,
-        asio::const_buffer(sData->data(), sData->size()), offset, "",
+        asio::const_buffer(sData->data(), sData->size()), offset, parameters,
         [ctx, file, offset, sData](
             int size, error_t e) { handle_result(ctx, e, size); });
 
