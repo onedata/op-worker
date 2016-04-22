@@ -11,9 +11,10 @@ import json
 import os
 import random
 import string
-from timeouts import *
 
 from . import common, docker, dns, cluster_manager, worker
+
+APPMOCK_WAIT_FOR_NAGIOS_SECONDS = 60 * 2
 
 
 def domain(appmock_instance, uid):
