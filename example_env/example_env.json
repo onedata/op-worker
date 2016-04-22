@@ -8,10 +8,6 @@
             "input_dir": "rel/op_worker",
             "target_dir": "rel/test_cluster"
         },
-        "cluster_worker": {
-            "input_dir": "rel/cluster_worker",
-            "target_dir": "rel/test_cluster"
-        },
         "oz_worker": {
             "input_dir": "rel/oz_worker",
             "target_dir": "rel/test_cluster"
@@ -41,14 +37,8 @@
         },
         "cfg2": {
             "storages": [
-                {
-                    "type": "posix",
-                    "name": "/mnt/st1"
-                },
-                {
-                    "type": "posix",
-                    "name": "/mnt/st2"
-                }
+                "/mnt/st1",
+                "/mnt/st2"
             ],
             "users": [
                 "user1",
@@ -79,6 +69,7 @@
         "p1": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
+            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -108,7 +99,7 @@
                                 "dbnode1",
                                 "dbnode2"
                             ],
-                            "oz_domain": "oz",
+                            "zone_domain": "oz",
                             "verify_oz_cert": false
                         }
                     }
@@ -116,8 +107,9 @@
             }
         },
         "p2.oz": {
-            "db_driver": "couchdb",
+            "db_driver": "riak",
             "os_config": "cfg2",
+            "gui_livereload": "none",
             "cluster_manager": {
                 "cm1": {
                     "vm.args": {
@@ -144,9 +136,9 @@
                                 "cm1"
                             ],
                             "db_nodes": [
-                                "dbnode1"
+                                "riaknode1"
                             ],
-                            "oz_domain": "oz",
+                            "zone_domain": "oz",
                             "verify_oz_cert": false
                         }
                     }
@@ -161,9 +153,9 @@
                                 "cm1"
                             ],
                             "db_nodes": [
-                                "dbnode1"
+                                "riaknode1"
                             ],
-                            "oz_domain": "oz",
+                            "zone_domain": "oz",
                             "verify_oz_cert": false
                         }
                     }
@@ -172,7 +164,7 @@
         }
     },
     "cluster_domains": {
-        "p3": {
+        "p1": {
             "db_driver": "couchdb",
             "os_config": "cfg1",
             "cluster_manager": {
@@ -212,7 +204,8 @@
     },
     "zone_domains": {
         "oz": {
-            "db_driver": "couchdb",
+            "gui_livereload": "none",
+            "db_driver": "couchbase",
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
@@ -279,6 +272,7 @@
         "spaces": {
             "space1": {
                 "displayed_name": "space1",
+                "storage": "/mnt/st1",
                 "users": [
                     "user1",
                     "user2",
@@ -287,32 +281,33 @@
                 "groups": [
                     "group1"
                 ],
-                "providers": {
-                    "p1": {
-                        "storage": "/mnt/st1",
+                "providers": [
+                    {
+                        "provider": "p1",
                         "supported_size": 1000000000
                     }
-                }
+                ]
             },
             "space2": {
                 "displayed_name": "space2",
+                "storage": "/mnt/st1",
                 "users": [
                     "user2"
                 ],
                 "groups": [
                     "group2"
                 ],
-                "providers": {
-                    "p2.oz": {
-                        "storage": "/mnt/st2",
+                "providers": [
+                    {
+                        "provider": "p2.oz",
                         "supported_size": 1000000000
                     }
-                }
+                ]
             }
         }
     },
     "appmock_domains": {
-        "p4": {
+        "p3": {
             "appmock": {
                 "appmock1": {
                     "mocked_app": "op_worker",
@@ -329,7 +324,7 @@
         }
     },
     "oneclient": {
-        "client-host1": {
+        "client_host_1": {
             "os_config": "cfg1",
             "clients": {
                 "client1": {
@@ -352,7 +347,7 @@
                 }
             }
         },
-        "client-host2": {
+        "client_host_2": {
             "os_config": "cfg2",
             "clients": {
                 "client1": {

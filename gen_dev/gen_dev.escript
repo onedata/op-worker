@@ -17,6 +17,7 @@
 -module(gen_dev).
 
 -define(ARGS_FILE, "gen_dev_args.json").
+-define(HELPER_MODULES, [args_parser, filesystem_operations, logger, mochijson2, release_configurator]).
 -define(EXIT_FAILURE_CODE, 1).
 
 %% API
@@ -150,27 +151,12 @@ prepare_fresh_release(InputDir, TargetDir, Name) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Loads helper modules.
+%% Compiles helper modules
 %% @end
 %%--------------------------------------------------------------------
 -spec helpers_init() -> ok.
 helpers_init() ->
-    SrcDir = filename:join(get_escript_dir(), "src"),
-    {ok, Modules} = file:list_dir(SrcDir),
-    lists:foreach(fun(Module) ->
-        compile_and_load_module(filename:join(SrcDir, Module))
-    end, Modules).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Compiles and loads module into erlang VM.
-%% @end
-%%--------------------------------------------------------------------
--spec compile_and_load_module(File :: string()) -> ok.
-compile_and_load_module(File) ->
-    {ok, ModuleName, Binary} = compile:file(File, [report, binary]),
-    {module, _} = code:load_binary(ModuleName, File, Binary),
-    ok.
+    true = code:add_path(filename:join(get_escript_dir(), "ebin")).
 
 %%--------------------------------------------------------------------
 %% @doc
