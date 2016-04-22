@@ -135,7 +135,6 @@ create_record(<<"space">>, Data) ->
     Name = proplists:get_value(<<"name">>, Data, <<"">>),
     {ok, SpaceId} = space_logic:create_user_space(
         UserAuth, #space_info{name = Name}),
-    SpaceId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},

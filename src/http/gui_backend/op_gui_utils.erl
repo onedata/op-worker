@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_user_rest_auth/0, get_users_default_space/0]).
+-export([get_user_rest_auth/0]).
 -export([ids_to_association/2, association_to_ids/1]).
 
 %%%===================================================================
@@ -39,19 +39,6 @@ get_user_rest_auth() ->
     {ok, #document{value = #session{auth = Auth}}} = session:get(SessionId),
     #auth{macaroon = Mac, disch_macaroons = DMacs} = Auth,
     {user, {Mac, DMacs}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the default space of current user (the one in GUI context).
-%% @end
-%%--------------------------------------------------------------------
--spec get_users_default_space() -> binary().
-get_users_default_space() ->
-    % @TODO VFS-1860 this should be taken from onedata_user record and
-    % changes of this should be pushed.
-    {ok, DefaultSpaceId} = oz_users:get_default_space(get_user_rest_auth()),
-    DefaultSpaceId.
 
 
 %%--------------------------------------------------------------------
