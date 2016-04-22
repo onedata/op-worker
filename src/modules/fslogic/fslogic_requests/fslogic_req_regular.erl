@@ -20,7 +20,7 @@
 %% API
 -export([get_file_location/3, get_new_file_location/5, truncate/3,
     get_helper_params/3, release/2]).
--export([get_parent/2, synchronize_block/3]).
+-export([get_parent/2, synchronize_block/3, synchronize_block_and_compute_checksum/3]).
 
 %%%===================================================================
 %%% API functions
@@ -220,9 +220,25 @@ get_parent(_CTX, File) ->
 %%--------------------------------------------------------------------
 -spec synchronize_block(fslogic_worker:ctx(), {uuid, file_meta:uuid()}, fslogic_blocks:block()) ->
     #fuse_response{}.
-synchronize_block(_Ctx, {uuid, Uuid}, Block)  ->
+synchronize_block(_CTX, {uuid, Uuid}, Block)  ->
     ok = replica_synchronizer:synchronize(Uuid, Block),
     #fuse_response{status = #status{code = ?OK}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Synchronizes given block with remote replicas and returns checksum of
+%% synchronized data.
+%% @end
+%%--------------------------------------------------------------------
+-spec synchronize_block_and_compute_checksum(fslogic_worker:ctx(),
+    {uuid, file_meta:uuid()}, fslogic_blocks:block()) -> #fuse_response{}.
+synchronize_block_and_compute_checksum(CTX, {uuid, Uuid},
+    #file_block{offset = Offset, size = Size})  ->
+    {ok, Handle} = lfm_files:open(fslogic_context:get_session_id(CTX), {uuid, Uuid}, read),
+    {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
+    Checksum = crypto:hash(sha, Data),
+    #fuse_response{status = #checksum{value = Checksum}}.
 
 
 %%%===================================================================
