@@ -26,6 +26,7 @@
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1,
     fsync/1]).
+-export([open_at_creation/1]).
 
 -type handle() :: #sfm_handle{}.
 
@@ -70,6 +71,19 @@ open(SFMHandle, write) ->
     open_for_write(SFMHandle);
 open(SFMHandle, rdwr) ->
     open_for_rdwr(SFMHandle).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Opens the file. To used opened descriptor, pass returned handle to other functions.
+%% File may and should be closed with release/1, but file will be closed automatically
+%% when handle goes out of scope (term will be released by Erlang's GC).
+%% Bypasses permissions check to allow to open file at creation.
+%% @end
+%%--------------------------------------------------------------------
+-spec open_at_creation(handle()) ->
+    {ok, handle()} | logical_file_manager:error_reply().
+open_at_creation(SFMHandle) ->
+    open_impl(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -306,8 +320,8 @@ fsync(#sfm_handle{storage = Storage, file = FileId, space_uuid = SpaceUUID, sess
 -spec open_for_read(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
 -check_permissions([{?read_object, 1}]).
-open_for_read(LfmHandle) ->
-    open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read).
+open_for_read(SFMHandle) ->
+    open_impl(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read).
 
 %%--------------------------------------------------------------------
 %% @doc Opens file in write mode and checks necessary permissions.
@@ -315,8 +329,8 @@ open_for_read(LfmHandle) ->
 -spec open_for_write(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
 -check_permissions([{?write_object, 1}]).
-open_for_write(LfmHandle) ->
-    open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write).
+open_for_write(SFMHandle) ->
+    open_impl(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write).
 
 %%--------------------------------------------------------------------
 %% @doc Opens file in rdwr mode and checks necessary permissions.
@@ -324,8 +338,8 @@ open_for_write(LfmHandle) ->
 -spec open_for_rdwr(handle()) ->
     {ok, handle()} | logical_file_manager:error_reply().
 -check_permissions([{?read_object, 1}, {?write_object, 1}]).
-open_for_rdwr(LfmHandle) ->
-    open_impl(LfmHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
+open_for_rdwr(SFMHandle) ->
+    open_impl(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
 
 %%--------------------------------------------------------------------
 %% @doc
