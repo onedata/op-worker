@@ -238,7 +238,8 @@ synchronize_block_and_compute_checksum(CTX, {uuid, Uuid},
     {ok, Handle} = lfm_files:open(fslogic_context:get_session_id(CTX), {uuid, Uuid}, read),
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size), % does sync internally
     Checksum = crypto:hash(sha256, Data),
-    #fuse_response{status = #checksum{value = Checksum}}.
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #checksum{value = Checksum}}.
 
 
 %%%===================================================================
