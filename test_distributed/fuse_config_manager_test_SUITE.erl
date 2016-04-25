@@ -83,8 +83,9 @@ verify_storage_test_file_test(Config) ->
     test_utils:set_env(Worker, ?APP_NAME, remove_storage_test_file_attempts, 1),
 
     FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId1, {uuid, FileUuid}, write)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
+    FileUuid = fslogic_uuid:file_guid_to_uuid(FileGuid),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId1, {guid, FileGuid}, write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, <<"test">>)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 

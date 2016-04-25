@@ -328,7 +328,7 @@ lfm_acl_test(Config) ->
     FileName = <<"/test_file_acl">>,
     DirName = <<"/test_dir_acl">>,
 
-    {ok, FileUuid} = lfm_proxy:create(W, SessId1, FileName, 8#755),
+    {ok, FileGUID} = lfm_proxy:create(W, SessId1, FileName, 8#755),
     {ok, _} = lfm_proxy:mkdir(W, SessId1, DirName),
 
     % test setting and getting acl
@@ -336,9 +336,9 @@ lfm_acl_test(Config) ->
         #accesscontrolentity{acetype = ?allow_mask, identifier = UserId1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
         #accesscontrolentity{acetype = ?deny_mask, identifier = GroupId1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
     ],
-    Ans1 = lfm_proxy:set_acl(W, SessId1, {uuid, FileUuid}, Acl),
+    Ans1 = lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl),
     ?assertEqual(ok, Ans1),
-    Ans2 = lfm_proxy:get_acl(W, SessId1, {uuid, FileUuid}),
+    Ans2 = lfm_proxy:get_acl(W, SessId1, {guid, FileGUID}),
     ?assertEqual({ok, Acl}, Ans2).
 
 
