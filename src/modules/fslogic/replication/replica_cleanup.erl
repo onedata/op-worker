@@ -35,7 +35,7 @@ clean_replica_files(FileUuid) ->
         fun(LocationId) ->
             case file_location:get(LocationId) of
                 {ok, #document{value = #file_location{storage_id = StorageId, file_id = FileId,
-                    provider_id = LocalProviderId, space_id = SpaceDirUuid}}} ->
+                    provider_id = LocalProviderId, space_uuid = SpaceDirUuid}}} ->
                     {ok, Storage} = storage:get(StorageId),
                     SFMHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, FileUuid, Storage, FileId),
                     storage_file_manager:unlink(SFMHandle),

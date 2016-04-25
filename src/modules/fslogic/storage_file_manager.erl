@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("annotations/include/annotations.hrl").
 
--export([new_handle/5, new_handle/6]).
+-export([new_handle/4, new_handle/5]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, truncate/2, unlink/1]).
 -export([open_at_creation/1]).
@@ -45,10 +45,12 @@
 %% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileGUID :: fslogic_worker:file_guid(),
+-spec new_handle(SessionId :: session:id(), FileGUID :: fslogic_worker:file_guid(),
   Storage :: datastore:document(), FileId :: helpers:file()) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileGUID, Storage, FileId) ->
+new_handle(SessionId, FileGUID, Storage, FileId) ->
+    {_FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,
@@ -68,10 +70,10 @@ new_handle(SessionId, SpaceUUID, FileGUID, Storage, FileId) ->
 %% Therefore handle created with this function may be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(SessionId :: session:id(), SpaceUUID :: file_meta:uuid(), FileGUID :: fslogic_worker:file_guid(),
+-spec new_handle(SessionId :: session:id(), FileGUID :: fslogic_worker:file_guid(),
     StorageId :: storage:id(), FileId :: helpers:file(), oneprovider:id()) ->
     handle().
-new_handle(SessionId, SpaceUUID, FileGUID, StorageId, FileId, ProviderId) ->
+new_handle(SessionId, FileGUID, StorageId, FileId, ProviderId) ->
     {IsLocal, Storage} = case oneprovider:get_provider_id() of
         ProviderId ->
             {ok, S} = storage:get(StorageId),
@@ -79,6 +81,8 @@ new_handle(SessionId, SpaceUUID, FileGUID, StorageId, FileId, ProviderId) ->
         _ ->
             {false, undefined}
     end,
+    {_FileUUID, SpaceId} = fslogic_uuid:unpack_file_guid(FileGUID),
+    SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     #sfm_handle{
         session_id = SessionId,
         space_uuid = SpaceUUID,

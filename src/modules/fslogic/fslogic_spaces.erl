@@ -59,7 +59,7 @@ get_default_space_id(UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_id(FileUUID :: file_meta:uuid()) ->
-    {ok, SpaceId :: binary()}.
+    SpaceId :: binary().
 get_space_id(FileUUID) ->
     {ok, #document{key = SpaceUUID}} = get_space({uuid, FileUUID}),
     fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID).

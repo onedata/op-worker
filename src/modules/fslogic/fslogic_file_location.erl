@@ -122,19 +122,20 @@ create_storage_file(SpaceId, FileUuid, SessId, Mode) ->
     SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     Location = #file_location{blocks = [#file_block{offset = 0, size = 0, file_id = FileId, storage_id = StorageId}],
         provider_id = oneprovider:get_provider_id(), file_id = FileId, storage_id = StorageId, uuid = FileUuid,
-        space_id = SpaceDirUuid},
+        space_uuid = SpaceDirUuid},
     {ok, LocId} = file_location:create(#document{value = Location}),
     file_meta:attach_location({uuid, FileUuid}, LocId, oneprovider:get_provider_id()),
 
     LeafLess = fslogic_path:dirname(FileId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceDirUuid, undefined, Storage, LeafLess),
+    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, fslogic_uuid:to_file_guid(FileUuid, SpaceId), Storage, LeafLess),
+    ?info("Storage create 1 ~p ~p", [Storage, LeafLess]),
     case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
-
-    SFMHandle1 = storage_file_manager:new_handle(SessId, SpaceDirUuid, FileUuid, Storage, FileId),
+    ?info("Storage create 2 ~p ~p", [Storage, FileId]),
+    SFMHandle1 = storage_file_manager:new_handle(SessId, fslogic_uuid:to_file_guid(FileUuid, SpaceId), Storage, FileId),
     storage_file_manager:unlink(SFMHandle1),
     ok = storage_file_manager:create(SFMHandle1, Mode),
     {StorageId, FileId}.

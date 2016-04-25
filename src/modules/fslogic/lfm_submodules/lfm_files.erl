@@ -178,8 +178,7 @@ open(SessId, FileKey, OpenType) ->
     {guid, FileGUID} = fslogic_uuid:ensure_guid(CTX, FileKey),
     lfm_utils:call_fslogic(SessId, #get_file_location{uuid = FileGUID, flags = OpenType},
         fun(#file_location{provider_id = ProviderId, uuid = _UUID, file_id = FileId, storage_id = StorageId} = Location) ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, _UUID}, fslogic_context:get_user_id(CTX)),
-            SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileGUID, StorageId, FileId, ProviderId),
+            SFMHandle0 = storage_file_manager:new_handle(SessId, FileGUID, StorageId, FileId, ProviderId),
 
             case storage_file_manager:open(SFMHandle0, OpenType) of
                 {ok, NewSFMHandle} ->
@@ -357,8 +356,7 @@ get_sfm_handle_n_update_handle(#lfm_handle{provider_id = ProviderId, file_uuid =
         case maps:get(Key, SFMHandles, undefined) of
             undefined ->
                 {SID, FID} = Key,
-                {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, FileUUID}, fslogic_context:get_user_id(CTX)),
-                SFMHandle0 = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, SID, FID, ProviderId),
+                SFMHandle0 = storage_file_manager:new_handle(SessId, FileUUID, SID, FID, ProviderId),
 
                 case storage_file_manager:open(SFMHandle0, OpenType) of
                     {ok, NewSFMHandle} ->

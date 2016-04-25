@@ -221,7 +221,7 @@ translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
         uuid = Record#'FileLocation'.uuid,
         provider_id = Record#'FileLocation'.provider_id,
-        space_id = Record#'FileLocation'.space_id,
+        space_uuid = Record#'FileLocation'.space_id,
         storage_id = Record#'FileLocation'.storage_id,
         file_id = Record#'FileLocation'.file_id,
         blocks = lists:map(
@@ -241,7 +241,7 @@ translate_from_protobuf(#'RemoteData'{data = Data}) ->
 translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
     #'remote_write_result'{wrote = Wrote};
 translate_from_protobuf(#'ProxyIORequest'{parameters = Parameters, storage_id = SID, file_id = FID, proxyio_request = Record}) ->
-    #'proxyio_request'{parameters = parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
+    #'proxyio_request'{parameters = maps:from_list([translate_from_protobuf(P) || P <- Parameters]),
         storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)};
 translate_from_protobuf(#'RemoteRead'{offset = Offset, size = Size}) ->
     #'remote_read'{offset = Offset, size = Size};
@@ -436,7 +436,7 @@ translate_to_protobuf(#file_location{} = Record) ->
     {file_location, #'FileLocation'{
         uuid = Record#file_location.uuid,
         provider_id = Record#file_location.provider_id,
-        space_id = Record#file_location.space_id,
+        space_id = Record#file_location.space_uuid,
         storage_id = Record#file_location.storage_id,
         file_id = Record#file_location.file_id,
         blocks = lists:map(fun(Block) ->
@@ -563,8 +563,6 @@ translate_to_protobuf(#'list_xattr'{uuid = UUID}) ->
     {list_xattr, #'ListXattr'{uuid = UUID}};
 translate_to_protobuf(#'xattr'{name = Name, value = Value}) ->
     {xattr, #'Xattr'{name = Name, value = Value}};
-translate_to_protobuf(#'xattr_list'{names = Names}) ->
-    {xattr_list, #'XattrList'{names = Names}};
 translate_to_protobuf(#'dir'{uuid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 translate_to_protobuf(#'get_parent'{uuid = UUID}) ->

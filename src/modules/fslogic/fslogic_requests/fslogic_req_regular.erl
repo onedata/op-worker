@@ -173,7 +173,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
     {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
         false ->
             {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
+            SFMHandle = storage_file_manager:new_handle(SessId, fslogic_uuid:to_file_guid(UUID, SpaceId), Storage, FileId),
             {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
             save_handle(SessId, Handle);
         true ->
@@ -184,7 +184,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
-            space_id = SpaceUUID, handle_id = HandleId})}.
+            space_uuid = SpaceUUID, handle_id = HandleId})}.
 
 
 %%--------------------------------------------------------------------
@@ -287,7 +287,7 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = C
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
             uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
-            space_id = SpaceUUID, handle_id = HandleId})}.
+            space_uuid = SpaceUUID, handle_id = HandleId})}.
 
 %%--------------------------------------------------------------------
 %% @doc Saves file handle in user's session, returns id of saved handle
