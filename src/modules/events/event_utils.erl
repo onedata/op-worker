@@ -37,7 +37,7 @@ inject_event_stream_definition(#subscription{object = #file_attr_subscription{
     file_uuid = FileUuid, counter_threshold = CtrThr, time_threshold = TimeThr}} = Sub) ->
     Sub#subscription{event_stream = ?FILE_ATTR_EVENT_STREAM#event_stream_definition{
         admission_rule = fun
-            (#event{object = #update_event{object = #file_attr{guid = Uuid}}})
+            (#event{object = #update_event{object = #file_attr{uuid = Uuid}}})
                 when Uuid =:= FileUuid -> true;
             (_) -> false
         end,

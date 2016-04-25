@@ -32,7 +32,7 @@ prepare([], _State) ->
     [];
 prepare([<<"objectType">> | Tail], State) ->
     [{<<"objectType">>, <<"application/cdmi-object">>} | prepare(Tail, State)];
-prepare([<<"objectID">> | Tail], #{attributes := #file_attr{guid = Uuid}} = State) ->
+prepare([<<"objectID">> | Tail], #{attributes := #file_attr{uuid = Uuid}} = State) ->
     {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
     [{<<"objectID">>, Id} | prepare(Tail, State)];
 prepare([<<"objectName">> | Tail], #{path := Path} = State) ->
@@ -45,23 +45,23 @@ prepare([<<"parentURI">> | Tail], #{path := Path} = State) ->
 prepare([<<"parentID">> | Tail], #{path := <<"/">>} = State) ->
     [{<<"parentID">>, <<>>} | prepare(Tail, State)];
 prepare([<<"parentID">> | Tail], #{path := Path, auth := Auth} = State) ->
-    {ok, #file_attr{guid = Uuid}} =
+    {ok, #file_attr{uuid = Uuid}} =
         onedata_file_api:stat(Auth, {path, filename:dirname(Path)}),
     {ok, Id} = cdmi_id:uuid_to_objectid(Uuid),
     [{<<"parentID">>, Id} | prepare(Tail, State)];
 prepare([<<"capabilitiesURI">> | Tail], State) ->
     [{<<"capabilitiesURI">>, ?dataobject_capability_path} | prepare(Tail, State)];
-prepare([<<"completionStatus">> | Tail], #{auth := Auth, attributes := #file_attr{guid = Uuid}} = State) ->
+prepare([<<"completionStatus">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
     CompletionStatus = cdmi_metadata:get_cdmi_completion_status(Auth, {guid, Uuid}),
     [{<<"completionStatus">>, CompletionStatus} | prepare(Tail, State)];
-prepare([<<"mimetype">> | Tail], #{auth := Auth, attributes := #file_attr{guid = Uuid}} = State) ->
+prepare([<<"mimetype">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
     Mimetype = cdmi_metadata:get_mimetype(Auth, {guid, Uuid}),
     [{<<"mimetype">>, Mimetype} | prepare(Tail, State)];
-prepare([<<"metadata">> | Tail], #{auth := Auth, attributes := Attrs = #file_attr{guid = Uuid}} = State) ->
+prepare([<<"metadata">> | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Attrs)} | prepare(Tail, State)];
-prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, attributes := Attrs = #file_attr{guid = Uuid}} = State) ->
+prepare([{<<"metadata">>, Prefix} | Tail], #{auth := Auth, attributes := Attrs = #file_attr{uuid = Uuid}} = State) ->
     [{<<"metadata">>, cdmi_metadata:prepare_metadata(Auth, {guid, Uuid}, Prefix, Attrs)} | prepare(Tail, State)];
-prepare([<<"valuetransferencoding">> | Tail], #{auth := Auth, attributes := #file_attr{guid = Uuid}} = State) ->
+prepare([<<"valuetransferencoding">> | Tail], #{auth := Auth, attributes := #file_attr{uuid = Uuid}} = State) ->
     Encoding = cdmi_metadata:get_encoding(Auth, {guid, Uuid}),
     [{<<"valuetransferencoding">>, Encoding} | prepare(Tail, State)];
 prepare([<<"value">> | Tail], State) ->

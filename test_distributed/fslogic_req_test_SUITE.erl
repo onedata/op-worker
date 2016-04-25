@@ -96,8 +96,8 @@ fslogic_mkdir_and_rmdir_test(Config) ->
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
 
-    #fuse_response{fuse_response = #file_attr{guid = RootUUID1}} = RootFileAttr1,
-    #fuse_response{fuse_response = #file_attr{guid = RootUUID2}} = RootFileAttr2,
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID1}} = RootFileAttr1,
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID2}} = RootFileAttr2,
 
     MakeTree = fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
         NewPath = <<Path/binary, "/", Leaf/binary>>,
@@ -108,7 +108,7 @@ fslogic_mkdir_and_rmdir_test(Config) ->
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, NewPath}}),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
         ?assertEqual(FileAttr, ?req(Worker, SessId, #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
-        #fuse_response{fuse_response = #file_attr{guid = FileUUID}} = FileAttr,
+        #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
         {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
     end,
@@ -152,7 +152,7 @@ fslogic_read_dir_test(Config) ->
     ValidateReadDir = fun({SessId, Path, NameList}) ->
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-        #fuse_response{fuse_response = #file_attr{guid = FileUUID}} = FileAttr,
+        #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
         ExpectedNames = lists:sort(NameList),
 
@@ -238,7 +238,7 @@ chmod_test(Config) ->
 
             FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
-            #fuse_response{fuse_response = #file_attr{guid = GUID, mode = 8#123}} = FileAttr
+            #fuse_response{fuse_response = #file_attr{uuid = GUID, mode = 8#123}} = FileAttr
 
         end, [SessId1, SessId2, SessId3, SessId4]).
 
@@ -396,8 +396,8 @@ simple_rename_test(Config) ->
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr1),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr2),
 
-    #fuse_response{fuse_response = #file_attr{guid = RootUUID1}} = RootFileAttr1,
-    #fuse_response{fuse_response = #file_attr{guid = _RootUUID2}} = RootFileAttr2,
+    #fuse_response{fuse_response = #file_attr{uuid = RootUUID1}} = RootFileAttr1,
+    #fuse_response{fuse_response = #file_attr{uuid = _RootUUID2}} = RootFileAttr2,
 
     MakeTree =
         fun(Leaf, {SessId, DefaultSpaceName, Path, ParentUUID, FileUUIDs}) ->
@@ -410,7 +410,7 @@ simple_rename_test(Config) ->
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
             ?assertEqual(FileAttr, ?req(Worker, SessId,
                 #get_file_attr{entry = {path, <<"/spaces/", DefaultSpaceName/binary, NewPath/binary>>}})),
-            #fuse_response{fuse_response = #file_attr{guid = FileUUID}} = FileAttr,
+            #fuse_response{fuse_response = #file_attr{uuid = FileUUID}} = FileAttr,
 
             {SessId, DefaultSpaceName, NewPath, FileUUID, [FileUUID | FileUUIDs]}
         end,
@@ -493,7 +493,7 @@ get_guid_privileged(Worker, SessId, Path) ->
 get_guid(Worker, SessId, Path) ->
     RootFileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
     ?assertMatch(#fuse_response{status = #status{code = ?OK}}, RootFileAttr),
-    #fuse_response{fuse_response = #file_attr{guid = GUID}} = RootFileAttr,
+    #fuse_response{fuse_response = #file_attr{uuid = GUID}} = RootFileAttr,
     GUID.
 
 %%%===================================================================

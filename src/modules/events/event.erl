@@ -174,7 +174,7 @@ set_key(#event{object = #read_event{file_uuid = FileUuid}} = Evt) ->
 set_key(#event{object = #write_event{file_uuid = FileUuid}} = Evt) ->
     Evt#event{key = FileUuid};
 
-set_key(#event{object = #update_event{object = #file_attr{guid = Uuid}}} = Evt) ->
+set_key(#event{object = #update_event{object = #file_attr{uuid = Uuid}}} = Evt) ->
     Evt#event{key = Uuid};
 
 set_key(#event{object = #update_event{object = #file_location{uuid = Uuid}}} = Evt) ->

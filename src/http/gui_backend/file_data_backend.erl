@@ -274,7 +274,7 @@ get_parent(FileGUID) ->
 -spec get_spaces_dir_uuid() -> binary().
 get_spaces_dir_uuid() ->
     SessionId = g_session:get_session_id(),
-    {ok, #file_attr{guid = SpacesDirUUID}} = logical_file_manager:stat(
+    {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces">>}),
     SpacesDirUUID.
 

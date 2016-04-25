@@ -142,7 +142,7 @@ delete_resource(Req, #{path := Path, auth := Auth} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_binary(req(), #{}) -> {term(), req(), #{}}.
-get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, guid = FileGUID}} = State) ->
+get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, uuid = FileGUID}} = State) ->
     % prepare response
     {Ranges, Req1} = cdmi_arg_parser:get_ranges(Req, Size),
     Mimetype = cdmi_metadata:get_mimetype(Auth, {guid, FileGUID}),
@@ -167,7 +167,7 @@ get_binary(Req, #{auth := Auth, attributes := #file_attr{size = Size, guid = Fil
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi(req(), #{}) -> {term(), req(), #{}}.
-get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, guid = FileGUID}}) ->
+get_cdmi(Req, State = #{options := Opts, auth := Auth, attributes := #file_attr{size = Size, uuid = FileGUID}}) ->
     NonEmptyOpts = utils:ensure_defined(Opts, [], ?DEFAULT_GET_FILE_OPTS),
     DirCdmi = cdmi_object_answer:prepare(NonEmptyOpts, State#{options := NonEmptyOpts}),
 
@@ -220,7 +220,7 @@ put_binary(ReqArg, State = #{auth := Auth, path := Path}) ->
                 Auth, {path, Path}, CdmiPartialFlag
             ),
             {true, Req1, State};
-        {ok, #file_attr{guid = FileGUID, size = Size}} ->
+        {ok, #file_attr{uuid = FileGUID, size = Size}} ->
             cdmi_metadata:update_mimetype(Auth, {guid, FileGUID}, Mimetype),
             cdmi_metadata:update_encoding(Auth, {guid, FileGUID}, Encoding),
             {RawRange, Req1} = cowboy_req:header(<<"content-range">>, Req),
@@ -301,7 +301,7 @@ put_cdmi(Req, #{path := Path, options := Opts, auth := Auth} = State) ->
             onedata_file_api:fsync(FileHandler),
 
             % return response
-            {ok, NewAttrs = #file_attr{guid = FileGUID}} = onedata_file_api:stat(Auth, {path, Path}),
+            {ok, NewAttrs = #file_attr{uuid = FileGUID}} = onedata_file_api:stat(Auth, {path, Path}),
             cdmi_metadata:update_encoding(Auth, {guid, FileGUID}, utils:ensure_defined(
                 RequestedValueTransferEncoding, undefined, <<"utf-8">>
             )),

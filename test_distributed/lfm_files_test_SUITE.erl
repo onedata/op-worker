@@ -375,7 +375,7 @@ get_uuid_privileged(Worker, SessId, Path) ->
     get_uuid(Worker, SessId, Path).
 
 get_uuid(Worker, SessId, Path) ->
-    #fuse_response{fuse_response = #file_attr{guid = UUID}} = ?assertMatch(
+    #fuse_response{fuse_response = #file_attr{uuid = UUID}} = ?assertMatch(
         #fuse_response{status = #status{code = ?OK}},
         ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
         30

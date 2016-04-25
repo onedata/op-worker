@@ -131,7 +131,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
-                guid = fslogic_uuid:to_file_guid(UUID, SpaceId),
+                uuid = fslogic_uuid:to_file_guid(UUID, SpaceId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};

@@ -466,7 +466,7 @@ write_event(FileUuid, Size, FileSize, Blocks) ->
 %%--------------------------------------------------------------------
 -spec file_attr_update_event() -> #update_event{}.
 file_attr_update_event() ->
-    #update_event{object = #file_attr{guid = <<"file_uuid">>}}.
+    #update_event{object = #file_attr{uuid = <<"file_uuid">>}}.
 
 %%--------------------------------------------------------------------
 %% @private

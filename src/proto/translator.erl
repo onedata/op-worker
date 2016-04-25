@@ -193,7 +193,7 @@ translate_from_protobuf(#'ChildLink'{uuid = UUID, name = Name}) ->
     #child_link{uuid = UUID, name = Name};
 translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
     #'file_attr'{
-        guid = FileAttr#'FileAttr'.uuid,
+        uuid = FileAttr#'FileAttr'.uuid,
         name = FileAttr#'FileAttr'.name,
         mode = FileAttr#'FileAttr'.mode,
         uid = FileAttr#'FileAttr'.uid,
@@ -410,7 +410,7 @@ translate_to_protobuf(#child_link{uuid = UUID, name = Name}) ->
     #'ChildLink'{uuid = UUID, name = Name};
 translate_to_protobuf(#file_attr{} = FileAttr) ->
     {file_attr, #'FileAttr'{
-        uuid = FileAttr#file_attr.guid,
+        uuid = FileAttr#file_attr.uuid,
         name = FileAttr#file_attr.name,
         mode = FileAttr#file_attr.mode,
         uid = FileAttr#file_attr.uid,
