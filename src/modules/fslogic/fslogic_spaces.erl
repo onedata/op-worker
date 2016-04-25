@@ -71,7 +71,7 @@ get_space_id(FileUUID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_space_id(CTX :: fslogic_worker:ctx(), FilePath :: file_meta:path()) ->
-    {ok, SpaceId :: binary()}.
+    SpaceId :: binary().
 get_space_id(CTX, Path) ->
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     case fslogic_path:get_canonical_file_entry(CTX, Tokens) of

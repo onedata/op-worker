@@ -46,7 +46,7 @@
 -type file_path() :: binary().
 -type file_handle() :: logical_file_manager:handle().
 -type file_name() :: binary().
--type file_id_or_path() :: {uuid, file_guid()} | {path, file_path()}.
+-type file_id_or_path() :: {guid, file_guid()} | {path, file_path()}.
 -type file_key() :: {path, file_path()} | {guid, file_guid()} | {handle, file_handle()}.
 -type open_mode() :: write | read | rdwr.
 -type perms_octal() :: non_neg_integer().

@@ -32,7 +32,9 @@
 -spec emit_file_attr_update(fslogic_worker:file(), [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_attr_update(FileEntry, ExcludedSessions) ->
-    case logical_file_manager:stat(?ROOT_SESS_ID, FileEntry) of
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
+    case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new attributes for file ~p to all sessions except ~p",
                 [FileEntry, ExcludedSessions]),
@@ -50,7 +52,9 @@ emit_file_attr_update(FileEntry, ExcludedSessions) ->
 -spec emit_file_sizeless_attrs_update(fslogic_worker:file()) ->
     ok | {error, Reason :: term()}.
 emit_file_sizeless_attrs_update(FileEntry) ->
-    case logical_file_manager:stat(?ROOT_SESS_ID, FileEntry) of
+    {ok, FileUUID} = file_meta:to_uuid(FileEntry),
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
+    case logical_file_manager:stat(?ROOT_SESS_ID, {guid, FileGUID}) of
         {ok, #file_attr{} = FileAttr} ->
             ?debug("Sending new times for file ~p to all subscribers", [FileEntry]),
             SizelessFileAttr = FileAttr#file_attr{size = undefined},

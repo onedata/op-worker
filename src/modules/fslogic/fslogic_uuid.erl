@@ -129,7 +129,7 @@ ensure_uuid(CTX, {path, Path}) ->
 %% Converts given file entry to FileGUID.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:file()) ->
+-spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:ext_file()) ->
     {guid, fslogic_worker:file_guid()}.
 ensure_guid(_CTX, {uuid, UUID}) ->
     {guid, to_file_guid(UUID)};
@@ -138,7 +138,12 @@ ensure_guid(_CTX, {guid, FileGUID}) ->
 ensure_guid(_CTX, #document{key = UUID}) ->
     {guid, to_file_guid(UUID)};
 ensure_guid(CTX, {path, Path}) ->
-    SpaceId = fslogic_spaces:get_space_id(CTX, Path),
+    SpaceId = try fslogic_spaces:get_space_id(CTX, Path) of
+        SpaceId0 -> SpaceId0
+    catch
+        _:{not_in_space, _} ->
+            undefined
+    end,
     {guid, to_file_guid(path_to_uuid(CTX, Path), SpaceId)}.
 
 %%--------------------------------------------------------------------

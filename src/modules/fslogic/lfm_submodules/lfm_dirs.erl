@@ -61,7 +61,7 @@ mkdir(SessId, Path, Mode) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec ls(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec ls(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{file_meta:uuid(), file_meta:name()}]} | logical_file_manager:error_reply().
 ls(SessId, FileKey, Offset, Limit) ->

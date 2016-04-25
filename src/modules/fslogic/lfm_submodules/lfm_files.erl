@@ -114,7 +114,7 @@ get_file_path(SessId, FileGUID) ->
 unlink(#lfm_handle{fslogic_ctx = #fslogic_ctx{session_id = SessId}, file_guid = GUID}) ->
     unlink(SessId, {guid, GUID}).
 
--spec unlink(session:id(), fslogic_worker:file()) ->
+-spec unlink(session:id(), fslogic_worker:ext_file()) ->
     ok | logical_file_manager:error_reply().
 unlink(SessId, FileEntry) ->
     CTX = fslogic_context:new(SessId),

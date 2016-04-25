@@ -181,7 +181,7 @@ multipart(Req, Params) ->
                     FileId = get_new_file_id(Params),
                     SessionId = g_session:get_session_id(),
                     {ok, FileHandle} = logical_file_manager:open(
-                        SessionId, {uuid, FileId}, write),
+                        SessionId, {guid, FileId}, write),
                     ChunkNumber = get_int_param(<<"resumableChunkNumber">>, Params),
                     ChunkSize = get_int_param(<<"resumableChunkSize">>, Params),
                     % First chunk number in resumable is 1

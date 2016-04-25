@@ -167,7 +167,7 @@ mv(SessId, FileEntry, TargetPath) ->
 %% Copies a file or directory to given location.
 %% @end
 %%--------------------------------------------------------------------
--spec cp(session:id(), file_meta:uuid_or_path(), file_meta:path()) ->
+-spec cp(session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
     ok | error_reply().
 cp(Auth, FileEntry, TargetPath) ->
     ?run(fun() -> lfm_files:cp(Auth, FileEntry, TargetPath) end).
@@ -223,7 +223,7 @@ create(SessId, Path, Mode) ->
 %% Opens a file in selected mode and returns a file handle used to read or write.
 %% @end
 %%--------------------------------------------------------------------
--spec open(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec open(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     OpenType :: helpers:open_mode()) ->
     {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
@@ -268,7 +268,7 @@ read(FileHandle, Offset, MaxSize) ->
 truncate(Handle, Size) ->
     ?run(fun() -> lfm_files:truncate(Handle, Size) end).
 
--spec truncate(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec truncate(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Size :: non_neg_integer()) ->
     ok | error_reply().
 truncate(SessId, FileKey, Size) ->
@@ -284,7 +284,7 @@ truncate(SessId, FileKey, Size) ->
 get_block_map(Handle) ->
     ?run(fun() -> lfm_files:get_block_map(Handle) end).
 
--spec get_block_map(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec get_block_map(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, fslogic_blocks:blocks()} | error_reply().
 get_block_map(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_block_map(SessId, FileKey) end).
@@ -323,7 +323,7 @@ check_perms(Path, PermType) ->
 get_acl(Handle) ->
     ?run(fun() -> lfm_perms:get_acl(Handle) end).
 
--spec get_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec get_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, [lfm_perms:access_control_entity()]} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
@@ -339,7 +339,7 @@ get_acl(SessId, FileKey) ->
 set_acl(Handle, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(Handle, EntityList) end).
 
--spec set_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path(), EntityList :: [lfm_perms:access_control_entity()]) ->
+-spec set_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path(), EntityList :: [lfm_perms:access_control_entity()]) ->
     ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
@@ -354,7 +354,7 @@ set_acl(SessId, FileKey, EntityList) ->
 remove_acl(Handle) ->
     ?run(fun() -> lfm_perms:remove_acl(Handle) end).
 
--spec remove_acl(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
+-spec remove_acl(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
     ok | error_reply().
 remove_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:remove_acl(SessId, FileKey) end).

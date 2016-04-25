@@ -57,8 +57,8 @@ rtransfer_opts() ->
                     end, URLs)
             end},
         {open_fun,
-            fun(FileUUID, OpenMode) ->
-                lfm_files:open(?ROOT_SESS_ID, {uuid, FileUUID}, OpenMode)
+            fun(FileGUID, OpenMode) ->
+                lfm_files:open(?ROOT_SESS_ID, {guid, FileGUID}, OpenMode)
             end},
         {read_fun,
             fun(Handle, Offset, MaxSize) ->

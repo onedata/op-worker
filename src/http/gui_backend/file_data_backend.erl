@@ -72,7 +72,7 @@ find(<<"file">>, [FileId]) ->
             [];
         <<"dir">> ->
             case logical_file_manager:ls(
-                SessionId, {uuid, FileId}, 0, 1000) of
+                SessionId, {guid, FileId}, 0, 1000) of
                 {ok, Chldrn} ->
                     Chldrn;
                 _ ->
@@ -289,9 +289,9 @@ get_spaces_dir_uuid() ->
 rm_rf(Id) ->
     SessionId = g_session:get_session_id(),
     {ok, Children} = logical_file_manager:ls(SessionId,
-        {uuid, Id}, 0, 1000),
+        {guid, Id}, 0, 1000),
     lists:foreach(
         fun({ChId, _}) ->
             ok = rm_rf(ChId)
         end, Children),
-    ok = logical_file_manager:unlink(SessionId, {uuid, Id}).
+    ok = logical_file_manager:unlink(SessionId, {guid, Id}).

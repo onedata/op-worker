@@ -165,7 +165,7 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
     exec(Worker,
         fun(Host) ->
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            #lfm_handle{file_guid = UUID,
+            #lfm_handle{file_guid = GUID,
                 fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
             Result =
                 case logical_file_manager:write(Handle, Offset, Bytes) of
@@ -173,7 +173,7 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
                         ets:insert(lfm_handles, {TestHandle, NewHandle}),
                         case logical_file_manager:fsync(NewHandle) of
                             ok ->
-                                {ok, Res, logical_file_manager:stat(SessId, {uuid, UUID})};
+                                {ok, Res, logical_file_manager:stat(SessId, {guid, GUID})};
                             Other2 ->
                                 Other2
                         end;
