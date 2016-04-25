@@ -38,7 +38,6 @@
     auth :: session:auth(),
     node :: node(),
     supervisor :: pid(),
-    watcher :: pid(),
     event_manager :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
@@ -51,7 +50,7 @@
 %% Local, cached version of OZ user
 -record(onedata_user, {
     name :: binary(),
-    space_ids :: [binary()],
+    spaces :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
     group_ids :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],

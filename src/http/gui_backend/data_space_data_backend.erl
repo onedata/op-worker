@@ -143,4 +143,3 @@ update_record(<<"data-space">>, _Id, _Data) ->
     ok | gui_error:error_result().
 delete_record(<<"data-space">>, _Id) ->
     gui_error:report_error(<<"Not iplemented">>).
-
