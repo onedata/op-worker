@@ -93,7 +93,7 @@ clear_cache(W) ->
 -spec basic_session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
 basic_session_setup(Worker, SessId, Iden, Con, Config) ->
-    ?assertEqual({ok, created}, rpc:call(Worker, session_manager,
+    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_fuse_session, [SessId, Iden, Con])),
     [{session_id, SessId}, {identity, Iden} | Config].
 

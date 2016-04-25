@@ -64,7 +64,7 @@ malformed_request(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), #{}) -> {boolean(), req(), #{}}.
+-spec is_authorized(req(), #{}) -> {true | {false, binary()} | halt, req(), #{}}.
 is_authorized(Req, State) ->
     rest_auth:is_authorized(Req, State).
 

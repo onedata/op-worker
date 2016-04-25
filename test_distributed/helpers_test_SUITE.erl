@@ -205,6 +205,7 @@ gen_filename() ->
 
 ctx_server(Config) ->
     CTX = helpers:new_handle(<<"DirectIO">>, #{<<"root_path">> => ?path(Config, "")}),
+    helpers:set_user_ctx(CTX, #posix_user_ctx{uid = 0, gid = 0}),
     ctx_server(Config, CTX).
 ctx_server(Config, CTX) ->
     receive
