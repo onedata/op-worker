@@ -102,8 +102,7 @@ find(<<"space-group">>, AssocIds) ->
 find_all(<<"space">>) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
-    {ok, Spaces} = user_logic:get_spaces(UserAuth, UserId),
-    {SpaceIds, _} = lists:unzip(Spaces),
+    SpaceIds = op_gui_utils:find_all_spaces(UserAuth, UserId),
     Res = lists:map(
         fun(SpaceId) ->
             {ok, [SpaceData]} = find(<<"space">>, [SpaceId]),
@@ -174,12 +173,13 @@ update_record(<<"space">>, SpaceId, Data) ->
     ok;
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
-    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     UserAuth = op_gui_utils:get_user_rest_auth(),
+    CurrentUser = g_session:get_user_id(),
+    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_logic:get(UserAuth, SpaceId, UserId),
+        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     NewUserPerms = lists:foldl(
         fun({PermGui, Flag}, PermsAcc) ->
@@ -194,6 +194,36 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
 
     Result = space_logic:set_user_privileges(
         UserAuth, SpaceId, UserId, lists:usort(NewUserPerms)),
+    case Result of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_warning(
+                <<"Cannot change user privileges due to unknown error.">>)
+    end;
+
+update_record(<<"space-group-permission">>, AssocId, Data) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    CurrentUser = g_session:get_user_id(),
+    {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
+    {ok, #document{
+        value = #space_info{
+            groups = GroupsAndPerms
+        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
+    GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
+    NewGroupPerms = lists:foldl(
+        fun({PermGui, Flag}, PermsAcc) ->
+            Perm = perm_gui_to_db(PermGui),
+            case Flag of
+                true ->
+                    PermsAcc ++ [Perm];
+                false ->
+                    PermsAcc -- [Perm]
+            end
+        end, GroupPerms, Data),
+
+    Result = space_logic:set_group_privileges(
+        UserAuth, SpaceId, GroupId, lists:usort(NewGroupPerms)),
     case Result of
         ok ->
             ok;
@@ -233,14 +263,14 @@ delete_record(<<"space">>, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_record(SpaceId :: binary()) -> proplists:proplist().
 space_record(SpaceId) ->
-    UserId = g_session:get_user_id(),
-    Auth = op_gui_utils:get_user_rest_auth(),
+    CurrentUser = g_session:get_user_id(),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
     {ok, #document{
         value = #space_info{
             name = Name,
             users = UsersAndPerms,
             groups = GroupsAndPerms
-        }}} = space_logic:get(Auth, SpaceId, UserId),
+        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
 
     UserPermissions = lists:map(
         fun({UsId, _UsPerms}) ->
@@ -252,7 +282,7 @@ space_record(SpaceId) ->
             op_gui_utils:ids_to_association(GroupId, SpaceId)
         end, GroupsAndPerms),
 
-    DefaultSpaceId = user_logic:get_default_space(Auth, UserId),
+    DefaultSpaceId = user_logic:get_default_space(UserAuth, CurrentUser),
     [
         {<<"id">>, SpaceId},
         {<<"name">>, Name},
@@ -270,13 +300,13 @@ space_record(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec space_user_permission_record(AssocId :: binary()) -> proplists:proplist().
 space_user_permission_record(AssocId) ->
-    Auth = op_gui_utils:get_user_rest_auth(),
-    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
     CurrentUser = g_session:get_user_id(),
+    {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_logic:get(Auth, SpaceId, CurrentUser),
+        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -316,12 +346,13 @@ space_user_record(UserId) ->
 -spec space_group_permission_record(AssocId :: binary()) ->
     proplists:proplist().
 space_group_permission_record(AssocId) ->
-    Auth = op_gui_utils:get_user_rest_auth(),
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    CurrentUser = g_session:get_user_id(),
     {GroupId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
     {ok, #document{
         value = #space_info{
             groups = GroupsAndPerms
-        }}} = space_logic:get(Auth, SpaceId, g_session:get_user_id()),
+        }}} = space_logic:get(UserAuth, SpaceId, CurrentUser),
     GroupPerms = proplists:get_value(GroupId, GroupsAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -357,7 +388,7 @@ space_group_record(GroupId) ->
 %% Returns all allowed space permissions.
 %% @end
 %%--------------------------------------------------------------------
--spec all_space_perms() -> [binary()].
+-spec all_space_perms() -> [atom()].
 all_space_perms() -> [
     space_invite_user, space_remove_user,
     space_invite_group, space_remove_group,
@@ -373,7 +404,7 @@ all_space_perms() -> [
 %% Converts a space permission from internal form to client-compliant form.
 %% @end
 %%--------------------------------------------------------------------
--spec perm_db_to_gui(binary()) -> binary().
+-spec perm_db_to_gui(atom()) -> binary().
 perm_db_to_gui(space_invite_user) -> <<"permInviteUser">>;
 perm_db_to_gui(space_remove_user) -> <<"permRemoveUser">>;
 perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
@@ -392,7 +423,7 @@ perm_db_to_gui(space_view_data) -> <<"permViewSpace">>.
 %% Converts a space permission from client-compliant form to internal form.
 %% @end
 %%--------------------------------------------------------------------
--spec perm_gui_to_db(binary()) -> binary().
+-spec perm_gui_to_db(binary()) -> atom().
 perm_gui_to_db(<<"permInviteUser">>) -> space_invite_user;
 perm_gui_to_db(<<"permRemoveUser">>) -> space_remove_user;
 perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;

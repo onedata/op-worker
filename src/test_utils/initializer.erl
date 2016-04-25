@@ -286,10 +286,15 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     SameDomainWorkers = get_same_domain_workers(Config, ?GET_DOMAIN(Worker)),
     initializer:space_storage_mock(SameDomainWorkers, StorageId),
 
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
+    SpaceId1 = <<"space_id1">>,
+    SpaceId2 = <<"space_id2">>,
+    SpaceId3 = <<"space_id3">>,
+    SpaceId4 = <<"space_id4">>,
+
+    Space1 = {SpaceId1, <<"space_name1">>},
+    Space2 = {SpaceId2, <<"space_name2">>},
+    Space3 = {SpaceId3, <<"space_name3">>},
+    Space4 = {SpaceId4, <<"space_name4">>},
     Spaces = [Space1, Space2, Space3, Space4],
 
     Group1 = {<<"group_id1">>, <<"group_name1">>},
@@ -298,10 +303,10 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
     Group4 = {<<"group_id4">>, <<"group_name4">>},
     Groups = [Group1, Group2, Group3, Group4],
 
-    User1 = {1, [Space1, Space2, Space3, Space4], Space1, [Group1, Group2, Group3, Group4]},
-    User2 = {2, [Space2, Space3, Space4], Space2, [Group2, Group3, Group4]},
-    User3 = {3, [Space3, Space4], Space3, [Group3, Group4]},
-    User4 = {4, [Space4], Space4, [Group4]},
+    User1 = {1, [Space1, Space2, Space3, Space4], SpaceId1, [Group1, Group2, Group3, Group4]},
+    User2 = {2, [Space2, Space3, Space4], SpaceId2, [Group2, Group3, Group4]},
+    User3 = {3, [Space3, Space4], SpaceId3, [Group3, Group4]},
+    User4 = {4, [Space4], SpaceId4, [Group4]},
     Users = [User1, User2, User3, User4],
 
     SpaceUsers = [

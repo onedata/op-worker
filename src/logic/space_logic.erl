@@ -18,7 +18,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 -export([get/3, create_user_space/2, delete/2]).
--export([set_name/3, set_user_privileges/4]).
+-export([set_name/3, set_user_privileges/4, set_group_privileges/4]).
 -export([leave_space/2, get_invite_user_token/2, get_invite_group_token/2,
     get_invite_provider_token/2]).
 
@@ -84,10 +84,25 @@ set_name(Client, SpaceId, Name) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_user_privileges(oz_endpoint:client(), SpaceId :: binary(),
-    UserId :: binary(), Privileges :: [binary()]) ->
+    UserId :: binary(), Privileges :: [atom()]) ->
     ok | {error, Reason :: term()}.
 set_user_privileges(Client, SpaceId, UserId, Privileges) ->
     oz_spaces:set_user_privileges(Client, SpaceId, UserId, [
+        {<<"privileges">>, Privileges}
+    ]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets space privileges for an user.
+%% User identity is determined using provided client.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_group_privileges(oz_endpoint:client(), SpaceId :: binary(),
+    GroupId :: binary(), Privileges :: [atom()]) ->
+    ok | {error, Reason :: term()}.
+set_group_privileges(Client, SpaceId, GroupId, Privileges) ->
+    oz_spaces:set_group_privileges(Client, SpaceId, GroupId, [
         {<<"privileges">>, Privileges}
     ]).
 

@@ -21,6 +21,9 @@
 -export([get_user_rest_auth/0]).
 -export([ids_to_association/2, association_to_ids/1]).
 
+% @todo temporary solution, fix when subscriptions work better
+-export([find_all_spaces/2]).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -42,7 +45,6 @@ get_user_rest_auth() ->
 
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Creates an associative ID from two IDs which can be easily decoupled later.
 %% @end
@@ -62,3 +64,47 @@ ids_to_association(FirstId, SecondId) ->
 association_to_ids(AssocId) ->
     [FirstId, SecondId] = binary:split(AssocId, <<".">>, [global]),
     {FirstId, SecondId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of all space ids for given user. Blocks until the spaces
+%% are synchronized (by repetitive polling).
+% @todo temporary solution, fix when subscriptions work better
+%% @end
+%%--------------------------------------------------------------------
+-spec find_all_spaces(UserAuth, UserId :: binary()) -> [SpaceId :: binary]
+    when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
+    DischargeMacaroons :: [macaroon:macaroon()]}}.
+find_all_spaces(UserAuth, UserId) ->
+    find_all_spaces(UserAuth, UserId, 500).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a list of all space ids for given user. Blocks until the spaces
+%% are synchronized (by repetitive polling).
+%% Retries up to given amount of times. Retries every 500 milliseconds.
+% @todo temporary solution, fix when subscriptions work better
+%% @end
+%%--------------------------------------------------------------------
+-spec find_all_spaces(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
+    [SpaceId :: binary] when UserAuth :: {user, {
+    Macaroon :: macaroon:macaroon(),
+    DischargeMacaroons :: [macaroon:macaroon()]}}.
+find_all_spaces(_, _, 0) ->
+    [];
+
+find_all_spaces(UserAuth, UserId, MaxRetries) ->
+    {ok, Spaces} = user_logic:get_spaces(UserAuth, UserId),
+    {SpaceIds, _} = lists:unzip(Spaces),
+    case SpaceIds of
+        [] ->
+            timer:sleep(500),
+            find_all_spaces(UserAuth, UserId, MaxRetries - 1);
+        _ ->
+            SpaceIds
+    end.
+
+
+
