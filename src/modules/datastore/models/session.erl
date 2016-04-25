@@ -30,12 +30,13 @@
     all_with_user/0]).
 
 -type id() :: binary().
+-type ttl() :: non_neg_integer().
 -type auth() :: #auth{}.
 -type type() :: fuse | rest | gui | provider_outgoing | provider.
--type status() :: active | inactive | phantom.
+-type status() :: active | inactive.
 -type identity() :: #identity{}.
 
--export_type([id/0, auth/0, type/0, status/0, identity/0]).
+-export_type([id/0, ttl/0, auth/0, type/0, status/0, identity/0]).
 
 %%%===================================================================
 %%% model_behaviour callbacks
@@ -309,12 +310,8 @@ get_connections(SessId) ->
 -spec remove_connection(SessId :: session:id(), Con :: pid()) ->
     ok | datastore:update_error().
 remove_connection(SessId, Con) ->
-    Diff = fun(#session{watcher = Watcher, connections = Cons} = Sess) ->
+    Diff = fun(#session{connections = Cons} = Sess) ->
         NewCons = lists:filter(fun(C) -> C =/= Con end, Cons),
-        case NewCons of
-            [] -> gen_server:cast(Watcher, schedule_session_status_checkup);
-            _ -> ok
-        end,
         {ok, Sess#session{connections = NewCons}}
     end,
     case session:update(SessId, Diff) of

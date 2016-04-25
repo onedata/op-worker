@@ -41,8 +41,8 @@ public:
 
     std::unordered_map<std::string, std::string> getUserCTX();
 
-    uid_t uid = 0;
-    gid_t gid = 0;
+    uid_t uid = -1;
+    gid_t gid = -1;
     int fh = -1;
 };
 
