@@ -107,11 +107,12 @@ model_init() ->
 -spec 'after'(ModelName :: model_behaviour:model_type(), Method :: model_behaviour:model_action(),
     Level :: datastore:store_level(), Context :: term(),
     ReturnValue :: term()) -> ok.
-'after'(onedata_user, create, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+% TODO filter by level when onedata_user will be globally cached
+'after'(onedata_user, create, _, _, {ok, UUID}) ->
     chown_pending_files(UUID);
-'after'(onedata_user, save, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(onedata_user, save, _, _, {ok, UUID}) ->
     chown_pending_files(UUID);
-'after'(onedata_user, create_or_update, ?GLOBAL_ONLY_LEVEL, _, {ok, UUID}) ->
+'after'(onedata_user, create_or_update, _, _, {ok, UUID}) ->
     chown_pending_files(UUID);
 'after'(_ModelName, _Method, _Level, _Context, _ReturnValue) ->
     ok.
