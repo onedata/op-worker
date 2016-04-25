@@ -21,11 +21,13 @@
 %%    source storage if possible to avoid copying
 %% 3. Add rollback or any other means of rescuing from failed renaming
 
--include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/common/credentials.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("annotations/include/annotations.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([rename/3]).
@@ -172,15 +174,15 @@ rename_select(CTX, SourceEntry, CanonicalTargetPath, LogicalTargetPath) ->
         true ->
             rename_trivial(CTX, SourceEntry, LogicalTargetPath);
         false ->
-            TargetSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(TargetSpaceUUID),
-            {ok, TargetProviderIds} = oz_spaces:get_providers(provider, TargetSpaceId),
-            TargetProvidersSet = ordsets:from_list(TargetProviderIds),
+            #fslogic_ctx{session_id = SessId, session = #session{}} = CTX,
+            {ok, #auth{macaroon = Macaroon, disch_macaroons = DMacaroons}} =
+                session:get_auth(SessId),
+            Client = {user, {Macaroon, DMacaroons}},
+            {ok, #user_details{id = UserId}} = oz_users:get_details(Client),
 
-            SourceSpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SourceSpaceUUID),
-            {ok, SourceProviderIds} = oz_spaces:get_providers(provider, SourceSpaceId),
-            SourceProvidersSet = ordsets:from_list(SourceProviderIds),
-
-            CommonProvidersSet = ordsets:intersection([TargetProvidersSet, SourceProvidersSet]),
+            TargetProvidersSet = get_supporting_providers(SourceSpaceUUID, Client, UserId),
+            SourceProvidersSet = get_supporting_providers(TargetSpaceUUID, Client, UserId),
+            CommonProvidersSet = ordsets:intersection(TargetProvidersSet, SourceProvidersSet),
             case ordsets:is_element(oneprovider:get_provider_id(), CommonProvidersSet) of
                 true ->
                     rename_interspace(CTX, SourceEntry, LogicalTargetPath);
@@ -581,3 +583,15 @@ update_mtime_ctime(Entry, Time) ->
                 }})
         end),
     ok.
+
+%%--------------------------------------------------------------------
+%% @doc Returns list of ids of providers supporting
+%%--------------------------------------------------------------------
+-spec get_supporting_providers(SpaceUUID :: binary(),
+    Client :: oz_endpoint:client(), UserId :: onedata_user:id()) -> [binary()].
+get_supporting_providers(SpaceUUID, Client, UserId) ->
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {ok, #document{value = #space_info{providers_supports = ProvidersSupports}}} =
+        space_info:get_or_fetch(Client, SpaceId, UserId),
+    ProviderIds = [ProviderId || {ProviderId, _} <- ProvidersSupports],
+    ordsets:from_list(ProviderIds).
