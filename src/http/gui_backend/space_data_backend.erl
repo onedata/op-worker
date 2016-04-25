@@ -102,7 +102,8 @@ find(<<"space-group">>, AssocIds) ->
 find_all(<<"space">>) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
-    {ok, SpaceIds} = user_logic:get_spaces(UserAuth, UserId),
+    {ok, Spaces} = user_logic:get_spaces(UserAuth, UserId),
+    {SpaceIds, _} = lists:unzip(Spaces),
     Res = lists:map(
         fun(SpaceId) ->
             {ok, [SpaceData]} = find(<<"space">>, [SpaceId]),
@@ -271,10 +272,11 @@ space_record(SpaceId) ->
 space_user_permission_record(AssocId) ->
     Auth = op_gui_utils:get_user_rest_auth(),
     {UserId, SpaceId} = op_gui_utils:association_to_ids(AssocId),
+    CurrentUser = g_session:get_user_id(),
     {ok, #document{
         value = #space_info{
             users = UsersAndPerms
-        }}} = space_logic:get(Auth, SpaceId, UserId),
+        }}} = space_logic:get(Auth, SpaceId, CurrentUser),
     UserPerms = proplists:get_value(UserId, UsersAndPerms),
     PermsMapped = lists:map(
         fun(SpacePerm) ->
@@ -357,11 +359,11 @@ space_group_record(GroupId) ->
 %%--------------------------------------------------------------------
 -spec all_space_perms() -> [binary()].
 all_space_perms() -> [
-    <<"space_invite_user">>, <<"space_remove_user">>,
-    <<"space_invite_group">>, <<"space_remove_group">>,
-    <<"space_add_provider">>, <<"space_remove_provider">>,
-    <<"space_set_privileges">>, <<"space_change_data">>,
-    <<"space_remove">>, <<"space_view_data">>
+    space_invite_user, space_remove_user,
+    space_invite_group, space_remove_group,
+    space_add_provider, space_remove_provider,
+    space_set_privileges, space_change_data,
+    space_remove, space_view_data
 ].
 
 
@@ -372,16 +374,16 @@ all_space_perms() -> [
 %% @end
 %%--------------------------------------------------------------------
 -spec perm_db_to_gui(binary()) -> binary().
-perm_db_to_gui(<<"space_invite_user">>) -> <<"permInviteUser">>;
-perm_db_to_gui(<<"space_remove_user">>) -> <<"permRemoveUser">>;
-perm_db_to_gui(<<"space_invite_group">>) -> <<"permInviteGroup">>;
-perm_db_to_gui(<<"space_remove_group">>) -> <<"permRemoveGroup">>;
-perm_db_to_gui(<<"space_set_privileges">>) -> <<"permSetPrivileges">>;
-perm_db_to_gui(<<"space_remove">>) -> <<"permRemoveSpace">>;
-perm_db_to_gui(<<"space_add_provider">>) -> <<"permInviteProvider">>;
-perm_db_to_gui(<<"space_remove_provider">>) -> <<"permRemoveProvider">>;
-perm_db_to_gui(<<"space_change_data">>) -> <<"permModifySpace">>;
-perm_db_to_gui(<<"space_view_data">>) -> <<"permViewSpace">>.
+perm_db_to_gui(space_invite_user) -> <<"permInviteUser">>;
+perm_db_to_gui(space_remove_user) -> <<"permRemoveUser">>;
+perm_db_to_gui(space_invite_group) -> <<"permInviteGroup">>;
+perm_db_to_gui(space_remove_group) -> <<"permRemoveGroup">>;
+perm_db_to_gui(space_set_privileges) -> <<"permSetPrivileges">>;
+perm_db_to_gui(space_remove) -> <<"permRemoveSpace">>;
+perm_db_to_gui(space_add_provider) -> <<"permInviteProvider">>;
+perm_db_to_gui(space_remove_provider) -> <<"permRemoveProvider">>;
+perm_db_to_gui(space_change_data) -> <<"permModifySpace">>;
+perm_db_to_gui(space_view_data) -> <<"permViewSpace">>.
 
 
 %%--------------------------------------------------------------------
@@ -391,13 +393,13 @@ perm_db_to_gui(<<"space_view_data">>) -> <<"permViewSpace">>.
 %% @end
 %%--------------------------------------------------------------------
 -spec perm_gui_to_db(binary()) -> binary().
-perm_gui_to_db(<<"permInviteUser">>) -> <<"space_invite_user">>;
-perm_gui_to_db(<<"permRemoveUser">>) -> <<"space_remove_user">>;
-perm_gui_to_db(<<"permInviteGroup">>) -> <<"space_invite_group">>;
-perm_gui_to_db(<<"permRemoveGroup">>) -> <<"space_remove_group">>;
-perm_gui_to_db(<<"permSetPrivileges">>) -> <<"space_set_privileges">>;
-perm_gui_to_db(<<"permRemoveSpace">>) -> <<"space_remove">>;
-perm_gui_to_db(<<"permInviteProvider">>) -> <<"space_add_provider">>;
-perm_gui_to_db(<<"permRemoveProvider">>) -> <<"space_remove_provider">>;
-perm_gui_to_db(<<"permModifySpace">>) -> <<"space_change_data">>;
-perm_gui_to_db(<<"permViewSpace">>) -> <<"space_view_data">>.
+perm_gui_to_db(<<"permInviteUser">>) -> space_invite_user;
+perm_gui_to_db(<<"permRemoveUser">>) -> space_remove_user;
+perm_gui_to_db(<<"permInviteGroup">>) -> space_invite_group;
+perm_gui_to_db(<<"permRemoveGroup">>) -> space_remove_group;
+perm_gui_to_db(<<"permSetPrivileges">>) -> space_set_privileges;
+perm_gui_to_db(<<"permRemoveSpace">>) -> space_remove;
+perm_gui_to_db(<<"permInviteProvider">>) -> space_add_provider;
+perm_gui_to_db(<<"permRemoveProvider">>) -> space_remove_provider;
+perm_gui_to_db(<<"permModifySpace">>) -> space_change_data;
+perm_gui_to_db(<<"permViewSpace">>) -> space_view_data.

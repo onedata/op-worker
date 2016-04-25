@@ -34,8 +34,7 @@
 -spec get(oz_endpoint:client(), UserId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 get({user, {Macaroon, DischMacaroons}}, UserId) ->
-    onedata_user:get_or_fetch(UserId,
-        #auth{macaroon = Macaroon, disch_macaroons = DischMacaroons}).
+    onedata_user:get_or_fetch({user, {Macaroon, DischMacaroons}}, UserId).
 
 
 %%--------------------------------------------------------------------
@@ -44,12 +43,12 @@ get({user, {Macaroon, DischMacaroons}}, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_spaces(oz_endpoint:client(), UserId :: onedata_user:id()) ->
-    {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
+    {ok, [{SpaceId :: binary(), SpaceName :: binary()}]} |
+    {error, Reason :: term()}.
 get_spaces({user, {Macaroon, DischMacaroons}}, UserId) ->
     case get({user, {Macaroon, DischMacaroons}}, UserId) of
         {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
-            {SpaceIds, _} = lists:unzip(Spaces),
-            {ok, SpaceIds};
+            {ok, Spaces};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -62,12 +61,12 @@ get_spaces({user, {Macaroon, DischMacaroons}}, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_spaces(UserId :: onedata_user:id()) ->
-    {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
+    {ok, [{SpaceId :: binary(), SpaceName :: binary()}]} |
+    {error, Reason :: term()}.
 get_spaces(UserId) ->
     case onedata_user:get(UserId) of
         {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
-            {SpaceIds, _} = lists:unzip(Spaces),
-            {ok, SpaceIds};
+            {ok, Spaces};
         {error, Reason} ->
             {error, Reason}
     end.

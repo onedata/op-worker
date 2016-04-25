@@ -50,7 +50,7 @@
 %% Local, cached version of OZ user
 -record(onedata_user, {
     name :: binary(),
-    spaces :: [{SpaceId :: binary(), SpaceName :: binary()}],
+    spaces = [] :: [{SpaceId :: binary(), SpaceName :: binary()}],
     default_space :: binary() | undefined,
     group_ids :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],

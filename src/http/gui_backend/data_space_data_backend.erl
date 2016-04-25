@@ -91,7 +91,8 @@ find(<<"data-space">>, [SpaceId]) ->
 find_all(<<"data-space">>) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
     UserId = g_session:get_user_id(),
-    {ok, SpaceIds} = user_logic:get_spaces(UserAuth, UserId),
+    {ok, Spaces} = user_logic:get_spaces(UserAuth, UserId),
+    {SpaceIds, _} = lists:unzip(Spaces),
     Res = lists:map(
         fun(SpaceId) ->
             {ok, Data} = find(<<"data-space">>, [SpaceId]),
