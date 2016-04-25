@@ -47,7 +47,8 @@ get({user, {Macaroon, DischMacaroons}}, UserId) ->
     {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
 get_spaces({user, {Macaroon, DischMacaroons}}, UserId) ->
     case get({user, {Macaroon, DischMacaroons}}, UserId) of
-        {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->
+        {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
+            {SpaceIds, _} = lists:unzip(Spaces),
             {ok, SpaceIds};
         {error, Reason} ->
             {error, Reason}
@@ -64,7 +65,8 @@ get_spaces({user, {Macaroon, DischMacaroons}}, UserId) ->
     {ok, [SpaceId :: binary()]} | {error, Reason :: term()}.
 get_spaces(UserId) ->
     case onedata_user:get(UserId) of
-        {ok, #document{value = #onedata_user{space_ids = SpaceIds}}} ->
+        {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
+            {SpaceIds, _} = lists:unzip(Spaces),
             {ok, SpaceIds};
         {error, Reason} ->
             {error, Reason}
