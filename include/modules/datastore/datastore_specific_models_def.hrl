@@ -77,7 +77,8 @@
     uid :: onedata_user:id(), %% Reference to onedata_user that owns this file
     size = 0 :: file_meta:size(),
     version = 1, %% Snaphot version
-    is_scope = false :: boolean()
+    is_scope = false :: boolean(),
+    scope :: datastore:key()
 }).
 
 
