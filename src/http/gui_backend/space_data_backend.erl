@@ -191,9 +191,15 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
             end
         end, UserPerms, Data),
 
-    space_logic:set_user_privileges(
+    Result = space_logic:set_user_privileges(
         UserAuth, SpaceId, UserId, lists:usort(NewUserPerms)),
-    ok.
+    case Result of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_warning(
+                <<"Cannot change user privileges due to unknown error.">>)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -205,9 +211,13 @@ update_record(<<"space-user-permission">>, AssocId, Data) ->
     ok | gui_error:error_result().
 delete_record(<<"space">>, SpaceId) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    % @TODO error handling
-    space_logic:delete(UserAuth, SpaceId),
-    ok.
+    case space_logic:delete(UserAuth, SpaceId) of
+        ok ->
+            ok;
+        {error, _} ->
+            gui_error:report_warning(
+                <<"Cannot remove space due to unknown error.">>)
+    end.
 
 
 %%%===================================================================
