@@ -95,10 +95,10 @@ emit_permission_changed(FileUuid) ->
 %% Send event informing subscribed client about file removal.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_removal(FileUuid :: file_meta:uuid()) ->
+-spec emit_file_removal(FileGUID :: fslogic_worker:file_guid()) ->
     ok | {error, Reason :: term()}.
-emit_file_removal(FileUuid) ->
-    event:emit(#event{object = #file_removal_event{file_uuid = fslogic_uuid:to_file_guid(FileUuid)}}).
+emit_file_removal(FileGUID) ->
+    event:emit(#event{object = #file_removal_event{file_uuid = FileGUID}}).
 
 %%%===================================================================
 %%% Internal functions

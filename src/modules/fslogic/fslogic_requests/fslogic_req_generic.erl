@@ -131,7 +131,7 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
             end,
             #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{
                 gid = GID,
-                uuid = fslogic_uuid:to_file_guid(UUID, SpaceId),
+                guid = fslogic_uuid:to_file_guid(UUID, SpaceId),
                 type = Type, mode = Mode, atime = ATime, mtime = MTime,
                 ctime = CTime, uid = FinalUID, size = Size, name = Name
             }};
@@ -149,6 +149,8 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
                          FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
 delete(CTX, File) ->
+    {ok, FileUUID} = file_meta:to_uuid(File),
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
     FuseResponse = case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
             delete_dir(CTX, FileDoc);
@@ -157,8 +159,7 @@ delete(CTX, File) ->
     end,
     case FuseResponse of
         #fuse_response{status = #status{code = ?OK}} ->
-            {uuid, UUID} = fslogic_uuid:ensure_uuid(CTX, File),
-            fslogic_event:emit_file_removal(UUID);
+            fslogic_event:emit_file_removal(FileGUID);
         _ ->
             ok
     end,
@@ -474,6 +475,7 @@ delete_file(CTX, File) ->
 delete_impl(CTX = #fslogic_ctx{session_id = SessId}, File) ->
     {ok, #document{key = FileUUID, value = #file_meta{type = Type}} = FileDoc} = file_meta:get(File),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     {ok, FileChildren} =
         case Type of
             ?DIRECTORY_TYPE ->
@@ -620,6 +622,7 @@ chmod_storage_files(CTX = #fslogic_ctx{session_id = SessId}, FileEntry, Mode) ->
     case file_meta:get(FileEntry) of
         {ok, #document{key = FileUUID, value = #file_meta{type = ?REGULAR_FILE_TYPE}} = FileDoc} ->
             {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
             Results = lists:map(
                 fun({SID, FID} = Loc) ->
                     {ok, Storage} = storage:get(SID),

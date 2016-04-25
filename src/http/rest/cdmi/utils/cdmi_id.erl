@@ -89,7 +89,7 @@
 %%--------------------------------------------------------------------
 %% @doc Converts uuid to cdmi objectid format
 %%--------------------------------------------------------------------
--spec uuid_to_objectid(onedata_file_api:file_uuid()) -> {ok, binary()} | {error, atom()}.
+-spec uuid_to_objectid(onedata_file_api:file_guid()) -> {ok, binary()} | {error, atom()}.
 uuid_to_objectid(Uuid) ->
     case build_objectid(http_utils:base64url_decode(Uuid)) of
         {error, Error} -> {error, Error};
@@ -99,7 +99,7 @@ uuid_to_objectid(Uuid) ->
 %%--------------------------------------------------------------------
 %% @doc Converts cdmi objectid format to uuid
 %%--------------------------------------------------------------------
--spec objectid_to_uuid(binary()) -> {ok, onedata_file_api:file_uuid()} | {error, atom()}.
+-spec objectid_to_uuid(binary()) -> {ok, onedata_file_api:file_guid()} | {error, atom()}.
 objectid_to_uuid(ObjectId) ->
     case from_base16(ObjectId) of
         <<0:8, _Enum:24, 0:8, _Length:8, _Crc:16, Data/binary>> ->

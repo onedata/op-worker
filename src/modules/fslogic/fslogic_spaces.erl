@@ -105,19 +105,15 @@ get_space({guid, FileGUID}) ->
 get_space(FileEntry) ->
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
 
-    SpaceId = case FileUUID of
+    case FileUUID of
         <<"">> ->
             throw({not_a_space, FileEntry});
         _ ->
-            case fslogic_uuid:file_uuid_to_space_id(FileUUID) of
-                {ok, SpaceId0} ->
-                    SpaceId0;
-                _ ->
-                    throw({not_found, file_meta})
-            end
-    end,
+            {ok, #document{key = SpaceUUID}} = Res = file_meta:get_scope({uuid, FileUUID}),
+            _ = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID), %% Crash if given UUID is not a space
+            Res
 
-    file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -134,7 +130,7 @@ get_space({guid, FileGUID}, UserId) ->
             file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId))
     end;
 get_space(FileEntry, UserId) ->
-    ?debug("get_space ~p ~p", [FileEntry, UserId]),
+    ?info("get_space ~p ~p", [FileEntry, UserId]),
     DefaultSpaceUUID = fslogic_uuid:default_space_uuid(UserId),
     SpacesDir = fslogic_uuid:spaces_uuid(UserId),
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),

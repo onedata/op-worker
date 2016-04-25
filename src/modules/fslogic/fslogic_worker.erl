@@ -297,7 +297,7 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {pa
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {uuid, UUID}}}) ->
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {guid, UUID}}}) ->
     fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     fslogic_req_generic:get_file_attr(Ctx, Entry);
@@ -455,7 +455,7 @@ request_to_file_entry_or_provider(Ctx, #fuse_request{fuse_request = #get_file_at
         OtherFileEntry ->
             {file, OtherFileEntry}
     end;
-request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {uuid, FileGUID}}}) ->
+request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {guid, FileGUID}}}) ->
     {file, {guid, FileGUID}};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     {file, Entry};
@@ -513,8 +513,8 @@ request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #create_sto
     {provider, oneprovider:get_provider_id()};
 request_to_file_entry_or_provider(_Ctx, #fuse_request{fuse_request = #verify_storage_test_file{}}) ->
     {provider, oneprovider:get_provider_id()};
-request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := GUID}}) ->
-    {file, {guid, GUID}};
+request_to_file_entry_or_provider(#fslogic_ctx{}, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_UUID := FileGUID}}) ->
+    {file, {guid, FileGUID}};
 request_to_file_entry_or_provider(_Ctx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).

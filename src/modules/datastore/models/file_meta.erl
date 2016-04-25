@@ -573,8 +573,8 @@ get_space_dir(SpaceId) ->
 -spec to_uuid(entry() | {guid, fslogic_worker:file_guid()}) -> {ok, uuid()} | datastore:generic_error().
 to_uuid({uuid, UUID}) ->
     {ok, UUID};
-to_uuid({guid, GUID}) ->
-    {ok, fslogic_uuid:file_guid_to_uuid(GUID)};
+to_uuid({guid, FileGUID}) ->
+    {ok, fslogic_uuid:file_guid_to_uuid(FileGUID)};
 to_uuid(#document{key = UUID}) ->
     {ok, UUID};
 to_uuid({path, Path}) ->

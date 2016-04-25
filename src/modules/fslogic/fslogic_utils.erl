@@ -81,15 +81,17 @@ gen_storage_file_id(Entry) ->
     file_meta:snapshot_name(Path, Version).
 
 
--spec get_local_file_location(fslogic_worker:file()) ->
+-spec get_local_file_location(fslogic_worker:ext_file()) ->
     datastore:document() | no_return().
 get_local_file_location(Entry) -> %todo get rid of single file location and use get_local_file_locations/1
     [LocalLocation] = get_local_file_locations(Entry),
     LocalLocation.
 
 
--spec get_local_file_locations(fslogic_worker:file()) ->
+-spec get_local_file_locations(fslogic_worker:ext_file()) ->
     [datastore:document()] | no_return().
+get_local_file_locations({guid, FileGUID}) ->
+    get_local_file_locations({uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)});
 get_local_file_locations(Entry) ->
     LProviderId = oneprovider:get_provider_id(),
     {ok, LocIds} = file_meta:get_locations(Entry),

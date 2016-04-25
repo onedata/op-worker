@@ -61,7 +61,7 @@ find(<<"file">>, [FileId]) ->
         size = SizeAttr,
         mtime = ModificationTime,
         mode = PermissionsAttr}} =
-        logical_file_manager:stat(SessionId, {uuid, FileId}),
+        logical_file_manager:stat(SessionId, {guid, FileId}),
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE -> {<<"dir">>, null};
         _ -> {<<"file">>, SizeAttr}
@@ -131,9 +131,9 @@ create_record(<<"file">>, Data) ->
                 gui_error:report_warning(<<"Names with 'nie' forbidden!">>);
             nomatch ->
                 Type = proplists:get_value(<<"type">>, Data),
-                ParentUUID = proplists:get_value(<<"parent">>, Data, null),
+                ParentGUID = proplists:get_value(<<"parent">>, Data, null),
                 {ok, ParentPath} = logical_file_manager:get_file_path(
-                    SessionId, ParentUUID),
+                    SessionId, ParentGUID),
                 Path = filename:join([ParentPath, Name]),
                 FileId = case Type of
                     <<"file">> ->
@@ -150,7 +150,7 @@ create_record(<<"file">>, Data) ->
                     size = SizeAttr,
                     mtime = ModificationTime,
                     mode = PermissionsAttr}} =
-                    logical_file_manager:stat(SessionId, {uuid, FileId}),
+                    logical_file_manager:stat(SessionId, {guid, FileId}),
                 Size = case Type of
                     <<"dir">> -> null;
                     _ -> SizeAttr
@@ -163,7 +163,7 @@ create_record(<<"file">>, Data) ->
                     {<<"permissions">>, Permissions},
                     {<<"modificationTime">>, ModificationTime},
                     {<<"size">>, Size},
-                    {<<"parent">>, ParentUUID},
+                    {<<"parent">>, ParentGUID},
                     {<<"children">>, []}
                 ],
                 {ok, Res}
@@ -201,7 +201,7 @@ update_record(<<"file">>, FileId, Data) ->
             case Perms >= 0 andalso Perms =< 8#777 of
                 true ->
                     ok = logical_file_manager:set_perms(
-                        SessionId, {uuid, FileId}, Perms);
+                        SessionId, {guid, FileId}, Perms);
                 false ->
                     gui_error:report_warning(<<"Cannot change permissions, "
                     "invalid octal value.">>)
@@ -252,16 +252,16 @@ delete_record(<<"file">>, Id) ->
 %% spaces dir has two different UUIDs, should be removed when this is fixed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(UUID :: binary()) -> binary().
-get_parent(UUID) ->
+-spec get_parent(FileGUID :: binary()) -> binary().
+get_parent(FileGUID) ->
     SessionId = g_session:get_session_id(),
-    {ok, ParentUUID} = logical_file_manager:get_parent(
-        SessionId, {uuid, UUID}),
-    case logical_file_manager:get_file_path(SessionId, ParentUUID) of
+    {ok, ParentGUID} = logical_file_manager:get_parent(
+        SessionId, {guid, FileGUID}),
+    case logical_file_manager:get_file_path(SessionId, ParentGUID) of
         {ok, <<"/spaces">>} ->
             get_spaces_dir_uuid();
         _ ->
-            ParentUUID
+            ParentGUID
     end.
 
 
@@ -274,7 +274,7 @@ get_parent(UUID) ->
 -spec get_spaces_dir_uuid() -> binary().
 get_spaces_dir_uuid() ->
     SessionId = g_session:get_session_id(),
-    {ok, #file_attr{uuid = SpacesDirUUID}} = logical_file_manager:stat(
+    {ok, #file_attr{guid = SpacesDirUUID}} = logical_file_manager:stat(
         SessionId, {path, <<"/spaces">>}),
     SpacesDirUUID.
 

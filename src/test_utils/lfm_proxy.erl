@@ -165,7 +165,7 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
     exec(Worker,
         fun(Host) ->
             [{_, Handle}] = ets:lookup(lfm_handles, TestHandle),
-            #lfm_handle{file_uuid = UUID,
+            #lfm_handle{file_guid = UUID,
                 fslogic_ctx = #fslogic_ctx{session_id = SessId}} = Handle,
             Result =
                 case logical_file_manager:write(Handle, Offset, Bytes) of

@@ -104,7 +104,7 @@
 
 %% Model for storing file's location data
 -record(file_location, {
-    uuid :: file_meta:uuid(),
+    uuid :: file_meta:uuid() | fslogic_worker:file_guid(),
     provider_id :: oneprovider:id(),
     space_uuid :: file_meta:uuid(),
     storage_id :: storage:id(),

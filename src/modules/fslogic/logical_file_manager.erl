@@ -53,7 +53,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 -type handle() :: #lfm_handle{}.
--type file_key() :: fslogic_worker:file() | {handle, handle()}.
+-type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
 -type error_reply() :: {error, term()}.
 
 -export_type([handle/0, file_key/0, error_reply/0]).
@@ -105,7 +105,7 @@ mkdir(SessId, Path, Mode) ->
 %% Deletes a directory with all its children.
 %% @end
 %%--------------------------------------------------------------------
--spec rmdir(session:id(), file_key()) -> ok | error_reply().
+-spec rmdir(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
 rmdir(SessId, FileKey) ->
     ?run(fun() -> lfm_utils:rm(SessId, FileKey) end).
 
@@ -115,9 +115,9 @@ rmdir(SessId, FileKey) ->
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(), FileKey :: file_meta:uuid_or_path(),
+-spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
-    {ok, [{file_meta:uuid(), file_meta:name()}]} | error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
 ls(SessId, FileKey, Offset, Limit) ->
     ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit) end).
 
@@ -127,7 +127,7 @@ ls(SessId, FileKey, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_count(SessId :: session:id(),
-    FileKey :: file_meta:uuid_or_path()) ->
+    FileKey :: fslogic_worker:file_guid_or_path()) ->
     {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
     ?run(fun() -> lfm_dirs:get_children_count(SessId, FileKey) end).
@@ -137,8 +137,8 @@ get_children_count(SessId, FileKey) ->
 %% Returns uuid of parent for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(SessId :: session:id(), FileKey :: file_meta:uuid_or_path()) ->
-    {ok, file_meta:uuid()} | error_reply().
+-spec get_parent(SessId :: session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
 get_parent(SessId, FileKey) ->
     ?run(fun() -> lfm_files:get_parent(SessId, FileKey) end).
 
@@ -177,10 +177,10 @@ cp(Auth, FileEntry, TargetPath) ->
 %% Returns full path of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_path(SessId :: session:id(), Uuid :: file_meta:uuid()) ->
+-spec get_file_path(SessId :: session:id(), FileGUID :: fslogic_worker:file_guid()) ->
     {ok, file_meta:path()}.
-get_file_path(SessId, Uuid) ->
-    ?run(fun() -> lfm_files:get_file_path(SessId, Uuid) end).
+get_file_path(SessId, FileGUID) ->
+    ?run(fun() -> lfm_files:get_file_path(SessId, FileGUID) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -191,7 +191,7 @@ get_file_path(SessId, Uuid) ->
 unlink(Handle) ->
     ?run(fun() -> lfm_files:unlink(Handle) end).
 
--spec unlink(session:id(), fslogic_worker:file()) -> ok | error_reply().
+-spec unlink(session:id(), fslogic_worker:file_guid_or_path()) -> ok | error_reply().
 unlink(SessId, FileEntry) ->
     ?run(fun() -> lfm_files:unlink(SessId, FileEntry) end).
 
@@ -214,7 +214,7 @@ create(SessId, Path) ->
 %%--------------------------------------------------------------------
 -spec create(SessId :: session:id(), Path :: file_meta:path(),
     Mode :: file_meta:posix_permissions()) ->
-    {ok, file_meta:uuid()} | error_reply().
+    {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path, Mode) ->
     ?run(fun() -> lfm_files:create(SessId, Path, Mode) end).
 

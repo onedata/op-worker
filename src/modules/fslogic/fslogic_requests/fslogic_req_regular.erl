@@ -39,6 +39,7 @@
 truncate(CTX = #fslogic_ctx{session_id = SessionId}, Entry, Size) ->
     {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(Entry),
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
     Results = lists:map(
         fun({SID, FID} = Loc) ->
             {ok, Storage} = storage:get(SID),
@@ -155,9 +156,9 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
         uid = fslogic_context:get_user_id(CTX)
     }},
 
-    {ok, UUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
+    {ok, FileUUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode),
+    {StorageId, FileId} = fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode),
 
     {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
     CurrTime = erlang:system_time(seconds),
@@ -173,7 +174,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
     {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
         false ->
             {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-            SFMHandle = storage_file_manager:new_handle(SessId, fslogic_uuid:to_file_guid(UUID, SpaceId), Storage, FileId),
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
             {ok, Handle} = storage_file_manager:open_at_creation(SFMHandle),
             save_handle(SessId, Handle);
         true ->
@@ -182,7 +183,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
+            uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = [],
             space_uuid = SpaceUUID, handle_id = HandleId})}.
 
@@ -265,18 +266,18 @@ get_file_location_for_rdwr(CTX, File) ->
     helpers:open_mode()) ->
     no_return() | #fuse_response{}.
 get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CTX, File, Mode) ->
-    {ok, #document{key = UUID} = FileDoc} = file_meta:get(File),
+    {ok, #document{key = FileUUID} = FileDoc} = file_meta:get(File),
 
     {ok, #document{key = StorageId, value = Storage}} = fslogic_storage:select_storage(CTX#fslogic_ctx.space_id),
-    FileId = fslogic_utils:gen_storage_file_id({uuid, UUID}),
+    FileId = fslogic_utils:gen_storage_file_id({uuid, FileUUID}),
 
-    #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, UUID}),
+    #document{value = #file_location{blocks = Blocks}} = fslogic_utils:get_local_file_location({uuid, FileUUID}),
 
     {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space(FileDoc, fslogic_context:get_user_id(CTX)),
 
     {ok, HandleId} = case SessId =:= ?ROOT_SESS_ID of
         false ->
-            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, UUID, Storage, FileId),
+            SFMHandle = storage_file_manager:new_handle(SessId, SpaceUUID, FileUUID, Storage, FileId),
             {ok, Handle} = storage_file_manager:open(SFMHandle, Mode),
             save_handle(SessId, Handle);
         true ->
@@ -285,7 +286,7 @@ get_file_location_impl(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = C
 
     #fuse_response{status = #status{code = ?OK},
         fuse_response = file_location:ensure_blocks_not_empty(#file_location{
-            uuid = fslogic_uuid:to_file_guid(UUID, SpaceId), provider_id = oneprovider:get_provider_id(),
+            uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
             storage_id = StorageId, file_id = FileId, blocks = Blocks,
             space_uuid = SpaceUUID, handle_id = HandleId})}.
 

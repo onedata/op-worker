@@ -17,7 +17,7 @@
 
 %% API
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
-    spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2]).
+    guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2]).
 -export([file_uuid_to_space_id/1, gen_file_uuid/1, gen_file_uuid/0]).
 -export([to_file_guid/2, unpack_file_guid/1, file_guid_to_uuid/1, to_file_guid/1, ensure_guid/2]).
 
@@ -112,8 +112,10 @@ path_to_uuid(CTX, Path) ->
 %% Converts given file entry to UUID.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:file()) ->
+-spec ensure_uuid(fslogic_worker:ctx(), fslogic_worker:ext_file()) ->
     {uuid, file_meta:uuid()}.
+ensure_uuid(_CTX, {guid, FileGUID}) ->
+    {uuid, fslogic_uuid:file_guid_to_uuid(FileGUID)};
 ensure_uuid(_CTX, {uuid, UUID}) ->
     {uuid, UUID};
 ensure_uuid(_CTX, #document{key = UUID}) ->
@@ -124,15 +126,15 @@ ensure_uuid(CTX, {path, Path}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Converts given file entry to GUID.
+%% Converts given file entry to FileGUID.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:file()) ->
     {guid, fslogic_worker:file_guid()}.
 ensure_guid(_CTX, {uuid, UUID}) ->
     {guid, to_file_guid(UUID)};
-ensure_guid(_CTX, {guid, GUID}) ->
-    {guid, GUID};
+ensure_guid(_CTX, {guid, FileGUID}) ->
+    {guid, FileGUID};
 ensure_guid(_CTX, #document{key = UUID}) ->
     {guid, to_file_guid(UUID)};
 ensure_guid(CTX, {path, Path}) ->
@@ -153,6 +155,15 @@ uuid_to_path(#fslogic_ctx{session_id = SessId, session = #session{
             {ok, Path} = fslogic_path:gen_path({uuid, FileUuid}, SessId),
             Path
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets full file path.
+%% @end
+%%--------------------------------------------------------------------
+-spec guid_to_path(fslogic_worker:ctx(), fslogic_worker:file_guid()) -> file_meta:path().
+guid_to_path(CTX = #fslogic_ctx{}, FileGUID) ->
+    uuid_to_path(CTX, fslogic_uuid:file_guid_to_uuid(FileGUID)).
 
 %%--------------------------------------------------------------------
 %% @doc Convert SpaceId to uuid of file_meta document of this space directory.

@@ -93,9 +93,9 @@ handle_http_download(Req, FileId) ->
             try
                 SessionId = g_session:get_session_id(),
                 {ok, FileHandle} = logical_file_manager:open(
-                    SessionId, {uuid, FileId}, read),
+                    SessionId, {guid, FileId}, read),
                 {ok, #file_attr{size = Size, name = FileName}} =
-                    logical_file_manager:stat(SessionId, {uuid, FileId}),
+                    logical_file_manager:stat(SessionId, {guid, FileId}),
                 StreamFun = cowboy_file_stream_fun(FileHandle, Size),
                 Headers = attachment_headers(FileName),
                 % Reply with attachment headers and a streaming function
@@ -127,7 +127,7 @@ cowboy_file_stream_fun(FileHandle, Size) ->
             % Any exceptions that occur during file streaming must be caught
             % here for cowboy to close the connection cleanly.
             ?error_stacktrace("Error while streaming file '~p' - ~p:~p",
-                [FileHandle#lfm_handle.file_uuid, T, M]),
+                [FileHandle#lfm_handle.file_guid, T, M]),
             ok
         end
     end.

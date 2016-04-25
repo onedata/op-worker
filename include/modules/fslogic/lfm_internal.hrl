@@ -18,6 +18,6 @@
     provider_id :: oneprovider:id(),
     sfm_handles = #{} :: sfm_handles_map(),
     fslogic_ctx :: fslogic_worker:ctx(),
-    file_uuid :: file_meta:uuid(),
+    file_guid :: fslogic_worker:file_guid(),
     open_mode :: helpers:open_mode()
 }).
