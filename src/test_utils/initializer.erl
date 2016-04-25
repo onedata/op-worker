@@ -373,7 +373,8 @@ name(Text, Num) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_users_mock_setup(Workers :: node() | [node()],
-    [{integer(), [{binary(), binary()}], [{binary(), binary()}]}]) ->
+    [{UserNum :: integer(), Spaces :: [{binary(), binary()}],
+        DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, oz_users),
