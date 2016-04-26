@@ -108,7 +108,7 @@ lookup_session(SessionId) ->
 %%--------------------------------------------------------------------
 -spec delete_session(SessionId :: binary()) -> ok | {error, term()}.
 delete_session(SessionId) ->
-    case session:delete(SessionId) of
+    case session_manager:remove_session(SessionId) of
         ok -> ok;
         {error, _} = Error -> Error
     end.
@@ -121,7 +121,7 @@ delete_session(SessionId) ->
 %%--------------------------------------------------------------------
 -spec get_cookie_ttl() -> integer() | {error, term()}.
 get_cookie_ttl() ->
-    case application:get_env(?APP_NAME, gui_cookie_ttl_seconds) of
+    case application:get_env(?APP_NAME, gui_session_ttl_seconds) of
         {ok, Val} when is_integer(Val) ->
             Val;
         _ ->

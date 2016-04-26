@@ -38,7 +38,6 @@
     auth :: session:auth(),
     node :: node(),
     supervisor :: pid(),
-    watcher :: pid(),
     event_manager :: pid(),
     sequencer_manager :: pid(),
     connections = [] :: [pid()],
