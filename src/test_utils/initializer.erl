@@ -322,6 +322,11 @@ create_test_users_and_spaces([Worker | Rest], Config) ->
         {<<"group_id4">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>, <<"user_id4">>]}
     ],
 
+    test_utils:mock_expect(SameDomainWorkers, dbsync_utils, get_providers_for_space,
+        fun(_) ->
+            []
+        end),
+
     file_meta_mock_setup(SameDomainWorkers),
     oz_spaces_mock_setup(SameDomainWorkers, Spaces, SpaceUsers),
     oz_groups_mock_setup(SameDomainWorkers, Groups, GroupUsers),
