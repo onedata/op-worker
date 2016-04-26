@@ -1,11 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @clientor Michal Zmuda
+%%% @author Lukasz Opiola
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Interface between provider and spaces.
+%%% @doc Interface to provider's space cache.
 %%% Operations may involve interactions with OZ api
 %%% or cached records from the datastore.
 %%% @end
