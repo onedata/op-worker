@@ -6,8 +6,7 @@ Brings up a set of cluster-worker nodes. They can create separate clusters.
 """
 
 import os
-import re
-from . import worker, common, gui_livereload
+from . import docker, common, worker, gui
 
 DOCKER_BINDIR_PATH = '/root/build'
 
@@ -31,40 +30,38 @@ class OZWorkerConfigurator:
 
     def tweak_config(self, cfg, uid, instance):
         sys_config = cfg['nodes']['node']['sys.config'][self.app_name()]
-        sys_config['external_ip'] = {'string': "IP_PLACEHOLDER"}
+        sys_config['external_ip'] = {'string': 'IP_PLACEHOLDER'}
 
         if 'http_domain' in sys_config:
             domain = worker.cluster_domain(instance, uid)
             sys_config['http_domain'] = {'string': domain}
-        # If livereload bases on gui output dir mount, change the location
-        # from where static files are served to that dir.
-        if 'gui_livereload' in cfg:
-            if cfg['gui_livereload'] in ['mount_output', 'mount_output_poll']:
-                sys_config['gui_custom_static_root'] = {
-                    'string': '/root/gui_static'}
+
         return cfg
 
-    def configure_started_instance(self, bindir, instance, config,
-                                   container_ids, output,
-                                   storages_dockers=None,
-                                   luma_config=None):
+    # Called BEFORE the instance (cluster of workers) is started,
+    # once for every instance
+    def pre_configure_instance(self, instance, instance_domain, config):
         this_config = config[self.domains_attribute()][instance]
-        # Check if gui_livereload is enabled in env and turn it on
-        if 'gui_livereload' in this_config:
-            mode = this_config['gui_livereload']
-            if mode != 'none':
-                print '''\
-Starting GUI livereload
-    zone: {0}
-    mode: {1}'''.format(instance, mode)
+        if 'gui_override' in this_config and isinstance(
+                this_config['gui_override'], dict):
+            # Preconfigure GUI override
+            gui_config = this_config['gui_override']
+            gui.override_gui(gui_config, instance_domain)
+
+    # Called AFTER the instance (cluster of workers) has been started
+    def post_configure_instance(self, bindir, instance, config, container_ids,
+                                output, storages_dockers=None,
+                                luma_config=None):
+        this_config = config[self.domains_attribute()][instance]
+        # Check if gui livereload is enabled in env and turn it on
+        if 'gui_override' in this_config and isinstance(
+                this_config['gui_override'], dict):
+            gui_config = this_config['gui_override']
+            livereload_flag = gui_config['livereload']
+            if livereload_flag:
                 for container_id in container_ids:
-                    gui_livereload.run(
-                        container_id,
-                        os.path.join(bindir, 'rel/gui.config'),
-                        'rel/oz_worker',
-                        DOCKER_BINDIR_PATH,
-                        '/root/bin/node',
-                        mode=mode)
+                    livereload_dir = gui_config['mount_path']
+                    gui.run_livereload(container_id, livereload_dir)
 
     def pre_start_commands(self, domain):
         return '''
@@ -75,16 +72,13 @@ touch /root/bin/node/data/dns.config
 sed -i.bak s/onedata.org/{domain}/g /root/bin/node/data/dns.config
         '''.format(domain=domain)
 
-    def extra_volumes(self, config, bindir):
+    def extra_volumes(self, config, bindir, instance_domain):
         extra_volumes = []
-        # Check if gui_livereload is enabled in env and add required volumes
-        if 'gui_livereload' in config:
-            extra_volumes += gui_livereload.required_volumes(
-                os.path.join(bindir, 'rel/gui.config'),
-                bindir,
-                'rel/oz_worker',
-                DOCKER_BINDIR_PATH,
-                mode=config['gui_livereload'])
+        # Check if gui override is enabled in env and add required volumes
+        if 'gui_override' in config and isinstance(config['gui_override'],
+                                                   dict):
+            gui_config = config['gui_override']
+            extra_volumes.extend(gui.extra_volumes(gui_config, instance_domain))
         return extra_volumes
 
     def app_name(self):
