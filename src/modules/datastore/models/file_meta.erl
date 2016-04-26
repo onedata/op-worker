@@ -114,18 +114,22 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 %%--------------------------------------------------------------------
 -spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUUID}, File) ->
+  ?error("aaaa ~p", [{{uuid, ParentUUID}, File}]),
     ?run(begin
              {ok, Parent} = get(ParentUUID),
              create(Parent, File)
          end);
 create({path, Path}, File) ->
+  ?error("aaaa2 ~p", [{{path, Path}, File}]),
     ?run(begin
              {ok, {Parent, _}} = resolve_path(Path),
              create(Parent, File)
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
+  ?error("aaaa3 ~p", [{Parent, File}]),
     create(Parent, #document{value = File});
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
+  ?error("aaaa4 ~p", [{Parent, FileDoc}]),
     ?run(begin
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
@@ -179,7 +183,7 @@ fix_parent_links(Parent, Entry) ->
     ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
     ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
     ok = datastore:add_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}]),
-    set_scope(FileDoc, Scope#document.key).
+    ok = set_scope(FileDoc, Scope#document.key).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -696,9 +700,20 @@ update_scopes(Entry, #document{key = NewScopeUUID} = NewScope) ->
              end
          end).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets scope for single entry
+%% @end
+%%--------------------------------------------------------------------
+-spec set_scope(Entry :: entry(), Scope :: datastore:key()) -> ok | datastore:generic_error().
 set_scope(Entry, Scope) ->
   Diff = #{scope => Scope},
-  {ok, _} = update(Entry, Diff).
+  case update(Entry, Diff) of
+    {ok, _} ->
+      ok;
+    Error ->
+      Error
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -710,8 +725,7 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
     ?run(begin
              SetterFun =
                  fun(CurrentEntry, ScopeUUID) ->
-                     {ok, CurrentUUID} = to_uuid(CurrentEntry),
-                     set_scope(CurrentUUID, ScopeUUID)
+                     set_scope(CurrentEntry, ScopeUUID)
                  end,
 
              Master = self(),
@@ -842,7 +856,7 @@ location_ref(ProviderId) ->
 %% Sets link's scopes for links connected with given document.
 %% @end
 %%--------------------------------------------------------------------
--spec set_link_context(Doc :: datastore:document()) -> ok.
+-spec set_link_context(Doc :: datastore:document() | datastore:key()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
 set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, scope = MotherScope}}) ->
   SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
@@ -850,23 +864,11 @@ set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, 
     SPACES_BASE_DIR_UUID ->
       set_link_context(ScopeUUID);
     _ ->
+      ?error("qqqq"),
       erlang:put(mother_scope, oneprovider:get_provider_id()),
       erlang:put(other_scopes, [])
   end,
   ok;
-set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true}}) ->
-    SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
-    case ScopeUUID of
-      ?ROOT_DIR_UUID ->
-        erlang:put(mother_scope, oneprovider:get_provider_id()),
-        erlang:put(other_scopes, []);
-      SPACES_BASE_DIR_UUID ->
-        erlang:put(mother_scope, oneprovider:get_provider_id()),
-        erlang:put(other_scopes, []);
-      _ ->
-        set_link_context(ScopeUUID)
-    end,
-    ok;
 set_link_context(#document{value = #file_meta{is_scope = false, scope = ScopeUUID}}) ->
     set_link_context(ScopeUUID);
 set_link_context(ScopeUUID) ->
@@ -874,9 +876,7 @@ set_link_context(ScopeUUID) ->
   erlang:put(mother_scope, MyProvID),
   try
     SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-    {ok, #document{value = #space_info{providers_supports = Supports}}} =
-      space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
-    OtherScopes = lists:map(fun({ProviderId, _}) -> ProviderId end, Supports) -- MyProvID,
+    OtherScopes = dbsync_utils:get_providers_for_space(SpaceId) -- [MyProvID],
     erlang:put(other_scopes, OtherScopes)
   catch
     E1:E2 ->

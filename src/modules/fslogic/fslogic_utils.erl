@@ -19,7 +19,7 @@
 %% API
 -export([random_ascii_lowercase_sequence/1, get_parent/1, gen_storage_file_id/1]).
 -export([get_local_file_location/1, get_local_file_locations/1, get_local_storage_file_locations/1]).
--export([wait_for_links/2, wait_for_file_meta/2]).
+-export([wait_for_file_meta/2]).
 
 %%%===================================================================
 %%% API functions
@@ -87,25 +87,6 @@ get_local_storage_file_locations(Entry) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Waiting for links document associated with file_meta to be present.
-%% @end
-%%--------------------------------------------------------------------
--spec wait_for_links(file_meta:uuid(), non_neg_integer()) -> ok | no_return().
-wait_for_links(FileUuid, 0) ->
-    ?error("Waiting for links document, for file ~p failed.", [FileUuid]),
-    throw(no_link_document);
-wait_for_links(FileUuid, Retries) ->
-    case file_meta:exists({uuid, links_utils:links_doc_key(FileUuid)}) of
-        true ->
-            ok;
-        false ->
-            timer:sleep(timer:seconds(1)),
-            wait_for_links(FileUuid, Retries - 1)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Waiting for file_meta with given file_uuid to be present.
 %% @end
 %%--------------------------------------------------------------------
@@ -119,5 +100,5 @@ wait_for_file_meta(FileUuid, Retries) ->
             ok;
         false ->
             timer:sleep(timer:seconds(1)),
-            wait_for_links(FileUuid, Retries - 1)
+            wait_for_file_meta(FileUuid, Retries - 1)
     end.

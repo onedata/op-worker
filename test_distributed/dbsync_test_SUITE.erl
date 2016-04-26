@@ -58,6 +58,8 @@ global_stream_test(MultiConfig) ->
     {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
     {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
 
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
+
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
             rpc:call(WorkerP2, dbsync_worker, apply_batch_changes, [undefined, SpaceId, BatchToSend])
@@ -91,9 +93,9 @@ global_stream_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1, Prov1ID)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2, Prov1ID)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3, Prov1ID)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
@@ -113,7 +115,7 @@ global_stream_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID, Prov1ID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -149,6 +151,8 @@ global_stream_document_remove_test(MultiConfig) ->
     {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
     {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
 
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
+
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
             rpc:call(WorkerP2, dbsync_worker, apply_batch_changes, [undefined, SpaceId, BatchToSend])
@@ -171,7 +175,8 @@ global_stream_document_remove_test(MultiConfig) ->
 
             {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(UUID1)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get,
+                [disk_only, file_meta, links_utils:links_doc_key(UUID1, Prov1ID)]),
 
             Map0 = #{},
             _Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0)
@@ -189,7 +194,8 @@ global_stream_document_remove_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, datastore, get,
+                            [disk_only, file_meta, links_utils:links_doc_key(UUID, Prov1ID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -267,6 +273,7 @@ global_stream_with_proto_test(MultiConfig) ->
     {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
     {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
 
+    Prov1ID = rpc:call(WorkerP1, oneprovider, get_provider_id, []),
 
     Dirs = lists:map(
         fun(N) ->
@@ -299,9 +306,9 @@ global_stream_with_proto_test(MultiConfig) ->
             {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
             {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1, Prov1ID)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2, Prov1ID)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3, Prov1ID)]),
 
             Map0 = #{},
             Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
@@ -321,7 +328,7 @@ global_stream_with_proto_test(MultiConfig) ->
                                 Reason1
                         end,
                     LocalLRev =
-                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID)]) of
+                        case rpc:call(WorkerP2, file_meta, get, [links_utils:links_doc_key(UUID, Prov1ID)]) of
                             {ok, #document{rev = LRev2}} ->
                                 LRev2;
                             {error, Reason2} ->
@@ -368,10 +375,8 @@ init_per_testcase(_, Config) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
     ConfigP1 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP1]}),
     ConfigP2 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP2]}),
-    ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
-    ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
 
-    test_utils:mock_new(Workers, [dbsync_proto, oneprovider, dbsync_utils]),
+    test_utils:mock_new(Workers, [oneprovider]),
 
     test_utils:mock_expect([WorkerP1], oneprovider, get_provider_id,
         fun() ->
@@ -381,6 +386,11 @@ init_per_testcase(_, Config) ->
         fun() ->
             <<"provider_2">>
         end),
+
+    ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
+    ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
+
+    test_utils:mock_new(Workers, [dbsync_proto, dbsync_utils]),
 
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_providers_for_space,
         fun(_) ->
