@@ -137,7 +137,7 @@ ensure_guid(_CTX, {guid, FileGUID}) ->
 ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
     lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, Path}}, fun
         (#file_attr{uuid = GUID}) ->
-            GUID
+            {guid, GUID}
     end).
 
 %%--------------------------------------------------------------------

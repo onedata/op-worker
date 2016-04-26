@@ -182,6 +182,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                     #fslogic_ctx{session_id = SessionId} = Context,
                     {ok, #document{value = #space_info{providers = ProviderIds}}} =
                         space_info:get_or_fetch(SessionId, SpaceId),
+                    ?info("Providers for space ~p: ~p", [SpaceId, ProviderIds]),
                     case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                         {_, true} ->
                             {Context, [oneprovider:get_provider_id()]};
@@ -199,6 +200,7 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
                                 fslogic_context:set_space_id(Context, Entry),
 
                             {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(SessionId, SpaceId),
+                            ?info("Providers for space ~p: ~p", [SpaceId, ProviderIds]),
                             case {ProviderIds, lists:member(oneprovider:get_provider_id(), ProviderIds)} of
                                 {_, true} ->
                                     {NewCtx, [oneprovider:get_provider_id()]};
@@ -213,6 +215,8 @@ run_and_catch_exceptions(Function, Context, Request, Type) ->
             end,
 
         Self = oneprovider:get_provider_id(),
+
+        ?info("Reroute info: ~p ~p", [Self, Providers]),
         case lists:member(Self, Providers) of
             true ->
                 apply(Function, [NextCTX, Request]);

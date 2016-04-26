@@ -17,6 +17,7 @@
 -include_lib("ctool/include/oz/oz_groups.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
+-include_lib("ctool/include/oz/oz_providers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/message_id.hrl").
@@ -65,45 +66,25 @@
                 {<<"displayed_name">>, <<"space_name1">>},
                 {<<"users">>, [<<"user1">>]},
                 {<<"groups">>, [<<"group1">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>},
-                        {<<"supported_size">>, 1000000000}
-                    ]}
-                ]}
+                {<<"providers">>, [<<"p1">>]}
             ]},
             {<<"space_id2">>, [
                 {<<"displayed_name">>, <<"space_name2">>},
                 {<<"users">>, [<<"user1">>, <<"user2">>]},
                 {<<"groups">>, [<<"group1">>, <<"group2">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>},
-                        {<<"supported_size">>, 1000000000}
-                    ]}
-                ]}
+                {<<"providers">>, [<<"p1">>]}
             ]},
             {<<"space_id3">>, [
                 {<<"displayed_name">>, <<"space_name3">>},
                 {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]},
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>},
-                        {<<"supported_size">>, 1000000000}
-                    ]}
-                ]}
+                {<<"providers">>, [<<"p1">>]}
             ]},
             {<<"space_id4">>, [
                 {<<"displayed_name">>, <<"space_name4">>},
                 {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]},
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
-                {<<"providers">>, [
-                    {<<"p1">>, [
-                        {<<"storage">>, <<"/mnt/st1">>},
-                        {<<"supported_size">>, 1000000000}
-                    ]}
-                ]}
+                {<<"providers">>, [<<"p1">>]}
             ]}
         ]}
 ]).
@@ -141,6 +122,13 @@ clear_assume_all_files_in_space(Config) ->
 -spec domain_to_provider_id(Domain :: atom()) -> binary().
 domain_to_provider_id(Domain) ->
     atom_to_binary(Domain, unicode).
+
+%%-------------------------------------------------------------------
+%% @doc Returns domain based on worker's provider id
+%%--------------------------------------------------------------------
+-spec provider_id_to_domain(ProviderId :: binary()) -> atom().
+provider_id_to_domain(ProviderId) ->
+    binary_to_atom(ProviderId, unicode).
 
 
 %%--------------------------------------------------------------------
@@ -406,19 +394,24 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 
     test_utils:mock_expect(AllWorkers, oz_providers, get_spaces,
         fun(PID) ->
-
-
             ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
                 Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
-                lists:foldl(fun({CPid, _}, CAcc) ->
+                lists:foldl(fun(CPid, CAcc) ->
                     ProvId0 = domain_to_provider_id(proplists:get_value(CPid, DomainMappings)),
                     maps:put(ProvId0, maps:get(CPid, CAcc, []) ++ [SpaceId], CAcc)
                 end, AccIn, Providers0)
             end, #{}, SpacesSetup),
 
-%%            ct:print("ProvMap ~p", [ProvMap]),
+            ct:print("ProvMap ~p", [ProvMap]),
 
             {ok, maps:get(PID, ProvMap)}
+        end),
+
+    test_utils:mock_expect(AllWorkers, oz_providers, get_details,
+        fun(_, PID) ->
+            Domain = provider_id_to_domain(PID),
+            Workers = get_same_domain_workers(Config, Domain),
+            {ok, #provider_details{id = PID, urls = [utils:get_host(Worker) || Worker <- Workers]}}
         end),
 
     MasterWorkers = lists:map(fun(Domain) ->
@@ -474,16 +467,22 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
         end, AccIn, Users)
     end, #{}, GroupUsers),
 
+    SpacesToProviders = lists:map(fun({SpaceId, SpaceConfig}) ->
+        Providers = proplists:get_value(<<"providers">>, SpaceConfig),
+        ProviderIds = [domain_to_provider_id(proplists:get_value(CPid, DomainMappings)) || CPid <- Providers],
+        {SpaceId, ProviderIds}
+    end, SpacesSetup),
+
 %%    ct:print("UserToGroups ~p", [UserToGroups]),
 
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
         AccIn ++ [{UserId, Spaces, maps:get(UserId, UserToGroups, [])}]
     end, [], UserToSpaces),
 
-    ct:print("Users ~p", [Users]),
+%%    ct:print("Users ~p", [Users]),
 
     file_meta_mock_setup(AllWorkers),
-    oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers),
+    oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
 
     proplists:compact(
@@ -527,10 +526,9 @@ teardown_storage(Worker, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_spaces_mock_setup(Workers :: node() | [node()],
-    [{binary(), binary()}], [{binary(), [binary()]}]) ->
+    [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [binary()]}]) ->
     ok.
-oz_spaces_mock_setup(Workers, Spaces, Users) ->
-    Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
+oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
     test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
@@ -540,8 +538,8 @@ oz_spaces_mock_setup(Workers, Spaces, Users) ->
     ),
 
     test_utils:mock_expect(Workers, oz_spaces, get_providers,
-        fun(_, _SpaceId) ->
-            {ok, [domain_to_provider_id(Domain) || Domain <- Domains]}
+        fun(_, SpaceId) ->
+            {ok, proplists:get_value(SpaceId, SpacesToProviders)}
         end
     ),
 
