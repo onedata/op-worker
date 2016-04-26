@@ -71,7 +71,6 @@ public:
 
     virtual void setUserCTX(std::unordered_map<std::string, std::string> args)
     {
-        throw std::system_error{std::make_error_code(std::errc::function_not_supported)};
     }
 
     virtual std::unordered_map<std::string, std::string> getUserCTX()
@@ -242,7 +241,8 @@ public:
 
     virtual asio::mutable_buffer sh_read(CTXPtr ctx,
         const boost::filesystem::path &p, asio::mutable_buffer buf,
-        off_t offset, const std::unordered_map<std::string, std::string> &parameters)
+        off_t offset,
+        const std::unordered_map<std::string, std::string> &parameters)
     {
         auto promise = std::make_shared<std::promise<asio::mutable_buffer>>();
         auto future = promise->get_future();
@@ -257,7 +257,8 @@ public:
                 promise->set_value(input);
         };
 
-        ash_read(std::move(ctx), p, buf, offset, parameters, std::move(callback));
+        ash_read(
+            std::move(ctx), p, buf, offset, parameters, std::move(callback));
         return waitFor(future);
     }
 
@@ -319,6 +320,11 @@ public:
 
         ash_release(std::move(ctx), p, std::move(callback));
         return waitFor(future);
+    }
+
+    virtual bool needsDataConsistencyCheck()
+    {
+        return false;
     }
 
     static int getFlagsValue(FlagsSet flags)
