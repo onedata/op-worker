@@ -398,6 +398,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     GlobalSetup = proplists:get_value(<<"test_global_setup">>, ConfigJSON, ?DEFAULT_GLOBAL_SETUP),
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
+    UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
 
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     catch test_utils:mock_new(AllWorkers, oneprovider),
@@ -456,11 +457,18 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 
 %%    ct:print("GroupUsers ~p", [GroupUsers]),
 
-    UserToSpaces = lists:foldl(fun({SpaceId, Users}, AccIn) ->
+    UserToSpaces0 = lists:foldl(fun({SpaceId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
             maps:put(UserId, [{SpaceId, proplists:get_value(SpaceId, Spaces)} | maps:get(UserId, CAcc, [])], CAcc)
         end, AccIn, Users)
     end, #{}, SpaceUsers),
+
+    UserToSpaces = maps:map(fun(UserId, Spaces) ->
+        UserConfig = proplists:get_value(UserId, UsersSetup),
+        DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
+        DefaultSpace = {DefaultSpaceId, proplists:get_value(DefaultSpaceId, Spaces)},
+        [DefaultSpace | Spaces -- [DefaultSpace]]
+    end, UserToSpaces0),
 
 %%    ct:print("UserToSpaces ~p", [UserToSpaces]),
 

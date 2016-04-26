@@ -164,7 +164,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     },
     {ok, FileUuid} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta])),
     {ok, FileUuid2} = ?assertMatch({ok, _}, rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, FileMeta2])),
-    {ok, _} = lfm_proxy:create(W1, SessionId, <<"file_to_compare">>, 8#777),
+    {ok, _} = lfm_proxy:create(W1, SessionId, <<"/file_to_compare">>, 8#777),
 
     %when
     rpc:call(W1, dbsync_events, change_replicated,
