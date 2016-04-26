@@ -9,7 +9,7 @@
 %%% CDMI tests
 %%% @end
 %%%-------------------------------------------------------------------
--module(cdmi_test_SUITE).
+-module(multi_provider_cdmi_test_SUITE).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").

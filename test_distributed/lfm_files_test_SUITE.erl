@@ -62,8 +62,8 @@ all() ->
 fslogic_new_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     RootUUID1 = get_uuid_privileged(Worker, SessId1, <<"/">>),
     RootUUID2 = get_uuid_privileged(Worker, SessId2, <<"/">>),
@@ -98,8 +98,8 @@ fslogic_new_file_test(Config) ->
 lfm_create_and_access_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     FilePath1 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
     FilePath2 = <<"/spaces/space_name3/", (generator:gen_name())/binary>>,
@@ -157,8 +157,8 @@ lfm_create_and_access_test(Config) ->
 lfm_create_and_unlink_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
     _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
@@ -186,8 +186,8 @@ lfm_create_and_unlink_test(Config) ->
 lfm_write_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     _RootUUID1 = get_uuid_privileged(W, SessId1, <<"/">>),
     _RootUUID2 = get_uuid_privileged(W, SessId2, <<"/">>),
@@ -242,7 +242,7 @@ lfm_write_test(Config) ->
 lfm_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
 
@@ -268,7 +268,7 @@ lfm_stat_test(Config) ->
 lfm_synch_stat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test5">>, 8#755)),
 
@@ -290,7 +290,7 @@ lfm_synch_stat_test(Config) ->
 lfm_truncate_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/test6">>, 8#755)),
 
@@ -322,8 +322,8 @@ lfm_truncate_test(Config) ->
 lfm_acl_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    SessId1 = ?config({session_id, 1}, Config),
-    UserId1 = ?config({user_id, 1}, Config),
+    SessId1 = ?config({session_id, <<"user1">>}, Config),
+    UserId1 = ?config({user_id, <<"user1">>}, Config),
     [{GroupId1, _GroupName1} | _] = ?config({groups, 1}, Config),
     FileName = <<"/test_file_acl">>,
     DirName = <<"/test_dir_acl">>,
@@ -357,7 +357,7 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(Config),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(_, Config) ->

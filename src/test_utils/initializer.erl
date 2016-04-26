@@ -24,13 +24,89 @@
 
 %% API
 -export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
-    create_test_users_and_spaces/1, create_test_users_and_spaces/2, clean_test_users_and_spaces/1,
+    create_test_users_and_spaces/2, create_test_users_and_spaces/3, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
 
 -define(TIMEOUT, timer:seconds(5)).
+-define(DEFAULT_GLOBAL_SETUP, [
+        {<<"users">>, [
+            {<<"user1">>, [
+                {<<"default_space">>, <<"space1">>}
+            ]},
+            {<<"user2">>, [
+                {<<"default_space">>, <<"space2">>}
+            ]},
+            {<<"user3">>, [
+                {<<"default_space">>, <<"space3">>}
+            ]},
+            {<<"user4">>, [
+                {<<"default_space">>, <<"space4">>}
+            ]}
+        ]},
+        {<<"groups">>, [
+            {<<"group1">>, [
+                {<<"users">>, [<<"user1">>]}
+            ]},
+            {<<"group2">>, [
+                {<<"users">>, [<<"user1">>, <<"user2">>]}
+            ]},
+            {<<"group3">>, [
+                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]}
+            ]},
+            {<<"group4">>, [
+                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]}
+            ]}
+        ]},
+        {<<"spaces">>, [
+            {<<"space1">>, [
+                {<<"displayed_name">>, <<"space1">>},
+                {<<"users">>, [<<"user1">>]},
+                {<<"groups">>, [<<"group1">>]},
+                {<<"providers">>, [
+                    {<<"p1">>, [
+                        {<<"storage">>, <<"/mnt/st1">>},
+                        {<<"supported_size">>, 1000000000}
+                    ]}
+                ]}
+            ]},
+            {<<"space2">>, [
+                {<<"displayed_name">>, <<"space2">>},
+                {<<"users">>, [<<"user1">>, <<"user2">>]},
+                {<<"groups">>, [<<"group1">>, <<"group2">>]},
+                {<<"providers">>, [
+                    {<<"p1">>, [
+                        {<<"storage">>, <<"/mnt/st1">>},
+                        {<<"supported_size">>, 1000000000}
+                    ]}
+                ]}
+            ]},
+            {<<"space3">>, [
+                {<<"displayed_name">>, <<"space3">>},
+                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]},
+                {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
+                {<<"providers">>, [
+                    {<<"p1">>, [
+                        {<<"storage">>, <<"/mnt/st1">>},
+                        {<<"supported_size">>, 1000000000}
+                    ]}
+                ]}
+            ]},
+            {<<"space4">>, [
+                {<<"displayed_name">>, <<"space4">>},
+                {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]},
+                {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
+                {<<"providers">>, [
+                    {<<"p1">>, [
+                        {<<"storage">>, <<"/mnt/st1">>},
+                        {<<"supported_size">>, 1000000000}
+                    ]}
+                ]}
+            ]}
+        ]}
+]).
 
 %%%===================================================================
 %%% API
@@ -70,10 +146,10 @@ domain_to_provider_id(Domain) ->
 %%--------------------------------------------------------------------
 %% @doc Setup and mocking related with users and spaces, done on each provider
 %%--------------------------------------------------------------------
--spec create_test_users_and_spaces(Config :: list()) -> list().
-create_test_users_and_spaces(Config) ->
-    DomainWorkers = get_different_domain_workers(Config),
-    create_test_users_and_spaces(DomainWorkers, Config).
+-spec create_test_users_and_spaces(ConfigPath :: string(), JsonConfig :: list()) -> list().
+create_test_users_and_spaces(ConfigPath, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    create_test_users_and_spaces(Workers, ConfigPath, Config).
 
 %%--------------------------------------------------------------------
 %% @doc Cleanup and unmocking related with users and spaces
@@ -98,7 +174,6 @@ clean_test_users_and_spaces(Config) ->
 -spec clean_test_users_and_spaces_no_validate(Config :: list()) -> term().
 clean_test_users_and_spaces_no_validate(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    DomainWorkers = get_different_domain_workers(Config),
 
     lists:foreach(fun(W) ->
         initializer:teardown_sesion(W, Config),
@@ -176,22 +251,22 @@ clear_models(Worker, Names) ->
 %%--------------------------------------------------------------------
 %% @doc Setup test users' sessions on server
 %%--------------------------------------------------------------------
--spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
+-spec setup_session(Worker :: node(), [{UserId :: binary(),
     [Spaces :: {binary(), binary()}], [Groups :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
+setup_session(Worker, [{UserId, Spaces, Groups} | R], Config) ->
     Self = self(),
 
     {SpaceIds, SpaceNames} = lists:unzip(Spaces),
     {GroupIds, _GroupNames} = lists:unzip(Groups),
 
-    Name = fun(Text, Num) -> name(Text, Num) end,
+    Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
 
-    SessId = Name("session_id", UserNum),
-    UserId = Name("user_id", UserNum),
+    SessId = Name("session_id", UserId),
+    UserId = UserId,
     Iden = #identity{user_id = UserId},
-    UserName = Name("username", UserNum),
+    UserName = Name("name", UserId),
 
     lists:foreach(fun(SpaceName) ->
         case get(SpaceName) of
@@ -211,12 +286,12 @@ setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
     [{ok, _} = rpc:call(Worker, onedata_group, get_or_fetch, [Id, #auth{}]) || Id <- GroupIds],
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
-        {{spaces, UserNum}, Spaces},
-        {{groups, UserNum}, Groups},
-        {{user_id, UserNum}, UserId},
-        {{user_name, UserNum}, UserName},
-        {{session_id, UserNum}, SessId},
-        {{fslogic_ctx, UserNum}, #fslogic_ctx{session = Session}}
+        {{spaces, UserId}, Spaces},
+        {{groups, UserId}, Groups},
+        {{user_id, UserId}, UserId},
+        {{user_name, UserId}, UserName},
+        {{session_id, UserId}, SessId},
+        {{fslogic_ctx, UserId}, #fslogic_ctx{session = Session}}
         | setup_session(Worker, R, Config)
     ].
 
@@ -315,18 +390,38 @@ communicator_mock(Workers) ->
 %%--------------------------------------------------------------------
 %% @doc Setup and mocking related with users and spaces on all given providers.
 %%--------------------------------------------------------------------
--spec create_test_users_and_spaces([Worker :: node()], Config :: list()) -> list().
-create_test_users_and_spaces(AllWorkers, Config) ->
+-spec create_test_users_and_spaces([Worker :: node()], ConfigPath :: string(), Config :: list()) -> list().
+create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
+    {ok, ConfigJSONBin} = file:read_file(ConfigPath),
+    ConfigJSON = json_utils:decode(ConfigJSONBin),
+
+    GlobalSetup = proplists:get_value(<<"test_global_setup">>, ConfigJSON, ?DEFAULT_GLOBAL_SETUP),
+    DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
+    SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
+
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
     catch test_utils:mock_new(AllWorkers, oneprovider),
     catch test_utils:mock_new(AllWorkers, oz_providers),
 
+%%    ct:print("Config 1: ~p", [Config]),
+%%    ct:print("Config 2: ~p", [ConfigJSON]),
+%%    ct:print("Config 3: ~p", [DomainMappings]),
+
     test_utils:mock_expect(AllWorkers, oz_providers, get_spaces,
-        fun(_PID) ->
-            {ok, [
-                <<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>,
-                <<"space_id5">>, <<"space_id6">>
-            ]}
+        fun(PID) ->
+
+
+            ProvMap = lists:foldl(fun({SpaceId, SpaceConfig}, AccIn) ->
+                Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
+                lists:foldl(fun({CPid, _}, CAcc) ->
+                    ProvId0 = domain_to_provider_id(proplists:get_value(CPid, DomainMappings)),
+                    maps:put(ProvId0, [SpaceId | maps:get(CPid, CAcc, [])], CAcc)
+                end, AccIn, Providers0)
+            end, #{}, SpacesSetup),
+
+            ct:print("ProvMap ~p", [ProvMap]),
+
+            {ok, maps:get(PID, ProvMap)}
         end),
 
     MasterWorkers = lists:map(fun(Domain) ->
@@ -342,43 +437,53 @@ create_test_users_and_spaces(AllWorkers, Config) ->
         MWorker
     end, Domains),
 
-    Space1 = {<<"space_id1">>, <<"space_name1">>},
-    Space2 = {<<"space_id2">>, <<"space_name2">>},
-    Space3 = {<<"space_id3">>, <<"space_name3">>},
-    Space4 = {<<"space_id4">>, <<"space_name4">>},
-    Spaces = [Space1, Space2, Space3, Space4],
+    Spaces = lists:map(fun({SpaceId, SpaceConfig}) ->
+        DisplayName = proplists:get_value(<<"displayed_name">>, SpaceConfig),
+        {SpaceId, DisplayName}
+        end, SpacesSetup),
 
-    Group1 = {<<"group_id1">>, <<"group_name1">>},
-    Group2 = {<<"group_id2">>, <<"group_name2">>},
-    Group3 = {<<"group_id3">>, <<"group_name3">>},
-    Group4 = {<<"group_id4">>, <<"group_name4">>},
-    Groups = [Group1, Group2, Group3, Group4],
+    Groups = [{GroupId, GroupId} || {GroupId, _} <- proplists:get_value(<<"groups">>, GlobalSetup)],
 
-    User1 = {1, [Space1, Space2, Space3, Space4], [Group1, Group2, Group3, Group4]},
-    User2 = {2, [Space2, Space3, Space4], [Group2, Group3, Group4]},
-    User3 = {3, [Space3, Space4], [Group3, Group4]},
-    User4 = {4, [Space4], [Group4]},
+    SpaceUsers = lists:map(fun({SpaceId, SpaceConfig}) ->
+        {SpaceId, proplists:get_value(<<"users">>, SpaceConfig)}
+    end, SpacesSetup),
 
-    SpaceUsers = [
-        {<<"space_id1">>, [<<"user_id1">>]},
-        {<<"space_id2">>, [<<"user_id1">>, <<"user_id2">>]},
-        {<<"space_id3">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>]},
-        {<<"space_id4">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>, <<"user_id4">>]}
-    ],
+%%    ct:print("SpaceUsers ~p", [SpaceUsers]),
 
-    GroupUsers = [
-        {<<"group_id1">>, [<<"user_id1">>]},
-        {<<"group_id2">>, [<<"user_id1">>, <<"user_id2">>]},
-        {<<"group_id3">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>]},
-        {<<"group_id4">>, [<<"user_id1">>, <<"user_id2">>, <<"user_id3">>, <<"user_id4">>]}
-    ],
+    GroupUsers = lists:map(fun({GroupId, GroupConfig}) ->
+        {GroupId, proplists:get_value(<<"users">>, GroupConfig)}
+    end, proplists:get_value(<<"groups">>, GlobalSetup)),
+
+%%    ct:print("GroupUsers ~p", [GroupUsers]),
+
+    UserToSpaces = lists:foldl(fun({SpaceId, Users}, AccIn) ->
+        lists:foldl(fun(UserId, CAcc) ->
+            maps:put(UserId, [{SpaceId, proplists:get_value(SpaceId, Spaces)} | maps:get(UserId, CAcc, [])], CAcc)
+        end, AccIn, Users)
+    end, #{}, SpaceUsers),
+
+%%    ct:print("UserToSpaces ~p", [UserToSpaces]),
+
+    UserToGroups = lists:foldl(fun({GroupId, Users}, AccIn) ->
+        lists:foldl(fun(UserId, CAcc) ->
+            maps:put(UserId, [{GroupId, proplists:get_value(GroupId, Groups)} | maps:get(UserId, CAcc, [])], CAcc)
+        end, AccIn, Users)
+    end, #{}, GroupUsers),
+
+%%    ct:print("UserToGroups ~p", [UserToGroups]),
+
+    Users = maps:fold(fun(UserId, Spaces, AccIn) ->
+        [{UserId, Spaces, maps:get(UserId, UserToGroups)} | AccIn]
+    end, [], UserToSpaces),
+
+%%    ct:print("Users ~p", [Users]),
 
     file_meta_mock_setup(AllWorkers),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
 
     proplists:compact(
-        lists:flatten([initializer:setup_session(W, [User1, User2, User3, User4], Config) || W <- MasterWorkers])
+        lists:flatten([initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).
 
 %%--------------------------------------------------------------------
@@ -409,14 +514,6 @@ get_same_domain_workers(Config, Domain) ->
 teardown_storage(Worker, Config) ->
     TmpDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     "" = rpc:call(Worker, os, cmd, ["rm -rf " ++ TmpDir]).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Appends Num to Text and converts it to binary.
-%%--------------------------------------------------------------------
--spec name(Text :: string(), Num :: integer()) -> binary().
-name(Text, Num) ->
-    list_to_binary(Text ++ integer_to_list(Num)).
 
 %%--------------------------------------------------------------------
 %% @private

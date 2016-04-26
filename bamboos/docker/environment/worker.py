@@ -257,6 +257,9 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
                     'ns': worker_ips,
                     'a': []
                 }
+            },
+            'domain_mappings': {
+                instance: cluster_domain(instance, uid)
             }
         }
         common.merge(current_output, domains)

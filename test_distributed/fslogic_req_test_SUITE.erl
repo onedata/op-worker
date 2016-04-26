@@ -61,8 +61,8 @@ all() ->
 fslogic_get_file_attr_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
@@ -76,10 +76,10 @@ fslogic_get_file_attr_test(Config) ->
         {SessId2, UserId2, 8#1770, 0, <<"/">>},
         {SessId1, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
         {SessId2, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
-        {SessId1, <<"space_id1">>, 8#1770, 0, <<"/spaces/space_name1">>},
-        {SessId2, <<"space_id2">>, 8#1770, 0, <<"/spaces/space_name2">>},
-        {SessId1, <<"space_id3">>, 8#1770, 0, <<"/spaces/space_name3">>},
-        {SessId2, <<"space_id4">>, 8#1770, 0, <<"/spaces/space_name4">>}
+        {SessId1, <<"space1">>, 8#1770, 0, <<"/spaces/space_name1">>},
+        {SessId2, <<"space2">>, 8#1770, 0, <<"/spaces/space_name2">>},
+        {SessId1, <<"space3">>, 8#1770, 0, <<"/spaces/space_name3">>},
+        {SessId2, <<"space4">>, 8#1770, 0, <<"/spaces/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/t1_dir">>}}
@@ -87,8 +87,8 @@ fslogic_get_file_attr_test(Config) ->
 
 fslogic_mkdir_and_rmdir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
     RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
@@ -144,10 +144,10 @@ fslogic_mkdir_and_rmdir_test(Config) ->
 
 fslogic_read_dir_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     ValidateReadDir = fun({SessId, Path, NameList}) ->
         FileAttr = ?req(Worker, SessId, #get_file_attr{entry = {path, Path}}),
@@ -220,10 +220,10 @@ fslogic_read_dir_test(Config) ->
 
 chmod_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     lists:foreach(
         fun(SessId) ->
@@ -245,10 +245,10 @@ chmod_test(Config) ->
 
 default_permissions_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     lists:foreach(
         fun({Path, SessIds}) ->
@@ -386,10 +386,10 @@ default_permissions_test(Config) ->
 
 simple_rename_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    {_SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
-    {_SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {_SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {_SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     RootFileAttr1 = ?req(Worker, SessId1, #get_file_attr{entry = {path, <<"/">>}}),
     RootFileAttr2 = ?req(Worker, SessId2, #get_file_attr{entry = {path, <<"/">>}}),
@@ -436,10 +436,10 @@ simple_rename_test(Config) ->
 
 update_times_test(Config) ->
     [Worker, _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, 2}, Config), ?config({user_id, 2}, Config)},
-    {SessId3, _UserId3} = {?config({session_id, 3}, Config), ?config({user_id, 3}, Config)},
-    {SessId4, _UserId4} = {?config({session_id, 4}, Config), ?config({user_id, 4}, Config)},
+    {SessId1, _UserId1} = {?config({session_id, <<"user1">>}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} = {?config({session_id, <<"user2">>}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId3, _UserId3} = {?config({session_id, <<"user3">>}, Config), ?config({user_id, <<"user3">>}, Config)},
+    {SessId4, _UserId4} = {?config({session_id, <<"user4">>}, Config), ?config({user_id, <<"user4">>}, Config)},
 
     GetTimes =
         fun(Entry, SessId) ->
@@ -511,7 +511,7 @@ init_per_testcase(_, Config) ->
     test_utils:mock_new(Workers, luma_utils),
     test_utils:mock_expect(Workers, luma_utils, get_storage_type, fun(_) -> ?DIRECTIO_HELPER_NAME end),
     initializer:communicator_mock(Workers),
-    initializer:create_test_users_and_spaces(Workers, Config).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),

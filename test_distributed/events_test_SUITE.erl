@@ -180,14 +180,14 @@ init_per_testcase(Case, Config) when
     end, lists:seq(0, 4)),
     {ok, SubId} = create_dafault_subscription(Case, Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    initializer:create_test_users_and_spaces([{session_ids, SessIds}, {subscription_id, SubId} | Config]);
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    initializer:create_test_users_and_spaces([{session_id, SessId} | Config]).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
 
 end_per_testcase(Case, Config) when
     Case =:= emit_read_event_should_execute_handler;

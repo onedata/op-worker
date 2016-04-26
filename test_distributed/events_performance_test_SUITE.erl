@@ -511,7 +511,7 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
         (_, _) -> ok
     end),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
-    initializer:create_test_users_and_spaces(Config);
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
 
 init_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -527,7 +527,7 @@ init_per_testcase(_, Config) ->
 
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
     session_setup(Worker, SessId, Iden, Self),
-    initializer:create_test_users_and_spaces([{session_id, SessId} | Config]).
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),

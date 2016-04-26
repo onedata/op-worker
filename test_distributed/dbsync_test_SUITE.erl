@@ -55,8 +55,8 @@ global_stream_test(MultiConfig) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
-    {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
-    {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
+    {SessId1P1, _} = {?config({session_id, <<"user1">>}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
+    {SessId1P2, _} = {?config({session_id, <<"user1">>}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
@@ -151,8 +151,8 @@ global_stream_document_remove_test(MultiConfig) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
-    {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
-    {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
+    {SessId1P1, _} = {?config({session_id, <<"user1">>}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
+    {SessId1P2, _} = {?config({session_id, <<"user1">>}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
     test_utils:mock_expect([WorkerP1], dbsync_proto, send_batch,
         fun(global, SpaceId, BatchToSend) ->
@@ -271,8 +271,8 @@ global_stream_with_proto_test(MultiConfig) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, ConfigP1),
     [WorkerP2 | _] = ?config(op_worker_nodes, ConfigP2),
 
-    {SessId1P1, _} = {?config({session_id, 1}, ConfigP1), ?config({user_id, 1}, ConfigP1)},
-    {SessId1P2, _} = {?config({session_id, 1}, ConfigP2), ?config({user_id, 1}, ConfigP2)},
+    {SessId1P1, _} = {?config({session_id, <<"user1">>}, ConfigP1), ?config({user_id, <<"user1">>}, ConfigP1)},
+    {SessId1P2, _} = {?config({session_id, <<"user1">>}, ConfigP2), ?config({user_id, <<"user1">>}, ConfigP2)},
 
 
     Dirs = lists:map(
@@ -383,8 +383,8 @@ init_per_testcase(_, Config) ->
 
     ConfigP1 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP1]}),
     ConfigP2 = lists:keystore(op_worker_nodes, 1, Config, {op_worker_nodes, [WorkerP2]}),
-    ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(ConfigP1),
-    ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(ConfigP2),
+    ConfigWithSessionInfoP1 = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), ConfigP1),
+    ConfigWithSessionInfoP2 = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), ConfigP2),
 
     ProviderId1 = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP1)),
     ProviderId2 = initializer:domain_to_provider_id(?GET_DOMAIN(WorkerP2)),
@@ -395,7 +395,7 @@ init_per_testcase(_, Config) ->
         end),
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_spaces_for_provider,
         fun(_) ->
-            [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>]
+            [<<"space1">>, <<"space2">>, <<"space3">>, <<"space4">>, <<"space5">>]
         end),
 
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, communicate,
