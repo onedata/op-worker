@@ -56,27 +56,27 @@
 
 all() ->
     ?ALL([
-        list_dir_test,
-        get_file_test,
-        metadata_test,
-        delete_file_test,
-        delete_dir_test,
-        create_file_test,
-        update_file_test,
-        create_dir_test,
-        capabilities_test,
-        choose_adequate_handler,
-        use_supported_cdmi_version,
-        use_unsupported_cdmi_version,
-        moved_permanently_test,
-        objectid_test,
-        request_format_check_test,
-        mimetype_and_encoding_test,
-        out_of_range_test,
-        partial_upload_test,
-        acl_test,
-        errors_test,
-        accept_header_test
+%%        list_dir_test,
+%%        get_file_test,
+%%        metadata_test,
+%%        delete_file_test,
+%%        delete_dir_test,
+%%        create_file_test,
+        update_file_test
+%%        create_dir_test,
+%%        capabilities_test,
+%%        choose_adequate_handler,
+%%        use_supported_cdmi_version,
+%%        use_unsupported_cdmi_version,
+%%        moved_permanently_test,
+%%        objectid_test,
+%%        request_format_check_test,
+%%        mimetype_and_encoding_test,
+%%        out_of_range_test,
+%%        partial_upload_test,
+%%        acl_test,
+%%        errors_test,
+%%        accept_header_test
 %%        copy_move_test %todo split into smaller tests and enable when copy/move will be working properly
     ]).
 
@@ -1748,6 +1748,7 @@ do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
 
 % Performs a single request using http_client
 do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
+    ct:print("CDMI: ~p", [cdmi_endpoint(Node) ++ RestSubpath]),
     http_client:request(
         Method,
         cdmi_endpoint(Node) ++ RestSubpath,
@@ -1829,7 +1830,7 @@ open_file(Worker, Config, Path, OpenMode) ->
 
 write_to_file(Config, Path, Data, Offset) ->
     [WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    {ok, FileHandle} = open_file(Config, Path, write),
+    {ok, FileHandle} = open_file(WorkerP1, Config, Path, write),
     Result = lfm_proxy:write(WorkerP1, FileHandle, Offset, Data),
     lfm_proxy:close(WorkerP1, FileHandle),
     Result.
@@ -1841,7 +1842,7 @@ get_file_content(Config, Path) ->
         {error, Error} -> {error, Error};
         {ok, Content} -> Content
     end,
-    lfm_proxy:close(WorkerP1, FileHandle),
+    lfm_proxy:close(WorkerP2, FileHandle),
     Result.
 
 mkdir(Config, Path) ->

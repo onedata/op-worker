@@ -146,23 +146,16 @@ create(SessId, Path) ->
     Mode :: file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | logical_file_manager:error_reply().
 create(SessId, Path, Mode) ->
-    CTX = fslogic_context:new(SessId),
-    {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalPath} = fslogic_path:gen_path(Entry, SessId),
-    {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
-    case file_meta:resolve_path(ParentPath) of
-        {ok, {#document{key = ParentUUID}, _}} ->
-            {ok, #document{key = SpaceUUID}} = fslogic_spaces:get_space({uuid, ParentUUID}, fslogic_context:get_user_id(CTX)),
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
+    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, ParentPath}}, fun
+        (#file_attr{uuid = ParentGUID}) ->
             lfm_utils:call_fslogic(SessId,
                 #get_new_file_location{
-                    name = Name, parent_uuid = fslogic_uuid:to_file_guid(ParentUUID, SpaceId), mode = Mode
+                    name = Name, parent_uuid = ParentGUID, mode = Mode
                 },
-                fun(#file_location{uuid = UUID}) -> {ok, UUID} end
-            );
-        {error, Error} -> {error, Error}
-    end.
+                fun(#file_location{uuid = GUID}) -> {ok, GUID} end
+            )
+        end).
 
 
 %%--------------------------------------------------------------------

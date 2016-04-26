@@ -13,6 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -129,22 +130,15 @@ ensure_uuid(CTX, {path, Path}) ->
 %% Converts given file entry to FileGUID.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:ext_file()) ->
+-spec ensure_guid(fslogic_worker:ctx(), fslogic_worker:file_guid_or_path()) ->
     {guid, fslogic_worker:file_guid()}.
-ensure_guid(_CTX, {uuid, UUID}) ->
-    {guid, to_file_guid(UUID)};
 ensure_guid(_CTX, {guid, FileGUID}) ->
     {guid, FileGUID};
-ensure_guid(_CTX, #document{key = UUID}) ->
-    {guid, to_file_guid(UUID)};
-ensure_guid(CTX, {path, Path}) ->
-    SpaceId = try fslogic_spaces:get_space_id(CTX, Path) of
-        SpaceId0 -> SpaceId0
-    catch
-        _:{not_in_space, _} ->
-            undefined
-    end,
-    {guid, to_file_guid(path_to_uuid(CTX, Path), SpaceId)}.
+ensure_guid(#fslogic_ctx{session_id = SessId}, {path, Path}) ->
+    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, Path}}, fun
+        (#file_attr{uuid = GUID}) ->
+            GUID
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
