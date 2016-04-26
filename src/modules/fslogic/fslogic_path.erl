@@ -130,6 +130,9 @@ gen_storage_path(Entry) ->
 %%--------------------------------------------------------------------
 -spec get_canonical_file_entry(Ctx :: fslogic_worker:ctx(), Tokens :: [file_meta:path()]) ->
     FileEntry :: file_meta:entry() | no_return().
+get_canonical_file_entry(#fslogic_ctx{session_id = ?ROOT_SESS_ID}, Tokens) ->
+    Path = fslogic_path:join(Tokens),
+    {path, Path};
 get_canonical_file_entry(Ctx, [<<?DIRECTORY_SEPARATOR>>]) ->
     UserId = fslogic_context:get_user_id(Ctx),
     {uuid, fslogic_uuid:default_space_uuid(UserId)};

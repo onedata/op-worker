@@ -324,7 +324,7 @@ lfm_acl_test(Config) ->
 
     SessId1 = ?config({session_id, <<"user1">>}, Config),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
-    [{GroupId1, _GroupName1} | _] = ?config({groups, 1}, Config),
+    [{GroupId1, _GroupName1} | _] = ?config(?config({groups, <<"user1">>}, Config), Config),
     FileName = <<"/test_file_acl">>,
     DirName = <<"/test_dir_acl">>,
 

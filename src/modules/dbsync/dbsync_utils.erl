@@ -37,7 +37,7 @@
     [oneprovider:id()].
 get_providers_for_space(SpaceId) ->
     try
-        {ok, #space_info{providers = ProviderIds}} = space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
+        {ok, #document{value = #space_info{providers = ProviderIds}}} = space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
         ProviderIds
     catch
         _:{_, {error, 'No such file or directory'}} ->

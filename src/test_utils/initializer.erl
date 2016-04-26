@@ -404,10 +404,6 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     catch test_utils:mock_new(AllWorkers, oneprovider),
     catch test_utils:mock_new(AllWorkers, oz_providers),
 
-%%    ct:print("Config 1: ~p", [Config]),
-%%    ct:print("Config 2: ~p", [ConfigJSON]),
-%%    ct:print("Config 3: ~p", [DomainMappings]),
-
     test_utils:mock_expect(AllWorkers, oz_providers, get_spaces,
         fun(PID) ->
 
@@ -416,11 +412,11 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                 Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
                 lists:foldl(fun({CPid, _}, CAcc) ->
                     ProvId0 = domain_to_provider_id(proplists:get_value(CPid, DomainMappings)),
-                    maps:put(ProvId0, [SpaceId | maps:get(CPid, CAcc, [])], CAcc)
+                    maps:put(ProvId0, maps:get(CPid, CAcc, []) ++ [SpaceId], CAcc)
                 end, AccIn, Providers0)
             end, #{}, SpacesSetup),
 
-            ct:print("ProvMap ~p", [ProvMap]),
+%%            ct:print("ProvMap ~p", [ProvMap]),
 
             {ok, maps:get(PID, ProvMap)}
         end),
@@ -459,7 +455,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 
     UserToSpaces0 = lists:foldl(fun({SpaceId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
-            maps:put(UserId, [{SpaceId, proplists:get_value(SpaceId, Spaces)} | maps:get(UserId, CAcc, [])], CAcc)
+            maps:put(UserId, maps:get(UserId, CAcc, []) ++ [{SpaceId, proplists:get_value(SpaceId, Spaces)}], CAcc)
         end, AccIn, Users)
     end, #{}, SpaceUsers),
 
@@ -474,14 +470,14 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 
     UserToGroups = lists:foldl(fun({GroupId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
-            maps:put(UserId, [{GroupId, proplists:get_value(GroupId, Groups)} | maps:get(UserId, CAcc, [])], CAcc)
+            maps:put(UserId, maps:get(UserId, CAcc, []) ++ [{GroupId, proplists:get_value(GroupId, Groups)}], CAcc)
         end, AccIn, Users)
     end, #{}, GroupUsers),
 
 %%    ct:print("UserToGroups ~p", [UserToGroups]),
 
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
-        [{UserId, Spaces, maps:get(UserId, UserToGroups)} | AccIn]
+        AccIn ++ [{UserId, Spaces, maps:get(UserId, UserToGroups)}]
     end, [], UserToSpaces),
 
 %%    ct:print("Users ~p", [Users]),
