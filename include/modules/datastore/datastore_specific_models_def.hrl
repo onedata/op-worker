@@ -57,6 +57,11 @@
     alias :: binary(),
     email_list :: [binary()],
     revision_history = [] :: [subscriptions:rev()],
+    % This field means that only public information is available about this
+    % user. This is the case when given user hasn't ever logged in to this
+    % provider, but basic information about him is required (e. g. he is a
+    % member of space or group together with user that is currently logged in).
+    % Public information contains id and name.
     public_only = false :: boolean()
 }).
 
