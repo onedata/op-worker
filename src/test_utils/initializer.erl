@@ -24,7 +24,7 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
+-export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1,
     create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
@@ -257,7 +257,9 @@ teardown_storage(Config) ->
 %%--------------------------------------------------------------------
 -spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
 space_storage_mock(Workers, StorageId) ->
+    ct:print("Workers: ~p~n", [Workers]),
     test_utils:mock_new(Workers, space_storage),
+    ct:print("StorageId: ~p~n", [StorageId]),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
     end).

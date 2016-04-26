@@ -1694,8 +1694,8 @@ init_per_suite(Config) ->
     initializer:setup_storage(ConfigWithNodes).
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    test_node_starter:clean_environment(Config).
+    initializer:teardown_storage(Config).%,
+%%    test_node_starter:clean_environment(Config).
 
 init_per_testcase(choose_adequate_handler, Config) ->
     Workers = ?config(op_worker_nodes, Config),

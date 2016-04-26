@@ -494,7 +494,6 @@ setup_onedata_user(UserId) ->
                                     }})
                     end,
 
-            ?dump({setup_onedata_user, UserId, Spaces}),
             lists:foreach(fun({SpaceId, _}) ->
                 SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
                 case exists({uuid, SpaceDirUuid}) of
