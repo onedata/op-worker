@@ -34,16 +34,16 @@
 -define(DEFAULT_GLOBAL_SETUP, [
         {<<"users">>, [
             {<<"user1">>, [
-                {<<"default_space">>, <<"space1">>}
+                {<<"default_space">>, <<"space_id1">>}
             ]},
             {<<"user2">>, [
-                {<<"default_space">>, <<"space2">>}
+                {<<"default_space">>, <<"space_id2">>}
             ]},
             {<<"user3">>, [
-                {<<"default_space">>, <<"space3">>}
+                {<<"default_space">>, <<"space_id3">>}
             ]},
             {<<"user4">>, [
-                {<<"default_space">>, <<"space4">>}
+                {<<"default_space">>, <<"space_id4">>}
             ]}
         ]},
         {<<"groups">>, [
@@ -61,8 +61,8 @@
             ]}
         ]},
         {<<"spaces">>, [
-            {<<"space1">>, [
-                {<<"displayed_name">>, <<"space1">>},
+            {<<"space_id1">>, [
+                {<<"displayed_name">>, <<"space_name1">>},
                 {<<"users">>, [<<"user1">>]},
                 {<<"groups">>, [<<"group1">>]},
                 {<<"providers">>, [
@@ -72,8 +72,8 @@
                     ]}
                 ]}
             ]},
-            {<<"space2">>, [
-                {<<"displayed_name">>, <<"space2">>},
+            {<<"space_id2">>, [
+                {<<"displayed_name">>, <<"space_name2">>},
                 {<<"users">>, [<<"user1">>, <<"user2">>]},
                 {<<"groups">>, [<<"group1">>, <<"group2">>]},
                 {<<"providers">>, [
@@ -83,8 +83,8 @@
                     ]}
                 ]}
             ]},
-            {<<"space3">>, [
-                {<<"displayed_name">>, <<"space3">>},
+            {<<"space_id3">>, [
+                {<<"displayed_name">>, <<"space_name3">>},
                 {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>]},
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>]},
                 {<<"providers">>, [
@@ -94,8 +94,8 @@
                     ]}
                 ]}
             ]},
-            {<<"space4">>, [
-                {<<"displayed_name">>, <<"space4">>},
+            {<<"space_id4">>, [
+                {<<"displayed_name">>, <<"space_name4">>},
                 {<<"users">>, [<<"user1">>, <<"user2">>, <<"user3">>, <<"user4">>]},
                 {<<"groups">>, [<<"group1">>, <<"group2">>, <<"group3">>, <<"group4">>]},
                 {<<"providers">>, [

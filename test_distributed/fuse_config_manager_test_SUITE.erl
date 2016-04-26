@@ -90,7 +90,7 @@ verify_storage_test_file_test(Config) ->
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 
     FileId = rpc:call(Worker, fslogic_utils, gen_storage_file_id, [{uuid, FileUuid}]),
-    SpaceUuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [<<"space1">>]),
+    SpaceUuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_uuid, [<<"space_id1">>]),
 
     Response1 = ?req(Worker, SessId1, #verify_storage_test_file{
         storage_id = StorageId, space_uuid = SpaceUuid,

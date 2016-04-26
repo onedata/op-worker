@@ -76,10 +76,10 @@ fslogic_get_file_attr_test(Config) ->
         {SessId2, UserId2, 8#1770, 0, <<"/">>},
         {SessId1, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
         {SessId2, <<"spaces">>, 8#1755, 0, <<"/spaces">>},
-        {SessId1, <<"space1">>, 8#1770, 0, <<"/spaces/space_name1">>},
-        {SessId2, <<"space2">>, 8#1770, 0, <<"/spaces/space_name2">>},
-        {SessId1, <<"space3">>, 8#1770, 0, <<"/spaces/space_name3">>},
-        {SessId2, <<"space4">>, 8#1770, 0, <<"/spaces/space_name4">>}
+        {SessId1, <<"space_id1">>, 8#1770, 0, <<"/spaces/space_name1">>},
+        {SessId2, <<"space_id2">>, 8#1770, 0, <<"/spaces/space_name2">>},
+        {SessId1, <<"space_id3">>, 8#1770, 0, <<"/spaces/space_name3">>},
+        {SessId2, <<"space_id4">>, 8#1770, 0, <<"/spaces/space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, ?req(Worker,
         SessId1, #get_file_attr{entry = {path, <<"/spaces/space_name1/t1_dir">>}}

@@ -395,7 +395,7 @@ init_per_testcase(_, Config) ->
         end),
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, get_spaces_for_provider,
         fun(_) ->
-            [<<"space1">>, <<"space2">>, <<"space3">>, <<"space4">>, <<"space5">>]
+            [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>]
         end),
 
     test_utils:mock_expect([WorkerP1, WorkerP2], dbsync_utils, communicate,
