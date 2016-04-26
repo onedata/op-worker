@@ -148,10 +148,12 @@ clear_models(Worker, Names) ->
 %% @doc Setup test users' sessions on server
 %%--------------------------------------------------------------------
 -spec setup_session(Worker :: node(), [{UserNum :: non_neg_integer(),
-    [Spaces :: {binary(), binary()}], [Groups :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
+    [Spaces :: {binary(), binary()}], DefaultSpace :: binary(),
+    [Groups :: {binary(), binary()}]}], Config :: term()) ->
+    NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{UserNum, Spaces, Groups} | R], Config) ->
+setup_session(Worker, [{UserNum, Spaces, _DefaultSpace, Groups} | R], Config) ->
     Self = self(),
 
     Name = fun(Text, Num) -> name(Text, Num) end,
@@ -257,9 +259,7 @@ teardown_storage(Config) ->
 %%--------------------------------------------------------------------
 -spec space_storage_mock(Workers :: node() | [node()], StorageId :: storage:id()) -> ok.
 space_storage_mock(Workers, StorageId) ->
-    ct:print("Workers: ~p~n", [Workers]),
     test_utils:mock_new(Workers, space_storage),
-    ct:print("StorageId: ~p~n", [StorageId]),
     test_utils:mock_expect(Workers, space_storage, get, fun(_) ->
         {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
     end).
