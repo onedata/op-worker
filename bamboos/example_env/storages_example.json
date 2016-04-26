@@ -37,6 +37,10 @@
                   "type": "s3",
                   "name": "s3",
                   "bucket": "onedata"
+                },
+                {
+                  "type": "nfs",
+                  "name": "/mnt/nfs",
                 }
             ],
             "users": [
@@ -260,6 +264,22 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "s4": {
+                "displayed_name": "s3",
+                "users": [
+                    "u1",
+                    "u2"
+                ],
+                "groups": [
+                    "g1"
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/nfs",
                         "supported_size": 1000000000
                     }
                 }
