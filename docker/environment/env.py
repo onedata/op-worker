@@ -12,7 +12,7 @@ import copy
 import json
 import time
 from . import appmock, client, common, zone_worker, cluster_manager, \
-    worker, provider_worker, cluster_worker, docker, dns, s3, ceph, \
+    worker, provider_worker, cluster_worker, docker, dns, s3, ceph, nfs, \
     amazon_iam, luma
 
 
@@ -20,6 +20,7 @@ def default(key):
     return {'image': 'onedata/worker',
             'ceph_image': 'onedata/ceph',
             's3_image': 'lphoward/fake-s3',
+            'nfs_image': 'erezhorev/dockerized_nfs_server',
             'bin_am': '{0}/appmock'.format(os.getcwd()),
             'bin_oz': '{0}/oz_worker'.format(os.getcwd()),
             'bin_op_worker': '{0}/op_worker'.format(os.getcwd()),
@@ -31,8 +32,8 @@ def default(key):
 
 
 def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
-       s3_image=default('s3_image'), bin_am=default('bin_am'),
-       bin_oz=default('bin_oz'),
+       s3_image=default('s3_image'), nfs_image=default('nfs_image'),
+       bin_am=default('bin_am'), bin_oz=default('bin_oz'),
        bin_cluster_manager=default('bin_cluster_manager'),
        bin_op_worker=default('bin_op_worker'),
        bin_cluster_worker=default('bin_cluster_worker'),
@@ -72,7 +73,8 @@ def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
 
     # Start storages
     storages_dockers, storages_dockers_ids = \
-        _start_storages(config, config_path, ceph_image, s3_image, image, uid)
+        _start_storages(config, config_path, ceph_image, s3_image, nfs_image,
+                        image, uid)
     output['storages'] = storages_dockers
     output['docker_ids'].extend(storages_dockers_ids)
 
@@ -94,7 +96,8 @@ def up(config_path, image=default('image'), ceph_image=default('ceph_image'),
 
     # Start oneclient instances
     if 'oneclient' in config:
-        oc_output = client.up(image, bin_oc, dns_server, uid, config_path, logdir)
+        oc_output = client.up(image, bin_oc, dns_server, uid, config_path,
+                              logdir, storages_dockers)
         common.merge(output, oc_output)
 
     # Setup global environment - providers, users, groups, spaces etc.
@@ -185,8 +188,9 @@ def setup_worker(worker, bin_worker, domains_name, bin_cm, config, config_path,
         dns.maybe_restart_with_configuration('auto', uid, output)
 
 
-def _start_storages(config, config_path, ceph_image, s3_image, image, uid):
-    storages_dockers = {'ceph': {}, 's3': {}}
+def _start_storages(config, config_path, ceph_image, s3_image, nfs_image, image,
+                    uid):
+    storages_dockers = {'ceph': {}, 's3': {}, 'nfs': {}}
     docker_ids = []
     if 'os_configs' in config:
         start_iam_mock = False
@@ -201,13 +205,14 @@ def _start_storages(config, config_path, ceph_image, s3_image, image, uid):
                 if storage['type'] == 'ceph' and storage['name'] not in \
                         storages_dockers['ceph']:
                     pool = tuple(storage['pool'].split(':'))
-                    result = ceph.up(ceph_image, [pool])
+                    result = ceph.up(ceph_image, [pool], storage['name'], uid)
                     docker_ids.extend(result['docker_ids'])
                     del result['docker_ids']
                     storages_dockers['ceph'][storage['name']] = result
                 elif storage['type'] == 's3' and storage['name'] not in \
                         storages_dockers['s3']:
-                    result = s3.up(s3_image, [storage['bucket']])
+                    result = s3.up(s3_image, [storage['bucket']],
+                                   storage['name'], uid)
                     docker_ids.extend(result['docker_ids'])
                     del result['docker_ids']
 
@@ -217,6 +222,18 @@ def _start_storages(config, config_path, ceph_image, s3_image, image, uid):
                         result['iam_request_scheme'] = storage['iam_request_scheme']
 
                     storages_dockers['s3'][storage['name']] = result
+                elif storage['type'] == 'nfs' and storage['name'] not in \
+                        storages_dockers['nfs']:
+                    result = nfs.up(nfs_image, uid, storage['name'])
+                    docker_ids.extend(result['docker_ids'])
+
+                    # create system users and groups on nfs docker
+                    container = result['docker_ids'][0]
+                    common.create_users(container, cfg['users'])
+                    common.create_groups(container, cfg['groups'])
+
+                    del result['docker_ids']
+                    storages_dockers['nfs'][storage['name']] = result
 
         if start_iam_mock:
             docker_ids.extend(_start_iam_mock(image, uid, storages_dockers))
