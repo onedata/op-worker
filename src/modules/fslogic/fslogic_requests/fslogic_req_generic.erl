@@ -148,9 +148,9 @@ get_file_attr(#fslogic_ctx{session_id = SessId} = CTX, File) ->
 -spec delete(fslogic_worker:ctx(), File :: fslogic_worker:file()) ->
                          FuseResponse :: #fuse_response{} | no_return().
 -check_permissions([{traverse_ancestors, 2}]).
-delete(CTX, File) ->
+delete(#fslogic_ctx{space_id = SpaceId} = CTX, File) ->
     {ok, FileUUID} = file_meta:to_uuid(File),
-    FileGUID = fslogic_uuid:to_file_guid(FileUUID),
+    FileGUID = fslogic_uuid:to_file_guid(FileUUID, SpaceId),
     FuseResponse = case file_meta:get(File) of
         {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = FileDoc} ->
             delete_dir(CTX, FileDoc);
