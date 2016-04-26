@@ -83,22 +83,26 @@ global_stream_test(MultiConfig) ->
             Path2 = <<"/", D0/binary, "/", D0/binary>>,
             Path3 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>,
 
-            {ok, #file_attr{uuid = UUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
-            {ok, #file_attr{uuid = UUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
-            {ok, #file_attr{uuid = UUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3}),
+            {ok, #file_attr{uuid = FileGUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
+            {ok, #file_attr{uuid = FileGUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
+            {ok, #file_attr{uuid = FileGUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3}),
 
-            {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
-            {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
-            {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
+            FileUUID1 = fslogic_uuid:file_guid_to_uuid(FileGUID1),
+            FileUUID2 = fslogic_uuid:file_guid_to_uuid(FileGUID2),
+            FileUUID3 = fslogic_uuid:file_guid_to_uuid(FileGUID3),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3)]),
+            {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID1]),
+            {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID2]),
+            {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID3]),
+
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID1)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID2)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID3)]),
 
             Map0 = #{},
-            Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
-            Map2 = maps:put(Path2, {UUID2, Rev2, LRev2}, Map1),
-            _Map3 = maps:put(Path3, {UUID3, Rev3, LRev3}, Map2)
+            Map1 = maps:put(Path1, {FileUUID1, Rev1, LRev1}, Map0),
+            Map2 = maps:put(Path2, {FileUUID2, Rev2, LRev2}, Map1),
+            _Map3 = maps:put(Path3, {FileUUID3, Rev3, LRev3}, Map2)
         end, Dirs),
 
     lists:foreach(
@@ -123,7 +127,8 @@ global_stream_test(MultiConfig) ->
                     ?assertMatch(LocalRev, Rev),
                     ?assertMatch(LocalLRev, LRev),
 
-                    ?assertMatch({ok, #file_attr{uuid = UUID}}, lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}))
+                    {ok, #file_attr{uuid = GUID}} = lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}),
+                    ?assertMatch(UUID, fslogic_uuid:file_guid_to_uuid(GUID))
 
                 end, maps:to_list(PathMap))
         end, RevPerPath),
@@ -167,14 +172,15 @@ global_stream_document_remove_test(MultiConfig) ->
         fun(D0) ->
 
             Path1 = <<"/", D0/binary>>,
-            {ok, #file_attr{uuid = UUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
+            {ok, #file_attr{uuid = FileGUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
+            FileUUID1 = fslogic_uuid:file_guid_to_uuid(FileGUID1),
 
-            {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
+            {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID1]),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(UUID1)]),
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, links_utils:links_doc_key(FileUUID1)]),
 
             Map0 = #{},
-            _Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0)
+            _Map1 = maps:put(Path1, {FileUUID1, Rev1, LRev1}, Map0)
         end, Dirs),
 
     lists:foreach(
@@ -199,7 +205,8 @@ global_stream_document_remove_test(MultiConfig) ->
                     ?assertMatch(LocalRev, Rev),
                     ?assertMatch(LocalLRev, LRev),
 
-                    ?assertMatch({ok, #file_attr{uuid = UUID}}, lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}))
+                    {ok, #file_attr{uuid = GUID}} = lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}),
+                    ?assertMatch(UUID, fslogic_uuid:file_guid_to_uuid(GUID))
 
                 end, maps:to_list(PathMap))
         end, RevPerPath),
@@ -291,22 +298,26 @@ global_stream_with_proto_test(MultiConfig) ->
             Path2 = <<"/", D0/binary, "/", D0/binary>>,
             Path3 = <<"/", D0/binary, "/", D0/binary, "/", D0/binary>>,
 
-            {ok, #file_attr{uuid = UUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
-            {ok, #file_attr{uuid = UUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
-            {ok, #file_attr{uuid = UUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3}),
+            {ok, #file_attr{uuid = FileGUID1}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path1}),
+            {ok, #file_attr{uuid = FileGUID2}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path2}),
+            {ok, #file_attr{uuid = FileGUID3}} = lfm_proxy:stat(WorkerP1, SessId1P1, {path, Path3}),
 
-            {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID1]),
-            {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID2]),
-            {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, UUID3]),
+            FileUUID1 = fslogic_uuid:file_guid_to_uuid(FileGUID1),
+            FileUUID2 = fslogic_uuid:file_guid_to_uuid(FileGUID2),
+            FileUUID3 = fslogic_uuid:file_guid_to_uuid(FileGUID3),
 
-            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID1)]),
-            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID2)]),
-            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(UUID3)]),
+            {ok, #document{rev = Rev1}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID1]),
+            {ok, #document{rev = Rev2}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID2]),
+            {ok, #document{rev = Rev3}} = rpc:call(WorkerP1, datastore, get, [disk_only, file_meta, FileUUID3]),
+
+            {ok, #document{rev = LRev1}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID1)]),
+            {ok, #document{rev = LRev2}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID2)]),
+            {ok, #document{rev = LRev3}} = rpc:call(WorkerP1, file_meta, get, [links_utils:links_doc_key(FileUUID3)]),
 
             Map0 = #{},
-            Map1 = maps:put(Path1, {UUID1, Rev1, LRev1}, Map0),
-            Map2 = maps:put(Path2, {UUID2, Rev2, LRev2}, Map1),
-            _Map3 = maps:put(Path3, {UUID3, Rev3, LRev3}, Map2)
+            Map1 = maps:put(Path1, {FileUUID1, Rev1, LRev1}, Map0),
+            Map2 = maps:put(Path2, {FileUUID2, Rev2, LRev2}, Map1),
+            _Map3 = maps:put(Path3, {FileUUID3, Rev3, LRev3}, Map2)
         end, Dirs),
 
     lists:foreach(
@@ -331,7 +342,8 @@ global_stream_with_proto_test(MultiConfig) ->
                     ?assertMatch(LocalRev, Rev),
                     ?assertMatch(LocalLRev, LRev),
 
-                    ?assertMatch({ok, #file_attr{uuid = UUID}}, lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}))
+                    {ok, #file_attr{uuid = GUID}} = lfm_proxy:stat(WorkerP2, SessId1P2, {path, Path}),
+                    ?assertMatch(UUID, fslogic_uuid:file_guid_to_uuid(GUID))
 
                 end, maps:to_list(PathMap))
         end, RevPerPath),

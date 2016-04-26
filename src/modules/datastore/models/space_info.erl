@@ -220,26 +220,28 @@ fetch(Client, SpaceId, UserId) ->
         name = Name
     } = Info = get_info(Client, SpaceId),
 
-    case get(SpaceId, UserId) of
-        {ok, #document{value = SpaceInfo} = Doc} ->
-            NewDoc = Doc#document{value = SpaceInfo#space_info{
-                users = UsersWithPrivileges,
-                groups = GroupsWithPrivileges,
-                providers_supports = Supports,
-                name = Name
-            }},
-            {ok, _} = save(NewDoc),
-            {ok, NewDoc};
-        {error, {not_found, _}} ->
-            {ok, #document{key = ParentKey}} = fetch(SpaceId),
-            Doc = #document{value = Info},
-            {ok, Key} = save(Doc),
-            ok = datastore:add_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME,
-                {UserId, {Key, ?MODEL_NAME}}),
-            {ok, Doc};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+    datastore:run_synchronized(?MODEL_NAME, SpaceId, fun() ->
+        case get(SpaceId, UserId) of
+            {ok, #document{value = SpaceInfo} = Doc} ->
+                NewDoc = Doc#document{value = SpaceInfo#space_info{
+                    users = UsersWithPrivileges,
+                    groups = GroupsWithPrivileges,
+                    providers_supports = Supports,
+                    name = Name
+                }},
+                {ok, _} = save(NewDoc),
+                {ok, NewDoc};
+            {error, {not_found, _}} ->
+                {ok, #document{key = ParentKey}} = fetch(SpaceId),
+                Doc = #document{value = Info},
+                {ok, Key} = save(Doc),
+                ok = datastore:add_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME,
+                    {UserId, {Key, ?MODEL_NAME}}),
+                {ok, Doc};
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

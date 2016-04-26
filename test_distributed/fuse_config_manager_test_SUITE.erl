@@ -57,10 +57,10 @@ create_storage_test_file_test(Config) ->
     {SessId1, _UserId1} = {?config({session_id, 1}, Config), ?config({user_id, 1}, Config)},
 
     FilePath = <<"/spaces/space_name1/", (generator:gen_name())/binary>>,
-    {ok, FileUuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
+    {ok, FileGUID} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, FilePath, 8#600)),
 
     Response1 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = StorageId, file_uuid = FileUuid
+        storage_id = StorageId, file_uuid = FileGUID
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?OK},
         fuse_response = #storage_test_file{}}, Response1),
@@ -71,7 +71,7 @@ create_storage_test_file_test(Config) ->
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response2),
 
     Response3 = ?req(Worker, SessId1, #create_storage_test_file{
-        storage_id = <<"unknown_id">>, file_uuid = FileUuid
+        storage_id = <<"unknown_id">>, file_uuid = FileGUID
     }),
     ?assertMatch(#fuse_response{status = #status{code = ?EAGAIN}}, Response3).
 

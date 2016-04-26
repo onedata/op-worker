@@ -346,7 +346,7 @@ read_should_synchronize_file(Config) ->
     % then
     ?assertEqual({ok, <<>>}, Ans),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, prepare_request, '_'])),
-    ?assert(rpc:call(W1, meck, called, [rtransfer, prepare_request, [ExternalProviderId, FileUuid, 1, 3]])),
+    ?assert(rpc:call(W1, meck, called, [rtransfer, prepare_request, [ExternalProviderId, FileGUID, 1, 3]])),
     ?assertEqual(1, rpc:call(W1, meck, num_calls, [rtransfer, fetch, '_'])),
     ?assert(rpc:call(W1, meck, called, [rtransfer, fetch, [ref, '_', '_']])),
     test_utils:mock_validate_and_unload(Workers, rtransfer),
@@ -739,7 +739,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
 rtransfer_config_should_work(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessionId = <<"session_id1">>,
-    {ok, FileUuid} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
+    {ok, FileGUID} = lfm_proxy:create(W1, SessionId, <<"test_file">>, 8#777),
 
     ?assertEqual(ok, rpc:call(W1, erlang, apply, [
         fun() ->
@@ -747,9 +747,9 @@ rtransfer_config_should_work(Config) ->
             Open = proplists:get_value(open_fun, Opts),
             Read = proplists:get_value(read_fun, Opts),
             Write = proplists:get_value(write_fun, Opts),
-            {ok, WriteHandle} = erlang:apply(Open, [FileUuid, write]),
+            {ok, WriteHandle} = erlang:apply(Open, [FileGUID, write]),
             {ok, _, 4} = erlang:apply(Write, [WriteHandle, 0, <<"data">>]),
-            {ok, ReadHandle} = erlang:apply(Open, [FileUuid, read]),
+            {ok, ReadHandle} = erlang:apply(Open, [FileGUID, read]),
             {ok, _, <<"data">>} = erlang:apply(Read, [ReadHandle, 0, 10]),
             ok
         end, []

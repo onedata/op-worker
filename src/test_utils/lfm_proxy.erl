@@ -372,7 +372,7 @@ exec(Worker, Fun) ->
         end),
     receive
         {Pid, Result} -> Result
-    after timer:seconds(5) ->
+    after timer:seconds(10) ->
         {error, test_timeout}
     end.
 

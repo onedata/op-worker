@@ -381,7 +381,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, Con) ->
     Attempt :: non_neg_integer()) -> ok.
 maybe_log_failure(_, {badmatch, {error, empty_connection_pool}}, _) ->
     ok;
-maybe_log_failure(_, {badmatch, {error, {not_found,session}}}, _) ->
+maybe_log_failure(_, {badmatch, {error, {not_found, session}}}, _) ->
     ok;
 maybe_log_failure(Request, Reason, Attempt) ->
     case Attempt > ?LOG_FAILED_ATTEMPTS_THRESHOLD of
