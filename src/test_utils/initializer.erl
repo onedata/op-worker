@@ -477,10 +477,10 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 %%    ct:print("UserToGroups ~p", [UserToGroups]),
 
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
-        AccIn ++ [{UserId, Spaces, maps:get(UserId, UserToGroups)}]
+        AccIn ++ [{UserId, Spaces, maps:get(UserId, UserToGroups, [])}]
     end, [], UserToSpaces),
 
-%%    ct:print("Users ~p", [Users]),
+    ct:print("Users ~p", [Users]),
 
     file_meta_mock_setup(AllWorkers),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers),

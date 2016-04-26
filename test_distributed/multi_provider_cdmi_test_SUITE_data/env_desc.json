@@ -23,20 +23,20 @@
             "cluster_manager": {
                 "cm": {
                     "vm.args": {
-                        "setcookie": "test_cookie"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 2
+                        "worker_num": 1
                     }
                 }
             },
             "op_worker": {
                 "worker1": {
                     "vm.args": {
-                        "setcookie": "test_cookie"
+                        "setcookie": "test_cookie1"
                     },
                     "sys.config": {
                         "cm_nodes": [
@@ -48,10 +48,29 @@
                         "oz_domain": "oz",
                         "verify_oz_cert": false
                     }
-                },
-                "worker2": {
+                }
+            }
+        },
+        "p2": {
+            "db_driver": "couchdb",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
                     "vm.args": {
-                        "setcookie": "test_cookie"
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
                     },
                     "sys.config": {
                         "cm_nodes": [
@@ -71,37 +90,17 @@
         "users": {
             "user1": {
                 "default_space": "space1"
-            },
-            "user2": {
-                "default_space": "space2"
-            },
-            "user3": {
-                "default_space": "space1"
             }
         },
         "groups": {
-            "group1": {
-                "users": [
-                    "user1",
-                    "user3"
-                ]
-            },
-            "group2": {
-                "users": [
-                    "user2"
-                ]
-            }
         },
         "spaces": {
             "space1": {
                 "displayed_name": "space1",
                 "users": [
-                    "user1",
-                    "user2",
-                    "user3"
+                    "user1"
                 ],
                 "groups": [
-                    "group1"
                 ],
                 "providers": {
                     "p1": {
@@ -113,13 +112,12 @@
             "space2": {
                 "displayed_name": "space2",
                 "users": [
-                    "user2"
+                    "user1"
                 ],
                 "groups": [
-                    "group2"
                 ],
                 "providers": {
-                    "p2.oz": {
+                    "p2": {
                         "storage": "/mnt/st2",
                         "supported_size": 1000000000
                     }
