@@ -131,17 +131,20 @@ find_query(<<"space">>, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    % @todo error handling
-    Name = proplists:get_value(<<"name">>, Data, <<"">>),
-    {ok, SpaceId} = space_logic:create_user_space(
-        UserAuth, #space_info{name = Name}),
-    {ok, [
-        {<<"id">>, SpaceId},
-        {<<"name">>, Name},
-        {<<"isDefault">>, false},
-        {<<"userPermissions">>, []},
-        {<<"groupPermissions">>, []}
-    ]}.
+    Name = proplists:get_value(<<"name">>, Data, <<"New Space">>),
+    case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
+        {ok, SpaceId} ->
+            {ok, [
+                {<<"id">>, SpaceId},
+                {<<"name">>, Name},
+                {<<"isDefault">>, false},
+                {<<"userPermissions">>, []},
+                {<<"groupPermissions">>, []}
+            ]};
+        _ ->
+            gui_error:report_warning(
+                <<"Cannot create new space due to unknown error.">>)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -152,25 +155,40 @@ create_record(<<"space">>, Data) ->
 -spec update_record(RsrcType :: binary(), Id :: binary(),
     Data :: proplists:proplist()) ->
     ok | gui_error:error_result().
-update_record(<<"space">>, SpaceId, Data) ->
-    % @TODO Use space_info modify!!!!
-    % @todo error handling
+update_record(<<"space">>, SpaceId, [{<<"isDefault">>, Flag}]) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    case proplists:get_value(<<"isDefault">>, Data, undefined) of
+    case Flag of
         undefined ->
             ok;
         false ->
             ok;
         true ->
-            user_logic:set_default_space(UserAuth, SpaceId)
-    end,
-    case proplists:get_value(<<"name">>, Data, undefined) of
+            case user_logic:set_default_space(UserAuth, SpaceId) of
+                ok ->
+                    ok;
+                {error, _} ->
+                    gui_error:report_warning(
+                        <<"Cannot change default space due to unknown error.">>)
+            end
+    end;
+
+update_record(<<"space">>, SpaceId, [{<<"name">>, Name}]) ->
+    UserAuth = op_gui_utils:get_user_rest_auth(),
+    case Name of
         undefined ->
             ok;
+        <<"">> ->
+            gui_error:report_warning(
+                <<"Cannot set space name to empty string.">>);
         NewName ->
-            space_logic:set_name(UserAuth, SpaceId, NewName)
-    end,
-    ok;
+            case space_logic:set_name(UserAuth, SpaceId, NewName) of
+                ok ->
+                    ok;
+                {error, _} ->
+                    gui_error:report_warning(
+                        <<"Cannot change space name due to unknown error.">>)
+            end
+    end;
 
 update_record(<<"space-user-permission">>, AssocId, Data) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
