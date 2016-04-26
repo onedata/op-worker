@@ -844,6 +844,16 @@ location_ref(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec set_link_context(Doc :: datastore:document()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
+set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, scope = MotherScope}}) ->
+  SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
+  case MotherScope of
+    SPACES_BASE_DIR_UUID ->
+      set_link_context(ScopeUUID);
+    _ ->
+      erlang:put(mother_scope, oneprovider:get_provider_id()),
+      erlang:put(other_scopes, [])
+  end,
+  ok;
 set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true}}) ->
     SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
     case ScopeUUID of
@@ -860,10 +870,17 @@ set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true}}
 set_link_context(#document{value = #file_meta{is_scope = false, scope = ScopeUUID}}) ->
     set_link_context(ScopeUUID);
 set_link_context(ScopeUUID) ->
-  erlang:put(mother_scope, oneprovider:get_provider_id()),
-%%  SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
-%%  {ok, #document{value = #space_info{providers_supports = Supports}}} =
-%%    space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
-%%  erlang:put(other_scopes, lists:map(fun({ProviderId, _}) -> ProviderId end, Supports)),
-  erlang:put(other_scopes, []),
+  MyProvID = oneprovider:get_provider_id(),
+  erlang:put(mother_scope, MyProvID),
+  try
+    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(ScopeUUID),
+    {ok, #document{value = #space_info{providers_supports = Supports}}} =
+      space_info:get_or_fetch(?ROOT_SESS_ID, SpaceId),
+    OtherScopes = lists:map(fun({ProviderId, _}) -> ProviderId end, Supports) -- MyProvID,
+    erlang:put(other_scopes, OtherScopes)
+  catch
+    E1:E2 ->
+      ?error_stacktrace("Cannot set other_scopes for uuid ~p, error: ~p:~p", [ScopeUUID, E1, E2]),
+      erlang:put(other_scopes, [])
+  end,
   ok.
