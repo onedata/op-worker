@@ -32,9 +32,8 @@
 %%--------------------------------------------------------------------
 -spec get(oz_endpoint:client(), GroupId :: binary()) ->
     {ok, datastore:document()} | {error, Reason :: term()}.
-get({user, {Macaroon, DischMacaroon}}, GroupId) ->
-    onedata_group:get_or_fetch(
-        #auth{macaroon = Macaroon, disch_macaroons = DischMacaroon}, GroupId).
+get({user, {Macaroon, DischMacaroons}}, GroupId) ->
+    onedata_group:get_or_fetch({user, {Macaroon, DischMacaroons}}, GroupId).
 
 
 

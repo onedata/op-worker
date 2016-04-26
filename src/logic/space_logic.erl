@@ -87,7 +87,8 @@ set_name(Client, SpaceId, Name) ->
 -spec set_user_privileges(oz_endpoint:client(), SpaceId :: binary(),
     UserId :: binary(), Privileges :: [atom()]) ->
     ok | {error, Reason :: term()}.
-set_user_privileges(Client, SpaceId, UserId, Privileges) ->
+set_user_privileges(Client, SpaceId, UserId, PrivilegesAtoms) ->
+    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
     oz_spaces:set_user_privileges(Client, SpaceId, UserId, [
         {<<"privileges">>, Privileges}
     ]).
@@ -102,7 +103,8 @@ set_user_privileges(Client, SpaceId, UserId, Privileges) ->
 -spec set_group_privileges(oz_endpoint:client(), SpaceId :: binary(),
     GroupId :: binary(), Privileges :: [atom()]) ->
     ok | {error, Reason :: term()}.
-set_group_privileges(Client, SpaceId, GroupId, Privileges) ->
+set_group_privileges(Client, SpaceId, GroupId, PrivilegesAtoms) ->
+    Privileges = [atom_to_binary(P, utf8) || P <- PrivilegesAtoms],
     oz_spaces:set_group_privileges(Client, SpaceId, GroupId, [
         {<<"privileges">>, Privileges}
     ]).

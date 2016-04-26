@@ -73,7 +73,7 @@ association_to_ids(AssocId) ->
 % @todo temporary solution, fix when subscriptions work better
 %% @end
 %%--------------------------------------------------------------------
--spec find_all_spaces(UserAuth, UserId :: binary()) -> [SpaceId :: binary]
+-spec find_all_spaces(UserAuth, UserId :: binary()) -> [SpaceId :: binary()]
     when UserAuth :: {user, {Macaroon :: macaroon:macaroon(),
     DischargeMacaroons :: [macaroon:macaroon()]}}.
 find_all_spaces(UserAuth, UserId) ->
@@ -89,7 +89,7 @@ find_all_spaces(UserAuth, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_all_spaces(UserAuth, UserId :: binary(), MaxRetries :: integer()) ->
-    [SpaceId :: binary] when UserAuth :: {user, {
+    [SpaceId :: binary()] when UserAuth :: {user, {
     Macaroon :: macaroon:macaroon(),
     DischargeMacaroons :: [macaroon:macaroon()]}}.
 find_all_spaces(_, _, 0) ->
