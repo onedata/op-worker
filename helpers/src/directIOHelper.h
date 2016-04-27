@@ -17,10 +17,10 @@
 #include <fuse.h>
 #include <sys/types.h>
 
-#include <string>
-#include <map>
-#include <unordered_map>
 #include <functional>
+#include <map>
+#include <string>
+#include <unordered_map>
 
 namespace one {
 namespace helpers {
@@ -39,9 +39,13 @@ public:
 
     ~PosixHelperCTX();
 
-    void setUserCTX(std::unordered_map<std::string, std::string> args);
+    /**
+    * @copydoc IStorageHelper::setUserCtx
+    * It should contain 'uid' and 'gid' values.
+    */
+    void setUserCTX(std::unordered_map<std::string, std::string> args) override;
 
-    std::unordered_map<std::string, std::string> getUserCTX();
+    std::unordered_map<std::string, std::string> getUserCTX() override;
 
     uid_t uid = -1;
     gid_t gid = -1;
