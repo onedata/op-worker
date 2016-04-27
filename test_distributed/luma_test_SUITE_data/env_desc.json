@@ -24,7 +24,8 @@
                 {
                     "type": "s3",
                     "name": "s3",
-                    "bucket": "onedata"
+                    "bucket": "onedata",
+                    "disable_iam_mock": true
                 }
             ],
             "users": [

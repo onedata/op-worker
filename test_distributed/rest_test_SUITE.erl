@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -134,6 +135,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_, Config) ->
     application:start(ssl2),
     hackney:start(),
+    mock_oz_spaces(Config),
     mock_oz_certificates(Config),
     Config.
 
@@ -146,6 +148,7 @@ end_per_testcase(Case, Config) when
     hackney:stop(),
     application:stop(ssl2);
 end_per_testcase(_, Config) ->
+    unmock_oz_spaces(Config),
     unmock_oz_certificates(Config),
     hackney:stop(),
     application:stop(ssl2).
@@ -176,6 +179,19 @@ rest_endpoint(Node) ->
             P -> P
         end,
     string:join(["https://", utils:get_host(Node), ":", Port, "/rest/latest/"], "").
+
+mock_oz_spaces(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_expect(Workers, oz_spaces, get_details,
+        fun(_, _) -> {ok, #space_details{}} end),
+    test_utils:mock_expect(Workers, oz_spaces, get_users,
+        fun(_, _) -> {ok, []} end),
+    test_utils:mock_expect(Workers, oz_spaces, get_groups,
+        fun(_, _) -> {ok, []} end).
+
+unmock_oz_spaces(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, oz_spaces).
 
 mock_oz_certificates(Config) ->
     [Worker1, _] = Workers = ?config(op_worker_nodes, Config),
