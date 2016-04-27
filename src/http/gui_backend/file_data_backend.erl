@@ -283,7 +283,7 @@ rm_rf(FileId) ->
         _ ->
             ok
     end,
-    ok = logical_file_manager:unlink(SessionId, {guid FileId}).
+    ok = logical_file_manager:unlink(SessionId, {guid, FileId}).
 
 
 %%--------------------------------------------------------------------
@@ -308,7 +308,7 @@ file_record(SessionId, FileId) ->
         size = SizeAttr,
         mtime = ModificationTime,
         mode = PermissionsAttr}} =
-        logical_file_manager:stat(SessionId, {uuid, FileId}),
+        logical_file_manager:stat(SessionId, {guid, FileId}),
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE -> {<<"dir">>, null};
         _ -> {<<"file">>, SizeAttr}
@@ -319,7 +319,7 @@ file_record(SessionId, FileId) ->
             [];
         <<"dir">> ->
             case logical_file_manager:ls(
-                SessionId, {uuid, FileId}, 0, 1000) of
+                SessionId, {guid, FileId}, 0, 1000) of
                 {ok, Chldrn} ->
                     Chldrn;
                 _ ->

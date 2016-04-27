@@ -25,9 +25,8 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1,
-    create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
-    basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
+-export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1, clean_test_users_and_spaces/1,
+    basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0, create_test_users_and_spaces/2,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, assume_all_files_in_space/2, clear_assume_all_files_in_space/1]).
@@ -245,7 +244,7 @@ clear_models(Worker, Names) ->
     [Spaces :: {binary(), binary()}], [Groups :: {binary(), binary()}]}], Config :: term()) -> NewConfig :: term().
 setup_session(_Worker, [], Config) ->
     Config;
-setup_session(Worker, [{UserId, Spaces, Groups} | R], Config) ->
+setup_session(Worker, [{UserId, Spaces, _DefaultSpaceId, Groups} | R], Config) ->
     Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
 
     SessId = Name("session_id", UserId),
@@ -390,7 +389,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                 Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
                 lists:foldl(fun(CPid, CAcc) ->
                     ProvId0 = domain_to_provider_id(proplists:get_value(CPid, DomainMappings)),
-                    maps:put(ProvId0, maps:get(CPid, CAcc, []) ++ [SpaceId], CAcc)
+                    maps:put(ProvId0, maps:get(ProvId0, CAcc, []) ++ [SpaceId], CAcc)
                 end, AccIn, Providers0)
             end, #{}, SpacesSetup),
 
@@ -468,7 +467,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 %%    ct:print("UserToGroups ~p", [UserToGroups]),
 
     Users = maps:fold(fun(UserId, Spaces, AccIn) ->
-        AccIn ++ [{UserId, Spaces, maps:get(UserId, UserToGroups, [])}]
+        UserConfig = proplists:get_value(UserId, UsersSetup),
+        DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
+        AccIn ++ [{UserId, Spaces, DefaultSpaceId, maps:get(UserId, UserToGroups, [])}]
     end, [], UserToSpaces),
 
 %%    ct:print("Users ~p", [Users]),

@@ -9,7 +9,7 @@
 %%% This file contains event API tests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(-include("proto/common/credentials.hrl").events_test_SUITE).
+-module(events_test_SUITE).
 -author("Krzysztof Trzepla").
 
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -18,6 +18,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -183,10 +184,14 @@ init_per_testcase(Case, Config) when
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
 
 init_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SessId} = session_setup(Worker),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
+    test_utils:mock_new(Workers, space_info),
+    test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
+        {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
+    end),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
 
 end_per_testcase(Case, Config) when
@@ -217,10 +222,11 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate_and_unload(Worker, [communicator]);
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:clear_assume_all_files_in_space(Config),
+    test_utils:mock_unload(Workers, space_info),
     test_utils:mock_validate_and_unload(Worker, [communicator]).
 
 %%%===================================================================

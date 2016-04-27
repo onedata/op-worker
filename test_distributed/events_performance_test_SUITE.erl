@@ -511,11 +511,15 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
         (#subscription_cancellation{} = Msg, _) -> Self ! Msg, ok;
         (_, _) -> ok
     end),
+    test_utils:mock_new(Workers, space_info),
+    test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
+        {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
+    end),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
 
 init_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     SessId = <<"session_id">>,
     Iden = #identity{user_id = <<"user_id">>},
@@ -525,7 +529,10 @@ init_per_testcase(_, Config) ->
     test_utils:mock_expect(Worker, communicator, send, fun
         (_, _) -> ok
     end),
-
+    test_utils:mock_new(Workers, space_info),
+    test_utils:mock_expect(Workers, space_info, get_or_fetch, fun(_, _, _) ->
+        {ok, #document{value = #space_info{providers = [oneprovider:get_provider_id()]}}}
+    end),
     ok = initializer:assume_all_files_in_space(Config, <<"spaceid">>),
     session_setup(Worker, SessId, Iden, Self),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), [{session_id, SessId} | Config]).
@@ -533,13 +540,15 @@ init_per_testcase(_, Config) ->
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    test_utils:mock_unload(Workers, space_info),
     test_utils:mock_validate_and_unload(Workers, communicator);
 
 end_per_testcase(_, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    test_utils:mock_unload(Workers, space_info),
     test_utils:mock_validate_and_unload(Worker, communicator).
 
 %%%===================================================================

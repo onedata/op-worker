@@ -154,7 +154,7 @@ get_space(FileEntry, UserId) ->
             {ok, Spaces} = user_logic:get_spaces(UserId),
             #document{key = SpaceUUID} = SpaceDocument,
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
-            case is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds) of
+            case (is_list(Spaces) andalso lists:keymember(SpaceId, 1, Spaces)) of
                 true ->
                     {ok, SpaceDocument};
                 false -> throw({not_a_space, FileEntry})
