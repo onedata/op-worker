@@ -266,16 +266,24 @@ get_spaces_dir_uuid(SessionId) ->
 %% Recursively deletes a directory and all its contents.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_rf(Id :: binary()) -> ok | no_return().
-rm_rf(Id) ->
+-spec rm_rf(FileId :: binary()) -> ok | no_return().
+rm_rf(FileId) ->
     SessionId = g_session:get_session_id(),
-    {ok, Children} = logical_file_manager:ls(SessionId,
-        {uuid, Id}, 0, 1000),
-    lists:foreach(
-        fun({ChId, _}) ->
-            ok = rm_rf(ChId)
-        end, Children),
-    ok = logical_file_manager:unlink(SessionId, {uuid, Id}).
+    {ok, #file_attr{
+        type = Type
+    }} = logical_file_manager:stat(SessionId, {uuid, FileId}),
+    case Type of
+        ?DIRECTORY_TYPE ->
+            {ok, Children} = logical_file_manager:ls(
+                SessionId, {uuid, FileId}, 0, 1000),
+            lists:foreach(
+                fun({ChId, _}) ->
+                    ok = rm_rf(ChId)
+                end, Children);
+        _ ->
+            ok
+    end,
+    ok = logical_file_manager:unlink(SessionId, {uuid, FileId}).
 
 
 %%--------------------------------------------------------------------

@@ -82,7 +82,8 @@ cat <<"EOF" > /tmp/gen_dev_args.json
 EOF
 {mount_commands}
 {pre_start_commands}
-/root/bin/node/bin/{executable} console'''
+/root/bin/node/bin/{executable} console
+sleep 5'''  # Add sleep so logs can be chowned
 
     mount_commands = common.mount_nfs_command(config, storages_dockers)
     pre_start_commands = configurator.pre_start_commands(domain)
