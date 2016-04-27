@@ -43,7 +43,7 @@ compile:
 
 deps:
 	./rebar get-deps
-	deps/gui/pull-gui.sh
+	deps/gui/pull-gui.sh gui-config.sh
 
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
