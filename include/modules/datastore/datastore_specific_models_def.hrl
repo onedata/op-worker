@@ -59,7 +59,7 @@
 %% Local, cached version of OZ user
 -record(onedata_user, {
     name :: binary(),
-    space_ids :: [binary()],
+    spaces :: [{SpaceId :: binary(), SpaceName :: binary()}],
     group_ids :: [binary()],
     connected_accounts :: [onedata_user:connected_account()],
     alias :: binary(),

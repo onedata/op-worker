@@ -174,7 +174,8 @@ saves_the_actual_data(Config) ->
 
     push_update(Node, [
         update(4, [<<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}])
         )
     ]),
     expect_message([], 4, []),
@@ -196,7 +197,7 @@ saves_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
-        space_ids = [<<"C">>, <<"D">>],
+        spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
@@ -238,7 +239,7 @@ new_user_with_present_space_triggers_file_meta_creation(Config) ->
 
         push_update(Node, [
             update(3, [<<"r2">>, <<"r1">>], U1,
-                user(<<"onedata ftw">>, [], [S1])
+                user(<<"onedata ftw">>, [], [{S1, <<"space_name">>}])
             )
         ]),
         expect_message([U1], 3, [])
@@ -262,7 +263,7 @@ new_user_with_present_space_triggers_file_meta_creation2(Config) ->
 
         push_update(Node, [
             update(3, [<<"r2">>, <<"r1">>], U1,
-                user(<<"onedata ftw">>, [], [S1])
+                user(<<"onedata ftw">>, [], [{S1, <<"space_name">>}])
             )
         ]),
         expect_message([U1], 3, [])
@@ -278,7 +279,7 @@ new_user_with_new_space_triggers_file_meta_creation(Config) ->
             )),
             update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
             update(3, [<<"r2">>, <<"r1">>], U1,
-                user(<<"onedata ftw">>, [], [S1])
+                user(<<"onedata ftw">>, [], [{S1, <<"space_name">>}])
             )
         ]),
         expect_message([U1], 3, [])
@@ -301,7 +302,8 @@ updated_user_with_present_space_triggers_file_meta_creation(Config) ->
             update(4, [<<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
             )),
-            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+            update(5, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}]))
         ]),
         expect_message([U1], 5, [])
     end,
@@ -324,7 +326,8 @@ updated_user_with_present_space_triggers_file_meta_creation2(Config) ->
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1])),
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}])),
             update(5, [<<"r2">>, <<"r1">>], S1, space(
                 <<"space_name">>, [{U1, Priv1}], [], [{P1, 1000}]
             ))
@@ -350,7 +353,8 @@ updated_user_with_present_space_triggers_file_meta_creation3(Config) ->
         expect_message([U1], 3, []),
 
         push_update(Node, [
-            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+            update(4, [<<"r3">>, <<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}]))
         ]),
         expect_message([U1], 4, []),
 
@@ -411,7 +415,8 @@ add_provider_to_space_triggers_file_meta_creation(Config) ->
                 <<"space_name">>, [{U1, Priv1}], [], []
             )),
             update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+            update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+                [{S1, <<"space_name">>}]))
         ]),
         expect_message([U1], 3, []),
 
@@ -440,7 +445,8 @@ space_without_support_test(Config) ->
             <<"space_name">>, [{U1, Priv1}], [], []
         )),
         update(2, [<<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>)),
-        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [], [S1]))
+        update(3, [<<"r2">>, <<"r1">>], U1, user(<<"onedata">>, [],
+            [{S1, <<"space_name">>}]))
     ]),
     expect_message([U1], 3, []),
 
@@ -479,7 +485,8 @@ updates_with_the_actual_data(Config) ->
             [{<<"U1">>, Priv1}, {<<"U2">>, []}]
         )),
         update(7, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}])
         ),
         update(8, [<<"r3">>, <<"r2">>, <<"r1">>], P1, provider(<<"diginet rulz">>))
     ]),
@@ -502,7 +509,7 @@ updates_with_the_actual_data(Config) ->
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
         name = <<"onedata ftw">>,
         group_ids = [<<"A">>, <<"B">>],
-        space_ids = [<<"C">>, <<"D">>],
+        spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
     ?assertMatch({ok, #document{key = P1, value = #provider_info{
@@ -552,7 +559,8 @@ resolves_conflicts(Config) ->
         update(1, [<<"r3">>, <<"r2">>, <<"r1">>], S1, space(<<"space xp">>)),
         update(2, [<<"r3">>, <<"r2">>, <<"r1">>], G1, group(<<"group lol">>)),
         update(3, [<<"r3">>, <<"r2">>, <<"r1">>], U1,
-            user(<<"onedata ftw">>, [<<"A">>, <<"B">>], [<<"C">>, <<"D">>])
+            user(<<"onedata ftw">>, [<<"A">>, <<"B">>],
+                [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}])
         )
     ]),
     expect_message([], 3, []),
@@ -578,7 +586,7 @@ resolves_conflicts(Config) ->
     }, fetch(Node, onedata_group, G1)),
     ?assertMatch({ok, #document{key = U1, value = #onedata_user{
         name = <<"onedata ftw">>,
-        group_ids = [<<"A">>, <<"B">>], space_ids = [<<"C">>, <<"D">>],
+        group_ids = [<<"A">>, <<"B">>], spaces = [{<<"C">>, <<"D">>}, {<<"E">>, <<"F">>}],
         revision_history = [<<"r3">>, <<"r2">>, <<"r1">>]}}
     }, fetch(Node, onedata_user, U1)),
     ok.
@@ -662,8 +670,8 @@ group(Name) ->
 group(Name, SIDs, UsersWithPrivileges) ->
     {group, [{name, Name}, {spaces, SIDs}, {users, UsersWithPrivileges}]}.
 
-user(Name, GIDs, SIDs) ->
-    {user, [{name, Name}, {group_ids, GIDs}, {space_ids, SIDs}]}.
+user(Name, GIDs, Spaces) ->
+    {user, [{name, Name}, {group_ids, GIDs}, {space_names, Spaces}]}.
 
 update(Seq, Revs, ID, Core) ->
     [{seq, Seq}, {revs, Revs}, {id, ID}, Core].

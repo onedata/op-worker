@@ -48,7 +48,7 @@ get_default_space_id(CTX = #fslogic_ctx{}) ->
 get_default_space_id(?ROOT_USER_ID) ->
     throw(no_default_space_for_root_user);
 get_default_space_id(UserId) ->
-    {ok, #document{value = #onedata_user{space_ids = [DefaultSpaceId | _]}}} =
+    {ok, #document{value = #onedata_user{spaces = [{DefaultSpaceId, _} | _]}}} =
         onedata_user:get(UserId),
     {ok, DefaultSpaceId}.
 

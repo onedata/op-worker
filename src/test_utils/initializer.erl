@@ -15,6 +15,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 -include_lib("ctool/include/oz/oz_groups.hrl").
+-include_lib("ctool/include/oz/oz_users.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models_def.hrl").
 -include_lib("ctool/include/oz/oz_providers.hrl").
@@ -151,7 +152,8 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_sesion(W, Config),
         clear_cache(W)
     end, DomainWorkers),
-    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_groups, space_storage, oneprovider, oz_providers]).
+    test_utils:mock_validate_and_unload(Workers, [file_meta, oz_spaces, oz_users,
+        oz_groups, space_storage, oneprovider, oz_providers]).
 
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -244,9 +246,6 @@ clear_models(Worker, Names) ->
 setup_session(_Worker, [], Config) ->
     Config;
 setup_session(Worker, [{UserId, Spaces, Groups} | R], Config) ->
-    {SpaceIds, SpaceNames} = lists:unzip(Spaces),
-    {GroupIds, _GroupNames} = lists:unzip(Groups),
-
     Name = fun(Text, User) -> list_to_binary(Text ++ "_" ++ binary_to_list(User))  end,
 
     SessId = Name("session_id", UserId),
@@ -254,22 +253,17 @@ setup_session(Worker, [{UserId, Spaces, Groups} | R], Config) ->
     Iden = #identity{user_id = UserId},
     UserName = Name("name", UserId),
 
-    lists:foreach(fun(SpaceName) ->
+    lists:foreach(fun({_, SpaceName}) ->
         case get(SpaceName) of
             undefined -> put(SpaceName, [SessId]);
             SessIds -> put(SpaceName, [SessId | SessIds])
         end
-    end, SpaceNames),
+    end, Spaces),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, #auth{}, []])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, create, [
-        #document{key = UserId, value = #onedata_user{
-            name = UserName, space_ids = SpaceIds, group_ids = GroupIds
-        }}
-    ]),
-    [{ok, _} = rpc:call(Worker, onedata_group, get_or_fetch, [Id, #auth{}]) || Id <- GroupIds],
+    {ok, _} = rpc:call(Worker, onedata_user, fetch, [{user, UserNum}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -480,6 +474,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
 %%    ct:print("Users ~p", [Users]),
 
     file_meta_mock_setup(AllWorkers),
+    oz_users_mock_setup(AllWorkers, Users),
     oz_spaces_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesToProviders),
     oz_groups_mock_setup(AllWorkers, Groups, GroupUsers),
 
@@ -515,6 +510,36 @@ get_same_domain_workers(Config, Domain) ->
 teardown_storage(Worker, Config) ->
     TmpDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     "" = rpc:call(Worker, os, cmd, ["rm -rf " ++ TmpDir]).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Mocks oz_users module, so that it returns user details, spaces and groups.
+%% @end
+%%--------------------------------------------------------------------
+-spec oz_users_mock_setup(Workers :: node() | [node()],
+    [{integer(), [{binary(), binary()}], [{binary(), binary()}]}]) ->
+    ok.
+oz_users_mock_setup(Workers, Users) ->
+    test_utils:mock_new(Workers, oz_users),
+    test_utils:mock_expect(Workers, oz_users, get_details, fun({user, UserNum}) ->
+        {ok, #user_details{
+            id = name("user_id", UserNum),
+            name = name("username", UserNum)
+        }}
+    end),
+
+    test_utils:mock_expect(Workers, oz_users, get_spaces, fun({user, UserNum}) ->
+        {_, Spaces, _} = lists:keyfind(UserNum, 1, Users),
+        {[DefaultSpaceId | _] = SpaceIds, _} = lists:unzip(Spaces),
+        {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
+    end),
+
+    test_utils:mock_expect(Workers, oz_users, get_groups, fun({user, UserNum}) ->
+        {_, _, Groups} = lists:keyfind(UserNum, 1, Users),
+        {GroupIds, _} = lists:unzip(Groups),
+        {ok, GroupIds}
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -594,5 +619,6 @@ file_meta_mock_setup(Workers) ->
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, 'after', fun
         (onedata_user, create_or_update, _, _, {ok, UUID}) -> Handler(UUID);
-        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID)
+        (onedata_user, create, _, _, {ok, UUID}) -> Handler(UUID);
+        (onedata_user, save, _, _, {ok, UUID}) -> Handler(UUID)
     end).
