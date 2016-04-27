@@ -190,7 +190,7 @@ def setup_worker(worker, bin_worker, domains_name, bin_cm, config, config_path,
 
 def _start_storages(config, config_path, ceph_image, s3_image, nfs_image, image,
                     uid):
-    storages_dockers = {'ceph': {}, 's3': {}, 'nfs': {}}
+    storages_dockers = {'ceph': {}, 's3': {}, 'nfs': {}, 'posix': {}}
     docker_ids = []
     if 'os_configs' in config:
         start_iam_mock = False

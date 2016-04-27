@@ -190,6 +190,44 @@ def remove(containers, docker_host=None, force=False,
     subprocess.check_call(cmd)
 
 
+def login(user, password, repository='hub.docker.com'):
+    """Logs into docker repository."""
+
+    subprocess.check_call(['docker', 'login', '-u', user, '-p', password,
+                           repository])
+
+
+def build_image(image, build_args):
+    """Builds and tags docker image."""
+
+    subprocess.check_call(['docker', 'build', '--no-cache', '--force-rm', '-t',
+                           image] + build_args)
+
+
+def tag_image(image, tag):
+    """Tags docker image."""
+
+    subprocess.check_call(['docker', 'tag', image, tag])
+
+
+def push_image(image):
+    """Pushes docker image to the repository."""
+
+    subprocess.check_call(['docker', 'push', image])
+
+
+def pull_image(image):
+    """Pulls docker image from the repository."""
+
+    subprocess.check_call(['docker', 'pull', image])
+
+
+def remove_image(image):
+    """Removes docker image."""
+
+    subprocess.check_call(['docker', 'rmi', '-f', image])
+
+
 def create_volume(path, name, image, command):
     cmd = ['docker']
 

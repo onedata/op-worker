@@ -16,6 +16,8 @@ import time
 import sys
 from . import docker
 from timeouts import *
+import tempfile
+import stat
 
 try:
     import xml.etree.cElementTree as eTree
@@ -24,7 +26,7 @@ except ImportError:
 
 requests.packages.urllib3.disable_warnings()
 
-HOST_STORAGE_PATH = "/tmp/onedata/storage"
+HOST_STORAGE_PATH = "/tmp/onedata"
 
 
 def nagios_up(ip, port=None, protocol='https'):
@@ -238,17 +240,13 @@ def volume_for_storage(storage):
 
 
 def storage_host_path(storage):
-    """Returns path to storage on host
+    """Returns path to temporary directory for storage on host
     """
-    return os.path.join(HOST_STORAGE_PATH, ensure_relative_path(storage))
-
-
-def ensure_relative_path(path):
-    """Ensures that given path is relative (doesn't start with '/')
-    """
-    if path[0] == "/":
-        return path[1:]
-    return path
+    if not os.path.exists(HOST_STORAGE_PATH):
+        os.makedirs(HOST_STORAGE_PATH)
+    tmpdir = tempfile.mkdtemp(dir=HOST_STORAGE_PATH)
+    os.chmod(tmpdir,  stat.S_IRWXU or stat.S_IRWXG or stat.S_IRWXO)
+    return tmpdir
 
 
 def mount_nfs_command(config, storages_dockers):

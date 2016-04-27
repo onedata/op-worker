@@ -96,7 +96,7 @@ EOF
     )
 
     volumes = [(bindir, DOCKER_BINDIR_PATH, 'ro')]
-    volumes += configurator.extra_volumes(config, bindir, domain)
+    volumes += configurator.extra_volumes(config, bindir, domain, storages_dockers)
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
@@ -262,6 +262,9 @@ def up(image, bindir, dns_server, uid, config_path, configurator, logdir=None,
                     'ns': worker_ips,
                     'a': []
                 }
+            },
+            'domain_mappings': {
+                instance: instance_domain
             }
         }
         common.merge(current_output, domains)
