@@ -244,8 +244,6 @@ clear_models(Worker, Names) ->
 setup_session(_Worker, [], Config) ->
     Config;
 setup_session(Worker, [{UserId, Spaces, Groups} | R], Config) ->
-    Self = self(),
-
     {SpaceIds, SpaceNames} = lists:unzip(Spaces),
     {GroupIds, _GroupNames} = lists:unzip(Groups),
 
@@ -264,7 +262,7 @@ setup_session(Worker, [{UserId, Spaces, Groups} | R], Config) ->
     end, SpaceNames),
 
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #auth{}, Self])),
+        reuse_or_create_session, [SessId, fuse, Iden, #auth{}, []])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
     {ok, _} = rpc:call(Worker, onedata_user, create, [
         #document{key = UserId, value = #onedata_user{

@@ -20,6 +20,7 @@
 %% API
 -export([reuse_or_create_fuse_session/3, reuse_or_create_fuse_session/4]).
 -export([reuse_or_create_rest_session/1, reuse_or_create_rest_session/2]).
+-export([reuse_or_create_session/5]).
 -export([create_gui_session/2]).
 -export([remove_session/1]).
 -export([get_provider_session_id/2, session_id_to_provider_id/1]).

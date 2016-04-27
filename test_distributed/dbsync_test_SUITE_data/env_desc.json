@@ -83,5 +83,40 @@
                 }
             }
         }
+    },
+    "test_global_setup": {
+        "users": {
+            "user1": {
+                "default_space": "space1"
+            }
+        },
+        "groups": {
+        },
+        "spaces": {
+            "space_id1": {
+                "displayed_name": "space_name1",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": [
+                    "p1",
+                    "p2"
+                ]
+            },
+            "space_id2": {
+                "displayed_name": "space_name2",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": [
+                    "p1",
+                    "p2"
+                ]
+            }
+        }
     }
 }
