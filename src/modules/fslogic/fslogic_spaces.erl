@@ -152,7 +152,8 @@ get_space(FileEntry, UserId) ->
         ?ROOT_USER_ID ->
             {ok, SpaceDocument};
         _ ->
-            {ok, SpaceIds} = onedata_user:get_spaces(UserId),
+            {ok, Spaces} = onedata_user:get_spaces(UserId),
+            {SpaceIds, _} = lists:unzip(Spaces),
             #document{key = SpaceUUID} = SpaceDocument,
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
             case is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds) of

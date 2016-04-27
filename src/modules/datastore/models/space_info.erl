@@ -21,7 +21,7 @@
 -include_lib("ctool/include/oz/oz_spaces.hrl").
 
 %% API
--export([create_or_update/2, get/2, get_or_fetch/3]).
+-export([create_or_update/2, get/2, get_or_fetch/3, get_or_fetch/2]).
 
 %% model_behaviour callbacks
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, model_init/0,
@@ -162,6 +162,20 @@ get(SpaceId, UserId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets space info from the database in user context. If space info is not found
+%% fetches it from onezone and stores it in the database.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_or_fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
+    {ok, datastore:document()} | datastore:get_error().
+get_or_fetch(SessionId, SpaceId) ->
+    Client = fslogic_utils:session_to_rest_client(SessionId),
+    {ok, #document{value = #session{identity = #identity{user_id = UserId}}}} = session:get(SessionId),
+    get_or_fetch(Client, SpaceId, UserId).
+
 
 %%--------------------------------------------------------------------
 %% @doc

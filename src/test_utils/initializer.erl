@@ -263,7 +263,7 @@ setup_session(Worker, [{UserId, Spaces, Groups} | R], Config) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, #auth{}, []])),
     {ok, #document{value = Session}} = rpc:call(Worker, session, get, [SessId]),
-    {ok, _} = rpc:call(Worker, onedata_user, fetch, [{user, UserNum}]),
+    {ok, _} = rpc:call(Worker, onedata_user, fetch, [{user, {UserId, UserName}}]),
     ?assertReceivedMatch(onedata_user_setup, ?TIMEOUT),
     [
         {{spaces, UserId}, Spaces},
@@ -522,21 +522,21 @@ teardown_storage(Worker, Config) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, oz_users),
-    test_utils:mock_expect(Workers, oz_users, get_details, fun({user, UserNum}) ->
+    test_utils:mock_expect(Workers, oz_users, get_details, fun({user, {UID, UName}}) ->
         {ok, #user_details{
-            id = name("user_id", UserNum),
-            name = name("username", UserNum)
+            id = UID,
+            name = UName
         }}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_spaces, fun({user, UserNum}) ->
-        {_, Spaces, _} = lists:keyfind(UserNum, 1, Users),
+    test_utils:mock_expect(Workers, oz_users, get_spaces, fun({user, {UID, _}}) ->
+        {_, Spaces, _} = lists:keyfind(UID, 1, Users),
         {[DefaultSpaceId | _] = SpaceIds, _} = lists:unzip(Spaces),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
     end),
 
-    test_utils:mock_expect(Workers, oz_users, get_groups, fun({user, UserNum}) ->
-        {_, _, Groups} = lists:keyfind(UserNum, 1, Users),
+    test_utils:mock_expect(Workers, oz_users, get_groups, fun({user, {UID, _}}) ->
+        {_, _, Groups} = lists:keyfind(UID, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
     end).
