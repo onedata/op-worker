@@ -62,7 +62,7 @@ all() ->
 %%        delete_file_test,
 %%        delete_dir_test,
 %%        create_file_test,
-        update_file_test
+%%        update_file_test
 %%        create_dir_test,
 %%        capabilities_test,
 %%        choose_adequate_handler,
