@@ -15,34 +15,52 @@
 # image that should be used.
 #####################################################################
 
+# If docker command is not present, just skip gui injection and continue.
+command -v docker >/dev/null 2>&1 || {
+    echo "WARNING: docker client not found, continuing without gui injection." >&2;
+    exit 0;
+}
+
 if [[ ! -f "${1}" ]]; then
     echo "Usage:"
     echo "    ./inject-gui.sh <path to gui config>"
     exit 1
 fi
 
+TARGET_DIR=''
+PRIMARY_IMAGE=''
+SECONDARY_IMAGE=''
 # Source gui config which should contain following exports:
 # TARGET_DIR
 # PRIMARY_IMAGE
 # SECONDARY_IMAGE
 source ${1}
 
-echo ${TARGET_DIR}
-echo ${PRIMARY_IMAGE}
-echo ${SECONDARY_IMAGE}
+if [[ -z ${TARGET_DIR} ]]; then
+    echo "TARGET_DIR not defined in ${1}, aborting"
+    exit 1
+fi
+if [[ -z ${PRIMARY_IMAGE} ]]; then
+    echo "PRIMARY_IMAGE not defined in ${1}, aborting"
+    exit 1
+fi
+if [[ -z ${SECONDARY_IMAGE} ]]; then
+    echo "SECONDARY_IMAGE not defined in ${1}, aborting"
+    exit 1
+fi
 
 STATIC_FILES_IMAGE=${PRIMARY_IMAGE}
-docker pull ${STATIC_FILES_IMAGE}
+docker pull ${STATIC_FILES_IMAGE} 2>/dev/null
 if [ $? -ne 0 ]; then
     STATIC_FILES_IMAGE=${SECONDARY_IMAGE}
-    docker pull ${STATIC_FILES_IMAGE}
+    docker pull ${STATIC_FILES_IMAGE} 2>/dev/null
     if [ $? -ne 0 ]; then
-        echo "Cannot pull primary nor secondary docker image for static GUI \
-        files. Exiting."
+        echo "Cannot pull primary nor secondary docker image for static GUI files. Exiting."
         exit 1
     fi
 fi
-exit 0
+
+set -e
 
 echo "Copying static GUI files"
 echo "    from image: ${STATIC_FILES_IMAGE}"

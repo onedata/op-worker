@@ -22,8 +22,3 @@ TARGET_DIR='rel/op_worker/data/gui_static'
 PRIMARY_IMAGE='docker.onedata.org/op-gui-default:VFS-1825'
 # Image which will be used if primary image is not resolved.
 SECONDARY_IMAGE='onedata/op-gui-default:VFS-1825'
-
-
-
-SECONDARY_IMAGE='docker.onedata.org/op-gui-default:VFS-1826'
-PRIMARY_IMAGE='onedata/op-gui-default:VFS-1825'
