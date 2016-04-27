@@ -73,11 +73,13 @@ get_space(FileEntry, UserId) ->
     catch
         _:_ ->
             try
+                %% check if SpaceUUID is root space
                 OwnerId = fslogic_uuid:default_space_owner(SpaceUUID),
                 {ok, #document{key = UserDefaultSpaceUUID}} = get_default_space(OwnerId),
                 fslogic_uuid:space_dir_uuid_to_spaceid(UserDefaultSpaceUUID)
             catch
                _:_ ->
+                   %% SpaceUUID is neither space nor root space
                    throw({not_a_space, FileEntry})
             end
     end,
