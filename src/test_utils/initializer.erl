@@ -529,6 +529,7 @@ teardown_storage(Worker, Config) ->
     [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [binary()]}]) ->
     ok.
 oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
+    Domains = lists:usort([?GET_DOMAIN(W) || W <- Workers]),
     test_utils:mock_new(Workers, oz_spaces),
     test_utils:mock_expect(Workers, oz_spaces, get_details,
         fun(_, SpaceId) ->
@@ -539,7 +540,7 @@ oz_spaces_mock_setup(Workers, Spaces, Users, SpacesToProviders) ->
 
     test_utils:mock_expect(Workers, oz_spaces, get_providers,
         fun(_, SpaceId) ->
-            {ok, proplists:get_value(SpaceId, SpacesToProviders)}
+            {ok, proplists:get_value(SpaceId, SpacesToProviders, [domain_to_provider_id(D) || D <- Domains])}
         end
     ),
 
