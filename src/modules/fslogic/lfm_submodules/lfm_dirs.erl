@@ -38,20 +38,15 @@ mkdir(SessId, Path) ->
     Mode :: file_meta:posix_permissions()) ->
     {ok, DirUUID :: file_meta:uuid()} | logical_file_manager:error_reply().
 mkdir(SessId, Path, Mode) ->
-    CTX = fslogic_context:new(SessId),
-    {ok, Tokens} = fslogic_path:verify_file_path(Path),
-    Entry = fslogic_path:get_canonical_file_entry(CTX, Tokens),
-    {ok, CanonicalPath} = fslogic_path:gen_path(Entry, SessId),
-    {Name, ParentPath} = fslogic_path:basename_and_parent(CanonicalPath),
-    case file_meta:resolve_path(ParentPath) of
-        {ok, {#document{key = ParentUUID}, _}} ->
+    {Name, ParentPath} = fslogic_path:basename_and_parent(Path),
+    lfm_utils:call_fslogic(SessId, #get_file_attr{entry = {path, ParentPath}}, fun
+        (#file_attr{uuid = ParentGUID}) ->
             lfm_utils:call_fslogic(SessId,
-                #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode},
+                #create_dir{parent_uuid = ParentGUID, name = Name, mode = Mode},
                 fun(#dir{uuid = DirUUID}) ->
                     {ok, DirUUID}
-                end);
-        {error, Error} -> {error, Error}
-    end.
+                end)
+    end).
 
 
 %%--------------------------------------------------------------------

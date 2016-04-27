@@ -183,26 +183,8 @@ get_or_fetch(Client, SpaceId, UserId) ->
 -spec get(SpaceId :: binary(), UserId :: onedata_user:id()) ->
     {ok, datastore:document()} | datastore:get_error().
 get(SpaceId, UserId) ->
-    case datastore:fetch_link(?LINK_STORE_LEVEL, SpaceId, ?MODEL_NAME, UserId) of
-        {ok, {LinkKey, _}} -> space_info:get(LinkKey);
-        {error, link_not_found} -> {error, {not_found, ?MODEL_NAME}};
-        {error, Reason} -> {error, Reason}
-    end.
+    space_info:get({SpaceId, UserId}).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Fetches space info from onezone in provider context and stores it
-%% in the database.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(SpaceId :: binary()) ->
-    {ok, datastore:document()} | datastore:get_error().
-fetch(SpaceId) ->
-    SpaceInfo = get_info(provider, SpaceId),
-    Doc = #document{key = SpaceId, value = SpaceInfo},
-    {ok, _} = save(Doc),
-    {ok, Doc}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -232,11 +214,8 @@ fetch(Client, SpaceId, UserId) ->
                 {ok, _} = save(NewDoc),
                 {ok, NewDoc};
             {error, {not_found, _}} ->
-                {ok, #document{key = ParentKey}} = fetch(SpaceId),
-                Doc = #document{value = Info},
-                {ok, Key} = save(Doc),
-                ok = datastore:add_links(?LINK_STORE_LEVEL, ParentKey, ?MODEL_NAME,
-                    {UserId, {Key, ?MODEL_NAME}}),
+                Doc = #document{key = {SpaceId, UserId}, value = Info},
+                {ok, _} = save(Doc),
                 {ok, Doc};
             {error, Reason} ->
                 {error, Reason}

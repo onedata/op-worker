@@ -64,7 +64,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
                 }}
             ) end),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
-                #dir{uuid = DirUUID}
+                #dir{uuid = fslogic_uuid:to_file_guid(DirUUID)}
             };
         {error, already_exists} ->
             #fuse_response{status = #status{code = ?EEXIST}}

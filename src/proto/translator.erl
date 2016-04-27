@@ -123,8 +123,8 @@ translate_from_protobuf(#'FuseRequest'{fuse_request = {_, Record}}) ->
     #fuse_request{fuse_request = translate_from_protobuf(Record)};
 translate_from_protobuf(#'GetFileAttr'{entry_type = 'PATH', entry = Path}) ->
     #get_file_attr{entry = {path, Path}};
-translate_from_protobuf(#'GetFileAttr'{entry_type = 'UUID', entry = UUID}) ->
-    #get_file_attr{entry = {uuid, UUID}};
+translate_from_protobuf(#'GetFileAttr'{entry_type = 'UUID', entry = GUID}) ->
+    #get_file_attr{entry = {guid, GUID}};
 translate_from_protobuf(#'GetFileChildren'{uuid = UUID, offset = Offset, size = Size}) ->
     #get_file_children{uuid = UUID, offset = Offset, size = Size};
 translate_from_protobuf(#'CreateDir'{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
@@ -486,8 +486,8 @@ translate_to_protobuf(#fuse_request{fuse_request = Record}) ->
     {fuse_request, #'FuseRequest'{fuse_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#get_file_attr{entry = {path, Path}}) ->
     {get_file_attr, #'GetFileAttr'{entry = Path, entry_type = 'PATH'}};
-translate_to_protobuf(#get_file_attr{entry = {uuid, UUID}}) ->
-    {get_file_attr, #'GetFileAttr'{entry_type = 'UUID', entry = UUID}};
+translate_to_protobuf(#get_file_attr{entry = {guid, GUID}}) ->
+    {get_file_attr, #'GetFileAttr'{entry_type = 'UUID', entry = GUID}};
 translate_to_protobuf(#get_file_children{uuid = UUID, offset = Offset, size = Size}) ->
     {get_file_children, #'GetFileChildren'{uuid = UUID, offset = Offset, size = Size}};
 translate_to_protobuf(#create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode}) ->
