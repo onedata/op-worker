@@ -117,7 +117,15 @@ EOF
         else:
             posix_storages = [s['name'] for s in os_config['storages']
                               if s['type'] == 'posix']
-    volumes += [common.volume_for_storage(s) for s in posix_storages]
+
+        for s in posix_storages:
+            if not (storages_dockers and s in storages_dockers['posix'].keys()):
+                v = common.volume_for_storage(s)
+                (host_path, docker_path, mode) = v
+                if not storages_dockers:
+                    storages_dockers = {'posix': {}}
+                storages_dockers['posix'][s] = {"host_path": host_path, "docker_path": docker_path}
+                volumes.append(v)
 
     if logdir:
         logdir = os.path.join(os.path.abspath(logdir), hostname)
