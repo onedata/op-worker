@@ -114,22 +114,18 @@ create(#document{value = #file_meta{name = FileName}} = Document) ->
 %%--------------------------------------------------------------------
 -spec create(entry(), file_meta() | datastore:document()) -> {ok, uuid()} | datastore:create_error().
 create({uuid, ParentUUID}, File) ->
-  ?error("aaaa ~p", [{{uuid, ParentUUID}, File}]),
     ?run(begin
              {ok, Parent} = get(ParentUUID),
              create(Parent, File)
          end);
 create({path, Path}, File) ->
-  ?error("aaaa2 ~p", [{{path, Path}, File}]),
     ?run(begin
              {ok, {Parent, _}} = resolve_path(Path),
              create(Parent, File)
          end);
 create(#document{} = Parent, #file_meta{} = File) ->
-  ?error("aaaa3 ~p", [{Parent, File}]),
     create(Parent, #document{value = File});
 create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name = FileName, version = V}} = FileDoc) ->
-  ?error("aaaa4 ~p", [{Parent, FileDoc}]),
     ?run(begin
              false = is_snapshot(FileName),
              datastore:run_synchronized(?MODEL_NAME, ParentUUID,
@@ -406,14 +402,11 @@ get_ancestors(Entry) ->
     ?run(begin
              {ok, #document{key = Key} = Doc} = get(Entry),
              set_link_context(Doc),
-             ?error("geta ~p", [{Entry, Doc}]),
              {ok, get_ancestors2(Key, [])}
          end).
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->
-  ?error("geta3 ~p", [{Acc}]),
     Acc;
 get_ancestors2(Key, Acc) ->
-  ?error("geta2 ~p", [{Key, Acc, erlang:get(mother_scope), erlang:get(other_scopes)}]),
     {ok, {ParentKey, ?MODEL_NAME}} = datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
     get_ancestors2(ParentKey, [ParentKey | Acc]).
 
@@ -429,7 +422,6 @@ resolve_path(Path) ->
 
 -spec resolve_path(Parent :: entry(), path()) -> {ok, {datastore:document(), [uuid()]}} | datastore:generic_error().
 resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
-  ?error("xxxx2 ~p", [{ParentEntry, Path}]),
     ?run(begin
              {ok, #document{key = RootUUID} = Root} = get(ParentEntry),
              SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
@@ -456,7 +448,6 @@ resolve_path(ParentEntry, <<?DIRECTORY_SEPARATOR, Path/binary>>) ->
                      set_link_context(Root),
                      case datastore:link_walk(?LINK_STORE_LEVEL, Root, Tokens, get_leaf) of
                          {ok, {Leaf, KeyPath}} ->
-                           ?error("xxxx ~p", [{Root, Tokens, Leaf, KeyPath}]),
                              [_ | [RealParentUUID | _]] = lists:reverse([RootUUID | KeyPath]),
                              {ok, {ParentUUID, _}} = datastore:fetch_link(?LINK_STORE_LEVEL, Leaf, parent),
                              case ParentUUID of
@@ -502,14 +493,11 @@ rename(Entry, Op) ->
 %%--------------------------------------------------------------------
 -spec get_scope(Entry :: entry()) -> {ok, ScopeDoc :: datastore:document()} | datastore:generic_error().
 get_scope(#document{value = #file_meta{is_scope = true}} = Document) ->
-  ?error("bbbb ~p", [Document]),
     {ok, Document};
 get_scope(#document{value = #file_meta{is_scope = false, scope = Scope}} = Document) ->
-  ?error("bbbb2 ~p", [Document]),
     get(Scope);
 get_scope(Entry) ->
     ?run(begin
-           ?error("bbbb3 ~p", [Entry]),
              {ok, Doc} = get(Entry),
              get_scope(Doc)
          end).
@@ -764,7 +752,7 @@ set_scopes(Entry, #document{key = NewScopeUUID}) ->
                  after 200 ->
                      ?error("set_scopes error for entry: ~p", [Entry])
                  end
-                           end, Setters),
+             end, Setters),
              Res
          end).
 
@@ -866,13 +854,11 @@ location_ref(ProviderId) ->
 -spec set_link_context(Doc :: datastore:document() | datastore:key()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
 set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, scope = MotherScope}}) ->
-  ?error("aaaaa ~p", [oneprovider:get_provider_id()]),
   SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
   case MotherScope of
     SPACES_BASE_DIR_UUID ->
       set_link_context(ScopeUUID);
     _ ->
-      ?error("qqqq"),
       erlang:put(mother_scope, oneprovider:get_provider_id()),
       erlang:put(other_scopes, [])
   end,
@@ -880,7 +866,6 @@ set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, 
 set_link_context(#document{value = #file_meta{is_scope = false, scope = ScopeUUID}}) ->
     set_link_context(ScopeUUID);
 set_link_context(ScopeUUID) ->
-  ?error("aaaaa2 ~p", [oneprovider:get_provider_id()]),
   MyProvID = oneprovider:get_provider_id(),
   erlang:put(mother_scope, MyProvID),
   try
