@@ -56,7 +56,7 @@ generate: deps compile
 	./rebar generate $(OVERLAY_VARS)
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 	# Copy GUI static files into release
-	./inject_gui.sh
+	./inject-gui.sh
 
 clean: relclean pkgclean
 	./rebar clean

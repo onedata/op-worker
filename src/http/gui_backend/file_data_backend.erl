@@ -170,7 +170,7 @@ create_record(<<"file">>, Data) ->
             <<"dir">> ->
                 gui_error:report_warning(<<"Failed to create new directory.">>);
             <<"file">> ->
-                gui_error:report_warning(<<"Failed to create new fiel.">>)
+                gui_error:report_warning(<<"Failed to create new file.">>)
         end
     end.
 

@@ -7,18 +7,42 @@
 # cited in 'LICENSE.txt'.
 #####################################################################
 # usage:
-# ./inject_gui.sh
+# ./inject_gui.sh <path to gui-config>
 #
-# This script copies static GUI files included in a static docker image to
-# given directory. Can be used to inject the GUI during release building.
+# This script copies static GUI files included in a static docker.
+# Can be used to inject the GUI during release building.
+# Requires configuration file that defines target directory and docker
+# image that should be used.
 #####################################################################
 
-# Configuration
-STATIC_FILES_IMAGE='docker.onedata.org/op-gui-default:VFS-1825'
-TARGET_DIR='rel/op_worker/data/gui_static'
+if [[ ! -f "${1}" ]]; then
+    echo "Usage:"
+    echo "    ./inject-gui.sh <path to gui config>"
+    exit 1
+fi
 
-# Fail on any command failure
-set -e
+# Source gui config which should contain following exports:
+# TARGET_DIR
+# PRIMARY_IMAGE
+# SECONDARY_IMAGE
+source ${1}
+
+echo ${TARGET_DIR}
+echo ${PRIMARY_IMAGE}
+echo ${SECONDARY_IMAGE}
+
+STATIC_FILES_IMAGE=${PRIMARY_IMAGE}
+docker pull ${STATIC_FILES_IMAGE}
+if [ $? -ne 0 ]; then
+    STATIC_FILES_IMAGE=${SECONDARY_IMAGE}
+    docker pull ${STATIC_FILES_IMAGE}
+    if [ $? -ne 0 ]; then
+        echo "Cannot pull primary nor secondary docker image for static GUI \
+        files. Exiting."
+        exit 1
+    fi
+fi
+exit 0
 
 echo "Copying static GUI files"
 echo "    from image: ${STATIC_FILES_IMAGE}"
