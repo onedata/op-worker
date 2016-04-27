@@ -70,7 +70,15 @@ create(Document) ->
 %%--------------------------------------------------------------------
 -spec get(datastore:ext_key()) -> {ok, datastore:document()} | datastore:get_error().
 get(Key) ->
-    datastore:get(?STORE_LEVEL, ?MODULE, Key).
+    case datastore:get(?STORE_LEVEL, ?MODULE, Key) of
+        {error, Reason} ->
+            {error, Reason};
+        {ok, D = #document{value = S = #space_info{providers_supports = Supports}}} when is_list(Supports) ->
+            {ProviderIds, _} = lists:unzip(Supports),
+            {ok, D#document{value = S#space_info{providers = ProviderIds}}};
+        {ok, Doc} ->
+            {ok, Doc}
+    end .
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -169,7 +177,7 @@ get(SpaceId, UserId) ->
 %% fetches it from onezone and stores it in the database.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_fetch(Client :: oz_endpoint:client(), SpaceId :: binary()) ->
+-spec get_or_fetch(session:id(), SpaceId :: binary()) ->
     {ok, datastore:document()} | datastore:get_error().
 get_or_fetch(SessionId, SpaceId) ->
     Client = fslogic_utils:session_to_rest_client(SessionId),
@@ -196,8 +204,12 @@ get_or_fetch(Client, SpaceId, UserId) ->
         {ok, #document{value = SpaceInfo} = Doc} ->
             case onedata_user:get_or_fetch(Client, UserId) of
                 {ok, #document{value = #onedata_user{spaces = Spaces}}} ->
-                    {_, SpaceName} = lists:keyfind(SpaceId, 1, Spaces),
-                    {ok, Doc#document{value = SpaceInfo#space_info{name = SpaceName}}};
+                    case lists:keyfind(SpaceId, 1, Spaces) of
+                        false ->
+                            {ok, Doc};
+                        {_, SpaceName} ->
+                            {ok, Doc#document{value = SpaceInfo#space_info{name = SpaceName}}}
+                    end;
                 {error, Reason} ->
                     {error, Reason}
             end;

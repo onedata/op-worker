@@ -298,26 +298,26 @@ handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {pa
     {ok, Tokens} = fslogic_path:verify_file_path(Path),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     fslogic_req_generic:get_file_attr(Ctx, CanonicalFileEntry);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {guid, UUID}}}) ->
-    fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = {guid, GUID}}}) ->
+    fslogic_req_generic:get_file_attr(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_attr{entry = Entry}}) ->
     fslogic_req_generic:get_file_attr(Ctx, Entry);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #delete_file{uuid = UUID}}) ->
-    fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_dir{parent_uuid = ParentUUID, name = Name, mode = Mode}}) ->
-    fslogic_req_special:mkdir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentUUID)}, Name, Mode);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_children{uuid = UUID, offset = Offset, size = Size}}) ->
-    fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Offset, Size);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_parent{uuid = UUID}}) ->
-    fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)});
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #change_mode{uuid = UUID, mode = Mode}}) ->
-    fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, Mode);
-handle_fuse_request(Ctx, #fuse_request{fuse_request = #rename{uuid = UUID, target_path = TargetPath}}) ->
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #delete_file{uuid = GUID}}) ->
+    fslogic_req_generic:delete(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #create_dir{parent_uuid = ParentGUID, name = Name, mode = Mode}}) ->
+    fslogic_req_special:mkdir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(ParentGUID)}, Name, Mode);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_file_children{uuid = GUID, offset = Offset, size = Size}}) ->
+    fslogic_req_special:read_dir(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Offset, Size);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_parent{uuid = GUID}}) ->
+    fslogic_req_regular:get_parent(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)});
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #change_mode{uuid = GUID, mode = Mode}}) ->
+    fslogic_req_generic:chmod(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, Mode);
+handle_fuse_request(Ctx, #fuse_request{fuse_request = #rename{uuid = GUID, target_path = TargetPath}}) ->
     {ok, Tokens} = fslogic_path:verify_file_path(TargetPath),
     CanonicalFileEntry = fslogic_path:get_canonical_file_entry(Ctx, Tokens),
     #fslogic_ctx{session_id = SessId} = Ctx,
     {ok, CanonicalTargetPath} = fslogic_path:gen_path(CanonicalFileEntry, SessId),
-    fslogic_req_generic:rename(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, CanonicalTargetPath);
+    fslogic_req_generic:rename(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(GUID)}, CanonicalTargetPath);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #update_times{uuid = UUID, atime = ATime, mtime = MTime, ctime = CTime}}) ->
     fslogic_req_generic:update_times(Ctx, {uuid, fslogic_uuid:file_guid_to_uuid(UUID)}, ATime, MTime, CTime);
 handle_fuse_request(Ctx, #fuse_request{fuse_request = #get_new_file_location{name = Name, parent_uuid = ParentUUID,
