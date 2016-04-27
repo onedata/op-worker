@@ -131,19 +131,25 @@ find_query(<<"space">>, _Data) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 create_record(<<"space">>, Data) ->
     UserAuth = op_gui_utils:get_user_rest_auth(),
-    Name = proplists:get_value(<<"name">>, Data, <<"New Space">>),
-    case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
-        {ok, SpaceId} ->
-            {ok, [
-                {<<"id">>, SpaceId},
-                {<<"name">>, Name},
-                {<<"isDefault">>, false},
-                {<<"userPermissions">>, []},
-                {<<"groupPermissions">>, []}
-            ]};
-        _ ->
+    Name = proplists:get_value(<<"name">>, Data),
+    case Name of
+        <<"">> ->
             gui_error:report_warning(
-                <<"Cannot create new space due to unknown error.">>)
+                <<"Cannot create space with emty name.">>);
+        _ ->
+            case space_logic:create_user_space(UserAuth, #space_info{name = Name}) of
+                {ok, SpaceId} ->
+                    {ok, [
+                        {<<"id">>, SpaceId},
+                        {<<"name">>, Name},
+                        {<<"isDefault">>, false},
+                        {<<"userPermissions">>, []},
+                        {<<"groupPermissions">>, []}
+                    ]};
+                _ ->
+                    gui_error:report_warning(
+                        <<"Cannot create new space due to unknown error.">>)
+            end
     end.
 
 
