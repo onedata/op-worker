@@ -37,14 +37,11 @@ def _node_up(image, pools, name, uid):
     username = 'client.admin'
     key = docker.exec_(container, ['ceph', 'auth', 'print-key', username],
                        output=True)
-    settings = docker.inspect(container)
-    ip = settings['NetworkSettings']['IPAddress']
 
     return {
         'docker_ids': [container],
         'username': username,
-        'key': key,
-        'host_name': ip
+        'key': key
     }
 
 
