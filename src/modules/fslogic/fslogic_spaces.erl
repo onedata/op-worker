@@ -74,7 +74,7 @@ get_space(FileEntry, UserId) ->
         _:_ ->
             try
                 OwnerId = fslogic_uuid:default_space_owner(SpaceUUID),
-                {ok, #document{key = UserDefaultSpaceUUID}} = fslogic_spaces:get_default_space(OwnerId),
+                {ok, #document{key = UserDefaultSpaceUUID}} = get_default_space(OwnerId),
                 fslogic_uuid:space_dir_uuid_to_spaceid(UserDefaultSpaceUUID)
             catch
                _:_ ->
