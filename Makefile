@@ -58,7 +58,7 @@ generate: deps compile
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 	# Copy GUI static files into release
 	@mkdir -p rel/op_worker/data/gui_static
-	deps/gui_static/* rel/op_worker/data/gui_static/
+	cp deps/gui_static/* rel/op_worker/data/gui_static/
 
 clean: relclean pkgclean
 	./rebar clean
