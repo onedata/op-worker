@@ -164,7 +164,9 @@ refresh_subscription() ->
 %%--------------------------------------------------------------------
 -spec schedule_subscription_renew() -> ok.
 schedule_subscription_renew() ->
-    {ok, Seconds}= application:get_env(?APP_NAME,
+    whereis(?MODULE) ! {timer, refresh_subscription},
+
+    {ok, Seconds} = application:get_env(?APP_NAME,
         subscription_renew_seconds),
 
     {ok, _} = timer:send_interval(timer:seconds(Seconds), whereis(?MODULE),
@@ -180,7 +182,7 @@ schedule_subscription_renew() ->
 %%--------------------------------------------------------------------
 -spec schedule_connection_start() -> ok.
 schedule_connection_start() ->
-    {ok, Delay}= application:get_env(?APP_NAME,
+    {ok, Delay} = application:get_env(?APP_NAME,
         subscriptions_connection_restart_interval),
 
     {ok, _} = timer:send_after(Delay, whereis(?MODULE),
