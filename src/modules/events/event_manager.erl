@@ -20,6 +20,7 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/handshake_messages.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

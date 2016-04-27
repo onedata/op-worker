@@ -16,6 +16,7 @@
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -555,7 +556,7 @@ end_per_testcase(_, Config) ->
     Iden :: session:identity(), Con :: pid()) -> ok.
 session_setup(Worker, SessId, Iden, Con) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, Con])).
+        reuse_or_create_session, [SessId, fuse, Iden, #auth{}, [Con]])).
 
 %%--------------------------------------------------------------------
 %% @private
