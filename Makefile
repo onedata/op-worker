@@ -43,6 +43,7 @@ compile:
 
 deps:
 	./rebar get-deps
+	deps/gui/pull-gui.sh
 
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
@@ -56,7 +57,8 @@ generate: deps compile
 	./rebar generate $(OVERLAY_VARS)
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 	# Copy GUI static files into release
-	./inject-gui.sh gui-config.sh
+	@mkdir -p rel/op_worker/data/gui_static
+	deps/gui_static/* rel/op_worker/data/gui_static/
 
 clean: relclean pkgclean
 	./rebar clean
@@ -144,7 +146,6 @@ package/$(PKG_ID).tar.gz: deps
 	     echo "$${vsn}" > $${dep}/priv/vsn.git; \
 	     sed -i'' "s/{vsn,\\s*git}/{vsn, \"$${vsn}\"}/" $${dep}/src/*.app.src 2>/dev/null || true; \
 	done
-	./inject-gui.sh gui-config.sh
 	find package/$(PKG_ID) -depth -name ".git" -not -path '*/cluster_worker/*' -exec rm -rf {} \;
 	tar -C package -czf package/$(PKG_ID).tar.gz $(PKG_ID)
 
