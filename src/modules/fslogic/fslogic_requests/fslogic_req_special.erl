@@ -99,19 +99,17 @@ read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
                 }
             };
         SpacesKey ->
-            {ok, #document{value = #onedata_user{space_ids = SpacesIds}}} =
+            {ok, #document{value = #onedata_user{spaces = Spaces}}} =
                 onedata_user:get(UserId),
 
             Children =
-                case Offset < length(SpacesIds) of
+                case Offset < length(Spaces) of
                     true ->
-                        SpacesIdsChunk = lists:sublist(SpacesIds, Offset + 1, Size),
-                        lists:map(fun(SpaceId) ->
+                        SpacesChunk = lists:sublist(Spaces, Offset + 1, Size),
+                        lists:map(fun({SpaceId, SpaceName}) ->
                             SpaceUUID = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-                            {ok, #document{value = #space_info{name = Name}}} =
-                                space_info:get_or_fetch(SessId, SpaceId),
-                            #child_link{uuid = SpaceUUID, name = Name}
-                        end, SpacesIdsChunk);
+                            #child_link{uuid = SpaceUUID, name = SpaceName}
+                        end, SpacesChunk);
                     false ->
                         []
                 end,
