@@ -140,6 +140,7 @@ create(#document{key = ParentUUID} = Parent, #document{value = #file_meta{name =
                                  {ok, UUID} ->
                                      SavedDoc = FileDoc#document{key = UUID},
                                      {ok, Scope} = get_scope(Parent),
+                                     set_link_context(Scope),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {FileName, SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, Parent, {snapshot_name(FileName, V), SavedDoc}),
                                      ok = datastore:add_links(?LINK_STORE_LEVEL, SavedDoc, [{parent, Parent}]),
@@ -180,6 +181,7 @@ fix_parent_links(Parent, Entry) ->
     {ok, #document{} = ParentDoc} = get(Parent),
     {ok, #document{value = #file_meta{name = FileName, version = V}} = FileDoc} = get(Entry),
     {ok, Scope} = get_scope(Parent),
+    set_link_context(Scope),
     ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {FileName, FileDoc}),
     ok = datastore:add_links(?LINK_STORE_LEVEL, ParentDoc, {snapshot_name(FileName, V), FileDoc}),
     ok = datastore:add_links(?LINK_STORE_LEVEL, FileDoc, [{parent, ParentDoc}]),
@@ -404,11 +406,14 @@ get_ancestors(Entry) ->
     ?run(begin
              {ok, #document{key = Key} = Doc} = get(Entry),
              set_link_context(Doc),
+             ?error("geta ~p", [{Entry, Doc}]),
              {ok, get_ancestors2(Key, [])}
          end).
 get_ancestors2(?ROOT_DIR_UUID, Acc) ->
+  ?error("geta3 ~p", [{Acc}]),
     Acc;
 get_ancestors2(Key, Acc) ->
+  ?error("geta2 ~p", [{Key, Acc, erlang:get(mother_scope), erlang:get(other_scopes)}]),
     {ok, {ParentKey, ?MODEL_NAME}} = datastore:fetch_link(?LINK_STORE_LEVEL, Key, ?MODEL_NAME, parent),
     get_ancestors2(ParentKey, [ParentKey | Acc]).
 
@@ -497,13 +502,14 @@ rename(Entry, Op) ->
 %%--------------------------------------------------------------------
 -spec get_scope(Entry :: entry()) -> {ok, ScopeDoc :: datastore:document()} | datastore:generic_error().
 get_scope(#document{value = #file_meta{is_scope = true}} = Document) ->
-    set_link_context(Document),
+  ?error("bbbb ~p", [Document]),
     {ok, Document};
-get_scope(#document{value = #file_meta{is_scope = false, scope = Scope}} = Doc) ->
-    set_link_context(Doc),
+get_scope(#document{value = #file_meta{is_scope = false, scope = Scope}} = Document) ->
+  ?error("bbbb2 ~p", [Document]),
     get(Scope);
 get_scope(Entry) ->
     ?run(begin
+           ?error("bbbb3 ~p", [Entry]),
              {ok, Doc} = get(Entry),
              get_scope(Doc)
          end).
@@ -674,6 +680,7 @@ rename3(#document{value = #file_meta{name = OldName}} = Subject, OldParentUUID, 
              ok = datastore:delete_links(?LINK_STORE_LEVEL, OldParentUUID, ?MODEL_NAME, OldName),
 
              {ok, NewScope} = get_scope(NewParent),
+             set_link_context(NewScope),
              ok = datastore:add_links(?LINK_STORE_LEVEL, NewParent, {NewName, Subject}),
              {ok, FileUUID} = update(Subject, #{name => NewName}),
              ok = datastore:add_links(?LINK_STORE_LEVEL, FileUUID, ?MODEL_NAME, {parent, NewParent}),
@@ -859,6 +866,7 @@ location_ref(ProviderId) ->
 -spec set_link_context(Doc :: datastore:document() | datastore:key()) -> ok.
 % TODO Upgrade to allow usage with cache (info avaliable for spawned processes)
 set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, scope = MotherScope}}) ->
+  ?error("aaaaa ~p", [oneprovider:get_provider_id()]),
   SPACES_BASE_DIR_UUID = ?SPACES_BASE_DIR_UUID,
   case MotherScope of
     SPACES_BASE_DIR_UUID ->
@@ -872,6 +880,7 @@ set_link_context(#document{key = ScopeUUID, value = #file_meta{is_scope = true, 
 set_link_context(#document{value = #file_meta{is_scope = false, scope = ScopeUUID}}) ->
     set_link_context(ScopeUUID);
 set_link_context(ScopeUUID) ->
+  ?error("aaaaa2 ~p", [oneprovider:get_provider_id()]),
   MyProvID = oneprovider:get_provider_id(),
   erlang:put(mother_scope, MyProvID),
   try

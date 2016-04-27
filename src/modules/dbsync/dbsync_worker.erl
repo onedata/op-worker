@@ -434,9 +434,9 @@ has_sync_context(#document{value = Value}) when is_tuple(Value) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_sync_context(datastore:document()) ->
-    datastore:key().
-get_sync_context(#document{key = Key, value = #file_meta{}}) ->
-    Key;
+    datastore:key() | datastore:document().
+get_sync_context(#document{value = #file_meta{}} = Doc) ->
+    Doc;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_meta}}) ->
     DocKey;
 get_sync_context(#document{value = #links{doc_key = DocKey, model = file_location}}) ->
@@ -473,8 +473,8 @@ get_space_id(#document{key = Key} = Doc) ->
 -spec get_space_id_not_cached(KeyToCache :: term(), datastore:document()) ->
     {ok, SpaceId :: binary()} | {error, Reason :: term()}.
 get_space_id_not_cached(KeyToCache, #document{} = Doc) ->
-    FileUUID = get_sync_context(Doc),
-    case file_meta:get_scope({uuid, FileUUID}) of
+    Context = get_sync_context(Doc),
+    case file_meta:get_scope(Context) of
         {ok, #document{key = <<"">> = Root}} ->
             state_put({space_id, KeyToCache}, Root),
             {ok, Root};
