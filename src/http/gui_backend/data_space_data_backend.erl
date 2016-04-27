@@ -82,15 +82,15 @@ find(<<"data-space">>, [SpaceDirId]) ->
     {ok, proplists:proplist()} | gui_error:error_result().
 find_all(<<"data-space">>) ->
     UserId = op_gui_utils:get_user_id(),
-    {ok, #document{
-        value = #onedata_user{
-            space_ids = SpaceIds}}} = onedata_user:get(UserId),
+    {ok, #document{value = #onedata_user{
+            spaces = Spaces
+    }}} = onedata_user:get(UserId),
     Res = lists:map(
-        fun(SpaceId) ->
+        fun({SpaceId, _}) ->
             SpaceDirId = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
             {ok, SpaceData} = find(<<"data-space">>, [SpaceDirId]),
             SpaceData
-        end, SpaceIds),
+        end, Spaces),
     {ok, Res}.
 
 

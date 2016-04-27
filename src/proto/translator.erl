@@ -195,8 +195,15 @@ translate_from_protobuf(#'StatusReport'{space_id = SpaceId, seq_num = SeqNum}) -
     #status_report{space_id = SpaceId, seq = SeqNum};
 translate_from_protobuf(#'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
     #batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes};
+
+% Replication
 translate_from_protobuf(#'SynchronizeBlock'{uuid = Uuid, block = #'FileBlock'{offset = O, size = S}}) ->
     #synchronize_block{uuid = Uuid, block = #file_block{offset = O, size = S}};
+translate_from_protobuf(#'SynchronizeBlockAndComputeChecksum'{uuid = Uuid,
+    block = #'FileBlock'{offset = O, size = S}}) ->
+    #synchronize_block_and_compute_checksum{uuid = Uuid, block = #file_block{offset = O, size = S}};
+translate_from_protobuf(#'Checksum'{value = Value}) ->
+    #checksum{value = Value};
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -367,6 +374,16 @@ translate_to_protobuf(#status_report{space_id = SpaceId, seq = SeqNum}) ->
     {status_report, #'StatusReport'{space_id = SpaceId, seq_num = SeqNum}};
 translate_to_protobuf(#batch_update{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}) ->
     {batch_update, #'BatchUpdate'{space_id = SpaceId, since_seq = Since, until_seq = Until, changes_encoded = Changes}};
+
+% Replication
+translate_to_protobuf(#synchronize_block{uuid = Uuid, block = Block}) ->
+    {synchronize_block, #'SynchronizeBlock'{uuid = Uuid, block = Block}};
+translate_to_protobuf(#synchronize_block_and_compute_checksum{uuid = Uuid, block = Block}) ->
+    {synchronize_block_and_compute_checksum,
+        #'SynchronizeBlockAndComputeChecksum'{uuid = Uuid, block = Block}};
+translate_to_protobuf(#checksum{value = Value}) ->
+    {checksum, #'Checksum'{value = Value}};
+
 translate_to_protobuf(undefined) ->
     undefined.
 
