@@ -40,6 +40,8 @@
     catch
         _:{badmatch, {error, {not_found, file_meta}}} ->
             {error, ?ENOENT};
+        _:{badmatch, {error, enoent}} ->
+            {error, ?ENOENT};
         _:___Reason ->
             ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason]),
             {error, ___Reason}
