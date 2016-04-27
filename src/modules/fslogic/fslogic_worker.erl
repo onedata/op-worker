@@ -321,9 +321,11 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 
     Results.
 
-handle_read_events(Evts, Ctx) ->
+handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
     lists:map(fun(#event{object = #read_event{file_uuid = FileUUID}}) ->
-        fslogic_times:update_atime({uuid, FileUUID}, fslogic_context:get_user_id(Ctx))
+        {ok, #document{value = #session{identity = #identity{
+            user_id = UserId}}}} = session:get(SessId),
+        fslogic_times:update_atime({uuid, FileUUID}, UserId)
     end, Evts).
 
 handle_proxyio_request(SessionId, #proxyio_request{
