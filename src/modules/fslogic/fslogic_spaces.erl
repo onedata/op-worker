@@ -48,7 +48,7 @@ get_default_space_id(CTX = #fslogic_ctx{}) ->
 get_default_space_id(?ROOT_USER_ID) ->
     throw(no_default_space_for_root_user);
 get_default_space_id(UserId) ->
-    {ok, #document{value = #onedata_user{spaces = [{DefaultSpaceId, _} | _]}}} =
+    {ok, #document{value = #onedata_user{default_space = DefaultSpaceId}}} =
         onedata_user:get(UserId),
     {ok, DefaultSpaceId}.
 
@@ -130,7 +130,6 @@ get_space({guid, FileGUID}, UserId) ->
             file_meta:get(fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId))
     end;
 get_space(FileEntry, UserId) ->
-    ?info("get_space ~p ~p", [FileEntry, UserId]),
     DefaultSpaceUUID = fslogic_uuid:default_space_uuid(UserId),
     SpacesDir = fslogic_uuid:spaces_uuid(UserId),
     {ok, FileUUID} = file_meta:to_uuid(FileEntry),
@@ -152,8 +151,7 @@ get_space(FileEntry, UserId) ->
         ?ROOT_USER_ID ->
             {ok, SpaceDocument};
         _ ->
-            {ok, Spaces} = onedata_user:get_spaces(UserId),
-            {SpaceIds, _} = lists:unzip(Spaces),
+            {ok, Spaces} = user_logic:get_spaces(UserId),
             #document{key = SpaceUUID} = SpaceDocument,
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUUID),
             case is_list(SpaceIds) andalso lists:member(SpaceId, SpaceIds) of

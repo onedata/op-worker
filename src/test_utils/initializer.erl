@@ -25,8 +25,8 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([setup_session/3, teardown_sesion/2, setup_storage/1, teardown_storage/1,
-    create_test_users_and_spaces/2, create_test_users_and_spaces/3, clean_test_users_and_spaces/1,
+-export([setup_session/3, teardown_sesion/2, setup_storage/1, setup_storage/2, teardown_storage/1,
+    create_test_users_and_spaces/1, clean_test_users_and_spaces/1,
     basic_session_setup/5, basic_session_teardown/2, remove_pending_messages/0,
     remove_pending_messages/1, clear_models/2, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
@@ -518,7 +518,8 @@ teardown_storage(Worker, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec oz_users_mock_setup(Workers :: node() | [node()],
-    [{integer(), [{binary(), binary()}], [{binary(), binary()}]}]) ->
+    [{UserNum :: integer(), Spaces :: [{binary(), binary()}],
+        DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
     ok.
 oz_users_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, oz_users),
@@ -530,13 +531,13 @@ oz_users_mock_setup(Workers, Users) ->
     end),
 
     test_utils:mock_expect(Workers, oz_users, get_spaces, fun({user, {UID, _}}) ->
-        {_, Spaces, _} = lists:keyfind(UID, 1, Users),
-        {[DefaultSpaceId | _] = SpaceIds, _} = lists:unzip(Spaces),
+        {_, Spaces, DefaultSpaceId, _} = lists:keyfind(UID, 1, Users),
+        {SpaceIds, _} = lists:unzip(Spaces),
         {ok, #user_spaces{ids = SpaceIds, default = DefaultSpaceId}}
     end),
 
     test_utils:mock_expect(Workers, oz_users, get_groups, fun({user, {UID, _}}) ->
-        {_, _, Groups} = lists:keyfind(UID, 1, Users),
+        {_, _, _, Groups} = lists:keyfind(UID, 1, Users),
         {GroupIds, _} = lists:unzip(Groups),
         {ok, GroupIds}
     end).

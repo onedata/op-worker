@@ -19,7 +19,7 @@ GIT_URL := $(shell if [ "${GIT_URL}" = "file:/" ]; then echo 'ssh://git@git.plgr
 ONEDATA_GIT_URL := $(shell if [ "${ONEDATA_GIT_URL}" = "" ]; then echo ${GIT_URL}; else echo ${ONEDATA_GIT_URL}; fi)
 export ONEDATA_GIT_URL
 
-.PHONY: deps package test test_gui
+.PHONY: deps package test
 
 all: test_rel
 
@@ -43,42 +43,24 @@ compile:
 
 deps:
 	./rebar get-deps
-
-gui_dev:
-	./deps/gui/build_gui.sh dev
-
-gui_prod:
-	./deps/gui/build_gui.sh prod
-
-gui_doc:
-	jsdoc -c src/http/gui/.jsdoc.conf src/http/gui/app
-
-gui_clean:
-	cd src/http/gui && rm -rf node_modules bower_components dist tmp
+	deps/gui/pull-gui.sh gui-config.sh
 
 ##
 ## Reltool configs introduce dependency on deps directories (which do not exist)
 ## Also a release is not nescesary for us.
 ## We prevent reltool from creating a release.
 ## todo: find better solution
-##
-## Generates a dev release
-generate_dev: deps compile gui_dev
-	# Remove gui tmp dir
-	rm -rf src/http/gui/tmp
-	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
-	./rebar generate $(OVERLAY_VARS)
-	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
 
 ## Generates a production release
-generate: deps compile gui_prod
-	# Remove gui tmp dir
-	rm -rf src/http/gui/tmp
+generate: deps compile
 	sed -i "s/{sub_dirs, \[\"rel\"\]}\./{sub_dirs, \[\]}\./" deps/cluster_worker/rebar.config
 	./rebar generate $(OVERLAY_VARS)
 	sed -i "s/{sub_dirs, \[\]}\./{sub_dirs, \[\"rel\"\]}\./" deps/cluster_worker/rebar.config
+	# Copy GUI static files into release
+	@mkdir -p rel/op_worker/data/gui_static
+	cp -R deps/gui_static/* rel/op_worker/data/gui_static/
 
-clean: relclean pkgclean gui_clean
+clean: relclean pkgclean
 	./rebar clean
 
 distclean:
@@ -90,7 +72,7 @@ distclean:
 
 rel: generate
 
-test_rel: generate_dev cm_rel appmock_rel
+test_rel: generate cm_rel appmock_rel
 
 cm_rel:
 	ln -sf deps/cluster_worker/cluster_manager/
@@ -113,9 +95,6 @@ eunit:
 	./rebar eunit skip_deps=true suites=${SUITES}
 ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
-
-test_gui:
-	cd test_gui && ember test
 
 coverage:
 	$(BASE_DIR)/bamboos/docker/coverage.escript $(BASE_DIR)

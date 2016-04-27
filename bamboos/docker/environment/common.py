@@ -266,3 +266,22 @@ mkdir -p {mount_point}
 mount -t nfs -o proto=tcp,port=2049,nolock {host}:/exports {mount_point}
 '''.format(host=storages_dockers['nfs'][storage['name']]['ip'], mount_point=storage['name'])
     return mount_command
+
+
+def mount_nfs_command(config, storages_dockers):
+    """Prepares nfs mount commands for specified os_config and storage dockers
+    :param config: config that may contain os_config inside
+    :param storages_dockers: storage dockers map
+    :return: string with commands
+    """
+    mount_command = ''
+    if not storages_dockers:
+        return mount_command
+    if 'os_config' in config:
+        for storage in config['os_config']['storages']:
+            if storage['type'] == 'nfs':
+                mount_command += '''
+mkdir -p {mount_point}
+mount -t nfs -o proto=tcp,port=2049,nolock {host}:/exports {mount_point}
+'''.format(host=storages_dockers['nfs'][storage['name']]['ip'], mount_point=storage['name'])
+    return mount_command
