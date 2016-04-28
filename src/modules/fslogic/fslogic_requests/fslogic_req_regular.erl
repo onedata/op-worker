@@ -157,7 +157,7 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
 
     {ok, FileUUID} = file_meta:create({uuid, NormalizedParentUUID}, File),
 
-    try fslogic_file_location:create_storage_file(SpaceId, UUID, SessId, Mode) of
+    try fslogic_file_location:create_storage_file(SpaceId, FileUUID, SessId, Mode) of
         {StorageId, FileId} ->
             {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
             CurrTime = erlang:system_time(seconds),
@@ -185,10 +185,10 @@ get_new_file_location(#fslogic_ctx{session_id = SessId, space_id = SpaceId} = CT
                 fuse_response = file_location:ensure_blocks_not_empty(#file_location{
                     uuid = fslogic_uuid:to_file_guid(FileUUID, SpaceId), provider_id = oneprovider:get_provider_id(),
                     storage_id = StorageId, file_id = FileId, blocks = [],
-                    space_id = SpaceUUID, handle_id = HandleId})}
+                    space_uuid = SpaceUUID, handle_id = HandleId})}
     catch
         T:M ->
-            {ok, FileLocations} = file_meta:get_locations({uuid, UUID}),
+            {ok, FileLocations} = file_meta:get_locations({uuid, FileUUID}),
             lists:map(fun(Id) -> file_location:delete(Id) end, FileLocations),
             file_meta:delete({uuid, FileUUID}),
             ?error_stacktrace("Cannot create file on storage - ~p:~p", [T, M]),

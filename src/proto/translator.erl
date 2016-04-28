@@ -557,8 +557,6 @@ translate_to_protobuf(#'proxyio_request'{parameters = Parameters, storage_id = S
     {proxyio_request, #'ProxyIORequest'{parameters = ParametersProto, storage_id = SID, file_id = FID, proxyio_request = translate_to_protobuf(Record)}};
 translate_to_protobuf(#'remote_read'{offset = Offset, size = Size}) ->
     {remote_read, #'RemoteRead'{offset = Offset, size = Size}};
-translate_to_protobuf(#'remote_write'{offset = Offset, data = Data}) ->
-    {remote_write, #'RemoteWrite'{offset = Offset, data = Data}};
 translate_to_protobuf(#'dir'{uuid = UUID}) ->
     {dir, #'Dir'{uuid = UUID}};
 translate_to_protobuf(#'get_parent'{uuid = UUID}) ->
