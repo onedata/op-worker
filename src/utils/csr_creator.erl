@@ -27,7 +27,7 @@
 %% ====================================================================
 %% @doc Initializes NIF library.
 %% @end
--spec init() -> ok | {error, Reason :: atom()}.
+-spec init() -> ok | {error, Reason :: term()}.
 init() ->
     LibName = "csr_creator_drv",
     LibPath =
@@ -43,7 +43,12 @@ init() ->
             Dir ->
                 filename:join(Dir, LibName)
         end,
-    erlang:load_nif(LibPath, 0).
+
+    case erlang:load_nif(LibPath, 0) of
+        ok -> ok;
+        {error, {reload, _}} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
 
 
 %% create_csr/3
