@@ -18,7 +18,8 @@
 
 %% API
 -export([spaces_uuid/1, default_space_uuid/1, path_to_uuid/2, uuid_to_path/2,
-    guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2]).
+    guid_to_path/2, spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, ensure_uuid/2,
+    default_space_owner/1]).
 -export([file_uuid_to_space_id/1, gen_file_uuid/1, gen_file_uuid/0]).
 -export([to_file_guid/2, unpack_file_guid/1, file_guid_to_uuid/1, to_file_guid/1, ensure_guid/2]).
 
@@ -202,6 +203,9 @@ space_dir_uuid_to_spaceid(SpaceUuid) ->
     case binary_to_term(http_utils:base64url_decode(SpaceUuid)) of
         {space, SpaceId} ->
             SpaceId;
+        {root_space, UserId} ->
+            {ok, #document{key = DefaultSpaceUUID}} = fslogic_spaces:get_default_space(UserId),
+            fslogic_uuid:space_dir_uuid_to_spaceid(DefaultSpaceUUID);
         _ ->
             throw({not_a_space, {uuid, SpaceUuid}})
     end.
@@ -220,7 +224,18 @@ spaces_uuid(UserId) ->
 %%--------------------------------------------------------------------
 -spec default_space_uuid(UserId :: onedata_user:id()) -> file_meta:uuid().
 default_space_uuid(UserId) ->
-    http_utils:base64url_encode(UserId).
+    http_utils:base64url_encode(term_to_binary({root_space, UserId})).
+
+
+%%--------------------------------------------------------------------
+%% @doc Returns user id of default space directory owner.
+%% @end
+%%--------------------------------------------------------------------
+-spec default_space_owner(DefaultSpaceUUID :: file_meta:uuid()) ->
+    onedata_user:id().
+default_space_owner(DefaultSpaceUUID) ->
+    {root_space, UserId} = binary_to_term(http_utils:base64url_decode(DefaultSpaceUUID)),
+    UserId.
 
 %%%===================================================================
 %%% Internal functions

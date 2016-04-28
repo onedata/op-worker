@@ -376,19 +376,15 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
         case replica_updater:update(FileUUID, Blocks, FileSize, true) of
             {ok, size_changed} ->
-                MTime = erlang:system_time(seconds),
-                {ok, _} = file_meta:update({uuid, FileUUID}, #{
-                    mtime => MTime, ctime => MTime
-                }),
-                fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUUID}),
+                {ok, #document{value = #session{identity = #identity{
+                    user_id = UserId}}}} = session:get(SessId),
+                fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
                 fslogic_event:emit_file_attr_update({uuid, FileUUID}, [SessId]),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {ok, size_not_changed} ->
-                MTime = erlang:system_time(seconds),
-                {ok, _} = file_meta:update({uuid, FileUUID}, #{
-                    mtime => MTime, ctime => MTime
-                }),
-                fslogic_event:emit_file_sizeless_attrs_update({uuid, FileUUID}),
+                {ok, #document{value = #session{identity = #identity{
+                    user_id = UserId}}}} = session:get(SessId),
+                fslogic_times:update_mtime_ctime({uuid, FileUUID}, UserId),
                 fslogic_event:emit_file_location_update({uuid, FileUUID}, [SessId]);
             {error, Reason} ->
                 ?error("Unable to update blocks for file ~p due to: ~p.", [FileUUID, Reason])
@@ -402,20 +398,12 @@ handle_write_events(Evts, #{session_id := SessId} = Ctx) ->
 
     Results.
 
-handle_read_events(Evts, _Ctx) ->
+handle_read_events(Evts, #{session_id := SessId} = _Ctx) ->
     lists:map(fun(#event{object = #read_event{file_uuid = FileGUID}}) ->
         FileUUID = fslogic_uuid:file_guid_to_uuid(FileGUID),
-        case fslogic_times:calculate_atime({uuid, FileUUID}) of
-            actual ->
-                ok;
-            NewATime ->
-                {ok, FileDoc} = file_meta:get({uuid, FileUUID}),
-                #document{value = FileMeta} = FileDoc,
-                {ok, _} = file_meta:update(FileDoc, #{atime => NewATime}),
-                spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
-                    FileDoc#document{value = FileMeta#file_meta{atime = NewATime}}
-                ) end)
-        end
+        {ok, #document{value = #session{identity = #identity{
+            user_id = UserId}}}} = session:get(SessId),
+        fslogic_times:update_atime({uuid, FileUUID}, UserId)
     end, Evts).
 
 handle_proxyio_request(SessionId, #proxyio_request{
