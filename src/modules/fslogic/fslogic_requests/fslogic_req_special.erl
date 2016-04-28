@@ -53,15 +53,7 @@ mkdir(CTX, ParentUUID, Name, Mode) ->
     }},
     case file_meta:create(NormalizedParentUUID, File) of
         {ok, DirUUID} ->
-            {ok, ParentDoc} = file_meta:get(NormalizedParentUUID),
-            #document{value = ParentMeta} = ParentDoc,
-            {ok, _} = file_meta:update(ParentDoc, #{mtime => CTime, ctime => CTime}),
-
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
-                ParentDoc#document{value = ParentMeta#file_meta{
-                    mtime = CTime, ctime = CTime
-                }}
-            ) end),
+            fslogic_times:update_mtime_ctime(NormalizedParentUUID, fslogic_context:get_user_id(CTX)),
             #fuse_response{status = #status{code = ?OK}, fuse_response =
                 #dir{uuid = DirUUID}
             };
@@ -86,16 +78,7 @@ read_dir(#fslogic_ctx{session_id = SessId} = CTX, File, Offset, Size) ->
 
     ?debug("read_dir ~p ~p ~p links: ~p", [File, Offset, Size, ChildLinks]),
 
-    case fslogic_times:calculate_atime(FileDoc) of
-        actual ->
-            ok;
-        NewATime ->
-            #document{value = FileMeta} = FileDoc,
-            {ok, _} = file_meta:update(FileDoc, #{atime => NewATime}),
-            spawn(fun() -> fslogic_event:emit_file_sizeless_attrs_update(
-                FileDoc#document{value = FileMeta#file_meta{atime = NewATime}}
-            ) end)
-    end,
+    fslogic_times:update_atime(FileDoc, fslogic_context:get_user_id(CTX)),
 
     SpacesKey = fslogic_uuid:spaces_uuid(UserId),
     DefaultSpaceKey = fslogic_uuid:default_space_uuid(UserId),
