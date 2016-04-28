@@ -1490,7 +1490,7 @@ acl(Config) ->
     % set acl to 'read&write' and test cdmi get request (should succeed)
     RequestHeaders2 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
     {ok, 204, _, _} = do_request(Workers, Dirname1, put, RequestHeaders2, MetadataAclReadWriteExecute),
-    {ok, 200, _, _} = do_request(Workers, Dirname1, get, RequestHeaders2, []),
+    {ok, 200, _, _} = do_request(WorkerP2, Dirname1, get, RequestHeaders2, []),
 
     % create files in directory (should succeed)
     {ok, 201, _, _} = do_request(Workers, File1, put, [user_1_token_header(Config)], []),
@@ -1595,7 +1595,7 @@ errors(Config) ->
         ?OBJECT_CONTENT_TYPE_HEADER
     ],
     {ok, Code6, _Headers6, _Response6} =
-        do_request(Workers, "nonexistent_file", get, RequestHeaders6),
+        do_request(WorkerP2, "nonexistent_file", get, RequestHeaders6),
     ?assertMatch(404, Code6),
     %%------------------------------
 
@@ -1606,7 +1606,7 @@ errors(Config) ->
         ?CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code7, _Headers7, _Response7} =
-        do_request(Workers, "nonexisting_dir/", get, RequestHeaders7),
+        do_request(WorkerP2, "nonexisting_dir/", get, RequestHeaders7),
     ?assertEqual(404, Code7),
     %%------------------------------
 
@@ -1641,7 +1641,7 @@ errors(Config) ->
 
     mock_opening_file_without_perms(Config),
     {ok, Code9, _Headers9, _Response9} =
-        do_request(Workers, File9, get, RequestHeaders9),
+        do_request(WorkerP2, File9, get, RequestHeaders9),
     unmock_opening_file_without_perms(Config),
     ?assertEqual(403, Code9).
 %%------------------------------
@@ -1651,7 +1651,7 @@ accept_header(Config) ->
     AcceptHeader = {<<"Accept">>, <<"*/*">>},
 
     {ok, Code1, _Headers1, _Response1} =
-        do_request(Workers, [], get,
+        do_request(WorkerP2, [], get,
             [user_1_token_header(Config), ?CDMI_VERSION_HEADER, AcceptHeader], []),
 
     ?assertEqual(200, Code1).

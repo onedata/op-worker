@@ -488,12 +488,15 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
                 undefined -> ok; %% Skip if not configured
                 StorageName ->
                     Domain = proplists:get_value(PID, DomainMappings),
-                    [Worker | _] = get_same_domain_workers(Config, Domain),
-                    {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
-                        storage, get_by_name, [StorageName])),
-                    StorageId = rpc:call(Worker, storage, id, [Storage]),
-                    {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
-                        space_storage, add, [SpaceId, StorageId]))
+                    case get_same_domain_workers(Config, Domain) of
+                        [Worker | _] ->
+                            {ok, Storage} = ?assertMatch({ok, _}, rpc:call(Worker,
+                                storage, get_by_name, [StorageName])),
+                            StorageId = rpc:call(Worker, storage, id, [Storage]),
+                            {ok, _} = ?assertMatch({ok, _}, rpc:call(Worker,
+                                space_storage, add, [SpaceId, StorageId]));
+                        _ -> ok
+                    end
             end
         end, Providers0)
     end, SpacesSetup),

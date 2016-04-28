@@ -63,20 +63,20 @@ all() ->
         delete_dir_test,
 %%        create_file_test,
         update_file_test,
-%%        create_dir_test,
+        create_dir_test,
         capabilities_test,
         choose_adequate_handler_test,
         use_supported_cdmi_version_test,
         use_unsupported_cdmi_version_test,
         moved_permanently_test,
 %%        objectid_test,
-        request_format_check_test
+        request_format_check_test,
 %%        mimetype_and_encoding_test,
 %%        out_of_range_test,
 %%        partial_upload_test,
 %%        acl_test,
 %%        errors_test,
-%%        accept_header_test
+        accept_header_test
 %%        copy_move_test %todo split into smaller tests and enable when copy/move will be working properly
     ]).
 
